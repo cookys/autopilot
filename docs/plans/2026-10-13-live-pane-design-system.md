@@ -1,6 +1,6 @@
 # Live pane design system — one IA, one visual vocabulary, enforced in code
 
-Status: **frozen** (2026-10-13) after two plan-review generations (§10, §10.2, §10.3; receipts in [`evidence/2026-10-13-live-pane/plan-review/`](evidence/2026-10-13-live-pane/plan-review/README.md)). Ready for P0; no product code changed yet. The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
+Status: **frozen** (2026-10-13) after two plan-review generations (§10, §10.2, §10.3; receipts in [`evidence/2026-10-13-live-pane/plan-review/`](evidence/2026-10-13-live-pane/plan-review/README.md)). Ready for P0; no product code changed yet. Amended in place on 2026-10-16 by [§12](#12-revision-2026-10-16-the-semantic-palette) (colour and emphasis only; where §3.2, §3.4 and §3.6 differ from §12, §12 wins). The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
 Scope: the live mod's pane (`mods/live/pane.tsx`, `mods/live/model.ts`) and the glyphs it shares with the band (`mods/live/band.tsx`).
 Builds on the approved TUI v2 design: [`evidence/2026-10-10-tui-v2/ia.md`](evidence/2026-10-10-tui-v2/ia.md) (colour semantics, glyph vocabulary) and [`i18n.md`](evidence/2026-10-10-tui-v2/i18n.md).
 
@@ -155,14 +155,14 @@ Wrapped lines hang at the column their own text started at. No line is wider tha
 
 ### 3.2 Status vocabulary: ten states
 
-A state is one glyph, one theme key and one zh word. Glyph and theme key are always together. The word is drawn too, except in two compact forms named here and nowhere else: (a) `item {word:false}` under a header chip of the same state (I21); (b) count badges in the tab strip and the band (`●2`, `⊘1`, `▲`, `⚑1`), built only by `badge(stated, n?)` in `ui.ts` (I14). Glyph and word are coloured; the rest of the line is not.
+A state is one glyph, one theme key and one zh word. Glyph and theme key are always together. The word is drawn too, except in two compact forms named here and nowhere else: (a) `item {word:false}` under a header chip of the same state (I21); (b) count badges in the band (`●2`, `⊘1`, `⚑1`; the tab strip's badges were replaced by the tab name's colour, §12.5), built only by `badge(stated, n?)` in `ui.ts` (I14). Glyph and word are coloured; the rest of the line is not.
 
 | State | Glyph | Theme key | zh | en | Meaning |
 |---|---|---|---|---|---|
-| `need_you` | `▲` | `warning`, bold | 要你處理 | needs you | a person must act |
+| `need_you` | `▲` | `warning` (mark only, not bold; §12) | 要你處理 | needs you | a person must act |
 | `failed` | `✗` | `error` | 失敗 | failed | ended badly (rc ≠ 0, rejected) |
 | `stalled` | `⊘` | `error` | 疑似卡住 | stalled | should be moving and is not |
-| `findings` | `△` | `warning` | 待修 | to fix | ended with findings someone else will fix |
+| `findings` | `△` | default text (§12) | 待修 | to fix | ended with findings someone else will fix |
 | `running` | `●` | `suggestion` | 執行中 | running | moving now, and fresh |
 | `done` | `✓` | `success` | 完成 | done | ended well |
 | `pending` | `○` | `inactive` | 未開始 | not started | queued or still to come |
@@ -210,7 +210,7 @@ A raw token (`SHIP-AS-IS`, `reviewed`, `not_needed`, `[exited with code 0]`, `wa
 
 1. **No glyph that a terminal may draw as an emoji.** The test is `\p{Extended_Pictographic}`, not `\p{Emoji}`: the `Emoji` property also matches every ASCII digit, `#` and `*` (keycap-sequence bases), which would reject the pane's own numbers. Measured in Node: `⏸ ⚙ ⚠ ✔ ✖ ▶ ⏹ ⏺ ▪ ▫` are Extended_Pictographic; every glyph in §3.2 and the structure/chart tables (`▲ ✗ ⊘ △ ● ✓ ○ ◌ ∅ ◦ › ▾ ▸ └ ─ ━ ▰ ▱ ◐ ⚑ ↺ ◆`) is not. The explicit `EMOJI_BANNED` list repeats the ten above so the rule still holds if a Unicode update moves a property. It is checked on the glyph table and on glyph segments only, plus a separate check for the emoji variation selector U+FE0F and the keycap mark U+20E3 anywhere (§6, I5). Replacements: stalled `⏸` → `⊘`; dispatch count `⚙N` → `●N` (the running state, counted); the hygiene chip's `⚠` → `▲`.
 2. **One glyph, one meaning, across band and pane.** Glyphs fall into three groups and do not cross: state glyphs (§3.2), structure glyphs (`▾ ▸` fold, `─` rule, `└` detail, `$` command, `›` go to tab, `◦` neutral bullet), and chart glyphs (`▰ ▱` meter, `▁…█` sparkline, `◐` "you are here" in the stage walk). `⚑N` stays as the residue count in the band and on the 殘留 tab badge only (owner-approved 10-10); the pane body uses `▲`. The strip's `▸` "next" chip (`pane.tsx` `tabStrip`) is the one exception left; P5 replaces it with `›` so that `▸` means only "folded".
-3. **The stage walk uses state glyphs for its nodes:** done `✓` success, current `◐` claude bold, to come `○` inactive (`✓─✓─◐─○─○`). `●` (running) no longer means "done node".
+3. **The stage walk uses state glyphs for its nodes:** done `✓` success, current `◐` claude, to come `○` inactive (`✓─✓─◐─○─○`), in the pane and in the band alike (the band drew a green `●` until 2026-10-16). `●` (running) never means "done node".
 4. **Width.** `◐ ● ○ ▲ △ ◆ ─ ━ └ · …` are East Asian *Ambiguous*: a CJK-locale terminal may draw them 2 cells wide (the `ⓘ` comment at `model.ts` 1461 records this happening for `ⓘ` on the owner's terminal). The owner's screenshots show `● ▲ ─ · └ ◆ ▰ ▱ ✓ ▾ ⚑ ↺` at one cell. Every glyph that is new to the vocabulary, fallbacks included, must pass the real-terminal check in P0 before it ships: `⊘ △ ○ ◌ ∅ ◦ › ━ ◐ ◍`.
 
 ### 3.5 Number, time and money formats
@@ -232,6 +232,8 @@ The ui module owns one formatter per kind. Tab code never concatenates a unit.
 | count | number first, then the measure word from the string table; never `N*` | `已完成 39 項 · 沒有固定總數` |
 
 ### 3.6 Colour and emphasis
+
+**Superseded in part by §12 (2026-10-16): the palette table, the bold whitelist and the once-per-surface rule there replace the bullets below wherever they differ.**
 
 `ia.md`'s colour table stands, with four corrections that bring the code back to it:
 
@@ -732,11 +734,15 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 7. **The band position slot reads `size·level·stage`.** The `▸` that joined level and stage is replaced by the band's `·` separator (the wide band still swaps it for the stage walk). `▸` now means only "folded", in band and pane alike (§3.4 rule 2). A band lint in `live.test.ts` fails if any band output draws `▸`; its negative control puts the arrow back.
 8. **The three P5 trade-offs are approved as built, no code change:** (a) on a narrow column the low-priority columns go first; (b) durations are zero-padded (`1d00h`, `3h05m`, `Nd`); (c) no data reads `沒有資料`.
 
+**Owner ruling 2026-10-16** (after the tab names went yellow): 「整個 panel 顏色盤點重整，考慮視覺重量跟顏色代表的意涵，盡量讓介面清楚明瞭，然後更新為預設開發 design pattern」. Resolved in §12: one colour, one meaning; bold is a whitelist; the owner's attention is drawn in yellow once per surface. This is the default design pattern for every mod surface from now on.
+
+**Owner ruling 2026-10-16, Q1 revised** (decision `d-5723c838`, answered 「合併＋白字」 after comparing both renders): the active tab name is no longer orange. It is bold default text, or bold yellow when that tab needs the owner; orange (`here`) stays only on the `━` run under it. This replaces the 2026-10-13 Q1 mark wherever it says "bold `claude` text" (§3.6, §4, Q1 above, §9); §12.5 has the rule.
+
 ## 9. Unverified (each is checked in the named phase)
 
 Verified as of 2026-10-14 (struck items below):
 - ~~One-cell rendering of `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`~~ confirmed by the owner in ssh + tmux on 2026-10-13 (`GLYPHS.verified`, `glyph-check.js`).
-- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to bold `claude` text alone when it wraps (Q1); covered by `mods/live/now.test.ts:324-329` (a wrapped strip draws no `━`, the active label stays bold `claude`; 76-column unwrapped control alongside).
+- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to the bold name alone when it wraps (Q1; bold `claude` until 2026-10-16, bold default text since, §12.5); covered by `mods/live/now.test.ts` "hint: a tab strip that wraps" (a wrapped strip draws no `━`, the active label stays bold; 76-column unwrapped control alongside).
 
 - Whether the owner's 殘留 screenshot (17 lane worktrees as unintegrated) predates the producer fix: awaiting confirmation on the owner's machine (P5 acceptance); the producer is fixed (`dc30d96c`, `793880e6`; stale-develop case in `hooks/tests/repo-residue-sweep.test.sh`).
 - `bodyColumns` overstating the drawable width (P0 a).
@@ -804,3 +810,45 @@ G2 is the last generation: depth-0 ruled on each finding, and this file is froze
 - 2026-10-13, G2: the generation cap was reached, so depth-0 ruled on each finding and the plan is frozen after §10.3 (no further review is sent).
 - The Kimi seat ended `precondition_failed` in both generations because the manifest carried a wrong model id (it should be `kimi-code/k3`).
 - Both generations ran with only two model families (openai and minimax).
+
+## 12. Revision 2026-10-16: the semantic palette
+
+Owner ruling 2026-10-16 (see §8): 「整個 panel 顏色盤點重整，考慮視覺重量跟顏色代表的意涵，盡量讓介面清楚明瞭，然後更新為預設開發 design pattern」. This section is the default design pattern for the live mod's pane and band and for any mod surface written after it. It changes colour and weight only: no glyph shape changes, except the band's finished stage node (`●` to `✓`, §3.4 rule 3), and the worst-of aggregation (§3.3) is untouched. Two layout changes follow from the rules and are part of this revision: the tab strip no longer carries count badges (the tab name's colour says it, §12.5), and the `要你處理` section title shows a plain `N` where it showed `▲ N` (§12.2).
+
+Method: every use of a theme key in `mods/live` was inventoried (file and line), each key was found to carry between two and seven meanings, and the table below gives each key exactly one.
+
+### 12.1 The palette: one colour, one meaning
+
+| Role (`PALETTE` in `ui.ts`) | Theme key | The one meaning | Used for |
+|---|---|---|---|
+| `attention` | `warning` (yellow) | the owner must look or act | the `need_you` mark `▲`, the top verdict `要你決定`, the name of a tab that needs the owner, QC owed (`QC▲`), residue to handle (`⚑`), a meter at 80% and above, a plugin source behind upstream |
+| `here` | `claude` (orange) | you are here | the `━` run under the active tab (not its name, §12.5), the current stage node `◐`, the current unit cell |
+| `broken` | `error` (red) | broken or probably broken | `failed`, `stalled`, a meter at 100% and above |
+| `done` | `success` (green) | finished | `done` `✓`, QC `✓`, a finished stage node `✓` (pane and band) |
+| `running` | `suggestion` (blue) | running now | `running` `●`, in the pane and in the band's `●N` |
+| `idle` | `inactive` (grey) | nothing to do | `pending`, `stopped`, `skipped`, `unknown` marks, the empty part of a bar |
+| `structure` | `subtle` (dark grey) | structure | section rules, fold marks, the strip baseline, the band `│` |
+| (none) | default text | content | values, names, prose, the active tab name (bold), `findings` (`△ 待修`), a recommendation `★`, a meter below 80% |
+| (weight) | `dim` | secondary | key columns, units, times, hints, inactive tab names, the `›` next-page button |
+
+Consequences that were ambiguous before: `findings` is not the owner's to act on (the author fixes it), so it is default text and no longer yellow; a healthy meter says nothing, so a 2% bar is default text and no longer green; `★` is a recommendation, not a state, so it is default text and no longer blue; the `›` button is an action, not a place, so it is `dim` and no longer orange; the picked option and the send button on a decision card are bold default text and no longer green. `stalled` keeps the red of `failed` (the §3.2 vocabulary does not change).
+
+### 12.2 The attention rule: once per surface
+
+The owner's attention is drawn in yellow text once per surface. In the pane that is the top verdict line and the name of the tab that needs the owner; in the band it is the verdict word. Everywhere else a `need_you` item draws only its `▲` yellow, with its words in default text and not bold; the count on the `要你處理` section title is a plain number (no mark, no colour); `QC▲` and `⚑N` colour the mark only and leave the label and the number in default text.
+
+### 12.3 Bold is a whitelist
+
+Bold is allowed on exactly these: a section title, the verdict line, the active tab name, the name of a tab that needs the owner, the picked option on a decision card, and the card's send button (`BOLD_USES` in `ui.ts`). Nothing else is bold, including a meter's percent, the text of a `need_you` row, `QC▲`, `⚑N`, the stage label and the current-stage node. This replaces the §3.6 bold bullet and the exemptions that grew around it in invariant I4.
+
+### 12.4 Enforcement
+
+- `PALETTE` in `ui.ts` is the only place in `mods/live` that names a theme key. Pane and band both draw through it, so one state is one colour on both. `ui-lint.test.js` L8 fails on a theme-key literal anywhere else (the negative control plants a prose segment painted `warning` and must go red); L9 pins the band's only bold to the verdict slot.
+- Invariant I4 (`invariants.testkit.ts`) now checks the whitelist instead of a list of exemptions; I6 checks that a state's glyph and word carry exactly `STATES[id].key` / `wordKey`, including "no colour" for `findings`.
+- The `?` tab is generated from the same tables; its strings describe the new meanings (`legend.*`, en and zh-TW).
+
+### 12.5 Tab strip
+
+The tab strip draws a tab that needs the owner as bold `attention` text, replacing the strip's count badges (§3.2 b), and the active tab as a bold name with an orange (`here`) `━` run under it. The active name is bold default text, or bold `attention` when that tab needs the owner: the need stays visible on the tab you are looking at, and orange appears in the strip only on the `━` run (owner 2026-10-16, decision `d-5723c838`, 「合併＋白字」; the first build of this revision kept the name orange, as the 2026-10-13 Q1 had it, and was compared side by side before the ruling). A strip that wraps draws no `━` and keeps the bold name alone; there an active tab that needs the owner looks like any other needing tab, and the top verdict line still says it.
+
+The active label carries the `here` tag without the `here` colour: I4 reads the tag to tell the active name from a stray bold tab (`boldUseOf` in `ui.ts`; a bold tab name with neither the tag nor the attention colour, or one painted `claude`, is a violation, with a negative control in `ui.test.ts`). Tests find the active tab by the column of the `━` run, not by colour (`activeKeyOf` in `live.test.ts`).

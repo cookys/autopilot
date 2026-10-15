@@ -19,8 +19,9 @@ export type DecideActs = { state: DecideState; inputs: boolean; onPress: (id: st
 
 type El = (props: any) => any
 
-// The tab strip (ui.ts `strip`): Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is bold `claude` text, and
-// the baseline under the strip carries a run of `━` beneath it (a strip that wraps keeps the bold alone). A tab that holds something for the owner carries a badge.
+// The tab strip (ui.ts `strip`): Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is a bold name, and
+// the baseline under the strip carries a `claude` run of `━` beneath it (a strip that wraps keeps the bold alone). A tab that holds something for the owner is
+// drawn attention bold (no badge, no count).
 // The FIRST drawn Button is the `›` next-tab chip and it carries the pane's autoFocus ("of several in one site the first drawn wins"): whenever Ctrl+x Tab or
 // `open({focus})` hands the pane the keyboard, the ring lands on a Button whose Enter steps to the next tab. It used to land on the ACTIVE tab's Button,
 // where Enter pressed the tab already showing (a no-op): "Ctrl+x Tab, Enter, Enter" cycled tabs only when the ring happened to sit on the band's ⓘ
@@ -36,7 +37,6 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
         {strip.tabs.map(x => (
           <Box key={x.id}>
             {Button === undefined ? draw(x.label, 'label') : <Button key={x.id} plain onPress={() => onTab(x.id)}>{draw(x.label, 'label')}</Button>}
-            {x.badge.map((b, i) => draw(b, 'badge' + i))}
             <Text> </Text>
           </Box>
         ))}

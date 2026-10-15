@@ -13,7 +13,7 @@ import { T_EN } from './i18n'
 import type { T } from './i18n'
 import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui'
-import { GLYPHS, STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
 const GS = GLYPHS.state
 const GT = GLYPHS.structure
 const GC = GLYPHS.chart
@@ -273,8 +273,8 @@ const startedMs = (r: Json): number => Date.parse(String(r.started_at || r.fact_
 const VERDICT_MARK = Object.fromEntries((['decide', 'stalled', 'waiting', 'running', 'idle'] as const).map(k => {
   const st = STATES[stateOf('verdict', k).id]
   return [k, { mark: st.glyph, key: st.key }]
-})) as Record<VerdictKind, { mark: string; key: ThemeKey }>
-export const verdictOf = (kind: VerdictKind, t: T): { kind: VerdictKind; mark: string; word: string; key: ThemeKey } => ({ kind, mark: VERDICT_MARK[kind].mark, word: t('verdict.' + kind), key: VERDICT_MARK[kind].key })
+})) as Record<VerdictKind, { mark: string; key: ThemeKey | undefined }>
+export const verdictOf = (kind: VerdictKind, t: T): { kind: VerdictKind; mark: string; word: string; key: ThemeKey | undefined } => ({ kind, mark: VERDICT_MARK[kind].mark, word: t('verdict.' + kind), key: VERDICT_MARK[kind].key })
 
 // "<project>": the last directory of a normal repo's git common dir. Any other shape (bare repo, no prefix, a path
 // inside .git, empty) falls back to the first 8 hex of the project key. Pure string work: never git, never a hash.
@@ -1268,18 +1268,18 @@ export function spendOf(env: Json): { brain: number; cap: number } | null {
 }
 
 // ---- the slots ----
-// Colour semantics (one meaning per theme key; text colour only, never a background):
-//   warning = a person must act or look · error = stalled / over cap · success = done / ok · suggestion = running now
-//   claude = you are here (current stage, current bar cell) · inactive = zero / absent / not yet · subtle = chrome · dim = labels and hints
+// Colour semantics: one meaning per colour, through the ui.ts PALETTE roles only (text colour, never a background; the table and the rules are in the 2026-10-16 revision of
+// docs/plans/2026-10-13-live-pane-design-system.md). attention = the owner must look or act · broken = stalled / over cap · done = finished · running = running now
+// here = you are here (current stage, current bar cell) · idle = zero / absent / not yet · structure = separators · dim = labels and hints. Bold only on the verdict.
 const sp = (text: string, extra: Partial<Seg> = {}): Seg => ({ text, ...extra })
 
-export function slotVerdict(v: { mark: string; word: string; key: ThemeKey }, reason: string | null = null): Slot {
-  const segs: Seg[] = [sp(v.mark + ' ' + v.word, { color: v.key, bold: v.key !== 'inactive' })]
+export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | undefined }, reason: string | null = null): Slot {
+  const segs: Seg[] = [sp(v.mark + ' ' + v.word, { ...ui.tone(v.key), bold: v.key !== PALETTE.idle })]
   if (reason !== null && reason !== '') segs.push(sp(reason, { dim: true, tag: 'reason' })) // layoutBand places it, clipped, when the line is wide
   return { id: 'verdict', segs }
 }
 
-// The stage walk as `●─●─◐─○─○` (done success, current `◐` claude bold, later `○` inactive, links subtle); null = nothing to draw
+// The stage walk as `✓─✓─◐─○─○` (done `✓` done, current `◐` here, later `○` idle, links structure; the same marks as the pane's walk); null = nothing to draw
 // (no walk published, the current stage is not on it, or it is longer than the band can carry).
 export const WALK_MAX = 9
 export function walkSegs(w: StageWalkView | null, current: string | null): Seg[] | null {
@@ -1288,8 +1288,8 @@ export function walkSegs(w: StageWalkView | null, current: string | null): Seg[]
   if (at < 0 || w.walk.length < 2 || w.walk.length > WALK_MAX) return null
   const out: Seg[] = []
   w.walk.forEach((_n, i) => {
-    if (i > 0) out.push(sp(GT.rule, { color: 'subtle', tag: 'walk' }))
-    out.push(i < at ? sp(GS.running, { color: 'success', tag: 'walk' }) : i === at ? sp(GC.here, { color: 'claude', bold: true, tag: 'walk' }) : sp(GS.pending, { color: 'inactive', tag: 'walk' }))
+    if (i > 0) out.push(sp(GT.rule, { color: PALETTE.structure, tag: 'walk' }))
+    out.push(i < at ? sp(GS.done, { color: PALETTE.done, tag: 'walk' }) : i === at ? sp(GC.here, { color: PALETTE.here, tag: 'walk' }) : sp(GS.pending, { color: PALETTE.idle, tag: 'walk' }))
   })
   return out
 }
@@ -1303,7 +1303,7 @@ export function slotPosition(m: MarkerView | null, nowMs: number, w: StageWalkVi
   if (head !== '') segs.push(sp(head)) // `size·level·stage`: the `·` is the band's separator (`▸` only ever means folded); the wide band swaps it for the walk
   if (walk === null) { if (head !== '') segs.push(sp('·')) }
   else { if (head !== '') segs.push(sp('·', { tag: 'dot' })); segs.push(sp(' ', { tag: 'walk' }), ...walk, sp(' ', { tag: 'walk' })) }
-  segs.push(sp(m.stage, { color: 'claude', bold: true, tag: 'stage' }))
+  segs.push(sp(m.stage, { color: PALETTE.here, tag: 'stage' }))
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
   if (age !== '—') segs.push(sp(' ' + GT.age + age, { dim: true, tag: 'age' }))
   return { id: 'position', segs }
@@ -1315,9 +1315,9 @@ export function unitBarSegs(index: number, total: number): Seg[] {
   const k = Math.min(Math.max(index, 1), total)
   const cur = total > 10 ? Math.max(1, Math.min(10, Math.ceil((k * 10) / total))) : k
   const segs: Seg[] = []
-  if (cur > 1) segs.push(sp(GC.meterOn.repeat(cur - 1), { color: 'success', tag: 'bar' }))
-  segs.push(sp(GC.meterOn, { color: 'claude', tag: 'bar' }))
-  if (cells > cur) segs.push(sp(GC.meterOff.repeat(cells - cur), { color: 'inactive', tag: 'bar' }))
+  if (cur > 1) segs.push(sp(GC.meterOn.repeat(cur - 1), { color: PALETTE.done, tag: 'bar' }))
+  segs.push(sp(GC.meterOn, { color: PALETTE.here, tag: 'bar' }))
+  if (cells > cur) segs.push(sp(GC.meterOff.repeat(cells - cur), { color: PALETTE.idle, tag: 'bar' }))
   return segs
 }
 export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
@@ -1332,8 +1332,8 @@ export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
 export function slotDispatch(live: number, stalled: number): Slot | null {
   if (live <= 0 && stalled <= 0) return null
   const segs: Seg[] = []
-  if (live > 0) segs.push(sp(GS.running + live, { tag: 'live' }))
-  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + GS.stalled + stalled, { color: 'error', tag: 'stalled' }))
+  if (live > 0) segs.push(sp(GS.running + live, { color: PALETTE.running, tag: 'live' }))
+  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + GS.stalled + stalled, { color: PALETTE.broken, tag: 'stalled' }))
   return { id: 'dispatch', segs }
 }
 
@@ -1346,7 +1346,8 @@ export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null 
   if (round !== null) segs.push(sp(GT.round + ' ', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
   if (chip !== null) {
     if (round !== null) segs.push(sp(' ', { tag: 'round' }))
-    segs.push(sp(chip, chip === 'QC' + GS.done ? { color: 'success', tag: 'qc' } : { color: 'warning', bold: true, tag: 'qc' }))
+    // the label stays default text; only the mark carries the colour (the owner's attention is yellow once: the verdict word)
+    segs.push(sp(chip.slice(0, 2), { tag: 'qc' }), sp(chip.slice(2), { color: chip === 'QC' + GS.done ? PALETTE.done : PALETTE.attention, tag: 'qc' }))
   }
   return { id: 'review', segs }
 }
@@ -1356,7 +1357,7 @@ export function slotDecisions(d: DecisionsView | null): Slot | null {
   if (d === null) return null
   const parts: Seg[] = []
   if (d.count > 0) parts.push(sp(GT.decisions + d.count))
-  if (d.undocumented > 0) parts.push(sp('?' + d.undocumented, { color: 'inactive' }))
+  if (d.undocumented > 0) parts.push(sp('?' + d.undocumented, { color: PALETTE.idle }))
   if (d.ladder !== null) parts.push(sp(d.ladder.rung))
   if (parts.length === 0) return null
   return { id: 'decisions', segs: parts.flatMap((p, i) => (i === 0 ? [p] : [sp(' '), p])) }
@@ -1365,16 +1366,15 @@ export function slotDecisions(d: DecisionsView | null): Slot | null {
 // brain-tier spend vs the cap: warning from 80 % of the cap, error from 100 %
 export function spendColor(brain: number, cap: number): ThemeKey | undefined {
   const ratio = brain / cap // the raw ratio, never a rounded percent: the band slot and the Spend tab judge the same number
-  return ratio >= 1 ? 'error' : ratio >= 0.8 ? 'warning' : undefined
+  return ratio >= 1 ? PALETTE.broken : ratio >= 0.8 ? PALETTE.attention : undefined
 }
-export const spendState = (brain: number, cap: number): ThemeKey => spendColor(brain, cap) ?? 'success'
 
 // `▰▰▰▱▱`: filled = round(ratio * n) cells in the state colour, the rest inactive; one tag per width variant
 export function spendBarSegs(brain: number, cap: number, n: number, tag?: SegTag): Seg[] {
   const f = Math.min(n, Math.max(0, Math.round((brain / cap) * n)))
   const segs: Seg[] = []
-  if (f > 0) segs.push(sp(GC.meterOn.repeat(f), { color: spendState(brain, cap), ...(tag === undefined ? {} : { tag }) }))
-  if (n > f) segs.push(sp(GC.meterOff.repeat(n - f), { color: 'inactive', ...(tag === undefined ? {} : { tag }) }))
+  if (f > 0) segs.push(sp(GC.meterOn.repeat(f), { ...ui.tone(spendColor(brain, cap)), ...(tag === undefined ? {} : { tag }) }))
+  if (n > f) segs.push(sp(GC.meterOff.repeat(n - f), { color: PALETTE.idle, ...(tag === undefined ? {} : { tag }) }))
   return segs
 }
 
@@ -1404,7 +1404,7 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   if (chip !== null) {
     const text = chip.text.replace(' ' + GT.behind, GT.behind)
     const arrow = text.indexOf(GT.behind)
-    const col = chip.warn ? { color: 'warning' as ThemeKey } : {}
+    const col = chip.warn ? { color: PALETTE.attention } : {}
     if (arrow < 0) segs.push(sp(text, { ...col, tag: 'chip' }))
     else {
       const m = new RegExp('^(\\S*' + GT.behind + '\\d+)(.*)$').exec(text.slice(arrow))
@@ -1414,13 +1414,13 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   }
   if (wt > 0) {
     if (chip !== null) segs.push(sp(' ', { tag: 'chip' })) // the separator goes with the chip: a lone `⚑N` has no leading space
-    segs.push(sp(GT.residue + wt, { color: 'warning', bold: true, tag: 'wt' }))
+    segs.push(sp(GT.residue, { color: PALETTE.attention, tag: 'wt' }), sp(String(wt), { tag: 'wt' })) // the mark is yellow, the number default text
   }
   return { id: 'hygiene', segs }
 }
 
 export type BandFacts = {
-  verdict: { mark: string; word: string; key: ThemeKey }
+  verdict: { mark: string; word: string; key: ThemeKey | undefined }
   marker: MarkerView | null; live: number; stalled: number
   review: ReviewView | null; qc: QcView | null; decisions: DecisionsView | null
   spend: { brain: number; cap: number } | null; loadSource: LoadSourceView | null; residue: ResidueView | null
@@ -1477,10 +1477,10 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const join = (list: Slot[]): Seg[] => {
     const out: Seg[] = []
     list.forEach((s, i) => {
-      if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? sp(' ') : sp(BAND_SEP, { color: 'subtle' }))
+      if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? sp(' ') : sp(BAND_SEP, { color: PALETTE.structure }))
       out.push(...s.segs.map(g => ({ ...g, slot: s.id })))
     })
-    out.push(sp(BAND_SEP, { color: 'subtle' }))
+    out.push(sp(BAND_SEP, { color: PALETTE.structure }))
     return out
   }
   const widthOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0) + displayWidth(BAND_INFO_LABEL)
@@ -1593,7 +1593,7 @@ const CLOSING_PUNCT = '）」』、。，；：！？)]}】》〉,.;:!?'
 type WrapCh = { ch: string; si: number; w: number }
 function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   if (displayWidth(l.text) <= cols) return [l]
-  const base: Seg[] = l.segs ?? [{ text: l.text, ...(l.color !== undefined ? { color: l.color } : l.warn ? { color: 'warning' as ThemeKey } : {}), ...(l.bold ? { bold: true } : {}), ...(l.dim ? { dim: true } : {}) }]
+  const base: Seg[] = l.segs ?? [{ text: l.text, ...(l.color !== undefined ? { color: l.color } : l.warn ? { color: PALETTE.attention } : {}), ...(l.bold ? { bold: true } : {}), ...(l.dim ? { dim: true } : {}) }]
   const chars: WrapCh[] = []
   base.forEach((s, si) => { for (const ch of s.text) chars.push({ ch, si, w: cellWidth(ch.codePointAt(0) as number) }) })
   const lead = (l.text.match(/^ */) as RegExpMatchArray)[0].length

@@ -95,23 +95,26 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
   expect(i4(l => l)).toEqual([]) // control: the unmodified render is I4-clean
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0) // a bold value outside header / verdict
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true, dim: true } : s)) } : l)).length).toBeGreaterThan(0) // bold and dim on one segment
-  // a findings item (△ 待修, also the warning colour) is not need_you: its bold mark must be caught
-  for (const role of ['glyph', 'state'] as const) { // one bold mark at a time, so no other rule can be what catches it
-    expect(i4(l => (l.kind === 'item' && l.text.includes('待修') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === role ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0)
+  // bold is a whitelist (owner 2026-10-16): no item mark, word or body is bold, not even a need_you one, and a meter's percent is not bold either
+  for (const role of ['glyph', 'state', 'prose'] as const) { // one bold segment at a time, so no other rule can be what catches it
+    expect(i4(l => (l.kind === 'item' && l.text.includes('待修') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === role ? { ...s, bold: true } : s)) } : l)).length, role).toBeGreaterThan(0)
   }
-  // positives: a need_you item may bold its mark, word and body; a meter headline value may be bold
   const needYouItem = (l: PaneLine): PaneLine => (l.kind === 'item' && l.text.includes('待修')
     ? { ...l, segs: [{ text: STATES.need_you.glyph, role: 'glyph' as const, color: STATES.need_you.key, bold: true }, { text: ' ', role: 'prose' as const }, { text: l.text.trim(), role: 'prose' as const, bold: true }] }
     : l)
-  expect(i4(needYouItem)).toEqual([])
+  expect(i4(needYouItem).length).toBeGreaterThan(0) // the old need_you exemption is gone
   const pct = { text: ' 80%', role: 'value' as const, fmt: 'pct' as const, bold: true, color: 'warning' as const }
-  const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind: 'meter' as const, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l) // a synthetic meter line: filled cells, then the bold value
-  expect(i4(meterRow)).toEqual([])
-  const pct0 = { ...pct, text: ' 0%', color: 'success' as const }
-  const meter0 = (kind: PaneLine['kind']) => (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind, segs: [{ text: GLYPHS.chart.meterOff.repeat(4), role: 'glyph' as const, color: 'success' as const }, pct0] } : l)
-  expect(i4(meter0('meter'))).toEqual([]) // a 0% meter has no filled cell and its bold value is still allowed (the P1 check keyed on the filled glyph and rejected it)
-  expect(i4(meter0('kv')).length).toBeGreaterThan(0) // the same segments on a plain kv row are not a meter
-  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), pct] } : l)).length).toBeGreaterThan(0) // a bold pct on a plain kv row is not a meter
+  const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind: 'meter' as const, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l)
+  expect(i4(meterRow).length).toBeGreaterThan(0) // a bold meter percent is flagged
+  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), pct] } : l)).length).toBeGreaterThan(0) // and so is a bold pct on a plain kv row
+  // positives: a tab name wearing the attention colour, or the active one (here) in default text, may be bold; a bold tab-role seg in any other colour may not,
+  // and since 2026-10-16 neither may a claude-coloured one
+  const tabSeg = (color: 'warning' | 'claude' | 'success' | undefined, here = false) => (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), { text: ' Aa ', role: 'tab' as const, bold: true, ...(color ? { color } : {}), ...(here ? { here: true } : {}) }] } : l)
+  expect(i4(tabSeg('warning'))).toEqual([])
+  expect(i4(tabSeg(undefined, true))).toEqual([])
+  expect(i4(tabSeg(undefined)).length).toBeGreaterThan(0)
+  expect(i4(tabSeg('claude', true)).length).toBeGreaterThan(0)
+  expect(i4(tabSeg('success')).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.replace(/^[▾▸] /u, '') } : l)).length).toBeGreaterThan(0) // a header without its fold mark

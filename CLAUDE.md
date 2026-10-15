@@ -134,6 +134,7 @@ In a Mission graph, each node's `verification_commands` hold only fast, fixed ch
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `docs/BACKLOG.md` |
 | Plans | `docs/plans/` — registered in `docs/projects/INDEX.md` (Version `active`; `scripts/check-plan-graduation.js`'s `plan_unregistered` gate) |
+| Mod surface colour and emphasis (pane, band, any new mod) | [`docs/plans/2026-10-13-live-pane-design-system.md`](docs/plans/2026-10-13-live-pane-design-system.md) §12: one colour one meaning, bold whitelist; colours only through `PALETTE` in `mods/live/ui.ts` (`ui-lint.test.js` L8 enforces) |
 | Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |

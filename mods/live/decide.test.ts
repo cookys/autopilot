@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
-import { decideTabLines, nowLines, stripOf, tabBadges } from './tabs'
+import { decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
 
@@ -58,14 +58,14 @@ test('DECIDE card: first line `n. question`, the background below it, ONE row of
   expect(ls.length).toBeLessThan(24)
 })
 
-test('DECIDE choose: the picked option is `[x]` in success text (no background, no inverse), the others stay plain, the send row counts it and becomes pressable', () => {
+test('DECIDE choose: the picked option is `[x]` in bold default text (no background, no inverse), the others stay plain, the send row counts it and becomes pressable', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 1 } })))
   const row = ls.find(l => l.kind === 'choice' && l.text.includes('完整顯示')) as PaneLine
   expect(row.text.trimEnd()).toBe('  [ ] ★ OK  [x] 完整顯示')
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
-  for (const s of picked) { expect(s.color).toBe('success'); expect('backgroundColor' in s || 'inverse' in s).toBe(false) }
+  for (const s of picked) { expect(s.color).toBeUndefined(); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
   expect(ls.some(l => l.text.includes('全列出來')), 'the picked option shows its one-line description').toBe(true)
   const last = ls[ls.length - 1]
   expect(last.text.trim()).toBe('[ 送出（已選 1/3） ]')
@@ -105,14 +105,15 @@ test('DECIDE none: no question is one empty line and no badge; each question add
     const none = decideTabLines(snapOf([]), ctxOf(t, 76, view()))
     expect(none.map(l => l.kind), loc).toEqual(['empty'])
     expect(none[0].text, loc).toContain(t('decide.none'))
-    expect(tabBadges(snapOf([])).decide, loc).toBeUndefined()
-    const badge = tabBadges(snapOf(THREE)).decide as ui.Frag
-    expect(badge.text, loc).toBe('▲3')
-    expect(badge.segs[0].color, loc).toBe('warning')
+    expect(tabNeeds(snapOf([])).decide, loc).toBeUndefined()
+    expect(tabNeeds(snapOf(THREE)).decide, loc).toEqual({})
   }
-  // the badge reaches the strip, after the tab's label
+  // the need reaches the strip: the tab name is warning bold, no symbol; no number
   const strip = stripOf(snapOf(THREE), { t: makeT('zh-TW'), cols: 76 }, 'now', true)
-  expect(strip.tabs.find(x => x.id === 'decide')?.badge.map(s => s.text).join('')).toBe('▲3')
+  const dtab = strip.tabs.find(x => x.id === 'decide')!
+  expect(dtab.label.color).toBe('warning')
+  expect(dtab.label.bold).toBe(true)
+  expect(strip.rule.map(s => s.text).join('')).not.toMatch(/[▲●⚑]/)
   expect(strip.tabs.map(x => x.id)).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
 })
 
@@ -128,6 +129,22 @@ test('DECIDE every invariant: I1-I8 and I10 hold on the tab in both locales, wit
   // control: the checker does flag a background planted on an option segment
   const bent = decideTabLines(snapOf(THREE), ctxOf(makeT('en'), 76, view())).map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => ({ ...s, backgroundColor: 'red' }) as never) }) : l))
   expect(violations(bent, 76, makeT('en')).some(v => v.startsWith('I6'))).toBe(true)
+})
+
+test('DECIDE bold whitelist (I4): only the picked option and the send button may be bold; an unpicked option, the star or a plain segment on a choice line is flagged (negative control)', () => {
+  const t = makeT('en')
+  const ls = decideTabLines(snapOf(THREE), ctxOf(t, 76, view({ picks: { 'd-4290499d': 1 } })))
+  expect(violations(ls, 76, t).filter(v => v.startsWith('I4'))).toEqual([]) // control: the real card (picked option bold, send button bold) is clean
+  expect(ls.some(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.bold === true && s.role === 'pick'))).toBe(true)
+  expect(ls.some(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.bold === true && s.role === 'send'))).toBe(true)
+  // plant: bold on every NON-picked, non-send segment of the option rows (an unpicked option label, the star, the spacing)
+  const bent = ls.map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => (s.role === 'pick' || s.role === 'send' || s.text.trim() === '' ? s : { ...s, bold: true })) }) : l))
+  expect(violations(bent, 76, t).some(v => v.startsWith('I4'))).toBe(true)
+  // the same bold on a send-role seg that has no press id (a button that cannot be pressed) is flagged too
+  const dead = ls.map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => (s.role === 'send' ? { ...s, press: undefined } : s)) }) : l))
+  expect(violations(dead, 76, t).some(v => v.startsWith('I4'))).toBe(true)
+  // BOLD_USES is the list I4 reads
+  expect(ui.BOLD_USES).toContain('picked option')
 })
 
 test('DECIDE owner: the cards are the 待決 tab\'s own fact, and 現況 shows only the one summary row', () => {

@@ -318,6 +318,9 @@ const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.sli
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
 const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
 
+// the drawn Text of one tab's name in the strip (its colour and weight say whether the tab needs the owner)
+const tabName = (tree: Node, id: string): Drawn => walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id && n.props?.key !== 'next') ? (walkAll(walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id) as Drawn).find(n => n.type === 'Text') as Drawn) : ({} as Drawn)
+
 // a mounted pane on one tab (the caller unmounts it)
 async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
   const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -1169,7 +1172,7 @@ for (const surface of SURFACES) {
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
     expect(pane.texts[rule + 1]).toMatch(/^▲ 待決議事項 1 件\s+待決 ›$/) // one row that points at the 待決 tab (the whole question is not repeated here)
-    expect(pane.texts[rule]).toContain('▲ 1') // the section chip counts what awaits you
+    expect(pane.texts[rule]).toMatch(/要你處理\s+1\s/) // the section title counts what awaits you as a plain number (no ▲, no colour)
     expect(pane.texts.some(t => t.startsWith('▾ 待決議事項'))).toBe(false) // the old block that spread every question over this tab is gone
     expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     const cards = (await paneParts($, surface, 'decide')).texts
@@ -2267,7 +2270,7 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
+const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
 const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ⊘1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ●2 ⊘1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_NARROW = '⊘ 疑似卡住 │ ●2 ⊘1 │ ⚑2 │ ⓘ '
@@ -2291,7 +2294,7 @@ function walkAll(n: Drawn, out: Drawn[] = []): Drawn[] {
   return out
 }
 // every drawn node uses theme keys as text colour only: no backgroundColor, no inverse, no raw colour
-// (P5: the panel's active tab is bold `claude` text with a `━` under it; no background anywhere, so the second argument is kept only for the callers' sake)
+// (P5: the panel's active tab is a bold name with a `claude` `━` under it; no background anywhere, so the second argument is kept only for the callers' sake)
 function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
   for (const n of walkAll(tree)) {
     const p = n.props || {}
@@ -2302,12 +2305,28 @@ function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
 }
 const joined = (texts: string[]) => texts.join('')
 
-// the tab showing: its Button wraps a bold Text (bold `claude`); the others wrap a plain one, and the `next` chip is no tab
-const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string' && (c as Drawn).props?.bold === true)
+// the tab showing (owner 2026-10-16: its name is bold default text, or attention bold when it needs the owner, so no colour tells it apart from a
+// needing tab): the one strip Button that starts at the column where the baseline's `━` run starts. The strip Buttons come first in draw order
+// (the `next` chip, then the tabs), each followed by a one-cell gap; the baseline is the first Text made only of `─` / `━`, its leading `─` run as
+// wide as everything left of the active label.
+async function activeKeyOf(p: any): Promise<string | undefined> {
+  const texts = (await p.findAll({ type: 'Text' })) as Drawn[]
+  const rule = texts.map(n => textOf(n as Node)).filter(x => x !== '' && /^[─━]+$/u.test(x))
+  const at = rule.findIndex(x => x.startsWith('━'))
+  if (at < 0) return undefined
+  const markAt = rule.slice(0, at).reduce((w, x) => w + displayWidth(x), 0)
+  let x = 0
+  for (const b of (await p.findAll({ type: 'Button' })) as Drawn[]) {
+    if (b.props?.key !== 'next' && x === markAt) return b.props?.key as string
+    x += displayWidth(fullText(b as Node)) + 1 // fullText: the `next` chip may carry its glyph as a label prop
+    if (x > markAt) return undefined
+  }
+  return undefined
+}
 
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+  const tab = (await activeKeyOf(pane))
   await pane.unmount()
   return tab
 }
@@ -2347,16 +2366,16 @@ for (const surface of SURFACES) {
     expect(dimOf(' 最久的派工 4m 沒有輸出')).toBe(true) // the reason phrase is a dim hint
     expect(colorOf('implement')).toBe('claude') // the stage: you are here
     expect(colorOf('M!·l5 ')).toBeUndefined() // the rest of the position is the default colour
-    expect(colorOf('●')).toBe('success') // walk: done nodes
+    expect(colored.filter(([x]) => x === '✓').map(([, c]) => c)).toEqual(['success', 'success', 'success']) // walk: two done nodes drawn as ✓ (not ●), then the QC mark
     expect(colorOf('◐')).toBe('claude') // the current node
     expect(colorOf('○')).toBe('inactive') // nodes to come
     expect(colorOf('─')).toBe('subtle') // links are chrome
     expect(colorOf('▰▰')).toBe('success') // unit bar: done cells
     expect(colored.filter(([x]) => x === '▰')[0]?.[1]).toBe('claude') // the current cell
     expect(colorOf('▱▱')).toBe('inactive') // cells to come
-    expect(colorOf('●2')).toBeUndefined()
+    expect(colorOf('●2')).toBe('suggestion') // running: the band draws the same blue as the pane's ●
     expect(colorOf(' ⊘1')).toBe('error') // stalled
-    expect(colorOf('QC✓')).toBe('success')
+    expect(colorOf('QC')).toBeUndefined() // the label stays default text, the mark carries the colour
     expect(dimOf('↺ ')).toBe(true)
     expect(colorOf('◆3')).toBeUndefined() // claude is reserved for "you are here"
     expect(colorOf('?1')).toBe('inactive')
@@ -2364,9 +2383,12 @@ for (const surface of SURFACES) {
     expect(colorOf('120')).toBe('warning') // 80.3 % of the cap: the amount, then the bar in the same state colour
     expect(colorOf('▰▰▰▰▰▰▰▰')).toBe('warning')
     expect(dimOf('80%')).toBe(true)
-    expect(colorOf('⚑2')).toBe('warning') // the owner reminder
+    expect(colorOf('⚑')).toBe('warning') // the owner reminder: the mark is yellow, the number stays default text
+    expect(colored.some(([x, c]) => x === '2' && c === undefined)).toBe(true)
     expect(dimOf('↓3')).toBe(true)
     expect(colored.filter(([x]) => x === ' │ ').every(([, c]) => c === 'subtle')).toBe(true)
+    expect(colored.every(([x, c]) => c !== 'claude' || x === 'implement' || x === '◐' || x === '▰')).toBe(true) // claude is only "you are here"
+    expect(line.tree && walkTexts(line.tree).some(n => n.props?.bold === true && textOf(n) !== '⊘ 疑似卡住')).toBe(false) // bold: the verdict word only
     expectThemeOnly(line.tree as Drawn)
   })
 
@@ -2463,7 +2485,7 @@ for (const surface of SURFACES) {
       await band.press({ key: slot })
       await band.unmount()
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const active = (await activeKeyOf(pane))
       await pane.unmount()
       expect([slot, active]).toEqual([slot, tab])
     }
@@ -2508,7 +2530,7 @@ for (const surface of SURFACES) {
     await b.unmount()
     const activeTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2526,7 +2548,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2611,7 +2633,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2642,7 +2664,7 @@ for (const surface of SURFACES) {
     await first.unmount()
     await second.unmount()
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+    const tab = (await activeKeyOf(pane))
     await pane.unmount()
     expect(tab).toBe('decide') // Now (first press) then Decide (second press)
   })
@@ -2734,42 +2756,47 @@ for (const surface of SURFACES) {
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
     expect(strip).toContain('待決')
-    expect(strip.slice(strip.indexOf('待決'), strip.indexOf('派工'))).not.toContain('▲') // nothing is pending in this world: the tab carries no badge
     expect(strip).toContain('派工')
-    expect(strip).toContain('●2')
     expect(strip).toContain('審查')
     expect(strip).toContain('用量')
     expect(strip).toContain('殘留')
-    expect(strip).toContain('⚑2')
     expect(strip.trim().endsWith('?')).toBe(true)
-    // the active tab (Now) is bold `claude` text with a `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1)
+    expect(strip).not.toMatch(/[▲●⚑]/) // no symbol badge anywhere in the strip
+    // names only: 殘留 needs the owner (2 worktrees) and is warning bold; 派工 has 2 live runs and is plain dim; 待決 has nothing pending here and is plain dim
+    const nameNode = (id: string) => tabName(tree as Node, id)
+    expect(nameNode('hygiene').props?.color).toBe('warning')
+    expect(nameNode('hygiene').props?.bold).toBe(true)
+    for (const id of ['dispatch', 'decide', 'spend']) { expect(nameNode(id).props?.color, id).toBeUndefined(); expect(nameNode(id).props?.bold, id).not.toBe(true) }
+    expect(strip).not.toMatch(/殘留 \d/) // variant A: colour only, no number
+    // the active tab (Now) is bold default text with a `claude` `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1, 2026-10-16)
     const stripNodes = walkAll(((tree.children || [])[0]) as Drawn)
     expect(stripNodes.filter(n => n.props?.backgroundColor !== undefined).length).toBe(0)
     const boldNodes = stripNodes.filter(n => n.type === 'Text' && n.props?.bold === true)
-    expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === 'claude')).toBe(true)
+    expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === undefined)).toBe(true)
+    expect(stripNodes.some(n => n.type === 'Text' && n.props?.color === 'claude' && !textOf(n as Node).includes('━'))).toBe(false) // claude only on the ━ run
     expect(boldNodes.some(n => textOf(n as Node).includes('派工'))).toBe(false)
     expect(fullText(((tree.children || []) as Node[])[0])).toContain('━')
     await pane.unmount()
   })
 
-  test('P7 panel: tab badges: ▲ on Review when QC is owed, ⚑N on Hygiene, ●N on Dispatch, nothing when there is nothing (' + surface + ')', async ($, on) => {
+  test('P7 panel: tab names: Review, Hygiene and Decide go warning bold when they need the owner, Dispatch never does, no symbol anywhere (' + surface + ')', async ($, on) => {
     const files = richWorld()
     files[LIVE + '/runs/' + KEY + '.qc.json'] = j({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state: 'owed', range: null, protected_files_count: 1, evidence: null })
     const w = world(on, files)
     await start($, surface)
-    const strip = async () => stripOf((await paneParts($, surface, 'now')).tree)
-    const owed = await strip()
-    expect(owed).toContain('審查 ▲')
-    expect(owed).toContain('⚑2')
-    expect(owed).toContain('●2')
+    const tree0 = async () => (await paneParts($, surface, 'now')).tree
+    const loud = (tree: Node, id: string) => { const p = tabName(tree, id).props; return p?.color === 'warning' && p?.bold === true }
+    const owed = await tree0()
+    expect(loud(owed, 'review'), 'QC owed marks Review').toBe(true)
+    expect(loud(owed, 'hygiene'), 'residue marks Hygiene').toBe(true)
+    expect(loud(owed, 'dispatch'), 'a live dispatch marks nothing').toBe(false)
+    expect(stripOf(owed)).not.toMatch(/[▲●⚑]/)
     delete w.files[LIVE + '/runs/' + KEY + '.qc.json']
     delete w.files[LIVE + '/runs/' + KEY + '.residue.json']
-    w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 }, published_at: '2026-10-04T10:00:25.000Z' }))
     await w.clock.advance(5000)
-    const quiet0 = await strip()
-    expect(quiet0).not.toContain('▲')
-    expect(quiet0).not.toContain('⚑')
-    expect(quiet0).not.toContain('●')
+    const quiet = await tree0()
+    for (const id of ['review', 'hygiene', 'dispatch', 'decide']) expect(loud(quiet, id), id + ' with nothing to do is not marked').toBe(false)
+    expect(stripOf(quiet)).not.toMatch(/[▲●⚑]/)
   })
 
   test('P7 panel: every tab renders its fixture facts, theme colours only (' + surface + ')', async ($, on) => {
@@ -2780,7 +2807,7 @@ for (const surface of SURFACES) {
     const legend = await tab('legend')
     expect(legend.texts[0]).toContain('狀態') // the generated `?` tab (I15) opens on its states section
     for (const id of ui.STATE_IDS) expect(joined(legend.texts)).toContain(ui.STATES[id].glyph + ' ' + makeT('zh-TW')('ui.state.' + id)) // every state glyph with its word
-    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'residue', 'behind'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
+    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'behind'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
@@ -2824,7 +2851,7 @@ for (const surface of SURFACES) {
 
     const hygiene = await tab('hygiene')
     // P5: the groups, the cleanup row and the plugin source are `item` rows on the shared components; a group is folded until its toggle is pressed
-    expect(has(hygiene.texts, '要你處理', '▲ 2', '3.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '要你處理', ' 2 ', '3.0 MB')).toBe(true)
     expect(has(hygiene.texts, '▲ worktree', '有未提交變更', '1 個', '2.0 MB')).toBe(true)
     expect(has(hygiene.texts, '▲ 分支', '分支未整合', '1 條')).toBe(true)
     expect(hygiene.texts).toContain('✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支')
@@ -2920,7 +2947,7 @@ test('P7 model: slot texts and theme keys', () => {
   const rv = readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, code: { generation: 4, seats: [] } }), KEY)
   const qc = (state: string) => readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state }), { project_key: KEY, root_run_id: null })
   expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4 QC▲')
-  expect(slotReview(rv, qc('owed'))?.segs[3]?.color).toBe('warning')
+  expect(slotReview(rv, qc('owed'))?.segs.slice(3).map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['▲', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
   expect(text(slotReview(null, qc('ok')))).toBe('QC✓')
   expect(text(slotReview(rv, qc('not_needed')))).toBe('↺ R4')
   expect(slotReview(null, qc('unknown'))).toBeNull()
@@ -2952,7 +2979,7 @@ test('P7 model: slot texts and theme keys', () => {
   expect(slotHygiene(ls({ behind_upstream: 3 }), null)?.segs.map(g => [g.text, g.dim === true])).toEqual([['dev', false], ['↓3', true]])
   expect(text(slotHygiene(ls(), rs(0)))).toBe('dev')
   expect(text(slotHygiene(null, rs(3)))).toBe('⚑3')
-  expect(slotHygiene(null, rs(3))?.segs[0]).toEqual({ text: '⚑3', color: 'warning', bold: true, tag: 'wt' })
+  expect(slotHygiene(null, rs(3))?.segs).toEqual([{ text: '⚑', color: 'warning', tag: 'wt' }, { text: '3', tag: 'wt' }]) // the mark is yellow, the number default text, no bold
   expect(slotHygiene(ls({ flags: ['marketplace_not_directory'] }), null)?.segs[0].color).toBe('warning')
   expect(slotHygiene(null, rs(0))).toBeNull()
   // an older fact without the needs_human fields reads as 0 / [] (no wt segment, no rows); the list is capped at 20
@@ -3011,7 +3038,7 @@ for (const surface of SURFACES) {
     }
     const a = await spendNode(119.6) // rounds to 80 % but is below 0.8 of the cap
     expect(a[0]).toBeUndefined()
-    expect(a[1]).toBe('success')
+    expect(a[1]).toBeUndefined() // a healthy level is default text, not green
     expect(a[2]).toBe('79%') // floored, so it never reads 80% before the threshold
     const b = await spendNode(120)
     expect([b[0], b[1]]).toEqual(['warning', 'warning'])
@@ -3146,20 +3173,20 @@ const GRID: Record<string, string> = {
   'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
   'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ ',
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
-  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
   'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 80': '● Running │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
   'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
   'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
   'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
   'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
 }
@@ -3387,7 +3414,7 @@ test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path b
 
 // I15 (plan section 5.6): the `?` tab is generated from the tables the pane draws from. Every state of STATES (glyph + word) and every structure glyph a tab draws
 // is on it, in both locales, at every width, and each entry is one example plus its explanation.
-const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'residue', 'behind'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
+const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'behind'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
 const legendMissing = (lines: { text: string }[], t: ReturnType<typeof makeT>): string[] => {
   const all = lines.map(l => l.text).join('\n')
   const out: string[] = []
@@ -3780,7 +3807,7 @@ for (const surface of SURFACES) {
     await nav.press({ key: 'g' + ptr })
     await nav.unmount()
     const review = await mountPane()
-    const active = ((await review.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+    const active = (await activeKeyOf(review))
     await review.unmount()
     expect(active).toBe('review')
   })
@@ -4475,7 +4502,7 @@ test('quota slot: a window is plain below 80 %, warning from 80 %, error from 10
   const tabLine = spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', 79.9)] }), { t: makeT('en'), cols: 120 }).find(l => l.kind === 'meter') as { text: string; segs: { text: string; color?: string }[] }
   expect(tabLine.text).toContain(' 79%')
   expect(tabLine.text).not.toContain('80%')
-  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBe('success') // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
+  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBeUndefined() // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
@@ -4531,7 +4558,7 @@ test('usage tab: an API-key login is one absent row; no account read is one empt
 test('usage tab: the limits chip names the worst level; a window over its cap makes it 已超過, and the meter bar and percent take the level colour', () => {
   const t = makeT('zh-TW')
   const chipOf = (pct: number) => (spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', pct)] }), { t, cols: 76 }).find(l => l.kind === 'header' && l.text.startsWith('▾ ' + t('usage.limits'))) as { segs: { text: string; color?: string }[] }).segs.find(s => s.role === 'value')
-  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), 'success'], [t('spend.ok'), 'success'], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
+  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), undefined], [t('spend.ok'), undefined], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
 })
 
 for (const surface of SURFACES) {
@@ -4600,7 +4627,7 @@ for (const surface of SURFACES) {
     await band.press({ key: 'quota' })
     await band.unmount()
     const pane = await mountPane()
-    const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+    const active = (await activeKeyOf(pane))
     await pane.unmount()
     expect(active).toBe('spend')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
@@ -4746,7 +4773,7 @@ for (const surface of SURFACES) {
     const activeAfter = async (key: string): Promise<string> => {
       await pressAt($, surface, key)
       const pane = await mountOn($, surface)
-      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key as string
+      const active = (await activeKeyOf(pane)) as string
       await pane.unmount()
       return active
     }
@@ -4828,7 +4855,7 @@ for (const surface of SURFACES) {
     await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸'))
     await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x'))
     expect(await hyg($, 76)).toEqual([
-      "▾ 要你處理  ▲ 2 · 3.0 MB ──────────────────────────────────────────────────",
+      "▾ 要你處理  2 · 3.0 MB ────────────────────────────────────────────────────",
       "▲ worktree  有未提交變更 · 1 個 · 2.0 MB                                  ▾",
       "◦ hands-x · 4d04h · 2.0 MB                                                ▾",
       "  └ failure",
@@ -4985,13 +5012,15 @@ for (const surface of SURFACES) {
     ])
   })
 
-  test('DECIDE mounted: the strip badges the tab with the number of questions, and the 現況 summary row opens it (' + surface + ')', async ($, on) => {
+  test('DECIDE mounted: the strip colours the 待決 tab, and the 現況 summary row opens it (' + surface + ')', async ($, on) => {
     decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'now')
     const tree = (await pane.drawn()) as Node
     await pane.unmount()
-    expect(stripOf(tree)).toContain('待決 ▲3')
+    expect(stripOf(tree)).not.toContain('▲')
+    expect(tabName(tree, 'decide').props?.color).toBe('warning')
+    expect(stripOf(tree)).not.toMatch(/待決 \d/)
     const rows = rowsOf(tree)
     const at = rows.findIndex(t => /^▲ 待決議事項 3 件\s+待決 ›$/.test(t))
     expect(at).toBeGreaterThanOrEqual(0)

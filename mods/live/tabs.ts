@@ -53,23 +53,20 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 // PaneLine is one drawn row (wrapLine already broke what was wider than the pane). A strip that wraps is the one height this file cannot be sure of, so then the hint says
 // "more" without a number. A header line too narrow for the hint drops it: the spend segments are never squeezed or cut.
 export type ScrollView = { offset: number; bodyRows: number }
-// ---- tab badges: which tab holds something for the owner, visible without opening it. ▲ = QC owed (Review), ●N = live dispatches, ⚑N = residue a person must act on ----
-export function tabBadges(snap: LiveSnapshot): Partial<Record<PaneTab, Frag>> {
-  const out: Partial<Record<PaneTab, Frag>> = {}
-  const live = snap.detail.counts === null ? 0 : snap.detail.counts.confirmed_live
-  if (live > 0) out.dispatch = ui.stateBadge(ui.stateOf('run', { rc: null, final_status: null, stall: false, fresh: true }) as ui.BadgeStated, live, 'dispatch.counts')
-  if (snap.detail.qc !== null) {
-    const s = ui.stateOf('qc', snap.detail.qc.state)
-    if (ui.isBadgeState(s)) out.review = ui.stateBadge(s, undefined, 'review.qc')
-  }
+// ---- tab attention: which tab holds something for the owner, visible without opening it. The tab NAME is drawn warning bold (no symbol): 待決 while a question is open, 殘留 while
+// residue needs a person, 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
+export type TabNeed = Record<string, never>
+export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> {
+  const out: Partial<Record<PaneTab, TabNeed>> = {}
+  if (snap.detail.qc !== null && ui.isNeedYou(ui.stateOf('qc', snap.detail.qc.state))) out.review = {}
   const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  if (wt > 0) out.hygiene = ui.residueBadge(wt, 'residue.groups')
-  if (snap.pending.length > 0) out.decide = ui.decideBadge(snap.pending.length, 'decide.cards')
+  if (wt > 0) out.hygiene = {}
+  if (snap.pending.length > 0) out.decide = {}
   return out
 }
 export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): ui.Strip {
-  const badges = snap === null ? {} : tabBadges(snap)
-  return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => ({ id, label: tabLabel(id, ctx.t), ...(badges[id] === undefined ? {} : { badge: badges[id] }) })), hasButton)
+  const needs = snap === null ? {} : tabNeeds(snap)
+  return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // an empty-text line is drawn as an empty Text, which takes no row on screen (the header's trailing blank is one): count only the rows that are really drawn
@@ -138,7 +135,7 @@ function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (m === null || m.stage === null) body.push(ui.kv(u, t(KEY_IDS.stage), [ui.absent(t('nodata.stage'))], { fact: F }))
     else {
       const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { tone: 'strong', here: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
+      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { here: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
     }
     if (m === null || m.unit === null || slotUnit(m, t) === null) body.push(ui.kv(u, t(KEY_IDS.unit), [ui.absent(t('nodata.unit'))], { fact: F }))
     else {

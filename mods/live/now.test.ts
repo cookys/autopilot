@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, staleSuffix, wrapLines } from './model'
-import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
+import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, tabNeeds, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
@@ -153,13 +153,11 @@ const i17 = (ls: PaneLine[]): string[] => {
   for (const l of ls) if (l.fact === 'review.round' && (l.segs ?? []).filter(s => s.role === 'state').length > 1) out.push('review.round row has more than one state segment')
   return out
 }
-// a bare-glyph item (no state word) under a count chip must wear the chip's glyph; a differing state keeps its word
-const glyphOfSeg = (l: PaneLine): string | undefined => (l.segs ?? []).find(s => s.role === 'glyph')?.text
-const bareMismatch = (ls: PaneLine[]): string[] => {
+// the 要你處理 section title carries a PLAIN count (owner 2026-10-16): no state glyph and no colour on the title; the yellow mark lives on the rows under it
+const chipViolations = (ls: PaneLine[]): string[] => {
   const head = ls.find(l => l.kind === 'header' && l.fact === 'now.attention')
-  const chip = head === undefined ? undefined : [...(head.segs ?? [])].reverse().find(s => s.role === 'glyph')?.text
-  if (chip === undefined) return []
-  return ls.filter(l => l.kind === 'item' && l.fact === 'now.attention' && !(l.segs ?? []).some(s => s.role === 'state') && glyphOfSeg(l) !== chip).map(l => JSON.stringify(l.text.trimEnd()))
+  if (head === undefined) return ['no now.attention header']
+  return (head.segs ?? []).filter(s => s.role === 'glyph' && Object.values(ui.STATES).some(st => st.glyph === s.text) || (s.role !== 'glyph' && s.role !== 'rule' && s.color !== undefined)).map(s => JSON.stringify(s.text))
 }
 // the golden table: the (fact, goto, kind) triples of the busy snapshot, in order
 const GOLDEN_NOW = [
@@ -178,11 +176,11 @@ test('I17: every data line of 現況 has a fact; a foreign fact is a kv / item p
     expect(i17([...ls, ls.find(l => l.fact === 'review.round') as PaneLine]).length).toBeGreaterThan(0)
     const rv = ls.find(l => l.fact === 'review.round') as PaneLine
     expect(i17(ls.map(l => (l === rv ? { ...l, segs: [...(l.segs ?? []), { text: 'x', role: 'state' as const }] } : l))).length, 'a second state seg on the review row').toBeGreaterThan(0)
-    // a bare-glyph reason under a chip of another state is flagged; the real render has none, and the stalled reason says its word
-    expect(bareMismatch(ls), loc).toEqual([])
+    // the section title count is plain: no ▲ and no colour; a planted yellow ▲ chip is flagged (negative control)
+    expect(chipViolations(ls), loc).toEqual([])
     const reason = ls.find(l => l.kind === 'item' && l.fact === 'now.attention') as PaneLine
-    expect(reason.segs?.some(s => s.role === 'state'), 'the stalled reason keeps its state word under a louder chip').toBe(true)
-    expect(bareMismatch(ls.map(l => (l === reason ? { ...l, segs: (l.segs ?? []).filter(s => s.role !== 'state') } : l))).length).toBeGreaterThan(0)
+    expect(reason.segs?.some(s => s.role === 'state'), 'the stalled reason keeps its state word').toBe(true)
+    expect(chipViolations(ls.map(l => (l.kind === 'header' && l.fact === 'now.attention' ? { ...l, segs: [...(l.segs ?? []), { text: ui.STATES.need_you.glyph, role: 'glyph' as const, color: 'warning' as const }] } : l))).length).toBeGreaterThan(0)
     // the header: spend.* on the two spend segments, none of them a goto
     const head = headerLines(snap(), ctxOf(t, 120))
     const facts = head.flatMap(l => (l.segs ?? []).flatMap(s => (s.fact === undefined ? [] : [s.fact])))
@@ -324,7 +322,7 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     const st = stripOf(s, c, 'now', true)
     expect(st.rule.some(g => g.text.includes('━')), loc + ': a wrapped strip draws no ━ under-mark').toBe(false)
     const on = st.tabs.find(x => x.on)!
-    expect(on.label.bold === true && on.label.color === 'claude', loc + ': the active label falls back to bold claude').toBe(true)
+    expect(on.label.bold === true && on.label.here === true && on.label.color === undefined, loc + ': the active label falls back to bold alone').toBe(true)
     const one = stripOf(s, ctxOf(t, 76), 'now', true)
     expect(one.rule.some(g => g.text.includes('━')), loc + ': control: an unwrapped strip does draw it').toBe(true)
     // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
@@ -498,13 +496,14 @@ test('every tab: the shared checker flags a hand-written number, a bold mark wit
   expect(tabViolations('legend', legend.map(l => ({ ...l, segs: [...(l.segs ?? []), { text: ' 7m', role: 'value' as const }] })), 120, t).some(v => v.includes(' I8 ')), 'legend I8').toBe(true)
 })
 
-test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here', () => {
+test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here, and claude is only on the ━ run', () => {
   for (const [loc, t] of LOCALES) {
     const sr = stripOf(snap(), ctxOf(t, 120), 'now', true)
-    const marked = [...sr.tabs.map(x => x.label), ...sr.tabs.flatMap(x => x.badge), ...sr.rule]
-    for (const s of marked) if (s.bold === true || s.color === 'claude') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
+    const marked = [...sr.tabs.map(x => x.label), ...sr.rule]
+    for (const s of marked) if ((s.bold === true || s.color === 'claude') && s.color !== 'warning') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
     expect(sr.tabs.filter(x => x.on).length).toBe(1)
     expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
+    expect(sr.tabs.some(x => x.label.color === 'claude'), loc + ': no tab name is claude').toBe(false)
   }
 })
 
@@ -550,4 +549,45 @@ test('PENDING: an orphaned question carries the asker-ended label in pane and ba
     expect(staleSuffix(pend('d-9', 'q', { orphaned: true, stale: true, age_s: 8 * 86400 }), t), loc + ': stale and orphaned both say so').toBe(t('decision.stale_days', { d: 8 }) + t('decision.orphaned'))
     expect(staleSuffix(pend('d-9', 'q'), t), loc).toBe('')
   }
+})
+
+// ---- the tab NAME carries the need (owner 2026-10-16): warning bold for a tab that holds something for the owner, no symbol; a running dispatch is not marked ----
+// Negative controls: the old strip draws symbol badges after the name and never colours it, so every colour assertion below fails on it.
+const needSnap = (over: { pending?: boolean; residue?: number; qc?: string | null; live?: number }): LiveSnapshot => {
+  const s = snap({ decision: over.pending === true }) as never as { detail: { residue: unknown; qc: unknown; counts: unknown } }
+  s.detail.residue = over.residue === undefined ? null : { needs_human_count: over.residue, needs_human: [], needs_human_bytes: 0, by_class: {}, reapable_worktrees: 0, at: null }
+  s.detail.qc = over.qc === undefined || over.qc === null ? null : { state: over.qc, range: null, protected_files_count: 0, evidence: null, mode: 'block', checked_at: null }
+  s.detail.counts = { confirmed_live: over.live ?? 0, exited: 0, unknown: 0, fresh_bound_s: 30 }
+  return s as never
+}
+const loud = (sr: ui.Strip, id: string): boolean => { const l = sr.tabs.find(x => x.id === id)!.label; return l.color === 'warning' && l.bold === true }
+test('tab colour: 待決 / 殘留 / 審查 go warning bold when they need the owner, and not otherwise', () => {
+  const t = makeT('zh-TW')
+  const c = ctxOf(t, 120)
+  const all = stripOf(needSnap({ pending: true, residue: 2, qc: 'owed' }), c, 'now', true)
+  for (const id of ['decide', 'hygiene', 'review']) expect(loud(all, id), id + ' needs the owner').toBe(true)
+  const none = stripOf(needSnap({ pending: false, residue: 0, qc: 'ok' }), c, 'now', true)
+  for (const id of ['decide', 'hygiene', 'review']) expect(loud(none, id), id + ' has nothing for the owner').toBe(false)
+  expect(none.tabs.find(x => x.id === 'review')!.label.dim).toBe(true)
+  // one at a time: each condition marks only its own tab
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ pending: true }), c, 'now', true), id))).toEqual(['decide'])
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ residue: 1 }), c, 'now', true), id))).toEqual(['hygiene'])
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ qc: 'owed' }), c, 'now', true), id))).toEqual(['review'])
+  for (const q of ['ok', 'not_needed', 'unknown']) expect(loud(stripOf(needSnap({ qc: q }), c, 'now', true), 'review'), 'qc ' + q).toBe(false)
+})
+test('tab colour: a running dispatch never marks 派工; no symbol badge is drawn anywhere in the strip', () => {
+  const t = makeT('zh-TW')
+  const sr = stripOf(needSnap({ pending: true, residue: 2, qc: 'owed', live: 3 }), ctxOf(t, 120), 'now', true)
+  expect(loud(sr, 'dispatch')).toBe(false)
+  expect(tabNeeds(needSnap({ live: 3 })).dispatch).toBeUndefined()
+  const text = [...sr.tabs.map(x => x.label), ...sr.rule].map(g => g.text).join('')
+  expect(text).not.toMatch(/[▲●⚑⊘]/)
+})
+test('tab colour: the active tab that needs the owner is warning bold, with its claude ━ run under it (owner 2026-10-16)', () => {
+  const sr = stripOf(needSnap({ pending: true }), ctxOf(makeT('zh-TW'), 120), 'decide', true)
+  const on = sr.tabs.find(x => x.on)!
+  expect(on.id).toBe('decide')
+  expect(on.label.color).toBe('warning')
+  expect(on.label.bold).toBe(true)
+  expect(sr.rule.some(g => g.text.includes('━') && g.color === 'claude')).toBe(true)
 })

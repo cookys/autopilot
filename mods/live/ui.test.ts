@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import {
   GLYPHS, STATES, SEVERITY, STATE_IDS, FRESH_MS, isStale, stateOf, worst, classify, isMade, isFrag, blank, header, kv, item, bullet, empty, more, command, detail, meter, table, val,
-  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W,
+  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W, PALETTE, meterKey, countChip, strip, boldUseOf,
 } from './ui'
 import type { Ctx, BadgeStated } from './ui'
 import { wrapLines } from './model'
@@ -219,4 +219,61 @@ test('header: a title and a chip too wide for the pane are cut so the line is co
   const small = header(ctx(76), 'Review', { id: 'sec:x', open: false })
   expect(small.text.startsWith('▸ Review ')).toBe(true)
   expect(displayWidth(small.text)).toBe(75)
+})
+
+// ---- the semantic palette (owner ruling 2026-10-16): one colour, one meaning ----
+test('palette: every state colour is a PALETTE role; need_you draws only its mark yellow, findings is default text, nothing in STATES is bold', () => {
+  const roles = new Set(Object.values(PALETTE))
+  for (const id of STATE_IDS) {
+    const s = STATES[id]
+    if (s.key !== undefined) expect(roles.has(s.key), id).toBe(true)
+    expect('bold' in s, id).toBe(false)
+  }
+  expect(STATES.need_you.key).toBe(PALETTE.attention)
+  expect(STATES.need_you.wordKey).toBeUndefined()
+  expect(STATES.findings.key).toBeUndefined()
+  expect(STATES.findings.wordKey).toBeUndefined()
+  expect(STATES.failed.key).toBe(PALETTE.broken)
+  expect(STATES.stalled.key).toBe(PALETTE.broken)
+  expect(STATES.running.key).toBe(PALETTE.running)
+  expect(STATES.done.key).toBe(PALETTE.done)
+  // one colour, one meaning: the seven roles map to seven distinct keys
+  expect(new Set(Object.values(PALETTE)).size).toBe(Object.keys(PALETTE).length)
+})
+
+test('palette: a meter is plain below 80 %, attention from 80 %, broken from 100 %; its bar and percent are not bold', () => {
+  expect([meterKey(0), meterKey(0.79), meterKey(0.8), meterKey(0.99), meterKey(1), meterKey(1.4)]).toEqual([undefined, undefined, PALETTE.attention, PALETTE.attention, PALETTE.broken, PALETTE.broken])
+  const l = meter(ctx(76), 'quota', 50, 100, { cells: 10, fact: 'usage.limit_max' as never })
+  expect((l.segs ?? []).every(g => g.bold !== true)).toBe(true)
+  expect((l.segs ?? []).filter(g => g.role === 'glyph' && g.color !== undefined).map(g => g.color)).toEqual([PALETTE.idle]) // the filled cells are default text, only the empty ones are idle
+})
+
+test('palette: a need_you count on a section title is a plain number; any other state keeps its mark', () => {
+  const plain = countChip(ctx(76), stateOf('verdict', 'DECIDE'), 2, 'now.attention' as never)
+  expect(plain.segs.map(g => [g.text, g.color])).toEqual([['2', undefined]])
+  const fail = countChip(ctx(76), stateOf('run', { rc: 1 } as never), 2, 'dispatch.counts' as never)
+  expect(fail.segs[0].color).toBe(PALETTE.broken)
+})
+
+test('palette: the tab strip draws the active name default bold, a needing name attention+bold (active or not), the rest dim, the here colour only on the ━ run, and the next-page button dim', () => {
+  const sr = strip(ctx(76), 'now' as never, [{ id: 'now' as never, label: 'Now' }, { id: 'decide' as never, label: 'Decide', need: true }, { id: 'spend' as never, label: 'Spend' }], true)
+  expect(sr.next).toMatchObject({ dim: true })
+  expect(sr.next?.color).toBeUndefined()
+  const [now, decide, spend] = sr.tabs
+  expect([now.label.color, now.label.bold, now.label.here]).toEqual([undefined, true, true])
+  expect([decide.label.color, decide.label.bold]).toEqual([PALETTE.attention, true])
+  expect([spend.label.color, spend.label.bold, spend.label.dim]).toEqual([undefined, undefined, true])
+  expect(sr.rule.some(g => g.color === PALETTE.here && g.bold !== true)).toBe(true)
+  expect(sr.tabs.some(x => x.label.color === PALETTE.here)).toBe(false)
+  const onNeed = strip(ctx(76), 'decide' as never, [{ id: 'now' as never, label: 'Now' }, { id: 'decide' as never, label: 'Decide', need: true }], false).tabs[1].label
+  expect([onNeed.color, onNeed.bold, onNeed.here]).toEqual([PALETTE.attention, true, true])
+})
+
+test('palette: I4 accepts a bold tab name only when it is the active one (here) or one that needs the owner; a planted bold inactive name is a violation', () => {
+  const line = { kind: 'kv', text: '' } as never
+  expect(boldUseOf(line, { text: ' Now ', bold: true, here: true, role: 'tab' })).toBe('active tab name')
+  expect(boldUseOf(line, { text: ' Decide ', bold: true, color: PALETTE.attention, role: 'tab' })).toBe('needing tab name')
+  // negative controls: a bold tab with no here mark and no attention colour, and the pre-2026-10-16 claude-coloured active name
+  expect(boldUseOf(line, { text: ' Spend ', bold: true, role: 'tab' })).toBeNull()
+  expect(boldUseOf(line, { text: ' Now ', bold: true, here: true, color: PALETTE.here, role: 'tab' })).toBeNull()
 })

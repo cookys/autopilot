@@ -169,8 +169,9 @@ for(const [g,list] of Object.entries(byGraph)){
 EOF
 
 if [ -z "${GRAPH:-}" ] || [ -z "${INTEGRATED:-}" ]; then
-  skip "no graph with multiple COMPLETE adoptions and integration evidence — nothing to roll over"
-  vacuous_exit
+  bad "frozen fixture has no graph with multiple COMPLETE adoptions and integration evidence"
+  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
+  exit 1
 fi
 
 roll() { node "$RECONCILE" rollover --repo-root "$ROOT" --graph-digest "$GRAPH" --canonical-adoption "$1" 2>&1; }

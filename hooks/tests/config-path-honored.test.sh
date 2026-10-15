@@ -89,5 +89,28 @@ lib() { # [AUTOPILOT_CONFIG_FILE value] -> "<fuse mode> <lease_hours>"
 [ "$(lib "$OTHER")" = "block 22" ] && ok "4: brain-spend + residue-config followed AUTOPILOT_CONFIG_FILE" || bad "4: lib readers ignored AUTOPILOT_CONFIG_FILE (got: $(lib "$OTHER"))"
 [ "$(lib)" = "off 11" ] && ok "4c: control: variable unset -> HOME config used" || bad "4c: control: got $(lib)"
 
+# --- 5. session-handoff (writer half of the same handoff_inject switch) -------------------------
+REPO2="$SCRATCH/repo2"; mkdir -p "$REPO2"
+( cd "$REPO2" && git init -q -b main && git config user.email t@t && git config user.name t && echo v1 >app.txt && git add app.txt && git commit -qm init && echo v2 >app.txt )
+TX="$SCRATCH/tx.jsonl"
+{ printf '%s\n' '{"type":"user","message":{"content":"do x"}}'; printf '%s\n' '{"type":"user","message":{"content":"do y"}}'; printf '%s\n' '{"type":"user","message":{"content":"and more"}}'; } >"$TX"
+sh_wrote() { # [AUTOPILOT_CONFIG_FILE value] -> yes|no: did the hook write a handoff for REPO2
+  rm -rf "$H/.autopilot/handoff"
+  printf '{"reason":"clear","cwd":"%s","transcript_path":"%s","session_id":"s5"}' "$REPO2" "$TX" \
+    | env -u AUTOPILOT_CONFIG_FILE -u AUTOPILOT_HANDOFF_INJECT HOME="$H" TMPDIR="$SCRATCH" CLAUDE_PLUGIN_ROOT="$ROOT" \
+        ${1:+AUTOPILOT_CONFIG_FILE="$1"} node "$ROOT/hooks/session-handoff.js" >/dev/null 2>&1
+  if ls "$H/.autopilot/handoff/"*.md >/dev/null 2>&1; then echo yes; else echo no; fi
+}
+printf '{"handoff_inject":false}\n' >"$H/.autopilot/config.json"; printf '{"handoff_inject":true}\n' >"$OTHER"
+[ "$(sh_wrote "$OTHER")" = "yes" ] && ok "5: session-handoff followed AUTOPILOT_CONFIG_FILE (handoff written)" || bad "5: session-handoff ignored AUTOPILOT_CONFIG_FILE"
+[ "$(sh_wrote)" = "no" ] && ok "5c: control: variable unset -> HOME config used (nothing written)" || bad "5c: control: handoff written despite HOME config off"
+
+# --- 6. dispatch-foreman.sh resolve_tool_cap: foreman_guard.bash_cap -------------------------------
+eval "$(sed -n '/^resolve_tool_cap()/,/^}/p' "$ROOT/scripts/dispatch-foreman.sh")"
+printf '{"foreman_guard":{"bash_cap":11}}\n' >"$H/.autopilot/config.json"; printf '{"foreman_guard":{"bash_cap":22}}\n' >"$OTHER"
+cap() { ( unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_CONFIG_FILE; export HOME="$H"; [ -n "${1:-}" ] && export AUTOPILOT_CONFIG_FILE="$1"; resolve_tool_cap ); }
+[ "$(cap "$OTHER")" = "22" ] && ok "6: resolve_tool_cap followed AUTOPILOT_CONFIG_FILE" || bad "6: resolve_tool_cap got $(cap "$OTHER") (want 22)"
+[ "$(cap)" = "11" ] && ok "6c: control: variable unset -> HOME config used" || bad "6c: control: got $(cap) (want 11)"
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

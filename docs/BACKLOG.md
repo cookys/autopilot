@@ -27,18 +27,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
 - **Context**: Phase 1 = selector + miss-check (28 cases, 0 missed). Phase 2: hook mods/live tests into the selector's map, eval ON/OFF, then change the gate step; keep the full suite for release preflight. Also unblocks BL-0087 option B.
 
-### mods Now tab: a background row may never end when no status notification follows
+### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002
 - **Status**: open
 - **Since**: 2026-10-12
 - **Origin**: self
-- **Problem**: mods 的 Now 分頁顯示背景工作時，只有收到「完成」通知或被明確停止才會把那一列結束。如果工作中途離開再回來，卻沒有後續通知，那一列可能永遠掛著。實際是否發生尚未在真實環境驗證。 (draft)
+- **Problem**: mods 的 Now 分頁上，如果 session 中途離開再 resume，原本的背景工作已經不在、也不會再有完成通知，那一列可能永遠掛著；對話紀錄裡沒有 resume 的標記可判斷。subagent 與 headless 那種不會有通知的背景指令已修好。
 - **Impact**: 最壞是畫面上殘留一列已不存在的背景工作，屬於顯示問題；先實測再決定要不要修。 (draft)
 - **Trigger**: a stale 背景指令 or 監看 row is seen, or a session is resumed after quitting with background work running
 - **Effort**: S
 - **Source**: feat/mods-activity review, 2026-10-12 (UNVERIFIED live behavior)
 - **Pointer**: docs/backlog/mods-activity-row-never-ends.md
-- **Context**: rows end only on a `<task-notification>` status or a TaskStop (mods/live/model.ts scanBackground). Probe a resume after quitting mid `sleep 600`; Bash results with `backgroundEndsWithFinalResponse` say no notification follows.
+- **Context**: scanBackground (mods/live/model.ts) ends rows on a task-notification status, TaskStop, or for flagged Bash results the next real prompt. Resume: probe quitting mid `sleep 600`, find a transcript signal first.
 
 ### Cross-repo dispatch has no worktree or handoff rule
 - **Id**: BL-0004
@@ -1131,14 +1131,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### dispatch-hetero watchdog round-2 cleanups: dead _watchdog_pgid_has_live, test-helper hygiene, HETERO_TEST_* knobs
+### dispatch-hetero: with a tty, set -m makes a worker that reads /dev/tty take SIGTTIN
 - **Id**: BL-0099
 - **Status**: open
 - **Since**: 2026-09-29
 - **Origin**: self
-- **Problem**: 派工用的 hetero 監看程式（watchdog）在審查時留下幾項清理工作：一段已經沒人呼叫的死碼、測試輔助程式不夠整齊、還有幾個測試專用的旋鈕沒處理。 (draft)
-- **Impact**: 純屬整理，不影響功能；下次動到這部分時順手處理即可。 (draft)
-- **Trigger**: next dispatch-hetero containment change
+- **Problem**: 派工監看程式在有終端機（tty）的環境下會開啟工作控制（set -m），這時如果被派出去的程式去讀終端機，會被系統暫停（SIGTTIN），卡住不動。
+- **Impact**: 低。一般派工不讀終端機，headless 也沒有 tty；只有互動式手動跑、而且派出的程式要讀終端機時才會卡住。
+- **Trigger**: a dispatched worker is seen stopped (state T) under an interactive run, or next dispatch-hetero job-control change
 - **Effort**: S
 - **Source**: v2.36.104 landing review rounds 1-4
 - **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md
@@ -1324,31 +1324,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### sealed-docs list covers only part of the sha-bound files
-- **Id**: BL-0133
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 新的封存檔清單只收了一部分被指紋鎖定的檔案：有 10 份工作圖靠另一份授權檔鎖定、另有兩類評分與規格檔，都還不在清單裡，改寫連結的工具仍可能碰壞它們。
-- **Impact**: 目前現役的工作圖受歸檔工具另一道規則保護，沒出事；但文件檢查改寫連結時仍可能再弄壞一次。
-- **Trigger**: next touch of scripts/lib/sealed-docs.js or a doc rewriter
-- **Effort**: S
-- **Source**: lane S review, 2026-10-13
-- **Pointer**: none
-- **Context**: Add graphs with a paired *-task-authority.json, *.seal.json spec_path, eval rubrics; catch only MODULE_NOT_FOUND (warn otherwise); fix doc-drift-gate.js:129 vs :46 comment.
 
-### fifteen sealed plan/rubric files no longer match their manifest digest
-- **Id**: BL-0134
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 有 15 份已封存的計畫或評分檔，內容早就和當初鎖定的指紋對不上，原因是之前的歸檔改寫；目前沒有任何流程會檢查它們。
-- **Impact**: 現在不影響任何流程；若日後把派工路由指回這些舊任務或重跑，會直接以指紋不符失敗。
-- **Trigger**: mission routing points at one of these missions, or a check starts scanning all source manifests
-- **Effort**: S
-- **Source**: lane S investigation, 2026-10-13
-- **Pointer**: none
-- **Context**: Pre-date 2f3a2477; list via a sha256 scan of docs/mission-*-sources.json. Restore bytes from the sealing commit, never re-seal.
 
 
 

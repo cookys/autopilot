@@ -14,7 +14,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Still open**: a node whose `verification_commands` start with the whole suite needs about 56 min for that step alone. That is near the one-hour campaign wall and far past the 15 min CI cap. `src/mission/runtime.js:1368` joins each node's `verification_commands` with `&&`; the graph author writes them per node (e.g. `docs/mission-qualification-verdict-stability-execution-graph.json`), so Mission does not inherit one chain for every node.
 - **Options (owner decision)**:
   - A. Keep the chain and wait for the suite to go green. Reached 2026-10-13; the time problem remains.
-  - B. Each node's `verification_commands` name only the suites it touches, plus the light checks. Editing a sealed graph breaks its digest, so this applies to new graphs only (see BL-0134 for what editing sealed files costs).
+  - B. Each node's `verification_commands` name only the suites it touches, plus the light checks. Editing a sealed graph breaks its digest, so this applies to new graphs only (an edited sealed file fails its pinned digest until its sealed bytes are restored from git history; 14 such files were restored on 2026-10-15).
   - C. Run the whole suite as a separate, non-blocking gate outside campaign acceptance (release preflight, nightly).
 - Related: BL-0001 (select the suites a diff touches in qc-gate).
 
@@ -24,7 +24,7 @@ Owner chose **C**, with one change from the option as listed above: the whole su
 campaign node or campaign close, but it does block the merge into `develop`.
 
 - Each node's `verification_commands` hold only fast, fixed checks; no node starts with
-  `bash hooks/tests/run.sh`. New graphs only: a sealed graph keeps its chain (BL-0134).
+  `bash hooks/tests/run.sh`. New graphs only: a sealed graph keeps its chain.
 - The whole suite runs once, alone, before a campaign's merge into `develop`; red means no merge.
   Ordinary changes do not: the owner approved BL-0001 on 2026-10-13, so their qc-gate test step
   moves to the suites the diff touches once BL-0001 ships.

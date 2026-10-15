@@ -8,7 +8,7 @@ Source: feat/mods-activity review, 2026-10-12. Live behavior UNVERIFIED.
 - Two cases may never get that notification:
   - a session resumed after the process that owned a background shell or persistent Monitor exited;
   - a Bash result carrying `backgroundEndsWithFinalResponse: true` (Claude Code's tool types say no completion
-    notification can follow it).
+    notification can follow it). Done (nowbg lane, 2026-10-15): such a row ends at the next real prompt.
 - Related, narrow: when `$.session.messages()` keeps throwing, `readActivity` (mods/live/register.ts) keeps the
   previous shell and watch rows with no session id attached, so after a session switch the old session's rows
   stay until a transcript read succeeds. Fix direction: store the sid with `activity`, drop kept rows on a change.

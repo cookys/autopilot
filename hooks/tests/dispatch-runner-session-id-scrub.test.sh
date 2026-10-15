@@ -117,7 +117,14 @@ hetero_case() {
 }
 hetero_case "1a hetero cgroup/default branch" "" 0
 assert_eq "$(mroot_of sid-h1)" "$MROOT" "1a hetero: manifest root_run_id is the parent session's job root"
-hetero_case "1b hetero setsid --wait branch" "$NOCG_BIN" 0
+# 1b is the `setsid --wait` branch: dispatch-hetero only takes it when the host's setsid exists AND
+# its --help mentions --wait (HAVE_SETSID). Without that it silently runs the plain no-setsid branch
+# under a label that claims otherwise, so skip it visibly like 1c and 4 (BL-0184).
+if [ -n "$REAL_SETSID" ] && "$REAL_SETSID" --help 2>&1 | grep -q -- --wait; then
+  hetero_case "1b hetero setsid --wait branch" "$NOCG_BIN" 0
+else
+  echo "SKIP [dispatch-runner-session-id-scrub] 1b hetero setsid --wait branch: no setsid with --wait on this host"
+fi
 # 1c wraps the host's real setsid in a shim; a host without one has nothing to wrap (BL-0135).
 if [ -n "$REAL_SETSID" ]; then
   hetero_case "1c hetero plain+setsid branch" "$NOWAIT_BIN" 0

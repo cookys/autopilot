@@ -1,0 +1,11 @@
+{
+  "session_id": "4176436a-4367-47a9-8a1a-48c075339099",
+  "level": null,
+  "repo_root": "/tmp/d0probe-pZGP7Z/repo-l/.claude/worktrees/hetero-d0-l-outer-FDSICf",
+  "started_at": "2026-10-15T09:54:23.674Z",
+  "expires_at": "2026-10-16T09:54:23.674Z",
+  "repo_identity": "git-common-dir:/tmp/d0probe-pZGP7Z/repo-l/.git",
+  "project_key": "faf658f00faf68c5",
+  "root_run_id": "hetero-1792058062-3954738-ac1b",
+  "parent_session_id": "ed9a3931-bbcd-41b5-9e45-f881c981b8d1"
+}

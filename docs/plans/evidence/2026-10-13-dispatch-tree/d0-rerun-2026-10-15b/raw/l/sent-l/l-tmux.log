@@ -1,0 +1,3 @@
+tmux new rc=0
+no server running on /tmp/tmux-1000/d0l-cb54bfc9-3951365
+kill-server rc=1

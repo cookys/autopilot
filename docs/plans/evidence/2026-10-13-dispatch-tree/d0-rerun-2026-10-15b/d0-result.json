@@ -1,0 +1,78 @@
+{
+  "schema": "autopilot.d0-result/1",
+  "plan": "docs/plans/2026-10-13-dispatch-tree.md",
+  "generated_at": "2026-10-15T09:54:39Z",
+  "claude_version": "2.1.300 (Claude Code)",
+  "omit_sentinel_negative_control": false,
+  "rows": [
+    {
+      "row": "d2",
+      "status": "pass",
+      "evidence": "Claude->codex(stub)->Claude end to end (post-3d rule, plan section 7 row d2 note): inner marker carries no parent_session_id, outer marker unchanged, nested manifest parent_run_id == harness run",
+      "detail": {
+        "outer_session": "e293467a-7a4c-4692-a11e-2b76770fb60d",
+        "inner_session": "c16b6285-b467-43da-ab81-e5cfc440d1be",
+        "outer_claude_rc": 0,
+        "codex_stub_env": "CLAUDE_CODE_SESSION_ID=e293467a-7a4c-4692-a11e-2b76770fb60d AUTOPILOT_PARENT_RUN_ID=hetero-1792058048-3952218-1cca AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=e293467a-7a4c-4692-a11e-2b76770fb60d AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792058048-3952218-1cca inner-claude rc=0 ",
+        "inner_claude_bash_env": "CLAUDE_CODE_SESSION_ID=c16b6285-b467-43da-ab81-e5cfc440d1be AUTOPILOT_PARENT_RUN_ID=hetero-1792058048-3952218-1cca AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=e293467a-7a4c-4692-a11e-2b76770fb60d AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792058048-3952218-1cca inner-review rc=1 ",
+        "inner_marker_exists": true,
+        "inner_marker_session_id": "c16b6285-b467-43da-ab81-e5cfc440d1be",
+        "inner_marker_parent_session_id": "",
+        "outer_marker_unchanged": "true",
+        "outer_hetero_run_id": "hetero-1792058048-3952218-1cca",
+        "nested_manifest_parent_run_id": "hetero-1792058048-3952218-1cca",
+        "nested_manifest_session_id": "c16b6285-b467-43da-ab81-e5cfc440d1be",
+        "nested_manifest_depth": "1",
+        "note": "inner_session is the id the stub codex passed as --session-id; no manifest claims it, so section 3 places the nested rail by a named reason"
+      }
+    },
+    {
+      "row": "l",
+      "status": "pass",
+      "evidence": "hetero cc-shim child's hook env had AUTOPILOT_CHILD_SESSION_ID == manifest child_session_id == --session-id; child marker parent == P; the claude started in a real tmux (private socket) wrote a marker with no parent_session_id",
+      "detail": {
+        "launcher_session_id_P": "ed9a3931-bbcd-41b5-9e45-f881c981b8d1",
+        "hetero_rc": 1,
+        "manifest_child_session_id": "4176436a-4367-47a9-8a1a-48c075339099",
+        "wrapper_argv_session_id": "4176436a-4367-47a9-8a1a-48c075339099",
+        "tmux_started_session_id": "46cae707-9527-4209-85fb-ab4f880b0bf3",
+        "child_hook_env": "AUTOPILOT_LIVE_DIR=/dev/shm/d0probe-live-M4XQeT AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=REDACTED AUTOPILOT_GROK_EFFORT_PROBE=0 AUTOPILOT_ROOT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_ENDPOINT_GLM_TOKEN=REDACTED AUTOPILOT_ENDPOINTS_ENV=/home/cookys/.autopilot/endpoints.env AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-pZGP7Z/session-mode AUTOPILOT_DISPATCH_RUNS_DIR=/tmp/d0probe-pZGP7Z/runs-l AUTOPILOT_ENDPOINT_QWEN38_TOKEN=REDACTED AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=ed9a3931-bbcd-41b5-9e45-f881c981b8d1 AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S=2 AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic AUTOPILOT_PARENT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_ENDPOINT_QWEN38_URL=http://192.168.101.7:8001 CLAUDE_CODE_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_WORKTREE_ROOT_RUN_ID= AUTOPILOT_CHILD_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_ENDPOINT_QWEN38_TRANSPORT=plaintext-private ",
+        "child_bash_env": "AUTOPILOT_PARENT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_DISPATCH_RUNS_DIR=/tmp/d0probe-pZGP7Z/runs-l AUTOPILOT_WORKTREE_ROOT_RUN_ID= CLAUDE_CODE_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_CHILD_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_ENDPOINT_QWEN38_TOKEN=REDACTED AUTOPILOT_LIVE_DIR=/dev/shm/d0probe-live-M4XQeT AUTOPILOT_GROK_EFFORT_PROBE=0 AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic AUTOPILOT_ENDPOINT_QWEN38_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_GLM_TOKEN=REDACTED AUTOPILOT_ENDPOINTS_ENV=/home/cookys/.autopilot/endpoints.env AUTOPILOT_ROOT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_PARENT_SESSION_ID=ed9a3931-bbcd-41b5-9e45-f881c981b8d1 AUTOPILOT_ENDPOINT_QWEN38_TRANSPORT=plaintext-private AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-pZGP7Z/session-mode AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S=2 AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=REDACTED AUTOPILOT_DISPATCH_DEPTH=1 ",
+        "tmux_server_env_seen_by_second_claude": "AUTOPILOT_PARENT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_DISPATCH_RUNS_DIR=/tmp/d0probe-pZGP7Z/runs-l AUTOPILOT_WORKTREE_ROOT_RUN_ID= CLAUDE_CODE_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_CHILD_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_ENDPOINT_QWEN38_TOKEN=REDACTED AUTOPILOT_LIVE_DIR=/dev/shm/d0probe-live-M4XQeT AUTOPILOT_GROK_EFFORT_PROBE=0 AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic AUTOPILOT_ENDPOINT_QWEN38_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_GLM_TOKEN=REDACTED AUTOPILOT_ENDPOINTS_ENV=/home/cookys/.autopilot/endpoints.env AUTOPILOT_ROOT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_PARENT_SESSION_ID=ed9a3931-bbcd-41b5-9e45-f881c981b8d1 AUTOPILOT_ENDPOINT_QWEN38_TRANSPORT=plaintext-private AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-pZGP7Z/session-mode AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S=2 AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=REDACTED AUTOPILOT_DISPATCH_DEPTH=1 ",
+        "second_claude_hook_env": "AUTOPILOT_LIVE_DIR=/dev/shm/d0probe-live-M4XQeT AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=REDACTED AUTOPILOT_GROK_EFFORT_PROBE=0 AUTOPILOT_ROOT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_ENDPOINT_GLM_TOKEN=REDACTED AUTOPILOT_ENDPOINTS_ENV=/home/cookys/.autopilot/endpoints.env AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-pZGP7Z/session-mode AUTOPILOT_DISPATCH_RUNS_DIR=/tmp/d0probe-pZGP7Z/runs-l AUTOPILOT_ENDPOINT_QWEN38_TOKEN=REDACTED AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=ed9a3931-bbcd-41b5-9e45-f881c981b8d1 AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S=2 AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic AUTOPILOT_PARENT_RUN_ID=hetero-1792058062-3954738-ac1b AUTOPILOT_ENDPOINT_QWEN38_URL=http://192.168.101.7:8001 CLAUDE_CODE_SESSION_ID=46cae707-9527-4209-85fb-ab4f880b0bf3 AUTOPILOT_WORKTREE_ROOT_RUN_ID= AUTOPILOT_CHILD_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099 AUTOPILOT_ENDPOINT_QWEN38_TRANSPORT=plaintext-private ",
+        "tmux_log": "tmux new rc=0 no server running on /tmp/tmux-1000/d0l-cb54bfc9-3951365 kill-server rc=1 ",
+        "child_marker": "{\"session_id\":\"4176436a-4367-47a9-8a1a-48c075339099\",\"level\":null,\"repo_root\":\"/tmp/d0probe-pZGP7Z/repo-l/.claude/worktrees/hetero-d0-l-outer-FDSICf\",\"started_at\":\"2026-10-15T09:54:23.674Z\",\"expires_at\":\"2026-10-16T09:54:23.674Z\",\"repo_identity\":\"git-common-dir:/tmp/d0probe-pZGP7Z/repo-l/.git\",\"project_key\":\"faf658f00faf68c5\",\"root_run_id\":\"hetero-1792058062-3954738-ac1b\",\"parent_session_id\":\"ed9a3931-bbcd-41b5-9e45-f881c981b8d1\"}",
+        "tmux_claude_marker": "{\"session_id\":\"46cae707-9527-4209-85fb-ab4f880b0bf3\",\"level\":null,\"repo_root\":\"/tmp/d0probe-pZGP7Z/repo-l/.claude/worktrees/hetero-d0-l-outer-FDSICf\",\"started_at\":\"2026-10-15T09:54:26.238Z\",\"expires_at\":\"2026-10-16T09:54:26.238Z\",\"repo_identity\":\"git-common-dir:/tmp/d0probe-pZGP7Z/repo-l/.git\",\"project_key\":\"faf658f00faf68c5\",\"root_run_id\":\"hetero-1792058062-3954738-ac1b\"}",
+        "failed_conditions": ""
+      }
+    }
+  ],
+  "blocking": {
+    "3a": [
+      "a",
+      "b",
+      "c"
+    ],
+    "3b": [
+      "a",
+      "f"
+    ],
+    "3c": [],
+    "5": [
+      "g",
+      "h",
+      "i"
+    ],
+    "R": [
+      "c",
+      "d1",
+      "d2",
+      "e",
+      "f",
+      "k"
+    ],
+    "3d": [
+      "l"
+    ]
+  }
+}

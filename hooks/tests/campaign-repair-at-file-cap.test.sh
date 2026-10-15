@@ -22,11 +22,12 @@
 #   FAIL one shared pre-spend predicate is exported: 'c_helper_exported=true' not found
 #   FAIL advisory fires when cap == output_paths and repairs are allowed: 'd_cap_equals_paths_repairs=...' not found
 # Mutation: helper reverted to `used >= max` for every phase -> 14 FAIL (all of (a), the real-ledger intake and repair stages).
-# Stage F mutations (each applied alone, then restored; all restored = green, 48 assertions):
-#   M1 cli.js: `repair: false,` added to the predicate call -> RED, 11 fail (every cli a_* repair-phase row at/below/over cap, b_cli_eligibility, f_* blocked/parity incl. AWAITING_CONVERGENCE_ADJUDICATION)
+# Stage G (real CLI, advisory on stderr) mutation: bin/autopilot.js advisory write moved to stdout -> RED, 4 fail (G rows only).
+# Stage F mutations (each applied alone, then restored; all restored = green, 54 assertions):
+#   M1 cli.js: `repair: false,` added to the predicate call -> RED, 11 fail (only the four repair-phase AT-cap rows, a_disposition_churn_cap, a_disposition_wall_exhausted, b_cli_eligibility, f_AWAITING_DISPOSITION_blocked and the BOUNDARY_REJECTED / AWAITING_DISPOSITION / AWAITING_CONVERGENCE_ADJUDICATION parity rows; below/over-cap rows and f_AWAITING_CONVERGENCE_ADJUDICATION_blocked stay green)
 #   M2 campaign-intake.js: predicate replaced by inline `usage >= max` -> RED, 11 fail (b_intake_status=claimed, repair lifecycle b_*, c_intake_uses_helper, f_BOUNDARY_REJECTED/AWAITING_DISPOSITION parity, intake-reached-predicate)
 #   M3 cli.js: `!reviewingResumable && ` removed -> RED, 1 fail (f_REVIEWING parity: cli now calls the predicate, intake does not)
-#   M4 cli.js: predicate negated -> RED, 22 fail (all a_* rows, b_cli_eligibility, f_* blocked/parity)
+#   M4 cli.js: predicate negated -> RED, 22 fail (every a_* row of the four repair phases plus PREPARED, a_disposition_churn_cap/wall_exhausted, b_cli_eligibility, f_* blocked/parity; a_IMPLEMENTING_at_cap stays green because IMPLEMENTING exits before the predicate)
 TEST_NAME="campaign-repair-at-file-cap"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -476,13 +477,14 @@ assert_contains "$OUT" "c_cli_uses_helper=true" "cli.js uses the shared predicat
 assert_contains "$OUT" "c_intake_uses_helper=true" "campaign-intake.js uses the shared predicate"
 assert_contains "$OUT" "c_engine_uses_helper=true" "campaignMutationBudgetStatus uses the shared predicate"
 assert_contains "$OUT" "c_table=PREPARED:3=false,PREPARED:4=true,PREPARED:5=true,IMPLEMENTING:3=false,IMPLEMENTING:4=true,IMPLEMENTING:5=true,BOUNDARY_REJECTED:3=false,BOUNDARY_REJECTED:4=false,BOUNDARY_REJECTED:5=true,VERTICAL_VERIFICATION:3=false,VERTICAL_VERIFICATION:4=false,VERTICAL_VERIFICATION:5=true,ADJUDICATING:3=false,ADJUDICATING:4=false,ADJUDICATING:5=true,AWAITING_DISPOSITION:3=false,AWAITING_DISPOSITION:4=false,AWAITING_DISPOSITION:5=true,REPAIRING:3=false,REPAIRING:4=false,REPAIRING:5=true,REVIEWING:3=false,REVIEWING:4=true,REVIEWING:5=true" "predicate table: >= for first pass, > for repair phases"
-# D. advisory
+# F. cli.js vs campaign-intake.js side by side
 assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:true,intake:true" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): both sides refuse with campaign_file_budget_exhausted"
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_blocked=cli:false,intake:false" "AWAITING_DISPOSITION at 4/4 (repair phase): neither side refuses"
 for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION; do
   assert_contains "$OUT" "f_${ph}_parity=true" "$ph: cli.js and campaign-intake.js evaluate the pre-spend predicate identically (same calls, same verdict)"
 done
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_intake_calls=AWAITING_DISPOSITION:4/4:repair=undefined->false" "intake really reached the predicate for the disposition resume (not vacuous parity)"
+# D. advisory
 assert_contains "$OUT" "d_cap_equals_paths_repairs=campaign_file_cap_no_first_pass_headroom" "advisory fires when cap == output_paths and repairs are allowed"
 assert_contains "$OUT" "d_cap_below_paths_repairs=campaign_file_cap_no_first_pass_headroom" "advisory fires when cap < output_paths with repairs"
 assert_contains "$OUT" "d_headroom=none" "no advisory with headroom"
@@ -559,6 +561,10 @@ for (const [tag, cap, repairs] of [['eq', 2, 2], ['gt', 3, 2], ['norep', 2, 0]])
   const shown = require(path.join(root, "src", "engine", "campaign-intake")).formatCampaignAdvisories({ advisories: r.advisories });
   console.log(`e_${tag}_shown=${shown.map((l) => l.split(':')[0]).join('|') || 'none'}`);
 }
+// An advisory without a message renders without a trailing colon (exact line, not a prefix).
+const fmt = require(path.join(root, 'src', 'engine', 'campaign-intake')).formatCampaignAdvisories;
+console.log(`e_nomsg_line=[${fmt({ advisories: [{ code: 'no_msg' }] }).join('|')}]`);
+console.log(`e_msg_line=[${fmt({ advisories: [{ code: 'has_msg', message: 'hi' }] }).join('|')}]`);
 NODE
 )"
 echo "$ADV_OUT"
@@ -567,6 +573,29 @@ assert_contains "$ADV_OUT" "e_gt=admitted advisories=none" "real intake: cap > o
 assert_contains "$ADV_OUT" "e_norep=admitted advisories=none" "real intake: repairs disabled carries no advisory"
 assert_contains "$ADV_OUT" "e_eq_shown=ADVISORY campaign_file_cap_no_first_pass_headroom" "advisory is rendered as a human-readable line"
 assert_contains "$ADV_OUT" "e_gt_shown=none" "no advisory, no line rendered"
-# The CLI prints those lines (stderr) for the engine result; removing this call hides the advisory.
-assert_contains "$(cat "$REPO_ROOT/bin/autopilot.js")" "formatCampaignAdvisories(result.campaign_control)" "bin/autopilot.js surfaces control.advisories on stderr"
+assert_contains "$ADV_OUT" "e_nomsg_line=[ADVISORY no_msg]" "an advisory without a message has no trailing colon"
+assert_contains "$ADV_OUT" "e_msg_line=[ADVISORY has_msg: hi]" "an advisory with a message keeps 'code: message'"
+
+# ---- G. the REAL CLI (bin/autopilot.js engine implement-review) with the engine loop stubbed by a
+# preload: advisories must land on stderr as ADVISORY lines while stdout stays one parseable JSON
+# object (an advisory written to stdout would corrupt the result the caller parses). -----------------
+CLI_STUB="$TEST_TMP/cli-advisory-stub.js"
+cat > "$CLI_STUB" <<'JS'
+const path = require('path');
+const { AutopilotEngine } = require(path.join(process.env.REPO_ROOT, 'src', 'engine'));
+AutopilotEngine.prototype.runImplementationReviewLoop = function () {
+  return { status: 'converged', campaign_control: { advisories: [
+    { code: 'cli_probe_code', message: 'cli probe message' }, { code: 'cli_probe_bare' },
+  ] } };
+};
+JS
+CLI_OUTF="$TEST_TMP/cli.stdout"; CLI_ERRF="$TEST_TMP/cli.stderr"
+env -u AUTOPILOT_LEVEL REPO_ROOT="$REPO_ROOT" node -r "$CLI_STUB" "$REPO_ROOT/bin/autopilot.js" \
+  engine implement-review --legacy-unmanaged --prompt-file "$CLI_STUB" --branch b --base abc --cwd "$TEST_TMP" \
+  >"$CLI_OUTF" 2>"$CLI_ERRF"; CLI_RC=$?
+assert_eq "$CLI_RC" "0" "real CLI exits 0 for a converged result"
+assert_contains "$(cat "$CLI_ERRF")" "ADVISORY cli_probe_code: cli probe message" "real CLI prints the advisory on stderr"
+assert_eq "$(grep -x 'ADVISORY cli_probe_bare' "$CLI_ERRF")" "ADVISORY cli_probe_bare" "real CLI prints a message-less advisory without a trailing colon"
+assert_not_contains "$(cat "$CLI_OUTF")" "ADVISORY" "stdout carries no advisory text"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$CLI_OUTF")" "converged" "stdout is a single parseable JSON result"
 finalize_test

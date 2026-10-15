@@ -1625,15 +1625,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.
 
 
-### cost-fuse quoted dispatch exemption counts quotes, not single/double pairs
-- **Id**: BL-0189
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 費用保險絲在提醒模式下會放行派工指令，現在也認加了引號的寫法，但只檢查引號總數是偶數，沒檢查單、雙引號各自成對。目前試不出能繞過的寫法，另外幾種引號內夾特殊符號的形狀也還沒有測試釘住。
-- **Impact**: 低。審查時試過的形狀都擋得住，只是防線靠其他過濾規則，沒有直接的測試。
-- **Trigger**: next touch of hooks/cost-fuse.js isDispatchBash, or a bypass shape reported
-- **Effort**: S
-- **Source**: fuse2 review 2026-10-15 (BL-0183 merge)
-- **Pointer**: none
-- **Context**: cost-fuse.js:244-247 checks an even total; require even counts per quote kind. Add 11f negatives: ; | $( backtick newline inside quotes, mixed "$X'/..., space inside quotes.

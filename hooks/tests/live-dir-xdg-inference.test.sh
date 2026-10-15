@@ -276,6 +276,10 @@ assert_r1_context_budget_reads_1m() {
  "context_window":{"context_window_size":1000000,"total_input_tokens":160413},
  "written_at":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
 JSON
+  # BL-0181: the hook reads $AUTOPILOT_CONFIG_FILE (run.sh pins it to `{}`, default t2 150k).
+  # The 1M case needs t2 above 160k; give it its own config instead of relying on a host one.
+  printf '{"context_budget":{"t2":450000}}\n' > "$TMP/config.json"
+  export AUTOPILOT_CONFIG_FILE="$TMP/config.json"
   export AUTOPILOT_LIVE_DIR="$LIVE"
   export AUTOPILOT_CONTEXT_BUDGET_DIR="$TMP/state"
   export CLAUDE_CODE_SESSION_ID="$SID"
@@ -283,7 +287,7 @@ JSON
   printf '%s' "$PAYLOAD" | node "$HOOK" 2>"$TMP/err.txt"
   RC=$?
   ERR="$(cat "$TMP/err.txt")"
-  unset AUTOPILOT_LIVE_DIR AUTOPILOT_CONTEXT_BUDGET_DIR CLAUDE_CODE_SESSION_ID
+  unset AUTOPILOT_LIVE_DIR AUTOPILOT_CONTEXT_BUDGET_DIR CLAUDE_CODE_SESSION_ID AUTOPILOT_CONFIG_FILE
   if [ "$RC" != "0" ]; then
     bad "1M live window should not T2 at 160k, rc=$RC stderr=[$ERR]"
   else

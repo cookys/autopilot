@@ -45,7 +45,8 @@ function sandbox() {
     turn('user', [{ type: 'tool_result', content: 'ok' }]),
   ].join('\n') + '\n');
   const env = {
-    ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_SESSION_MODE_DIR: sm,
+    // BL-0181: hooks read $AUTOPILOT_CONFIG_FILE (run.sh pins it); aim it at the sandbox home's config.
+    ...process.env, HOME: home, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json'), AUTOPILOT_LIVE_DIR: live, AUTOPILOT_SESSION_MODE_DIR: sm,
     AUTOPILOT_TASK_CARD_DIR: tc, AUTOPILOT_DISPATCH_RUNS_DIR: runs,
   };
   delete env.AUTOPILOT_PRECOMPACT_STDOUT;

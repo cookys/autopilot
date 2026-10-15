@@ -533,7 +533,39 @@ const POSIX_CLASS = { alpha: 'a-zA-Z', digit: '0-9', alnum: 'a-zA-Z0-9', upper: 
 const SELF_CMDLINE_PREFIX = "/usr/bin/zsh -c source /tmp/shell-snapshot.sh && eval '";
 const PATTERN_MAX_LEN = 300; // longer patterns are not judged (null)
 // Nested quantifiers / quantified alternation can backtrack exponentially in a JS RegExp: never run those.
-const REDOS_RE = /\([^)]*[*+{][^)]*\)[*+{]|\([^)]*\|[^)]*\)[*+{]/;
+// Scan the pattern: a `)` followed by `* + {` whose matching group (by depth, skipping `\x` escapes and `[...]` classes)
+// holds a quantifier or `|` is catastrophic-prone, however many parens wrap it.
+function scanRegex(pat, onOpen, onClose) {
+  for (let i = 0; i < pat.length; i += 1) {
+    const c = pat[i];
+    if (c === '\\') { i += 1; continue; }
+    if (c === '[') { // character class: `]` right after `[` / `[^` is literal
+      let j = i + 1;
+      if (pat[j] === '^') j += 1;
+      if (pat[j] === ']') j += 1;
+      while (j < pat.length && pat[j] !== ']') j += pat[j] === '\\' ? 2 : 1;
+      i = j; continue;
+    }
+    if (c === '(') onOpen(i);
+    else if (c === ')') onClose(i);
+  }
+}
+function hasQuantOrAlt(s) {
+  let found = false;
+  let depthFree = s.replace(/\\./g, '').replace(/\[(?:\^?\]|\^)?[^\]]*\]/g, '');
+  if (/[*+{|]/.test(depthFree)) found = true;
+  return found;
+}
+function redosShaped(pat) {
+  const stack = [];
+  let bad = false;
+  scanRegex(pat, (i) => stack.push(i), (i) => {
+    const start = stack.pop();
+    if (start === undefined || bad) return;
+    if (/[*+{]/.test(pat[i + 1] || '') && hasQuantOrAlt(pat.slice(start + 1, i))) bad = true;
+  });
+  return bad;
+}
 
 // Shell word -> the string the command receives (quotes removed, `\x` unescaped). Variables stay as `$name`.
 function dequote(w) {
@@ -620,7 +652,7 @@ function patternMatchesSelf(pattern, raw, vars, flags) {
     if (/\$[A-Za-z_{(]/.test(pat)) return null; // an unknown variable / substitution: unknowable
   }
   if (/\$\(|`/.test(pat)) return null;
-  if (pat.length > PATTERN_MAX_LEN || REDOS_RE.test(pat)) return null; // unjudgeable: ReDoS guard
+  if (pat.length > PATTERN_MAX_LEN || redosShaped(pat)) return null; // unjudgeable: ReDoS guard
   pat = pat.replace(/\[:([a-z]+):\]/g, (all, n) => POSIX_CLASS[n] || all);
   if (flags.exact) pat = `^(?:${pat})$`;
   try { return new RegExp(pat, flags.icase ? 'i' : '').test(SELF_CMDLINE_PREFIX + raw.replace(/'/g, `'"'"'`)); } catch { return null; }
@@ -791,4 +823,4 @@ function detectZshExpansion(cmd, cwd) {
   return null;
 }
 
-module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, segments, expandSegments };
+module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

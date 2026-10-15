@@ -845,6 +845,21 @@ test('message: the watch recipe is bounded by timeout, warns about stale .exit, 
       assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`);
     });
   }
+  const { patternMatchesSelf } = require('../scripts/lib/bash-launch-rules.js');
+  for (const pat of ['((a+))+c', '((a|aa))+c', '(?:(a+))+c', '(.*)*x$', '(a+)+b']) {
+    test(`patternMatchesSelf is unjudgeable and fast: ${pat}`, () => {
+      const t0 = Date.now();
+      const r = patternMatchesSelf(pat, 'pgrep -f x', new Map(), {});
+      assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`);
+      assert.strictEqual(r, null);
+    });
+  }
+  test('patternMatchesSelf still judges ordinary groups', () => {
+    assert.strictEqual(patternMatchesSelf('(foo)+bar', 'pgrep -f foobar', new Map(), {}), true);
+    assert.strictEqual(patternMatchesSelf('(foo)+bar', 'pgrep -f x', new Map(), {}), false);
+    assert.strictEqual(patternMatchesSelf('(foo|bar)x', 'pgrep -f barx', new Map(), {}), true);
+    assert.strictEqual(patternMatchesSelf('[(]a+[)]+', 'pgrep -f x', new Map(), {}), false);
+  });
   test('rule2 ReDoS pattern takes the null (unjudgeable) path and falls back to the old stance', () => {
     assert.strictEqual(detectPkillSelfMatch("pgrep -f '(.*)*x$'"), null); // `$` => assumed fine
     assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+[b]'"), null); // bracket => assumed fine

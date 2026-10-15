@@ -65,13 +65,14 @@ export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '�
 //   structure  (subtle)     = rules, fold marks, separators
 export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure'
 export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle' }
-// the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a picked decision option and the send button. Nothing else is bold.
-export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'picked option', 'send button'] as const
+// the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a decision card's question, a picked decision option and the send button. Nothing else is bold.
+export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'question title', 'picked option', 'send button'] as const
 // which whitelist entry a bold segment belongs to, or null (a violation); invariant I4 reads this so the test never keeps its own copy of the list
 export function boldUseOf(line: PaneLine, s: Seg): (typeof BOLD_USES)[number] | null {
   if (line.kind === 'verdict') return 'verdict line'
   if (line.kind === 'header' && s.role === 'prose') return 'header title'
   if (s.role === 'tab') return s.here === true && (s.color === undefined || s.color === PALETTE.attention) ? 'active tab name' : s.color === PALETTE.attention ? 'needing tab name' : null
+  if (line.kind === 'item' && s.role === 'title') return 'question title'
   if (line.kind === 'choice' && s.role === 'pick') return 'picked option'
   if (line.kind === 'choice' && s.role === 'send' && s.press !== undefined) return 'send button'
   return null
@@ -398,7 +399,7 @@ function frag(segs: Seg[], fact?: FactId): Frag {
 export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== null && FRAGS.has(v)
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
-export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'pick' | 'send'
+export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'title' | 'pick' | 'send'
 type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
@@ -552,10 +553,38 @@ export function more(u: Ctx, n: number, noun: string, id: string, open = false, 
 // ---- the 待決 tab's controls (pick-and-submit). A `choice` line is a row of pressable options: every seg that carries a `press` id is drawn as a Button by
 // pane.tsx, consecutive segs of one id are one Button. A `field` line is a label followed by a text field (pane.tsx draws the Input). Neither is a number or a state. ----
 export type Choice = { label: string; picked: boolean; recommended: boolean; press?: string }
-// the options of one question as rows of at most `cols - 1` cells: `[x] ★ label` (picked: bold default text) beside `[ ] label`, two cells between options, indent 2.
-// A press-less choice is drawn plain (a question already sent), its picked mark kept.
-export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
+// the 待決 card's rows share the pane's key/value grammar: the key (dim) at column 2 in a 10-cell slot, the value at column 12, continuation lines hung at 12.
+export const CARD_KEY_W = KEY_W - 2
+const cardLead = (key: string): Seg[] => [sg('  '), dim(padCells(cutProse(key, CARD_KEY_W - 1), CARD_KEY_W), { role: 'key' })]
+const cardHang = (): Seg => sg(' '.repeat(KEY_W))
+// the question line(s): `▲ n. question` with the glyph of its state; the whole text is bold default text (the 'question title' bold use) while the question is open, plain once it is
+// sent. It wraps (never cut, never repeated) and continuation lines start at column 2. `meta` (dim, after ` · `) closes the last line, or takes one of its own when it does not fit.
+export function cardTitle(u: Ctx, s: Stated, title: string, meta: string | undefined, o: { fact: FactId; sent: boolean }): PaneLine[] {
   const room = u.cols - 1 - 2
+  const pieces = wrapPlain(title, room, room)
+  const lines = pieces.map((piece, i) => {
+    const body = sg(piece, { role: 'title', ...(o.sent ? {} : { bold: true }) })
+    const lead = i === 0 ? [...stateLead(u, s, { word: false }).segs, sg(' ')] : [sg('  ')]
+    return lineOf('item', [...lead, body], { fact: o.fact, hang: 2 })
+  })
+  if (meta !== undefined && meta !== '') {
+    const last = lines[lines.length - 1]
+    const tail = dim(' · ' + meta, { role: 'prose' })
+    if (displayWidth(last.text) + displayWidth(tail.text) <= u.cols - 1) lines[lines.length - 1] = lineOf('item', [...(last.segs as Seg[]), tail], { fact: o.fact, hang: 2 })
+    else lines.push(lineOf('item', [sg('  '), dim(cutProse(meta, Math.max(1, room)), { role: 'prose' })], { fact: o.fact, hang: 2 }))
+  }
+  return lines
+}
+// one key/value row of a card: `  key       value` (the value wraps, continuation lines hang at column 12). `subtle` draws the value dim; an empty key makes a continuation-only row.
+export function cardRow(u: Ctx, key: string, value: string, o: { fact: FactId; subtle?: boolean }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - KEY_W)
+  return wrapPlain(value, room, room).map((piece, i) =>
+    lineOf('kv', [...(i === 0 ? cardLead(key) : [cardHang()]), sg(piece, { role: 'prose', ...(o.subtle === true ? { dim: true } : {}) })], { hang: KEY_W, fact: o.fact }))
+}
+// the options of one question: the key `選項` at column 2, then rows of at most `cols - 1` cells from column 12: `[x] ★ label` (picked: bold default text) beside `[ ] label`, two
+// cells between options. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
+export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
+  const room = u.cols - 1 - KEY_W
   const piece = (c: Choice): Seg[] => {
     const press = c.press === undefined ? {} : { press: c.press }
     const pick = c.picked ? { bold: true, role: 'pick' as const } : c.press === undefined ? { dim: true } : {}
@@ -576,23 +605,25 @@ export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId
     w += cw
   }
   if (cur.length > 0) rows.push(cur)
-  return rows.map(r => lineOf('choice', [sg('  '), ...r], { fact: o.fact }))
+  return rows.map((r, i) => lineOf('choice', [...(i === 0 ? cardLead(key) : [cardHang()]), ...r], { fact: o.fact }))
 }
-// one action row: `[ label ]`, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent)
-export function actionRow(u: Ctx, label: string, o: { press?: string; fact: FactId }): PaneLine {
+// the send row: `[ label ]` at column 2, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent), then a dim `note` saying where
+// the answers go; a note that does not fit beside the button takes the line below, at column 2.
+export function actionRow(u: Ctx, label: string, o: { press?: string; note?: string; fact: FactId }): PaneLine[] {
   const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
-  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'send', bold: true, press: o.press })], { fact: o.fact })
+  const button = o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'send', bold: true, press: o.press })
+  const note = o.note === undefined || o.note === '' ? undefined : o.note
+  if (note !== undefined && 2 + displayWidth(text) + 2 + displayWidth(note) <= u.cols - 1) return [lineOf('choice', [sg('  '), button, sg('  '), dim(note, { role: 'prose' })], { fact: o.fact })]
+  const out = [lineOf('choice', [sg('  '), button], { fact: o.fact })]
+  if (note !== undefined) out.push(...wrapPlain(note, u.cols - 1 - 2, u.cols - 1 - 2).map(piece => lineOf('detail', [sg('  '), dim(piece, { role: 'prose' })], { fact: o.fact })))
+  return out
 }
-// the recommendation's reason, one subtle line under the option row: `  ★ <why>`
-export function recommendNote(u: Ctx, why: string, fact: FactId): PaneLine {
-  const lead = sg('  '), mark = sg(GLYPHS.structure.recommend, { role: 'glyph', dim: true })
-  return lineOf('detail', [lead, mark, sg(' ', { dim: true }), dim(cutProse(why, Math.max(1, u.cols - 1 - 4)), { role: 'prose' })], { fact })
-}
-// a labelled text field: the label is drawn here, the Input after it by pane.tsx (a surface without Input never gets this line: the tab says to answer in the conversation)
+// a labelled text field: the key at column 2, the Input at column 12 (drawn by pane.tsx; a surface without Input never gets this line: the card says to answer in the conversation)
 export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: string; value: string; fact: FactId }): PaneLine {
-  return lineOf('field', [sg('  '), dim(cutProse(label, Math.max(1, u.cols - 1 - 4)), { role: 'prose' }), sg(' ')], { fact: o.fact, field: { key: o.key, placeholder: o.placeholder, value: o.value } })
+  return lineOf('field', cardLead(label), { fact: o.fact, field: { key: o.key, placeholder: o.placeholder, value: o.value } })
 }
 
+const CLOSING_PUNCT_UI = '）」』、。，；：！？)]}】》〉,.;:!?'
 // wrap plain text at spaces, after `/`, and between wide characters; continuation lines hang at `hang` (already part of `first`'s prefix width)
 function wrapPlain(body: string, firstW: number, restW: number): string[] {
   const out: string[] = []
@@ -603,9 +634,16 @@ function wrapPlain(body: string, firstW: number, restW: number): string[] {
   for (const ch of body) {
     const cw = cellWidth(ch.codePointAt(0) as number)
     if (w + cw > limit && cur !== '') {
-      const cut = lastBreak > 0 ? lastBreak : cur.length
-      out.push(cur.slice(0, cut).replace(/ +$/, ''))
-      cur = cur.slice(cut).replace(/^ +/, '')
+      // in code points, so a step back never splits a surrogate pair
+      const cps = [...cur]
+      let cut = lastBreak > 0 ? [...cur.slice(0, lastBreak)].length : cps.length
+      // a closing mark never starts a line: while the next line would open with one (after its leading spaces are dropped), the character before the cut goes
+      // down too. This covers a run of marks (`。」`), a space before the mark, and a cut at an earlier break; at least one character stays on this line.
+      const head = (k: number): string => (cps.slice(k).join('') + ch).replace(/^ +/, '')[0] ?? ''
+      const closing = (c: string): boolean => c !== '' && CLOSING_PUNCT_UI.includes(c)
+      while (cut > 1 && closing(head(cut))) cut -= 1
+      out.push(cps.slice(0, cut).join('').replace(/ +$/, ''))
+      cur = cps.slice(cut).join('').replace(/^ +/, '')
       w = displayWidth(cur)
       limit = restW
       lastBreak = -1

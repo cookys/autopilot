@@ -69,8 +69,8 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
   return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
-// an empty-text line is drawn as an empty Text, which takes no row on screen (the header's trailing blank is one): count only the rows that are really drawn
-export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + [...head, ...body].filter(l => l.text !== '').length + extra
+// every line is one drawn row: pane.tsx draws a blank line as a one-cell Text (an empty Text would take no row)
+export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + head.length + body.length + extra
 export function withOverflowHint(head: PaneLine[], ctx: PaneCtx, scroll: ScrollView | null | undefined, treeRows: number, exact: boolean): PaneLine[] {
   if (scroll === null || scroll === undefined || scroll.offset !== 0 || treeRows <= scroll.bodyRows) return head
   let at = -1
@@ -294,48 +294,53 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   })
 }
 // ================= Decide (待決) =================
-// The owner's open questions, one compact card each: `n. question`, the background, a row of option Buttons (the recommended one starred, the picked one in
-// success text), an optional note field, and what stalls. Under the cards one Button sends every answered question as a single prompt (register.ts). A phone has
-// no text field, so a question without options says to answer in the conversation there.
+// The owner's open questions under one section header (`▾ 待你回答  3 ───`), one card each. A card is the question (bold, wraps, never repeated), then rows in the pane's key/value
+// grammar (key at column 2, value at column 12): 背景 (why it is asked) → 卡住 (what stalls) → 選項 (Buttons; the recommended one starred, the picked one bold) → 建議 (the
+// recommendation and its reason, no star) → 補充 (the note field). A row with nothing to say is not drawn. A blank line separates cards. Under the cards one Button sends every
+// answered question as a single prompt (register.ts) and says where the answers go. A phone has no text field, so a question without options says to answer in the conversation.
 function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
   const F = 'decide.cards' as const
   const list = snap.pending
-  if (list.length === 0) return [ui.empty(t('decide.none'), F)]
-  const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
+  const id0 = 'sec:decide.cards'
+  const open0 = U.sectionOpen(ctx.folded, id0)
   const needYou = ui.stateOf('verdict', 'DECIDE')
+  if (list.length === 0) return [ui.header(u, t('decide.title'), { id: id0, open: open0 }), ...(open0 ? [ui.empty(t('decide.none'), F)] : [])]
+  const head = ui.header(u, t('decide.title'), { id: id0, open: open0 }, { right: ui.countChip(u, needYou, list.length, F), fact: F })
+  if (!open0) return [head]
+  const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
   const sentState = ui.stateOf('task', 'PENDING') // a question already sent: not yet closed by the session
-  const out: PaneLine[] = []
+  const out: PaneLine[] = [head]
   list.forEach((d, i) => {
     const id = d.id
     const sent = id !== null && dv.sent[id] !== undefined
-    const title = (i + 1) + '. ' + d.question + staleSuffix(d, t)
-    out.push(ui.item(u, sent ? sentState : needYou, title, sent ? [t('decide.sent')] : undefined, { fact: F, word: false }))
-    if (displayWidth(title) > ctx.cols - 1 - 4) out.push(...ui.detail(u, d.question, { attached: true })) // the headline is one cut line; the whole question follows
-    if (d.background !== null) out.push(...ui.detail(u, d.background, { fact: F }))
+    out.push(...ui.cardTitle(u, sent ? sentState : needYou, (i + 1) + '. ' + d.question + staleSuffix(d, t), sent ? t('decide.sent') : undefined, { fact: F, sent }))
+    if (d.background !== null) out.push(...ui.cardRow(u, t('decide.k_background'), d.background, { fact: F, subtle: true }))
+    if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
     if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
-      if (d.recommendation !== null && d.why !== null) out.push(ui.recommendNote(u, d.why, F))
-      if (pick !== null && d.options[pick].description !== '') out.push(...ui.detail(u, d.options[pick].description, { attached: true, at: 0 }))
+      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
+      if (pick !== null && d.options[pick].description !== '') out.push(...ui.cardRow(u, '', d.options[pick].description, { fact: F, subtle: true }))
+    }
+    if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason follows after a colon
+      const what = rec === null ? d.recommendation : d.options[rec].label
+      out.push(...ui.cardRow(u, t('decide.k_advice'), d.why === null ? what : t('decide.advice', { what, why: d.why }), { fact: F }))
     }
     if (!sent) {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))
       else if (d.options.length === 0 || id === null) out.push(...ui.detail(u, t('decide.in_chat'), { fact: F }))
     }
-    const meta = [...(d.blocks === null ? [] : [t('decide.blocks', { b: d.blocks })]), ...(d.source === null ? [] : [t('decide.source', { s: d.source })]), ...(d.recommendation !== null && rec === null ? [t('decide.recommend', { r: d.recommendation })] : [])]
-    if (meta.length > 0) out.push(...ui.detail(u, meta.join(' · '), { fact: F }))
-    out.push(ui.blank())
+    out.push(ui.blank()) // the one body blank (design plan 4, the 待決 exception): cards are told apart by a drawn empty row
   })
   const mine = list.filter(d => d.id !== null && !decideDialog(d)) // a question with no id, or one the asker's dialog answers, cannot be answered from here: it only says so
   const open = mine.filter(d => decideOpen(d, dv))
   const answered = open.filter(d => decideLine(d, dv) !== null).length
   if (mine.length === 0) return out.slice(0, -1) // no send row: drop the blank that closed the last card
-  if (open.length === 0) out.push(ui.actionRow(u, t('decide.sent_all'), { fact: F }))
-  else out.push(ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, ...(answered > 0 ? { press: 'submit' } : {}) }))
+  if (open.length === 0) out.push(...ui.actionRow(u, t('decide.sent_all'), { fact: F }))
+  else out.push(...ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, note: t('decide.submit_note'), ...(answered > 0 ? { press: 'submit' } : {}) }))
   return out
 }
 function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {

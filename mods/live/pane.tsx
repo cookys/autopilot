@@ -52,10 +52,10 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   const ctx = { t, cols, expanded, folded, ...(decide === null ? {} : { decide: { ...decide.state, inputs: decide.inputs && Input !== undefined } }) }
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]
   const drawn = (l: PaneLine) => segsOf(l).map((x, j) => <Text key={'g' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)
-  // a line with no segments is the blank (an empty Text takes no row); every other line is a row of segments
+  // a line with no segments is the blank (drawn as a one-cell Text: an empty Text takes no row); every other line is a row of segments
   const plainLine = (l: PaneLine, i: number, k = '') => l.segs !== undefined
     ? <Box key={k + 'l' + i} flexWrap={l.wrap === true ? 'wrap' : undefined}>{l.segs.map((s, j) => <Text key={'g' + j} {...drawSeg(s)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{s.text}</Text>)}</Box>
-    : <Text key={k + 'l' + i} wrap="truncate">{l.text}</Text>
+    : <Text key={k + 'l' + i} wrap="truncate">{l.text === '' ? ' ' : l.text}</Text>
   // a line with pressable segments (the 待決 option row and send row): consecutive segments of one `press` id are one Button, the rest plain Text. Without Button it is plain.
   const pressLine = (l: PaneLine, i: number, k: string) => {
     const runs: { press: string | undefined; segs: Seg[] }[] = []

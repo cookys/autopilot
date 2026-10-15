@@ -31,58 +31,108 @@ const ctxOf = (t: ReturnType<typeof makeT>, cols: number, decide?: DecideView) =
 const texts = (ls: PaneLine[]): string[] => ls.map(l => l.text.trimEnd())
 const pressIds = (ls: PaneLine[]): string[] => ls.flatMap(l => [...new Set((l.segs ?? []).flatMap(s => (s.press === undefined ? [] : [s.press])))])
 
-test('DECIDE card: first line `n. question`, the background below it, ONE row of option Buttons with the recommended one starred, the stall as one line, a note field, then the send row', () => {
+test('DECIDE card: a section header with the count, then per question the title, 背景 → 卡住 → 選項 → 建議 → 補充 in the key/value grammar (key at column 2, value at column 12), a blank between cards, the send row last', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))
   const t = texts(ls)
-  expect(t[0]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
-  expect(t[1].trim().startsWith('殘留分頁現在只列要人處理的')).toBe(true) // the background, dim text
+  expect(ls[0].kind).toBe('header')
+  expect(t[0]).toMatch(/^▾ 待你回答  3 ─+$/) // the section header every other tab has, the count on its right
+  expect(ui.displayWidth(ls[0].text)).toBe(75)
+  expect(t[1]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
+  const at = (prefix: string, from = 0): number => t.findIndex((x, i) => i >= from && x.startsWith(prefix))
+  const bg = at('  背景      殘留分頁現在只列要人處理的')
+  const blocks = at('  卡住      下一個派工')
   const row = ls.findIndex(l => l.kind === 'choice' && l.text.includes('[ ]'))
-  expect(t[row]).toBe('  [ ] ★ OK  [ ] 完整顯示') // one row; the star marks the recommendation
+  const advice = at('  建議      ')
+  const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
+  expect(bg).toBe(2)
+  expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
+  expect(t[row]).toBe('  選項      [ ] ★ OK  [ ] 完整顯示') // one row; the star marks the recommendation, on the option only
   expect(ls[row].segs?.filter(s => s.role === 'glyph').map(s => s.text)).toEqual([ui.GLYPHS.structure.recommend])
   expect(pressIds([ls[row]])).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1'])
-  expect(t.some(x => x === '  卡住：下一個派工')).toBe(true) // "if unanswered" is one subtle line
-  const field = ls.find(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
-  expect(field?.text.trim()).toBe('補充')
-  expect(field?.field?.placeholder).toBe('選填')
+  expect(t[advice]).toBe('  建議      OK') // no reason given: the recommended option alone
+  expect(t[note]).toBe('  補充')
+  expect(ls[note].field?.placeholder).toBe('選填，可留空')
+  expect(ls[note].segs?.[1].text).toBe('補充      ') // the key slot is 10 cells: the field starts at column 12
+  // every value row hangs at column 12
+  for (const l of ls.filter(x => x.kind === 'kv')) expect(l.hang).toBe(12)
   // the second card is numbered 2 and has its own row; the third has no options, so it asks for a typed reply
   expect(t.some(x => x === '▲ 2. U6 要不要把建議也寫進回覆')).toBe(true)
-  expect(t.some(x => x === '  [ ] 要  [ ] 不要')).toBe(true)
+  expect(t.some(x => x === '  選項      [ ] 要  [ ] 不要')).toBe(true)
   expect(t.some(x => x === '▲ 3. 這個分支要叫什麼名字？')).toBe(true)
-  expect(ls.find(l => l.field !== undefined && l.field.key === 'note:d-0000free')?.text.trim()).toBe('回覆')
-  // the send row is last and is inert while nothing is chosen
+  const free = ls.find(l => l.field !== undefined && l.field.key === 'note:d-0000free')
+  expect(free?.text.trim()).toBe('回覆')
+  expect(free?.field?.placeholder).toBe('請輸入你的回答')
+  // a blank line after every card (drawn: pane.tsx gives it a row), none before the first title or between a title and its rows
+  expect(ls.filter(l => l.kind === 'blank').length).toBe(3)
+  expect(ls.map((l, i) => (l.kind === 'blank' ? i : -1)).filter(i => i >= 0).every(i => ls[i + 1].kind === 'item' || ls[i + 1].kind === 'choice')).toBe(true)
+  expect(ls[1].kind).toBe('item')
+  // the send row is last and is inert while nothing is chosen; it says where the answers go
   const last = ls[ls.length - 1]
-  expect(last.text.trim()).toBe('[ 送出（已選 0/3） ]')
+  expect(last.text.trim()).toBe('[ 送出（已選 0/3） ]  答案會貼進這個對話送出')
   expect(pressIds([last])).toEqual([])
+  expect(last.segs?.find(s => s.text.includes('答案會貼進'))?.dim).toBe(true)
   // a card is not a screenful: three cards of this kind fit well under a page
-  expect(ls.length).toBeLessThan(24)
+  expect(ls.length).toBeLessThan(28)
+})
+
+test('DECIDE title: the question is bold default text, wraps from column 2 and is never repeated; the glyph keeps the attention colour; a sent title is plain (negative controls)', () => {
+  const zh = makeT('zh-TW')
+  const q = '這個題目非常長所以一行放不下它必須換行而且續行要從第二欄開始不能再用角落符號把整題重複一次'
+  const ls = decideTabLines(snapOf([dec('d-long', q, { options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, 40, view()))
+  const titles = ls.filter(l => l.kind === 'item')
+  expect(titles.length).toBeGreaterThanOrEqual(3)
+  expect(titles[0].text.startsWith('▲ 1. ')).toBe(true)
+  for (const l of titles.slice(1)) expect(l.text.startsWith('  ') && !l.text.startsWith('   ')).toBe(true) // continuation lines start at column 2
+  expect(titles.map(l => l.text.slice(2)).join('').replace('1. ', '')).toBe(q) // the whole question once, in order
+  expect(ls.some(l => l.text.includes(ui.GLYPHS.structure.detail)), 'no └ copy of the question').toBe(false)
+  expect(ls.filter(l => l.text.includes('這個題目非常長')).length).toBe(1)
+  for (const l of titles) for (const s of (l.segs ?? []).filter(x => x.role === 'title')) { expect(s.bold).toBe(true); expect(s.color).toBeUndefined(); expect(ui.boldUseOf(l, s)).toBe('question title') }
+  expect(titles[0].segs?.find(s => s.role === 'glyph')?.color).toBe(ui.PALETTE.attention)
+  expect(titles[0].segs?.find(s => s.role === 'glyph')?.bold).toBeUndefined()
+  // a sent question is not bold: the bold title is the thing that still waits for you
+  const sent = decideTabLines(snapOf([dec('d-long', q, { options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, 40, view({ sent: { 'd-long': 1 } })))
+  expect(sent.filter(l => l.kind === 'item').every(l => (l.segs ?? []).every(s => s.bold !== true))).toBe(true)
+  // control 1: the bold title is on the whitelist, and I4 stays clean on the real card
+  expect(ui.BOLD_USES).toContain('question title')
+  expect(violations(ls, 40, zh).filter(v => v.startsWith('I4'))).toEqual([])
+  // control 2: bold on anything that is not a question title is flagged by I4 (a background value, an option key, a title segment that lost its role)
+  const bend = (pick: (l: PaneLine) => boolean, edit: (s: any) => unknown): PaneLine[] =>
+    decideTabLines(snapOf(THREE), ctxOf(zh, 76, view())).map(l => (pick(l) && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => (s.text.trim() === '' ? s : (edit(s) as never))) }) : l))
+  const real = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))
+  expect(violations(real, 76, zh).filter(v => v.startsWith('I4'))).toEqual([]) // green side
+  expect(violations(bend(l => l.kind === 'kv', s => ({ ...s, bold: true })), 76, zh).some(v => v.startsWith('I4'))).toBe(true)
+  expect(violations(bend(l => l.kind === 'item' && l.text.startsWith('▲'), s => (s.role === 'title' ? { ...s, role: 'prose' } : s)), 76, zh).some(v => v.startsWith('I4'))).toBe(true)
+  expect(violations(bend(l => l.kind === 'detail' || l.kind === 'empty' || l.kind === 'header', s => ({ ...s, bold: true, role: 'title' })), 76, zh).some(v => v.startsWith('I4'))).toBe(true) // the role alone does not whitelist a non-item line
 })
 
 test('DECIDE choose: the picked option is `[x]` in bold default text (no background, no inverse), the others stay plain, the send row counts it and becomes pressable', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 1 } })))
   const row = ls.find(l => l.kind === 'choice' && l.text.includes('完整顯示')) as PaneLine
-  expect(row.text.trimEnd()).toBe('  [ ] ★ OK  [x] 完整顯示')
+  expect(row.text.trimEnd()).toBe('  選項      [ ] ★ OK  [x] 完整顯示')
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
   for (const s of picked) { expect(s.color).toBeUndefined(); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
-  expect(ls.some(l => l.text.includes('全列出來')), 'the picked option shows its one-line description').toBe(true)
+  const desc = ls.find(l => l.text.includes('全列出來')) as PaneLine
+  expect(desc.text, 'the picked option shows its description, dim, at column 12').toBe('            全列出來')
+  expect(desc.segs?.every(s => s.dim === true || s.text.trim() === '')).toBe(true)
   const last = ls[ls.length - 1]
-  expect(last.text.trim()).toBe('[ 送出（已選 1/3） ]')
+  expect(last.text.trim()).toBe('[ 送出（已選 1/3） ]  答案會貼進這個對話送出')
   expect(pressIds([last])).toEqual(['submit'])
   // a pick that is no longer one of the options (the list changed under it) counts as no pick
   const stale = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 7 } })))
-  expect(stale[stale.length - 1].text.trim()).toBe('[ 送出（已選 0/3） ]')
+  expect(stale[stale.length - 1].text.trim()).toBe('[ 送出（已選 0/3） ]  答案會貼進這個對話送出')
 })
 
 test('DECIDE sent: a question already sent says so, draws its options without Buttons and without a field, and the send row stops offering it', () => {
   const zh = makeT('zh-TW')
   const v = view({ picks: { 'd-4290499d': 0 }, sent: { 'd-4290499d': 5 } })
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, v))
-  expect(texts(ls)[0]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
+  expect(texts(ls)[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
   expect(pressIds(ls).filter(p => p.startsWith('pick:d-4290499d'))).toEqual([])
   expect(ls.some(l => l.field?.key === 'note:d-4290499d')).toBe(false)
-  expect(texts(ls).some(x => x === '  [x] ★ OK  [ ] 完整顯示')).toBe(true) // the choice made stays visible
+  expect(texts(ls).some(x => x === '  選項      [x] ★ OK  [ ] 完整顯示')).toBe(true) // the choice made stays visible
   expect(pressIds(ls).some(p => p.startsWith('pick:d-c24ecfd9'))).toBe(true) // the other questions are still open
   // all sent: nothing left to send
   const all = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ sent: { 'd-4290499d': 5, 'd-c24ecfd9': 5, 'd-0000free': 5 } })))
@@ -100,11 +150,12 @@ test('DECIDE phone: with no text field a question without options says to answer
   }
 })
 
-test('DECIDE none: no question is one empty line and no badge; each question adds to the badge', () => {
+test('DECIDE none: no question is the section header and one empty line, and no badge; each question adds to the badge', () => {
   for (const [loc, t] of LOCALES) {
     const none = decideTabLines(snapOf([]), ctxOf(t, 76, view()))
-    expect(none.map(l => l.kind), loc).toEqual(['empty'])
-    expect(none[0].text, loc).toContain(t('decide.none'))
+    expect(none.map(l => l.kind), loc).toEqual(['header', 'empty']) // the section header stays; the empty line is the one line under it
+    expect(none[0].text, loc).toContain(t('decide.title'))
+    expect(none[1].text, loc).toContain(t('decide.none'))
     expect(tabNeeds(snapOf([])).decide, loc).toBeUndefined()
     expect(tabNeeds(snapOf(THREE)).decide, loc).toEqual({})
   }
@@ -159,7 +210,7 @@ test('DECIDE owner: the cards are the 待決 tab\'s own fact, and 現況 shows o
   expect(now.length, '現況 with three questions is no longer than with one').toBe(nowLines(snapOf([THREE[0]]), ctxOf(zh, 76)).length)
 })
 
-test('DECIDE recommendation: matched to an option by label (equal, or one starts with the other); an unmatched one is said once on the meta line instead', () => {
+test('DECIDE recommendation: matched to an option by label (equal, or one starts with the other); an unmatched one is written as it is on the 建議 row', () => {
   expect(recommendedIndex(dec('a', 'q', { options: [OPT('OK'), OPT('No')], recommendation: 'ok' }))).toBe(0)
   expect(recommendedIndex(dec('a', 'q', { options: [OPT('OK'), OPT('No')], recommendation: 'No — it is cheaper' }))).toBe(1)
   expect(recommendedIndex(dec('a', 'q', { options: [OPT('OK'), OPT('No')], recommendation: 'something else' }))).toBe(null)
@@ -167,7 +218,65 @@ test('DECIDE recommendation: matched to an option by label (equal, or one starts
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], recommendation: '先做丙' })]), ctxOf(zh, 76, view()))
   expect(ls.some(l => l.text.includes('★'))).toBe(false)
-  expect(texts(ls).some(x => x === '  建議：先做丙')).toBe(true)
+  expect(texts(ls).some(x => x === '  建議      先做丙')).toBe(true)
+})
+
+test('DECIDE send note: the button says where the answers go, in both locales; on a narrow pane the note takes the line below; a folded section is only its header (negative controls)', () => {
+  for (const [loc, t] of LOCALES) {
+    const wide = decideTabLines(snapOf(THREE), ctxOf(t, 76, view()))
+    const row = wide[wide.length - 1]
+    expect(row.text.trim(), loc).toBe('[ ' + t('decide.submit', { n: 0, total: 3 }) + ' ]  ' + t('decide.submit_note'))
+    expect(row.segs?.some(s => s.dim === true && s.text === t('decide.submit_note')), loc).toBe(true)
+    const narrow = decideTabLines(snapOf(THREE), ctxOf(t, 36, view()))
+    const btn = narrow.findIndex(l => l.kind === 'choice' && l.text.includes('[ ' + t('decide.submit', { n: 0, total: 3 }) + ' ]'))
+    expect(btn, loc).toBeGreaterThan(0)
+    expect(narrow[btn].text.trim(), loc).toBe('[ ' + t('decide.submit', { n: 0, total: 3 }) + ' ]') // the note did not fit beside it
+    expect(narrow.slice(btn + 1).map(l => l.text.trim()).join(' '), loc).toBe(t('decide.submit_note')) // it is wrapped below, at column 2
+    for (const l of narrow) expect(ui.displayWidth(l.text), l.text).toBeLessThanOrEqual(35)
+    // the pressable form keeps its press id and its note
+    const pick = decideTabLines(snapOf(THREE), ctxOf(t, 76, view({ picks: { 'd-4290499d': 0 } })))
+    expect(pressIds([pick[pick.length - 1]]), loc).toEqual(['submit'])
+    // folded: the header alone, no cards, no send row
+    const folded = decideTabLines(snapOf(THREE), { ...ctxOf(t, 76, view()), folded: new Set(['sec:decide.cards']) })
+    expect(folded.length, loc).toBe(1)
+    expect(folded[0].toggle, loc).toBe('sec:decide.cards')
+    expect(folded[0].text, loc).toMatch(/^▸ /)
+    expect(decideTabLines(snapOf(THREE), ctxOf(t, 76, view()))[0].text, loc).toMatch(/^▾ /)
+    // the count on the header is the number of questions, as a plain count (no formatter-less number)
+    expect(decideTabLines(snapOf([THREE[0], THREE[1]]), ctxOf(t, 76, view()))[0].text, loc).toMatch(/ 2 ─+$/)
+  }
+  // control: the send note is not part of the press target: the Button text is only `[ ... ]`
+  const row = decideTabLines(snapOf(THREE), ctxOf(makeT('zh-TW'), 76, view({ picks: { 'd-4290499d': 0 } }))).slice(-1)[0]
+  expect(row.segs?.filter(s => s.press !== undefined).map(s => s.text)).toEqual(['[ 送出（已選 1/3） ]'])
+})
+
+test('DECIDE wrap: a closing mark never starts a continuation line (negative control: the checker flags a planted one)', () => {
+  const zh = makeT('zh-TW')
+  const bgText = 'P5 已審查通過並合併（bcaef0cc）。審查員指出計畫裡「殘留分頁截圖」只有資料產生端的證據，沒有你機器上的畫面，所以這一項改回待確認。'
+  const startsClosed = (ls: PaneLine[]): string[] => texts(ls).filter(x => /^\s+[）」』、。，；：！？]/.test(x))
+  for (const cols of [60, 66, 70, 76, 80]) {
+    const ls = decideTabLines(snapOf([dec('d-1', 'q?', { background: bgText, options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, cols, view()))
+    expect(startsClosed(ls), 'cols ' + cols).toEqual([])
+    expect(texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).map(x => x.trim()).join('').replace(/^背景\s+/, '')).toBe(bgText) // nothing lost to the wrap
+  }
+  expect(startsClosed([{ ...decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))[0], text: '            」只有' }])).toEqual(['            」只有'])
+})
+
+test('DECIDE wrap: a run of closing marks, a space before a mark and an astral character never put a closing mark at the head of a line, and nothing is lost', () => {
+  const zh = makeT('zh-TW')
+  const cases = [
+    '他說「這一項改回待確認。」然後又說「這是第二句話，後面還有括號（註一）。」最後一句「結束了！」）」',
+    '𠀋𠀋𠀋 名字裡有擴充字元「𠀋」。後面接一串「引號裡的句子。」再一串（括號裡的句子。）以及更多文字直到換行為止。',
+    'the reviewer said (see the plan ) and then ( more text here ) , then a list ; of items : done !',
+  ]
+  const closing = /^\s+[）」』、。，；：！？)\]}】》〉,.;:!?]/
+  for (const bg of cases) for (let cols = 40; cols <= 80; cols++) {
+    const ls = decideTabLines(snapOf([dec('d-1', 'q?', { background: bg, options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, cols, view()))
+    const rows = texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            '))
+    expect(rows.filter(x => closing.test(x.replace(/^  背景/, '    '))), 'cols ' + cols + ': ' + bg.slice(0, 12)).toEqual([])
+    expect(rows.some(x => /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(x)), 'cols ' + cols + ': a lone surrogate').toBe(false)
+    expect(rows.map(x => x.trim()).join('').replace(/^背景\s+/, '').replace(/ /g, ''), 'cols ' + cols + ': nothing lost').toBe(bg.replace(/ /g, ''))
+  }
 })
 
 // ---- the reply text: a wire format the model reads back; the id is what ties an answer to its question ----
@@ -196,35 +305,53 @@ test('DECIDE reply: the head line, then `<id>｜<first 30 characters> → <answe
 })
 
 // ---- review round 1 ----
-test('DECIDE meta: one subtle line `卡住：… · 來源：…`, the ★ reason line only under a recommendation; empty parts are left out, never drawn empty (all / none / source only)', () => {
+test('DECIDE rows: 背景 → 卡住 → 選項 → 建議 → 補充, a row with nothing to say is not drawn, the source is never drawn, 建議 is `<option>：<reason>` with no star (negative controls)', () => {
   const zh = makeT('zh-TW')
-  const one = (over: Partial<LiveDecision>) => texts(decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view())))
-  const all = one({ recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
-  expect(all).toContain('  ★ 少一屏')
-  expect(all).toContain('  卡住：下一個派工 · 來源：lane-x')
-  expect(all.indexOf('  ★ 少一屏'), 'the reason follows the option row').toBe(all.findIndex(x => x.startsWith('  [ ] ★ 甲')) + 1)
+  const full = (over: Partial<LiveDecision>) => decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view()))
+  const one = (over: Partial<LiveDecision>) => texts(full(over))
+  const all = one({ background: '為什麼問', recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
+  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  選項      [ ] ★ 甲  [ ] 乙', '  建議      甲：少一屏', '  補充']
+  expect(keys.map(k => all.indexOf(k)), 'every row is there').not.toContain(-1)
+  expect(keys.map(k => all.indexOf(k)), 'in this order').toEqual(keys.map(k => all.indexOf(k)).slice().sort((a, b) => a - b))
+  expect(all.join('\n'), 'the source is data for the assistant, not the owner').not.toMatch(/lane-x|來源/)
   expect(all.join('\n'), 'not_authorized is deliberately not drawn: being on this tab already says the owner decides').not.toContain('深度零不能決定')
+  // nothing to say: only the title, the options and the note
   const none = one({})
-  expect(none.some(x => x.includes('卡住') || x.includes('來源') || x.includes('★ '))).toBe(false)
-  expect(none.join('\n')).not.toMatch(/卡住：\s*$|來源：\s*$/m)
-  const src = one({ source: 'lane-x' })
-  expect(src).toContain('  來源：lane-x')
-  expect(src.some(x => x.includes('卡住'))).toBe(false)
+  expect(none.some(x => /^ {2}(背景|卡住|建議) /.test(x))).toBe(false)
+  expect(none.join('\n')).not.toMatch(/(背景|卡住|建議)\s*$/m)
+  // only some: the others are not drawn
+  const blocksOnly = one({ blocks: '下一個派工' })
+  expect(blocksOnly).toContain('  卡住      下一個派工')
+  expect(blocksOnly.some(x => x.startsWith('  背景') || x.startsWith('  建議'))).toBe(false)
+  expect(one({ source: 'lane-x' }).join('\n')).not.toMatch(/lane-x|來源/)
   // a reason without a recommendation has nothing to hang under: not drawn
   expect(one({ why: '少一屏' }).some(x => x.includes('少一屏'))).toBe(false)
-  // the ★ line is a detail line made by the design system: the glyph from GLYPHS, dim, no background
-  const ls = decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], recommendation: '甲', why: '少一屏' })]), ctxOf(zh, 76, view()))
-  const why = ls.find(l => l.text.includes('少一屏')) as PaneLine
-  expect(why.kind).toBe('detail')
-  expect(why.segs?.find(s => s.role === 'glyph')?.text).toBe(ui.GLYPHS.structure.recommend)
-  expect(why.segs?.every(s => s.dim === true || s.text.trim() === '')).toBe(true)
+  // a recommendation without a reason: the recommended option's label alone
+  expect(one({ recommendation: '甲' })).toContain('  建議      甲')
+  expect(one({ recommendation: '乙' })).toContain('  建議      乙')
+  // the star is on the option only; 建議 carries none
+  const ls = full({ recommendation: '甲', why: '少一屏' })
+  const starred = (l: PaneLine[]): PaneLine[] => l.filter(x => x.kind !== 'choice' && x.text.includes(ui.GLYPHS.structure.recommend))
+  expect(starred(ls)).toEqual([])
+  expect(ls.filter(x => x.kind === 'choice' && x.text.includes('★')).length).toBe(1)
+  // the value of 建議 is default text, the 背景 value is dim, the key is dim
+  const adv = ls.find(x => x.text.startsWith('  建議')) as PaneLine
+  expect(adv.kind).toBe('kv')
+  expect(adv.segs?.find(s => s.role === 'key')?.dim).toBe(true)
+  expect(adv.segs?.find(s => s.role === 'prose')?.dim).toBeUndefined()
+  const bgl = full({ background: '為什麼問' }).find(x => x.text.startsWith('  背景')) as PaneLine
+  expect(bgl.segs?.find(s => s.role === 'prose')?.dim).toBe(true)
+  // control: the star checker does flag a star planted on the 建議 row, and the source check a planted source
+  const bent = ls.map(x => (x.text.startsWith('  建議') ? ui.carry(x, { ...x, text: x.text + ' ★', segs: [...(x.segs ?? []), { text: ' ★' }] }) : x))
+  expect(starred(bent).length).toBeGreaterThan(0)
+  expect(texts(bent).join('\n') + '來源：lane-x').toMatch(/lane-x|來源/)
 })
 
 test('DECIDE send row: the total counts only the questions still open from the pane (an id, not sent, not a dialog)', () => {
   const zh = makeT('zh-TW')
   const list = [THREE[0], THREE[1], THREE[2], dec(null, '沒有 id', { options: [OPT('甲'), OPT('乙')] }), dec('d-dlg', '對話框題', { options: [OPT('甲'), OPT('乙')], origin: 'ask_user_question' })]
   const ls = decideTabLines(snapOf(list), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 0 }, sent: { 'd-0000free': 3 } })))
-  expect(ls[ls.length - 1].text.trim()).toBe('[ 送出（已選 1/2） ]')
+  expect(ls[ls.length - 1].text.trim()).toBe('[ 送出（已選 1/2） ]  答案會貼進這個對話送出')
 })
 
 test('DECIDE dialog: a question the asking session\'s dialog answers has no option Buttons, no field, says so, and is not counted or sent', () => {

@@ -219,6 +219,14 @@ ts_snapshot_build() {
   else
     git -C "$container/repo" checkout --quiet --detach "$sha" || return 1
   fi
+  # BL-0182: clone maps the real repo's LOCAL branches to the snapshot's origin/*, so a stale
+  # local develop masquerades as origin/develop. Overlay the real repo's own remote-tracking
+  # refs (when it has any) so ancestry checks against origin/develop see the true remote state.
+  if git -C "$real_root" for-each-ref --count=1 --format=x refs/remotes/origin/ 2>/dev/null | grep -q x; then
+    GIT_CONFIG_COUNT=0 GIT_ALLOW_PROTOCOL=file \
+      git -C "$container/repo" fetch --quiet --no-tags --no-write-fetch-head origin \
+      '+refs/remotes/origin/*:refs/remotes/origin/*' || return 1
+  fi
   rsync -a --delete --exclude='.git' "${real_root}/" "$container/repo/" || return 1
   git -C "$container/repo" remote set-url origin /nonexistent/autopilot-test-snapshot-origin || return 1
   if [ -e "$container/repo/.git/objects/info/alternates" ]; then

@@ -1842,15 +1842,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: validateManagedDevFlowAdmission (session-mode.js ~:453-505, compare :489) uses markerPath()/getSessionId(); route it through resolveMarkerWriteTarget.
 
-### Dispatch-tree 3b live gaps: tmux parent leak, kimi child env, per-rail mutations
+### Dispatch-tree 3b live gaps: tmux parent leak, kimi child env
 - **Id**: BL-0176
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 3b 有三件事只靠讀程式碼確認、沒有實測：在子 session 裡開的 tmux 之後再開新 session，會不會記錯父 session；kimi 子程序拿到的身分；review 與 explore 這兩條路徑拿掉關鍵步驟時測試會不會轉紅。
-- **Impact**: 低到中。tmux 那項若成立，派工追蹤樹會把無關的 session 掛到舊的派工底下。
-- **Trigger**: D0 重跑（kimi 需要有憑證的環境），或有人在 rail 子 session 裡開 tmux 長駐時
+- **Problem**: 在派出去的子 session 裡開的 tmux 等長駐 shell，之後在裡面開的全新 session 會把當年那次派工記成自己的上層（2026-10-15 已用模擬重現）。另外 kimi 子程序拿到的身分只看過程式碼、沒實測。
+- **Impact**: 低到中。派工追蹤樹會把無關的 session 掛到舊的派工底下；不會寫到別人的紀錄。
+- **Trigger**: dispatch-tree plan revision before R (tmux fix needs plan review; option (1) preferred), or a credentialed env for kimi
 - **Effort**: S
 - **Source**: review of lane/dispatch-tree-3b, 2026-10-15
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: D6 residual (plan §4); kimi stub exited 2 in review; mutations ran on author only.
+- **Context**: D6 residual (plan §4). Per-rail mutations done 2026-10-15. tmux leak reproduced: ensurePlainMarker records env P for any new id != P; two options in the sidecar.

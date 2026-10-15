@@ -279,9 +279,18 @@ EOF
         AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$REPO_ROOT/docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" \
         bash "$WHO" --runner "$CR" --model "$CM" --diff-file "$DIFF" --bin "$CMP_REC" >/dev/null 2>&1 < /dev/null
     done
-    NORM='s/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g'
+    # dispatch-tree 3b (plan docs/plans/2026-10-13-dispatch-tree.md section 6 rule 3) made every rail hand EVERY
+    # child runner AUTOPILOT_PARENT_SESSION_ID (the id `session-mode.js write-target --rail` resolves: session env
+    # chain, else the normalized cwd), and 3d may add AUTOPILOT_CHILD_SESSION_ID for claude children. The base
+    # script predates that and exports neither, and head's value depends on the environment the suite runs in, so no
+    # amount of env scrubbing can make the two sides equal. Drop exactly these two names (nothing else) from both
+    # sides; the head-side presence of the parent id is pinned by the assertion below, and that the rest
+    # (argv, cwd shape, every other env var) stays byte-identical is what this compare is for.
+    NORM='s/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g; /^AUTOPILOT_(PARENT|CHILD)_SESSION_ID=/d'
     assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec")" \
       "non-blind $CR argv/cwd-shape/env are byte-identical to base ${BASE_SHA:0:8}"
+    assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR head run carries the 3b rule-3 parent id (so the normalisation above drops something real)"
+    assert_not_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR base run has no parent id (the difference is the intended 3b change, not noise)"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'ARGV:' "non-blind $CR byte-compare base run actually ran the recorder"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'ARGV:' "non-blind $CR byte-compare head run actually ran the recorder"
   done

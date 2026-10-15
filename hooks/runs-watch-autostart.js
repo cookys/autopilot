@@ -32,6 +32,9 @@
  *     A plain or dev-flow session holds no orchestrator marker, so this hook ALSO runs on UserPromptSubmit and re-ensures cheaply
  *     (foreground `flock -n` probe; spawn only when free; one spawn attempt per prompt).
  *   - SessionEnd does NOT stop the watcher (other sessions may share it); idle-exit handles it.
+ *   - Isolated environment (HOME is not the real home, or CLAUDE_CONFIG_DIR is not the real ~/.claude — see
+ *     src/status/load-source.js isolatedEnv) with AUTOPILOT_LIVE_DIR unset: no cache and no watcher on the shared live
+ *     dir; override with AUTOPILOT_LOAD_SOURCE_TRUST_ENV=1. startWatcherDetached enforces the same for session-mode `set`.
  *   - Never blocks: one 5 s-bounded probe, the watcher itself is detached (nohup, own session).
  *   - Fail-open: any problem is at most ONE stderr line, exit 0, no stdout.
  *   - Optional tuning: AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S / AUTOPILOT_RUNS_WATCH_INTERVAL_S (positive integers).
@@ -260,7 +263,15 @@ function run(payload) {
   const cwd = path.resolve(typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd());
   const root = path.resolve(__dirname, '..');
   let base = null;
-  try { base = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no fast path */ }
+  // Isolated environment (own HOME / CLAUDE_CONFIG_DIR) on the shared live dir: no per-cwd cache and no watcher there
+  // (it would write fake projects and a bogus load-source.json into the real live dir). The marker and live pointer
+  // (under the isolated HOME) still work. Chosen over redirecting the watcher to a private live dir: that would need
+  // every reader (band, statusline) to find it too, and a test terminal wants the real dir left alone, not a second one.
+  let isolated = null;
+  try { isolated = require(path.join(root, 'src/status/load-source')).isolatedEnv(process.env).reason; } catch (_error) { /* not isolated */ }
+  if (!isolated) {
+    try { base = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no fast path */ }
+  }
   const event = payload.hook_event_name;
   const sid = typeof payload.session_id === 'string' ? payload.session_id : '';
   // The pointer must still exist too (a deleted pointer is restored by the full path).
@@ -304,6 +315,7 @@ function run(payload) {
     const w = inspectWatcher(base, scope.project_key, root);
     if (w && w.state === 'stale') reapStale(w, scope.project_key);
   }
+  if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment
   const { startWatcherDetached } = require(path.join(root, 'src/status/runs-watch'));
   const opts = { key: scope.project_key, cwd: topLevel(cwd), env: process.env, render: true };
   // Optional tuning (tests use it to make the watcher idle-exit in seconds); defaults are the watcher's own.

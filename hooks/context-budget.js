@@ -54,8 +54,7 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
-const { configPath } = require('../scripts/lib/config-path.js');
+const { readContextBudget } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW,
@@ -77,34 +76,9 @@ function getSessionId(payload) {
 }
 
 function loadConfig() {
-  // explicitT1/T2 track whether the value came from the USER (config/env) or is
-  // still the absolute default. Only a window SMALLER than 200K rescales defaults down;
-  // it must never override a value the user set by hand. (v2.32.56)
-  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false, liveWrite: true, step: 50_000 };
-  try {
-    const file = configPath();
-    const user = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const cb = user && user.context_budget;
-    if (cb && typeof cb === 'object') {
-      if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
-      if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
-      if (Number.isFinite(cb.step) && cb.step >= 0) cfg.step = cb.step;
-      if (cb.mode === 'off' || cb.mode === 'warn') cfg.mode = cb.mode;
-      if (cb.live_write === false) cfg.liveWrite = false;
-    }
-  } catch { /* absent/corrupt config → defaults */ }
-  const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
-  const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
-  if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
-  if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
-  const envStepRaw = process.env.AUTOPILOT_CONTEXT_BUDGET_STEP;
-  const envStep = envStepRaw === undefined || envStepRaw === '' ? NaN : Number(envStepRaw);
-  if (Number.isFinite(envStep) && envStep >= 0) cfg.step = envStep; // env beats config; 0 = remind on every call
-  if (process.env.AUTOPILOT_CONTEXT_BUDGET_MODE === 'off') cfg.mode = 'off';
-  // v2.37 (mods P1W W2f) opt-out for the live-context-file writer only (the hook keeps nudging).
-  const lw = process.env.AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE;
-  if (lw === 'off' || lw === '0' || lw === 'false') cfg.liveWrite = false;
-  return cfg;
+  // One parse of context_budget (config + env), shared with the SessionStart budget warning:
+  // scripts/lib/config-path.js readContextBudget.
+  return readContextBudget();
 }
 
 const WRITER_ID = 'context-budget';

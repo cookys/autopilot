@@ -38,6 +38,12 @@ printf '{"schema":1,"run_id":"other-kid","role":"implementer","runner":"codex","
 printf '{"schema":1,"run_id":"run-other-9","role":"reviewer","runner":"codex","model":"gpt-x","started_at":"%s","session_id":"someone-else"}\n' \
   "$(date -u +%FT%TZ)" > "$AUTOPILOT_DISPATCH_RUNS_DIR/run-other-9.manifest.json"
 
+# The runs above are live: stamp the test shell's own pid (alive for the whole test) so the liveness probe
+# (dispatch-status.js --run: manifest pid, kill-0) sees them as running.
+for f in "$AUTOPILOT_DISPATCH_RUNS_DIR"/*.manifest.json; do
+  node -e 'const fs=require("fs");const f=process.argv[1];const m=JSON.parse(fs.readFileSync(f,"utf8"));m.pid=Number(process.argv[2]);fs.writeFileSync(f,JSON.stringify(m)+"\n")' "$f" "$$"
+done
+
 printf 'NOTE-FROM-MODEL: owner said "keep the old API"; next step is X.\n' > "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 
 TR="$HOOK_HOME/transcript.jsonl"
@@ -127,6 +133,46 @@ console.log(h.dispatchSection({sessionId:"s",roots:new Set(),now:Date.now(),dirs
 ' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_DISPATCH_RUNS_DIR")
 assert_contains "$out" "unavailable: dispatch-status exit" "negative: broken dispatch reader -> unavailable"
 
+# liveness: a run with no ended_at is judged by re-derivable facts (manifest pid, kill-0), not by its age. Own dir,
+# so the caps of the main fixture above do not apply.
+LIVEDIR="$TEST_TMP/runs-liveness"; mkdir -p "$LIVEDIR"
+bash -c 'exit 0' & DEADPID=$!; wait "$DEADPID"
+OLDZ="$(date -u -d '3 days ago' +%FT%TZ)"
+printf '{"schema":1,"run_id":"run-live-1","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"%s","pid":%s}\n' "$OLDZ" "$SID" "$$" > "$LIVEDIR/run-live-1.manifest.json"
+printf '{"schema":1,"run_id":"run-gone-1","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"%s","pid":%s}\n' "$NOWZ" "$SID" "$DEADPID" > "$LIVEDIR/run-gone-1.manifest.json"
+printf '{"schema":1,"run_id":"run-nopid-1","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"%s"}\n' "$NOWZ" "$SID" > "$LIVEDIR/run-nopid-1.manifest.json"
+out=$(node -e '
+const h=require(process.argv[1]);
+console.log(h.dispatchSection({sessionId:process.argv[2],roots:new Set(),now:Date.now(),dirs:{dispatchRuns:process.argv[3]}}));
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$LIVEDIR")
+assert_contains "$out" "run-live-1 RUNNING" "liveness: a live pid is RUNNING whatever the run's age"
+assert_contains "$out" "run-gone-1 GONE" "liveness: a run whose pid is gone is not shown as running"
+assert_not_contains "$out" "run-gone-1 RUNNING" "liveness: a crashed run is never RUNNING"
+assert_contains "$out" "run-nopid-1 UNKNOWN" "liveness: no pid or lock -> state unknown, not running"
+assert_not_contains "$out" "run-nopid-1 RUNNING" "liveness: no pid or lock is never RUNNING"
+
+# deadline: the whole handoff has one wall-clock bound; sections that do not fit say so in the existing failure format
+out=$(node -e '
+const h=require(process.argv[1]);
+const slow=(cwd,args)=>{Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150);return {ok:true,out:"x"};};
+const t0=Date.now();
+const md=h.buildHandoff({sessionId:"s",cwd:"/tmp",gitRunner:slow,deadlineMs:400,dirs:{dispatchRuns:process.argv[2],handoff:process.argv[3]},snapshot:{error:"none"}});
+console.log("elapsed="+(Date.now()-t0));
+console.log(md);
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_DISPATCH_RUNS_DIR" "$AUTOPILOT_MODEL_HANDOFF_DIR")
+assert_contains "$out" "unavailable: handoff deadline reached" "deadline: a section past the deadline says unavailable"
+el=$(printf '%s' "$out" | sed -n 's/^elapsed=//p')
+if [ "${el:-99999}" -lt 1500 ]; then assert_eq 1 1 "deadline: handoff ended near the deadline (${el} ms)"; else assert_eq "$el" "<1500" "deadline: handoff overran"; fi
+out=$(node -e '
+const h=require(process.argv[1]);
+console.log(h.dispatchSection({sessionId:"s",roots:new Set(),now:Date.now(),dirs:{dispatchRuns:process.argv[2]},deadlineAt:Date.now()-1}));
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_DISPATCH_RUNS_DIR")
+assert_contains "$out" "unavailable: handoff deadline reached" "deadline: dispatch section past the deadline is unavailable"
+
+# the PreCompact worst case is fixed: no per-section timeout sum above the deadline constant
+cap=$(node -e 'console.log(require(process.argv[1]).HANDOFF_DEADLINE_MS)' "$REPO_ROOT/scripts/lib/compaction-handoff.js")
+if [ "${cap:-99999}" -le 8000 ]; then assert_eq 1 1 "deadline: HANDOFF_DEADLINE_MS <= 8000"; else assert_eq "$cap" "<=8000" "deadline constant"; fi
+
 # --- 3. SessionStart budget warning -------------------------------------------------------------
 ss() { # $1 = source ; extra env set by caller
   run_hook session-start.js "{\"session_id\":\"$SID\",\"source\":\"$1\",\"cwd\":\"$REPO\",\"transcript_path\":\"${2:-}\"}"
@@ -150,6 +196,29 @@ unset AUTOPILOT_CONTEXT_BUDGET_GAP
 printf '{"context_budget":{"t2":450000,"gap":80000}}\n' > "$AUTOPILOT_CONFIG_FILE"
 ss startup
 assert_contains "$__RUN_STDOUT" "Window that fits: 563000" "gap config key raises the bar"
+# the budget hint can be switched off: context_budget.mode=off in the config, or the mode env, silences the warning too
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW=450000
+printf '{"context_budget":{"t2":450000,"mode":"off"}}\n' > "$AUTOPILOT_CONFIG_FILE"
+ss startup
+assert_not_contains "$__RUN_STDOUT" "T2 is never reached" "off: config context_budget.mode=off -> no budget warning"
+printf '{"context_budget":{"t2":450000}}\n' > "$AUTOPILOT_CONFIG_FILE"
+AUTOPILOT_CONTEXT_BUDGET_MODE=off ss startup
+assert_not_contains "$__RUN_STDOUT" "T2 is never reached" "off: AUTOPILOT_CONTEXT_BUDGET_MODE=off -> no budget warning"
+ss startup
+assert_contains "$__RUN_STDOUT" "T2 is never reached" "off: control - mode left on still warns"
+# one parse for both consumers: whatever the hook reads for t2/gap/mode, the warning reads
+parity=$(node -e '
+const {readContextBudget}=require(process.argv[1]); const h=require(process.argv[2]);
+const env={AUTOPILOT_CONFIG_FILE:process.argv[3]};
+const a=readContextBudget({env}); const b=h.readBudget({env});
+console.log(a.t2===b.t2&&a.gap===b.gap?"same":"differ "+JSON.stringify([a.t2,a.gap,b]));
+' "$REPO_ROOT/scripts/lib/config-path.js" "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_CONFIG_FILE")
+assert_eq "$parity" "same" "readBudget agrees with the shared context_budget parse"
+# a non-positive t2 in the config is read the way the hook reads it (any finite number), not skipped
+printf '{"context_budget":{"t2":-5}}\n' > "$AUTOPILOT_CONFIG_FILE"
+t2v=$(node -e 'console.log(require(process.argv[1]).readBudget({env:{AUTOPILOT_CONFIG_FILE:process.argv[2]}}).t2)' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_CONFIG_FILE")
+assert_eq "$t2v" "-5" "readBudget takes t2 from the same rule as the hook (config: any finite number)"
+printf '{"context_budget":{"t2":450000}}\n' > "$AUTOPILOT_CONFIG_FILE"
 printf '{"context_budget":{"t2":450000}}\n' > "$AUTOPILOT_CONFIG_FILE"
 unset CLAUDE_CODE_AUTO_COMPACT_WINDOW
 ss startup
@@ -213,6 +282,10 @@ LONGDIR="$TEST_TMP/$(printf 'd%.0s' $(seq 1 160))"; mkdir -p "$LONGDIR"
 export AUTOPILOT_MODEL_HANDOFF_DIR="$LONGDIR"
 head -c 20000 /dev/zero | tr '\0' 'N' > "$LONGDIR/$SID.md"
 for i in $(seq 1 40); do echo x > "$REPO/$(printf 'long-file-name-%.0s' 1 2 3 4)-$i.txt"; done
+# pack the git section too: long commit subjects (HEAD + 5 recent), more worktrees than the list shows, many dirty paths
+( cd "$REPO" && git add -A >/dev/null 2>&1 && git reset -q \
+  && for i in 1 2 3 4 5 6; do git commit -q --allow-empty -m "commit $i $(printf 'subject-words %.0s' $(seq 1 12))"; done \
+  && for i in 1 2 3 4 5 6 7 8; do git worktree add -q "$TEST_TMP/wt-$(printf 'w%.0s' $(seq 1 30))-$i" -b "wt-branch-$i" >/dev/null 2>&1; done )
 for i in 1 2 3 4 5 6 7 8; do
   printf '{"schema":1,"run_id":"fill-%s-%s","role":"implementer-with-a-long-role","runner":"codex-runner","model":"model-with-a-rather-long-name-x","started_at":"%s","session_id":"%s"}\n' "$i" "$(printf 'r%.0s' $(seq 1 20))" "$NOWZ" "$SID" > "$AUTOPILOT_DISPATCH_RUNS_DIR/fill-$i.manifest.json"
 done
@@ -220,6 +293,10 @@ BIGT="$HOOK_HOME/transcript-big.jsonl"
 for i in 1 2 3 4 5 6; do printf '{"type":"assistant","timestamp":"T%s","message":{"content":"%s"}}\n' "$i" "$(printf 'W%.0s' $(seq 1 2500))"; done > "$BIGT"
 run_hook state-checkpoint.js "{\"transcript_path\":\"$BIGT\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
 assert_file_exists "$FILE" "full-sections checkpoint written"
+gitsec=$(awk '/^## Project and Git State/{f=1;next} /^## Dispatches/{f=0} f' "$FILE" | wc -c)
+# every git piece at its cap: the section fills (most of) SECTION_CAPS.git = 1700 bytes and the list/cut markers show
+if [ "$gitsec" -ge 1400 ] && [ "$gitsec" -le 1700 ]; then assert_eq 1 1 "packed: git section is full ($gitsec of 1700 bytes)"; else assert_eq "$gitsec" "1400..1700" "packed: git section size"; fi
+assert_contains "$(cat "$FILE")" "more lines cut" "packed: the git section hit its cap and says how many lines went"
 run_hook session-start.js "{\"session_id\":\"$SID\",\"source\":\"compact\",\"cwd\":\"$REPO\",\"transcript_path\":\"$BIGT\"}"
 verdict=$(printf '%s' "$__RUN_STDOUT" | node -e '
 let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);const c=(o.hookSpecificOutput||{}).additionalContext||o.additional_context||"";

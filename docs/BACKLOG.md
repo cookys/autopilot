@@ -1433,18 +1433,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: frz2 review 2026-10-15
 - **Pointer**: none
 
-### Compaction handoff: leftover review notes
-- **Id**: BL-0193
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 交接機制審查留下的小事：預算檢查自己另讀一份 t2 設定，關掉預算提示時仍會警告；當機的派工會一直顯示執行中；壓縮前最壞約 22 秒；長度測試沒塞滿 git 段。
-- **Impact**: 低。警告多印一次、舊派工被當成執行中、壓縮前稍慢，都不影響正確性。
-- **Trigger**: 有人回報上面任一現象，或下次動 compaction-handoff.js
-- **Effort**: S
-- **Source**: hand review 2026-10-15
-- **Pointer**: none
-
 ### Move exam registration to llm-playground; autopilot reads one JSON
 - **Id**: BL-0194
 - **Status**: open

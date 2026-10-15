@@ -267,6 +267,10 @@ console.log(`surface_seal=${JSON.stringify(
   surfaceCase.engine.repair_lineage && surfaceCase.engine.repair_lineage.repair_scope_seal,
 )}`);
 console.log(`surface_dispatches=${surfaceCase.dispatchCount}`);
+const occurrencesOf = (c) => JSON.stringify(
+  c.engine.repair_lineage ? c.engine.repair_lineage.finding_occurrences : 'no-lineage',
+);
+console.log(`surface_occurrences=${occurrencesOf(surfaceCase)}`);
 
 const parkCase = runCase({
   ticket: 'rail-park',
@@ -284,6 +288,7 @@ console.log(`park_reason=${parkCase.repairResult && parkCase.repairResult.reason
 console.log(`park_engine_phase=${parkCase.engine.phase}`);
 console.log(`park_engine_status=${parkCase.engine.status}`);
 console.log(`park_dispatches=${parkCase.dispatchCount}`);
+console.log(`park_occurrences=${occurrencesOf(parkCase)}`);
 
 function runVerifyLedgerCase({ ticket, stdout, stderr }) {
   const autopilot = path.join(repo, '.autopilot');
@@ -506,6 +511,17 @@ assert_r1_managed_rail_repair() {
   assert_eq "$(printf '%s\n' "$OUT" | sed -n 's/^park_engine_phase=//p' | head -n 1)" \
     "awaiting_disposition" \
     "park case engine phase is awaiting_disposition"
+  # BL-0098: a park must not consume the finding-recurrence budget. The count is bumped only AFTER a
+  # real dispatch (authorizedFindingState), so a parked pathless finding keeps its occurrences at 0
+  # and can be dispositioned and repaired later without being treated as a recurring lineage.
+  # The surface case is the positive control: the same observable shows 1 after a real repair.
+  # Mutation (applied alone, restored): bump+sync occurrences right before the recurrence check -> RED, 2 fail (surface=2, park=1).
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 's/^surface_occurrences=//p' | head -n 1)" \
+    '[{"finding_id":"spurious-live-flip-single-station","occurrences":1}]' \
+    "a dispatched repair counts one occurrence (positive control for the park probe)"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 's/^park_occurrences=//p' | head -n 1)" \
+    '[]' \
+    "a parked pathless finding consumes no finding-recurrence occurrence"
 }
 
 assert_r1_managed_rail_repair

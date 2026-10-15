@@ -106,6 +106,7 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 // execution roles. Adoption is disclosure of qualification evidence, never an
 // execution-authority grant, so the wider namespace is the correct one here.
 const { CAPABILITY_ROLE_IDS } = require('../src/engine/roles');
+const { engineSpellings, sameEngine } = require('./lib/engine-spelling');
 const VALID_ROLES = new Set(CAPABILITY_ROLE_IDS);
 
 function fail(msg, code) {
@@ -220,6 +221,13 @@ function localSeatHash(engine, runner, role, effort) {
   return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
+// BL-0187: seat_hash keeps hashing the engine string AS RECORDED (it is row identity), so a feed
+// built under the other kimi-code spelling advertises that spelling's hash. Accept an advertised
+// hash that matches ANY equivalent spelling -- the comparison is normalised, the hash is not.
+function advertisedMatches(advertised, engine, runner, role, effort) {
+  return engineSpellings(engine).some((e) => advertised === localSeatHash(e, runner, role, effort));
+}
+
 // What this consumer's environment actually is, for the environment (never gating) comparison.
 // The runner version costs a `--version` call and is best-effort: a probe failure is reported as
 // unknown, not as a mismatch, because "I could not look" and "it differs" are different facts.
@@ -262,15 +270,16 @@ function feedEntryApplicability(entry) {
     // A mismatch means the producer's seat-identity algorithm and ours disagree. That is worth
     // shouting about — it is exactly how a strike gets attached to a seat nobody reads — but it
     // is a DIFF, not an admission decision, so it warns.
-    seat_hash_matches: entry.seat_hash ? entry.seat_hash === derived : null,
+    seat_hash_matches: entry.seat_hash
+      ? advertisedMatches(entry.seat_hash, seat.engine, seat.runner, seat.role, effort) : null,
     // Distinguishing WHY it differs is the difference between an actionable message and noise.
     // A feed built before effort joined the seat identity advertises the three-field hash, which
     // we can reproduce exactly — so we can say "your feed predates effort partitioning" instead
     // of "our algorithms disagree", and the producer knows precisely what to regenerate.
     seat_hash_basis: entry.seat_hash
-      ? (entry.seat_hash === derived
+      ? (advertisedMatches(entry.seat_hash, seat.engine, seat.runner, seat.role, effort)
         ? 'agrees'
-        : (entry.seat_hash === localSeatHash(seat.engine, seat.runner, seat.role, undefined)
+        : (advertisedMatches(entry.seat_hash, seat.engine, seat.runner, seat.role, undefined)
           ? 'legacy_three_field'
           : 'unknown'))
       : 'absent',
@@ -326,7 +335,7 @@ function selectEntries(artifact, filters) {
   if (filters.role) entries = entries.filter((e) => e.role === filters.role);
   if (filters.seat) {
     const [engine, runner] = filters.seat;
-    entries = entries.filter((e) => e.seat.engine === engine && e.seat.runner === runner);
+    entries = entries.filter((e) => sameEngine(e.seat.engine, engine) && e.seat.runner === runner);
   }
   return entries;
 }
@@ -501,11 +510,14 @@ function describeFeedStrike(strike) {
     class: strike.class,
     seat_hash_derived: derived,
     seat_hash_advertised: strike.seat_hash || null,
-    seat_hash_matches: strike.seat_hash ? strike.seat_hash === derived : null,
+    seat_hash_matches: strike.seat_hash
+      ? advertisedMatches(strike.seat_hash, strike.engine, strike.runner, strike.role,
+        effort === null ? undefined : effort) : null,
     seat_hash_basis: strike.seat_hash
-      ? (strike.seat_hash === derived
+      ? (advertisedMatches(strike.seat_hash, strike.engine, strike.runner, strike.role,
+        effort === null ? undefined : effort)
         ? 'agrees'
-        : (strike.seat_hash === localSeatHash(strike.engine, strike.runner, strike.role, undefined)
+        : (advertisedMatches(strike.seat_hash, strike.engine, strike.runner, strike.role, undefined)
           ? 'legacy_three_field'
           : 'unknown'))
       : 'absent',
@@ -694,7 +706,7 @@ function cmdAdopt(opts, source) {
   const collisions = [];
   for (const entry of entries) {
     for (const row of existing) {
-      if (row.engine !== entry.seat.engine || row.runner !== entry.seat.runner || row.role !== entry.role) continue;
+      if (!sameEngine(row.engine, entry.seat.engine) || row.runner !== entry.seat.runner || row.role !== entry.role) continue;
       const localKind = (row.provenance && row.provenance.kind) || 'self-qualified';
       collisions.push({
         default_id: entry.default_id,

@@ -7,6 +7,7 @@ const process = require('process');
 const transcriptSecrets = require('../hooks/_shared/secret-patterns');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, writeSnapshot, toEventId, maxEventId } = require('./lib/jsonl-store');
 const { validateUsageBlock } = require('./lib/qualification-usage');
+const { engineSpellings, sameEngine, canonicalEngine } = require('./lib/engine-spelling');
 const {
   buildCapabilityEvidenceReceipt,
   capabilityEvidenceProducerHash,
@@ -369,6 +370,13 @@ function nowArgToMs(value, required = false) {
   return ms;
 }
 
+// BL-0187: `engine` enters grouping keys in its canonical spelling, so `kimi-code-k3` and
+// `kimi-code/k3` rows for the same seat collapse to one entry. The row itself is never rewritten.
+function identityFieldValue(row, name) {
+  if (!row || row[name] === undefined) return '';
+  return name === 'engine' ? String(canonicalEngine(row[name])) : String(row[name]);
+}
+
 function identityKey(row) {
   // Invocation-tuple extension (v2.32.25 R1): effort/model are OPTIONAL row fields
   // but distinct values are distinct qualifications (gpt-X@high and gpt-X@xhigh
@@ -377,7 +385,7 @@ function identityKey(row) {
   const tupleExt = ['effort', 'model']
     .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''));
   return CONFIGURED_IDENTITY_FIELDS
-    .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''))
+    .map((name) => identityFieldValue(row, name))
     .concat(tupleExt)
     .concat([
       row && row.evidence ? String(row.evidence.scope_hash || '') : '',
@@ -1535,7 +1543,7 @@ function currentRowsForRole(role, nowMs, options = {}) {
   const byInvocation = new Map();
   for (const row of latest.values()) {
     const key = CONFIGURED_IDENTITY_FIELDS
-      .map((name) => (row[name] !== undefined ? String(row[name]) : ''))
+      .map((name) => identityFieldValue(row, name))
       .concat([row.effort === undefined ? '' : String(row.effort)])
       .concat([
         row.evidence ? row.evidence.scope_hash : '',
@@ -1784,19 +1792,9 @@ function seatKindOf(row) {
   return 'default';
 }
 
-// BL-0157: the Kimi Code seat has been recorded under two spellings -- scorecard rows use
-// `kimi-code-k3`, strike rows `kimi-code/k3` -- and the engine string feeds seat_hash, so a strike
-// written under one spelling never reached a seat read under the other. Normalise on READ only:
-// recorded rows are never rewritten (seat_hash is part of each row's identity). The equivalence is
-// the `kimi-code` provider prefix followed by `/` or `-`; nothing else is aliased.
-const KIMI_CODE_ENGINE_RE = /^kimi-code[/-](.+)$/u;
-function engineSpellings(engine) {
-  const m = typeof engine === 'string' ? KIMI_CODE_ENGINE_RE.exec(engine) : null;
-  return m ? [`kimi-code/${m[1]}`, `kimi-code-${m[1]}`] : [engine];
-}
-function sameEngine(a, b) {
-  return a === b || engineSpellings(a).includes(b);
-}
+// BL-0157: the Kimi Code seat has two engine spellings (`kimi-code-k3` / `kimi-code/k3`); the
+// equivalence lives in lib/engine-spelling.js (BL-0187) so every comparator shares one definition.
+// Normalised on READ only -- recorded rows are never rewritten (seat_hash is row identity).
 // Every seat_hash this seat may carry in strikes.jsonl (one per equivalent engine spelling).
 function seatHashSpellings(engine, runner, role, effort, seatKind) {
   return new Set(engineSpellings(engine).map((e) => seatIdentityHash(e, runner, role, effort, seatKind)));

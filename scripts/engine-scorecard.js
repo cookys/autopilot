@@ -1784,6 +1784,24 @@ function seatKindOf(row) {
   return 'default';
 }
 
+// BL-0157: the Kimi Code seat has been recorded under two spellings -- scorecard rows use
+// `kimi-code-k3`, strike rows `kimi-code/k3` -- and the engine string feeds seat_hash, so a strike
+// written under one spelling never reached a seat read under the other. Normalise on READ only:
+// recorded rows are never rewritten (seat_hash is part of each row's identity). The equivalence is
+// the `kimi-code` provider prefix followed by `/` or `-`; nothing else is aliased.
+const KIMI_CODE_ENGINE_RE = /^kimi-code[/-](.+)$/u;
+function engineSpellings(engine) {
+  const m = typeof engine === 'string' ? KIMI_CODE_ENGINE_RE.exec(engine) : null;
+  return m ? [`kimi-code/${m[1]}`, `kimi-code-${m[1]}`] : [engine];
+}
+function sameEngine(a, b) {
+  return a === b || engineSpellings(a).includes(b);
+}
+// Every seat_hash this seat may carry in strikes.jsonl (one per equivalent engine spelling).
+function seatHashSpellings(engine, runner, role, effort, seatKind) {
+  return new Set(engineSpellings(engine).map((e) => seatIdentityHash(e, runner, role, effort, seatKind)));
+}
+
 function normRunnerToken(r) {
   return r === 'codex-cli' ? 'codex' : r;
 }
@@ -1796,7 +1814,7 @@ function findSeatBaseline(
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
     if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
-    if (row.engine !== engine || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
+    if (!sameEngine(row.engine, engine) || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     // Effort partitions the seat. An UNDEFINED requested effort selects rows that also have no
@@ -1868,6 +1886,8 @@ function pendingRevocationRowFromStrike(row) {
 // Surviving rows (after invalidation subtraction + dedup) are returned as
 // `rows` — the sole producer of pending_revocation.
 function foldSeatStrikes(seatHashValue, baselineQMs, nowMs, storeDir = CAPABILITY_DIR) {
+  // A Set means "this seat under every equivalent engine spelling" (BL-0157).
+  const seatHashes = seatHashValue instanceof Set ? seatHashValue : new Set([seatHashValue]);
   const strikesFile = path.join(storeDir, 'strikes.jsonl');
   const lines = fs.existsSync(strikesFile)
     ? fs.readFileSync(strikesFile, 'utf8').split(/\r?\n/).filter((l) => l.trim().length > 0)
@@ -1891,7 +1911,7 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs, storeDir = CAPABILIT
       continue;
     }
     if (row.schema_version !== 2) continue; // legacy v1 or unrecognized — ignored entirely
-    if (row.seat_hash !== seatHashValue) continue; // not this seat's row
+    if (!seatHashes.has(row.seat_hash)) continue; // not this seat's row
     parsedRows.push(row);
   }
 
@@ -2029,7 +2049,9 @@ function computeSeatProjection(
 
   let activeStrikeRows = [];
   if (baseline) {
-    const fold = foldSeatStrikes(seatHashValue, baseline.instantMs, nowMs, storeDir);
+    const fold = foldSeatStrikes(
+      seatHashSpellings(engine, runner, role, effort, seatKind), baseline.instantMs, nowMs, storeDir,
+    );
     projection.strikes_since_pass = fold.strikesSincePass;
     projection.critical_trigger = fold.criticalTrigger;
     projection.rejected_strikes = fold.rejected;
@@ -2412,7 +2434,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
   for (const row of allRows) {
     if (!row || typeof row !== 'object') continue;
     if (isSupersededEvent(row.event_id, supersededEventIds)) continue;
-    if (row.engine !== engine || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
+    if (!sameEngine(row.engine, engine) || normRunnerToken(row.runner) !== normRunnerToken(runner)) continue;
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     if (seatEffortOf(row) !== effort) continue;   // same effort partitioning as the read path
@@ -2475,7 +2497,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
     // create machinery); present-but-unreadable fails closed (case xiv).
     const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
     if (fs.existsSync(strikesFile)) requireReadableFile(strikesFile, 'strikes store');
-    const fold = foldSeatStrikes(seatHashValue, best.instantMs, nowMs);
+    const fold = foldSeatStrikes(seatHashSpellings(engine, runner, role, effort), best.instantMs, nowMs);
     projection.strikes_since_pass = fold.strikesSincePass;
     projection.critical_trigger = fold.criticalTrigger;
     projection.rejected_strikes = fold.rejected;

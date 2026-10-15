@@ -1021,6 +1021,7 @@ const { grokEffortClamp } = require('./lib/grok-effort');
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const agyContainment = require('./lib/agy-containment');
+const kimiContainment = require('./lib/kimi-containment');
 const qualificationUsage = require('./lib/qualification-usage');
 
 // Transient-error retry for the agy transport ONLY (shapes: AGY_TRANSIENT below). agy sometimes exits non-zero
@@ -1080,6 +1081,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let args;
   let sidecar = null;
   let promptFile = null;
+  let kimiAgentDir = null;
   // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
@@ -1142,7 +1144,22 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
-    args = ['-m', model, '-p', prompt];
+    //
+    // CONTAINMENT (BL-0156): kimi has no --tools flag; the only way to take its
+    // tools away is a custom agent file with `tools: []` (--agent-file). Same single
+    // owner as dispatch-review.sh's blind rail: lib/kimi-containment.js. FAIL CLOSED
+    // without QRP_CLI_HOME: the post-run audit reads <HOME>/.kimi-code/sessions, and
+    // without a cloned HOME the run would write into (and be audited against) the
+    // operator's real ~/.kimi-code -- refuse instead of exposing it.
+    if (!process.env.QRP_CLI_HOME) {
+      throw new Error(
+        'kimi requires QRP_CLI_HOME: the tool-less agent is only provable via the post-run '
+        + 'audit of the cloned HOME\'s .kimi-code sessions -- refusing to spawn kimi uncontained',
+      );
+    }
+    kimiAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-kimi-agent-'));
+    const kimiAgentFile = kimiContainment.writeToollessAgent(kimiAgentDir);
+    args = ['-m', model, '--agent-file', kimiAgentFile, '-p', prompt];
   } else if (kind === 'grok') {
     // CONTAINMENT (probed live, grok 1.0.13, 2026-08-29 + 2026-08-29 security-review
     // follow-up): containment is a single CATCH-ALL wildcard deny, `--deny "*"` — NOT
@@ -1477,6 +1494,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
+      if (kimiAgentDir) fs.rmSync(kimiAgentDir, { recursive: true, force: true });
       // A clean exit proves nothing about containment (the fallback-to-default
       // agent also exits 0) — audit agy's own log and transcript BEFORE the clone,
       // the only copy of them, is removed.
@@ -1487,6 +1505,15 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         });
         if (breach) {
           error = new Error(`agy containment breach: ${breach} — answer discarded`);
+          value = undefined;
+        }
+      }
+      // Same for kimi: exit 0 proves nothing; the wire transcript must show the
+      // tool-less agent was bound and no tool ran (fail closed on a missing wire).
+      if (!error && kind === 'kimi' && cloneHome) {
+        const breach = kimiContainment.auditKimiRun({ seatHome: cloneHome });
+        if (breach) {
+          error = new Error(`kimi containment breach: ${breach} — answer discarded`);
           value = undefined;
         }
       }

@@ -81,6 +81,15 @@ A peer report is not closed until the reporter has an answer.
 
 BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0), and a row whose Pointer resolves to an existing `docs/plans/*.md` is redundant once the plan exists. The fix is **deleting the row** (history stays in git and at the pointer); `check-plan-graduation.js --fix` does it mechanically, subject to the peer rule above.
 
+## Frozen evidence — `.frozen-evidence`
+
+The archive passes (`check-plan-graduation.js --fix`, `--archive`, `--migrate-archive-layout`) rewrite `docs/plans/<stem>` paths in tracked files. Files whose bytes a seal or digest pins are skipped automatically; evidence frozen only by convention needs a tracked marker file named `.frozen-evidence`:
+
+- One path per line, relative to the marker's own directory. A file freezes that file; a directory freezes every tracked file under it; `.` freezes the marker's whole directory. Blank lines and `#` comments are ignored. The marker file itself is frozen too.
+- A line that escapes the marker's directory (`..`, an absolute path) is ignored — a marker cannot freeze files outside its own tree.
+- Every skipped file that mentions the graduating or migrated path is reported as `plan_reference_frozen` (report-only, all three passes), so the stale mention is visible instead of silent.
+- Deleting a marker un-freezes its evidence. `check-plan-graduation.js --frozen-base <git-ref>` reports `frozen_marker_deleted` (report-only, exit unchanged) for every marker present at `<ref>` and gone from the working tree; pass the merge base (e.g. `origin/develop`) before archiving.
+
 ## Config — `.claude/backlog-config.md`
 
 ```markdown

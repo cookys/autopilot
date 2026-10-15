@@ -160,6 +160,13 @@ const INTERP_C_RE = /^(?:\S*\/)?(?:python[0-9.]*|perl|ruby|node)\s+(?:-[a-zA-Z]*
 const SHELL_CALL_RE = /(os\.(?:system|popen)|subprocess\.(?:run|call|Popen|check_call|check_output|getoutput)|child_process\.(?:exec|execSync|spawn)|\bsystem)\(\s*(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g;
 // List-form launches: python `subprocess.Popen(['rail', ...])`, node `spawn('rail', [args])` / `spawn('bash', ['rail', ...])`.
 const LIST_CALL_RE = /(subprocess\.Popen|child_process\.(?:spawn|execFile)|\b(?:spawn|execFile))\(\s*(\[[^\]]*\]|'[^']*'|"[^"]*")(?:\s*,\s*(\[[^\]]*\]))?/g;
+// Does the child launched by `call` outlive the one-liner? One judgment for the list AND the string
+// (`shell=True` / `{shell: true}`) forms (BL-0190). Python's Popen child outlives the interpreter unless the body
+// waits for it; a node child keeps the event loop alive (the call blocks) unless it is unref'd (`detached` alone
+// is not enough).
+const childOutlivesCall = (call, body) => (/Popen/.test(call)
+  ? !/\.(?:wait|communicate)\(|\bwith\s+subprocess\.Popen/.test(body)
+  : /\.unref\(/.test(body));
 const LIST_WORD_RE = /'([^']*)'|"([^"]*)"/g;
 const listWords = (txt) => { const o = []; let m; LIST_WORD_RE.lastIndex = 0; while ((m = LIST_WORD_RE.exec(txt)) !== null) o.push(m[1] !== undefined ? m[1] : m[2]); return o; };
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
@@ -268,8 +275,9 @@ function expandSegmentsUncached(text, depth) {
       let cm;
       while ((cm = SHELL_CALL_RE.exec(body)) !== null) {
         const script = cm[2] !== undefined ? cm[2] : cm[3];
-        // Popen / spawn return at once: the child outlives the call even with no `&` in the string.
-        const asyncCall = /Popen|spawn/.test(cm[1]);
+        // Popen / spawn return at once, so the child outlives the call even with no `&` in the string —
+        // unless the body waits for it (python) or never unref's it (node): same rule as the list form.
+        const asyncCall = /Popen|spawn/.test(cm[1]) && childOutlivesCall(cm[1], body);
         all.push(...expandSegments(script, depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg || asyncCall, sh: true, sub: true })));
       }
     }
@@ -278,10 +286,12 @@ function expandSegmentsUncached(text, depth) {
       LIST_CALL_RE.lastIndex = 0;
       let lm;
       while ((lm = LIST_CALL_RE.exec(body)) !== null) {
-        const py = /Popen/.test(lm[1]);
-        // Python's Popen child outlives the interpreter unless the body waits for it; a node child keeps the event
-        // loop alive (the call blocks) unless it is unref'd (`detached` alone is not enough).
-        if (py ? /\.(?:wait|communicate)\(|\bwith\s+subprocess\.Popen/.test(body) : !/\.unref\(/.test(body)) continue;
+        if (!childOutlivesCall(lm[1], body)) continue;
+        // A lone quoted string (`shell=True` / `{shell: true}`) is a whole script, not one command word.
+        if (lm[3] === undefined && lm[2][0] !== '[') {
+          all.push(...expandSegments(lm[2].slice(1, -1), depth + 1).map((x) => ({ ...x, bg: true, sh: true, sub: true })));
+          continue;
+        }
         const words = lm[3] !== undefined ? [...listWords(lm[2]), ...listWords(lm[3])] : listWords(lm[2]);
         if (!words.length) continue;
         all.push(...expandSegments(words.map((w) => (/^[\w./:=@%+,-]+$/.test(w) ? w : `'${w.replace(/'/g, '')}'`)).join(' '), depth + 1)

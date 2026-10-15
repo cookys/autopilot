@@ -331,6 +331,36 @@ for (const cmd of BL185_ALLOW) {
   });
 }
 
+// ---- BL-0190: string-form Popen/spawn judged by the same wait/unref rule as the list form ----
+const BL190_DENY = [
+  `python3 -c "import subprocess; subprocess.Popen('${RV} x', shell=True)"`, // string form, nothing waits (control: still blocked)
+  `python3 -c "import subprocess; subprocess.Popen('${RV} x', shell=True); print(1)"`,
+  `node -e "const c=require('child_process').spawn('${RV} x', {shell: true, detached: true}); c.unref()"`, // string form, unref'd
+  `node -e "require('child_process').spawn('${RV} x', {shell: true, detached: true}).unref()"`,
+  `node -e "const child_process=require('child_process'); child_process.spawn('${RV} x', {shell: true, detached: true}).unref()"`,
+];
+for (const cmd of BL190_DENY) {
+  test(`rule1 denies (BL-0190): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+const BL190_ALLOW = [
+  `python3 -c "import subprocess; p=subprocess.Popen('${RV} x', shell=True); p.wait()"`, // body waits for its child
+  `python3 -c "import subprocess; subprocess.Popen('${RV} x', shell=True).wait()"`,
+  `python3 -c "import subprocess; p=subprocess.Popen('${RV} x', shell=True); p.communicate()"`,
+  `node -e "require('child_process').spawn('${RV} x', {shell: true})"`, // node keeps running until the child ends
+  `node -e "require('child_process').spawn('${RV} x', {shell: true, stdio: 'inherit'})"`,
+  `node -e "const child_process=require('child_process'); child_process.spawn('${RV} x', {shell: true})"`, // base denied this (unqualified literal spawn always background)
+];
+for (const cmd of BL190_ALLOW) {
+  test(`rule1 allows (BL-0190): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}
+
 // ---- Rule 2: pkill/pgrep -f without [x] => DENY by default (BL-0148; was warn-only BL-0019) ----
 // Cases are data, run through the real hook; the command text never reaches a live Bash tool call.
 const PK_DENY = [

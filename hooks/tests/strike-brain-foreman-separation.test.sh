@@ -88,5 +88,37 @@ if (k({ evidence: { scope: { task_classes: ["code"] } } }) !== "default" || k({}
 process.stdout.write(bad.length ? bad.join(",") : "ok");' "$SC" 2>&1)"
 [ "$D_OUT" = ok ] && ok "D1 seatKindOf: scope-only brain row classified brain" || bad "D1 seatKindOf wrong: $D_OUT"
 
+# E: invalidate-strike honours --seat-kind brain (BL-0178). Without it the invalidation hashes the
+# DEFAULT seat, finds no target, and the brain strike can never be rescinded.
+BR_BEFORE="$(status_of brain strikes_since_pass)"; DEF_BEFORE="$(status_of default strikes_since_pass)"
+DEF_ROWS_BEFORE="$(rows_of default)"
+PROOF="$(sha_of proof-e)"
+if node "$CAP" invalidate-strike --engine dual --runner claude --role owner --seat-kind brain \
+  --invalidates-event-id 1 --proof-artifact-sha256 "$PROOF" --proof-detector-id pdet --writer fuse \
+  --dedup-key inv-e1 --detector-id det --detector-version 1 --artifact-sha256 "$(sha_of inv-e1)" \
+  --receipt-ref r-inv-e1 --now "$NOW" >"$TESTDIR/inv.log" 2>&1; then ok "E1 brain invalidate-strike accepted"; else bad "E1 invalidate rejected: $(head -c 200 "$TESTDIR/inv.log")"; fi
+[ "$(status_of brain strikes_since_pass)" = "$((BR_BEFORE-1))" ] && ok "E2 brain seat recovers one strike ($BR_BEFORE -> $((BR_BEFORE-1)))" || bad "E2 brain strikes=$(status_of brain strikes_since_pass) (was $BR_BEFORE)"
+[ "$(status_of default strikes_since_pass)" = "$DEF_BEFORE" ] && [ "$(rows_of default)" = "$DEF_ROWS_BEFORE" ] && ok "E3 foreman seat untouched by brain invalidation" || bad "E3 foreman changed"
+# the same invalidation aimed at the default seat must NOT find the brain strike (event 2)
+if node "$CAP" invalidate-strike --engine dual --runner claude --role owner \
+  --invalidates-event-id 2 --proof-artifact-sha256 "$PROOF" --proof-detector-id pdet --writer fuse \
+  --dedup-key inv-e2 --detector-id det --detector-version 1 --artifact-sha256 "$(sha_of inv-e2)" \
+  --receipt-ref r-inv-e2 --now "$NOW" >/dev/null 2>&1; then bad "E4 default-seat invalidation hit a brain strike"; else ok "E4 default-seat invalidation cannot reach a brain strike"; fi
+
+# F: an unknown --seat-kind is an error on every seat-kind command, never a silent default.
+for cmd in seat-hash strike-seat invalidate-strike; do
+  for v in foo Brain ""; do
+    node "$CAP" "$cmd" --engine dual --runner claude --role owner --seat-kind "$v" >"$TESTDIR/f.out" 2>&1; rc=$?
+    if [ "$rc" -ne 0 ] && grep -q "seat-kind" "$TESTDIR/f.out" 2>/dev/null; then ok "F $cmd --seat-kind '$v' rejected (rc=$rc)"; else bad "F $cmd --seat-kind '$v' rc=$rc"; fi
+  done
+done
+
+# G: --help advertises --seat-kind on the strike commands
+HELP="$(node "$CAP" --help 2>&1)"
+for cmd in strike-seat invalidate-strike; do
+  printf '%s\n' "$HELP" | grep -E "capability-state.js $cmd " | grep -q -- '--seat-kind' && ok "G $cmd usage line lists --seat-kind" || bad "G $cmd usage line omits --seat-kind"
+done
+printf '%s\n' "$HELP" | grep -E '^\s+--seat-kind ' >/dev/null && ok "G3 options section documents --seat-kind" || bad "G3 options section omits --seat-kind"
+
 printf 'Summary: %s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

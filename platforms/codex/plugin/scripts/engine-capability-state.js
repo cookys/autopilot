@@ -40,8 +40,8 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
   node scripts/engine-capability-state.js strike --identity-file <path> --source <fuse|conformance_audit> --receipt-ref <token> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
-  node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
-  node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain] --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain] --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain]
   node scripts/engine-capability-state.js pin-seat --engine <token> --runner <token> --role <token> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who> [--store <path>]
   node scripts/engine-capability-state.js unpin-seat --role <token> [--engine <token> --runner <token> [--endpoint <name|@none>]] [--store <path>]
@@ -69,6 +69,9 @@ Options:
                        rows recorded before effort partitioning — omitting is not a wildcard, and a
                        strike written without it lands on a different seat than an effort-bearing
                        projection reads.
+  --seat-kind <kind>   brain | default (strike-seat / invalidate-strike / seat-hash). Brain-seat exams
+                       (owner_brain_seat) and foreman exams share role owner; brain strikes live on their
+                       own seat hash. Omit for the default (foreman/legacy) seat; any other value is an error.
   --class <name>       ordinary_strike | critical_reexam_trigger (strike-seat).
   --predicate-id <id>  Required iff --class critical_reexam_trigger; must be a registered predicate.
   --cause-class <name> engine_output | runner_delivery | ambiguous (strike-seat).

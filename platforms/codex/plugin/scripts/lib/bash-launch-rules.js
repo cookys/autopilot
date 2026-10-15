@@ -160,13 +160,36 @@ const INTERP_C_RE = /^(?:\S*\/)?(?:python[0-9.]*|perl|ruby|node)\s+(?:-[a-zA-Z]*
 const SHELL_CALL_RE = /(os\.(?:system|popen)|subprocess\.(?:run|call|Popen|check_call|check_output|getoutput)|child_process\.(?:exec|execSync|spawn)|\bsystem)\(\s*(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g;
 // List-form launches: python `subprocess.Popen(['rail', ...])`, node `spawn('rail', [args])` / `spawn('bash', ['rail', ...])`.
 const LIST_CALL_RE = /(subprocess\.Popen|child_process\.(?:spawn|execFile)|\b(?:spawn|execFile))\(\s*(\[[^\]]*\]|'[^']*'|"[^"]*")(?:\s*,\s*(\[[^\]]*\]))?/g;
-// Does the child launched by `call` outlive the one-liner? One judgment for the list AND the string
-// (`shell=True` / `{shell: true}`) forms (BL-0190). Python's Popen child outlives the interpreter unless the body
-// waits for it; a node child keeps the event loop alive (the call blocks) unless it is unref'd (`detached` alone
-// is not enough).
-const childOutlivesCall = (call, body) => (/Popen/.test(call)
-  ? !/\.(?:wait|communicate)\(|\bwith\s+subprocess\.Popen/.test(body)
-  : /\.unref\(/.test(body));
+// Does the child launched by the call at `body[idx]` outlive the one-liner? One judgment for the list AND the
+// string (`shell=True` / `{shell: true}`) forms (BL-0190). Python's Popen child outlives the interpreter unless
+// THIS launch is waited on; a node child keeps the event loop alive (the call blocks) unless THIS launch is
+// unref'd (`detached` alone is not enough). "This launch" = a `.wait()` / `.communicate()` / `.unref()` chained
+// on the call, or one on the variable the call is assigned to (`p = Popen(...)` … `p.wait()`); a wait or unref on
+// any other variable says nothing about this child. `with Popen(...) as p:` waits on exit.
+const CHILD_ASSIGN_RE = /([\w$]+)\s*=\s*(?:[\w$]+(?:\(\s*['"][\w:./-]*['"]\s*\))?\s*\.\s*)*$/;
+function callCloseIndex(body, open) { // index just past the `)` matching body[open] === '(' (quote-aware), or -1
+  let depth = 0;
+  for (let i = open; i < body.length; i++) {
+    const c = body[i];
+    if (c === '"' || c === "'") { // skip a quoted string
+      for (i += 1; i < body.length && body[i] !== c; i++) if (body[i] === '\\') i += 1;
+    } else if (c === '(') depth += 1;
+    else if (c === ')' && (depth -= 1) === 0) return i + 1;
+  }
+  return -1;
+}
+function childOutlivesCall(call, body, idx) {
+  const py = /Popen/.test(call);
+  const verbs = py ? 'wait|communicate' : 'unref';
+  const before = body.slice(0, idx);
+  if (py && /\bwith\s+$/.test(before)) return false;
+  const open = body.indexOf('(', idx);
+  const close = open < 0 ? -1 : callCloseIndex(body, open);
+  if (close >= 0 && new RegExp(`^\\s*\\.\\s*(?:${verbs})\\s*\\(`).test(body.slice(close))) return !py; // chained on the call
+  const vm = CHILD_ASSIGN_RE.exec(before);
+  const waited = !!vm && new RegExp(`(?<![\\w$.])${vm[1].replace(/\$/g, '\\$')}\\s*\\.\\s*(?:${verbs})\\s*\\(`).test(body);
+  return py ? !waited : waited;
+}
 const LIST_WORD_RE = /'([^']*)'|"([^"]*)"/g;
 const listWords = (txt) => { const o = []; let m; LIST_WORD_RE.lastIndex = 0; while ((m = LIST_WORD_RE.exec(txt)) !== null) o.push(m[1] !== undefined ? m[1] : m[2]); return o; };
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
@@ -277,7 +300,7 @@ function expandSegmentsUncached(text, depth) {
         const script = cm[2] !== undefined ? cm[2] : cm[3];
         // Popen / spawn return at once, so the child outlives the call even with no `&` in the string —
         // unless the body waits for it (python) or never unref's it (node): same rule as the list form.
-        const asyncCall = /Popen|spawn/.test(cm[1]) && childOutlivesCall(cm[1], body);
+        const asyncCall = /Popen|spawn/.test(cm[1]) && childOutlivesCall(cm[1], body, cm.index);
         all.push(...expandSegments(script, depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg || asyncCall, sh: true, sub: true })));
       }
     }
@@ -286,7 +309,7 @@ function expandSegmentsUncached(text, depth) {
       LIST_CALL_RE.lastIndex = 0;
       let lm;
       while ((lm = LIST_CALL_RE.exec(body)) !== null) {
-        if (!childOutlivesCall(lm[1], body)) continue;
+        if (!childOutlivesCall(lm[1], body, lm.index)) continue;
         // A lone quoted string (`shell=True` / `{shell: true}`) is a whole script, not one command word.
         if (lm[3] === undefined && lm[2][0] !== '[') {
           all.push(...expandSegments(lm[2].slice(1, -1), depth + 1).map((x) => ({ ...x, bg: true, sh: true, sub: true })));

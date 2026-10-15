@@ -361,6 +361,45 @@ for (const cmd of BL190_ALLOW) {
   });
 }
 
+// ---- BL-0190 review fix: a wait/unref counts only when it is on THIS launch (its variable, or chained on the call) ----
+const BL190B_DENY = [
+  `python3 -c "import subprocess; p=subprocess.Popen('${RV} x', shell=True); q=subprocess.Popen(['ls']); q.wait()"`, // q waited, p not (string)
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); q=subprocess.Popen(['ls']); q.wait()"`, // same, list form
+  `python3 -c "import subprocess; subprocess.Popen('${RV} x', shell=True); subprocess.Popen(['ls']).wait()"`, // chained wait belongs to the OTHER call
+];
+for (const cmd of BL190B_DENY) {
+  test(`rule1 denies (BL-0190 review): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+const BL190B_ALLOW = [
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); p.wait()"`, // own variable
+  `python3 -c "import subprocess; subprocess.Popen(['${RV}', 'x']).wait()"`, // chained on the call
+  `python3 -c "import subprocess; p=subprocess.Popen('${RV} x', shell=True); q=subprocess.Popen(['ls']); p.wait()"`,
+  `python3 -c "import subprocess; with subprocess.Popen('${RV} x', shell=True) as p: pass"`, // with-exit waits
+  // node: unref on a DIFFERENT variable does not detach this spawn; it keeps the event loop alive until the child ends
+  `node -e "const s=require('child_process').spawn('${RV} x', {shell: true}); other.unref()"`,
+  `node -e "const s=require('child_process').spawn('${RV}', ['x']); other.unref()"`,
+];
+for (const cmd of BL190B_ALLOW) {
+  test(`rule1 allows (BL-0190 review): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}
+const BL190B_DENY2 = [
+  `node -e "const s=require('child_process').spawn('${RV} x', {shell: true, detached: true}); s.unref(); other.ref()"`, // own variable unref'd
+  `node -e "const s=require('child_process').spawn('${RV}', ['x'], {detached: true}); s.unref()"`,
+];
+for (const cmd of BL190B_DENY2) {
+  test(`rule1 denies (BL-0190 review): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+  });
+}
+
 // ---- Rule 2: pkill/pgrep -f without [x] => DENY by default (BL-0148; was warn-only BL-0019) ----
 // Cases are data, run through the real hook; the command text never reaches a live Bash tool call.
 const PK_DENY = [

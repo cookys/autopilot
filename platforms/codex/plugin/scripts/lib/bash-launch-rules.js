@@ -30,7 +30,7 @@ const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
 const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout',
-  'ionice', 'flock', 'chrt', 'taskset', 'xargs']);
+  'ionice', 'flock', 'chrt', 'taskset', 'xargs', 'parallel']);
 // Leading positional words a prefix command consumes before the real command: `flock FILE cmd`, `chrt PRIO cmd`,
 // `taskset MASK cmd` (`taskset -c LIST cmd` has no mask word: handled where the flags are read).
 const POSITIONAL = { flock: 1, chrt: 1, taskset: 1 };
@@ -39,6 +39,9 @@ const VALUE_FLAGS = {
   nice: new Set(['-n']), sudo: new Set(['-u', '-g', '-h', '-p', '-C']), env: new Set(['-u', '-C', '-S']), timeout: new Set(['-s', '-k']),
   ionice: new Set(['-c', '-n', '-p', '-P', '-u']), flock: new Set(['-w', '-E', '--timeout', '--conflict-exit-code']),
   taskset: new Set(['-c', '--cpu-list']), xargs: new Set(['-P', '-n', '-L', '-I', '-d', '-E', '-s', '-a', '-R', '-S']),
+  // GNU parallel: `parallel [options] command {} ::: args` (options per its man page)
+  parallel: new Set(['-j', '--jobs', '-n', '--max-args', '-N', '-S', '--sshlogin', '-a', '--arg-file', '-I', '-d', '--delimiter', '-L', '--max-lines',
+    '--joblog', '--results', '--delay', '--timeout', '--retries', '--workdir', '--tagstring', '--colsep', '-C']),
 };
 // Shell keywords that precede a command: `for …; do CMD &`, `if …; then CMD`, `{ CMD; }`.
 const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '!', '(']);
@@ -155,6 +158,10 @@ function tokens(segText) {
 // Interpreter one-liners whose string argument is run by a shell (python / perl / ruby / node).
 const INTERP_C_RE = /^(?:\S*\/)?(?:python[0-9.]*|perl|ruby|node)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*[ce]\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 const SHELL_CALL_RE = /(os\.(?:system|popen)|subprocess\.(?:run|call|Popen|check_call|check_output|getoutput)|child_process\.(?:exec|execSync|spawn)|\bsystem)\(\s*(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g;
+// List-form launches: python `subprocess.Popen(['rail', ...])`, node `spawn('rail', [args])` / `spawn('bash', ['rail', ...])`.
+const LIST_CALL_RE = /(subprocess\.Popen|child_process\.(?:spawn|execFile)|\b(?:spawn|execFile))\(\s*(\[[^\]]*\]|'[^']*'|"[^"]*")(?:\s*,\s*(\[[^\]]*\]))?/g;
+const LIST_WORD_RE = /'([^']*)'|"([^"]*)"/g;
+const listWords = (txt) => { const o = []; let m; LIST_WORD_RE.lastIndex = 0; while ((m = LIST_WORD_RE.exec(txt)) !== null) o.push(m[1] !== undefined ? m[1] : m[2]); return o; };
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 
 // ---- `$(…)` / backtick scanner -------------------------------------------------------------------
@@ -266,6 +273,21 @@ function expandSegmentsUncached(text, depth) {
         all.push(...expandSegments(script, depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg || asyncCall, sh: true, sub: true })));
       }
     }
+    if (im && seg.text.length <= SEG_MAX_TEXT) {
+      const body = (im[1] !== undefined ? im[1] : im[2]).replace(/\\(["'])/g, '$1');
+      LIST_CALL_RE.lastIndex = 0;
+      let lm;
+      while ((lm = LIST_CALL_RE.exec(body)) !== null) {
+        const py = /Popen/.test(lm[1]);
+        // Python's Popen child outlives the interpreter unless the body waits for it; a node child keeps the event
+        // loop alive (the call blocks) unless it is unref'd (`detached` alone is not enough).
+        if (py ? /\.(?:wait|communicate)\(|\bwith\s+subprocess\.Popen/.test(body) : !/\.unref\(/.test(body)) continue;
+        const words = lm[3] !== undefined ? [...listWords(lm[2]), ...listWords(lm[3])] : listWords(lm[2]);
+        if (!words.length) continue;
+        all.push(...expandSegments(words.map((w) => (/^[\w./:=@%+,-]+$/.test(w) ? w : `'${w.replace(/'/g, '')}'`)).join(' '), depth + 1)
+          .map((x) => ({ ...x, bg: true, sh: true, sub: true })));
+      }
+    }
     for (const sub of (seg.text.length > SEG_MAX_TEXT ? [] : findSubstitutions(seg.text))) {
       // The body of `$(…)` / backticks is a fresh script: strip ITS heredoc bodies and comments too
       // (`git commit -m "$(cat <<'EOF' … EOF)"` — the outer lexer treats the heredoc as quoted data).
@@ -342,10 +364,11 @@ function waitsForAll(rest, pidVar = null) {
     args.push(a);
   }
   if (args.length === 0) return true;
-  if (args.length !== 1) return false;
-  if (/^"?\$!"?$/.test(args[0])) return true;
-  // `pid=$!` taken right after THIS launch, then `wait $pid`: the same job.
-  return !!pidVar && new RegExp(`^"?\\$(?:${pidVar}|\\{${pidVar}\\})"?$`).test(args[0]);
+  if (args.some((a) => a.startsWith('-'))) return false; // `wait -n` returns after ONE job
+  // `wait $P1 $P2` waits for every listed job, so it is enough that one of them is THIS launch's pid:
+  // `$!` itself, or `pid=$!` taken right after this launch.
+  const mine = pidVar ? new RegExp(`^"?\\$(?:${pidVar}|\\{${pidVar}\\})"?$`) : null;
+  return args.some((a) => /^"?\$!"?$/.test(a) || (mine && mine.test(a)));
 }
 
 // `pid=$!` straight after the launch at pos[idx] (same shell level, no other background launch in between).
@@ -363,6 +386,7 @@ function bangVarAfter(pos, idx) {
 
 // Functions whose body runs a rail: name -> rail path. `f(){ rail x; }; f &` backgrounds the rail through f.
 const FUNC_DEF_RE = /^(?:function\s+([A-Za-z_][\w.:-]*)(?:\s*\(\s*\))?|([A-Za-z_][\w.:-]*)\s*\(\s*\))\s*\{\s*(.*)$/;
+const PAREN_FUNC_DEF_RE = /^(?:function\s+([A-Za-z_][\w.:-]*)(?:\s*\(\s*\))?|([A-Za-z_][\w.:-]*)\s*\(\s*\))\s*\(([\s\S]*)$/;
 function functionRails(pos) {
   const map = new Map();
   let open = null;
@@ -370,6 +394,13 @@ function functionRails(pos) {
     const t = p.seg.text;
     const m = FUNC_DEF_RE.exec(t);
     if (!open) {
+      // `f() ( rail x )`: the body is a subshell; the whole body sits in this one segment text.
+      const pm = PAREN_FUNC_DEF_RE.exec(t);
+      if (pm) {
+        const railIn = pm[3].replace(/\)\s*$/, '').split(/[;\n&|]+/).map((x) => commandPosition(x).head).find((h) => isRail(h));
+        if (railIn) map.set(pm[1] || pm[2], railIn);
+        continue;
+      }
       if (!m) continue;
       open = { name: m[1] || m[2], depth: 1, rail: null };
       const h = commandPosition(m[3]).head;
@@ -491,47 +522,211 @@ function launchAdvice(shape, rail, nested = false) {
   return parts.join(' ');
 }
 
-const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F']);
-const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal']);
+const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F', 'd', 'r', 'O']);
+const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal',
+  '--delimiter', '--runstates', '--older', '--ns', '--nslist', '--env']);
+const POSIX_CLASS = { alpha: 'a-zA-Z', digit: '0-9', alnum: 'a-zA-Z0-9', upper: 'A-Z', lower: 'a-z', space: '\\s', blank: ' \\t' };
+// APPROXIMATION of what the Bash tool's own shell shows in /proc/<pid>/cmdline. Observed real shape:
+// `/usr/bin/zsh -c source …snapshot… && eval '<call>' < /dev/null && pwd -P >| …` — the shell path varies by host and the call
+// sits inside single quotes (each `'` becomes `'"'"'`). The load-bearing premise is only that the call text appears verbatim
+// in the cmdline; the prefix just keeps `^`-anchored patterns from matching the call's first word.
+const SELF_CMDLINE_PREFIX = "/usr/bin/zsh -c source /tmp/shell-snapshot.sh && eval '";
+const PATTERN_MAX_LEN = 300; // longer patterns are not judged (null)
+// Nested quantifiers / quantified alternation can backtrack exponentially in a JS RegExp: never run those.
+// Scan the pattern: a `)` followed by `* + {` whose matching group (by depth, skipping `\x` escapes and `[...]` classes)
+// holds a quantifier or `|` is catastrophic-prone, however many parens wrap it.
+function scanRegex(pat, onOpen, onClose) {
+  for (let i = 0; i < pat.length; i += 1) {
+    const c = pat[i];
+    if (c === '\\') { i += 1; continue; }
+    if (c === '[') { // character class: `]` right after `[` / `[^` is literal
+      let j = i + 1;
+      if (pat[j] === '^') j += 1;
+      if (pat[j] === ']') j += 1;
+      while (j < pat.length && pat[j] !== ']') j += pat[j] === '\\' ? 2 : 1;
+      i = j; continue;
+    }
+    if (c === '(') onOpen(i);
+    else if (c === ')') onClose(i);
+  }
+}
+function hasQuantOrAlt(s) {
+  let found = false;
+  let depthFree = s.replace(/\\./g, '').replace(/\[(?:\^?\]|\^)?[^\]]*\]/g, '');
+  if (/[*+{|]/.test(depthFree)) found = true;
+  return found;
+}
+function redosShaped(pat) {
+  const stack = [];
+  let bad = false;
+  scanRegex(pat, (i) => stack.push(i), (i) => {
+    const start = stack.pop();
+    if (start === undefined || bad) return;
+    if (/[*+{]/.test(pat[i + 1] || '') && hasQuantOrAlt(pat.slice(start + 1, i))) bad = true;
+  });
+  return bad;
+}
+
+// Shell word -> the string the command receives (quotes removed, `\x` unescaped). Variables stay as `$name`.
+function dequote(w) {
+  let out = '';
+  for (let i = 0; i < w.length; i += 1) {
+    const c = w[i];
+    if (c === "'") { const j = w.indexOf("'", i + 1); const e = j < 0 ? w.length : j; out += w.slice(i + 1, e); i = e; continue; }
+    if (c === '"') {
+      i += 1;
+      for (; i < w.length && w[i] !== '"'; i += 1) {
+        if (w[i] === '\\' && /["\\$`]/.test(w[i + 1] || '')) i += 1;
+        out += w[i];
+      }
+      continue;
+    }
+    if (c === '\\' && i + 1 < w.length) { i += 1; out += w[i]; continue; }
+    out += c;
+  }
+  return out;
+}
+
+// Plain `NAME=literal` assignment segments of this call (no `$`, backtick or glob in the value).
+function literalAssignments(segs) {
+  const vars = new Map();
+  for (const sg of segs) {
+    const m = /^(?:export\s+)?([A-Za-z_]\w*)=(\S*)$/.exec(sg.text);
+    if (!m) continue;
+    const v = dequote(m[2]);
+    if (!/[$`]/.test(v)) vars.set(m[1], v);
+  }
+  return vars;
+}
+
+const SHELL_RE = '(?:\\S*\\/)?(?:bash|sh|zsh|dash)';
+const SAME_FILE = (a, b) => a.replace(/^\.\//, '') === b.replace(/^\.\//, '');
+
+// Does some segment of the call execute `file` (`./f`, `bash f`, `source f`, `. f`)?
+function executesFile(segs, file) {
+  return segs.some((sg) => {
+    const w = tokens(sg.text).map((t) => dequote(t.raw));
+    const k = w.findIndex((x) => !/^[A-Za-z_]\w*=/.test(x));
+    if (k < 0) return false;
+    if (SAME_FILE(w[k], file)) return true;
+    const h = w[k].replace(/^.*\//, '');
+    if (['bash', 'sh', 'zsh', 'dash'].includes(h) || w[k] === 'source' || w[k] === '.') {
+      return w.slice(k + 1).some((x) => !x.startsWith('-') && SAME_FILE(x, file));
+    }
+    return false;
+  });
+}
+
+// Heredoc bodies the call RUNS: fed straight to a shell (`bash <<EOF`, `cat <<EOF | bash`), or written to a file
+// (`cat > f <<EOF`) that another segment then executes. A heredoc that is only data (never run) is not returned.
+function runHeredocBodies(raw, segs) {
+  const out = [];
+  const lines = String(raw).split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = /<<(-?)[ \t]*(?:'([^']+)'|"([^"]+)"|\\?([A-Za-z_]\w*))/.exec(lines[i]);
+    if (!m || lines[i][m.index + 2] === '<') continue;
+    const tag = m[2] || m[3] || m[4];
+    const body = [];
+    let j = i + 1;
+    for (; j < lines.length; j += 1) { if ((m[1] ? lines[j].replace(/^\t+/, '') : lines[j]) === tag) break; body.push(lines[j]); }
+    const intro = lines[i];
+    let runs = new RegExp(`^\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`).test(intro)
+      || new RegExp(`\\|\\s*(?:(?:sudo|env|exec)\\s+)*${SHELL_RE}\\b`).test(intro.slice(m.index));
+    if (!runs) {
+      const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
+      const file = fm && (fm[1] || fm[2] || fm[3]);
+      runs = !!file && executesFile(segs, file);
+    }
+    if (runs) out.push(body.join('\n'));
+    i = j;
+  }
+  return out;
+}
+
+// Would `pgrep -f <pattern>` match this very call's shell? Test the pattern (ERE ~ JS RegExp) against the text the
+// shell's cmdline carries. null = cannot tell (unresolved variable, unparsable regex): the caller falls back.
+function patternMatchesSelf(pattern, raw, vars, flags) {
+  let pat = pattern;
+  if (/\$[A-Za-z_{]/.test(pat)) {
+    pat = pat.replace(/\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g, (all, a, b) => (vars.has(a || b) ? vars.get(a || b) : all));
+    if (/\$[A-Za-z_{(]/.test(pat)) return null; // an unknown variable / substitution: unknowable
+  }
+  if (/\$\(|`/.test(pat)) return null;
+  if (pat.length > PATTERN_MAX_LEN || redosShaped(pat)) return null; // unjudgeable: ReDoS guard
+  pat = pat.replace(/\[:([a-z]+):\]/g, (all, n) => POSIX_CLASS[n] || all);
+  if (flags.exact) pat = `^(?:${pat})$`;
+  try { return new RegExp(pat, flags.icase ? 'i' : '').test(SELF_CMDLINE_PREFIX + raw.replace(/'/g, `'"'"'`)); } catch { return null; }
+}
 
 // Rule 2. Returns { rule, why, pattern } or null.
+// A pattern is a self-match when it really matches the call's own command line (so `[fF]oo`, `^x`, `x\.py` are
+// fine and `P=foo; pgrep -f "$P"` is not); the shapes scanned include heredoc scripts the call runs, `eval` /
+// `watch` bodies, `\pkill` and `xargs pkill`.
 function detectPkillSelfMatch(cmd) {
-  const text = executableText(typeof cmd === 'string' ? cmd : '');
-  for (const seg of expandSegments(text)) {
-    const { head, rest } = commandPosition(seg.text);
-    if (!head) continue;
-    const name = head.replace(/^.*\//, '');
-    if (name !== 'pkill' && name !== 'pgrep') continue;
-    let full = false;
-    for (const a of rest) {
-      if (a === '--full' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a)) full = true;
+  const raw = typeof cmd === 'string' ? cmd : '';
+  const top = expandSegments(executableText(raw));
+  const vars = literalAssignments(top);
+  const scripts = [top];
+  for (const body of runHeredocBodies(raw, top)) scripts.push(expandSegments(executableText(body)));
+  for (let si = 0; si < scripts.length && si < 8; si += 1) {
+    for (const seg of scripts[si]) {
+      const { head, rest } = commandPosition(seg.text);
+      if (!head) continue;
+      const name = dequote(head).replace(/^.*\//, '');
+      if (name === 'eval' || name === 'watch') {
+        // the words after `eval` / `watch [-n N …]` are a script
+        let k = 0;
+        if (name === 'watch') while (k < rest.length && /^-/.test(rest[k])) k += (rest[k] === '-n' || rest[k] === '--interval') ? 2 : 1;
+        const bodyText = dequote(rest.slice(k).join(' '));
+        if (bodyText) scripts.push(expandSegments(executableText(bodyText)));
+        continue;
+      }
+      if (name !== 'pkill' && name !== 'pgrep') continue;
+      const flags = { icase: false, exact: false };
+      let full = false;
+      for (const a of rest) {
+        if (a === '--full') full = true;
+        else if (a === '--ignore-case') flags.icase = true;
+        else if (a === '--exact') flags.exact = true;
+        else if (/^-[a-zA-Z]+$/.test(a) && !/^-[A-Z]{2,}$/.test(a)) {
+          if (a.includes('f')) full = true;
+          if (a.includes('i')) flags.icase = true;
+          if (a.includes('x')) flags.exact = true;
+        }
+      }
+      if (!full) continue;
+      // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
+      // Options that take a value (`-u me`, `-P 1`, `-d ,`, `--uid me`) skip that value, so it is never the pattern.
+      const toks = tokens(seg.text).map((t) => t.raw);
+      const hi = toks.findIndex((t) => dequote(t).replace(/^.*\//, '') === name);
+      let word;
+      for (let i = hi + 1; i < toks.length; i++) {
+        const t = toks[i];
+        if (/^--[a-z-]+$/.test(t)) { if (PGREP_LONG_VALUE.has(t)) i += 1; continue; }
+        if (/^-[a-zA-Z0-9]+$/.test(t)) {
+          const signal = /^-[A-Z]{2,}[0-9]*$/.test(t) || /^-[0-9]/.test(t); // `-HUP`, `-9`: a signal, takes no value
+          if (!signal && PGREP_VALUE_FLAGS.has(t[t.length - 1])) i += 1;
+          continue;
+        }
+        if (t.startsWith('-')) continue;
+        word = t; break;
+      }
+      if (word === undefined) continue;
+      const pattern = dequote(word);
+      const hit = patternMatchesSelf(pattern, raw, vars, flags);
+      if (hit === false) continue;
+      // Unjudgeable (unknown $VAR, unparsable regex): keep the old stance — a `[x]` bracket or a `$` means "assume fine".
+      if (hit === null && (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern))) continue;
+      return {
+        rule: 'pkill-self-match',
+        pattern,
+        why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line (the shell running it), `
+          + 'so it can match and kill its own shell. Instead: read the PID from a pidfile (`kill "$(cat x.pid)"`), '
+          + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
+          + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; an unresolvable `$VAR` pattern is not flagged), or bracket one '
+          + "character (`'[f]oo'`)",
+      };
     }
-    if (!full) continue;
-    // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
-    // Walk the words after the command: options that take a value (`-u me`, `-P 1`, `--uid me`) skip that
-    // value, so `me` is never mistaken for the pattern.
-    const toks = tokens(seg.text).map((t) => t.raw);
-    const hi = toks.findIndex((t) => t.replace(/^.*\//, '') === name);
-    let word;
-    for (let i = hi + 1; i < toks.length; i++) {
-      const t = toks[i];
-      if (/^--[a-z-]+$/.test(t)) { if (PGREP_LONG_VALUE.has(t)) i += 1; continue; }
-      if (/^-[a-zA-Z0-9]+$/.test(t)) { if (PGREP_VALUE_FLAGS.has(t[t.length - 1]) && !/^-[0-9]/.test(t)) i += 1; continue; }
-      if (t.startsWith('-')) continue;
-      word = t; break;
-    }
-    if (word === undefined) continue;
-    const pattern = word.replace(/^(['"])([\s\S]*)\1$/, '$2');
-    if (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern)) continue; // `[f]oo` self-exclusion; `$PAT` unknowable
-    return {
-      rule: 'pkill-self-match',
-      pattern,
-      why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line (the shell running it), `
-        + 'so it can match and kill its own shell. Instead: read the PID from a pidfile (`kill "$(cat x.pid)"`), '
-        + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
-        + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; a `$VAR` pattern is not flagged), or bracket one '
-        + "character (`'[f]oo'`)",
-    };
   }
   return null;
 }
@@ -628,4 +823,4 @@ function detectZshExpansion(cmd, cwd) {
   return null;
 }
 
-module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, segments, expandSegments };
+module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

@@ -282,6 +282,55 @@ test('a REAL detached rail inside a substitution is still denied', () => {
   assert.strictEqual(run('echo "$(nohup scripts/dispatch-review.sh x &)"').deny, true);
 });
 
+// ---- BL-0185: more background-launch shapes (list-form interpreters, parallel, subshell functions) + multi-pid wait ----
+const RV = 'scripts/dispatch-review.sh';
+const BL185_DENY = [
+  `python3 -c "import subprocess; subprocess.Popen(['${RV}', 'x'])"`, // python list form
+  `python3 -c "import subprocess; subprocess.Popen(['bash', '${RV}', 'x'])"`,
+  `python3 -c 'import subprocess; subprocess.Popen(["${RV}", "x"])'`,
+  `node -e "const c=require('child_process').spawn('${RV}', ['x'], {detached: true}); c.unref()"`, // node list form (unref'd)
+  `node -e 'const c=require("child_process").spawn("bash", ["${RV}", "x"], {detached: true}); c.unref()'`,
+  `parallel ${RV} {} ::: a b &`, // GNU parallel backgrounded
+  `parallel -j2 ${RV} {} ::: a b &`,
+  `setsid -f parallel --jobs 2 ${RV} {} ::: a b`,
+  `f() ( ${RV} x )\nf &`, // subshell-body function
+  `f() ( ${RV} x ); f &`,
+  `f() (\n  ${RV} x\n)\nf &`,
+  `{ ${RV} x; } &`, // brace group sent to the background (already caught on base: regression pin)
+  `{\n${RV} x\n} > log 2>&1 &`,
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait -n $P1 $P2`, // wait -n returns after ONE job
+  `${RV} a & P1=$!\nwait 12345`, // waits for an unrelated pid
+];
+for (const cmd of BL185_DENY) {
+  test(`rule1 denies (BL-0185): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+const BL185_ALLOW = [
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait $P1 $P2`, // wait with two pid variables
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait "$P1" "$P2"`,
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait \${P1} \${P2}`,
+  `${RV} a &\nwait $! 999`,
+  `{ ${RV} x; } & wait`,
+  `parallel ${RV} {} ::: a b`, // foreground parallel blocks until done
+  `parallel -j2 ${RV} {} ::: a b && echo done`,
+  `parallel -j2 ${RV} {} ::: a b & wait`,
+  `f() ( ${RV} x )\nf`, // subshell function called in the foreground
+  `f() ( ${RV} x )\nf & wait`,
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); p.wait()"`, // python waits for its child
+  `python3 -c "import subprocess; subprocess.Popen(['grep', 'dispatch-review.sh', 'f'])"`, // not a rail
+  `node -e "require('child_process').spawn('${RV}', ['x'])"`, // node keeps running until the child ends
+  `node -e "require('child_process').spawn('grep', ['dispatch-review.sh'], {detached: true}).unref()"`,
+];
+for (const cmd of BL185_ALLOW) {
+  test(`rule1 allows (BL-0185): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}
+
 // ---- Rule 2: pkill/pgrep -f without [x] => DENY by default (BL-0148; was warn-only BL-0019) ----
 // Cases are data, run through the real hook; the command text never reaches a live Bash tool call.
 const PK_DENY = [
@@ -297,6 +346,14 @@ const PK_DENY = [
   "cat > f <<'EOF'\ndata\nEOF\npkill -f vllm",
   "pkill -f 'vllm serve'",
   'git commit -m "see `pgrep -f x`"',
+  // BL-0153: shapes that really match the shell running the call
+  "bash <<'EOF'\npgrep -f foo\nEOF", "cat <<'EOF' | bash\npkill -f foo\nEOF",
+  "cat > /tmp/x.sh <<'EOF'\npgrep -f foo\nEOF\nbash /tmp/x.sh", "cat > x.sh <<'EOF'\npkill -f foo\nEOF\nchmod +x x.sh\n./x.sh",
+  'P=foo; pgrep -f "$P"', 'P=foo\npkill -f ${P}', 'a=fo; b=o; pgrep -f "$a$b"; echo foo',
+  'echo 1 | xargs pkill -f foo', 'eval "pkill -f foo"', "eval 'pgrep -f foo'", 'watch pgrep -f foo', "watch -n 2 'pgrep -f foo'",
+  '\\pkill -f foo', "'pkill' -f foo", 'command pkill -f foo',
+  "pgrep -f '[f]oo'; echo foo", // the bracket guards one occurrence, the other still matches
+  'pkill -f -HUP foo', 'pgrep -f -d , foo', 'pgrep -if FOO; echo foo',
 ];
 for (const cmd of PK_DENY) {
   test(`rule2 denies: ${JSON.stringify(cmd)}`, () => {
@@ -316,6 +373,13 @@ const PK_ALLOW = [
   'cat > f <<EOF\npkill -f vllm\nEOF',
   "echo 'use `pgrep -f x` never'",
   "pgrep -f '[s]elftest'",
+  // BL-0153 look-alikes: patterns that cannot match this call's own text
+  "pkill -f '[fF]oo'", "pgrep -f '^x'", "pgrep -f 'x\\.py'", "pgrep -f -d , '[f]oo'", "pgrep -d , -f '^zzz'", 'pgrep -f "foo$"',
+  'a=fo; b=o; pgrep -f "$a$b"', 'P=[f]oo; pgrep -f "$P"', 'kill "$(cat x.pid)"', 'pgrep -x foo', 'pgrep -fx "[f]oo"',
+  'echo "pkill -f foo" | cat', 'echo "eval pkill -f foo"', 'grep -n "watch pgrep -f" notes.md', 'echo "\\pkill -f foo"',
+  "cat > x.sh <<'EOF'\npgrep -f foo\nEOF\ncat x.sh", // written, never run: data
+  "cat <<'EOF' | grep pgrep\npgrep -f foo\nEOF",
+  'eval "pkill -x foo"', "watch -n 2 'pgrep -fa [f]oo'", 'pkill -f "[v]llm"; true',
 ];
 for (const cmd of PK_ALLOW) {
   test(`rule2 allows: ${JSON.stringify(cmd)}`, () => {
@@ -770,3 +834,35 @@ test('message: the watch recipe is bounded by timeout, warns about stale .exit, 
   assert.match(r, /must not contain `\.`/);
   assert.match(r, /a subagent cannot/);
 });
+
+// ---- BL-0153 review: ReDoS guard. A catastrophic pattern must be unjudgeable (never run) and return fast. ----
+{
+  const { detectPkillSelfMatch } = require('../scripts/lib/bash-launch-rules.js');
+  for (const pat of ['(.*)*x$', '(a+)+b', '(a|aa)+c', 'x'.repeat(400)]) {
+    test(`rule2 ReDoS guard returns fast: ${pat.slice(0, 12)}`, () => {
+      const t0 = Date.now();
+      detectPkillSelfMatch(`pgrep -f '${pat}'`);
+      assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`);
+    });
+  }
+  const { patternMatchesSelf } = require('../scripts/lib/bash-launch-rules.js');
+  for (const pat of ['((a+))+c', '((a|aa))+c', '(?:(a+))+c', '(.*)*x$', '(a+)+b']) {
+    test(`patternMatchesSelf is unjudgeable and fast: ${pat}`, () => {
+      const t0 = Date.now();
+      const r = patternMatchesSelf(pat, 'pgrep -f x', new Map(), {});
+      assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`);
+      assert.strictEqual(r, null);
+    });
+  }
+  test('patternMatchesSelf still judges ordinary groups', () => {
+    assert.strictEqual(patternMatchesSelf('(foo)+bar', 'pgrep -f foobar', new Map(), {}), true);
+    assert.strictEqual(patternMatchesSelf('(foo)+bar', 'pgrep -f x', new Map(), {}), false);
+    assert.strictEqual(patternMatchesSelf('(foo|bar)x', 'pgrep -f barx', new Map(), {}), true);
+    assert.strictEqual(patternMatchesSelf('[(]a+[)]+', 'pgrep -f x', new Map(), {}), false);
+  });
+  test('rule2 ReDoS pattern takes the null (unjudgeable) path and falls back to the old stance', () => {
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(.*)*x$'"), null); // `$` => assumed fine
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+[b]'"), null); // bracket => assumed fine
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+b'").rule, 'pkill-self-match'); // plain => denied, regex never run
+  });
+}

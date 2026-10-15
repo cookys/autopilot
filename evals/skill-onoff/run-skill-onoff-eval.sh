@@ -345,6 +345,11 @@ if node "$BASE_DIR/lib/transcript-query.js" "$TRANSCRIPT" skill-invoked "${CHECK
 fi
 
 # ── failure classification (closed vocabulary; content-free) ──
+# claude -p reports login/limit failures as an is_error result line on stdout, not on stderr (stage-graph runs: the
+# OAuth expiry cells were classified runner_error). So the evidence text is stderr plus the transcript's is_error lines.
+ERR_TEXT="$(cat "$RAW_ERR" 2>/dev/null; grep -h '"is_error":[ ]*true' "$TRANSCRIPT" 2>/dev/null | head -n 5 || true)"
+AUTH_RE='(^|[^a-z])(unauthorized|forbidden|authentication|invalid[ _-]?(api[ _-]?)?key|login required|token expired|oauth token has expired|please run /login|not logged in)([^a-z]|$)'
+QUOTA_RE='(usage limit|weekly limit|rate limit|limit reached|hit your limit|quota|credit balance)'
 failure_class="null"; failure_cause="null"; STOPPED_BY_TIMEOUT=0
 if [ -n "$PREFLIGHT_FAIL" ]; then
   failure_class='"infra_fail"'; failure_cause='"plugin_script_unresolvable"'
@@ -355,8 +360,10 @@ elif [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [
   STOPPED_BY_TIMEOUT=1
 elif [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; then
   failure_class='"infra_fail"'; failure_cause='"runner_timeout"'
-elif [ "$RUN_EXIT" -ne 0 ] \
-    && grep -Eqi '(^|[^a-z])(unauthorized|forbidden|authentication|invalid[ _-]?(api[ _-]?)?key|login required|token expired)([^a-z]|$)' "$RAW_ERR" 2>/dev/null; then
+elif [ "$RUN_EXIT" -ne 0 ] && printf '%s\n' "$ERR_TEXT" | grep -Eqi "$QUOTA_RE"; then
+  # BL-0112: the matrix driver stops the whole campaign on this cause instead of burning every remaining cell.
+  failure_class='"infra_fail"'; failure_cause='"quota"'
+elif [ "$RUN_EXIT" -ne 0 ] && printf '%s\n' "$ERR_TEXT" | grep -Eqi "$AUTH_RE"; then
   failure_class='"infra_fail"'; failure_cause='"authentication"'
 elif [ "$RUN_EXIT" -ne 0 ]; then
   failure_class='"infra_fail"'; failure_cause='"runner_error"'

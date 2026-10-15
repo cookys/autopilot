@@ -37,6 +37,8 @@ bash evals/skill-onoff/run-skill-onoff-matrix.sh \
 node evals/skill-onoff/score-onoff.js --results results/primary-sonnet.jsonl
 ```
 
+Campaign guards (proof: `hooks/tests/skill-onoff-failfast.test.sh`): a cell failing with `authentication` or `quota` stops the matrix at once (exit 4, reason on stderr); fix the cause and re-run the same command. The runner version is pinned in `<results>.runner-pin` on first run (and `DISABLE_AUTOUPDATER=1` is exported for `--runner cc`); a different version before any cell stops the matrix (exit 3). To move to a new version, start a new results file.
+
 Spend-free regression: `hooks/tests/skill-onoff-{eval,markers,score}.test.sh` (stub runner via
 `ONOFF_STUB_BIN`; planted red cases — the vacuous FULL==OFF fixture can never reach
 SHIP-GATE-MET).

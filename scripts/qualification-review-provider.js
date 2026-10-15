@@ -1368,6 +1368,12 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     }
     cloneHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-clihome-'));
     fs.cpSync(template, cloneHome, { recursive: true, dereference: false });
+    if (kind === 'kimi') {
+      // The template may hold wires from earlier runs (real staging dirs do, from default-agent
+      // runs). The post-run audit walks every wire under the clone's sessions, so drop them from
+      // the CLONE (never the template): only this run's own wire may be audited.
+      fs.rmSync(path.join(cloneHome, '.kimi-code', 'sessions'), { recursive: true, force: true });
+    }
     if (kind === 'agy') {
       // Containment for --dangerously-skip-permissions above: force-merge a
       // tool deny-list into THIS CLONE's settings before agy ever spawns, so

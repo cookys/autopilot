@@ -2079,6 +2079,17 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   const none = runProvider({ env: kimiEnv('none'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(none.child.status, 1, 'kimi run that left no wire is rejected (fail closed)');
   check(/containment unverified/.test(none.child.stderr), 'the missing-wire rejection says containment is unverified');
+  // Stale sessions in the TEMPLATE (a prior default-agent run, as in real staging dirs) must not
+  // be audited: only the wire this run produced counts. The template itself stays untouched.
+  const staleWire = path.join(kimiTemplate, '.kimi-code', 'sessions', 'wd_old', 'session_old', 'agents', 'main');
+  fs.mkdirSync(staleWire, { recursive: true });
+  fs.copyFileSync(path.join(KIMI_FIX, 'k1-leak', 'wire.jsonl'), path.join(staleWire, 'wire.jsonl'));
+  const stale = runProvider({ env: kimiEnv('clean'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(stale.child.status, 0, 'a clean kimi run passes even when the template holds an old leaking session');
+  check(fs.existsSync(path.join(staleWire, 'wire.jsonl')), 'the template HOME keeps its old session (only the clone is cleaned)');
+  const staleLeak = runProvider({ env: kimiEnv('leak'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(staleLeak.child.status, 1, 'a kimi run that itself used tools is still rejected with a stale template present');
+  fs.rmSync(path.join(kimiTemplate, '.kimi-code', 'sessions'), { recursive: true, force: true });
   // Fail closed: no QRP_CLI_HOME -> refuse before spawn.
   const bare = runProvider({
     env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
@@ -2090,5 +2101,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 418) throw new Error(`qualification-review-provider: expected exactly 418 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 421) throw new Error(`qualification-review-provider: expected exactly 421 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

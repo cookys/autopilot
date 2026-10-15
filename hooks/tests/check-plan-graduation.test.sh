@@ -1291,4 +1291,18 @@ out="$(node "$GATE" --repo-root "$d" --json)"
 assert_not_contains "$out" '"code":"frozen_marker_deleted"' "BL-0191: without --frozen-base the guard is off"
 
 
+# --- BL-0191 review fix: --frozen-base is a ref, never a git option ---
+d="$(fixture_repo frozen-base-injection)"
+git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init >/dev/null
+inj="$TEST_TMP/injected-output.txt"
+rc=0; node "$GATE" --repo-root "$d" --frozen-base "--output=$inj" --json >/dev/null 2>&1 || rc=$?
+assert_eq "$rc" "2" "BL-0191: a dash-leading --frozen-base is a usage error (exit 2)"
+if [ -e "$inj" ]; then r=created; else r=absent; fi
+assert_eq "$r" "absent" "BL-0191: --frozen-base --output=<path> never makes git write that file"
+out="$(node "$GATE" --repo-root "$d" --frozen-base no-such-ref --json)"
+assert_contains "$out" '"code":"frozen_marker_deleted","kind":"frozen_base"' \
+  "BL-0191: an unresolvable ref is reported as a frozen_base problem, not a fake marker path"
+assert_not_contains "$out" '"path":".frozen-evidence"' "BL-0191: no invented marker path for a bad ref"
+
+
 finalize_test

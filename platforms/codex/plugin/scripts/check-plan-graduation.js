@@ -178,7 +178,10 @@ function parseArgs(argv) {
     else if (a === '--changelog') out.changelog = need();
     else if (a === '--plans-dir') out.plansDir = need();
     else if (a === '--allowlist') out.allowlist = need();
-    else if (a === '--frozen-base') out.frozenBase = need();
+    else if (a === '--frozen-base') {
+      out.frozenBase = need();
+      if (out.frozenBase.startsWith('-')) usage(2); // a ref, never a git option (`--output=<path>` would write a file)
+    }
     else if (a === '--fix') out.fix = true;
     else if (a === '--json') out.json = true;
     else if (a === '--register-template') out.registerTemplate = need();
@@ -504,12 +507,15 @@ function markedFrozenEvidenceFiles(repoRoot) {
 function deletedFrozenMarkers(repoRoot, baseRef) {
   let out;
   try {
-    out = execFileSync('git', ['-C', repoRoot, 'diff', '--name-only', '--diff-filter=D', '-z', baseRef, '--'],
+    // Resolve to a sha first: --end-of-options keeps a dash-leading value from being read as a git option.
+    const sha = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    out = execFileSync('git', ['-C', repoRoot, 'diff', '--name-only', '--diff-filter=D', '-z', sha, '--'],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
     return [{
-      code: 'frozen_marker_deleted', kind: 'marker', path: '.frozen-evidence',
-      detail: `could not diff against --frozen-base ${baseRef}: ${String(e.message).split('\n')[0]}`,
+      code: 'frozen_marker_deleted', kind: 'frozen_base', ref: baseRef,
+      detail: `--frozen-base ${baseRef} did not resolve to a commit; marker deletions were NOT checked`,
     }];
   }
   return out.split('\0').filter((f) => f && path.posix.basename(f) === '.frozen-evidence').map((f) => ({
@@ -1707,6 +1713,7 @@ function main() {
       for (const v of finalResult.violations) {
         const where = v.kind === 'backlog_row' ? `BACKLOG row "${v.title}"`
           : v.kind === 'reference' ? `docs/plans/${v.stem}`
+            : v.kind === 'frozen_base' ? `--frozen-base ${v.ref}`
             : v.path;
         const tag = BLOCKING_CODES.has(v.code) ? v.code : `${v.code} (report-only)`;
         process.stdout.write(`${tag}: ${where} — ${v.detail}\n`);

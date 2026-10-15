@@ -83,12 +83,25 @@ for f in dispatch-hetero.sh dispatch-review.sh dispatch-author.sh; do
     fail "$f still has a model-less grok_effort_clamp call"
   fi
 done
-# The QRP transport (qualification-review-provider.js) must delegate to the bash lib, not restate a table
-# (its old "Node mirror" carried the same global-table defect).
-grep -q "lib', 'grok-effort.sh'" "$script_dir/qualification-review-provider.js" \
-  || fail "qualification-review-provider.js does not delegate grok effort clamping to lib/grok-effort.sh"
+# The QRP transport (qualification-review-provider.js) must delegate to the shared JS clamp
+# (lib/grok-effort.js, which itself shells out to lib/grok-effort.sh) and pass the model, not restate a table.
+grep -q "require('./lib/grok-effort')" "$script_dir/qualification-review-provider.js" \
+  || fail "qualification-review-provider.js does not delegate grok effort clamping to lib/grok-effort.js"
 grep -q 'grokEffortClamp(effort, model, bin)' "$script_dir/qualification-review-provider.js" \
   || fail "qualification-review-provider.js does not pass the model to the grok clamp"
+grep -q "grok-effort.sh" "$script_dir/lib/grok-effort.js" \
+  || fail "lib/grok-effort.js does not delegate to lib/grok-effort.sh"
+# Parity: the JS entry must agree with the bash clamp for every effort x model (stub CLI from 2b).
+if command -v node >/dev/null 2>&1; then
+  for model in "" old new only-high; do
+    for e in low medium high xhigh max '' nonsense; do
+      want="$(grok_effort_clamp "$e" "$model" "$stub_dir/grok")"
+      got="$(node -e 'process.stdout.write(require(process.argv[1]).grokEffortClamp(process.argv[2], process.argv[3], process.argv[4]))' \
+        "$script_dir/lib/grok-effort.js" "$e" "$model" "$stub_dir/grok")"
+      [ "$got" = "$want" ] || fail "JS/bash clamp parity broke: effort='$e' model='$model' js=$got bash=$want"
+    done
+  done
+fi
 # The qoder rail already had its own --reasoning-effort; it must not have been disturbed.
 grep -q -- '--reasoning-effort "\$4"' "$script_dir/dispatch-review.sh" \
   || fail "dispatch-review.sh: qoder --reasoning-effort wiring was disturbed"

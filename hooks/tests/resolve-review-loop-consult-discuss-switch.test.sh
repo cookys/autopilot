@@ -368,6 +368,7 @@ hooks/tests/campaign-dispatch-projection.test.sh|partial roster fixture, resolve
 hooks/tests/campaign-intake-rejection-release.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/campaign-repair-engine-at-file-cap.test.sh|in-process roster object literal for an engine fixture, never resolved from config; consult/discuss not involved
 hooks/tests/campaign-repair-at-file-cap.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
+hooks/tests/campaign-repair-revert-monotonic.test.sh|in-process roster object literal for a repair-revert fixture, never resolved from config; consult/discuss not involved
 hooks/tests/campaign-resume-reviewing-phase.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/contract-parity.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/controller-boundary-budget-bridge.test.sh|partial roster fixture, resolves consult/discuss via the default

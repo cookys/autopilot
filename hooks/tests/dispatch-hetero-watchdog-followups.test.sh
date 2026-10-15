@@ -134,10 +134,10 @@ assert_r1_nojobcontrol_reports_unenforced() {
     --branch feat/wdog-njc --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r1_nojobcontrol_reports_unenforced: missing JSON: $out"
-  assert_eq "false" "$(json_get "$json" timeout_enforced)" "plain nojobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timeout_enforced)" "false" "plain nojobcontrol timeout_enforced"
   mf="$(find "$runs" -name '*.manifest.json' | head -1)"
   [ -n "$mf" ] || fail "assert_r1_nojobcontrol_reports_unenforced: no manifest"
-  assert_eq "false" "$(json_get "$(cat "$mf")" timeout_enforced)" "manifest timeout_enforced"
+  assert_eq "$(json_get "$(cat "$mf")" timeout_enforced)" "false" "manifest timeout_enforced"
 }
 
 assert_r1_nojobcontrol_detached_real_path() {
@@ -163,7 +163,7 @@ assert_r1_nojobcontrol_detached_real_path() {
   local json
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r1_nojobcontrol_detached_real_path: empty result"
-  assert_eq "false" "$(json_get "$json" timeout_enforced)" "detached nojobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timeout_enforced)" "false" "detached nojobcontrol timeout_enforced"
 }
 
 assert_r1_nosetsid_with_jobcontrol_still_enforces() {
@@ -186,8 +186,8 @@ assert_r1_nosetsid_with_jobcontrol_still_enforces() {
     return
   fi
   [ "$elapsed" -lt 30 ] || fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: took ${elapsed}s"
-  assert_eq "true" "$(json_get "$json" timed_out)" "nosetsid+jobcontrol timed_out"
-  assert_eq "true" "$(json_get "$json" timeout_enforced)" "nosetsid+jobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timed_out)" "true" "nosetsid+jobcontrol timed_out"
+  assert_eq "$(json_get "$json" timeout_enforced)" "true" "nosetsid+jobcontrol timeout_enforced"
   stubpid="$(cat "$pidfile" 2>/dev/null || true)"
   [ -n "$stubpid" ] || fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: no pidfile"
   if pid_alive "$stubpid"; then
@@ -231,7 +231,11 @@ wait_pid_dead() {
 reap_pid() {
   local pid="$1"
   [ -n "$pid" ] || return 0
-  kill -KILL "$pid" 2>/dev/null || true
+  # Only signal a pid that is still present: after wait_pid_dead confirmed it
+  # gone, a bare kill could hit a recycled pid.
+  if pid_alive "$pid"; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
   wait "$pid" 2>/dev/null || true
 }
 
@@ -269,7 +273,7 @@ assert_r2_cgroup_kill_failure_falls_back_to_pgid() {
   wait "$dispid" 2>/dev/null || true
   json="$(last_json "$(cat "$outf")")"
   [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_falls_back_to_pgid: missing JSON: $(cat "$outf")"
-  assert_eq "true" "$(json_get "$json" timed_out)" "r2 cgroup fallback timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "true" "r2 cgroup fallback timed_out"
 }
 
 assert_r2_cgroup_kill_failure_detached_real_path() {
@@ -303,7 +307,7 @@ assert_r2_cgroup_kill_failure_detached_real_path() {
   fi
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: empty result"
-  assert_eq "true" "$(json_get "$json" timed_out)" "r2 detached timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "true" "r2 detached timed_out"
   stubpid="$(cat "$pidfile" 2>/dev/null || true)"
   [ -n "$stubpid" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: no pidfile"
   if ! wait_pid_dead "$stubpid" 30; then
@@ -325,6 +329,7 @@ assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
   echo "$helper" > "${tok}.sleeppid"
   set -e -o pipefail
   _cancel_worker_watchdog
+  set +e   # restore file-scope errexit state (lib.sh runs without -e)
   if ! pid_alive "$helper"; then
     fail "assert_r6_cancel_skips_kill_when_cmdline_lacks_tag: unrelated helper $helper was killed"
     return
@@ -397,6 +402,7 @@ assert_r6_cancel_kills_when_cmdline_has_tag() {
   echo "$helper" > "${tok}.sleeppid"
   set -e -o pipefail
   _cancel_worker_watchdog
+  set +e   # restore file-scope errexit state (lib.sh runs without -e)
   if pid_alive "$helper"; then
     reap_pid "$helper"
     fail "assert_r6_cancel_kills_when_cmdline_has_tag: tagged sleeper $helper still alive"
@@ -414,7 +420,6 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
   eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
@@ -522,7 +527,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
     --branch feat/wdog-r3-nat --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: missing JSON: $out"
-  assert_eq "false" "$(json_get "$json" timed_out)" "inline natural-exit timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "false" "inline natural-exit timed_out"
   _r3_assert_no_leftover_watchdog "$wdtmp" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path inline"
 
   local stubd="$TEST_TMP/grok-r3-nat-d"
@@ -547,7 +552,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
   fi
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: empty detached result"
-  assert_eq "false" "$(json_get "$json" timed_out)" "detached natural-exit timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "false" "detached natural-exit timed_out"
   wait "$wrap" 2>/dev/null || true
   _r3_assert_no_leftover_watchdog "$wdtmpd" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path detached"
 }
@@ -564,7 +569,6 @@ assert_r6_cancel_kills_when_cmdline_has_tag
 assert_r3_alive_helper_matches_exact_pgid() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   local live="" other="" holder="" zfile="$TEST_TMP/r3-pgid-z.pid"
   : > "$zfile"
@@ -674,7 +678,7 @@ assert_r10_result_json_never_default_timeout_source() {
   assert_r10_result_ok "$json" "no-timeout"
   mf="$(find "$runs" -name '*.manifest.json' | head -1)"
   [ -n "$mf" ] || fail "assert_r10_result_json_never_default_timeout_source: no manifest"
-  assert_eq "default" "$(json_get "$(cat "$mf")" timeout_source)" "no-timeout manifest timeout_source"
+  assert_eq "$(json_get "$(cat "$mf")" timeout_source)" "default" "no-timeout manifest timeout_source"
 
   local stubt="$TEST_TMP/grok-r10-t" runst="$TEST_TMP/runs-r10-t"
   mkdir -p "$runst"
@@ -752,7 +756,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
     fail "assert_r8_detached_reaps_worker_session_descendants: sleeper pid $sleeper still alive after result"
   fi
   if [ -n "$(json_get "$json" contained)" ]; then
-    assert_eq "true" "$(json_get "$json" contained)" "detached contained"
+    assert_eq "$(json_get "$json" contained)" "true" "detached contained"
   fi
   reap_pid "$sleeper"
   wait "$wrap" 2>/dev/null || true
@@ -774,7 +778,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
     fail "assert_r8 inline: sleeper pid $sleeperi still alive"
   fi
   if [ -n "$(json_get "$jsoni" contained)" ]; then
-    assert_eq "true" "$(json_get "$jsoni" contained)" "inline contained"
+    assert_eq "$(json_get "$jsoni" contained)" "true" "inline contained"
   fi
   reap_pid "$sleeperi"
 }
@@ -791,7 +795,6 @@ assert_r8_detached_reaps_worker_session_descendants
 assert_r6_alive_check_fails_open_to_firing() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r6-ps-stub"
@@ -865,7 +868,6 @@ assert_r6_alive_check_fails_open_to_firing
 assert_r7_scope_unknown_state_no_fallback_fires() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r7-ps-stub"
@@ -932,7 +934,6 @@ assert_r7_scope_unknown_state_no_fallback_fires
 assert_r8_alive_check_matrix() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r8-ps-stub"

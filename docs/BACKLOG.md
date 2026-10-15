@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0182 -->
+<!-- next-id: BL-0183 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1803,15 +1803,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
 
-### Hooks read ~/.autopilot/config.json directly, ignoring AUTOPILOT_CONFIG_FILE
-- **Id**: BL-0181
+### engine-qualify-verdict-stability KR7 red only inside the full suite
+- **Id**: BL-0182
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 約 20 個 hook 和共用程式直接讀家目錄底下的設定檔，不看指定設定檔的那個變數。測試若沒有另外改家目錄，就會讀到這台機器的真實設定；BL-0180 的統一釘住管不到它們。
-- **Impact**: 低到中。目前會讀設定的測試都有自己改家目錄；新寫的測試忘了改，結果就會跟著機器設定變。
-- **Trigger**: next host-dependent red in a hook test, or next touch of the config readers
+- **Problem**: 資格考穩定度那支測試單獨跑全綠，但完整套件裡連兩次都紅：它檢查某個舊版本是否已在遠端主線上，在全套裡判斷成「不在」，實際上一直都在。應該是前面某支測試改了它看到的版本庫狀態。
+- **Impact**: 中。完整套件每次都多一支假紅，真的回歸混在裡面時容易被當成老問題放過。
+- **Trigger**: next full-suite run, or next touch of the KR7 parity check
 - **Effort**: S
-- **Source**: lane/bl0180 report, 2026-10-15
+- **Source**: full-suite runs 2026-10-15 (bl0180 tree, dt3d+bka tree); solo rerun green; verdict-stability test KR7 block, base 6fdcf5ac
 - **Pointer**: none
-- **Context**: e.g. cost-tracker, foreman-guard, context-budget, opt-in, session-start and scripts/lib/*.js read os.homedir()/.autopilot/config.json. Route them through one reader that honours AUTOPILOT_CONFIG_FILE.

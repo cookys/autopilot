@@ -86,6 +86,7 @@
 
 ### 修正
 
+- **hook 與共用程式讀設定時會看 `AUTOPILOT_CONFIG_FILE`**（BL-0181）：新增 `scripts/lib/config-path.js`，17 處原本直接讀 `~/.autopilot/config.json` 的 hook、腳本與 `dispatch-foreman.sh` 改走它；沒設這個變數時行為不變。測試共用的 `hooks/tests/lib.sh` 改把設定釘在假家目錄裡，`config-path-honored.test.sh` 確認 hook 讀的是指定的設定而不是家目錄那份。
 - **子 session 只在 rail 發的身分相符時才記上層**（BL-0176）：在派出去的子 session 裡開的 tmux 等長駐 shell，之後在裡面開的新 session 不會再把舊派工記成自己的上層。rail 為每個 claude 子程序產生一個子身分並交給它，只有 session id 與它相符才記上層；其他 runner、工頭與能力探測一律移除繼承來的子身分。
 - **一次歸檔多份計畫時，每份各記自己的出貨點**（BL-0171）：`check-plan-graduation.js --archive --shipped-in` 改收 `<stem>=<sha>` 配對（可重複或逗號分隔），只給一個不帶 stem 的值時仍套用到每一份。有計畫沒配到、stem 不存在或不唯一、同一個 stem 給兩次，都以結束碼 2 拒絕，一份都不搬。歸檔改寫引用時也會處理 `docs/` 底下的相對連結 `plans/<stem>.md`；`docs/` 以外的檔案和 `docs/mission-*.json` 不改（後者的 `plan_path`／`rubric_path` 由 next-touch-validation 逐字比對）。Codex 鏡像同步。
 - **腦力題和工頭題的扣點分開記**（BL-0170）：同一個模型的腦力題失誤不會再累積到工頭席位的扣點與撤銷待定，反之亦然。腦力席位的 `seat_hash` 多帶 `seat_kind=brain`；工頭與舊有席位的雜湊不變，已記的扣點不會失聯。`strike-seat`、`invalidate-strike`、`seat-hash`、`seat-status` 新增 `--seat-kind brain`。`--help` 也列出這個選項；撤銷腦力席位的扣點不會影響工頭席位（BL-0178）。嚴重違規立即執法、扣點衰減與到期只提醒的規則不變。

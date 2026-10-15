@@ -271,4 +271,48 @@ assert_contains "$(cat "$AUTOPILOT_COST_FUSE_DIR/fuse-session-lock.json")" '"war
 rm -f "$AUTOPILOT_COST_FUSE_DIR/fuse-session-lock.json.lock"
 unset AUTOPILOT_COST_FUSE_MODE
 
+
+# ── 11. BL-0105: the dispatch exemption is anchored to the command word ──
+export AUTOPILOT_COST_FUSE_MODE=warn
+write_costs "claude-fable-5-1" 200 "fuse-session-1"
+write_transcript "claude-fable-5-1"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Bash 'FOO=scripts/dispatch-x.sh rm -rf build' 'fuse-session-1')"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case11a: an env assignment whose value is the rail path is not exempt"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Bash 'bash /tmp/evil/myscripts/dispatch-x.sh' 'fuse-session-1')"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case11b: a path whose last dir merely ends in 'scripts' is not exempt"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Bash 'bash scripts/dispatch-x.sh' 'fuse-session-1')"
+assert_eq "" "$__RUN_STDOUT" "case11c: control: bare relative rail is still exempt"
+run_hook cost-fuse.js "$(make_payload Bash 'node /home/u/.claude/plugins/autopilot/scripts/dispatch-review.js --x 2>&1' 'fuse-session-1')"
+assert_eq "" "$__RUN_STDOUT" "case11d: control: absolute plugin-root rail is still exempt"
+
+# ── 12. BL-0105: distinct session ids never share a sanitised key ──
+write_transcript "claude-fable-5-1"
+cat > "$AUTOPILOT_COSTS_FILE" <<EOF
+{"ts":"${TODAY}T01:00:00.000Z","session":"a/b","model":"claude-fable-5-1","cost_usd":60}
+{"ts":"${TODAY}T02:00:00.000Z","session":"a_b","model":"claude-fable-5-1","cost_usd":120}
+EOF
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Edit '' 'a_b')"
+assert_contains "$__RUN_STDERR" 'this session $120.00' "case12a: session a_b does not absorb a/b's spend"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Edit '' 'a/b')"
+assert_contains "$__RUN_STDERR" 'this session $60.00' "case12b: session a/b does not absorb a_b's spend"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+run_hook cost-fuse.js "$(make_payload Edit '' 'a/b')"
+run_hook cost-fuse.js "$(make_payload Edit '' 'a_b')"
+assert_contains "$__RUN_STDERR" 'this session' "case12c: a/b's warn state does not silence a_b"
+
+# ── 13. BL-0105: no resolvable session id prints 'unknown', not $0.00 ──
+write_costs "claude-fable-5-1" 200 "fuse-session-1"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID
+NOSID_PAYLOAD=$(printf '{"tool_name":"Edit","transcript_path":"%s","tool_input":{},"hook_event_name":"PreToolUse"}' "$TRANSCRIPT_FILE")
+run_hook cost-fuse.js "$NOSID_PAYLOAD"
+assert_contains "$__RUN_STDERR" 'this session unknown' "case13: warn says 'this session unknown' with no session id"
+assert_not_contains "$__RUN_STDERR" 'this session $0.00' "case13: warn never claims a fake zero session spend"
+unset AUTOPILOT_COST_FUSE_MODE
+
 finalize_test

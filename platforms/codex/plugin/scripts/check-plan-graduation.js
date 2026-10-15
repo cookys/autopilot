@@ -73,6 +73,14 @@
  *   "2026-09-19-roundtable") to exclude from plan_released_not_archived and
  *   plan_orphan — for plans that are intentionally living docs.
  *
+ * --archive <stem>... [--shipped-in <v> | --shipped-in <stem>=<v>[,<stem>=<v>...]...]:
+ *   explicit archive. A single bare --shipped-in value applies to every --archive stem; the
+ *   `<stem>=<v>` form (repeatable and/or comma-separated) gives each plan its own merge
+ *   point. With pairs, a stem lacking a value is refused (shipped_in_missing_for_stem, exit
+ *   2, nothing moved) — never silently filled with `shipped`. Mixed or several bare values
+ *   are shipped_in_ambiguous. Reference rewrite also covers docs-relative `plans/<stem>`
+ *   links (docs/scripts-inventory.md shape), not only `docs/plans/<stem>`.
+ *
  * Exit: 0 clean (report-only codes alone never block) · 1 blocking violations · 2 usage
  *
  * Known limitations (documented, not fixed — 🔵 class, non-blocking to note):
@@ -128,7 +136,8 @@ function usage(code) {
     '[--allowlist <file>] [--fix] [--json]\n' +
     '   or: node scripts/check-plan-graduation.js --register-template <stem> [--repo-root <dir>]\n' +
     '   or: node scripts/check-plan-graduation.js --archive <stem> [--archive <stem>...] ' +
-    '[--shipped-in <version-or-sha>] [--repo-root <dir>] [--json]\n' +
+    '[--shipped-in <version-or-sha> | --shipped-in <stem>=<version-or-sha>[,<stem>=<sha>...]...] ' +
+    '[--repo-root <dir>] [--json]\n' +
     '   or: node scripts/check-plan-graduation.js --migrate-archive-layout ' +
     '[--repo-root <dir>] [--json]\n'
   );
@@ -146,7 +155,7 @@ function parseArgs(argv) {
     json: false,
     registerTemplate: null,
     archive: [],
-    shippedIn: null,
+    shippedIn: [],
     migrateArchiveLayout: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -165,7 +174,7 @@ function parseArgs(argv) {
     else if (a === '--json') out.json = true;
     else if (a === '--register-template') out.registerTemplate = need();
     else if (a === '--archive') out.archive.push(need());
-    else if (a === '--shipped-in') out.shippedIn = need();
+    else if (a === '--shipped-in') out.shippedIn.push(need());
     else if (a === '--migrate-archive-layout') out.migrateArchiveLayout = true;
     else usage(2);
   }
@@ -219,6 +228,17 @@ function planPathPrefixRegExp(stem) {
 // as a prefix.
 function evidencePathPrefixRegExp(stem) {
   return new RegExp(`docs/plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+}
+
+// BL-0171: docs-relative link forms (`](plans/<stem>.md)` in docs/scripts-inventory.md,
+// `](../plans/<stem>.md)` in docs/projects/INDEX.md) carry no `docs/` prefix, so the two
+// patterns above never see them. Match `plans/<stem>` / `plans/evidence/<stem>` NOT preceded by
+// `docs/` (that form belongs to the passes above) or a name character, never `plans/_archive/`.
+function relPlanPathRegExp(stem) {
+  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!docs/)plans/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+}
+function relEvidencePathRegExp(stem) {
+  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!docs/)plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 
 // --- dated archive layout ---
@@ -1113,6 +1133,8 @@ function rewritePlanReferences(repoRoot, stem) {
   const passes = [
     { re: evidencePathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}evidence/${stem}` },
     { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}${stem}` },
+    { re: relEvidencePathRegExp(stem), replacement: `plans/_archive/${datedSeg}evidence/${stem}`, relative: true },
+    { re: relPlanPathRegExp(stem), replacement: `plans/_archive/${datedSeg}${stem}`, relative: true },
   ];
   const rewritten = [];
   // Report-only: frozen files that mention the stem keep their bytes; name them so the stale
@@ -1132,7 +1154,15 @@ function rewritePlanReferences(repoRoot, stem) {
     let text = readFileSafe(abs);
     if (text == null) continue;
     let changed = false;
-    for (const { re, replacement } of passes) {
+    for (const { re, replacement, relative } of passes) {
+      // INDEX.md's docs-relative links are archiveIndexRow's job, scoped to the stem's OWN
+      // registered rows (another row's prose mention is deliberately left alone).
+      if (relative && rel === 'docs/projects/INDEX.md') continue;
+      // docs-relative links only make sense inside docs/ (a `plans/<stem>.md` string in src/ or an
+      // external `.autopilot/plans/` path is not a link to this archive). docs/mission-*.json
+      // (sources manifests, graphs) are mission-runtime inputs: next-touch-validation pins a
+      // manifest's plan_path/rubric_path verbatim (SOURCE_AUTHORITY_INVALID), so never rewrite them.
+      if (relative && (!rel.startsWith('docs/') || /^docs\/mission-[^/]*\.json$/.test(rel))) continue;
       re.lastIndex = 0;
       if (!re.test(text)) continue;
       re.lastIndex = 0;
@@ -1267,10 +1297,60 @@ function rewriteLegacyArchiveReferences(repoRoot, stem) {
 // when omitted) same as --fix's released-archive path; if it has NO row at all,
 // --archive (unlike --fix) appends one with that Version so the archive is still
 // recorded — the whole point of this action is "this WAS shipped, record it as such."
+// --shipped-in grammar (BL-0171): the flag may repeat and each value may be comma-separated.
+//   * every token is `<stem>=<value>`  -> per-plan pairs (Map stem -> value)
+//   * exactly one bare token            -> that value applies to every --archive stem (legacy)
+//   * mixed, or several bare tokens     -> shipped_in_ambiguous (refused)
+// Returns { pairs: Map|null, all: string|null, error: string|null }.
+function parseShippedInPairs(raw) {
+  const tokens = [];
+  for (const r of raw || []) for (const t of String(r).split(',')) if (t.trim()) tokens.push(t.trim());
+  if (!tokens.length) return { pairs: null, all: null, error: null };
+  const paired = tokens.filter((t) => t.includes('='));
+  if (paired.length === tokens.length) {
+    const pairs = new Map();
+    for (const t of tokens) {
+      const i = t.indexOf('=');
+      const k = t.slice(0, i).trim();
+      const v = t.slice(i + 1).trim();
+      if (!k || !v) return { pairs: null, all: null, error: `shipped_in_malformed_pair: ${t}` };
+      if (pairs.has(k)) return { pairs: null, all: null, error: `shipped_in_duplicate_stem: ${k}` };
+      pairs.set(k, v);
+    }
+    return { pairs, all: null, error: null };
+  }
+  if (!paired.length && tokens.length === 1) return { pairs: null, all: tokens[0], error: null };
+  return { pairs: null, all: null, error: 'shipped_in_ambiguous: use one bare value, or only <stem>=<value> pairs' };
+}
+
 function archiveStems(repoRoot, plansDir, archiveDir, stems, shippedIn, activeLineageStems) {
-  const version = shippedIn || 'shipped';
+  const raw = Array.isArray(shippedIn) ? shippedIn : (shippedIn ? [shippedIn] : []);
+  const parsedShippedIn = parseShippedInPairs(raw);
+  const pairs = parsedShippedIn.pairs;
+  if (parsedShippedIn.error) {
+    return stems.map((stem) => ({
+      stem, ok: false, reason: parsedShippedIn.error.split(':')[0], detail: parsedShippedIn.error,
+    }));
+  }
+  if (pairs) {
+    // Named refusal before ANY move: a plan with no pair value is never silently filled with
+    // 'shipped', and a pair naming a stem that is not being archived is a typo, not a no-op.
+    const missing = stems.filter((s) => !pairs.has(s));
+    const unknown = [...pairs.keys()].filter((k) => !stems.includes(k));
+    if (missing.length || unknown.length) {
+      return stems.map((stem) => ({
+        stem,
+        ok: false,
+        reason: missing.length ? 'shipped_in_missing_for_stem' : 'shipped_in_unknown_stem',
+        detail: missing.length
+          ? `--shipped-in has pairs but no value for: ${missing.join(', ')}`
+          : `--shipped-in names stems not in --archive: ${unknown.join(', ')}`,
+      }));
+    }
+  }
   const results = [];
   for (const stem of stems) {
+    const version = pairs ? pairs.get(stem) : (parsedShippedIn.all || 'shipped');
     const planPath = path.join(plansDir, `${stem}.md`);
     if (!fs.existsSync(planPath)) {
       results.push({ stem, ok: false, reason: `not a live plan: docs/plans/${stem}.md does not exist` });

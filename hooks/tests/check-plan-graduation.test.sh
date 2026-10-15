@@ -1058,4 +1058,97 @@ d="$(r7_fixture r7-mut-fix)"
 node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --fix --json >/dev/null 2>&1 || true
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "### Unanswered peer row" "R7 mutation: without the guard --fix deletes the unanswered row"
 
+# --- BL-0171: --shipped-in takes stem=sha pairs (per-plan merge points) and the reference
+#     rewrite also covers docs-relative `plans/<stem>` links (docs/scripts-inventory.md shape).
+bl0171_fixture() {
+  local d
+  d="$(fixture_repo_with_index "$1")"
+  printf '# Plan A\n' > "$d/docs/plans/2026-07-01-alpha.md"
+  printf '# Plan B\n' > "$d/docs/plans/2026-07-02-beta.md"
+  mkdir -p "$d/docs/plans/evidence/2026-07-02-beta"
+  printf 'ev\n' > "$d/docs/plans/evidence/2026-07-02-beta/x.md"
+  node -e '
+    const fs = require("fs"); const p = process.argv[1];
+    let s = fs.readFileSync(p, "utf8");
+    const hdr = "|------|---------|---------|-------|------|\n";
+    s = s.replace(hdr, hdr
+      + "| 2026-07-01 | alpha | active | — | [plan](../plans/2026-07-01-alpha.md) |\n"
+      + "| 2026-07-02 | beta | active | — | [plan](../plans/2026-07-02-beta.md) |\n");
+    fs.writeFileSync(p, s);
+  ' "$d/docs/projects/INDEX.md"
+  cat > "$d/docs/scripts-inventory.md" <<'MD'
+| Script | Plan |
+|---|---|
+| a.js | [alpha](plans/2026-07-01-alpha.md) |
+| b.js | Contract: [`docs/plans/2026-07-02-beta.md`](../docs/plans/2026-07-02-beta.md) and [ev](plans/evidence/2026-07-02-beta/x.md) |
+MD
+  git -C "$d" add -A >/dev/null
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+  echo "$d"
+}
+
+d="$(bl0171_fixture bl0171-pairs)"
+node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=aaa1111 --shipped-in 2026-07-02-beta=bbb2222 >/dev/null
+idx="$(cat "$d/docs/projects/INDEX.md")"
+assert_contains "$idx" "| alpha | aaa1111 |" "BL-0171: alpha row gets its own merge point"
+assert_contains "$idx" "| beta | bbb2222 |" "BL-0171: beta row gets its own merge point"
+inv="$(cat "$d/docs/scripts-inventory.md")"
+assert_contains "$inv" "](plans/_archive/2026/07/2026-07-01-alpha.md)" \
+  "BL-0171: docs-relative plans/<stem> link is rewritten to the dated archive"
+assert_eq "$(printf '%s' "$inv" | grep -c '(plans/2026-07-0')" "0" \
+  "BL-0171: no stale docs-relative plan link remains"
+assert_contains "$inv" "](plans/_archive/2026/07/evidence/2026-07-02-beta/x.md)" \
+  "BL-0171: docs-relative evidence link is rewritten"
+assert_contains "$inv" "](../docs/plans/_archive/2026/07/2026-07-02-beta.md)" \
+  "BL-0171: docs/plans/ form still rewritten exactly once (no double prefix)"
+
+# comma-separated pairs
+d="$(bl0171_fixture bl0171-comma)"
+node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=aaa1111,2026-07-02-beta=bbb2222 >/dev/null
+idx="$(cat "$d/docs/projects/INDEX.md")"
+assert_contains "$idx" "| alpha | aaa1111 |" "BL-0171: comma-separated pairs (alpha)"
+assert_contains "$idx" "| beta | bbb2222 |" "BL-0171: comma-separated pairs (beta)"
+
+# single bare value keeps the old apply-to-all behaviour
+d="$(bl0171_fixture bl0171-bare)"
+node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in v7.7.7 >/dev/null
+idx="$(cat "$d/docs/projects/INDEX.md")"
+assert_contains "$idx" "| alpha | v7.7.7 |" "BL-0171: bare --shipped-in still applies to alpha"
+assert_contains "$idx" "| beta | v7.7.7 |" "BL-0171: bare --shipped-in still applies to beta"
+
+# pairs given but one plan has no value: named refusal, nothing moved
+d="$(bl0171_fixture bl0171-missing)"
+out="$(node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=aaa1111 --json 2>&1)"; rc=$?
+assert_eq "$rc" "2" "BL-0171: a plan with no pair value is refused (exit 2)"
+assert_contains "$out" "shipped_in_missing_for_stem" "BL-0171: refusal is named"
+assert_file_exists "$d/docs/plans/2026-07-01-alpha.md" "BL-0171: nothing moved on a missing pair"
+assert_file_exists "$d/docs/plans/2026-07-02-beta.md" "BL-0171: beta not moved either"
+assert_not_contains "$(cat "$d/docs/projects/INDEX.md")" "| shipped |" "BL-0171: never silently filled with shipped"
+
+# Negative controls: break the pair parsing / the relative-link pass; the new cells must go red.
+MUT="$TEST_TMP/bl0171-mut-pairs"
+mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
+sed -i "s|^  const pairs = parsedShippedIn.pairs;|  const pairs = null;|" "$MUT/scripts/check-plan-graduation.js"
+if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "BL-0171 pair mutation did not apply"; fi
+d="$(bl0171_fixture bl0171-mut-pairs-fx)"
+node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=aaa1111 --shipped-in 2026-07-02-beta=bbb2222 >/dev/null 2>&1 || true
+assert_not_contains "$(cat "$d/docs/projects/INDEX.md")" "| alpha | aaa1111 |" \
+  "BL-0171 negative control: without pair parsing the per-plan value is lost"
+
+MUT="$TEST_TMP/bl0171-mut-link"
+mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
+sed -i "/^    { re: relPlanPathRegExp(stem)/d; /^    { re: relEvidencePathRegExp(stem)/d" "$MUT/scripts/check-plan-graduation.js"
+if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "BL-0171 link mutation did not apply"; fi
+d="$(bl0171_fixture bl0171-mut-link-fx)"
+node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in v1 >/dev/null 2>&1 || true
+assert_contains "$(cat "$d/docs/scripts-inventory.md")" "(plans/2026-07-01-alpha.md)" \
+  "BL-0171 negative control: without the relative-link pass the stale link remains"
+
+
 finalize_test

@@ -8,6 +8,13 @@
 # base_sha — never committed under hooks/tests/fixtures/.
 . "$(dirname "$0")/lib.sh"
 
+# Pin the operator config to scratch. resolve-dispatch-topology.js applies
+# topology.exclude_seats from $AUTOPILOT_CONFIG_FILE (default ~/.autopilot/config.json)
+# to --resolve-live; a host that excludes this suite's seat empties the unpinned
+# preferred_tuple and the KR3 red cases then refuse for the wrong reason (BL-0179).
+export AUTOPILOT_CONFIG_FILE="$TEST_TMP/operator-config.json"
+printf '{}\n' > "$AUTOPILOT_CONFIG_FILE"
+
 PRE_SHA="62a580713c13ee35b0cce009e06c5441f52c790a"
 # The pre builds live in a symlinked repo-shaped tree under TEST_TMP (never in the real scripts/,
 # which other suites' inventory/mirror checks scan); __dirname-relative requires resolve via symlinks.

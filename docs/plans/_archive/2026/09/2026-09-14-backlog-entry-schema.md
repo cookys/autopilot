@@ -264,9 +264,9 @@ Dependencies: 1 → 2 → 3 → 4 → 5 (2 can be built in parallel with 1's eva
 
 - R0: author (this session), 2026-09-14.
 - Bounded identity: `logical_plan_id = backlog-entry-schema-2026-09-14`; manifest
-  `docs/plans/_archive/2026/09/2026-09-14-backlog-entry-schema.plan-review-manifest.json` (GLM-5.2 architecture chair +
+  `docs/plans/2026-09-14-backlog-entry-schema.plan-review-manifest.json` (GLM-5.2 architecture chair +
   MiniMax-M3 operations skeptic, both anthropic-compatible; roster's sol@codex / grok seats not used —
-  codex quota unknown, grok 402); frozen rubric `docs/plans/_archive/2026/09/2026-09-14-backlog-entry-schema.rubric.md`
+  codex quota unknown, grok 402); frozen rubric `docs/plans/2026-09-14-backlog-entry-schema.rubric.md`
   (sha256 `9037f7b6…`), plan sha256 at review `cef22ca0…`.
 - G1 (2026-09-14, session `bes-20260914`): policy verdict **CONDITIONAL / `required_seat_transport_exhausted`**,
   terminal. GLM: transport success, strict parse, **READY, zero findings**. MiniMax: transport success
@@ -286,20 +286,3 @@ Dependencies: 1 → 2 → 3 → 4 → 5 (2 can be built in parallel with 1's eva
     no gap named — refuted as format noise, not findings.
   - Freeze predicate met at depth 0: zero unrepaired construct/mechanism findings, zero deferred. No G2
     dispatched (the policy stop is terminal and every substantive claim is folded).
-- Implementation (2026-09-14, /l5 managed campaign `mission-3b68ecb09a6171ab89ab7d4b`, node
-  `backlog-entry-schema-p123`, attempt 2, base `8a64802f`): implementer cursor/cursor-grok-4.6-low →
-  `37630d5e` (29 files, exactly the sealed output_paths). Review r1 MiniMax-M3 FIX-THEN-SHIP: `kv-regex-class`
-  and `assert-not-contains-undeclared` **refuted** by probe + mutation (evidence dir `impl-disposition-authority.json`),
-  two 🔵 rejected. The rail terminal-stopped on `--resume` (BACKLOG row). Second family GLM-5.2 FIX-THEN-SHIP:
-  `blg-skip-cross-style` **confirmed** (heading entry in a table/checklist file skipped) and repaired; depth-0's own
-  probe found `shipped <version>` carried no date for `done_not_moved` → schema now `shipped <version> <date>`;
-  `caps.<lowercase>` normalised. Repair `7efbc2f3`; merge `8e247018`. Gate on the real backlog: 153 entries,
-  235,390 B, 747 violations (the Phase 4 starting point).
-- Phase 4 (2026-09-14, v2.36.39, execution plan `2026-09-14-backlog-entry-migration.md`): tool shipped via
-  /l5 mission-5c34ed65c6a4 (GLM second family; three MUST-FIX confirmed and repaired with depth-0's own
-  idempotence/small-row/64 KiB-pipe findings); 4b applied at depth 0: 237,170 → 103,643 B, 154 sidecars,
-  allowlist 30 (Title caps), `mode: block`. **Deviation from the Phase 4 acceptance "≤ 40 KB"**: 154 rows at
-  the 900 B cap cannot fit 40 KB; the number was a guess, the cap is the contract — recorded, not repaired.
-  Open question 3 answered by incident: the first new row after the flip was over cap and got pushed because
-  the gate ran only at finish-flow; `check-backlog-entries` is now a pre-commit ritual in `scripts/sync-manifest.json`.
-

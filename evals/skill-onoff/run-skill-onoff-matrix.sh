@@ -16,6 +16,15 @@
 #
 # Env ONOFF_KEEP_CELLS_DIR=<dir>: keep each cell's out dir under <dir>/<task>/<arm>/<rep>/ instead of deleting it.
 #
+# Fail fast (BL-0112): a cell that fails with failure_cause authentication or quota stops the whole campaign at once
+# (exit 4, reason on stderr) — every later cell would fail the same way in ~2 s. Causes come from run-skill-onoff-eval.sh's
+# classifier (stderr + is_error transcript lines). Other infra_fail causes keep the old rule (3 attempts per cell, the
+# campaign scorer then decides). Resume after fixing the cause by re-running the same command (infra_fail rows re-run).
+# Runner pin (BL-0113): the first run records the runner version in <results>.runner-pin; before every cell the version
+# is re-probed and a different one stops the campaign (exit 3) so one results file never mixes two runner versions.
+# cc runs also export DISABLE_AUTOUPDATER=1. Probe command: ONOFF_VERSION_CMD (default `claude --version` for --runner cc;
+# none for the stub runner unless ONOFF_VERSION_CMD is set). To deliberately move to a new version, start a new results file.
+#
 # Rows with failure_class=infra_fail are NOT treated as complete — they re-run on resume
 # (max 3 recorded attempts per cell, then the cell stays missing for score-onoff to judge).
 
@@ -56,6 +65,22 @@ fi
 mkdir -p "$(dirname "$RESULTS")"
 touch "$RESULTS"
 
+VERSION_CMD="${ONOFF_VERSION_CMD:-}"
+[ -n "$VERSION_CMD" ] || [ "$RUNNER" != "cc" ] || VERSION_CMD="claude --version"
+[ "$RUNNER" != "cc" ] || export DISABLE_AUTOUPDATER=1
+PIN_FILE="$RESULTS.runner-pin"
+probe_version() { [ -z "$VERSION_CMD" ] || { bash -c "$VERSION_CMD" 2>/dev/null | head -n 1 || true; }; }
+if [ -n "$VERSION_CMD" ]; then
+  PINNED=$(probe_version)
+  [ -n "$PINNED" ] || { echo "ERROR: runner version probe ('$VERSION_CMD') returned nothing — cannot pin" >&2; exit 3; }
+  if [ -s "$PIN_FILE" ]; then
+    WANT=$(head -n 1 "$PIN_FILE")
+    [ "$WANT" = "$PINNED" ] || { echo "ERROR: runner version changed: campaign pinned '$WANT', now '$PINNED' ($PIN_FILE) — use a new results file to start a fresh version" >&2; exit 3; }
+  else
+    printf '%s\n' "$PINNED" > "$PIN_FILE"
+  fi
+fi
+
 cell_state() { # $1 task $2 arm $3 rep → echoes "done" | "attempts:<n>"
   node -e '
     const fs=require("fs");
@@ -90,13 +115,20 @@ for task in "${TASK_ARR[@]}"; do
         echo "cell $task|$arm|$rep: 3 infra_fail attempts recorded — leaving missing" >&2
         exhausted=$((exhausted+1)); continue
       fi
+      if [ -n "$VERSION_CMD" ]; then
+        NOW=$(probe_version)
+        [ "$NOW" = "$PINNED" ] || { echo "ERROR: runner version drifted mid-campaign: pinned '$PINNED', now '$NOW' — stopping before cell $task|$arm|$rep" >&2; exit 3; }
+      fi
       out=$(mktemp -d -t "onoff-cell-XXXXXX")
       echo "── cell $task|$arm|$rep (attempt $((attempts+1)))"
+      abort_cause=""
       MAN=(); [ -z "$ARM_MANIFESTS" ] || MAN=(--arm-manifest "$ARM_MANIFESTS/$arm.json")
       if bash "$BASE_DIR/run-skill-onoff-eval.sh" \
           --task "$task" --arm "$arm" --model "$MODEL" --rep "$rep" "${MAN[@]+"${MAN[@]}"}" \
           --runner "$RUNNER" --out "$out" "${PASS[@]+"${PASS[@]}"}" >/dev/null; then
         cat "$out/result.json" >> "$RESULTS"
+        cause=$(node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.failure_class==="infra_fail"?String(j.failure_cause):"")}catch{}' "$out/result.json")
+        case "$cause" in authentication|quota) abort_cause="$cause" ;; esac
       else
         echo "harness error on $task|$arm|$rep (exit $?)" >&2
       fi
@@ -111,6 +143,10 @@ for task in "${TASK_ARR[@]}"; do
       fi
       rm -rf "$out"
       ran=$((ran+1))
+      if [ -n "$abort_cause" ]; then  # after retention, so a misclassification can be inspected afterwards
+        echo "ABORT: cell $task|$arm|$rep failed with $abort_cause — stopping the campaign (remaining cells would fail the same way). Fix it, then re-run the same command to resume." >&2
+        exit 4
+      fi
     done
   done
 done

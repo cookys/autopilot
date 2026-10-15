@@ -1,0 +1,4326 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_state",
+  "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+  "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+  "initial_required_acceptance_hashes": [
+    "8ad11b2453b76ca7ced00d939e48cebe180f4946732751757d512f29e1abea1c",
+    "db1d5466584547b289208b3cdb6f9f03ed4bbeb795eb585d9b575bc991e23d34"
+  ],
+  "execution_graph": {
+    "artifact_type": "mission_execution_graph",
+    "calculated_batches": 1,
+    "calculated_depth": 1,
+    "graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+    "nodes": [
+      {
+        "acceptance_ids": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "campaign": {
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "baseline_churn": 1200,
+          "max_changed_files": 8,
+          "max_extra_churn": 600,
+          "max_growth_ratio": 1.5,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "output_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/verify-red-green.sh"
+          ],
+          "profile": "high",
+          "required_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/secret-scan-diff.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/secret-scan-diff.js",
+            "scripts/verify-red-green.sh"
+          ],
+          "spec": {
+            "path": "docs/plans/2026-07-31-correctness-gates.md",
+            "section": "Deliverable C contract"
+          }
+        },
+        "dependencies": [],
+        "gate_attempt_budget": 3,
+        "id": "correctness-gates",
+        "reservation": {
+          "campaigns": 1,
+          "canonical_changed_files": 8,
+          "engine_attempts": 3,
+          "external_wait_seconds": 1800,
+          "output_bytes": 5000000,
+          "tool_calls": 400,
+          "wall_seconds": 3600
+        },
+        "source_plan_ids": [
+          "plan-0a83aa1240d903003565e881af5ce833eccae7df29fbf08ae3a6ef26a0d9df96"
+        ],
+        "source_rubric_ids": [
+          "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+          "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+          "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+          "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+          "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+          "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+          "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+        ],
+        "verification_commands": [
+          "bash hooks/tests/preflight-release-routing.test.sh",
+          "bash hooks/tests/verify-red-green.test.sh",
+          "bash hooks/tests/classify-diff-risk.test.sh",
+          "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+          "bash hooks/tests/secret-scan-diff.test.sh",
+          "bash hooks/tests/reenabled-blockers.test.sh"
+        ]
+      },
+      {
+        "acceptance_ids": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "campaign": {
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "baseline_churn": 1500,
+          "max_changed_files": 8,
+          "max_extra_churn": 750,
+          "max_growth_ratio": 1.5,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "output_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "profile": "high",
+          "required_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "spec": {
+            "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "section": "Deliverable B contract"
+          }
+        },
+        "dependencies": [],
+        "gate_attempt_budget": 3,
+        "id": "evidence-eval-truth",
+        "reservation": {
+          "campaigns": 1,
+          "canonical_changed_files": 8,
+          "engine_attempts": 3,
+          "external_wait_seconds": 1800,
+          "output_bytes": 6000000,
+          "tool_calls": 400,
+          "wall_seconds": 3600
+        },
+        "source_plan_ids": [
+          "plan-35ec55ffaf4cced49355457b329bcf501e70e67b12d1ee1edba563564902226b"
+        ],
+        "source_rubric_ids": [
+          "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+          "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+          "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+          "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+          "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+          "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+          "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+        ],
+        "verification_commands": [
+          "bash hooks/tests/orchestration-eval.test.sh",
+          "bash hooks/tests/engine-scorecard.test.sh",
+          "bash hooks/tests/resolve-review-loop.test.sh"
+        ]
+      }
+    ],
+    "schema_version": 1
+  },
+  "graph_progress": {
+    "correctness-gates": {
+      "status": "ready",
+      "attempts": 3,
+      "terminal_count": 1,
+      "active_claim_id": null,
+      "last_outcome": "ready",
+      "last_receipt_digest": "3abc74dc35b08b177871854cdb218f7d94bfaf0793ad0704060515753974de16"
+    },
+    "evidence-eval-truth": {
+      "status": "ready",
+      "attempts": 3,
+      "terminal_count": 1,
+      "active_claim_id": null,
+      "last_outcome": "ready",
+      "last_receipt_digest": "b17b7d15915ac911960b574c928c588671f0ef1802b2ba3f67a9b580e43bb358"
+    }
+  },
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "contract_id": "mission-v1-95c1ebd800fbea5479ba49da60d3279d9188e86502b57ec8c2af3d6dab6d5b21",
+  "root_run_id": "mission-baa18c972660cf5a67783e50",
+  "enforcement_mode": "enforce",
+  "state": "COMPLETE",
+  "closure_ratio": 1,
+  "max_stagnant_campaigns": 2,
+  "successor_inherits_durable_consumed": true,
+  "axes": {
+    "campaigns": {
+      "authorized_ceiling": 10,
+      "reserved_active": 0,
+      "durable_consumed": 2,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 8,
+      "overspend": false
+    },
+    "wall_seconds": {
+      "authorized_ceiling": 36000,
+      "reserved_active": 0,
+      "durable_consumed": 7200,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 28800,
+      "overspend": false
+    },
+    "tool_calls": {
+      "authorized_ceiling": 1500,
+      "reserved_active": 0,
+      "durable_consumed": 800,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 700,
+      "overspend": false
+    },
+    "engine_attempts": {
+      "authorized_ceiling": 50,
+      "reserved_active": 0,
+      "durable_consumed": 6,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 44,
+      "overspend": false
+    },
+    "external_wait_seconds": {
+      "authorized_ceiling": 14400,
+      "reserved_active": 0,
+      "durable_consumed": 3600,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 10800,
+      "overspend": false
+    },
+    "canonical_changed_files": {
+      "authorized_ceiling": 500,
+      "reserved_active": 0,
+      "durable_consumed": 16,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 484,
+      "overspend": false
+    },
+    "output_bytes": {
+      "authorized_ceiling": 50000000,
+      "reserved_active": 0,
+      "durable_consumed": 11000000,
+      "active_actual": 0,
+      "known": false,
+      "enforced": true,
+      "remaining": 39000000,
+      "overspend": false
+    }
+  },
+  "claims": {
+    "claim-v1-46fe1164aecacb9197dabd431ee2b923c7b3a8d58e5abb1eec8f6ce3daa391bc": {
+      "claim_id": "claim-v1-46fe1164aecacb9197dabd431ee2b923c7b3a8d58e5abb1eec8f6ce3daa391bc",
+      "idempotency_key": "graph-node:evidence-eval-truth:attempt:1",
+      "binding_digest": "cb35f7cafa7fcdd810e53be399e2af6dd759d362178091841427d0e267e5231a",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-0d537569b9cb209c264c0154d7e13a5dba42cfe75c7caa5f2a6b31baed3ee7ed",
+      "campaign_contract_digest": "1e5d90d1e69522109cf5078c8832a72b8e35a893b34dcd2b19183daf277f7a9b",
+      "mission_subject_digest": "1e5d90d1e69522109cf5078c8832a72b8e35a893b34dcd2b19183daf277f7a9b",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "aggregate-only-import",
+        "classified-failures",
+        "fail-closed-scoring",
+        "honest-missing-data",
+        "minimax-limitation-visible",
+        "negative-controls",
+        "non-authoritative-telemetry"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+        "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+        "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+        "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+        "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+        "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+      ],
+      "graph_node_id": "evidence-eval-truth",
+      "graph_attempt": 1,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-evidence-eval-truth-a1",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/evidence-eval-truth-a1",
+        "vertical_acceptance": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "allowed_path_prefixes": [
+          ".claude/review-loop-config.md",
+          "docs/plans/2026-07-31-evidence-eval-truth.md",
+          "evals/orchestration",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1500,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 750,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+        "rubric_ids": [
+          "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+          "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+          "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+          "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+          "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+          "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+          "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "evidence-eval-truth",
+          "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "section": "Deliverable B contract"
+          },
+          "required_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "output_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 6000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/orchestration-eval.test.sh",
+            "bash hooks/tests/engine-scorecard.test.sh",
+            "bash hooks/tests/resolve-review-loop.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 6000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-30T21:21:02.392Z",
+      "expires_at": "2026-07-30T22:21:02.392Z",
+      "terminal": true,
+      "released": true,
+      "reconciled": false,
+      "event_digest": "7e5695b927ecb6ebb7d4e0b0011ad05a6478b73d1ab23da54d84d6b1c1d15b30",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        }
+      }
+    },
+    "claim-v1-1147382b34d541f9ab869940c9e0c2734c75074f6784abe5b889c92c19248f8e": {
+      "claim_id": "claim-v1-1147382b34d541f9ab869940c9e0c2734c75074f6784abe5b889c92c19248f8e",
+      "idempotency_key": "graph-node:correctness-gates:attempt:1",
+      "binding_digest": "ac6946fb5db9e4b4bf44ca4b17d5e2dba8bdbbfad9d0a3e1d5236e6e6289c8c5",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-744c6e5a88ab68a92894db483be54bd4ff963263573cf030fefea4de96bf3f1f",
+      "campaign_contract_digest": "097aed7096d4de67208e8000b4bf5043eac76f60e0dafffc350cdf99938ad8a7",
+      "mission_subject_digest": "097aed7096d4de67208e8000b4bf5043eac76f60e0dafffc350cdf99938ad8a7",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "binary-path-risk",
+        "current-version-prose",
+        "external-command-compatibility",
+        "interface-stability",
+        "negative-controls",
+        "secret-deletion-safe",
+        "worktree-red-green"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+        "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+        "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+        "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+        "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+        "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+      ],
+      "graph_node_id": "correctness-gates",
+      "graph_attempt": 1,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-correctness-gates-a1",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/correctness-gates-a1",
+        "vertical_acceptance": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "allowed_path_prefixes": [
+          "docs/plans/2026-07-31-correctness-gates.md",
+          "hooks/commit-secret-scan.js",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1200,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 600,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+        "rubric_ids": [
+          "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+          "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+          "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+          "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+          "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+          "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+          "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "correctness-gates",
+          "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-correctness-gates.md",
+            "section": "Deliverable C contract"
+          },
+          "required_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/secret-scan-diff.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/secret-scan-diff.js",
+            "scripts/verify-red-green.sh"
+          ],
+          "output_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/verify-red-green.sh"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 5000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/preflight-release-routing.test.sh",
+            "bash hooks/tests/verify-red-green.test.sh",
+            "bash hooks/tests/classify-diff-risk.test.sh",
+            "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "bash hooks/tests/secret-scan-diff.test.sh",
+            "bash hooks/tests/reenabled-blockers.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 5000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-30T21:21:07.707Z",
+      "expires_at": "2026-07-30T22:21:07.707Z",
+      "terminal": true,
+      "released": true,
+      "reconciled": false,
+      "event_digest": "20a08b70f60128aca60a41d88ab6b18bacc0052f924fc07fbf82a598329fd750",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        }
+      }
+    },
+    "claim-v1-1f86eff76d9deac01d88f1a69e2fdb06c3f4bf1c46014c1c6ee9079ddea6356b": {
+      "claim_id": "claim-v1-1f86eff76d9deac01d88f1a69e2fdb06c3f4bf1c46014c1c6ee9079ddea6356b",
+      "idempotency_key": "graph-node:evidence-eval-truth:attempt:2",
+      "binding_digest": "4a0752b073bc147822e6a4cf35565cf7f2fb89949978076d194e8dcef486246d",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-a2654e0201d354739c235dfb6db6f493bb547768b5c12fa11750fa1081a52b98",
+      "campaign_contract_digest": "95118a4c61bfe2308dbfb8d6df10b776f4d5d1aea8be73b6746082525c463bda",
+      "mission_subject_digest": "95118a4c61bfe2308dbfb8d6df10b776f4d5d1aea8be73b6746082525c463bda",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "aggregate-only-import",
+        "classified-failures",
+        "fail-closed-scoring",
+        "honest-missing-data",
+        "minimax-limitation-visible",
+        "negative-controls",
+        "non-authoritative-telemetry"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+        "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+        "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+        "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+        "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+        "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+      ],
+      "graph_node_id": "evidence-eval-truth",
+      "graph_attempt": 2,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-evidence-eval-truth-a2",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/evidence-eval-truth-a2",
+        "vertical_acceptance": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "allowed_path_prefixes": [
+          ".claude/review-loop-config.md",
+          "docs/plans/2026-07-31-evidence-eval-truth.md",
+          "evals/orchestration",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1500,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 750,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+        "rubric_ids": [
+          "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+          "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+          "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+          "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+          "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+          "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+          "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "evidence-eval-truth",
+          "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "section": "Deliverable B contract"
+          },
+          "required_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "output_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 6000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/orchestration-eval.test.sh",
+            "bash hooks/tests/engine-scorecard.test.sh",
+            "bash hooks/tests/resolve-review-loop.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 6000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-30T21:48:39.374Z",
+      "expires_at": "2026-07-30T22:48:39.374Z",
+      "terminal": true,
+      "released": true,
+      "reconciled": false,
+      "event_digest": "3b1ddf5f3ecc7846051fe8f0d01b1ff075383f959683a23b31a503081b3f8524",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        }
+      }
+    },
+    "claim-v1-40af751891569d2e226054dd0062ce314b4cca68cebf9b2d444562206d65f924": {
+      "claim_id": "claim-v1-40af751891569d2e226054dd0062ce314b4cca68cebf9b2d444562206d65f924",
+      "idempotency_key": "graph-node:correctness-gates:attempt:2",
+      "binding_digest": "1db2c21c499b18005eee23730f0ab16eb63f58793ca381cfd9b007280f83c2e7",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-affba054f981a130dd1f1b8c36e8e316e21a69dd7c38d260fec18c1123d23b34",
+      "campaign_contract_digest": "aa0960d7d08e22af3d9f0ff875bf3ef001572752c605c684b184dedfc63320df",
+      "mission_subject_digest": "aa0960d7d08e22af3d9f0ff875bf3ef001572752c605c684b184dedfc63320df",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "binary-path-risk",
+        "current-version-prose",
+        "external-command-compatibility",
+        "interface-stability",
+        "negative-controls",
+        "secret-deletion-safe",
+        "worktree-red-green"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+        "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+        "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+        "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+        "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+        "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+      ],
+      "graph_node_id": "correctness-gates",
+      "graph_attempt": 2,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-correctness-gates-a2",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/correctness-gates-a2",
+        "vertical_acceptance": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "allowed_path_prefixes": [
+          "docs/plans/2026-07-31-correctness-gates.md",
+          "hooks/commit-secret-scan.js",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1200,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 600,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+        "rubric_ids": [
+          "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+          "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+          "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+          "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+          "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+          "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+          "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "correctness-gates",
+          "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-correctness-gates.md",
+            "section": "Deliverable C contract"
+          },
+          "required_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/secret-scan-diff.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/secret-scan-diff.js",
+            "scripts/verify-red-green.sh"
+          ],
+          "output_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/verify-red-green.sh"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 5000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/preflight-release-routing.test.sh",
+            "bash hooks/tests/verify-red-green.test.sh",
+            "bash hooks/tests/classify-diff-risk.test.sh",
+            "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "bash hooks/tests/secret-scan-diff.test.sh",
+            "bash hooks/tests/reenabled-blockers.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 5000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-30T21:48:42.993Z",
+      "expires_at": "2026-07-30T22:48:42.993Z",
+      "terminal": true,
+      "released": true,
+      "reconciled": false,
+      "event_digest": "0ec6a4ef336b8c77d37d35e3839ec31b88b6a78b2593690c6efee4109831ad88",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": true
+        }
+      }
+    },
+    "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232": {
+      "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+      "idempotency_key": "graph-node:correctness-gates:attempt:3",
+      "binding_digest": "f908dfda6644bd1895d23228220ee671bd0d50d6b2eeea67f38f04a87cd01c45",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+      "campaign_contract_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+      "mission_subject_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "binary-path-risk",
+        "current-version-prose",
+        "external-command-compatibility",
+        "interface-stability",
+        "negative-controls",
+        "secret-deletion-safe",
+        "worktree-red-green"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+        "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+        "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+        "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+        "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+        "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+      ],
+      "graph_node_id": "correctness-gates",
+      "graph_attempt": 3,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-correctness-gates-a3",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/correctness-gates-a3",
+        "vertical_acceptance": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "allowed_path_prefixes": [
+          "docs/plans/2026-07-31-correctness-gates.md",
+          "hooks/commit-secret-scan.js",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1200,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 600,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+        "rubric_ids": [
+          "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+          "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+          "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+          "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+          "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+          "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+          "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "correctness-gates",
+          "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-correctness-gates.md",
+            "section": "Deliverable C contract"
+          },
+          "required_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/secret-scan-diff.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/secret-scan-diff.js",
+            "scripts/verify-red-green.sh"
+          ],
+          "output_paths": [
+            "hooks/commit-secret-scan.js",
+            "hooks/tests/classify-diff-risk.test.sh",
+            "hooks/tests/preflight-release-routing.test.sh",
+            "hooks/tests/reenabled-blockers.test.sh",
+            "hooks/tests/verify-red-green.test.sh",
+            "scripts/classify-diff-risk.sh",
+            "scripts/preflight-release.sh",
+            "scripts/verify-red-green.sh"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 5000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/preflight-release-routing.test.sh",
+            "bash hooks/tests/verify-red-green.test.sh",
+            "bash hooks/tests/classify-diff-risk.test.sh",
+            "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "bash hooks/tests/secret-scan-diff.test.sh",
+            "bash hooks/tests/reenabled-blockers.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 5000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-31T05:35:01.851Z",
+      "expires_at": "2026-07-31T06:35:01.851Z",
+      "terminal": true,
+      "released": false,
+      "reconciled": true,
+      "event_digest": "17ea425f2dbd274f4bc0986c78957e7face6778548f8f59a0417b484c79e3808",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 1,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 3600,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 400,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 3,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 1800,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 8,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 5000000,
+          "known": false
+        }
+      }
+    },
+    "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01": {
+      "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+      "idempotency_key": "graph-node:evidence-eval-truth:attempt:3",
+      "binding_digest": "121f38ca69f4036db0d6225dcf9807075b47b3ef901e43812fede4b83b047101",
+      "identity_scheme": "mission-subject-v2",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+      "campaign_contract_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+      "mission_subject_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+      "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+      "acceptance_ids": [
+        "aggregate-only-import",
+        "classified-failures",
+        "fail-closed-scoring",
+        "honest-missing-data",
+        "minimax-limitation-visible",
+        "negative-controls",
+        "non-authoritative-telemetry"
+      ],
+      "acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+        "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+        "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+        "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+        "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+        "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+      ],
+      "graph_node_id": "evidence-eval-truth",
+      "graph_attempt": 3,
+      "campaign_contract_draft": {
+        "schema_version": 1,
+        "ticket": "mission-baa18c972660-evidence-eval-truth-a3",
+        "profile": "production",
+        "mission_grant_ref": null,
+        "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "branch": "mission/baa18c972660/evidence-eval-truth-a3",
+        "vertical_acceptance": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "allowed_path_prefixes": [
+          ".claude/review-loop-config.md",
+          "docs/plans/2026-07-31-evidence-eval-truth.md",
+          "evals/orchestration",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1500,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 750,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+        "rubric_ids": [
+          "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+          "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+          "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+          "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+          "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+          "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+          "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+        ],
+        "mission_runtime": {
+          "schema_version": 1,
+          "root_run_id": "mission-baa18c972660cf5a67783e50",
+          "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+          "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+          "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+          "graph_node_id": "evidence-eval-truth",
+          "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+        },
+        "strict_dispatch": {
+          "schema_version": 1,
+          "spec": {
+            "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "section": "Deliverable B contract"
+          },
+          "required_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "output_paths": [
+            ".claude/review-loop-config.md",
+            "evals/orchestration/run-orchestration-eval.sh",
+            "evals/orchestration/score.js",
+            "hooks/tests/engine-scorecard.test.sh",
+            "hooks/tests/orchestration-eval.test.sh",
+            "hooks/tests/resolve-review-loop.test.sh",
+            "scripts/engine-scorecard.js",
+            "scripts/resolve-review-loop.sh"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "budget": {
+            "max_changed_files": 8,
+            "max_wall_seconds": 3600,
+            "max_output_bytes": 6000000,
+            "max_tool_calls": 400,
+            "max_engine_attempts": 3
+          },
+          "verification_commands": [
+            "bash hooks/tests/orchestration-eval.test.sh",
+            "bash hooks/tests/engine-scorecard.test.sh",
+            "bash hooks/tests/resolve-review-loop.test.sh"
+          ]
+        }
+      },
+      "control_sequence": 0,
+      "reservation": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": true
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 6000000,
+          "durable_consumed": 0,
+          "known": true
+        }
+      },
+      "issued_at": "2026-07-31T05:35:01.906Z",
+      "expires_at": "2026-07-31T06:35:01.906Z",
+      "terminal": true,
+      "released": false,
+      "reconciled": true,
+      "event_digest": "ee4f9bce26854f6ca3901a949c2fef036a8a8a81cd6fe39af1777374605133a6",
+      "actual": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 1,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 3600,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 400,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 3,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 1800,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 8,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 6000000,
+          "known": false
+        }
+      }
+    }
+  },
+  "claim_idempotency_index": {
+    "graph-node:evidence-eval-truth:attempt:1": "claim-v1-46fe1164aecacb9197dabd431ee2b923c7b3a8d58e5abb1eec8f6ce3daa391bc",
+    "graph-node:correctness-gates:attempt:1": "claim-v1-1147382b34d541f9ab869940c9e0c2734c75074f6784abe5b889c92c19248f8e",
+    "graph-node:evidence-eval-truth:attempt:2": "claim-v1-1f86eff76d9deac01d88f1a69e2fdb06c3f4bf1c46014c1c6ee9079ddea6356b",
+    "graph-node:correctness-gates:attempt:2": "claim-v1-40af751891569d2e226054dd0062ce314b4cca68cebf9b2d444562206d65f924",
+    "graph-node:correctness-gates:attempt:3": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+    "graph-node:evidence-eval-truth:attempt:3": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01"
+  },
+  "events": [
+    {
+      "event_type": "grant_claimed",
+      "sequence": 1,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:evidence-eval-truth:attempt:1",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-0d537569b9cb209c264c0154d7e13a5dba42cfe75c7caa5f2a6b31baed3ee7ed",
+        "mission_subject_digest": "1e5d90d1e69522109cf5078c8832a72b8e35a893b34dcd2b19183daf277f7a9b",
+        "campaign_contract_digest": "1e5d90d1e69522109cf5078c8832a72b8e35a893b34dcd2b19183daf277f7a9b",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+          "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+          "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+          "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+          "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+          "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+        ],
+        "graph_node_id": "evidence-eval-truth",
+        "graph_attempt": 1,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-evidence-eval-truth-a1",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/evidence-eval-truth-a1",
+          "vertical_acceptance": [
+            "aggregate-only-import",
+            "classified-failures",
+            "fail-closed-scoring",
+            "honest-missing-data",
+            "minimax-limitation-visible",
+            "negative-controls",
+            "non-authoritative-telemetry"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1500,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 750,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+          "rubric_ids": [
+            "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+            "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+            "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+            "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+            "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+            "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+            "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "evidence-eval-truth",
+            "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "section": "Deliverable B contract"
+            },
+            "required_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "output_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "allowed_path_prefixes": [
+              ".claude/review-loop-config.md",
+              "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "evals/orchestration",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 6000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/orchestration-eval.test.sh",
+              "bash hooks/tests/engine-scorecard.test.sh",
+              "bash hooks/tests/resolve-review-loop.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 6000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-30T21:21:02.392Z",
+        "expires_at": "2026-07-30T22:21:02.392Z"
+      },
+      "event_digest": "7e5695b927ecb6ebb7d4e0b0011ad05a6478b73d1ab23da54d84d6b1c1d15b30"
+    },
+    {
+      "event_type": "grant_claimed",
+      "sequence": 2,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:correctness-gates:attempt:1",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-744c6e5a88ab68a92894db483be54bd4ff963263573cf030fefea4de96bf3f1f",
+        "mission_subject_digest": "097aed7096d4de67208e8000b4bf5043eac76f60e0dafffc350cdf99938ad8a7",
+        "campaign_contract_digest": "097aed7096d4de67208e8000b4bf5043eac76f60e0dafffc350cdf99938ad8a7",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+          "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+          "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+          "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+          "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+          "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+        ],
+        "graph_node_id": "correctness-gates",
+        "graph_attempt": 1,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-correctness-gates-a1",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/correctness-gates-a1",
+          "vertical_acceptance": [
+            "binary-path-risk",
+            "current-version-prose",
+            "external-command-compatibility",
+            "interface-stability",
+            "negative-controls",
+            "secret-deletion-safe",
+            "worktree-red-green"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1200,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 600,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+          "rubric_ids": [
+            "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+            "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+            "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+            "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+            "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+            "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+            "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "correctness-gates",
+            "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-correctness-gates.md",
+              "section": "Deliverable C contract"
+            },
+            "required_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/secret-scan-diff.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/secret-scan-diff.js",
+              "scripts/verify-red-green.sh"
+            ],
+            "output_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/verify-red-green.sh"
+            ],
+            "allowed_path_prefixes": [
+              "docs/plans/2026-07-31-correctness-gates.md",
+              "hooks/commit-secret-scan.js",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 5000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/preflight-release-routing.test.sh",
+              "bash hooks/tests/verify-red-green.test.sh",
+              "bash hooks/tests/classify-diff-risk.test.sh",
+              "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "bash hooks/tests/secret-scan-diff.test.sh",
+              "bash hooks/tests/reenabled-blockers.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 5000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-30T21:21:07.707Z",
+        "expires_at": "2026-07-30T22:21:07.707Z"
+      },
+      "event_digest": "20a08b70f60128aca60a41d88ab6b18bacc0052f924fc07fbf82a598329fd750"
+    },
+    {
+      "event_type": "no_effect_release",
+      "sequence": 3,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-46fe1164aecacb9197dabd431ee2b923c7b3a8d58e5abb1eec8f6ce3daa391bc",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        }
+      },
+      "event_digest": "96e43e7d090ff4cde13405c752da613a38c980ee003dcd6ae878a78d295eeeaa"
+    },
+    {
+      "event_type": "no_effect_release",
+      "sequence": 4,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-1147382b34d541f9ab869940c9e0c2734c75074f6784abe5b889c92c19248f8e",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        }
+      },
+      "event_digest": "407943632b3b33f3b4959d8b20096243645fb09f93d7afa96e4ca7842a6afd42"
+    },
+    {
+      "event_type": "grant_claimed",
+      "sequence": 5,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:evidence-eval-truth:attempt:2",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-a2654e0201d354739c235dfb6db6f493bb547768b5c12fa11750fa1081a52b98",
+        "mission_subject_digest": "95118a4c61bfe2308dbfb8d6df10b776f4d5d1aea8be73b6746082525c463bda",
+        "campaign_contract_digest": "95118a4c61bfe2308dbfb8d6df10b776f4d5d1aea8be73b6746082525c463bda",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+          "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+          "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+          "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+          "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+          "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+        ],
+        "graph_node_id": "evidence-eval-truth",
+        "graph_attempt": 2,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-evidence-eval-truth-a2",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/evidence-eval-truth-a2",
+          "vertical_acceptance": [
+            "aggregate-only-import",
+            "classified-failures",
+            "fail-closed-scoring",
+            "honest-missing-data",
+            "minimax-limitation-visible",
+            "negative-controls",
+            "non-authoritative-telemetry"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1500,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 750,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+          "rubric_ids": [
+            "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+            "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+            "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+            "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+            "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+            "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+            "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "evidence-eval-truth",
+            "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "section": "Deliverable B contract"
+            },
+            "required_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "output_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "allowed_path_prefixes": [
+              ".claude/review-loop-config.md",
+              "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "evals/orchestration",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 6000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/orchestration-eval.test.sh",
+              "bash hooks/tests/engine-scorecard.test.sh",
+              "bash hooks/tests/resolve-review-loop.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 6000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-30T21:48:39.374Z",
+        "expires_at": "2026-07-30T22:48:39.374Z"
+      },
+      "event_digest": "3b1ddf5f3ecc7846051fe8f0d01b1ff075383f959683a23b31a503081b3f8524"
+    },
+    {
+      "event_type": "grant_claimed",
+      "sequence": 6,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:correctness-gates:attempt:2",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-affba054f981a130dd1f1b8c36e8e316e21a69dd7c38d260fec18c1123d23b34",
+        "mission_subject_digest": "aa0960d7d08e22af3d9f0ff875bf3ef001572752c605c684b184dedfc63320df",
+        "campaign_contract_digest": "aa0960d7d08e22af3d9f0ff875bf3ef001572752c605c684b184dedfc63320df",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+          "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+          "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+          "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+          "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+          "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+        ],
+        "graph_node_id": "correctness-gates",
+        "graph_attempt": 2,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-correctness-gates-a2",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/correctness-gates-a2",
+          "vertical_acceptance": [
+            "binary-path-risk",
+            "current-version-prose",
+            "external-command-compatibility",
+            "interface-stability",
+            "negative-controls",
+            "secret-deletion-safe",
+            "worktree-red-green"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1200,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 600,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+          "rubric_ids": [
+            "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+            "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+            "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+            "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+            "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+            "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+            "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "correctness-gates",
+            "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-correctness-gates.md",
+              "section": "Deliverable C contract"
+            },
+            "required_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/secret-scan-diff.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/secret-scan-diff.js",
+              "scripts/verify-red-green.sh"
+            ],
+            "output_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/verify-red-green.sh"
+            ],
+            "allowed_path_prefixes": [
+              "docs/plans/2026-07-31-correctness-gates.md",
+              "hooks/commit-secret-scan.js",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 5000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/preflight-release-routing.test.sh",
+              "bash hooks/tests/verify-red-green.test.sh",
+              "bash hooks/tests/classify-diff-risk.test.sh",
+              "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "bash hooks/tests/secret-scan-diff.test.sh",
+              "bash hooks/tests/reenabled-blockers.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 5000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-30T21:48:42.993Z",
+        "expires_at": "2026-07-30T22:48:42.993Z"
+      },
+      "event_digest": "0ec6a4ef336b8c77d37d35e3839ec31b88b6a78b2593690c6efee4109831ad88"
+    },
+    {
+      "event_type": "no_effect_release",
+      "sequence": 7,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-1f86eff76d9deac01d88f1a69e2fdb06c3f4bf1c46014c1c6ee9079ddea6356b",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        }
+      },
+      "event_digest": "b144d6c81d0d176df2dde203417a6d7f7c23aa374b30b865c80eb20fea516456"
+    },
+    {
+      "event_type": "no_effect_release",
+      "sequence": 8,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-40af751891569d2e226054dd0062ce314b4cca68cebf9b2d444562206d65f924",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        }
+      },
+      "event_digest": "9e379efddbc6b82ba616fe40c162e38bc50d828c5dfbe4fb70b1ff404d771b08"
+    },
+    {
+      "event_type": "grant_claimed",
+      "sequence": 9,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:correctness-gates:attempt:3",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+        "mission_subject_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+        "campaign_contract_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "binary-path-risk",
+          "current-version-prose",
+          "external-command-compatibility",
+          "interface-stability",
+          "negative-controls",
+          "secret-deletion-safe",
+          "worktree-red-green"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+          "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+          "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+          "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+          "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+          "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+        ],
+        "graph_node_id": "correctness-gates",
+        "graph_attempt": 3,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-correctness-gates-a3",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/correctness-gates-a3",
+          "vertical_acceptance": [
+            "binary-path-risk",
+            "current-version-prose",
+            "external-command-compatibility",
+            "interface-stability",
+            "negative-controls",
+            "secret-deletion-safe",
+            "worktree-red-green"
+          ],
+          "allowed_path_prefixes": [
+            "docs/plans/2026-07-31-correctness-gates.md",
+            "hooks/commit-secret-scan.js",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1200,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 600,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/preflight-release-routing.test.sh && bash hooks/tests/verify-red-green.test.sh && bash hooks/tests/classify-diff-risk.test.sh && bash hooks/tests/classify-diff-risk-filename-space.test.sh && bash hooks/tests/secret-scan-diff.test.sh && bash hooks/tests/reenabled-blockers.test.sh",
+          "rubric_ids": [
+            "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+            "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+            "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+            "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+            "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+            "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+            "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "correctness-gates",
+            "graph_node_digest": "854b77ab33398fbc8013576c6253289f76144a936f421e0184c76ff39779549b"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-correctness-gates.md",
+              "section": "Deliverable C contract"
+            },
+            "required_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/secret-scan-diff.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/secret-scan-diff.js",
+              "scripts/verify-red-green.sh"
+            ],
+            "output_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/verify-red-green.sh"
+            ],
+            "allowed_path_prefixes": [
+              "docs/plans/2026-07-31-correctness-gates.md",
+              "hooks/commit-secret-scan.js",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 5000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/preflight-release-routing.test.sh",
+              "bash hooks/tests/verify-red-green.test.sh",
+              "bash hooks/tests/classify-diff-risk.test.sh",
+              "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "bash hooks/tests/secret-scan-diff.test.sh",
+              "bash hooks/tests/reenabled-blockers.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 5000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-31T05:35:01.851Z",
+        "expires_at": "2026-07-31T06:35:01.851Z"
+      },
+      "event_digest": "17ea425f2dbd274f4bc0986c78957e7face6778548f8f59a0417b484c79e3808"
+    },
+    {
+      "event_type": "grant_claimed",
+      "sequence": 10,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "identity_scheme": "mission-subject-v2",
+        "idempotency_key": "graph-node:evidence-eval-truth:attempt:3",
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+        "campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+        "mission_subject_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+        "campaign_contract_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+        "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+        "acceptance_ids": [
+          "aggregate-only-import",
+          "classified-failures",
+          "fail-closed-scoring",
+          "honest-missing-data",
+          "minimax-limitation-visible",
+          "negative-controls",
+          "non-authoritative-telemetry"
+        ],
+        "acceptance_hashes": [
+          "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+          "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+          "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+          "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+          "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+          "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+          "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+        ],
+        "graph_node_id": "evidence-eval-truth",
+        "graph_attempt": 3,
+        "campaign_contract_draft": {
+          "schema_version": 1,
+          "ticket": "mission-baa18c972660-evidence-eval-truth-a3",
+          "profile": "production",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+          "base_sha": "cbeccb1711da1ec3ad5ad3859514477b5906d606",
+          "branch": "mission/baa18c972660/evidence-eval-truth-a3",
+          "vertical_acceptance": [
+            "aggregate-only-import",
+            "classified-failures",
+            "fail-closed-scoring",
+            "honest-missing-data",
+            "minimax-limitation-visible",
+            "negative-controls",
+            "non-authoritative-telemetry"
+          ],
+          "allowed_path_prefixes": [
+            ".claude/review-loop-config.md",
+            "docs/plans/2026-07-31-evidence-eval-truth.md",
+            "evals/orchestration",
+            "hooks/tests",
+            "scripts"
+          ],
+          "max_changed_files": 8,
+          "baseline_churn": 1500,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 750,
+          "max_repair_generations": 2,
+          "max_wall_seconds": 3600,
+          "verify_cmd": "bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/engine-scorecard.test.sh && bash hooks/tests/resolve-review-loop.test.sh",
+          "rubric_ids": [
+            "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+            "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+            "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+            "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+            "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+            "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+            "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+          ],
+          "mission_runtime": {
+            "schema_version": 1,
+            "root_run_id": "mission-baa18c972660cf5a67783e50",
+            "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+            "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+            "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+            "graph_node_id": "evidence-eval-truth",
+            "graph_node_digest": "3ba1949a8cfab1810586df8b623559d53da6557b25c357542e4853c80190cadd"
+          },
+          "strict_dispatch": {
+            "schema_version": 1,
+            "spec": {
+              "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "section": "Deliverable B contract"
+            },
+            "required_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "output_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "allowed_path_prefixes": [
+              ".claude/review-loop-config.md",
+              "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "evals/orchestration",
+              "hooks/tests",
+              "scripts"
+            ],
+            "budget": {
+              "max_changed_files": 8,
+              "max_wall_seconds": 3600,
+              "max_output_bytes": 6000000,
+              "max_tool_calls": 400,
+              "max_engine_attempts": 3
+            },
+            "verification_commands": [
+              "bash hooks/tests/orchestration-eval.test.sh",
+              "bash hooks/tests/engine-scorecard.test.sh",
+              "bash hooks/tests/resolve-review-loop.test.sh"
+            ]
+          }
+        },
+        "reservation": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 1,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 3600,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 400,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 3,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 1800,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 8,
+              "durable_consumed": 0,
+              "known": true
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 6000000,
+              "durable_consumed": 0,
+              "known": true
+            }
+          ]
+        },
+        "issued_at": "2026-07-31T05:35:01.906Z",
+        "expires_at": "2026-07-31T06:35:01.906Z"
+      },
+      "event_digest": "ee4f9bce26854f6ca3901a949c2fef036a8a8a81cd6fe39af1777374605133a6"
+    },
+    {
+      "event_type": "reconciliation",
+      "sequence": 11,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            }
+          ]
+        }
+      },
+      "event_digest": "bd7e9df9953aa29493bbb8135bed17af3e891bb9f7c17f30d9ebe47c52e1a8d4"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 12,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b"
+      },
+      "event_digest": "434c5c58ecbfbd2cefc128ae0d90003c81e3cbb653918cf091d82f581f332904"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 13,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4"
+      },
+      "event_digest": "2d0be04d3fb5451726a0e2d05c3e307016f33cc2b7d876b9f1e9b79d1ce759ad"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 14,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603"
+      },
+      "event_digest": "b3b8258c56467c08f69a414c2caa677341a9f9552da1ddfada8be9e39a7c9dee"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 15,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c"
+      },
+      "event_digest": "cb2d4c01ecde0b8e0a678e0a40378b1afc341a6b8956e72880d5887586c07d23"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 16,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c"
+      },
+      "event_digest": "83ed1edc70694420d1390248bdb28a036576063f7039803d24a7fd8159b7883b"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 17,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75"
+      },
+      "event_digest": "9398a45466a3e0cf8583922e35f33c5fb8f1319ce0081f23f9e3cf0a83060b9f"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 18,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+      },
+      "event_digest": "2be3ef0f1731a3467e488d9ec6c34daccd89139520af78945d57339c893a0f26"
+    },
+    {
+      "event_type": "reconciliation",
+      "sequence": 19,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+        "actual_usage": {
+          "per_axis": [
+            {
+              "axis": "campaigns",
+              "authorized_ceiling": 10,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "wall_seconds",
+              "authorized_ceiling": 36000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "tool_calls",
+              "authorized_ceiling": 1500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "engine_attempts",
+              "authorized_ceiling": 50,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "external_wait_seconds",
+              "authorized_ceiling": 14400,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "canonical_changed_files",
+              "authorized_ceiling": 500,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            },
+            {
+              "axis": "output_bytes",
+              "authorized_ceiling": 50000000,
+              "reserved_active": 0,
+              "durable_consumed": 0,
+              "known": false
+            }
+          ]
+        }
+      },
+      "event_digest": "c17cc8669fe8d1fff44550b24c323c8f105f4ec4c0672e46bd34c0db8b639d05"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 20,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b"
+      },
+      "event_digest": "9f5cba929ab3ca77fe0b074543b60950b61c27f3515c9a02f3afc3408a79c530"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 21,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2"
+      },
+      "event_digest": "b64afd3527733660eee81528af149967402d50b59fa3d499efe8619525c31c09"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 22,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be"
+      },
+      "event_digest": "2165a070647b9820492d6b64339b9f0cf3ee73ce2d0cdfbcc323779baab143cc"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 23,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803"
+      },
+      "event_digest": "9f8529c8bf8685016adb018d07ed3ca20965da098daca12262312b8935f2852a"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 24,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795"
+      },
+      "event_digest": "a6a817b57a85ebfdf7b7c179a59fd61538099fc43bc11df2151024abf336fe24"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 25,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0"
+      },
+      "event_digest": "28c72b7920f78a57523266abb644835d177f279a9fc25444fc284c3ef59bf680"
+    },
+    {
+      "event_type": "acceptance_satisfied",
+      "sequence": 26,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "acceptance_hash": "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+      },
+      "event_digest": "839806bbc74c61d9b847d7dad340cc3fbcb4236a10accdc3d75ca1f4d622e7b8"
+    },
+    {
+      "event_type": "closure_evaluated",
+      "sequence": 27,
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "payload": {
+        "ratio": 1,
+        "other_axes_below_ratio": false,
+        "unknown_required_axis": false
+      },
+      "event_digest": "3f77c4e63f82a24c49ce44c7f37c235916cada6f26143741b62f74ad8b7c352f"
+    }
+  ],
+  "receipts": {
+    "mission_reconciliation:claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01": {
+      "artifact_type": "mission_reconciliation",
+      "event_type": "reconciliation",
+      "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+      "actual_usage": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 1,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 3600,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 400,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 3,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 1800,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 8,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 6000000,
+          "known": false
+        }
+      },
+      "reservation_consumed": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 6000000,
+          "durable_consumed": 0,
+          "known": false
+        }
+      },
+      "reservation_freed": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        }
+      },
+      "replay": "idempotent",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "source_event": {
+        "event_type": "reconciliation",
+        "sequence": 11,
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "payload": {
+          "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+          "actual_usage": {
+            "per_axis": [
+              {
+                "axis": "campaigns",
+                "authorized_ceiling": 10,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "wall_seconds",
+                "authorized_ceiling": 36000,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "tool_calls",
+                "authorized_ceiling": 1500,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "engine_attempts",
+                "authorized_ceiling": 50,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "external_wait_seconds",
+                "authorized_ceiling": 14400,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "canonical_changed_files",
+                "authorized_ceiling": 500,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "output_bytes",
+                "authorized_ceiling": 50000000,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              }
+            ]
+          }
+        },
+        "event_digest": "bd7e9df9953aa29493bbb8135bed17af3e891bb9f7c17f30d9ebe47c52e1a8d4"
+      },
+      "next_state": "ACTIVE",
+      "receipt_digest": "9c2db940adbd13d391b895107f6a9555a2457a04c262aada9b4f14ce19d6a0d3"
+    },
+    "mission_campaign_receipt:claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01": {
+      "schema_version": 1,
+      "artifact_type": "campaign_terminal_receipt",
+      "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+      "mission_campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+      "icc_campaign_id": "campaign-v1-28cf3f20d7676a2a9dad182a8c28c3b52f92e720fada00bf35038bcf6e090773",
+      "campaign_contract_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+      "raw_campaign_contract_digest": "c206dc8bce44b73e358cd76b7337357dd1783f6db5d54ff19e341d587c72d7bb",
+      "graph_node_id": "evidence-eval-truth",
+      "graph_attempt": 3,
+      "outcome": "ready",
+      "possibly_effectful": true,
+      "actual_usage": {
+        "per_axis": [
+          {
+            "axis": "campaigns",
+            "authorized_ceiling": 10,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "wall_seconds",
+            "authorized_ceiling": 36000,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "tool_calls",
+            "authorized_ceiling": 1500,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "engine_attempts",
+            "authorized_ceiling": 50,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "external_wait_seconds",
+            "authorized_ceiling": 14400,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "canonical_changed_files",
+            "authorized_ceiling": 500,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "output_bytes",
+            "authorized_ceiling": 50000000,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          }
+        ]
+      },
+      "satisfied_acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+        "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+        "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+        "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+        "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+        "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+      ],
+      "observed_at": "2026-07-31T07:52:08.843Z",
+      "receipt_digest": "b17b7d15915ac911960b574c928c588671f0ef1802b2ba3f67a9b580e43bb358"
+    },
+    "mission_reconciliation:claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232": {
+      "artifact_type": "mission_reconciliation",
+      "event_type": "reconciliation",
+      "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+      "actual_usage": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 1,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 3600,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 400,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 3,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 1800,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 8,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 5000000,
+          "known": false
+        }
+      },
+      "reservation_consumed": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 1,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 3600,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 400,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 3,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 1800,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 8,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 5000000,
+          "durable_consumed": 0,
+          "known": false
+        }
+      },
+      "reservation_freed": {
+        "campaigns": {
+          "axis": "campaigns",
+          "authorized_ceiling": 10,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "wall_seconds": {
+          "axis": "wall_seconds",
+          "authorized_ceiling": 36000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "tool_calls": {
+          "axis": "tool_calls",
+          "authorized_ceiling": 1500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "engine_attempts": {
+          "axis": "engine_attempts",
+          "authorized_ceiling": 50,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "external_wait_seconds": {
+          "axis": "external_wait_seconds",
+          "authorized_ceiling": 14400,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "canonical_changed_files": {
+          "axis": "canonical_changed_files",
+          "authorized_ceiling": 500,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        },
+        "output_bytes": {
+          "axis": "output_bytes",
+          "authorized_ceiling": 50000000,
+          "reserved_active": 0,
+          "durable_consumed": 0,
+          "known": false
+        }
+      },
+      "replay": "idempotent",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "source_event": {
+        "event_type": "reconciliation",
+        "sequence": 19,
+        "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+        "payload": {
+          "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+          "actual_usage": {
+            "per_axis": [
+              {
+                "axis": "campaigns",
+                "authorized_ceiling": 10,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "wall_seconds",
+                "authorized_ceiling": 36000,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "tool_calls",
+                "authorized_ceiling": 1500,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "engine_attempts",
+                "authorized_ceiling": 50,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "external_wait_seconds",
+                "authorized_ceiling": 14400,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "canonical_changed_files",
+                "authorized_ceiling": 500,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              },
+              {
+                "axis": "output_bytes",
+                "authorized_ceiling": 50000000,
+                "reserved_active": 0,
+                "durable_consumed": 0,
+                "known": false
+              }
+            ]
+          }
+        },
+        "event_digest": "c17cc8669fe8d1fff44550b24c323c8f105f4ec4c0672e46bd34c0db8b639d05"
+      },
+      "next_state": "ACTIVE",
+      "receipt_digest": "3a19c5b72a1ccd4562da277e83d1e7de2d618cb3c9e9876f0afc38fd84e36692"
+    },
+    "mission_campaign_receipt:claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232": {
+      "schema_version": 1,
+      "artifact_type": "campaign_terminal_receipt",
+      "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+      "mission_campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+      "icc_campaign_id": "campaign-v1-80c477b59fa440d324cc2b98032e101a9a630cc6c5c60057a062e7c1393f3e50",
+      "campaign_contract_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+      "raw_campaign_contract_digest": "4040a3ef498349fbfd685cc8c52181133b227c920c8e818443e6b540216f4475",
+      "graph_node_id": "correctness-gates",
+      "graph_attempt": 3,
+      "outcome": "ready",
+      "possibly_effectful": true,
+      "actual_usage": {
+        "per_axis": [
+          {
+            "axis": "campaigns",
+            "authorized_ceiling": 10,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "wall_seconds",
+            "authorized_ceiling": 36000,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "tool_calls",
+            "authorized_ceiling": 1500,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "engine_attempts",
+            "authorized_ceiling": 50,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "external_wait_seconds",
+            "authorized_ceiling": 14400,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "canonical_changed_files",
+            "authorized_ceiling": 500,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          },
+          {
+            "axis": "output_bytes",
+            "authorized_ceiling": 50000000,
+            "reserved_active": 0,
+            "durable_consumed": 0,
+            "known": false
+          }
+        ]
+      },
+      "satisfied_acceptance_hashes": [
+        "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+        "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+        "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+        "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+        "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+        "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+        "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+      ],
+      "observed_at": "2026-07-31T07:52:08.920Z",
+      "receipt_digest": "3abc74dc35b08b177871854cdb218f7d94bfaf0793ad0704060515753974de16"
+    }
+  },
+  "control_sequence": 0,
+  "closure_allowlist": [],
+  "stagnant_campaigns": 0,
+  "required_acceptance_hashes": [
+    "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+    "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+    "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+    "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+    "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+    "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+    "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+    "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+    "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+    "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+    "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+    "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350",
+    "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+  ],
+  "acceptance_hashes": [
+    "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+    "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+    "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+    "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+    "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+    "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+    "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+    "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+    "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+    "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+    "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+    "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350",
+    "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+  ],
+  "unknown_required_axes": [],
+  "terminal": {
+    "state": "COMPLETE",
+    "reason": "closure_evaluated",
+    "at_event": 27
+  },
+  "config": {
+    "schema_version": 1,
+    "artifact_type": "mission_convergence_contract",
+    "contract_id": "mission-v1-95c1ebd800fbea5479ba49da60d3279d9188e86502b57ec8c2af3d6dab6d5b21",
+    "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+    "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+    "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+    "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+    "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+    "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+    "initial_required_acceptance_hashes": [
+      "8ad11b2453b76ca7ced00d939e48cebe180f4946732751757d512f29e1abea1c",
+      "db1d5466584547b289208b3cdb6f9f03ed4bbeb795eb585d9b575bc991e23d34"
+    ],
+    "required_acceptance_hashes": [
+      "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+      "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+      "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+      "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+      "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+      "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+      "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+      "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+      "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+      "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+      "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+      "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350",
+      "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+    ],
+    "execution_graph": {
+      "artifact_type": "mission_execution_graph",
+      "calculated_batches": 1,
+      "calculated_depth": 1,
+      "graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+      "nodes": [
+        {
+          "acceptance_ids": [
+            "binary-path-risk",
+            "current-version-prose",
+            "external-command-compatibility",
+            "interface-stability",
+            "negative-controls",
+            "secret-deletion-safe",
+            "worktree-red-green"
+          ],
+          "campaign": {
+            "allowed_path_prefixes": [
+              "docs/plans/2026-07-31-correctness-gates.md",
+              "hooks/commit-secret-scan.js",
+              "hooks/tests",
+              "scripts"
+            ],
+            "baseline_churn": 1200,
+            "max_changed_files": 8,
+            "max_extra_churn": 600,
+            "max_growth_ratio": 1.5,
+            "max_repair_generations": 2,
+            "max_wall_seconds": 3600,
+            "output_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/verify-red-green.sh"
+            ],
+            "profile": "high",
+            "required_paths": [
+              "hooks/commit-secret-scan.js",
+              "hooks/tests/classify-diff-risk-filename-space.test.sh",
+              "hooks/tests/classify-diff-risk.test.sh",
+              "hooks/tests/preflight-release-routing.test.sh",
+              "hooks/tests/reenabled-blockers.test.sh",
+              "hooks/tests/secret-scan-diff.test.sh",
+              "hooks/tests/verify-red-green.test.sh",
+              "scripts/classify-diff-risk.sh",
+              "scripts/preflight-release.sh",
+              "scripts/secret-scan-diff.js",
+              "scripts/verify-red-green.sh"
+            ],
+            "spec": {
+              "path": "docs/plans/2026-07-31-correctness-gates.md",
+              "section": "Deliverable C contract"
+            }
+          },
+          "dependencies": [],
+          "gate_attempt_budget": 3,
+          "id": "correctness-gates",
+          "reservation": {
+            "campaigns": 1,
+            "canonical_changed_files": 8,
+            "engine_attempts": 3,
+            "external_wait_seconds": 1800,
+            "output_bytes": 5000000,
+            "tool_calls": 400,
+            "wall_seconds": 3600
+          },
+          "source_plan_ids": [
+            "plan-0a83aa1240d903003565e881af5ce833eccae7df29fbf08ae3a6ef26a0d9df96"
+          ],
+          "source_rubric_ids": [
+            "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+            "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+            "R3758626835649660684259251094120189861053883280826974358164212476234814362063",
+            "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+            "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+            "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+            "R98600831782972981573184571117747101292276586040795142894274970929913861891172"
+          ],
+          "verification_commands": [
+            "bash hooks/tests/preflight-release-routing.test.sh",
+            "bash hooks/tests/verify-red-green.test.sh",
+            "bash hooks/tests/classify-diff-risk.test.sh",
+            "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+            "bash hooks/tests/secret-scan-diff.test.sh",
+            "bash hooks/tests/reenabled-blockers.test.sh"
+          ]
+        },
+        {
+          "acceptance_ids": [
+            "aggregate-only-import",
+            "classified-failures",
+            "fail-closed-scoring",
+            "honest-missing-data",
+            "minimax-limitation-visible",
+            "negative-controls",
+            "non-authoritative-telemetry"
+          ],
+          "campaign": {
+            "allowed_path_prefixes": [
+              ".claude/review-loop-config.md",
+              "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "evals/orchestration",
+              "hooks/tests",
+              "scripts"
+            ],
+            "baseline_churn": 1500,
+            "max_changed_files": 8,
+            "max_extra_churn": 750,
+            "max_growth_ratio": 1.5,
+            "max_repair_generations": 2,
+            "max_wall_seconds": 3600,
+            "output_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "profile": "high",
+            "required_paths": [
+              ".claude/review-loop-config.md",
+              "evals/orchestration/run-orchestration-eval.sh",
+              "evals/orchestration/score.js",
+              "hooks/tests/engine-scorecard.test.sh",
+              "hooks/tests/orchestration-eval.test.sh",
+              "hooks/tests/resolve-review-loop.test.sh",
+              "scripts/engine-scorecard.js",
+              "scripts/resolve-review-loop.sh"
+            ],
+            "spec": {
+              "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+              "section": "Deliverable B contract"
+            }
+          },
+          "dependencies": [],
+          "gate_attempt_budget": 3,
+          "id": "evidence-eval-truth",
+          "reservation": {
+            "campaigns": 1,
+            "canonical_changed_files": 8,
+            "engine_attempts": 3,
+            "external_wait_seconds": 1800,
+            "output_bytes": 6000000,
+            "tool_calls": 400,
+            "wall_seconds": 3600
+          },
+          "source_plan_ids": [
+            "plan-35ec55ffaf4cced49355457b329bcf501e70e67b12d1ee1edba563564902226b"
+          ],
+          "source_rubric_ids": [
+            "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+            "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+            "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+            "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+            "R65141171156923691883405509641802725555365234277122521296016704079794885654767",
+            "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+            "R81926388360962228112521746731412591758352981723499869733502069382170474901141"
+          ],
+          "verification_commands": [
+            "bash hooks/tests/orchestration-eval.test.sh",
+            "bash hooks/tests/engine-scorecard.test.sh",
+            "bash hooks/tests/resolve-review-loop.test.sh"
+          ]
+        }
+      ],
+      "schema_version": 1
+    },
+    "enforcement_mode": "enforce",
+    "state": "DRAFT",
+    "closure_ratio": 1,
+    "max_stagnant_campaigns": 2,
+    "axes": {
+      "campaigns": {
+        "authorized_ceiling": 10,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "wall_seconds": {
+        "authorized_ceiling": 36000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "tool_calls": {
+        "authorized_ceiling": 1500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "engine_attempts": {
+        "authorized_ceiling": 50,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "external_wait_seconds": {
+        "authorized_ceiling": 14400,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "canonical_changed_files": {
+        "authorized_ceiling": 500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      },
+      "output_bytes": {
+        "authorized_ceiling": 50000000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": true,
+        "enforced": true
+      }
+    },
+    "grant_contract": {
+      "idempotency_key_required": true,
+      "single_use": true,
+      "expiry_seconds": 3600,
+      "bindings": [
+        "mission_lineage_id",
+        "task_authority_id",
+        "campaign_id",
+        "mission_subject_digest",
+        "base_sha",
+        "acceptance_ids"
+      ]
+    },
+    "control_contract": {
+      "actions": [
+        "ceiling_adjust",
+        "scope_frozen",
+        "finish_requested",
+        "abort_requested"
+      ],
+      "allowed_authorities": [
+        "authenticated_user",
+        "authenticated_doa",
+        "agent",
+        "owner_kernel"
+      ],
+      "ceiling_loosen_authority": "authenticated_user",
+      "pre_effect_sequence_check": true
+    },
+    "lineage_binding": {
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "root_run_id": "mission-baa18c972660cf5a67783e50",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "successor_inherits_durable_consumed": true
+    }
+  },
+  "config_provenance": {
+    "enforcement_mode": "project-default",
+    "closure_ratio": "project-default",
+    "max_stagnant_campaigns": "project-default",
+    "axes": "project-default",
+    "grant_contract": "project-default",
+    "control_contract": "project-default",
+    "lineage_binding": "project-default"
+  },
+  "config_digest": "0eea59c80922335530f6a296c1b90eb4a3a0492d8b18a7d3081ac59d5f4dfb68",
+  "red_lines": []
+}

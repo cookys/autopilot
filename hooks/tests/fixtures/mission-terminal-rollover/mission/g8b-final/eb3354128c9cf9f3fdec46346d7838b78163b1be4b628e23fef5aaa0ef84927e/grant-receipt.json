@@ -1,0 +1,15 @@
+{
+  "status": "claimed",
+  "mission_lineage_id": "lineage-v1-eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+  "claim_id": "claim-v1-984b719db455bb7b155ed3aaaa53ddd0f860495acf8a2693a9e4311f7f39ab22",
+  "mission_grant_ref": "04db1f8ee64462fcab5f1ad38d554930a12e45e812a717d79444327555f184d1",
+  "mission_subject_digest": "802c609cd4e16407fcff2ee2adef8d56e304745b6cad59c8387fabf5e99464ef",
+  "mission_campaign_id": "campaign-v2-1135d853e285cc938919547562bc6a00eb6e3a0da6605148a372756fe1142cdd",
+  "graph_node_id": "next-touch-debt-retirement",
+  "graph_attempt": 1,
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e/next-touch-debt-retirement/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e/next-touch-debt-retirement/attempt-1/campaign.seal.json",
+  "branch": "mission/eb3354128c9c/next-touch-debt-retirement-a1",
+  "base_sha": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "state_hash": "f29beba209e2ff71496f323b3ba59c8bd8e94ffd47698635c433a57f67ef35c5"
+}

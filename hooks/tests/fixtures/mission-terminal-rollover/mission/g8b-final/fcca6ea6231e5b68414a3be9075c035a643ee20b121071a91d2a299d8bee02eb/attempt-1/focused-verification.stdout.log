@@ -1,0 +1,7 @@
+G8b authority missing/tamper/lineage/cross-binding/CLI negatives passed
+G8b integrated rerun, authentic receipt binding, and drift/target guards passed
+G8b fresh runtime-positive and integration binding negatives passed
+disposable integration fixtures passed
+PASS [next-touch-validation] 24 assertions
+PASS [dispatch-detached-campaign-authority] 10 assertions
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","check-claude-md-inventory","l1-cache-key-parity"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}

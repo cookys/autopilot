@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_type": "next_touch_reviewer_attestation",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "campaign_id": "campaign-v1-962de4f5a8f0939bdd74d0538ed0a35a84131d373668f9cc5baa1bd996031bf6",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "fc03f35fca7c38a0b56c63c3ba05ddb2d81e5067",
+  "candidate_tree_sha": "535d99968c1d7c63fa726d701b67f32531b49717",
+  "roster_tuple": "claude-native/claude-opus/high/anthropic",
+  "actor_id": "codex/reviewer",
+  "session_id": "019fc93a-6377-79e3-beaa-a9794d8b830f",
+  "reviewer_version": "codex-cli 0.146.0",
+  "review_input_digest": "350bf6501428583d51780cee81943347c7f79db044c8fa71ff797ae933e6de43",
+  "diff_digest": "e945ed20187d4840e8046780cf36d0f71a41d612e11190049a0dae34ac55a5a4",
+  "verdict": "SHIP",
+  "findings": [],
+  "receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/attempt-1/review/reviewer-receipt.json",
+    "receipt_digest": "86cecca3abc795eb4bce4d9c7e29db4d90b29003f3613ca85d3d0d63c4470f51"
+  },
+  "receipt_digest": "e59bb18747a253f5dd1991c2d635907fae9b8a738f87a34214e00ba5feb54df0"
+}

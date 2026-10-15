@@ -124,6 +124,33 @@ list_check() { # <root> <cwd> -> prints the error code, or the branch list when 
 NOT_A_REPO="$TEST_TMP/not-a-repo"; mkdir -p "$NOT_A_REPO"
 eq "review_candidate_repair_seed_invalid" "$(list_check "$REPO_ROOT" "$NOT_A_REPO")" "a failing branch listing fails closed with a named code (no silent empty list)"
 
+# ---- BL-0155: a repair branch another clone pushed (remote-tracking only here) is counted too ------------------------
+# A local bare repo stands in for the remote; no network. clone B has never created repair/rp_rt-repair itself.
+RT="$TEST_TMP/rt"; mkdir -p "$RT"
+git init -q --bare -b main "$RT/origin.git"
+git clone -q "$RT/origin.git" "$RT/a" 2>/dev/null
+git -C "$RT/a" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$RT/a" push -q origin HEAD:refs/heads/main 2>/dev/null
+git -C "$RT/a" push -q origin HEAD:refs/heads/repair/rp_rt-repair 2>/dev/null
+git clone -q "$RT/origin.git" "$RT/b" 2>/dev/null
+eq '["repair/rp_rt-repair"]' "$(list_check "$REPO_ROOT" "$RT/b")" "BL-0155: a repair branch that exists only as a remote-tracking ref is listed"
+git -C "$RT/b" branch -q repair/local-only
+eq '["repair/local-only","repair/rp_rt-repair"]' "$(list_check "$REPO_ROOT" "$RT/b")" "BL-0155: local and remote-tracking repair branches are both listed, once each"
+git -C "$RT/b" branch -q repair/rp_rt-repair origin/repair/rp_rt-repair
+eq '["repair/local-only","repair/rp_rt-repair"]' "$(list_check "$REPO_ROOT" "$RT/b")" "BL-0155: a branch present locally AND remotely is listed once"
+seed_branch() { # <root> <cwd> <ticket> -> the repair branch the seed would pick
+  ROOT_UNDER_TEST="$1" LIST_CWD="$2" TICKET="$3" node -e "
+    const m = require(process.env.ROOT_UNDER_TEST + '/src/engine/review-candidate-repair-seed.js');
+    const adoption = { adoption: {}, ticket: process.env.TICKET, base_sha: 'a'.repeat(40) };
+    try {
+      const s = m.buildRepairSeed({ adoptionContract: adoption, reviewedHead: 'b'.repeat(40), findings: [], campaignId: 'c',
+        existingBranches: m.listRepairBranches(process.env.LIST_CWD) });
+      process.stdout.write(s.branch || s.contract.branch || JSON.stringify(Object.keys(s)));
+    } catch (e) { process.stdout.write(e.code || e.message); }"
+}
+git -C "$RT/b" branch -q -D repair/rp_rt-repair
+eq "repair/rp_rt-repair-r2" "$(seed_branch "$REPO_ROOT" "$RT/b" rp_rt)" "BL-0155: the seed skips a name taken only on the remote (-r2, no push collision)"
+
 # ---- BL-0155: the prompt states what the contract allows (not "one round") -----------------------------------------
 eq "false" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("one repair round")')" "seed: the prompt does not claim one round while the contract allows more"
 eq "true" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("authorizes a repair campaign")')" "seed: the prompt says choosing repair authorizes a repair campaign (plan RO13 wording)"

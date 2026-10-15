@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_terminal",
+  "status": "ready",
+  "candidate_tree_sha": "de13c279e8fa9f543a255664091842717b6318cd",
+  "verification_receipt_digest": "a9389e7ac64337b83ed4e084c24bccd8a0687027356d0095299df4923d54522b",
+  "repair_generations": 0,
+  "sealed_min_panel_size": 3,
+  "final_panel_count": 3,
+  "final_panel_seat_receipts": [
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 1,
+      "runner": "grok",
+      "model": "Grok-4.5",
+      "effort": "high",
+      "endpoint": null,
+      "family": "xai",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+      "reason": null,
+      "receipt_digest": "bbb4dcab1070c4d0af553bb64265b006b03d6c86f577503e6ca4f8dfd06602ab"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 2,
+      "runner": "agy",
+      "model": "Gemini 3.5 Flash (High)",
+      "effort": "high",
+      "endpoint": null,
+      "family": "google",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "a9389e7ac64337b83ed4e084c24bccd8a0687027356d0095299df4923d54522b",
+      "reason": null,
+      "receipt_digest": "1cec08392f609b68929b4b380409c8d17258c92fa06a255b202939453511207e"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 3,
+      "runner": "claude-native",
+      "model": "claude-opus",
+      "effort": "high",
+      "endpoint": null,
+      "family": "anthropic",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "be43ecf166b9fd71996eadfb890d0f3c9554026dbe8b1d3e66b27ba54956fe1d",
+      "reason": null,
+      "receipt_digest": "cff5412e3f17730fc78a2234459d8300ff648485170ba828ac25f84c1c6cd28c"
+    }
+  ],
+  "follow_up": [],
+  "rejected_findings": [],
+  "unresolved_final_findings": [],
+  "lifecycle_receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613/attempt-1/terminal/icc-lifecycle-receipt.json",
+    "root_run_id": "campaign-v1-db1cd19c1736cc0939be78cd84fd5032dfdd89c6dcbc83497b00639c17422311",
+    "receipt_digest": "0ddc928dcf59beb706ed1ededce44e18977c0d1be7df5c96170e2fdd181425c9"
+  },
+  "trace": [
+    "preflight",
+    "adopt_reviewed_candidate",
+    "scope_after_mutation",
+    "focused_vertical_verification",
+    "full_diff_review",
+    "adjudicate",
+    "scope_before_acceptance",
+    "convergence",
+    "final_panel",
+    "final_adjudicate"
+  ],
+  "receipt_digest": "88738d471534c9665066db2a56c15f98a0734135e5b29ed6d44cf4f0c6659629"
+}

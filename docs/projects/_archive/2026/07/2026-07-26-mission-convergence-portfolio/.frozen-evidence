@@ -1,0 +1,3 @@
+# BL-0096: historical path sets (observed_paths / authorized_paths) record what was true when audited.
+# No writing pass of check-plan-graduation.js may rewrite them.
+candidate-path-audit.json

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "artifact_type": "g8b_retained_worktree_receipt",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613",
+  "claim_id": "claim-v1-93c6bc2fcfa6b72380dade2f074a894014e7556c5bbbaaa6aa354824f2ab7d96",
+  "mission_campaign_id": "campaign-v2-5c0b078029d472e3c434fbf584810dfe1c5ede579ee2c28e5be3d3dea979a30e",
+  "worktree_path": "/tmp/g8b-fresh-authority-d932-mXcYi7/review-base",
+  "branch": "mission/48610e5ffb70/next-touch-debt-retirement-a1",
+  "candidate_sha": "d932e4912f836cf30e6ff0469f60109400307a59",
+  "candidate_tree_sha": "de13c279e8fa9f543a255664091842717b6318cd",
+  "retained": true,
+  "receipt_digest": "dc394930cd56ae7f39163c185735863678f30d983c4cd8852506cb22230c83b5"
+}

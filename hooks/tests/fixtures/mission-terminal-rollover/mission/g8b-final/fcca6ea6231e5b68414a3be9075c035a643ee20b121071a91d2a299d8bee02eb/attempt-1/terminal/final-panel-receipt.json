@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_final_panel",
+  "reviewed": true,
+  "verdict": "SHIP-AS-IS",
+  "findings": [],
+  "review_digest": "e5b277ae500c9bab7a10ecd6e60028c46fe81287c68b7d6a8561f039fac8bc5b",
+  "sealed_min_panel_size": 3,
+  "final_panel_count": 3,
+  "final_panel_seat_receipts": [
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 1,
+      "runner": "grok",
+      "model": "Grok-4.5",
+      "effort": "high",
+      "endpoint": null,
+      "family": "xai",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+      "reason": null,
+      "receipt_digest": "bbb4dcab1070c4d0af553bb64265b006b03d6c86f577503e6ca4f8dfd06602ab"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 2,
+      "runner": "agy",
+      "model": "Gemini 3.5 Flash (High)",
+      "effort": "high",
+      "endpoint": null,
+      "family": "google",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "cffbab0ea3014de212665ba52b5ccab3e2f9edb7aa5d700e6ddc67246fbfbb82",
+      "reason": null,
+      "receipt_digest": "70d7ad2fbc034c1b6c0d909f41a37ab93ff90ae102a25147d1b22caee7a8d182"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 3,
+      "runner": "claude-native",
+      "model": "claude-opus",
+      "effort": "high",
+      "endpoint": null,
+      "family": "anthropic",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "388161933738523084f43d73c9a390d36b46c5f9b6e5675636ea403ca7e8b100",
+      "reason": null,
+      "receipt_digest": "0f11a22b48938987e5ed6f7df03f9965a98dc6838e6672c23c27cf990f399f9b"
+    }
+  ],
+  "receipt_digest": "16f476877f370bca50141c35431556105e4fccd53056010e50d565fb663b30f8"
+}

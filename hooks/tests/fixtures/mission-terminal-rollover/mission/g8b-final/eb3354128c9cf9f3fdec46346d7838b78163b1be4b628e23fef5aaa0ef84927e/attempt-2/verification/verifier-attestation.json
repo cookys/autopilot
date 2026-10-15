@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "artifact_type": "next_touch_verifier_attestation",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+  "campaign_id": "campaign-v1-0dd7641f7dfac06f506d9c40b25033d7bbabbdcf5836bd6124883542ba1e5dc5",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "candidate_tree_sha": "9be1ed77829f1267f70fd1b13dfc853c6ec989ca",
+  "roster_tuple": "agy/Gemini 3.5 Flash (High)/high/google",
+  "actor_id": "codex/local-authoritative-verifier",
+  "session_id": "codex-verifier-7520e9aa1c3af33e793c7401",
+  "runner_version": "codex-host;node=v24.16.0;git=git version 2.53.0",
+  "provider_version": "local-authoritative-no-provider",
+  "command": "branch=verify/eb3354128c9c-c362-focused; cleanup(){ git checkout --detach c3621aa17e9556f2d2b5cdb38d3db13b2029fe20 >/dev/null 2>&1; git branch -D \"$branch\" >/dev/null 2>&1 || true; }; trap cleanup EXIT HUP INT TERM; git branch \"$branch\" c3621aa17e9556f2d2b5cdb38d3db13b2029fe20 && git checkout -q \"$branch\" && bash hooks/tests/next-touch-validation.test.sh && bash hooks/tests/dispatch-detached-campaign-authority.test.sh && bash scripts/sync-all.sh --check && cmp scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js && cmp scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh && cmp scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh && node --check scripts/next-touch-validation.js && node --check platforms/codex/plugin/scripts/next-touch-validation.js && bash -n scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | sort | sha256sum | awk '{print $1}')\" = 896ec9fadcb5879f61b56d30bcb8aca86617b4b807241e55ec9658c265df3df1 && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | wc -l | tr -d ' ')\" = 8 && ! rg -n \"TODO|FIXME|TBD|placeholder|not implemented\" scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && git diff --check b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD && test -z \"$(git status --porcelain)\"",
+  "command_argv": [
+    "/bin/sh",
+    "-c",
+    "branch=verify/eb3354128c9c-c362-focused; cleanup(){ git checkout --detach c3621aa17e9556f2d2b5cdb38d3db13b2029fe20 >/dev/null 2>&1; git branch -D \"$branch\" >/dev/null 2>&1 || true; }; trap cleanup EXIT HUP INT TERM; git branch \"$branch\" c3621aa17e9556f2d2b5cdb38d3db13b2029fe20 && git checkout -q \"$branch\" && bash hooks/tests/next-touch-validation.test.sh && bash hooks/tests/dispatch-detached-campaign-authority.test.sh && bash scripts/sync-all.sh --check && cmp scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js && cmp scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh && cmp scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh && node --check scripts/next-touch-validation.js && node --check platforms/codex/plugin/scripts/next-touch-validation.js && bash -n scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | sort | sha256sum | awk '{print $1}')\" = 896ec9fadcb5879f61b56d30bcb8aca86617b4b807241e55ec9658c265df3df1 && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | wc -l | tr -d ' ')\" = 8 && ! rg -n \"TODO|FIXME|TBD|placeholder|not implemented\" scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && git diff --check b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD && test -z \"$(git status --porcelain)\""
+  ],
+  "command_digest": "ca93e11c5c372342a02d1f7657cab5b8307a2db9d3509fbeaa50d4593850dcac",
+  "result_digest": "7520e9aa1c3af33e793c7401d0485bb85837aea08cc588dd8f4e7de13e9340c6",
+  "receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e/attempt-2/verification/verification-receipt-green.json",
+    "receipt_digest": "6ccce08f926eb04f8e046b3c2b2e2f537dbd3c87adb62e084254e46735248e7e"
+  },
+  "receipt_digest": "f8724978aa7c7a48b6fa2598cfae1a26dd4a128450b6f21500e86fc9170272d7"
+}

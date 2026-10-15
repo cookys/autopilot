@@ -1,0 +1,24 @@
+node:child_process:964
+    throw err;
+    ^
+
+Error: Command failed: git -C /tmp/g8b-verifier-c362-ntyO1G symbolic-ref -q --short HEAD
+    at genericNodeError (node:internal/errors:985:15)
+    at wrappedFn (node:internal/errors:539:14)
+    at checkExecSyncError (node:child_process:925:11)
+    at Object.execFileSync (node:child_process:961:15)
+    at [stdin]:20:61
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30) {
+  status: 1,
+  signal: null,
+  output: [ null, '', '' ],
+  pid: 3621575,
+  stdout: '',
+  stderr: ''
+}
+
+Node.js v24.16.0

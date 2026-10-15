@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_writer_fence",
+  "campaign_id": "campaign-v1-57e2c62a1098e568e4e7ec434bf0c46464e4c248543e9d5a60d46d7f67d8ac31",
+  "stage_identity": "g8b-new-a149-reviewed-candidate-adoption",
+  "candidate_commit": "a149f2548460cc0c4037cd7a037f9d28d2ae284b",
+  "candidate_tree_sha": "adc5f5c19076421322a4a8ec7297a37de6e445e2",
+  "status": "closed",
+  "evidence_mode": "dispatch_exit",
+  "closure_evidence_digest": "bacc9387b0d3df675d93ee6355c7673b9fcf3f80612459192e08335f5e2a4795",
+  "receipt_digest": "30d168d8c1313d08465e77e2e8ded3f5345c6b54e36fb138f9afd645afe036ea"
+}

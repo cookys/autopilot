@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_terminal_receipt",
+  "claim_id": "claim-v1-1650b6f50b38ba7be3a86ef370cdb967c28f75aa5d7ddafb4661330a58b2b124",
+  "mission_lineage_id": "lineage-v1-833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e",
+  "campaign_id": "campaign-v2-0e966850be8bcc8ea945735cf25d1b5c2e668d5bce16c7e53ca05ab61c20b414",
+  "mission_campaign_id": "campaign-v2-0e966850be8bcc8ea945735cf25d1b5c2e668d5bce16c7e53ca05ab61c20b414",
+  "icc_campaign_id": "campaign-v1-57e2c62a1098e568e4e7ec434bf0c46464e4c248543e9d5a60d46d7f67d8ac31",
+  "campaign_contract_digest": "b1f2788553902d6d3b213f856fc34053ed5be2b78677a3cfa0910aa6a81dc4d9",
+  "raw_campaign_contract_digest": "1d2136771d37545c7f067e7c05a162168e0723f49e538e2da03fe70ce38a178b",
+  "graph_node_id": "next-touch-debt-retirement",
+  "graph_attempt": 1,
+  "outcome": "ready",
+  "possibly_effectful": true,
+  "actual_usage": {
+    "per_axis": [
+      {
+        "axis": "campaigns",
+        "authorized_ceiling": 10,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "wall_seconds",
+        "authorized_ceiling": 36000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "tool_calls",
+        "authorized_ceiling": 1500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "engine_attempts",
+        "authorized_ceiling": 50,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "external_wait_seconds",
+        "authorized_ceiling": 14400,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "canonical_changed_files",
+        "authorized_ceiling": 500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "output_bytes",
+        "authorized_ceiling": 50000000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      }
+    ]
+  },
+  "satisfied_acceptance_hashes": [
+    "00d79fc88537eafcd58a5c93e013d50fd5f9e510875f8ee2266ed4ad31cdd855",
+    "15131990e54e1878c3f29ad8c0c75e55c2380cb61df121905aebb3a93a31687a",
+    "9151e175617af9634a4ab298efb9210c64bf126aaf3671aa44a65f730f37eaf9",
+    "d475375b0c097e43bc8437b13d0711938f8ad38eb8dcfcfdeb5260e32d2d96a5"
+  ],
+  "observed_at": "2026-08-06T05:36:42.606Z",
+  "receipt_digest": "5517d1d6a173a7f35184205409705dd21e110184834ca9b9b8dea736a1d64a6f"
+}

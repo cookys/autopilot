@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_prepare_receipt_recovery",
+  "reason": "original caller receipt was not persisted after successful prepare; reconstructed from canonical registry plus exact prepared DRAFT state and accepted by production validatePreparedReceipt",
+  "registry_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/registry.json",
+  "state_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/states/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e.json",
+  "registry_entry_digest": "76bc02cb4b02f475331291148074c57f6e8397ac4ff0932391fd94d2671fa975",
+  "prepared_state_hash": "b7b048ff1994e01c3aa579479cba2854e9ec1e5a70548416d37b02f5a22eb9af",
+  "recovered_receipt_digest": "074937f834eea54f212e4d5b6b807f5cc0c349efd9375530dfc26472c394528b",
+  "recovered_at": "2026-08-06T03:41:56.574Z"
+}

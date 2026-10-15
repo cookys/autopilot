@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "artifact_type": "g8b_production_icc_intake_receipt",
+  "mission_lineage_id": "lineage-v1-833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e",
+  "mission_campaign_id": "campaign-v2-0e966850be8bcc8ea945735cf25d1b5c2e668d5bce16c7e53ca05ab61c20b414",
+  "claim_id": "claim-v1-1650b6f50b38ba7be3a86ef370cdb967c28f75aa5d7ddafb4661330a58b2b124",
+  "claim_binding_digest": "db139caf8a34e692e73c7b342f8084ee7123a84268f0463e9b6febb9effae1de",
+  "mission_claim_base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "campaign_id": "campaign-v1-57e2c62a1098e568e4e7ec434bf0c46464e4c248543e9d5a60d46d7f67d8ac31",
+  "raw_campaign_contract_digest": "1d2136771d37545c7f067e7c05a162168e0723f49e538e2da03fe70ce38a178b",
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e/next-touch-debt-retirement/attempt-1/campaign.json",
+  "ledger_path": "/home/cookys/projects/autopilot/.git/autopilot/implementation-campaign.jsonl",
+  "generation": 1,
+  "generation_nonce_digest": "52e9696c08345fd6686731ba54a7d64cd3b4862fd0cb22f99f7b48a557f3d5e8",
+  "event_digests": [
+    "806d652d4f7a339b268e1a109ee1ec7a1984d568bee5482b17d7fc0e03ad0be9",
+    "4fec2217fd85a7e7000b72f76e4deeea462ace8febcfbfd6bb17c0ab27030dce",
+    "a54172d686649ef0b64dab5f3cae8062ac39035715d0b4ace45837ccb88372f3",
+    "3c4c1240ddfc18411a7613b6372b173e7920ec6ef6a71202f310bb8730eda41f",
+    "4481dfb164c8202f9a9b2647ce3d8fce91243bec42d070e0d4eef0b48b5ce521"
+  ],
+  "final_phase": "TERMINAL_READY",
+  "generation_status": "verified",
+  "mission_state": "COMPLETE",
+  "prepared_adopted": false,
+  "observed_at": "2026-08-06T05:36:42.606Z",
+  "receipt_digest": "6299b7b8746c43ef934346cbb0889d4d7742a479e605ec4604dfaa1d9a669075"
+}

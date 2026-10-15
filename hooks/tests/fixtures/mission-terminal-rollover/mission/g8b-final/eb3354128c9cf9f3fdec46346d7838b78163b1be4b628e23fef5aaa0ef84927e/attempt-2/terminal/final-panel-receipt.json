@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_final_panel",
+  "reviewed": true,
+  "verdict": "SHIP-AS-IS",
+  "findings": [],
+  "review_digest": "053abc44d4e99cb2773bb4d9a0fd8044c0f9e883e37ec5a9a2f6cb337511ed54",
+  "sealed_min_panel_size": 3,
+  "final_panel_count": 3,
+  "final_panel_seat_receipts": [
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 1,
+      "runner": "grok",
+      "model": "Grok-4.5",
+      "effort": "high",
+      "endpoint": null,
+      "family": "xai",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+      "reason": null,
+      "receipt_digest": "bbb4dcab1070c4d0af553bb64265b006b03d6c86f577503e6ca4f8dfd06602ab"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 2,
+      "runner": "agy",
+      "model": "Gemini 3.5 Flash (High)",
+      "effort": "high",
+      "endpoint": null,
+      "family": "google",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "6ccce08f926eb04f8e046b3c2b2e2f537dbd3c87adb62e084254e46735248e7e",
+      "reason": null,
+      "receipt_digest": "c187fdc51a06e62afa105ff6c3470ff05260bc932b3956b42b544c8d19a0cef7"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 3,
+      "runner": "claude-native",
+      "model": "claude-opus",
+      "effort": "high",
+      "endpoint": null,
+      "family": "anthropic",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "83c766c349738c0e88500ba33e11ee8d58ff62c3a484ab9cfd75a0f0186cbcb5",
+      "reason": null,
+      "receipt_digest": "73c0599243d4d89a8ce461d2777b182fe2405bd527adeb146a1e65b35c81e1bb"
+    }
+  ],
+  "receipt_digest": "f8a0f2df0d3bb4936440fb00a1b483f7a148c383dec03fb90e4ee388865c4471"
+}

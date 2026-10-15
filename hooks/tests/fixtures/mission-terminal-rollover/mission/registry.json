@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_runtime_registry",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "missions": {
+    "baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e": {
+      "schema_version": 1,
+      "adoption_key": "baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+      "task_authority_id": "03aa380015a3b01cf2255c999937c6f5ca826a1cd7c86fa3334cb75ab6f6ebb6",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "0d796d7e387c3447c6235f6be3aadf92f1f4e682595633f8e83fbe505c3ae24c",
+      "initial_required_acceptance_hashes": [
+        "8ad11b2453b76ca7ced00d939e48cebe180f4946732751757d512f29e1abea1c",
+        "db1d5466584547b289208b3cdb6f9f03ed4bbeb795eb585d9b575bc991e23d34"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "68755afe7d2c20af2619836b766b839c9be0823638bfd3c6f64cc4d4d87718f5",
+      "state_ref": "states/baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e.json"
+    },
+    "7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51": {
+      "schema_version": 1,
+      "adoption_key": "7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51",
+      "task_authority_id": "445cf90ec42db3f4f626936884aa2957f1023d1da378c18ec60ce5d315d787f9",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "a85c5e658a6121b8350e651ac9386c3fd584dedad49da32ad536705230995b0d",
+      "initial_required_acceptance_hashes": [
+        "16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975",
+        "d61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "e9cf69055aa95d5e430cb6fc2af6f8f81e9faeebbaef882f81534e7b765ac58c",
+      "state_ref": "states/7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51.json"
+    },
+    "eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e": {
+      "schema_version": 1,
+      "adoption_key": "eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+      "task_authority_id": "65e4cddb77afd987ffd28581d920aa20d91b3a83e7887c84d826066f800a3129",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "5c7c3ab43c877414585ae98d41f4b3246787b8c855e906c52f769af8a55caf11",
+      "initial_required_acceptance_hashes": [
+        "420ce13ff850251b20fe6c4ff6e4c2cba5c6654993e31a33f711d682ffde69ee",
+        "9f8417b8c6623f6afaca28524292c73b83917d0f706c0211e1faac468d645e8f"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "b7b048ff1994e01c3aa579479cba2854e9ec1e5a70548416d37b02f5a22eb9af",
+      "state_ref": "states/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e.json"
+    },
+    "e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f": {
+      "schema_version": 1,
+      "adoption_key": "e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+      "task_authority_id": "d50e4a4759797b67e294bdbb08ea0db7b0bd7a37f73b7d4dd3db925a5755a499",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "a9b08ee8afc63a077a8870682fd35c8b3f3cf13324cd22410e8ae847a011beee",
+      "initial_required_acceptance_hashes": [
+        "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+        "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "29d4472b7a27f238aab832d87d3f94c051806145876b12c5ede57a57a7b63fd4",
+      "state_ref": "states/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f.json"
+    },
+    "48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613": {
+      "schema_version": 1,
+      "adoption_key": "48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613",
+      "task_authority_id": "be4377d0d860331f1241440e5b8389def3e502cda4758ea477e37dcc6b862b9c",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "cffad3410b8ea470c7c0447f5bf9d49ca6a3a4df6954e25dbeccabb2257d2d03",
+      "initial_required_acceptance_hashes": [
+        "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+        "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "9df7d2ad8a2f9559b6d89a5303198ce1d32bbd8cff5c55c05ab2eb649ea9b85e",
+      "state_ref": "states/48610e5ffb70aa3d5c9c961325373dac7f19784aecd6fdd6c1c48b7c6f104613.json"
+    },
+    "833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e": {
+      "schema_version": 1,
+      "adoption_key": "833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e",
+      "task_authority_id": "76da347ed34b3c4c8a61062c893ac2e163d2b8a8468c5e3be58af88aaa13ccf7",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "2480361bceeb680e5dfbe919fd2f8dc748d17b6a86fb4311bd527e08a0a1342a",
+      "initial_required_acceptance_hashes": [
+        "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+        "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "08d18ea0205368458fadf3ab73bec00ff48e7dbff96e537775a7a6a4b868a515",
+      "state_ref": "states/833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e.json"
+    },
+    "fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb": {
+      "schema_version": 1,
+      "adoption_key": "fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb",
+      "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+      "mission_lineage_id": "lineage-v1-fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb",
+      "task_authority_id": "53b06eb647dba15feea94c1f2d91321008bdb09c53a571b022c998b936104d66",
+      "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+      "intent_hash": "ffc364c0420382f97499e58363a598ca016e1531619b6c1a40f7843c95af3ac7",
+      "initial_required_acceptance_hashes": [
+        "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+        "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57"
+      ],
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+      "enforcement_mode": "enforce",
+      "prepared_state_hash": "15cfb28221b7b1ec8cceb735ab25da7c990ade8b24cdf5b4925fe02b9578ddf2",
+      "state_ref": "states/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb.json"
+    }
+  }
+}

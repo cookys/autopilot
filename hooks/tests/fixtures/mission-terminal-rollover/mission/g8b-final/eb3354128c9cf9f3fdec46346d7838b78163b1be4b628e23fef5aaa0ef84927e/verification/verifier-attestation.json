@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "artifact_type": "next_touch_verifier_attestation",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+  "campaign_id": "campaign-v1-277e569b34b90df929d8dbac5c89a4d9b38823232fe5ab9a8f7bf790ec7e6837",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "candidate_tree_sha": "9be1ed77829f1267f70fd1b13dfc853c6ec989ca",
+  "roster_tuple": "agy/Gemini 3.5 Flash (High)/high/google",
+  "actor_id": "codex/local-authoritative-verifier",
+  "session_id": "codex-verifier-fb0445602f7102c98afb1a2c",
+  "runner_version": "codex-host;node=v24.16.0;git=git version 2.53.0",
+  "provider_version": "local-authoritative-no-provider",
+  "command": "bash hooks/tests/next-touch-validation.test.sh && bash hooks/tests/dispatch-detached-campaign-authority.test.sh && bash scripts/sync-all.sh --check && cmp scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js && cmp scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh && cmp scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh && node --check scripts/next-touch-validation.js && node --check platforms/codex/plugin/scripts/next-touch-validation.js && bash -n scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | sort | sha256sum | awk '{print $1}')\" = 896ec9fadcb5879f61b56d30bcb8aca86617b4b807241e55ec9658c265df3df1 && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | wc -l | tr -d ' ')\" = 8 && ! rg -n \"TODO|FIXME|TBD|placeholder|not implemented\" scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && git diff --check b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD && test -z \"$(git status --porcelain)\"",
+  "command_argv": [
+    "/bin/sh",
+    "-c",
+    "bash hooks/tests/next-touch-validation.test.sh && bash hooks/tests/dispatch-detached-campaign-authority.test.sh && bash scripts/sync-all.sh --check && cmp scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js && cmp scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh && cmp scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh && node --check scripts/next-touch-validation.js && node --check platforms/codex/plugin/scripts/next-touch-validation.js && bash -n scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | sort | sha256sum | awk '{print $1}')\" = 896ec9fadcb5879f61b56d30bcb8aca86617b4b807241e55ec9658c265df3df1 && test \"$(git diff --name-only b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD | wc -l | tr -d ' ')\" = 8 && ! rg -n \"TODO|FIXME|TBD|placeholder|not implemented\" scripts/next-touch-validation.js platforms/codex/plugin/scripts/next-touch-validation.js scripts/dispatch-hetero.sh platforms/codex/plugin/scripts/dispatch-hetero.sh scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh hooks/tests/next-touch-validation.test.sh hooks/tests/dispatch-detached-campaign-authority.test.sh && git diff --check b3dd078ae259843c1708eac69755a98b8fa20d5d..HEAD && test -z \"$(git status --porcelain)\""
+  ],
+  "command_digest": "1a801b3873b34b9cc0cf92a215d42fc32905c6e3a0286d300268595c2171aece",
+  "result_digest": "8375a6555581c5f9f2c6d732973e9ad4bc62d6511bdee0f628bd9bea8ff70e41",
+  "receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e/verification/verification-receipt.json",
+    "receipt_digest": "71df2c6e78dc7f94949300978c0ec9a7e30b34d3773bf0401ab6221b6aa09703"
+  },
+  "receipt_digest": "de6c859f417ff8c37e30e881bbb977efe2fb8041424b23d583c6b6d5af4b0579"
+}

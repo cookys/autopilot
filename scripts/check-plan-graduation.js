@@ -451,6 +451,41 @@ function frozenAssetFiles(repoRoot) {
   try {
     for (const rel of require('./lib/sealed-docs.js').sealedDocFiles(repoRoot)) frozen.add(rel);
   } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
+  // Evidence frozen only by convention (no seal/pin to derive it from): an explicit, tracked
+  // `.frozen-evidence` marker names it (BL-0096; 6559da33 rewrote the historical observed_paths of
+  // an unsealed candidate-path-audit.json). See markedFrozenEvidenceFiles.
+  for (const rel of markedFrozenEvidenceFiles(repoRoot)) frozen.add(rel);
+  return frozen;
+}
+
+// `.frozen-evidence` marker: a tracked file of that name freezes the paths its lines name. One
+// path per line, relative to the marker's own directory; a file freezes that file, a directory
+// (or `.` for the marker's whole directory) freezes every tracked file under it; blank lines and
+// `#` comments are ignored; a line that escapes the marker's directory (`..`, absolute) is
+// ignored. The marker file itself is frozen too. Explicit, per-evidence, no path heuristic.
+function markedFrozenEvidenceFiles(repoRoot) {
+  const frozen = new Set();
+  let tracked = [];
+  try {
+    tracked = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+      .split('\0').filter(Boolean);
+  } catch { return frozen; }
+  for (const marker of tracked.filter((f) => path.posix.basename(f) === '.frozen-evidence')) {
+    frozen.add(marker);
+    const dir = path.posix.dirname(marker);
+    const text = readFileSafe(path.join(repoRoot, marker));
+    if (text == null) continue;
+    for (const raw of text.split('\n')) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      if (path.posix.isAbsolute(line)) continue;
+      const target = path.posix.normalize(path.posix.join(dir, line));
+      if (target.startsWith('..')) continue;
+      if (dir !== '.' && target !== dir && !target.startsWith(`${dir}/`)) continue; // escaped the marker's dir
+      const all = target === '.';
+      for (const f of tracked) if (all || f === target || f.startsWith(`${target}/`)) frozen.add(f);
+    }
+  }
   return frozen;
 }
 

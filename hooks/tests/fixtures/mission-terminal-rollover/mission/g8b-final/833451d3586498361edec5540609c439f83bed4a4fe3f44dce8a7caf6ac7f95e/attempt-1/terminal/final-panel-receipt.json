@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_final_panel",
+  "reviewed": true,
+  "verdict": "SHIP-AS-IS",
+  "findings": [],
+  "review_digest": "95547d8bd75fcebcfaa9901a9ba2907bcee4919d3682395acd479ac0c68492e0",
+  "sealed_min_panel_size": 3,
+  "final_panel_count": 3,
+  "final_panel_seat_receipts": [
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 1,
+      "runner": "grok",
+      "model": "Grok-4.5",
+      "effort": "high",
+      "endpoint": null,
+      "family": "xai",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+      "reason": null,
+      "receipt_digest": "bbb4dcab1070c4d0af553bb64265b006b03d6c86f577503e6ca4f8dfd06602ab"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 2,
+      "runner": "agy",
+      "model": "Gemini 3.5 Flash (High)",
+      "effort": "high",
+      "endpoint": null,
+      "family": "google",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "4e6fc6fea2786a57060e6a161686698f84a377cbf0a8888dfcaf79329dc36dd2",
+      "reason": null,
+      "receipt_digest": "400b1ce968faea1c51c03051bdd76eee9df9d59ea8b0af4a6587765fc3eb7236"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 3,
+      "runner": "claude-native",
+      "model": "claude-opus",
+      "effort": "high",
+      "endpoint": null,
+      "family": "anthropic",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "d270f59544a35ef77aca87363bcf946361e1b7b6d31e457b76783eaded131337",
+      "reason": null,
+      "receipt_digest": "52969b9cd53f6deae3859c1ce4d4cbdf97124027d866df0cadf430d197699acd"
+    }
+  ],
+  "receipt_digest": "87ec381800c3656ca74ac6603ba756d9e8d9fe80fcd6136fe5fe2d98c05ba3e9"
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_type": "controller_full_diff_review",
+  "campaign_id": "campaign-v1-0dd7641f7dfac06f506d9c40b25033d7bbabbdcf5836bd6124883542ba1e5dc5",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "candidate_tree_sha": "9be1ed77829f1267f70fd1b13dfc853c6ec989ca",
+  "review_input_digest": "7abecb8198487aa7f26819f298720b8c35ae937b48c4ce9f9ac8d07922023609",
+  "diff_digest": "010b01a2a8d6d47bbd35f574b3a79ce006ddecdc27a72c49963304b4e5a80185",
+  "verdict": "SHIP-AS-IS",
+  "findings": [],
+  "follow_up": [],
+  "unresolved_final_findings": [],
+  "receipt_digest": "83c766c349738c0e88500ba33e11ee8d58ff62c3a484ab9cfd75a0f0186cbcb5"
+}

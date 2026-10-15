@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_terminal_receipt",
+  "claim_id": "claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01",
+  "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+  "campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+  "mission_campaign_id": "campaign-v2-a483b02913c750ddf3d380aece908caa1f988db14fc54c97b10e1e4e61526f3d",
+  "icc_campaign_id": "campaign-v1-28cf3f20d7676a2a9dad182a8c28c3b52f92e720fada00bf35038bcf6e090773",
+  "campaign_contract_digest": "c0699e6d317bc2c32c78e3a3fc6aabf7916e099c69c99ea71b1f10d52a3212bf",
+  "raw_campaign_contract_digest": "c206dc8bce44b73e358cd76b7337357dd1783f6db5d54ff19e341d587c72d7bb",
+  "graph_node_id": "evidence-eval-truth",
+  "graph_attempt": 3,
+  "outcome": "ready",
+  "possibly_effectful": true,
+  "actual_usage": {
+    "per_axis": [
+      {
+        "axis": "campaigns",
+        "authorized_ceiling": 10,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "wall_seconds",
+        "authorized_ceiling": 36000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "tool_calls",
+        "authorized_ceiling": 1500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "engine_attempts",
+        "authorized_ceiling": 50,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "external_wait_seconds",
+        "authorized_ceiling": 14400,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "canonical_changed_files",
+        "authorized_ceiling": 500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "output_bytes",
+        "authorized_ceiling": 50000000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      }
+    ]
+  },
+  "satisfied_acceptance_hashes": [
+    "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+    "2fe0cb03f06bcaa4d7cf58de444ea8f96add8d49585c9acf0c5100b36680fbe4",
+    "50a720353c0aec7cf369b0994c6d12dde4607fc5dae149966943ae543e4e3603",
+    "8e7119a7d24fab50dd9cc4fafca0a0cb35ef22e057bec561b6963f9d66689b2c",
+    "9b0b74d9bcf02c61476c65152e9c464a227936ac7e0c0db5cc4e35176402ce4c",
+    "a1577c915bcd3d1cf0f44cd3641d827543601e7cbc157883e8ad5c0d61072c75",
+    "a7d303bcc6e525e35981ea9a36f2f021f79140887ade1f392315aa159153b350"
+  ],
+  "observed_at": "2026-07-31T07:52:08.843Z",
+  "receipt_digest": "b17b7d15915ac911960b574c928c588671f0ef1802b2ba3f67a9b580e43bb358"
+}

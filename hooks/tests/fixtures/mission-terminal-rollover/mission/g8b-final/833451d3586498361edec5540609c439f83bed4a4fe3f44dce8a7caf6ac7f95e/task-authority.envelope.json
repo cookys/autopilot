@@ -1,0 +1,118 @@
+{
+  "acceptance": {
+    "contract_hash": "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+    "criteria_hash": "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57",
+    "required_evidence": [
+      "archive",
+      "doc-sync",
+      "receipts",
+      "review",
+      "tests"
+    ]
+  },
+  "authority_status": "shadow",
+  "data_egress_policy": {
+    "mode": "local-only",
+    "rules": []
+  },
+  "effect_permissions": {
+    "effects": [
+      {
+        "action_class": "external",
+        "destinations": [
+          "grok:api"
+        ],
+        "id": "engine-implementation-dispatch-v1",
+        "max_uses": 1,
+        "operation": "engine_implementation_dispatch",
+        "requires_approval": true,
+        "requires_challenge": false,
+        "requires_mediator": true,
+        "roles": [
+          "implementer"
+        ],
+        "tool_class": "model_runner"
+      }
+    ]
+  },
+  "escalation_policy": {
+    "on_role_denied": "block",
+    "on_scope_mismatch": "block",
+    "protected_effects_require_escalation": true
+  },
+  "execution_preferences": {
+    "assurance_profile": "conservative",
+    "assurance_source": "task-override",
+    "data_egress": "local-only",
+    "data_egress_source": "task-override",
+    "guidance_profile": "guided",
+    "guidance_source": "task-override",
+    "topology_preference": "heterogeneous",
+    "topology_source": "task-override"
+  },
+  "finish_receipt_schema": {
+    "required_fields": [
+      "authority_status",
+      "decisions_outside_user_intent",
+      "effective_profile",
+      "evidence"
+    ],
+    "schema_id": "mission-finish-v1"
+  },
+  "intent": {
+    "objective": "Integrate the fully reviewed consolidated G8b final JSONL-authority candidate a149f2548460cc0c4037cd7a037f9d28d2ae284b through a wholly new non-successor Mission rooted at review base 1f9c53f4f070b152950a4115660026c4bb4fbede, with focused local independent verification, exact-base review, terminal receipts, and atomic ff-only develop integration; do not use provider dispatch, push, release, or publish.",
+    "requirements_hash": "b4addbff981545a23a59bb11d3df42a8fc34ded9f685cb6370bbf884c0afadac",
+    "scope": {
+      "allowed_tools": [
+        "bash",
+        "git",
+        "node"
+      ],
+      "artifact_roots": [
+        ".claude",
+        ".opencode",
+        "docs",
+        "evals",
+        "hooks",
+        "platforms/codex/plugin",
+        "scripts",
+        "skills",
+        "src"
+      ],
+      "domains": [
+        "autopilot",
+        "backlog",
+        "orchestration"
+      ],
+      "languages": [
+        "javascript",
+        "json",
+        "markdown",
+        "shell"
+      ],
+      "task_classes": [
+        "implementation",
+        "verification"
+      ]
+    }
+  },
+  "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+  "mission_lineage_id": "lineage-v1-833451d3586498361edec5540609c439f83bed4a4fe3f44dce8a7caf6ac7f95e",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "red_lines": [
+    "no-external-publish",
+    "no-production-push",
+    "no-secret-disclosure"
+  ],
+  "resource_ceiling": {
+    "max_cost_usd_micros": 50000000,
+    "max_grant_ttl_seconds": 3600,
+    "max_tokens": 1000000,
+    "max_tool_calls": 1500,
+    "max_wall_seconds": 36000
+  },
+  "schema_version": 1,
+  "task_id": "next-touch-g8b-final-jsonl-authority",
+  "task_authority_id": "76da347ed34b3c4c8a61062c893ac2e163d2b8a8468c5e3be58af88aaa13ccf7"
+}

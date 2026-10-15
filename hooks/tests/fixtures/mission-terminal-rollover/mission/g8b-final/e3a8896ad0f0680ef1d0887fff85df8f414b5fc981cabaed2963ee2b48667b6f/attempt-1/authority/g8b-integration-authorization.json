@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "artifact_type": "g8b_integration_authorization",
+  "authority_mode": "fresh_non_successor",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "ticket": "mission-e3a8896ad0f0-next-touch-debt-retirement-a1",
+  "project": "next-touch-debt-retirement",
+  "graph_node_id": "next-touch-debt-retirement",
+  "authorized_branch": "mission/e3a8896ad0f0/next-touch-debt-retirement-a1",
+  "candidate_ref": "refs/heads/mission/e3a8896ad0f0/next-touch-debt-retirement-a1",
+  "mission_lineage_id": "lineage-v1-e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "adoption_key": "e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "task_authority_id": "d50e4a4759797b67e294bdbb08ea0db7b0bd7a37f73b7d4dd3db925a5755a499",
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "source_plan_path": "docs/plans/2026-08-03-next-touch-debt-retirement.md",
+  "source_rubric_path": "docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md",
+  "source_plan_sha256": "d61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b",
+  "source_rubric_sha256": "16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975",
+  "admission_base_sha": "f6805529bdca4cca76f334d8c82c8f2bf141aaf8",
+  "mission_claim_base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "review_base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "product_candidate_sha": "b3dd078ae259843c1708eac69755a98b8fa20d5d",
+  "product_candidate_tree_sha": "a8aaa64d8f086141fd4814fc54bc745b3420c489",
+  "integration_candidate_sha": "fc03f35fca7c38a0b56c63c3ba05ddb2d81e5067",
+  "integration_candidate_tree_sha": "535d99968c1d7c63fa726d701b67f32531b49717",
+  "integration_candidate_ref": "refs/heads/mission/e3a8896ad0f0/next-touch-debt-retirement-a1",
+  "develop_ref": "refs/heads/develop",
+  "develop_sha": "6dfd93f409128f53bccd39cac1d2d66eb9f339d6",
+  "d8_evaluated_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+  "d8_publication_sha": "c43370dd3df0918007fa35afe48f407124298617",
+  "d8_report_path": ".autopilot/evidence/grok-implementer-ab.json",
+  "d8_report_sha256": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+  "archive_plan_path": "docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md",
+  "archive_rubric_path": "docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md",
+  "historical_archive_authorization_path": "docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json",
+  "historical_archive_authorization_sha256": "3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba",
+  "historical_archive_authorization_digest": "e62c5a8438249aaea7bb930ff5c1a8fa311901e19e578d34a95228a5c28d1f7d",
+  "task_authority_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/task-authority.envelope.json",
+    "task_authority_id": "d50e4a4759797b67e294bdbb08ea0db7b0bd7a37f73b7d4dd3db925a5755a499"
+  },
+  "prepared_receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/prepare-receipt.json",
+    "receipt_digest": "683ce766dc3de2e5e7c39c0968a06c909de0f12747021e46e6d5dd427ffdf9f9"
+  },
+  "mission_state_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/states/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f.json",
+    "state_hash": "b082be4b0e56b07a99dd9cd9c1a05623b8bd4178c52b5bfef813b13100eb4c0d"
+  },
+  "mission_terminal_receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/attempt-1/terminal/mission-terminal-receipt.json",
+    "receipt_digest": "7ee78ed854d1c3d59f3630d71c6cd21db2ce93c9052c55a6e51ea0d0d6f69166"
+  },
+  "campaign_terminal_receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/attempt-1/terminal/mission-campaign-terminal-receipt.json",
+    "receipt_digest": "f647446b5d7638f122958e5062063e4c7744c117634fce1c36b4a3f5c38f950a"
+  },
+  "icc_terminal_receipt_ref": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f/attempt-1/terminal/icc-terminal-receipt.json",
+    "receipt_digest": "8bbc6af5621e954eac85993f5446ba4c0c68cf61ad7f6e54e8039546f0265771"
+  },
+  "mission_terminal_receipt_digest": "7ee78ed854d1c3d59f3630d71c6cd21db2ce93c9052c55a6e51ea0d0d6f69166",
+  "campaign_terminal_receipt_digest": "f647446b5d7638f122958e5062063e4c7744c117634fce1c36b4a3f5c38f950a",
+  "icc_terminal_receipt_digest": "8bbc6af5621e954eac85993f5446ba4c0c68cf61ad7f6e54e8039546f0265771",
+  "claim_id": "claim-v1-2721fdf7302fdf32eddd19de3a6cfd0fa4789c163520bab53a8554b3ad490b61",
+  "claim_binding_digest": "f3b9c907d416b2df994884351ba250d64723bd1e0125763707d42a4e22a37655",
+  "mission_campaign_id": "campaign-v2-1a9723ede0733783be5ca65dbab81b7da10dcbc2a326438fa48ecbd9f9e752ab",
+  "campaign_id": "campaign-v1-962de4f5a8f0939bdd74d0538ed0a35a84131d373668f9cc5baa1bd996031bf6",
+  "roster": {
+    "implementer": "grok/Grok-4.5/high/xai",
+    "verifier": "agy/Gemini 3.5 Flash (High)/high/google",
+    "reviewer": "claude-native/claude-opus/high/anthropic"
+  },
+  "receipt_digest": "dcc2bf34bd2c9fa3e80985fd84a11565caf7c80da7bd34684dd2d5f92a1eaeca"
+}

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "artifact_type": "campaign_terminal_receipt",
+  "claim_id": "claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232",
+  "mission_lineage_id": "lineage-v1-baa18c972660cf5a67783e507a83849e4a3c6ccd61ba93bdf29a31ba893d9d3e",
+  "campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+  "mission_campaign_id": "campaign-v2-7751faad571b2bed1b5357e1b7757c8b6a1625c338e16fe88227a7ff409ccc1d",
+  "icc_campaign_id": "campaign-v1-80c477b59fa440d324cc2b98032e101a9a630cc6c5c60057a062e7c1393f3e50",
+  "campaign_contract_digest": "59d14269f62a87765435859e4d2f74a3e56af788708a105f1404eccfd4bcb521",
+  "raw_campaign_contract_digest": "4040a3ef498349fbfd685cc8c52181133b227c920c8e818443e6b540216f4475",
+  "graph_node_id": "correctness-gates",
+  "graph_attempt": 3,
+  "outcome": "ready",
+  "possibly_effectful": true,
+  "actual_usage": {
+    "per_axis": [
+      {
+        "axis": "campaigns",
+        "authorized_ceiling": 10,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "wall_seconds",
+        "authorized_ceiling": 36000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "tool_calls",
+        "authorized_ceiling": 1500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "engine_attempts",
+        "authorized_ceiling": 50,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "external_wait_seconds",
+        "authorized_ceiling": 14400,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "canonical_changed_files",
+        "authorized_ceiling": 500,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      },
+      {
+        "axis": "output_bytes",
+        "authorized_ceiling": 50000000,
+        "reserved_active": 0,
+        "durable_consumed": 0,
+        "known": false
+      }
+    ]
+  },
+  "satisfied_acceptance_hashes": [
+    "157f8da6a2da5f53340b8d1dfe133d1ca80c7642bf1043bb4aec0d9cc90a153b",
+    "27638cb34058bcae0716405ce6e5e7cdd9835c1ab14d44a2bfa144aa6613afc2",
+    "28b64bfec50e7cf2c6210639fcb88ca665ff715750728e3cd8b15ffe0d3434be",
+    "3f6c30aa2ad33338485cdf5ea173e4b60d54ff1f2bb17ae90f6a351aec7bc803",
+    "60a2686b4c27382bfc9938756b978b7f2e3683478ad49435903a918575526795",
+    "6a52cf7da2eb33e6b4aa14a13aa2f73ad7bc31c8e90800c47ef9ff23fad321e0",
+    "ad01c5905ac8f16fed1e9d8fadfac3be25b6c14a541556f0712f76c600e19006"
+  ],
+  "observed_at": "2026-07-31T07:52:08.920Z",
+  "receipt_digest": "3abc74dc35b08b177871854cdb218f7d94bfaf0793ad0704060515753974de16"
+}

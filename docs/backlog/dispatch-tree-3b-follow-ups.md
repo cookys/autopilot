@@ -18,5 +18,8 @@ Left open by the 3b review (three rounds, merged as `92002f7f`, 2026-10-15). Pla
     `ensure-child` records a parent only when the payload id equals it. Cost: rail, hook and tests change;
     `child_session_mint` exists only on the claude branch, so non-claude runners carry no child id.
     (2) a liveness/time-window check on P's marker: heuristic, can misjudge, against ADR-0001. Preferred: (1).
+    **Chosen and shipped: (1)**, as plan step 3d (plan review frozen after two generations, receipts in
+    `docs/plans/evidence/2026-10-13-dispatch-tree/plan-review-3d/`), merged 2026-10-15. Still open: the live
+    §7 row l run and the codex row d2 re-run.
   - kimi: the review's stub made `dispatch-author-kimi.js` exit 2, so the child env was checked only by
     reading code. Needs a credentialed environment (owner).

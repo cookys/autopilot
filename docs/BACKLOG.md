@@ -1790,18 +1790,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
 
-### Dispatch-tree 3b live gaps: tmux parent leak, kimi child env
+### Dispatch-tree 3d live checks: tmux row l, codex row d2, kimi child env
 - **Id**: BL-0176
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 在派出去的子 session 裡開的 tmux 等長駐 shell，之後在裡面開的全新 session 會把當年那次派工記成自己的上層（2026-10-15 已用模擬重現）。另外 kimi 子程序拿到的身分只看過程式碼、沒實測。
-- **Impact**: 低到中。派工追蹤樹會把無關的 session 掛到舊的派工底下；不會寫到別人的紀錄。
-- **Trigger**: dispatch-tree plan revision before R (tmux fix needs plan review; option (1) preferred), or a credentialed env for kimi
+- **Problem**: tmux 讓新 session 掛錯上層的問題已在程式裡修好（3d），測試也全綠，但還沒用真的 claude＋tmux 實跑確認；codex 那條端到端檢查要照新規則重跑；kimi 子程序拿到的身分仍只看過程式碼。
+- **Impact**: 低。程式和模擬測試都已涵蓋；實跑是確認，不是已知缺陷。
+- **Trigger**: next dispatch-tree live session (rows l and d2 before R), or a credentialed env for kimi
 - **Effort**: S
-- **Source**: review of lane/dispatch-tree-3b, 2026-10-15
+- **Source**: review of lane/dispatch-tree-3b and lane/dt3d, 2026-10-15
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: D6 residual (plan §4). Per-rail mutations done 2026-10-15. tmux leak reproduced: ensurePlainMarker records env P for any new id != P; two options in the sidecar.
+- **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
 
 ### Hooks read ~/.autopilot/config.json directly, ignoring AUTOPILOT_CONFIG_FILE
 - **Id**: BL-0181

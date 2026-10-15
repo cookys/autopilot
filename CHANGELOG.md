@@ -86,6 +86,7 @@
 
 ### 修正
 
+- **子 session 只在 rail 發的身分相符時才記上層**（BL-0176）：在派出去的子 session 裡開的 tmux 等長駐 shell，之後在裡面開的新 session 不會再把舊派工記成自己的上層。rail 為每個 claude 子程序產生一個子身分並交給它，只有 session id 與它相符才記上層；其他 runner、工頭與能力探測一律移除繼承來的子身分。
 - **一次歸檔多份計畫時，每份各記自己的出貨點**（BL-0171）：`check-plan-graduation.js --archive --shipped-in` 改收 `<stem>=<sha>` 配對（可重複或逗號分隔），只給一個不帶 stem 的值時仍套用到每一份。有計畫沒配到、stem 不存在或不唯一、同一個 stem 給兩次，都以結束碼 2 拒絕，一份都不搬。歸檔改寫引用時也會處理 `docs/` 底下的相對連結 `plans/<stem>.md`；`docs/` 以外的檔案和 `docs/mission-*.json` 不改（後者的 `plan_path`／`rubric_path` 由 next-touch-validation 逐字比對）。Codex 鏡像同步。
 - **腦力題和工頭題的扣點分開記**（BL-0170）：同一個模型的腦力題失誤不會再累積到工頭席位的扣點與撤銷待定，反之亦然。腦力席位的 `seat_hash` 多帶 `seat_kind=brain`；工頭與舊有席位的雜湊不變，已記的扣點不會失聯。`strike-seat`、`invalidate-strike`、`seat-hash`、`seat-status` 新增 `--seat-kind brain`。`--help` 也列出這個選項；撤銷腦力席位的扣點不會影響工頭席位（BL-0178）。嚴重違規立即執法、扣點衰減與到期只提醒的規則不變。
 - **巢狀子 session 的入場檢查改讀自己的工作階段標記；子 session 不寫標記時會說原因**（BL-0174、BL-0175）：`session-mode.js` 的 managed dev-flow 入場檢查改用和寫入端相同的 `resolveMarkerWriteTarget` 判定身分。以前在有父 session 的巢狀子 session 裡，入場可能讀到父 session 的標記或繼承來的 id；現在只認自己的。有父 session 而只帶 `CLAUDE_SESSION_ID` 時改為拒絕，和寫入端一致；沒有父 session 時行為不變。`ensure-child` 不寫子標記時，在 stderr 印一行原因碼（`payload_unreadable`、`no_session_id`、`empty_session_id`、`child_is_parent`、`marker_unreadable`、`write_failed`），結束碼仍是 0，不會擋住子 session。Codex 鏡像同步。

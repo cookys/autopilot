@@ -526,9 +526,14 @@ const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F', 'd', 
 const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal',
   '--delimiter', '--runstates', '--older', '--ns', '--nslist', '--env']);
 const POSIX_CLASS = { alpha: 'a-zA-Z', digit: '0-9', alnum: 'a-zA-Z0-9', upper: 'A-Z', lower: 'a-z', space: '\\s', blank: ' \\t' };
-// What the Bash tool's own shell shows in /proc/<pid>/cmdline: the shell path first, then the call text verbatim
-// (quotes, heredocs and comments included). `pgrep -f` matches its pattern against exactly that.
-const SELF_CMDLINE_PREFIX = '/bin/bash -c eval ';
+// APPROXIMATION of what the Bash tool's own shell shows in /proc/<pid>/cmdline. Observed real shape:
+// `/usr/bin/zsh -c source …snapshot… && eval '<call>' < /dev/null && pwd -P >| …` — the shell path varies by host and the call
+// sits inside single quotes (each `'` becomes `'"'"'`). The load-bearing premise is only that the call text appears verbatim
+// in the cmdline; the prefix just keeps `^`-anchored patterns from matching the call's first word.
+const SELF_CMDLINE_PREFIX = "/usr/bin/zsh -c source /tmp/shell-snapshot.sh && eval '";
+const PATTERN_MAX_LEN = 300; // longer patterns are not judged (null)
+// Nested quantifiers / quantified alternation can backtrack exponentially in a JS RegExp: never run those.
+const REDOS_RE = /\([^)]*[*+{][^)]*\)[*+{]|\([^)]*\|[^)]*\)[*+{]/;
 
 // Shell word -> the string the command receives (quotes removed, `\x` unescaped). Variables stay as `$name`.
 function dequote(w) {
@@ -615,9 +620,10 @@ function patternMatchesSelf(pattern, raw, vars, flags) {
     if (/\$[A-Za-z_{(]/.test(pat)) return null; // an unknown variable / substitution: unknowable
   }
   if (/\$\(|`/.test(pat)) return null;
+  if (pat.length > PATTERN_MAX_LEN || REDOS_RE.test(pat)) return null; // unjudgeable: ReDoS guard
   pat = pat.replace(/\[:([a-z]+):\]/g, (all, n) => POSIX_CLASS[n] || all);
   if (flags.exact) pat = `^(?:${pat})$`;
-  try { return new RegExp(pat, flags.icase ? 'i' : '').test(SELF_CMDLINE_PREFIX + raw); } catch { return null; }
+  try { return new RegExp(pat, flags.icase ? 'i' : '').test(SELF_CMDLINE_PREFIX + raw.replace(/'/g, `'"'"'`)); } catch { return null; }
 }
 
 // Rule 2. Returns { rule, why, pattern } or null.

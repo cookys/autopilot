@@ -834,3 +834,20 @@ test('message: the watch recipe is bounded by timeout, warns about stale .exit, 
   assert.match(r, /must not contain `\.`/);
   assert.match(r, /a subagent cannot/);
 });
+
+// ---- BL-0153 review: ReDoS guard. A catastrophic pattern must be unjudgeable (never run) and return fast. ----
+{
+  const { detectPkillSelfMatch } = require('../scripts/lib/bash-launch-rules.js');
+  for (const pat of ['(.*)*x$', '(a+)+b', '(a|aa)+c', 'x'.repeat(400)]) {
+    test(`rule2 ReDoS guard returns fast: ${pat.slice(0, 12)}`, () => {
+      const t0 = Date.now();
+      detectPkillSelfMatch(`pgrep -f '${pat}'`);
+      assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`);
+    });
+  }
+  test('rule2 ReDoS pattern takes the null (unjudgeable) path and falls back to the old stance', () => {
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(.*)*x$'"), null); // `$` => assumed fine
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+[b]'"), null); // bracket => assumed fine
+    assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+b'").rule, 'pkill-self-match'); // plain => denied, regex never run
+  });
+}

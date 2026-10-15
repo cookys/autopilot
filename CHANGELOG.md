@@ -86,6 +86,10 @@
 
 ### 修正
 
+- **`pkill -f`／`pgrep -f` 守衛改成真的拿 pattern 去比對指令本身**（BL-0153）：不再只看有沒有 `[x]` 括號。透過 heredoc 跑的腳本、`eval`／`watch` 裡的指令、`\pkill`、先存進變數的 pattern 都會被擋；`[fF]oo`、`^x`、`x\.py` 這類其實比對不到自己的寫法不再被誤擋。可能讓比對卡住很久的 pattern（巢狀量詞、超過 300 字元）不拿去比對，照舊規則處理。
+- **背景派工檢查多認得幾種寫法**（BL-0185）：python `Popen([...])`、node `spawn(..., [...])` 清單寫法（沒有 `unref` 時不算背景）、GNU `parallel`、`f() ( ... )` 函式都會被看到；`wait $P1 $P2` 一次等多個 pid 不再被誤擋。
+- **歸檔工具不再改寫凍結的證據**（BL-0096）：在目錄放一個納入版控的 `.frozen-evidence` 標記檔，列出的檔案或目錄在 `--fix`、`--archive`、`--migrate-archive-layout` 時都不會被改寫，會回報成 `plan_reference_frozen`。
+- **修復分支編號也會算遠端已有的分支**（BL-0155）：另一個 clone 已推上去的修復分支不會再被取到同一個名字。
 - **啟用新格式的同一個提交刪掉外部反映列也會被抓到**（BL-0131）：推送前檢查改用目前版本的格式設定去讀歷史版本，啟用前的舊版本也能看出反映者欄位；沒啟用新格式的專案照舊讀法。
 - **資格考不再把額度用完或登入失效的錯誤訊息當成答錯**（BL-0161 第一項）：命令列工具正常結束、卻只印出額度或登入錯誤時，改算成連線失敗，不寫不合格紀錄、不扣點。真正的 JSON 答案即使提到這些字也不受影響；「unauthorized」這類常見單字只看錯誤輸出。
 - **測試總控的逾時判定改由自己的計時器決定**（BL-0088、BL-0100、BL-0184）：超過時限的套件一律標成逾時失敗，即使它攔下停止訊號後回報成功也一樣；套件自己以 124／137 結束不再被誤標成逾時。按 Ctrl+C 會立刻停掉正在跑的套件。
@@ -114,7 +118,7 @@
 - **只審不寫的 campaign 重審時，修正把檔案整個還原不再被拒**（BL-0154）：adoption 記帳的 `changed_files` 改記「上一輪已記值與本輪累積數取大者」，所以修正把某個檔案改回原樣、累積檔案數變少時，`return` 不會再被拒為 `BUDGET_RESET`。campaign 的單調檢查本身沒有放寬。Codex 鏡像同步。
 - **資格考用量紀錄分得出被截斷的考試**（BL-0168）：usage 區塊多了 `n_cases_expected` 和 `cases_complete`，只有題數固定的 implementer 會填，其他科一律是 null；`validateUsageBlock` 會交叉檢查缺 token 題數、總耗時、每小時答對數和價格欄位彼此是否一致。舊的 row 照樣通過。
 - **審查科評分程式重新受逐位元組比對保護**（BL-0162）：`engine-qualify-verdict-stability.test.sh` 的 KR7 比對基準改到 `6fdcf5ac`，`runQualification` 和審查科的 `verifyPinnedEvaluationAssets` 重新納入，唯一刻意的差異有列名宣告，negative control 走同一個比對函式。審查科和工頭的原始作答檔零筆時改寫空檔（原本寫一個換行），工頭的 `--raw-dir` 有了第一個測試。
-- **review-candidate 的 repair 交接不再蓋掉前一次的修復分支**（BL-0155）：同一個 ticket 第二次以後選 `repair`，交接的分支名稱改用 `repair/<ticket>-repair` 之後最小的未使用 `-rN`，前一次的修復分支不會被重用。列出既有分支改用 `%(refname:lstrip=2)`，所以 repo 裡有同名 tag 時也不會漏看；列不出來時以 `review_candidate_repair_seed_invalid` 擋下，不產生交接檔。任務說明改為授權「一個 repair campaign」，不再寫成只有一輪（contract 允許兩輪）。交接檔在結案之前寫入磁碟的順序，以及 preset repair 第一次執行時拒絕交接的情境，都已有測試保護。遠端已存在的同名分支還不會算進編號（BL-0155）。
+- **review-candidate 的 repair 交接不再蓋掉前一次的修復分支**（BL-0155）：同一個 ticket 第二次以後選 `repair`，交接的分支名稱改用 `repair/<ticket>-repair` 之後最小的未使用 `-rN`，前一次的修復分支不會被重用。列出既有分支改用 `%(refname:lstrip=2)`，所以 repo 裡有同名 tag 時也不會漏看；列不出來時以 `review_candidate_repair_seed_invalid` 擋下，不產生交接檔。任務說明改為授權「一個 repair campaign」，不再寫成只有一輪（contract 允許兩輪）。交接檔在結案之前寫入磁碟的順序，以及 preset repair 第一次執行時拒絕交接的情境，都已有測試保護。遠端已存在的同名分支也會算進編號（BL-0155，見下方）。
 - **腦力題合格不再讓工頭席位看起來也合格**（BL-0165、BL-0164）：腦力題和工頭題登記的角色都是 owner，`engine-scorecard.js` 的 `findSeatBaseline`、`computeSeatProjection` 和嚴格路徑（`--require-evidence`）現在按席位種類分開計算（`methodology_kind: owner_brain_seat` 或 `brain-seat` scope），腦力題的合格列只算腦力題席位。`current` 仍列出腦力題列，各自在自己的種類內判定。官方預設 recipe 的排除理由改成「腦力題是可登記的成績列，只是目前沒有出貨」。新增 `hooks/tests/scorecard-brain-foreman-separation.test.sh`。
 - **合格的 Claude 席位現在會出現在審查員階梯**：`resolve-dispatch-topology.js` 把 `claude-native` 視為本機裝了 `claude` 就可用，審查員、顧問、討論階梯與計畫審查面板都看得到；審查員階梯把 anthropic 家族排在其他家族之後，面板同強度時也不讓 anthropic 當主席；實作者階梯明確不收 claude-native（dispatch-hetero 沒有這個 runner）。
 - **重新產生席位不會再把退役模型帶回來，名單也不再重複或標錯家族**（BL-0169）：`resolve-dispatch-topology.js` 現在會讀 `~/.autopilot/config.json`（或 `AUTOPILOT_CONFIG_FILE`）裡的 `topology.exclude_seats`，每次產生、`--check`、`--resolve-live` 都套用，並和 `--exclude-seats` 合併；只寫引擎名就是退掉該模型所有強度與 runner。設定檔壞掉會直接報錯結束，不會默默當成沒有。審查員、顧問、討論三種階梯與面板的候選，同一席因兩份題庫版本都合格而出現兩次，現在合併成一席並取最新的基準事件。`MiniMax-M3.1-Flash-Preview` 名字含 `flash` 被誤標成 google，現在先認廠商名。走 HTTP 的 `anthropic-compatible` 席位（例如 GLM-5.3 審查員）原本因為沒有本機執行檔一律被當成沒裝而被濾掉，現在只要有設定對應的 endpoint 就算可用。

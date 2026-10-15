@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0190 -->
+<!-- next-id: BL-0192 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1128,18 +1128,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
 
-### Archive rewriter still rewrites UNSEALED frozen evidence (e.g. historical `observed_paths` in audits)
-- **Id**: BL-0096
-- **Status**: open
-- **Since**: 2026-09-23
-- **Origin**: self
-- **Problem**: 搬移、封存計畫文件的工具，會去改寫一些本應凍結不動的歷史證據檔，因為這些檔案沒有明確的凍結標記，只靠路徑判斷。曾經真的改壞一個稽核檔，事後才還原。 (draft)
-- **Impact**: 歷史證據有被無聲改掉的風險，但目前已知案例已還原。 (draft)
-- **Trigger**: the next archive/migrate run of check-plan-graduation, or any new frozen-evidence file without a seal
-- **Effort**: S
-- **Source**: 2026-09-23 CI repair, mission cluster (6559da33 rewrote `candidate-path-audit.json` observed_paths; restored byte-identical)
-- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
-- **Context**: `frozenAssetFiles()` now covers `*.seal.json` targets, qualification-asset-seals PATHS and mission-sources plan/rubric; evidence frozen by convention only has no marker. Needs an explicit marker rather than a path heuristic.
 
 ### dispatch-author forwards three final-panel qc_panel admission warnings on every run (noise for the author role)
 - **Id**: BL-0097
@@ -1357,18 +1345,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
 
 
-### mission-terminal-rollover tests read the live registry and sealed graph
-- **Id**: BL-0129
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 收尾換軌的測試直接讀 repo 裡真正的登錄檔和已封存的工作圖，只要這些檔案被搬動或歸檔，測試就會變紅，跟測試要驗的程式無關。
-- **Impact**: 歸檔或整理文件時會讓不相干的測試轉紅，浪費排查時間。
-- **Trigger**: next red of mission-terminal-rollover tests not caused by its code
-- **Effort**: S
-- **Source**: lane A, 2026-10-13
-- **Pointer**: none
-- **Context**: Give the suite its own frozen graph + registry fixture instead of the host files.
 
 
 
@@ -1454,31 +1430,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### pkill/pgrep -f self-match guard misses some forms and over-blocks others
-- **Id**: BL-0153
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 「pkill/pgrep -f 比對到自己」的檢查改成直接擋下之後，還有幾種寫法沒擋到，其中三種真的會殺掉自己的 shell；另外有幾種其實不會比對到自己的寫法被誤擋。
-- **Impact**: 沒擋到的寫法會讓等待迴圈永遠不結束，或殺掉自己。誤擋的寫法會被拒絕，使用者得改寫（拒絕訊息有給改寫方式）。
-- **Trigger**: c4140 保留暫行 hook 等這條（他們已擋 $P 與 \pkill，可參考其 no-pgrep-selfmatch.py）；或有人回報漏擋／誤擋時
-- **Effort**: M
-- **Source**: BL-0148 review, 2026-10-14
-- **Pointer**: none
-- **Context**: Missed: script run from a heredoc, write-then-run in one call, P=foo; pgrep -f "$P", xargs/eval/watch, \pkill. Over-blocked: [fF]oo, ^x, x\.py, -d ,. Fix: test RegExp(pattern) on the call's own text.
 
-### review-candidate repair branch numbering ignores remote branches
-- **Id**: BL-0155
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 把停車的審查交給寫手修時，新修復分支的編號只看本機已有的分支；別的 clone 已經推上遠端、本機還沒有的同名分支不會被算進去。
-- **Impact**: 低。兩台機器對同一個 ticket 各自 repair 時，推送可能撞名，要改名或強推。目前沒有人這樣用。
-- **Trigger**: 有人回報 repair 分支推送撞名，或 review-candidate 開始跨機器共用同一個 repo
-- **Effort**: S
-- **Source**: BL-0155 re-review round 2, 2026-10-15
-- **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: listRepairBranches lists refs/heads/repair/ only; also count refs/remotes/*/repair/. Engine catch to blocked for review_candidate_repair_seed_invalid has unit coverage only, no end-to-end case.
 
 
 
@@ -1550,18 +1502,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### bash-launch guard still misses some background launch shapes
-- **Id**: BL-0185
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 背景派工守衛這次補了很多寫法，但還有幾種把派工丟到背景卻不等它的寫法沒認出來，例如用程式語言的清單參數啟動、用平行執行工具、或用小括號定義的函式；另外一次等多個工作的寫法仍會被誤擋。
-- **Impact**: 低。漏掉的寫法在實際文件與技能裡都沒出現；誤擋的寫法新舊規則都一樣，不是這次的退步。
-- **Trigger**: a real dispatch slipping past the guard, or a legitimate multi-pid wait being denied
-- **Effort**: S
-- **Source**: launchguard lane and review 2026-10-15 (merged as c028552b)
-- **Pointer**: none
-- **Context**: uncovered: python Popen list form, node spawn list form, GNU parallel, subshell-body functions, backgrounded brace group. wait with two pid variables is denied by old and new rules.
 
 
 ### qualification defaults still compare kimi engine spellings exactly
@@ -1577,4 +1517,28 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.
 
+### bash-launch guard: string-form Popen/spawn handled unlike list form
+- **Id**: BL-0190
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 背景派工檢查對 python、node 啟動派工指令的兩種寫法處理不一致：清單寫法會看程式有沒有自己等結果，字串寫法不看。python 字串寫法即使程式自己等完也被擋，node 字串寫法一律當成丟到背景。
+- **Impact**: 低。只會誤擋或誤報，不會放掉真的背景派工；被擋時改用清單寫法即可。
+- **Trigger**: 有人回報這兩種寫法被誤擋，或下次動 bash-launch-rules.js 的 Popen/spawn 判斷
+- **Effort**: S
+- **Source**: guard3 lane finding, 2026-10-15
+- **Pointer**: none
+- **Context**: scripts/lib/bash-launch-rules.js: Popen('rail', shell=True) followed by .wait() still denied; node string spawn() treated as background with no unref check. List forms honour wait/unref.
 
+### .frozen-evidence marker: undocumented and silently removable
+- **Id**: BL-0191
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 歸檔工具現在會跳過 .frozen-evidence 標記檔列出的證據，但這個機制只有程式註解、沒有文件；標記檔被刪掉時不會有任何警告，下一次歸檔就會改寫原本凍結的證據。搬移歸檔版面那一路跳過時也不回報。
+- **Impact**: 低。目前只有兩處標記、靠 code review 保護；標記被誤刪才會出事。
+- **Trigger**: 新增第三個 .frozen-evidence 標記，或有人誤刪標記
+- **Effort**: S
+- **Source**: hyg2 review 2026-10-15 (cut list)
+- **Pointer**: none
+- **Context**: check-plan-graduation.js markedFrozenEvidenceFiles reads only tracked markers; --migrate-archive-layout skips without plan_reference_frozen; no --archive-only test. Document it in the check-plan-graduation reference.

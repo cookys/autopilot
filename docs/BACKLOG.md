@@ -1390,18 +1390,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
 
-### Grok and Kimi seats still owe the 2026-10-14 exams
+### Kimi seats still owe the 2026-10-14 exams
 - **Id**: BL-0167
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: owner
-- **Problem**: 2026-10-14 那輪資格考沒考到 Grok 和 Kimi。grok-4.7 帳戶餘額用完（402），沒有成績；Kimi K3、2.8 額度用完。owner 決定星期五（2026-10-16）補考。
-- **Impact**: 中。這三個席位在新版審查題（v6）和這輪加考的強度上沒有成績，排序時不會被推薦，也無法和其他模型比較。
-- **Trigger**: 2026-10-16（星期五），且 Grok 已儲值、Kimi 額度已重置
+- **Problem**: 2026-10-14 那輪資格考 Kimi K3、2.8 額度用完沒考到。Grok 已於 10/15 補考完（合格）；只剩 Kimi，要等額度重置。
+- **Impact**: 中。Kimi 兩個席位在新版審查題（v6）沒有成績，排序時不會被推薦，也無法和其他模型比較。
+- **Trigger**: 2026-10-16（星期五）下午 Kimi 額度重置後
 - **Effort**: S
-- **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」
+- **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」；10/15「kimi 時間到 (星期五下午) 會重置」
 - **Pointer**: none
-- **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
+- **Context**: Grok 4.7 low passed reviewer v6 on 2026-10-15 (42/42, 0/38 false, event 303). Kimi: reviewer v6 plus every role this round sat; no early stop. Refresh exam-home credentials first.
 
 ### Dispatch-tree 3d live check: kimi child env
 - **Id**: BL-0176

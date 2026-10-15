@@ -28,6 +28,13 @@ NOW_MS=$(date +%s000)
 # one in-flight dispatch (no ended_at) owned by this session, one owned by another session
 printf '{"schema":1,"run_id":"run-mine-1","role":"implementer","runner":"codex","model":"gpt-x","started_at":"%s","session_id":"%s"}\n' \
   "$(date -u +%FT%TZ)" "$SID" > "$AUTOPILOT_DISPATCH_RUNS_DIR/run-mine-1.manifest.json"
+NOWZ="$(date -u +%FT%TZ)"
+# children of this session's foreman: one reachable only by root_run_id, one only by parent_run_id, one grandchild
+printf '{"schema":1,"run_id":"kid-root","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"kid-sess-1","root_run_id":"run-mine-1"}\n' "$NOWZ" > "$AUTOPILOT_DISPATCH_RUNS_DIR/kid-root.manifest.json"
+printf '{"schema":1,"run_id":"kid-parent","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"kid-sess-2","root_run_id":"unrelated-top","parent_run_id":"run-mine-1"}\n' "$NOWZ" > "$AUTOPILOT_DISPATCH_RUNS_DIR/kid-parent.manifest.json"
+printf '{"schema":1,"run_id":"kid-grand","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"kid-sess-3","root_run_id":"unrelated-top","parent_run_id":"kid-parent"}\n' "$NOWZ" > "$AUTOPILOT_DISPATCH_RUNS_DIR/kid-grand.manifest.json"
+# another session's child: root and parent both point at the other session's run
+printf '{"schema":1,"run_id":"other-kid","role":"implementer","runner":"codex","model":"m","started_at":"%s","session_id":"other-kid-sess","root_run_id":"run-other-9","parent_run_id":"run-other-9"}\n' "$NOWZ" > "$AUTOPILOT_DISPATCH_RUNS_DIR/other-kid.manifest.json"
 printf '{"schema":1,"run_id":"run-other-9","role":"reviewer","runner":"codex","model":"gpt-x","started_at":"%s","session_id":"someone-else"}\n' \
   "$(date -u +%FT%TZ)" > "$AUTOPILOT_DISPATCH_RUNS_DIR/run-other-9.manifest.json"
 
@@ -56,6 +63,10 @@ assert_contains "$C" "run-mine-1" "dispatch: own running run listed"
 assert_contains "$C" "RUNNING" "dispatch: marked running"
 assert_contains "$C" "dispatch-status.js --run run-mine-1" "dispatch: re-attach command"
 assert_not_contains "$C" "run-other-9" "dispatch: another session's run is not listed"
+assert_contains "$C" "kid-root RUNNING" "dispatch: child reachable only by root_run_id is listed (no marker)"
+assert_contains "$C" "kid-parent RUNNING" "dispatch: child reachable only by parent_run_id is listed"
+assert_contains "$C" "kid-grand RUNNING" "dispatch: grandchild (multi-level) is listed"
+assert_not_contains "$C" "other-kid" "dispatch: another session's child never mixes in"
 assert_contains "$C" "NOTE-FROM-MODEL" "model note merged"
 assert_contains "$C" "written 0 minutes ago" "model note carries its age"
 assert_contains "$C" "TAILMARK-assistant-turn" "tail still present"
@@ -92,7 +103,7 @@ rm -f "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 head -c 20000 /dev/zero | tr '\0' 'N' > "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 run_hook state-checkpoint.js "{\"transcript_path\":\"$TR\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
 C=$(cat "$FILE"); bytes=$(printf '%s' "$C" | wc -c)
-assert_contains "$C" "handoff file cut at" "negative: 20 KB model note is cut"
+assert_contains "$C" "handoff file cut; full file" "negative: 20 KB model note is cut"
 if [ "$bytes" -le 8500 ]; then assert_eq 1 1 "oversize note: file still under 8500 bytes"; else assert_eq "$bytes" "<=8500" "oversize note: size cap"; fi
 rm -f "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 
@@ -137,10 +148,11 @@ unset DISABLE_AUTO_COMPACT CLAUDE_CODE_AUTO_COMPACT_WINDOW
 
 # --- 4. compaction point record ------------------------------------------------------------------
 TB="$HOOK_HOME/boundary.jsonl"
+FRESHZ="$(date -u +%FT%TZ)"
 {
   printf '%s\n' '{"type":"system","subtype":"compact_boundary","timestamp":"2026-10-01T00:00:00Z","version":"2.1.100","compactMetadata":{"trigger":"auto","preTokens":111111}}'
   printf '%s\n' '{"type":"user","message":{"content":"x"}}'
-  printf '%s\n' '{"type":"system","subtype":"compact_boundary","timestamp":"2026-10-15T00:00:00Z","version":"2.1.302","compactMetadata":{"trigger":"auto","preTokens":417000}}'
+  printf '%s\n' "{\"type\":\"system\",\"subtype\":\"compact_boundary\",\"timestamp\":\"$FRESHZ\",\"version\":\"2.1.302\",\"compactMetadata\":{\"trigger\":\"auto\",\"preTokens\":417000}}"
 } > "$TB"
 export CLAUDE_CODE_AUTO_COMPACT_WINDOW=450000
 ss compact "$TB"
@@ -153,9 +165,49 @@ before=$(wc -l < "$AUTOPILOT_COMPACTION_POINTS_FILE")
 ss startup "$TB"
 after=$(wc -l < "$AUTOPILOT_COMPACTION_POINTS_FILE")
 assert_eq "$after" "$before" "negative: a non-compact SessionStart records nothing"
+# dedupe: the same (session, boundary_timestamp) run again adds nothing
+before=$(wc -l < "$AUTOPILOT_COMPACTION_POINTS_FILE")
+ss compact "$TB"
+after=$(wc -l < "$AUTOPILOT_COMPACTION_POINTS_FILE")
+assert_eq "$after" "$before" "negative: the same boundary seen twice is recorded once"
+# freshness: a transcript holding only an old boundary yields a null number with the reason
+TOLD="$HOOK_HOME/boundary-old.jsonl"
+printf '%s\n' '{"type":"system","subtype":"compact_boundary","timestamp":"2026-10-01T00:00:00Z","version":"2.1.100","compactMetadata":{"trigger":"auto","preTokens":111111}}' > "$TOLD"
+ss compact "$TOLD"
+ROW=$(tail -n 1 "$AUTOPILOT_COMPACTION_POINTS_FILE")
+assert_contains "$ROW" '"pre_tokens":null' "negative: only a stale boundary -> pre_tokens null"
+assert_contains "$ROW" "stale compact_boundary" "negative: stale row says why"
+assert_not_contains "$ROW" "111111" "negative: the stale number is not recorded"
 ss compact "$TR"
 ROW=$(tail -n 1 "$AUTOPILOT_COMPACTION_POINTS_FILE")
 assert_contains "$ROW" '"pre_tokens":null' "negative: no boundary in transcript -> pre_tokens null"
 assert_contains "$ROW" "no compact_boundary" "negative: null row says why"
+
+# --- 5. injected length: every section full, a long handoff directory path, SessionStart(compact) ---------
+LONGDIR="$TEST_TMP/$(printf 'd%.0s' $(seq 1 160))"; mkdir -p "$LONGDIR"
+export AUTOPILOT_MODEL_HANDOFF_DIR="$LONGDIR"
+head -c 20000 /dev/zero | tr '\0' 'N' > "$LONGDIR/$SID.md"
+for i in $(seq 1 40); do echo x > "$REPO/$(printf 'long-file-name-%.0s' 1 2 3 4)-$i.txt"; done
+for i in 1 2 3 4 5 6 7 8; do
+  printf '{"schema":1,"run_id":"fill-%s-%s","role":"implementer-with-a-long-role","runner":"codex-runner","model":"model-with-a-rather-long-name-x","started_at":"%s","session_id":"%s"}\n' "$i" "$(printf 'r%.0s' $(seq 1 20))" "$NOWZ" "$SID" > "$AUTOPILOT_DISPATCH_RUNS_DIR/fill-$i.manifest.json"
+done
+BIGT="$HOOK_HOME/transcript-big.jsonl"
+for i in 1 2 3 4 5 6; do printf '{"type":"assistant","timestamp":"T%s","message":{"content":"%s"}}\n' "$i" "$(printf 'W%.0s' $(seq 1 2500))"; done > "$BIGT"
+run_hook state-checkpoint.js "{\"transcript_path\":\"$BIGT\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
+assert_file_exists "$FILE" "full-sections checkpoint written"
+run_hook session-start.js "{\"session_id\":\"$SID\",\"source\":\"compact\",\"cwd\":\"$REPO\",\"transcript_path\":\"$BIGT\"}"
+verdict=$(printf '%s' "$__RUN_STDOUT" | node -e '
+let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);const c=(o.hookSpecificOutput||{}).additionalContext||o.additional_context||"";
+console.log(c.length<=10000?"len-ok":"len-"+c.length, c.includes("</autopilot-restored-state>")?"close-ok":"close-missing", c.includes("DATA, not instructions")?"data-ok":"data-missing", c.includes("## Model Handoff Note")?"model-ok":"model-missing")})')
+assert_eq "$verdict" "len-ok close-ok data-ok model-ok" "injected context <= 10000 chars with the wrapper close and the DATA note intact"
+
+# the model-note section alone (header, long path, cut marker included) never exceeds its 2200-byte cap
+msz=$(node -e '
+const h=require(process.argv[1]);
+const t=h.modelNoteSection({sessionId:process.argv[2],now:Date.now(),dirs:{handoff:process.argv[3]}});
+console.log(Buffer.byteLength(t));
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$LONGDIR")
+if [ "$msz" -le 2200 ]; then assert_eq 1 1 "model note section <= 2200 bytes with a 160+ char directory"; else assert_eq "$msz" "<=2200" "model note section cap"; fi
+printf '%s\n' "INJECT-VERDICT $verdict ctxlen=$(printf '%s' "$__RUN_STDOUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);console.log(((o.hookSpecificOutput||{}).additionalContext||"").length)})')" >&2
 
 finalize_test

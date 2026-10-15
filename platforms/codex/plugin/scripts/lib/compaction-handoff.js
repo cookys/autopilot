@@ -144,7 +144,28 @@ function dispatchSection({ sessionId, roots, now, dirs, statusScript }) {
   let rows;
   try { rows = JSON.parse(r.stdout); } catch { return unavailable('dispatch-status output is not JSON'); }
   if (!Array.isArray(rows)) return unavailable('dispatch-status output is not a list');
-  const mine = rows.filter((m) => m && ((sessionId && m.session_id === sessionId) || (m.root_run_id && roots.has(m.root_run_id))));
+  // Ownership: this session's own runs, plus every run under them. The roots start as the marker's roots and
+  // the run ids of rows whose session_id is this session; a row belongs when it names one of the roots as its
+  // root_run_id or parent_run_id. A child's own session_id differs, so a session with no marker would otherwise
+  // lose the hands its foreman launched. Descendants join the roots until nothing new matches (multi-level).
+  const all = rows.filter(Boolean);
+  const owned = new Set(roots);
+  for (const m of all) if (sessionId && m.session_id === sessionId && m.run_id) owned.add(m.run_id);
+  const mineSet = new Set();
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const m of all) {
+      if (mineSet.has(m)) continue;
+      const own = sessionId && m.session_id === sessionId;
+      const byRoot = m.root_run_id && owned.has(m.root_run_id);
+      const byParent = m.parent_run_id && owned.has(m.parent_run_id);
+      if (own || byRoot || byParent) {
+        mineSet.add(m); grew = true;
+        if (m.run_id) owned.add(m.run_id);
+      }
+    }
+  }
+  const mine = all.filter((m) => mineSet.has(m));
   if (!mine.length) return `no dispatch manifest belongs to this session (${rows.length} in the runs directory)`;
   const running = mine.filter((m) => !m.ended_at).reverse();
   const ended = mine.filter((m) => m.ended_at).reverse().slice(0, RECENT_ENDED_CAP);
@@ -185,25 +206,44 @@ function modelNotePath(sessionId, dirs) {
   return path.join(base, `${norm(sessionId)}.md`);
 }
 
+// The whole section, header and cut marker included, stays within SECTION_CAPS.model bytes whatever the path
+// length: a long path is shown by its tail only.
 function modelNoteSection({ sessionId, now, dirs }) {
   if (!sessionId) return unavailable('no session id, so no handoff file path');
   let file;
   try { file = modelNotePath(sessionId, dirs); } catch (e) { return unavailable(`live-state directory: ${clip(e && e.message, 100)}`); }
-  let st;
-  try { st = fs.lstatSync(file); } catch (e) {
-    if (e && e.code === 'ENOENT') return `the model left no handoff file (expected path: ${file})`;
-    return unavailable(`cannot stat ${file}: ${e && e.code}`);
+  const shown = file.length > 80 ? `…${file.slice(-79)}` : file;
+  const cap = SECTION_CAPS.model;
+  const noFollow = fs.constants.O_NOFOLLOW || 0;
+  let fd;
+  try {
+    if (!noFollow) { // no O_NOFOLLOW on this platform: fall back to an lstat check
+      if (fs.lstatSync(file).isSymbolicLink()) return unavailable(`${shown} is not a regular file (symlinks are refused)`);
+    }
+    fd = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return `the model left no handoff file (expected path: ${shown})`;
+    if (e && e.code === 'ELOOP') return unavailable(`${shown} is not a regular file (symlinks are refused)`);
+    return unavailable(`cannot open ${shown}: ${e && e.code}`);
   }
-  if (!st.isFile()) return unavailable(`${file} is not a regular file (symlinks are refused)`);
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { return unavailable(`cannot read ${file}: ${e && e.code}`); }
-  const mins = Math.max(0, Math.round((now - st.mtimeMs) / 60000));
-  const body = Buffer.byteLength(text) > SECTION_CAPS.model - 200
-    ? `${Buffer.from(text).subarray(0, SECTION_CAPS.model - 240).toString('utf8').replace(/�+$/, '')}\n[...handoff file cut at ${SECTION_CAPS.model - 240} bytes; full file: ${file}]`
-    : text;
-  return `written ${mins} minute${mins === 1 ? '' : 's'} ago (${file})\n${body.replace(/\s+$/, '')}`;
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) return unavailable(`${shown} is not a regular file`);
+    const mins = Math.max(0, Math.round((now - st.mtimeMs) / 60000));
+    const header = `written ${mins} minute${mins === 1 ? '' : 's'} ago (${shown})\n`;
+    const marker = `\n[...handoff file cut; full file: ${shown}]`;
+    const room = Math.max(0, cap - Buffer.byteLength(header));
+    const want = Math.min(st.size, room + 1);
+    const buf = Buffer.alloc(want);
+    const got = want > 0 ? fs.readSync(fd, buf, 0, want, 0) : 0;
+    const cut = st.size > room || got > room;
+    const avail = cut ? Math.max(0, room - Buffer.byteLength(marker)) : room;
+    const text = buf.subarray(0, Math.min(got, avail)).toString('utf8').replace(/\uFFFD+$/, '');
+    return `${header}${text.replace(/\s+$/, '')}${cut ? marker : ''}`;
+  } catch (e) {
+    return unavailable(`cannot read ${shown}: ${e && e.code}`);
+  } finally { try { fs.closeSync(fd); } catch { /* ignore */ } }
 }
-
 // --- assemble -------------------------------------------------------------------------------
 
 /**
@@ -291,6 +331,24 @@ function budgetWarning(opts = {}) {
 
 // --- compaction point record ----------------------------------------------------------------
 
+const FRESH_WINDOW_MS = 10 * 60 * 1000;
+const DEDUPE_READ_BYTES = 256 * 1024;
+
+function alreadyRecorded(file, sessionId, boundaryTs) {
+  try {
+    const st = fs.statSync(file);
+    const len = Math.min(st.size, DEDUPE_READ_BYTES);
+    const fd = fs.openSync(file, 'r');
+    let text;
+    try { const b = Buffer.alloc(len); fs.readSync(fd, b, 0, len, st.size - len); text = b.toString('utf8'); } finally { fs.closeSync(fd); }
+    for (const line of text.split('\n')) {
+      if (!line.includes(boundaryTs)) continue;
+      try { const o = JSON.parse(line); if (o.session_id === (sessionId || null) && o.boundary_timestamp === boundaryTs) return true; } catch { /* partial line */ }
+    }
+  } catch { /* no file yet */ }
+  return false;
+}
+
 function lastCompactBoundary(transcriptPath) {
   const st = fs.statSync(transcriptPath);
   const len = Math.min(st.size, TRANSCRIPT_SCAN_BYTES);
@@ -332,7 +390,20 @@ function recordCompactionPoint(opts = {}) {
     let win = null;
     try { win = (opts.resolve || require('./autocompact-window.js').resolve)({ projectDir: opts.projectDir, model: opts.model, env: opts.env, home: opts.home }); } catch { win = null; }
     const meta = boundary && boundary.compactMetadata;
-    const pre = meta && Number.isFinite(meta.preTokens) ? meta.preTokens : null;
+    let pre = meta && Number.isFinite(meta.preTokens) ? meta.preTokens : null;
+    const nowMs = Number.isFinite(opts.now) ? opts.now : Date.now();
+    const bts = boundary && boundary.timestamp ? String(boundary.timestamp) : null;
+    // Freshness: a boundary older than this compaction's PreCompact checkpoint (or, with no checkpoint time,
+    // older than a fixed window) belongs to an earlier compaction: record no number rather than a wrong one.
+    if (boundary && pre !== null) {
+      const t = Date.parse(bts);
+      const floor = Number.isFinite(opts.notBeforeMs) ? opts.notBeforeMs : nowMs - FRESH_WINDOW_MS;
+      if (!Number.isFinite(t)) { pre = null; reason = 'compact_boundary has no usable timestamp, so it cannot be tied to this compaction'; }
+      else if (t < floor) {
+        pre = null;
+        reason = `stale compact_boundary (${bts}) is older than this compaction's ${Number.isFinite(opts.notBeforeMs) ? 'PreCompact checkpoint' : '10 minute window'}; its preTokens belong to an earlier compaction`;
+      }
+    }
     const row = {
       schema: 'autopilot.compaction-point/1',
       at: new Date(Number.isFinite(opts.now) ? opts.now : Date.now()).toISOString(),
@@ -347,6 +418,7 @@ function recordCompactionPoint(opts = {}) {
       note: pre === null ? (reason || 'compact_boundary carries no compactMetadata.preTokens') : null,
     };
     const file = compactionPointsFile(opts);
+    if (bts && alreadyRecorded(file, opts.sessionId, bts)) return { skipped: 'this (session, boundary_timestamp) is already recorded' };
     const store = require('./jsonl-store.js');
     store.ensureDir(path.dirname(file));
     store.appendRow(file, row);

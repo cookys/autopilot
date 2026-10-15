@@ -118,7 +118,12 @@ hetero_case() {
 hetero_case "1a hetero cgroup/default branch" "" 0
 assert_eq "$(mroot_of sid-h1)" "$MROOT" "1a hetero: manifest root_run_id is the parent session's job root"
 hetero_case "1b hetero setsid --wait branch" "$NOCG_BIN" 0
-hetero_case "1c hetero plain+setsid branch" "$NOWAIT_BIN" 0
+# 1c wraps the host's real setsid in a shim; a host without one has nothing to wrap (BL-0135).
+if [ -n "$REAL_SETSID" ]; then
+  hetero_case "1c hetero plain+setsid branch" "$NOWAIT_BIN" 0
+else
+  echo "SKIP [dispatch-runner-session-id-scrub] 1c hetero plain+setsid branch: no setsid on this host"
+fi
 hetero_case "1d hetero plain no-setsid branch" "$NOCG_BIN" 0 HETERO_TEST_NO_SETSID=1
 hetero_case "1e hetero detached+setsid branch" "" 1
 hetero_case "1f hetero detached no-setsid branch" "" 1 HETERO_TEST_NO_SETSID=1
@@ -166,13 +171,18 @@ STUB
 chmod +x "$TEST_TMP/foreman-bin/kimi"
 echo "brief" > "$TEST_TMP/brief.md"; echo "plan" > "$TEST_TMP/plan.md"
 # Both ways the variable could be handed over: the AUTOPILOT_* allowlist and an explicit passthrough.
-(cd "$SBX" && PATH="$TEST_TMP/foreman-bin:$PATH" KIMI_STUB_DIR="$FSD" KIMI_STUB_REPORT_DIR="$TEST_TMP/foreman-run" \
-  AUTOPILOT_KEEP_ME=kept \
-  bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
-  --run-id sidscrub --run-dir "$TEST_TMP/foreman-run" --poll 0.2 --env-passthrough AUTOPILOT_SESSION_ID \
-  --env-passthrough AUTOPILOT_KEEP_ME >"$TEST_TMP/foreman.out" 2>&1)
-check_scrubbed "4 foreman" "$FSD/env.all"
-assert_contains "$(cat "$FSD/env.all" 2>/dev/null)" "AUTOPILOT_KEEP_ME=kept" "4 foreman: other AUTOPILOT_* still pass the allowlist (the exclusion is targeted)"
+# dispatch-foreman.sh refuses to run without setsid (process-group containment), so the case needs one.
+if [ -n "$REAL_SETSID" ]; then
+  (cd "$SBX" && PATH="$TEST_TMP/foreman-bin:$PATH" KIMI_STUB_DIR="$FSD" KIMI_STUB_REPORT_DIR="$TEST_TMP/foreman-run" \
+    AUTOPILOT_KEEP_ME=kept \
+    bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
+    --run-id sidscrub --run-dir "$TEST_TMP/foreman-run" --poll 0.2 --env-passthrough AUTOPILOT_SESSION_ID \
+    --env-passthrough AUTOPILOT_KEEP_ME >"$TEST_TMP/foreman.out" 2>&1)
+  check_scrubbed "4 foreman" "$FSD/env.all"
+  assert_contains "$(cat "$FSD/env.all" 2>/dev/null)" "AUTOPILOT_KEEP_ME=kept" "4 foreman: other AUTOPILOT_* still pass the allowlist (the exclusion is targeted)"
+else
+  echo "SKIP [dispatch-runner-session-id-scrub] 4 foreman: no setsid on this host"
+fi
 
 # ================================================================= 5 dispatch-explore (codex)
 E_DUMP="$TEST_TMP/explore.env"

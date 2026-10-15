@@ -116,6 +116,8 @@ assert_eq "$(U merge-base --is-ancestor "$PUSHED" develop >/dev/null 2>&1; echo 
 assert_eq "$(U merge-base --is-ancestor "$PUSHED" origin/develop >/dev/null 2>&1; echo $?)" "0" "stale fixture: pushed HEAD is on origin/develop"
 OUT="$(node "$SCRIPT" scan --repo "$UP")"
 assert_eq "$(field "$OUT" summary.worktrees.clean-integrated)" "1" "stale develop: HEAD only on origin/develop is clean-integrated"
+assert_eq "$(field "$OUT" integration_ref)" "origin/develop" "stale develop: widened baseline is reported as the upstream ref, not HEAD (BL-0127)"
+assert_eq "$(field "$OUT" integration_sha)" "$PUSHED" "stale develop: integration_sha is the upstream tip"
 assert_eq "$(field "$OUT" summary.worktrees.clean-unintegrated)" "1" "stale develop: HEAD on neither stays clean-unintegrated"
 assert_eq "$(field "$OUT" summary.worktrees.dirty)" "1" "stale develop: dirty stays dirty"
 OUT="$(node "$SCRIPT" scan --repo "$UP" --integration-ref develop)"

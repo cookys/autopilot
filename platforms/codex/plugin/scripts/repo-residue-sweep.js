@@ -1109,12 +1109,17 @@ function main() {
   // local tip is an ancestor of its already-fetched upstream, measure against the upstream: a strict
   // superset, so every HEAD that was integrated stays integrated and the only new "integrated" ones are
   // real ancestors of a ref. No fetch. An explicit --integration-ref is taken literally.
+  let reportedRef = integrationRef; // the ref integration_sha was actually resolved from (BL-0127)
   if (!o.integrationRef) {
     // Only a remote-tracking upstream widens: a LOCAL branch as upstream (set-upstream-to=hands/x) would
     // make that branch "integrated" against itself and let reap drop its only ref.
     const upName = git(mainPath, ['rev-parse', '--symbolic-full-name', '@{upstream}']);
-    const up = upName.ok && upName.out.startsWith('refs/remotes/') ? git(mainPath, ['rev-parse', '--verify', '--quiet', '@{upstream}^{commit}']) : { ok: false };
-    if (up.ok && up.out &&up.out !== integrationSha.out && isAncestor(mainPath, integrationSha.out, up.out) === true) integrationSha.out = up.out;
+    const isRemote = upName.ok && upName.out.startsWith('refs/remotes/');
+    const up = isRemote ? git(mainPath, ['rev-parse', '--verify', '--quiet', `${upName.out}^{commit}`]) : { ok: false };
+    if (up.ok && up.out && up.out !== integrationSha.out && isAncestor(mainPath, integrationSha.out, up.out) === true) {
+      integrationSha.out = up.out;
+      reportedRef = upName.out.replace(/^refs\/remotes\//, '');
+    }
   }
   const integrationBranch = git(mainPath, ['rev-parse', '--abbrev-ref', integrationRef]).out;
 
@@ -1127,7 +1132,7 @@ function main() {
   const branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha.out, integrationBranch);
   const count = (rows, key) => rows.reduce((acc, r) => { acc[r[key]] = (acc[r[key]] || 0) + 1; return acc; }, {});
   const seats = classifyFinalPanelSeats(mainPath, worktrees, o.olderThanDays);
-  const report = { command: o.cmd, repo: mainPath, integration_ref: integrationRef, integration_sha: integrationSha.out, worktrees, branches, final_panel_seats: seats.rows, summary: { worktrees: count(worktrees, 'class'), branches: count(branches, 'class'), final_panel_seats: count(seats.rows, 'class') } };
+  const report = { command: o.cmd, repo: mainPath, integration_ref: reportedRef, integration_sha: integrationSha.out, worktrees, branches, final_panel_seats: seats.rows, summary: { worktrees: count(worktrees, 'class'), branches: count(branches, 'class'), final_panel_seats: count(seats.rows, 'class') } };
 
   if (o.cmd === 'scan') {
     const cfg = loadResidueConfig();

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "artifact_type": "g8b_attempt2_retained_worktree",
+  "campaign_id": "campaign-v1-0dd7641f7dfac06f506d9c40b25033d7bbabbdcf5836bd6124883542ba1e5dc5",
+  "mission_lineage_id": "lineage-v1-eb3354128c9cf9f3fdec46346d7838b78163b1be4b628e23fef5aaa0ef84927e",
+  "claim_id": "claim-v1-40ed698ae937ee82830cdaef6d68bba800527274a5a05225435ad6935c60bfcb",
+  "branch": "mission/eb3354128c9c/next-touch-debt-retirement-a2",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "candidate_tree_sha": "9be1ed77829f1267f70fd1b13dfc853c6ec989ca",
+  "worktree": "/tmp/g8b-attempt2-retained-Kww6Kj/candidate",
+  "receipt_digest": "8544ea7bf6d5c0c9ec5441beabe64c7659ef891c73984c1923033d42fd11baf3"
+}

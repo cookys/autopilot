@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_verification",
+  "campaign_id": "campaign-v1-962de4f5a8f0939bdd74d0538ed0a35a84131d373668f9cc5baa1bd996031bf6",
+  "tree_sha": "535d99968c1d7c63fa726d701b67f32531b49717",
+  "argv_hash": "5b835c4bf6d78d45d01a6f5b36477d297c385a1447bfb3e4ee78e79385b3abf5",
+  "env_fingerprint": "c69f8c7aafc5d5677f39eca1c1fe2e334a4b34c60613d84246333e7f050df8b3",
+  "request_digest": "df2289de904896ae10c5001bd20c6e84d9e3aaf8fb9c003e51ce4d52100908c7",
+  "verdict": "GREEN",
+  "exit_status": 0,
+  "writer_lease_closed": true,
+  "detached_checkout": true,
+  "runner_argv_attested": true,
+  "writer_fence_digest": "6789b8b96d2269386f69fa3bbefbf3d6ad957fdbdb13356ac5f171e49a6e3f09",
+  "checkout_attestation_digest": "e17fc1cfd1695be432f92fea4d1bb71aabd7323dfb8cf3b65f3f3a9293d47752",
+  "stdout_digest": "291de02a801fe5832ef2b30789d501a432f0a1e0aaae7f6b8eecc4ec904c5d6b",
+  "stderr_digest": "edaa4cdd83aad8603ee417f424f3cc3e8644e8e662f8bf5e16df0610fec9b3eb",
+  "started_at": "2026-08-06T04:37:05.895Z",
+  "ended_at": "2026-08-06T04:37:24.040Z",
+  "receipt_digest": "9225dac3951e85de31ce01ec87824987163835a2b2f27f6cfe894e4a5b0460b0"
+}

@@ -1,0 +1,11 @@
+Switched to a new branch 'verify/fresh-a149-833451'
+── sync-version: node scripts/sync-version.js --check
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh --check
+── check-canonical-invariants: bash scripts/check-canonical-invariants.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh --check
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh --check
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh --check
+── check-readme-parity: node scripts/check-readme-parity.js
+── check-hook-inventory: node scripts/check-hook-inventory.js --check
+── check-claude-md-inventory: node scripts/check-claude-md-inventory.js
+── l1-cache-key-parity: node scripts/check-l1-cache-key-parity.js

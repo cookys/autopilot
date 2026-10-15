@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_prepare_receipt",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "adoption_key": "e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "mission_lineage_id": "lineage-v1-e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "task_authority_id": "d50e4a4759797b67e294bdbb08ea0db7b0bd7a37f73b7d4dd3db925a5755a499",
+  "policy_hash": "78809e3845f5ebf1426050316ea8bede55edbf2364008dbad65bfca3b2645964",
+  "intent_hash": "a9b08ee8afc63a077a8870682fd35c8b3f3cf13324cd22410e8ae847a011beee",
+  "initial_required_acceptance_hashes": [
+    "668e24e52991cdfbed184de3f2d64e60a3a0d9deb423ad7aefecb3cd4b3d7a7d",
+    "ca366f61746f3b4050791f221ebbd41f014a05f27611a1a879882d85d30cae57"
+  ],
+  "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+  "mission_graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
+  "enforcement_mode": "enforce",
+  "state_hash": "29d4472b7a27f238aab832d87d3f94c051806145876b12c5ede57a57a7b63fd4",
+  "adopted": false,
+  "prepared_at": "2026-08-06T04:26:42.176Z",
+  "receipt_digest": "683ce766dc3de2e5e7c39c0968a06c909de0f12747021e46e6d5dd427ffdf9f9"
+}

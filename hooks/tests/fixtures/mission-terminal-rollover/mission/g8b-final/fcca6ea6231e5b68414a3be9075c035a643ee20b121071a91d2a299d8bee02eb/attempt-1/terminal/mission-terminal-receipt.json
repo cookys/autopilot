@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_terminal_receipt",
+  "mission_terminal": true,
+  "state_digest": "3ecf33682bef53feb257b9dd7f252b7d986c8f11e209e7e7c950e01edb58c9fd",
+  "terminal_digest": "75ec6e1e10df83d5bcdc01d909f6ca820cb49c4b86c6ec0cb8adce269f0f712a",
+  "residue": {
+    "lifecycle_residue": [
+      {
+        "campaign_id": "campaign-v1-97a4ceae42aa197a24c0cc8dd220fa346d14be7a03dd12f0ff7f865561c9d241",
+        "worktree": "/tmp/g8b-fresh-authority-c41-9WshHm/review-base",
+        "branch": "mission/fcca6ea6231e/next-touch-debt-retirement-a1",
+        "candidate_sha": "c41f25c57317c0de2d9455d074a08a267badcc39",
+        "candidate_tree_sha": "4546c556d784c04baeb2e184e095a018c14b803f",
+        "disposition": "retained_for_terminal_evidence"
+      }
+    ],
+    "residue_digest": "88d9498f5b0750f52ca0055a0a26794773a2014e5d8c6cb9cfcece3da493845b"
+  },
+  "residue_digest": "88d9498f5b0750f52ca0055a0a26794773a2014e5d8c6cb9cfcece3da493845b",
+  "receipt_digest": "5f8e89798f72e58e5e620d61f9d1573e4f08357dc42bb257e893b261e09b005b"
+}

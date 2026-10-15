@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_checkout_attestation",
+  "candidate_commit": "a149f2548460cc0c4037cd7a037f9d28d2ae284b",
+  "candidate_tree_sha": "adc5f5c19076421322a4a8ec7297a37de6e445e2",
+  "mode": "detached",
+  "worktree_path_digest": "d4c33e17f7542e85ec99cafecb5904f498eff4fbb870f051118481bf6eba714f",
+  "receipt_digest": "d3fa74176a94b1fb6064c697f007fb01694cec6b87b8dceecefe3824ad511b1b"
+}

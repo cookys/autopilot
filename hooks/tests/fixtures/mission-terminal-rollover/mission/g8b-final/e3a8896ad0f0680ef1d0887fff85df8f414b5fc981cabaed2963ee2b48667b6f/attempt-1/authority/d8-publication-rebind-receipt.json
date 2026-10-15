@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "artifact_type": "d8_publication_rebind_receipt",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-e3a8896ad0f0680ef1d0887fff85df8f414b5fc981cabaed2963ee2b48667b6f",
+  "task_authority_id": "d50e4a4759797b67e294bdbb08ea0db7b0bd7a37f73b7d4dd3db925a5755a499",
+  "authorized_branch": "mission/e3a8896ad0f0/next-touch-debt-retirement-a1",
+  "review_base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "evaluated_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+  "publication_sha": "c43370dd3df0918007fa35afe48f407124298617",
+  "publication_report_sha256": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+  "candidate_ref": "refs/heads/mission/e3a8896ad0f0/next-touch-debt-retirement-a1",
+  "candidate_sha": "fc03f35fca7c38a0b56c63c3ba05ddb2d81e5067",
+  "candidate_tree_sha": "535d99968c1d7c63fa726d701b67f32531b49717",
+  "mission_terminal_receipt_digest": "7ee78ed854d1c3d59f3630d71c6cd21db2ce93c9052c55a6e51ea0d0d6f69166",
+  "campaign_terminal_receipt_digest": "f647446b5d7638f122958e5062063e4c7744c117634fce1c36b4a3f5c38f950a",
+  "icc_terminal_receipt_digest": "8bbc6af5621e954eac85993f5446ba4c0c68cf61ad7f6e54e8039546f0265771",
+  "receipt_digest": "64beee6b0aec552cf026cd5b487285e63a8f28fbc0565976e0cd16925b5d0ef3"
+}

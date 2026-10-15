@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "artifact_type": "lifecycle_residue_receipt",
+  "issued_at": "2026-08-06T05:15:16.968Z",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "root_run_id": "campaign-v1-db1cd19c1736cc0939be78cd84fd5032dfdd89c6dcbc83497b00639c17422311",
+  "observed_head": "d932e4912f836cf30e6ff0469f60109400307a59",
+  "worktree_observation_digest": "18b37b3ec0f8699aee9c91d4a2cad52f21348adad493112992f26290e93fea37",
+  "journal_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "disposition_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "branch_inventory_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "owned_worktrees": [],
+  "branches": [],
+  "blockers": [],
+  "zero_residue": true,
+  "receipt_digest": "0ddc928dcf59beb706ed1ededce44e18977c0d1be7df5c96170e2fdd181425c9"
+}

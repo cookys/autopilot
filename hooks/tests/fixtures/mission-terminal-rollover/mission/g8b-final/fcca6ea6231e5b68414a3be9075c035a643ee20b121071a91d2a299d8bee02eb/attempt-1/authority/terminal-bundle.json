@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "artifact_type": "next_touch_terminal_bundle",
+  "repo_identity": "git-common-dir:@FIXTURE_COMMON_DIR@",
+  "mission_lineage_id": "lineage-v1-fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb",
+  "admission_base_sha": "f6805529bdca4cca76f334d8c82c8f2bf141aaf8",
+  "review_base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "d8_evaluated_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+  "d8_publication_sha": "c43370dd3df0918007fa35afe48f407124298617",
+  "candidate_sha": "c41f25c57317c0de2d9455d074a08a267badcc39",
+  "candidate_tree_sha": "4546c556d784c04baeb2e184e095a018c14b803f",
+  "source_plan_sha256": "d61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b",
+  "source_rubric_sha256": "16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975",
+  "prepared_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/prepare-receipt.json",
+    "receipt_digest": "40f755ef85de1281c25b0f82a7dc4a697eab5220a1b0c61f02636fd562b3f00d"
+  },
+  "mission_state": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/states/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb.json",
+    "state_hash": "3ecf33682bef53feb257b9dd7f252b7d986c8f11e209e7e7c950e01edb58c9fd"
+  },
+  "mission_terminal_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/terminal/mission-terminal-receipt.json",
+    "receipt_digest": "5f8e89798f72e58e5e620d61f9d1573e4f08357dc42bb257e893b261e09b005b"
+  },
+  "campaign_terminal_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/terminal/mission-campaign-terminal-receipt.json",
+    "receipt_digest": "88aa5b1b6d271ade8f92e8c9672678450df23742684c5452d2bd9071b9b34d7c"
+  },
+  "icc_terminal_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/terminal/icc-terminal-receipt.json",
+    "receipt_digest": "3f36f5542d43561154a9a58bae384caee293c8f36e103ca5bdf48381aa18e103"
+  },
+  "verification_receipts": [
+    {
+      "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/verification/verifier-attestation.json",
+      "receipt_digest": "f258dbb6cfe490e66cdd71bcbd1cbdade99a0a527cd2c6836323dd1cdb495393"
+    }
+  ],
+  "review_receipts": [
+    {
+      "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/review/reviewer-attestation.json",
+      "receipt_digest": "dde620a10ccc27dab112776fc7e16b474a6cdf487d77054b3da9699c3bee8954"
+    }
+  ],
+  "final_panel_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/terminal/final-panel-receipt.json",
+    "receipt_digest": "16f476877f370bca50141c35431556105e4fccd53056010e50d565fb663b30f8"
+  },
+  "ledger_path": "/home/cookys/projects/autopilot/.git/autopilot/implementation-campaign.jsonl",
+  "campaign_id": "campaign-v1-97a4ceae42aa197a24c0cc8dd220fa346d14be7a03dd12f0ff7f865561c9d241",
+  "develop_sha": "6dfd93f409128f53bccd39cac1d2d66eb9f339d6",
+  "candidate_ref": "refs/heads/mission/fcca6ea6231e/next-touch-debt-retirement-a1",
+  "source_worktree": "/tmp/g8b-fresh-authority-c41-9WshHm/review-base",
+  "allowed_path_prefixes": [],
+  "min_panel_size": 3,
+  "integration_state": "integrated",
+  "merge_receipt": {
+    "path": "../../../../../next-touch-debt-retirement/merge-execution-campaign-v1-97a4ceae42aa197a24c0cc8dd220fa346d14be7a03dd12f0ff7f865561c9d241-c41f25c57317c0de2d9455d074a08a267badcc39.json",
+    "receipt_digest": "8208ad27b6d3d675ef37236ed7982af65017cfbcc52ac024cb195f3d4ab6330c"
+  },
+  "d8_publication_rebind_receipt": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/authority/d8-publication-rebind-receipt.json",
+    "receipt_digest": "40665ffd216c3482394e4e5b7e0885f798856938297dc511b6535b7b3f46401f"
+  },
+  "g8b_integration_authorization": {
+    "path": "/home/cookys/projects/autopilot/.git/autopilot/mission/g8b-final/fcca6ea6231e5b68414a3be9075c035a643ee20b121071a91d2a299d8bee02eb/attempt-1/authority/g8b-integration-authorization.json",
+    "receipt_digest": "f22adfa94d82354038d23ab86dc812c4bcd254a4716ede1e26b82f4a0dbb0ed5"
+  },
+  "receipt_digest": "804edde874fdd5b5b4b5466182525e13652022fca380da99be688e54f85a50d8"
+}

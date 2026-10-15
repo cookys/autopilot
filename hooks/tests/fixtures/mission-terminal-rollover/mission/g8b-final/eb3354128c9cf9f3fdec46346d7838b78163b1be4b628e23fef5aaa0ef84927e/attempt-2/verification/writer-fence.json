@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_writer_fence",
+  "campaign_id": "campaign-v1-0dd7641f7dfac06f506d9c40b25033d7bbabbdcf5836bd6124883542ba1e5dc5",
+  "stage_identity": "g8b-attempt2-candidate-writer-closure",
+  "candidate_commit": "c3621aa17e9556f2d2b5cdb38d3db13b2029fe20",
+  "candidate_tree_sha": "9be1ed77829f1267f70fd1b13dfc853c6ec989ca",
+  "status": "closed",
+  "evidence_mode": "dispatch_exit",
+  "closure_evidence_digest": "44d53e7f6566a1e969e554a4b69bfe35db57892cf28364960f5a17e01849be0b",
+  "receipt_digest": "b686b4c9f9d7cf154b6b5aa3c8d866b295bc644149bc631dfd3fc70d9e83922c"
+}

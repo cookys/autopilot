@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "artifact_type": "implementation_campaign_final_panel",
+  "reviewed": true,
+  "verdict": "SHIP-AS-IS",
+  "findings": [],
+  "review_digest": "a2eab76d73539828f46684f60edf05f119c5475dc25ec9a37ec8b084c9b83dc8",
+  "sealed_min_panel_size": 3,
+  "final_panel_count": 3,
+  "final_panel_seat_receipts": [
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 1,
+      "runner": "grok",
+      "model": "Grok-4.5",
+      "effort": "high",
+      "endpoint": null,
+      "family": "xai",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b",
+      "reason": null,
+      "receipt_digest": "bbb4dcab1070c4d0af553bb64265b006b03d6c86f577503e6ca4f8dfd06602ab"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 2,
+      "runner": "agy",
+      "model": "Gemini 3.5 Flash (High)",
+      "effort": "high",
+      "endpoint": null,
+      "family": "google",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "a9389e7ac64337b83ed4e084c24bccd8a0687027356d0095299df4923d54522b",
+      "reason": null,
+      "receipt_digest": "1cec08392f609b68929b4b380409c8d17258c92fa06a255b202939453511207e"
+    },
+    {
+      "schema_version": 1,
+      "artifact_type": "implementation_campaign_final_panel_seat",
+      "seat_index": 3,
+      "runner": "claude-native",
+      "model": "claude-opus",
+      "effort": "high",
+      "endpoint": null,
+      "family": "anthropic",
+      "status": "reviewed",
+      "verdict": "SHIP-AS-IS",
+      "review_digest": "be43ecf166b9fd71996eadfb890d0f3c9554026dbe8b1d3e66b27ba54956fe1d",
+      "reason": null,
+      "receipt_digest": "cff5412e3f17730fc78a2234459d8300ff648485170ba828ac25f84c1c6cd28c"
+    }
+  ],
+  "receipt_digest": "ad1def28544a44580f958bff5a07767c0edcaea02bd897067bc61773251bdefd"
+}

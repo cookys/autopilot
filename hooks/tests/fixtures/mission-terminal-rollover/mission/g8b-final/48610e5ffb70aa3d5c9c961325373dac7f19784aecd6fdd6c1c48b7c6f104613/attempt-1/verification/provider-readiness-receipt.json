@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "artifact_type": "provider_readiness_receipt",
+  "issued_at": "2026-08-06T05:17:59.150Z",
+  "expires_at": "2026-08-06T05:27:59.150Z",
+  "roster_digest": "503e5e1030f22d56b3869aa253667761a81ddf5a7ee88a1844a6d491d8e80212",
+  "policy_digest": "9fd0313ca9bcc99aa855604f7c5273ebfd83374c6d36f0312f8549e87a813442",
+  "observation_digest": "c1d877f07ea3a7baca4d7084b8b21b24eac319707a5b2baad8e5ea39ded7ee23",
+  "overall_status": "usable",
+  "seats": [
+    {
+      "seat_id": "implementer",
+      "required": true,
+      "family": "xai",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "implementer",
+          "runner": "grok",
+          "model": "Grok-4.5",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "02c0a6cef64a0cd575163fad1a2a51e4ca2a8122abaa3d097716fbe4e77de5b0",
+        "observed_at": "2026-08-06T05:17:59.150Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "3e33b176b2c5861118380a2e2b70e6ed2070345ae317faaecac7700c04b42665"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "xai",
+        "tuple": {
+          "role": "implementer",
+          "runner": "grok",
+          "model": "Grok-4.5",
+          "effort": "high",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "verification_author",
+      "required": true,
+      "family": "google",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "verification_author",
+          "runner": "agy",
+          "model": "Gemini 3.5 Flash (High)",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "f6200efb5899bc59c5a1c296c50eba73d199dbd968dcbed26f39df853fb963e5",
+        "observed_at": "2026-08-06T05:17:59.150Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "5c7f24897647c54944d2a089bc3c7fe1f660050a09fc829250b0a13f3a4464cd"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "google",
+        "tuple": {
+          "role": "verification_author",
+          "runner": "agy",
+          "model": "Gemini 3.5 Flash (High)",
+          "effort": "high",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    },
+    {
+      "seat_id": "qc",
+      "required": true,
+      "family": "anthropic",
+      "decision": {
+        "schema_version": 1,
+        "artifact_type": "provider_readiness_decision",
+        "tuple": {
+          "role": "qc",
+          "runner": "claude-native",
+          "model": "claude-opus",
+          "effort": "high",
+          "endpoint": null
+        },
+        "tuple_digest": "9016bc23f76b0b2b018539aa76cf5a82c57e7a609fdeb0a4f03ebee2ddbbca16",
+        "observed_at": "2026-08-06T05:17:59.150Z",
+        "axes": {
+          "transport": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "live": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-local-no-provider-dispatch",
+            "freshness": "fresh",
+            "reason": null
+          },
+          "qualification": {
+            "status": "ready",
+            "observed_status": null,
+            "observed_at": "2026-08-06T05:17:59.150Z",
+            "ttl_seconds": 600,
+            "evidence_class": "host-injected-exact-role",
+            "freshness": "fresh",
+            "reason": null
+          }
+        },
+        "usable_now": true,
+        "probe_required": false,
+        "blocking_reasons": [],
+        "fallbacks": [],
+        "decision_digest": "e39b96b8462764f74a3ec19b7d5e52994a13da4f21ee25f54e689d0e730e1bb2"
+      },
+      "fallbacks": [],
+      "selected": {
+        "source": "primary",
+        "fallback_order": null,
+        "family": "anthropic",
+        "tuple": {
+          "role": "qc",
+          "runner": "claude-native",
+          "model": "claude-opus",
+          "effort": "high",
+          "endpoint": null
+        }
+      },
+      "status": "usable",
+      "failing_axes": []
+    }
+  ],
+  "receipt_digest": "ff27f949a9b915cc51e10f65dd9516d9ce6b5b90b051e347c30ff4a8dcd1d36a"
+}

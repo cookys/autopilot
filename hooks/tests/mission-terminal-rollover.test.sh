@@ -14,19 +14,20 @@
 # cannot be replayed. If that ancestry check ever softens, the exemption becomes
 # unsound. Most of this harness exists to keep that one argument honest.
 #
-# Why it runs against a clone of the REAL repository rather than a synthetic
-# fixture: a Mission state must satisfy ~20 validator predicates and
+# Inputs: a Mission state must satisfy ~20 validator predicates and
 # `repo_identity` is bound to the git common dir, so a hand-fabricated JSON
-# fixture is neither cheap nor more faithful. Every case below either makes no
-# writes or restores what it touched — but "restores" is not enough on its
-# own: mission-terminal-reconcile.js and mission-routing-admission.js derive
-# their common dir purely from `git -C <repo-root>`, so pointing --repo-root at
-# a SCRATCH CLONE (full history, its own independent .git) instead of the live
-# worktree gets the same real-Mission-state faithfulness while making it
-# structurally impossible for this harness to touch the live host's
-# .git/autopilot/mission — no restore-on-failure race, no live-store mutation
-# window at all. A live-store byte-identity check at the end is a belt-and-
-# braces regression guard on top of that isolation.
+# fixture is not cheap. Instead the harness reads a FROZEN SNAPSHOT of the real
+# Mission evidence for the two graphs it needs (c1c6f577: six same-graph adoptions;
+# d904c9d1: legacy), committed at hooks/tests/fixtures/mission-terminal-rollover/
+# (mission/ = registry + states + journals + evidence, repo identity replaced by a
+# placeholder; the sealed graph + sources json beside it). It never reads the host's
+# .git/autopilot/mission registry nor docs/mission-next-touch-debt-retirement-*.json,
+# so archiving, moving or re-sealing those on the host cannot change this suite's
+# result (BL-0129). mission-terminal-reconcile.js and mission-routing-admission.js
+# derive their common dir purely from `git -C <repo-root>`, so --repo-root points at
+# a SCRATCH CLONE (own independent .git, full history so observed_head ancestry is
+# real) — the live .git/autopilot/mission is never touched. A live-store byte-identity
+# check at the end is a belt-and-braces guard on top of that isolation.
 #
 # NOTE: hooks/tests/mission-routing-admission.test.sh is RED on develop independently
 # of this work (scripts/verify-preexisting.sh: head=fail, base=fail), so it cannot
@@ -35,6 +36,7 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
 LIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+FIXTURE="$LIVE_ROOT/hooks/tests/fixtures/mission-terminal-rollover"
 RECONCILE="$LIVE_ROOT/scripts/mission-terminal-reconcile.js"
 ADMISSION="$LIVE_ROOT/scripts/mission-routing-admission.js"
 PASS=0; FAIL=0
@@ -57,9 +59,10 @@ LIVE_COMMON="$(git -C "$LIVE_ROOT" rev-parse --path-format=absolute --git-common
 LIVE_MROOT="$LIVE_COMMON/autopilot/mission"
 LIVE_STORE="$LIVE_MROOT/terminal-rollovers.json"
 
-if [ ! -f "$LIVE_MROOT/registry.json" ]; then
-  skip "no Mission registry in this clone — rollover has nothing to act on"
-  vacuous_exit
+if [ ! -f "$FIXTURE/mission/registry.json" ]; then
+  bad "frozen Mission fixture missing: $FIXTURE/mission/registry.json"
+  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
+  exit 1
 fi
 
 # Byte-identity baseline on the LIVE store, taken before any scratch-clone
@@ -80,26 +83,16 @@ COMMON="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/de
 MROOT="$COMMON/autopilot/mission"
 STORE="$MROOT/terminal-rollovers.json"
 
-# .git/autopilot/mission is untracked runtime state, not part of git history,
-# so a fresh clone's .git does not carry it — copy the live snapshot into the
-# scratch clone's own (isolated) common dir. terminal-rollovers.json is
-# excluded: it is the TOOL'S OWN OUTPUT (not mission/evidence input), each
-# record's repo_identity is bound to the git-common-dir it was written under
-# (by design — see the header above), and the live copy's records are bound
-# to the live common dir. Carrying a stale record into the scratch clone
-# would make every fresh rollover computed under the scratch common dir look
-# like a conflicting "different rollover" for the same graph (ROLLOVER_REPLAY)
-# even though nothing is actually wrong — so rollover.json starts clean here,
-# same as it does the first time this ever runs on a fresh repo. The same
-# reasoning applies to legacy-terminal-dispositions.json: it is also the
-# tool's own output, its repo_identity and current_graph_digest are bound to
-# whatever common dir/graph it was last reconciled under on the LIVE host,
-# and that binding cannot possibly match the scratch clone's own common dir —
-# so it starts clean here too and gets re-derived inside the clone below.
+# Seed the scratch clone's own (isolated) common dir from the frozen snapshot.
+# terminal-rollovers.json and legacy-terminal-dispositions.json are the TOOL'S OWN
+# OUTPUT, so the snapshot carries neither: both start clean, exactly as on a fresh
+# repo, and are (re)derived inside the clone below. The sealed graph + sources are
+# overwritten in the clone's tree with their frozen copies so a move/archive of the
+# host's docs/ files cannot change what admission reads.
 mkdir -p "$(dirname "$MROOT")"
-cp -R "$LIVE_MROOT" "$MROOT"
-rm -f "$MROOT/terminal-rollovers.json"
-rm -f "$MROOT/legacy-terminal-dispositions.json"
+cp -R "$FIXTURE/mission" "$MROOT"
+cp "$FIXTURE/mission-next-touch-debt-retirement-execution-graph.json" \
+   "$FIXTURE/mission-next-touch-debt-retirement-sources.json" "$ROOT/docs/"
 
 # mission-routing-admission.js additionally requires (unconditionally, not just
 # for the graph under test) that registry.json's repo_identity, EVERY mission
@@ -132,7 +125,7 @@ function walk(dir) {
   }
 }
 walk(root);
-' "$MROOT" "git-common-dir:$LIVE_COMMON" "git-common-dir:$COMMON"
+' "$MROOT" "git-common-dir:@FIXTURE_COMMON_DIR@" "git-common-dir:$COMMON"
 
 # Find a graph that has MORE THAN ONE COMPLETE adoption — the exact condition that
 # produces the ambiguity. Without one, there is nothing for rollover to resolve.
@@ -278,13 +271,14 @@ CONFIGJSON
 # names hooks/tests/dispatch-review.test.sh and hooks/tests/resolve-review-loop.test.sh,
 # which were since split into per-topic suites. Admission requires every
 # required/output path the graph names to exist, so materialise any such
-# absent hooks/tests/*.test.sh path in the scratch clone (the clone is
-# disposable; the live tree is never touched).
+# absent repo-relative file path in the scratch clone (the clone is
+# disposable; the live tree is never touched). Not limited to hooks/tests:
+# any host-side move of a path the frozen graph names must not turn this red.
 while IFS= read -r p; do
-  [ -n "$p" ] && [ ! -e "$ROOT/$p" ] && : > "$ROOT/$p"
+  [ -n "$p" ] && [ ! -e "$ROOT/$p" ] && mkdir -p "$(dirname "$ROOT/$p")" && : > "$ROOT/$p"
 done < <(node -e '
 const g=require(process.argv[1]);const out=new Set();
-JSON.stringify(g,(k,v)=>{if(typeof v==="string"&&/^hooks\/tests\/[^/]+\.test\.sh$/.test(v))out.add(v);return v});
+JSON.stringify(g,(k,v)=>{if(typeof v==="string"&&/^(hooks|scripts|src|docs|skills|references|agents|platforms|\.claude)\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(v))out.add(v);return v});
 console.log([...out].join("\n"))' "$ROOT/docs/mission-next-touch-debt-retirement-execution-graph.json")
 
 # requireExactLegacyTerminalDisposition() (mission-routing-admission.js) also

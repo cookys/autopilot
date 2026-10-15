@@ -1190,4 +1190,50 @@ assert_contains "$out" "shipped_in_duplicate_stem" "BL-0171: duplicate refusal i
 assert_file_exists "$d/docs/plans/2026-07-01-alpha.md" "BL-0171: nothing moved on duplicate stem"
 
 
+# --- BL-0096: evidence frozen only by convention (no seal) is marked by a tracked
+#     `.frozen-evidence` file: its lines name files or directories (relative to the marker's
+#     dir, `.` = the whole dir) whose bytes no writing pass may touch. 6559da33 rewrote the
+#     historical observed_paths of an unsealed candidate-path-audit.json. Control: an unmarked
+#     sibling in the SAME dir is still rewritten, so the skip is discriminating. ---
+d="$(fixture_repo rewrite-skips-marked-evidence)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/proj/frozen-dir/sub" "$d/proj/mixed"
+printf '{"observed_paths":["docs/plans/2026-01-01-widget.md"]}\n' > "$d/proj/mixed/audit.json"
+printf '{"note":"docs/plans/2026-01-01-widget.md"}\n' > "$d/proj/mixed/loose.json"
+printf '# comment\naudit.json\n' > "$d/proj/mixed/.frozen-evidence"
+printf '{"observed_paths":["docs/plans/2026-01-01-widget.md"]}\n' > "$d/proj/frozen-dir/sub/state.json"
+printf '.\n' > "$d/proj/frozen-dir/.frozen-evidence"
+printf '# Changelog\n\n## v1.2.3 - ships widget\n\n- landed. See docs/plans/2026-01-01-widget.md.\n' > "$d/CHANGELOG.md"
+cp "$d/proj/mixed/audit.json" "$TEST_TMP/marked-audit.before"
+cp "$d/proj/frozen-dir/sub/state.json" "$TEST_TMP/marked-state.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_contains "$(cat "$d/proj/mixed/loose.json")" \
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "control (BL-0096): an UNMARKED json in the same dir IS rewritten"
+if cmp -s "$d/proj/mixed/audit.json" "$TEST_TMP/marked-audit.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "BL-0096: a file named in .frozen-evidence is byte-identical after --fix"
+if cmp -s "$d/proj/frozen-dir/sub/state.json" "$TEST_TMP/marked-state.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "BL-0096: a '.'-marked directory tree is byte-identical after --fix"
+assert_contains "$out" '"plan_reference_frozen","path":"proj/mixed/audit.json"' \
+  "BL-0096: the marked-file skip is reported (report-only)"
+
+# same marker honoured by --migrate-archive-layout (the pass that did the original damage)
+d="$(fixture_repo migrate-skips-marked-evidence)"
+mkdir -p "$d/docs/plans/_archive" "$d/proj"
+printf '# Plan\n' > "$d/docs/plans/_archive/2026-08-09-legacy.md"
+printf '{"observed_paths":["docs/plans/_archive/2026-08-09-legacy.md"]}\n' > "$d/proj/audit.json"
+printf '{"note":"docs/plans/_archive/2026-08-09-legacy.md"}\n' > "$d/proj/loose.json"
+printf 'audit.json\n' > "$d/proj/.frozen-evidence"
+cp "$d/proj/audit.json" "$TEST_TMP/marked-audit2.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --migrate-archive-layout --json >/dev/null
+assert_contains "$(cat "$d/proj/loose.json")" "docs/plans/_archive/2026/08/2026-08-09-legacy.md" \
+  "control (BL-0096 migrate): an unmarked json IS rewritten to the dated path"
+if cmp -s "$d/proj/audit.json" "$TEST_TMP/marked-audit2.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "BL-0096: a marked file is byte-identical after --migrate-archive-layout"
+
+
 finalize_test

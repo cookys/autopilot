@@ -19,7 +19,7 @@ export DISPATCH_QUIET=1
 export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1" AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
-  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
+  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID 2>/dev/null || true
 
 HETERO="$REPO_ROOT/scripts/dispatch-hetero.sh"
 REVIEW="$REPO_ROOT/scripts/dispatch-review.sh"
@@ -124,9 +124,9 @@ MF="$(one_manifest "$TEST_TMP/runs-grok")"
 # --- the child's marker: SessionStart path records parent_session_id; set does not --------------
 MD="$TEST_TMP/markers"; mkdir -p "$MD"
 EPM='const sm=require(process.argv[1]);const r=sm.ensurePlainMarker({sessionId:process.argv[2],repoRoot:process.argv[3],scope:{project_key:"k",repo_identity:null},dir:process.argv[4]});process.stdout.write(r)'
-env AUTOPILOT_PARENT_SESSION_ID="$PARENT" node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-1 "$SBX" "$MD" >/dev/null
-eq "$PARENT" "$(mf_get "$MD/child-1.json" parent_session_id)" "SessionStart marker: parent_session_id from AUTOPILOT_PARENT_SESSION_ID"
-env -u AUTOPILOT_PARENT_SESSION_ID node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-2 "$SBX" "$MD" >/dev/null
+env AUTOPILOT_PARENT_SESSION_ID="$PARENT" AUTOPILOT_CHILD_SESSION_ID=child-1 node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-1 "$SBX" "$MD" >/dev/null
+eq "$PARENT" "$(mf_get "$MD/child-1.json" parent_session_id)" "SessionStart marker: parent_session_id from AUTOPILOT_PARENT_SESSION_ID when the payload id is AUTOPILOT_CHILD_SESSION_ID (3d)"
+env -u AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID=child-2 node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-2 "$SBX" "$MD" >/dev/null
 eq "<absent>" "$(mf_get "$MD/child-2.json" parent_session_id)" "SessionStart marker: no variable => no parent_session_id key"
 # 3b rule 2: a session id equal to the launching session's own is the PARENT's marker: refused, nothing written.
 eq "refused_parent" "$(env AUTOPILOT_PARENT_SESSION_ID=child-3 node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-3 "$SBX" "$MD")" "SessionStart marker: a session equal to the parent is refused"

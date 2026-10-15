@@ -3650,7 +3650,9 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   # the job-root lookup earlier on; only the spawn is scrubbed.)
   # 3b rule 3: the child env (parent id = this rail's own write target, scrubbed ids) is resolved at spawn time,
   # so the detached child (a re-exec of this function) computes the same thing from its inherited env.
-  if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID); CHILD_SESSION_PARENT=""; fi
+  if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID); CHILD_SESSION_PARENT=""; fi
+  # 3d: only the cc-shim claude child gets the C the rail minted for it (after every -u in the env argv); every other runner has C removed above.
+  CHILD_SESSION_CLAUDE_ENV=(); if [ "${IS_CCSHIM:-0}" -eq 1 ] && [ -n "${CHILD_SESSION_ID:-}" ]; then CHILD_SESSION_CLAUDE_ENV=("AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"); fi
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -3668,12 +3670,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3687,7 +3689,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
     set -m 2>/dev/null || true
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
     selfpg="$(_self_pgid)" || selfpg=""
@@ -3699,7 +3701,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
-    setsid --wait env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+    setsid --wait env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     rp=$!
     WORKER_SID="$(_setsid_wait_worker_sid "$rp")"
     [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3707,12 +3709,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   else
     CONTAINMENT="plain"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"

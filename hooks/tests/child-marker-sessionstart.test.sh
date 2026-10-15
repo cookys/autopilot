@@ -20,7 +20,7 @@ export DISPATCH_QUIET=1
 export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1" AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
-  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_SESSION_MODE_DIR 2>/dev/null || true
+  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID AUTOPILOT_SESSION_MODE_DIR 2>/dev/null || true
 
 REVIEW="$REPO_ROOT/scripts/dispatch-review.sh"
 AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh"
@@ -146,12 +146,12 @@ done
 
 # ensure-child unit rules: payload only, existing marker kept, no parent var => no parent key, fail-open.
 UD="$TEST_TMP/unit"; mkdir -p "$UD"
-printf '{"session_id":"u-1","cwd":"%s"}' "$SBX" | env AUTOPILOT_SESSION_MODE_DIR="$UD" AUTOPILOT_PARENT_SESSION_ID=pp node "$REPO_ROOT/scripts/session-mode.js" ensure-child
-eq "pp" "$(mf_get "$UD/u-1.json" parent_session_id)" "ensure-child: parent from AUTOPILOT_PARENT_SESSION_ID"
+printf '{"session_id":"u-1","cwd":"%s"}' "$SBX" | env AUTOPILOT_SESSION_MODE_DIR="$UD" AUTOPILOT_PARENT_SESSION_ID=pp AUTOPILOT_CHILD_SESSION_ID=u-1 node "$REPO_ROOT/scripts/session-mode.js" ensure-child
+eq "pp" "$(mf_get "$UD/u-1.json" parent_session_id)" "ensure-child: parent from AUTOPILOT_PARENT_SESSION_ID when the payload id is AUTOPILOT_CHILD_SESSION_ID (3d)"
 BEFORE="$(cksum < "$UD/u-1.json")"
 printf '{"session_id":"u-1","cwd":"/elsewhere"}' | env AUTOPILOT_SESSION_MODE_DIR="$UD" AUTOPILOT_PARENT_SESSION_ID=other node "$REPO_ROOT/scripts/session-mode.js" ensure-child
 eq "$BEFORE" "$(cksum < "$UD/u-1.json")" "ensure-child: an existing marker is kept"
-printf '{"session_id":"u-2","cwd":"%s"}' "$SBX" | env -u AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_SESSION_MODE_DIR="$UD" AUTOPILOT_SESSION_ID=not-me CLAUDE_CODE_SESSION_ID=not-me-either node "$REPO_ROOT/scripts/session-mode.js" ensure-child
+printf '{"session_id":"u-2","cwd":"%s"}' "$SBX" | env -u AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID=u-2 AUTOPILOT_SESSION_MODE_DIR="$UD" AUTOPILOT_SESSION_ID=not-me CLAUDE_CODE_SESSION_ID=not-me-either node "$REPO_ROOT/scripts/session-mode.js" ensure-child
 eq "<absent>" "$(mf_get "$UD/u-2.json" parent_session_id)" "ensure-child: no parent variable => no parent_session_id"
 eq "2" "$(ls "$UD" | grep -c '\.json$')" "ensure-child: writes for payload.session_id only, never an env-derived id"
 printf 'not json' | env AUTOPILOT_SESSION_MODE_DIR="$UD" node "$REPO_ROOT/scripts/session-mode.js" ensure-child; eq "0" "$?" "ensure-child: malformed payload exits 0"

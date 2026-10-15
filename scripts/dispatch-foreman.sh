@@ -348,13 +348,13 @@ while IFS='=' read -r _k _val; do
   case "$_k" in
     # The foreman is a CHILD session: never hand it the parent's explicit session binding
     # (session-mode.js getSessionId() prefers it, so the child would clobber the parent's marker).
-    AUTOPILOT_SESSION_ID) ;;
+    AUTOPILOT_SESSION_ID|AUTOPILOT_CHILD_SESSION_ID) ;;   # 3d: C names a child of the rail that minted it, never of this foreman
     LC_*|KIMI_*|AUTOPILOT_*) FOREMAN_ENV+=("$_k=${!_k}") ;;
   esac
 done < <(env | grep -E '^(LC_[A-Z_]*|KIMI_[A-Za-z0-9_]*|AUTOPILOT_[A-Za-z0-9_]*)=' 2>/dev/null)
 if [ "${ENV_PASSTHROUGH[*]+set}" = set ]; then
   for _n in "${ENV_PASSTHROUGH[@]}"; do
-    [ "$_n" = "AUTOPILOT_SESSION_ID" ] && continue   # same exclusion as the allowlist above
+    [ "$_n" = "AUTOPILOT_SESSION_ID" ] || [ "$_n" = "AUTOPILOT_CHILD_SESSION_ID" ] && continue   # same exclusion as the allowlist above
     [ -n "${!_n:-}" ] && FOREMAN_ENV+=("$_n=${!_n}")
   done
 fi

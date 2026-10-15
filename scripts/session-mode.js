@@ -690,16 +690,21 @@ function writeMarkerFile(file, marker) {
 // an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
 // <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
 // -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id) | 'refused_parent' (3b: the id is the parent's).
-// parentSessionId: the launching session's id. Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
+// parentSessionId: the launching session's id, recorded only when sessionId equals childSessionId
+// (AUTOPILOT_CHILD_SESSION_ID, the id the rail minted; dispatch-tree 3d). Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
 // (exported by the rails onto the claude command line); `session-mode set` never does, so an explicit set cannot
 // claim a parent. Ignored when it is empty or equals this session's own id.
-function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir(), parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID }) {
+function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir(), parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID, childSessionId = process.env.AUTOPILOT_CHILD_SESSION_ID }) {
   const sid = normalizeSessionId(sessionId);
   if (!sid) return 'skipped';
   // 3b rule 2: a session id equal to the launching session's own is the PARENT's: never written from a child.
   // Checked before any directory, lock or file is touched.
   if (typeof parentSessionId === 'string' && parentSessionId.trim() && normalizeSessionId(parentSessionId.trim()) === sid) return 'refused_parent';
-  const parent = typeof parentSessionId === 'string' && parentSessionId.trim() && parentSessionId.trim() !== sessionId
+  // 3d rule 5: P is recorded as the parent only against the child id the launching rail minted (C). P alone is an
+  // inherited environment (a tmux or shell started inside a child), not proof this session is that child.
+  // Failure direction: no parent recorded, never a wrong one.
+  const namedChild = typeof childSessionId === 'string' && childSessionId.trim() && normalizeSessionId(childSessionId.trim()) === sid;
+  const parent = namedChild && typeof parentSessionId === 'string' && parentSessionId.trim() && parentSessionId.trim() !== sessionId
     ? parentSessionId.trim().slice(0, 128) : null;
   const file = path.join(dir, `${sid}.json`);
   let result = 'kept';

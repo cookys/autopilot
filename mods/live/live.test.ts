@@ -5013,6 +5013,21 @@ for (const surface of SURFACES) {
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
   })
 
+  test('DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (' + surface + ')', async ($, on) => {
+    decideWorld(on, [DQ1, { ...DQ2, origin: 'ask_user_question' }]) // the origin travels model.json -> job model -> pane, nothing is put into a view by hand
+    await start($, surface)
+    const rows = await decideRows($)
+    const at = rows.findIndex(t => t.startsWith('▲ 2. U6'))
+    expect(at).toBeGreaterThan(0)
+    expect(rows[at + 1]).toBe('  [ ] 要  [ ] 不要') // still shown, as plain text
+    expect(rows[at + 2]).toBe('  請在對話框回答。')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 0/1） ]') // only the first question counts
+    const buttons = await keysOf($, 'Button')
+    expect(buttons.filter(k => k.startsWith('pick:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
+    expect(buttons.filter(k => k.startsWith('pick:d-4290499d')).length).toBe(2)
+    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d'])
+  })
+
   test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {
     decideWorld(on)
     await start($, surface)

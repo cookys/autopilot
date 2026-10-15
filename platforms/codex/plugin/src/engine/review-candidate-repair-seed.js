@@ -104,11 +104,14 @@ function renderTask({ findings, reviewedHead, base, branch, campaignId }) {
   return lines.join('\n');
 }
 
-// Local branches under repair/, as bare names. `lstrip=2` drops `refs/heads/` even when a tag of the same
-// name exists (`refname:short` would then print `heads/<name>` and hide the branch). Fails closed: a listing
-// that cannot be made must not look like "no earlier repair branch".
+// Branches under repair/, as bare names: local ones plus remote-tracking ones (refs/remotes/<remote>/repair/...),
+// so a repair another clone already pushed counts even before it exists locally (BL-0155: otherwise the next
+// repair of the same ticket picks the same name and the push collides). Remote-tracking refs are as fresh as the
+// last fetch; this does not touch the network. Full refnames are printed and stripped here, so a tag of the same
+// name cannot make `refname:short` hide the branch (`heads/<name>`). Fails closed: a listing that cannot be
+// made must not look like "no earlier repair branch".
 function listRepairBranches(cwd) {
-  const listed = spawnSync('git', ['-C', cwd, 'for-each-ref', '--format=%(refname:lstrip=2)', 'refs/heads/repair/'],
+  const listed = spawnSync('git', ['-C', cwd, 'for-each-ref', '--format=%(refname)', 'refs/heads/repair/', 'refs/remotes/*/repair/*'],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (listed.error || listed.status !== 0) {
     throw new RepairSeedError(
@@ -116,7 +119,14 @@ function listRepairBranches(cwd) {
       `could not list existing repair branches (git for-each-ref failed: ${String((listed.error && listed.error.message) || listed.stderr || listed.status).trim().slice(0, 200)})`,
     );
   }
-  return String(listed.stdout || '').split('\n').filter(Boolean);
+  const names = new Set();
+  for (const ref of String(listed.stdout || '').split('\n').filter(Boolean)) {
+    const local = ref.match(/^refs\/heads\/(repair\/.+)$/);
+    const remote = ref.match(/^refs\/remotes\/[^/]+\/(repair\/.+)$/);
+    const name = (local && local[1]) || (remote && remote[1]);
+    if (name) names.add(name);
+  }
+  return [...names].sort();
 }
 
 // Build the seeded contract and task prompt. Pure: no I/O besides reading the schema ceiling.

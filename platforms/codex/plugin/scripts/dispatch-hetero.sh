@@ -172,6 +172,13 @@
 
 set -uo pipefail
 
+# Test seams: the HETERO_TEST_* knobs below (watchdog / containment fault injection) are
+# honoured only when the single test-mode switch is on. Without it any inherited knob is
+# dropped here, before it can reach a code path (BL-0099).
+if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
+  unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
+fi
+
 # Default is the agy *alias*, never a literal vendor id: agy_resolve_model_alias() resolves it
 # against the live `agy models` inventory and fails closed when no tier match exists. A literal
 # id rots silently — "Gemini 3.5 Flash (High)" outlived its own model and every --model-less
@@ -3499,6 +3506,12 @@ _watchdog_signal_worker() {
       sc=1
     else
       systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
+      if [ "$sc" -ne 0 ]; then
+        # One bounded retry: a transient failure must not leave the run unbounded.
+        sleep 0.3
+        sc=0
+        systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
+      fi
     fi
     if [ "$sc" -eq 0 ]; then
       return 0
@@ -3545,11 +3558,13 @@ _arm_worker_watchdog() {
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
       setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
     else
-      sleep "$secs" &
+      # No setsid: still tag argv0 so _cancel_worker_watchdog can recognise and kill it.
+      bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
     fi
     sp=$!
     echo "$sp" > "${tok}.sleeppid"
     wait "$sp" 2>/dev/null || true
+    sp=""   # reaped: the TERM trap must not signal a recycled pid
     [ -f "$tok" ] || exit 0
     if ! _watchdog_worker_alive; then
       exit 0

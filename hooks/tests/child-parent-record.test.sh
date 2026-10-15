@@ -14,6 +14,7 @@
 #       invocation (`--version` and `--help` included). A runner with no stub that ran is `not_run` = FAIL.
 # Seams: stub binaries that dump their own environment; the hook paths run for real against scratch dirs.
 . "$(dirname "$0")/lib.sh"
+export AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1   # HETERO_TEST_* seams in dispatch-hetero.sh are inert without it
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
 
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"

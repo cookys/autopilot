@@ -43,6 +43,7 @@ PASS=0; FAIL=0
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
+fail_exit() { printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 1; }
 skip() { printf 'SKIP: %s\n' "$1"; SKIP_REASON="$1"; }
 # A precondition-less run asserts NOTHING. It must not look like "0 passed, 0 failed" (a green
 # summary): print an explicit, greppable SKIP [suite] line on stdout and stderr, and exit 0 only
@@ -186,7 +187,7 @@ if [ -n "${OTHER:-}" ]; then
     && ok "refuses a COMPLETE adoption lacking integrated/zero-residue evidence" \
     || bad "accepted an adoption with no integration evidence: ${out:0:90}"
 else
-  skip "no second COMPLETE adoption to test refusal against"
+  bad "frozen fixture has no second COMPLETE adoption to test refusal against"; fail_exit
 fi
 
 # ---- a nonexistent adoption is refused
@@ -228,7 +229,7 @@ if [ -n "$EVID" ] && [ -f "$EVID" ]; then
   mv "$EVID.testbak" "$EVID"
   [ -f "$STORE.testbak" ] && mv "$STORE.testbak" "$STORE" || rm -f "$STORE"
 else
-  skip "could not locate lifecycle evidence for the ancestry case"
+  bad "frozen fixture has no lifecycle evidence for the ancestry case"; fail_exit
 fi
 
 # ---- the valid canonical is accepted and asserts no fabrication
@@ -312,7 +313,7 @@ if [ -f "$STORE" ]; then
   grep -q '"status":"READY"' <<< "$out" \
     && ok "restoring the intact rollover restores READY" || bad "READY did not recover after restore"
 else
-  skip "no rollover store to tamper with"
+  bad "no rollover store exists to tamper with (the rollover above did not write one)"; fail_exit
 fi
 
 # Byte-identity proof: the entire harness ran against the scratch clone's own

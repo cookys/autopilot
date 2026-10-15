@@ -1158,6 +1158,11 @@ function rewritePlanReferences(repoRoot, stem) {
       // INDEX.md's docs-relative links are archiveIndexRow's job, scoped to the stem's OWN
       // registered rows (another row's prose mention is deliberately left alone).
       if (relative && rel === 'docs/projects/INDEX.md') continue;
+      // docs-relative links only make sense inside docs/ (a `plans/<stem>.md` string in src/ or an
+      // external `.autopilot/plans/` path is not a link to this archive). docs/mission-*.json
+      // (sources manifests, graphs) are mission-runtime inputs: next-touch-validation pins a
+      // manifest's plan_path/rubric_path verbatim (SOURCE_AUTHORITY_INVALID), so never rewrite them.
+      if (relative && (!rel.startsWith('docs/') || /^docs\/mission-[^/]*\.json$/.test(rel))) continue;
       re.lastIndex = 0;
       if (!re.test(text)) continue;
       re.lastIndex = 0;
@@ -1309,6 +1314,7 @@ function parseShippedInPairs(raw) {
       const k = t.slice(0, i).trim();
       const v = t.slice(i + 1).trim();
       if (!k || !v) return { pairs: null, all: null, error: `shipped_in_malformed_pair: ${t}` };
+      if (pairs.has(k)) return { pairs: null, all: null, error: `shipped_in_duplicate_stem: ${k}` };
       pairs.set(k, v);
     }
     return { pairs, all: null, error: null };

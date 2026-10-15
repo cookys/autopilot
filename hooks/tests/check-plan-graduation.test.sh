@@ -1151,4 +1151,43 @@ assert_contains "$(cat "$d/docs/scripts-inventory.md")" "(plans/2026-07-01-alpha
   "BL-0171 negative control: without the relative-link pass the stale link remains"
 
 
+# --- BL-0171 review fixes: relative rewrite is docs/-only and skips mission manifests;
+#     unknown / ambiguous / duplicate --shipped-in are named refusals.
+d="$(bl0171_fixture bl0171-scope)"
+mkdir -p "$d/src" "$d/.autopilot/plans"
+printf 'const p = "plans/2026-07-01-alpha.md";\n' > "$d/src/code.js"
+printf 'see .autopilot/plans/2026-07-01-alpha.md and ~/.claude/plans/2026-07-01-alpha.md\n' > "$d/notes.md"
+printf '{"schema_version":1,"sources":[{"plan_path":"plans/2026-07-01-alpha.md","plan_sha256":"%s"}]}\n' \
+  "$(printf '0%.0s' $(seq 64))" > "$d/docs/mission-x-sources.json"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m more >/dev/null
+node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta --shipped-in v1 >/dev/null
+assert_contains "$(cat "$d/src/code.js")" '"plans/2026-07-01-alpha.md"' "BL-0171: non-docs file with plans/<stem> is untouched"
+assert_contains "$(cat "$d/notes.md")" ".autopilot/plans/2026-07-01-alpha.md" "BL-0171: external .autopilot/plans path untouched"
+assert_contains "$(cat "$d/notes.md")" "~/.claude/plans/2026-07-01-alpha.md" "BL-0171: ~/.claude/plans path untouched"
+assert_contains "$(cat "$d/docs/mission-x-sources.json")" '"plans/2026-07-01-alpha.md"' "BL-0171: docs/mission-*-sources.json is never rewritten"
+assert_contains "$(cat "$d/docs/scripts-inventory.md")" "](plans/_archive/2026/07/2026-07-01-alpha.md)" "BL-0171: docs/ link still rewritten"
+
+d="$(bl0171_fixture bl0171-unknown)"
+out="$(node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=a1,2026-07-02-beta=b2,2026-07-09-ghost=g3 --json 2>&1)"; rc=$?
+assert_eq "$rc" "2" "BL-0171: unknown pair stem refused (exit 2)"
+assert_contains "$out" "shipped_in_unknown_stem" "BL-0171: unknown refusal is named"
+assert_file_exists "$d/docs/plans/2026-07-01-alpha.md" "BL-0171: nothing moved on unknown stem"
+
+d="$(bl0171_fixture bl0171-ambiguous)"
+out="$(node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in v1 --shipped-in 2026-07-02-beta=b2 --json 2>&1)"; rc=$?
+assert_eq "$rc" "2" "BL-0171: mixed bare+pair refused (exit 2)"
+assert_contains "$out" "shipped_in_ambiguous" "BL-0171: ambiguous refusal is named"
+assert_file_exists "$d/docs/plans/2026-07-01-alpha.md" "BL-0171: nothing moved on ambiguous value"
+
+d="$(bl0171_fixture bl0171-dup)"
+out="$(node "$GATE" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
+  --shipped-in 2026-07-01-alpha=x,2026-07-01-alpha=y,2026-07-02-beta=b2 --json 2>&1)"; rc=$?
+assert_eq "$rc" "2" "BL-0171: duplicate stem value refused (exit 2)"
+assert_contains "$out" "shipped_in_duplicate_stem" "BL-0171: duplicate refusal is named"
+assert_file_exists "$d/docs/plans/2026-07-01-alpha.md" "BL-0171: nothing moved on duplicate stem"
+
+
 finalize_test

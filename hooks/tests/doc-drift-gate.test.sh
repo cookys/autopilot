@@ -216,6 +216,21 @@ SEALED_LIST="$(node -e 'console.log([...require(process.argv[1]).sealedDocFiles(
 assert_eq "$SEALED_LIST" "docs/mission-x-execution-graph.json,docs/plans/sealed.md,docs/plans/sealed.rubric.md" \
   "sealedDocFiles: sha-bound plan+rubric and graph_digest graph; not nosha plan or digest-less graph"
 
+# BL-0133: graphs pinned by a paired *-task-authority.json (mission_graph_digest) and the
+# spec_path of a *.seal.json (eval rubrics/corpora) are sealed too. Negative controls: a graph
+# whose authority has no mission_graph_digest, an unpaired graph, and a plain doc stay unlisted.
+mkdir -p "$SD/evals"
+printf '{"nodes":[]}\n' > "$SD/docs/mission-z-execution-graph.json"
+printf '{"mission_graph_digest":"%s"}\n' "$PSHA" > "$SD/docs/mission-z-task-authority.json"
+printf '{"nodes":[]}\n' > "$SD/docs/mission-w-execution-graph.json"
+printf '{"authority_status":"shadow"}\n' > "$SD/docs/mission-w-task-authority.json"
+printf '# rubric\n' > "$SD/evals/r-rubric.md"
+printf '# plain\n' > "$SD/evals/plain.md"
+printf '{"spec_sha256":"%s","spec_path":"evals/r-rubric.md"}\n' "$PSHA" > "$SD/evals/r-rubric.seal.json"
+SEALED_LIST="$(node -e 'console.log([...require(process.argv[1]).sealedDocFiles(process.argv[2])].sort().join(","))' "$REPO_ROOT/scripts/lib/sealed-docs.js" "$SD")"
+assert_eq "$SEALED_LIST" "docs/mission-x-execution-graph.json,docs/mission-z-execution-graph.json,docs/plans/sealed.md,docs/plans/sealed.rubric.md,evals/r-rubric.md" \
+  "sealedDocFiles: task-authority-paired graph and seal.json spec_path added; digest-less authority, unpaired graph, plain doc not listed"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

@@ -450,7 +450,13 @@ function frozenAssetFiles(repoRoot) {
   // doc-drift-gate.js and this tool cannot drift apart again.
   try {
     for (const rel of require('./lib/sealed-docs.js').sealedDocFiles(repoRoot)) frozen.add(rel);
-  } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
+  } catch (e) {
+    // Absent lib (e.g. a vendored copy): seal-file discovery above still applies. Anything else
+    // would silently un-freeze sealed files, so warn.
+    if (!e || e.code !== 'MODULE_NOT_FOUND') {
+      process.stderr.write(`check-plan-graduation: WARNING sealed-docs.js failed (${e && e.message}); sealed files may be rewritten\n`);
+    }
+  }
   // Evidence frozen only by convention (no seal/pin to derive it from): an explicit, tracked
   // `.frozen-evidence` marker names it (BL-0096; 6559da33 rewrote the historical observed_paths of
   // an unsealed candidate-path-audit.json). See markedFrozenEvidenceFiles.

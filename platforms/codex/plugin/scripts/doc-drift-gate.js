@@ -18,7 +18,15 @@ const fs = require('fs');
 const path = require('path');
 // Guarded: a vendored copy of this gate without scripts/lib/ degrades to "nothing sealed".
 let sealedDocFiles = () => new Set();
-try { ({ sealedDocFiles } = require('./lib/sealed-docs.js')); } catch { /* lib absent */ }
+try {
+  ({ sealedDocFiles } = require('./lib/sealed-docs.js'));
+} catch (e) {
+  // Only an absent lib degrades to "nothing sealed"; any other failure (syntax error, throw at
+  // load) would silently un-seal every file, so say so.
+  if (!e || e.code !== 'MODULE_NOT_FOUND') {
+    process.stderr.write(`doc-drift-gate: WARNING sealed-docs.js failed to load (${e && e.message}); sealed files are NOT skipped\n`);
+  }
+}
 
 const DEFAULT_EXCLUDES = [
   ".git",
@@ -126,7 +134,7 @@ function isExcluded(fullPath, scanRoot, excludes) {
 function getMdFiles(roots, excludes) {
   const out = new Set();
   // Sealed docs (a digest pins their bytes — see lib/sealed-docs.js) are frozen records, like
-  // docs/plans/evidence/: judged by no check, because the only "fix" is a byte edit that breaks
+  // the file-by-file frozen transcripts in DEFAULT_EXCLUDES: judged by no check, because the only "fix" is a byte edit that breaks
   // the seal (13976b30 did exactly that to a plan locked by a mission sources manifest).
   const sealed = sealedDocFiles(AUDIT_ROOT);
   let scanRoot = '.';

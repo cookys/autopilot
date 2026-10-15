@@ -56,6 +56,14 @@ for mode in serial parallel; do
   assert_eq "$RC" "1" "$mode: an overrunning suite fails the run"
   assert_contains "$SUMMARY" "fake-hang.test.sh [TIMEOUT]" "$mode: an overrunning suite is labelled [TIMEOUT]"
 
+  # A suite that traps the watchdog's TERM and exits 0 must still be a TIMEOUT failure, never a pass.
+  rm_suites
+  mk_suite fake-trapterm.test.sh 'trap "exit 0" TERM; sleep 30 & wait'
+  run_mode 2 fake- "${flags[@]}"
+  assert_neq "$RC" "0" "$mode: a suite that traps TERM and exits 0 after the ceiling does not pass"
+  assert_contains "$SUMMARY" "fake-trapterm.test.sh [TIMEOUT]" "$mode: trap-TERM-exit-0 is still labelled [TIMEOUT]"
+  assert_not_contains "$OUT" "ALL TESTS PASSED" "$mode: trap-TERM-exit-0 is not reported as passed"
+
   # Control: a green suite is neither.
   rm_suites
   mk_suite fake-ok.test.sh "echo PASS: ok; exit 0"

@@ -514,14 +514,21 @@ SUITE_EC=0
 SUITE_TIMED_OUT=0
 run_suite_guarded() {
   local file="$1" out="$2" marker
-  marker="$(mktemp "${TMPDIR:-/tmp}/hooks-run-timeout.XXXXXX")" || marker=""
-  [ -z "$marker" ] || rm -f "$marker"
+  if ! marker="$(mktemp "${TMPDIR:-/tmp}/hooks-run-timeout.XXXXXX")" || [ -z "$marker" ]; then
+    # Fail loud: without a marker the TIMEOUT label could not be told from a plain failure.
+    echo "run.sh: cannot create the timeout marker file under ${TMPDIR:-/tmp}; not running $file" >&2
+    echo "run.sh: cannot create the timeout marker file; $file was not run" >"$out"
+    SUITE_TIMED_OUT=0
+    SUITE_EC=1
+    return 0
+  fi
+  rm -f "$marker"
   SUITE_TIMED_OUT=0
   bash "$file" >"$out" 2>&1 </dev/null &
   SUITE_PID=$!
   (
     sleep "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
-    [ -z "$marker" ] || : >"$marker"
+    : >"$marker"
     kill -s TERM -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s TERM "$SUITE_PID" >/dev/null 2>&1
     sleep 10
     kill -s KILL -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_PID" >/dev/null 2>&1
@@ -529,10 +536,12 @@ run_suite_guarded() {
   SUITE_WD_PID=$!
   wait "$SUITE_PID"
   SUITE_EC=$?
-  if [ -n "$marker" ] && [ -e "$marker" ]; then
+  if [ -e "$marker" ]; then
     SUITE_TIMED_OUT=1
+    # A suite that trapped the watchdog's TERM and exited 0 must not read as a pass.
+    [ "$SUITE_EC" -ne 0 ] || SUITE_EC=124
   fi
-  [ -z "$marker" ] || rm -f "$marker"
+  rm -f "$marker"
   # Retire the watchdog (and its sleep) -- the suite is done.
   kill -s KILL -- "-$SUITE_WD_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_WD_PID" >/dev/null 2>&1 || true
   wait "$SUITE_WD_PID" 2>/dev/null || true

@@ -1670,7 +1670,7 @@ function formatCampaignAdvisories(control) {
   const advisories = control && Array.isArray(control.advisories) ? control.advisories : [];
   return advisories
     .filter((a) => a && typeof a.code === 'string')
-    .map((a) => `ADVISORY ${a.code}: ${a.message || ''}`.trimEnd());
+    .map((a) => (a.message ? `ADVISORY ${a.code}: ${a.message}` : `ADVISORY ${a.code}`));
 }
 
 function buildNoEffectReceipt({ missionClaim, rejection, campaignDigest, now }) {

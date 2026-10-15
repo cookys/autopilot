@@ -1,16 +1,12 @@
 ---
-status: shipped
+status: approved
 date: 2026-08-01
 size: L
 entry_level: l6
 project: backlog-convergence-plan-set
-merged_commit: 952df77ad3ce785a046425f025cce43270f3b85f
 ---
 
 # Backlog Convergence Plan Set
-
-Status: ✅ Shipped in v2.34.1 (no version bump) — merged locally as
-`952df77ad3ce785a046425f025cce43270f3b85f`.
 
 ## Decision
 
@@ -25,9 +21,8 @@ project remain the owners of their work. Track 4 and Track 5 stay design/Board-o
 
 ## Inventory result
 
-At plan freeze, `docs/BACKLOG.md` contained 66 `###` headings, of which one was the format example.
-The real intake inventory was **65 entries**. Archive closeout removed the 11 completed entries from
-the active backlog, leaving **54 trigger-bearing entries**:
+`docs/BACKLOG.md` contains 66 `###` headings, of which one is the format example. The real
+inventory is **65 entries**:
 
 | Classification | Count | Meaning |
 |---|---:|---|
@@ -142,8 +137,8 @@ bank or Track 3.
 
 **Backlog entry:** `Readiness gate 的 session-local qualification provider`.
 
-**Owner:** `docs/projects/_archive/2026/07/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
-`docs/plans/_archive/2026/07/2026-07-26-provider-readiness-orchestrator.md`.
+**Owner:** `docs/projects/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
+`docs/plans/2026-07-26-provider-readiness-orchestrator.md`.
 
 **Goal:** provide exact-tuple, host-injected qualification authority for implementer,
 verification-author, and QC roles. Transport/live probes and disk-backed scorecards remain
@@ -289,7 +284,7 @@ source contract cannot be satisfied by an existing one.
 
 - The Owner Kernel P4 item is attached to the active Owner Kernel project, not copied into a new
   project.
-- Skill-transport uses `docs/plans/_archive/2026/07/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
+- Skill-transport uses `docs/plans/2026-07-15-skill-transport-payoff-ab.md`; this portfolio only
   records the missing implementer arm disposition.
 - Fable uses `docs/plans/2026-07-08-fable-skills-absorption.md`; no implementation is authorized
   without its Board decision.

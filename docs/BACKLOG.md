@@ -1803,19 +1803,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: D6 residual (plan §4). Per-rail mutations done 2026-10-15. tmux leak reproduced: ensurePlainMarker records env P for any new id != P; two options in the sidecar.
 
-### session-mode-null-admission test is red and runs in no suite
-- **Id**: BL-0177
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 有一支檢查「Mission 開啟但入場結果為空時，設定工作階段不會當掉」的測試，目前有兩項失敗，而且它放在主測試入口不會跑到的位置，所以一直沒人發現。
-- **Impact**: 不確定：可能只是測試過時，也可能標記少記欄位；查清楚前這個保護等於沒有。
-- **Trigger**: next touch of session-mode.js set / Mission no-op surface, or before the 3.0.0 cut
-- **Effort**: S
-- **Source**: review of lane/bl0174-0175, 2026-10-15 (red on base feb910b4 and on head, identical lines)
-- **Pointer**: none
-- **Context**: scripts/tests/session-mode-null-admission.test.sh: 2 asserts red (admission=null, mission_noop), also with CC unset; run.sh skips scripts/tests/. Fix and move, or delete.
-
 ### Brain-seat strikes have no writer yet
 - **Id**: BL-0178
 - **Status**: open

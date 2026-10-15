@@ -271,4 +271,33 @@ assert_exit_code "$?" "2" "--tree with --by exits 2"
 node "$DIGEST_SCRIPT" --file "$TREE_FILE" --by session --tree >/dev/null 2>&1
 assert_exit_code "$?" "2" "--by then --tree also exits 2"
 
+# BL-0120: parent cycle, self-parent and 5-char label collisions. Session cyc: C (parent A) and D (parent C) hang under
+# a cycle A<->B; C is first in the file so a cycle breaker that judges C by the walk alone cuts it loose as an orphan.
+CYC_FILE="$FIXTURE_DIR/cycle.jsonl"
+cat > "$CYC_FILE" <<JSONL
+{"ts":"${TODAY_UTC}T08:00:00.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":1.0}
+{"ts":"${TODAY_UTC}T08:00:01.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.1,"sidechain":true,"agent_id":"cccc333333","parent_agent_id":"aaaa111111","depth":3,"agent_type":"worker"}
+{"ts":"${TODAY_UTC}T08:00:02.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.2,"sidechain":true,"agent_id":"dddd444444","parent_agent_id":"cccc333333","depth":4,"agent_type":"worker"}
+{"ts":"${TODAY_UTC}T08:00:03.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.4,"sidechain":true,"agent_id":"aaaa111111","parent_agent_id":"bbbb222222","depth":1,"agent_type":"worker"}
+{"ts":"${TODAY_UTC}T08:00:04.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.8,"sidechain":true,"agent_id":"bbbb222222","parent_agent_id":"aaaa111111","depth":2,"agent_type":"worker"}
+{"ts":"${TODAY_UTC}T08:00:05.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":1.6,"sidechain":true,"agent_id":"ssss555555","parent_agent_id":"ssss555555","depth":1,"agent_type":"selfp"}
+{"ts":"${TODAY_UTC}T08:00:06.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":3.2,"sidechain":true,"agent_id":"abcde11111","depth":1,"agent_type":"foreman"}
+{"ts":"${TODAY_UTC}T08:00:07.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":6.4,"sidechain":true,"agent_id":"abcde22222","depth":1,"agent_type":"foreman"}
+{"ts":"${TODAY_UTC}T08:00:08.000Z","session":"cyc-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.5,"sidechain":true,"agent_id":"abcdf33333","depth":1,"agent_type":"foreman"}
+JSONL
+CYC_JSON="$(node "$DIGEST_SCRIPT" --file "$CYC_FILE" --today --tree --json)"
+assert_exit_code "$?" "0" "--tree on cyclic parents exits 0"
+cj() { node -e 'const d=JSON.parse(process.argv[1]);const s=d.sessions[0];const root=s.root;const find=(n,id)=>n.agent_id===id?n:n.children.reduce((a,c)=>a||find(c,id),null);const all=(n)=>[n].concat(...n.children.map(all));let v;eval("v="+process.argv[2]);process.stdout.write(String(v))' "$CYC_JSON" "$1"; }
+assert_eq "$(cj 'all(root).length')" "9" "cycle: every agent stays reachable from the root"
+assert_eq "$(cj 's.total_usd')" "14.2" "cycle: session total counts every row"
+assert_eq "$(cj 'find(root,"cccc333333").orphan')" "false" "cycle: a node hanging under a cycle is not made an orphan"
+assert_eq "$(cj 'find(find(root,"aaaa111111"),"cccc333333")!==null')" "true" "cycle: the node under the cycle keeps its parent link"
+assert_eq "$(cj 'find(find(root,"cccc333333"),"dddd444444")!==null')" "true" "cycle: the grandchild keeps its parent link"
+assert_eq "$(cj 'find(root,"aaaa111111").orphan')" "true" "cycle: the one member that is cut loose is marked orphan"
+assert_eq "$(cj 'root.children.some(c=>c.agent_id==="ssss555555")&&!find(root,"ssss555555").orphan')" "true" "self-parent: attaches to the root, not an orphan"
+assert_eq "$(cj 'find(root,"abcde11111").label!==find(root,"abcde22222").label')" "true" "labels: two agents sharing type and 5-char prefix get distinct labels"
+assert_eq "$(cj 'find(root,"abcdf33333").label')" "foreman abcdf…" "labels: a non-colliding agent keeps the short label"
+CYC_TXT="$(node "$DIGEST_SCRIPT" --file "$CYC_FILE" --today --tree)"
+assert_contains "$CYC_TXT" "foreman abcde1" "labels: text output disambiguates the collision too"
+
 finalize_test

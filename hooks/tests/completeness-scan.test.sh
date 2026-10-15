@@ -95,4 +95,24 @@ done
 out="$(bash "$SCAN" --files x6.sh 2>/dev/null)"
 assert_eq "$(count "$out")" "0" "6 X is a template, not a marker"
 
+# (4) BL-0159(1): a --files list with no existing regular file is a usage error, not a pass
+bash "$SCAN" --files nope1.sh nope2.sh >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "all --files pieces missing exits 2"
+bash "$SCAN" --files "nope1.sh nope2.sh" >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "2" "all pieces of a joined arg missing exits 2"
+bash "$SCAN" --files nope1.sh tmpl.sh >/dev/null 2>&1; rc=$?
+assert_eq "$rc" "0" "one existing piece among missing ones still scans (exit 0)"
+# (5) BL-0159(2): the scanner's own pattern lines and the gate doc's marker table are not findings
+REAL_SCAN="$REPO_ROOT/scripts/completeness-scan.sh"
+GATE_DOC="$REPO_ROOT/skills/quality-pipeline/references/completeness-gate.md"
+out="$(bash "$SCAN" --files "$REAL_SCAN" 2>/dev/null)"
+assert_eq "$(count "$out")" "0" "scanner script does not report its own pattern definitions"
+out="$(bash "$SCAN" --files "$GATE_DOC" 2>/dev/null)"
+assert_eq "$(count "$out")" "0" "gate doc marker table is not scanned as findings"
+# (6) BL-0159(3): leading/trailing blanks in newline-list pieces are trimmed
+out="$(bash "$SCAN" --files "$(printf '  a.sh\n\tb.sh  \n')" 2>/dev/null)"
+assert_eq "$(scanned "$out")" "2" "padded newline-list pieces are trimmed and scanned"
+err="$(bash "$SCAN" --files "$(printf '  a.sh\n  nope.sh')" 2>&1 >/dev/null)"
+assert_contains "$err" "piece 'nope.sh'" "trimmed missing piece is reported without padding"
+
 finalize_test

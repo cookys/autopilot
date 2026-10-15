@@ -276,13 +276,31 @@ function buildTrees(rows) {
       }
       node.attached = parent;
     }
-    // A parent cycle (corrupt rows) would hide a subtree from the root: break it by re-attaching to root.
+    // A parent cycle (corrupt rows) would hide its members from the root: cut each cycle at the first member
+    // reached (re-attach it to root, mark orphan). Only a node that is itself ON a cycle is cut; one that merely
+    // hangs under a cycle walks into it, stops, and keeps its parent link.
     for (const node of s.agents.values()) {
       const seen = new Set();
       for (let p = node.attached; p && p !== s.root; p = p.attached) {
-        if (seen.has(p) || p === node) { node.attached = s.root; node.orphan = true; break; }
+        if (p === node) { node.attached = s.root; node.orphan = true; break; }
+        if (seen.has(p)) break;
         seen.add(p);
       }
+    }
+    // Label: type + id prefix; 5 chars unless two agents of the session would share a label, then the shortest
+    // longer prefix that tells them apart.
+    const byBase = new Map();
+    for (const node of s.agents.values()) {
+      const key = (node.agent_type || 'agent') + ' ' + node.agent_id.slice(0, 5);
+      if (!byBase.has(key)) byBase.set(key, []);
+      byBase.get(key).push(node);
+    }
+    for (const group of byBase.values()) {
+      if (group.length < 2) continue;
+      let len = 5;
+      const maxLen = Math.max(...group.map((n) => n.agent_id.length));
+      while (len < maxLen && new Set(group.map((n) => n.agent_id.slice(0, len))).size < group.length) len++;
+      for (const n of group) n.labelLen = len;
     }
     for (const node of s.agents.values()) node.attached.children.push(node);
     const total = (n) => {
@@ -298,7 +316,7 @@ function buildTrees(rows) {
 
 function nodeLabel(n) {
   if (!n.agent_id) return 'depth-0';
-  const base = (n.agent_type || 'agent') + ' ' + n.agent_id.slice(0, 5) + '\u2026';
+  const base = (n.agent_type || 'agent') + ' ' + n.agent_id.slice(0, n.labelLen || 5) + '\u2026';
   return n.orphan ? base + ' [orphan]' : base;
 }
 

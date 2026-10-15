@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0187 -->
+<!-- next-id: BL-0188 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1588,31 +1588,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: listRepairBranches lists refs/heads/repair/ only; also count refs/remotes/*/repair/. Engine catch to blocked for review_candidate_repair_seed_invalid has unit coverage only, no end-to-end case.
 
-### qualification provider: kimi CLI exams run without the no-tools agent file
-- **Id**: BL-0156
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: Kimi 參加資格考時，provider 直接用 kimi 預設的 agent，沒有套上我們做好的「不給工具」設定，事後也沒有檢查它有沒有動用工具。其他家考試都有關掉工具。
-- **Impact**: 中。Kimi 考試時理論上能讀寫檔或執行指令，隔離比其他家弱；8/30 的諮詢成績和今天的審查考試都是這樣考的。
-- **Trigger**: 下次 Kimi 考試前，或改 qualification-review-provider.js 的 kimi 分支時
-- **Effort**: S
-- **Source**: 2026-10-14 reviewer requalify (kimi lane)
-- **Pointer**: none
-- **Context**: qualification-review-provider.js kimi branch (~:1001) runs `kimi -m <model> -p` with the default agent; scripts/lib/kimi-containment.js write/audit is never called. Changes the containment fingerprint.
 
-### Kimi seat identity is spelled two ways, so strikes may miss the seat
-- **Id**: BL-0157
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 同一個 Kimi K3 席位，成績紀錄和扣分紀錄用了兩種不同的寫法（一個用短橫線、一個用斜線），名字對不上。
-- **Impact**: 中。Kimi 的扣分可能算不到它的席位上，派工時看不到它被記過，該降級時不會降級。
-- **Trigger**: 下次調整 Kimi 席位，或改 strike 寫入時的席位辨識邏輯時
-- **Effort**: S
-- **Source**: 2026-10-14 Kimi qualification history check
-- **Pointer**: none
-- **Context**: scorecard events 157/166/182 use engine `kimi-code-k3`; strikes.jsonl #71 uses `kimi-code/k3`. Kimi 2.8 too: reviewer/VA rows use `kimi-k2.8-preview`, implementer `kimi-code/kimi-for-coding`. Normalise one key.
 
 ### Owner-role qualification has no exam provider
 - **Id**: BL-0158
@@ -1741,3 +1717,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: cfg2 lane report 2026-10-15 (merged as 673a2c72): src/status review-server and sources-manifest read config.json under the autopilotHome argument
 - **Pointer**: none
+
+### qualification defaults still compare kimi engine spellings exactly
+- **Id**: BL-0187
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: Kimi 席位名稱有兩種寫法，扣點與成績基線已經會當成同一席，但產生與套用官方預設成績的兩支工具、以及成績單分組的地方仍逐字比對，兩種寫法會被當成兩個席位。
+- **Impact**: 低。目前成績單只有一種寫法，沒有實際出錯；哪天兩種寫法同時出現，官方預設可能套不上或同一模型出現兩列。
+- **Trigger**: a scorecard holding both kimi-code spellings, or next touch of the qualification defaults build/adopt scripts
+- **Effort**: S
+- **Source**: kimiprep review 2026-10-15 (merged as f3d50b5b)
+- **Pointer**: none
+- **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.

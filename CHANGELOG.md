@@ -86,6 +86,7 @@
 
 ### 修正
 
+- **Kimi 資格考改用不能動工具的模式，考完檢查作答紀錄**（BL-0156、BL-0157）：`qualification-review-provider.js` 的 kimi 分支帶 `--agent-file` 無工具 agent，沒設 `QRP_CLI_HOME` 就拒絕啟動；複製出來的 HOME 先清掉舊 session，考完用 `auditKimiRun` 檢查這次的紀錄，有動工具或沒有紀錄就作廢該題答案。`engine-scorecard.js` 讀取時把 `kimi-code/X` 和 `kimi-code-X` 視為同一個 engine，扣點與成績基線不會漏算；jsonl 檔不改寫。Codex 鏡像同步。
 - **背景派工守衛認得更多寫法，也不再誤擋同一層 shell 裡的等待**（BL-0139）：用 `case`、`xargs -P`、`ionice`／`flock`／`taskset`／`chrt` 包一層、`coproc`、函式包裝、五層以內的 `$()` 巢狀，以及 python／perl 交給 shell 的字串把派工丟到背景，現在都會擋。等待指令必須在啟動之後、在前景執行才算數，寫在啟動之前或自己也被丟背景的不再放行。`bash -c 'rail & wait'`、`(rail & wait)`、`wait >| f`、`pid=$!; wait $pid` 不再誤擋。Codex 鏡像同步。
 - **對已結案的審查票證重新派工時，錯誤訊息直接說明原因**（BL-0102）：`dispatch-plan-review.js` 的拒絕訊息改以 `ticket_session_already_terminal` 開頭，附上計畫 id、票證、先前的結論，並註明沒有呼叫任何審查席位、要重審得換新的計畫 id 與票證。結束碼不變。Codex 鏡像同步。
 - **剩下兩個讀設定的腳本也改走共用的路徑函式**（BL-0181 後續）：`run-approval.js` 與 `resolve-dispatch-topology.js` 改用 `scripts/lib/config-path.js`，沒設 `AUTOPILOT_CONFIG_FILE` 時行為不變。幾支測試跑完會清掉自己的暫存目錄、不再讀主機真實設定（BL-0140）。Codex 鏡像同步。

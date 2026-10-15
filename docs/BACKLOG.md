@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0192 -->
+<!-- next-id: BL-0193 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1445,28 +1445,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### bash-launch guard: string-form Popen/spawn handled unlike list form
-- **Id**: BL-0190
+### bash-launch guard: a reassigned launch variable hides the first child
+- **Id**: BL-0192
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 背景派工檢查對 python、node 啟動派工指令的兩種寫法處理不一致：清單寫法會看程式有沒有自己等結果，字串寫法不看。python 字串寫法即使程式自己等完也被擋，node 字串寫法一律當成丟到背景。
-- **Impact**: 低。只會誤擋或誤報，不會放掉真的背景派工；被擋時改用清單寫法即可。
-- **Trigger**: 有人回報這兩種寫法被誤擋，或下次動 bash-launch-rules.js 的 Popen/spawn 判斷
+- **Problem**: 背景派工檢查會看「啟動後有沒有等它結束」。如果同一個變數先接一個派工程序、再改接另一個程序，最後只等第二個，第一個派工其實沒人等，檢查卻會放行。另外寫成物件屬性再等（self.p.wait()）的情況會被誤擋。
+- **Impact**: 低。要刻意把同一個變數接兩次才會漏；誤擋時改寫成區域變數即可。
+- **Trigger**: 有人回報這兩種寫法被漏放或誤擋，或下次動 bash-launch-rules.js 的等待判斷
 - **Effort**: S
-- **Source**: guard3 lane finding, 2026-10-15
+- **Source**: frz2 review 2026-10-15
 - **Pointer**: none
-- **Context**: scripts/lib/bash-launch-rules.js: Popen('rail', shell=True) followed by .wait() still denied; node string spawn() treated as background with no unref check. List forms honour wait/unref.
 
-### .frozen-evidence marker: undocumented and silently removable
-- **Id**: BL-0191
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 歸檔工具現在會跳過 .frozen-evidence 標記檔列出的證據，但這個機制只有程式註解、沒有文件；標記檔被刪掉時不會有任何警告，下一次歸檔就會改寫原本凍結的證據。搬移歸檔版面那一路跳過時也不回報。
-- **Impact**: 低。目前只有兩處標記、靠 code review 保護；標記被誤刪才會出事。
-- **Trigger**: 新增第三個 .frozen-evidence 標記，或有人誤刪標記
-- **Effort**: S
-- **Source**: hyg2 review 2026-10-15 (cut list)
-- **Pointer**: none
-- **Context**: check-plan-graduation.js markedFrozenEvidenceFiles reads only tracked markers; --migrate-archive-layout skips without plan_reference_frozen; no --archive-only test. Document it in the check-plan-graduation reference.

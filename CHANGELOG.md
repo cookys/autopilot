@@ -86,6 +86,8 @@
 
 ### 修正
 
+- **凍結證據標記有文件、被刪會報出來**（BL-0191）：`references/backlog-entry.md` 說明 `.frozen-evidence` 標記的用途；搬移歸檔版面時跳過凍結證據會回報 `plan_reference_frozen`；新增只回報不阻擋的 `--frozen-base <ref>`，標記檔相對於該 ref 被刪除時回報 `frozen_marker_deleted`。ref 開頭是 `-` 會直接當用法錯誤，不能拿來夾帶 git 參數。
+- **背景派工檢查對字串與清單寫法一致**（BL-0190）：python `Popen`、node `spawn` 不論用字串或清單啟動派工指令，都改成看程式有沒有等它結束（wait／communicate／with 區塊）或明確放手（unref）；字串寫法也會被當成完整腳本解析，補上 `shell:true` 加 `unref()` 漏擋的情況。
 - **派工監看程式收尾更穩**（BL-0099）：沒有 setsid 時，計時用的程序也帶得到可辨識的名字，取消時收得掉；`systemctl --user kill` 偶發失敗時會重試一次。測試專用的三個 `HETERO_TEST_*` 開關，現在要另外設 `AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1` 才會生效，正式執行時設了也沒作用。
 - **mods「現在」分頁不再掛著不會結束的背景列**（BL-0002 部分）：同步 subagent 或 headless 裡的背景指令（Claude Code 標了 `backgroundEndsWithFinalResponse`）不會有完成通知，現在會在下一個真實 prompt 時結束那一列。session 中途離開再 resume 的情況還沒處理。
 - **封存檔清單補齊**（BL-0133）：被授權檔以指紋鎖定的工作圖，以及帶指紋的 `*.seal.json` 所指的規格檔（例如評估用的評分表與語料），也列入封存清單，文件檢查與歸檔工具不會再改寫它們。載入封存清單失敗時，除了「找不到模組」以外的錯誤都會印出警告。

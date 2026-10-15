@@ -1172,7 +1172,7 @@ for (const surface of SURFACES) {
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
     expect(pane.texts[rule + 1]).toMatch(/^▲ 待決議事項 1 件\s+待決 ›$/) // one row that points at the 待決 tab (the whole question is not repeated here)
-    expect(pane.texts[rule]).toContain('▲ 1') // the section chip counts what awaits you
+    expect(pane.texts[rule]).toMatch(/要你處理\s+1\s/) // the section title counts what awaits you as a plain number (no ▲, no colour)
     expect(pane.texts.some(t => t.startsWith('▾ 待決議事項'))).toBe(false) // the old block that spread every question over this tab is gone
     expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     const cards = (await paneParts($, surface, 'decide')).texts
@@ -2270,7 +2270,7 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
+const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
 const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ⊘1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ●2 ⊘1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_NARROW = '⊘ 疑似卡住 │ ●2 ⊘1 │ ⚑2 │ ⓘ '
@@ -2350,16 +2350,16 @@ for (const surface of SURFACES) {
     expect(dimOf(' 最久的派工 4m 沒有輸出')).toBe(true) // the reason phrase is a dim hint
     expect(colorOf('implement')).toBe('claude') // the stage: you are here
     expect(colorOf('M!·l5 ')).toBeUndefined() // the rest of the position is the default colour
-    expect(colorOf('●')).toBe('success') // walk: done nodes
+    expect(colored.filter(([x]) => x === '✓').map(([, c]) => c)).toEqual(['success', 'success', 'success']) // walk: two done nodes drawn as ✓ (not ●), then the QC mark
     expect(colorOf('◐')).toBe('claude') // the current node
     expect(colorOf('○')).toBe('inactive') // nodes to come
     expect(colorOf('─')).toBe('subtle') // links are chrome
     expect(colorOf('▰▰')).toBe('success') // unit bar: done cells
     expect(colored.filter(([x]) => x === '▰')[0]?.[1]).toBe('claude') // the current cell
     expect(colorOf('▱▱')).toBe('inactive') // cells to come
-    expect(colorOf('●2')).toBeUndefined()
+    expect(colorOf('●2')).toBe('suggestion') // running: the band draws the same blue as the pane's ●
     expect(colorOf(' ⊘1')).toBe('error') // stalled
-    expect(colorOf('QC✓')).toBe('success')
+    expect(colorOf('QC')).toBeUndefined() // the label stays default text, the mark carries the colour
     expect(dimOf('↺ ')).toBe(true)
     expect(colorOf('◆3')).toBeUndefined() // claude is reserved for "you are here"
     expect(colorOf('?1')).toBe('inactive')
@@ -2367,9 +2367,12 @@ for (const surface of SURFACES) {
     expect(colorOf('120')).toBe('warning') // 80.3 % of the cap: the amount, then the bar in the same state colour
     expect(colorOf('▰▰▰▰▰▰▰▰')).toBe('warning')
     expect(dimOf('80%')).toBe(true)
-    expect(colorOf('⚑2')).toBe('warning') // the owner reminder
+    expect(colorOf('⚑')).toBe('warning') // the owner reminder: the mark is yellow, the number stays default text
+    expect(colored.some(([x, c]) => x === '2' && c === undefined)).toBe(true)
     expect(dimOf('↓3')).toBe(true)
     expect(colored.filter(([x]) => x === ' │ ').every(([, c]) => c === 'subtle')).toBe(true)
+    expect(colored.every(([x, c]) => c !== 'claude' || x === 'implement' || x === '◐' || x === '▰')).toBe(true) // claude is only "you are here"
+    expect(line.tree && walkTexts(line.tree).some(n => n.props?.bold === true && textOf(n) !== '⊘ 疑似卡住')).toBe(false) // bold: the verdict word only
     expectThemeOnly(line.tree as Drawn)
   })
 
@@ -2831,7 +2834,7 @@ for (const surface of SURFACES) {
 
     const hygiene = await tab('hygiene')
     // P5: the groups, the cleanup row and the plugin source are `item` rows on the shared components; a group is folded until its toggle is pressed
-    expect(has(hygiene.texts, '要你處理', '▲ 2', '3.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '要你處理', ' 2 ', '3.0 MB')).toBe(true)
     expect(has(hygiene.texts, '▲ worktree', '有未提交變更', '1 個', '2.0 MB')).toBe(true)
     expect(has(hygiene.texts, '▲ 分支', '分支未整合', '1 條')).toBe(true)
     expect(hygiene.texts).toContain('✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支')
@@ -2927,7 +2930,7 @@ test('P7 model: slot texts and theme keys', () => {
   const rv = readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, code: { generation: 4, seats: [] } }), KEY)
   const qc = (state: string) => readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state }), { project_key: KEY, root_run_id: null })
   expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4 QC▲')
-  expect(slotReview(rv, qc('owed'))?.segs[3]?.color).toBe('warning')
+  expect(slotReview(rv, qc('owed'))?.segs.slice(3).map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['▲', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
   expect(text(slotReview(null, qc('ok')))).toBe('QC✓')
   expect(text(slotReview(rv, qc('not_needed')))).toBe('↺ R4')
   expect(slotReview(null, qc('unknown'))).toBeNull()
@@ -2959,7 +2962,7 @@ test('P7 model: slot texts and theme keys', () => {
   expect(slotHygiene(ls({ behind_upstream: 3 }), null)?.segs.map(g => [g.text, g.dim === true])).toEqual([['dev', false], ['↓3', true]])
   expect(text(slotHygiene(ls(), rs(0)))).toBe('dev')
   expect(text(slotHygiene(null, rs(3)))).toBe('⚑3')
-  expect(slotHygiene(null, rs(3))?.segs[0]).toEqual({ text: '⚑3', color: 'warning', bold: true, tag: 'wt' })
+  expect(slotHygiene(null, rs(3))?.segs).toEqual([{ text: '⚑', color: 'warning', tag: 'wt' }, { text: '3', tag: 'wt' }]) // the mark is yellow, the number default text, no bold
   expect(slotHygiene(ls({ flags: ['marketplace_not_directory'] }), null)?.segs[0].color).toBe('warning')
   expect(slotHygiene(null, rs(0))).toBeNull()
   // an older fact without the needs_human fields reads as 0 / [] (no wt segment, no rows); the list is capped at 20
@@ -3018,7 +3021,7 @@ for (const surface of SURFACES) {
     }
     const a = await spendNode(119.6) // rounds to 80 % but is below 0.8 of the cap
     expect(a[0]).toBeUndefined()
-    expect(a[1]).toBe('success')
+    expect(a[1]).toBeUndefined() // a healthy level is default text, not green
     expect(a[2]).toBe('79%') // floored, so it never reads 80% before the threshold
     const b = await spendNode(120)
     expect([b[0], b[1]]).toEqual(['warning', 'warning'])
@@ -3153,20 +3156,20 @@ const GRID: Record<string, string> = {
   'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
   'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ ',
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
-  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
   'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 80': '● Running │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
   'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
   'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
   'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
   'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
 }
@@ -4482,7 +4485,7 @@ test('quota slot: a window is plain below 80 %, warning from 80 %, error from 10
   const tabLine = spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', 79.9)] }), { t: makeT('en'), cols: 120 }).find(l => l.kind === 'meter') as { text: string; segs: { text: string; color?: string }[] }
   expect(tabLine.text).toContain(' 79%')
   expect(tabLine.text).not.toContain('80%')
-  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBe('success') // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
+  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBeUndefined() // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
@@ -4538,7 +4541,7 @@ test('usage tab: an API-key login is one absent row; no account read is one empt
 test('usage tab: the limits chip names the worst level; a window over its cap makes it 已超過, and the meter bar and percent take the level colour', () => {
   const t = makeT('zh-TW')
   const chipOf = (pct: number) => (spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', pct)] }), { t, cols: 76 }).find(l => l.kind === 'header' && l.text.startsWith('▾ ' + t('usage.limits'))) as { segs: { text: string; color?: string }[] }).segs.find(s => s.role === 'value')
-  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), 'success'], [t('spend.ok'), 'success'], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
+  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), undefined], [t('spend.ok'), undefined], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
 })
 
 for (const surface of SURFACES) {
@@ -4835,7 +4838,7 @@ for (const surface of SURFACES) {
     await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸'))
     await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x'))
     expect(await hyg($, 76)).toEqual([
-      "▾ 要你處理  ▲ 2 · 3.0 MB ──────────────────────────────────────────────────",
+      "▾ 要你處理  2 · 3.0 MB ────────────────────────────────────────────────────",
       "▲ worktree  有未提交變更 · 1 個 · 2.0 MB                                  ▾",
       "◦ hands-x · 4d04h · 2.0 MB                                                ▾",
       "  └ failure",

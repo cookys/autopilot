@@ -58,14 +58,14 @@ test('DECIDE card: first line `n. question`, the background below it, ONE row of
   expect(ls.length).toBeLessThan(24)
 })
 
-test('DECIDE choose: the picked option is `[x]` in success text (no background, no inverse), the others stay plain, the send row counts it and becomes pressable', () => {
+test('DECIDE choose: the picked option is `[x]` in bold default text (no background, no inverse), the others stay plain, the send row counts it and becomes pressable', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 1 } })))
   const row = ls.find(l => l.kind === 'choice' && l.text.includes('完整顯示')) as PaneLine
   expect(row.text.trimEnd()).toBe('  [ ] ★ OK  [x] 完整顯示')
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
-  for (const s of picked) { expect(s.color).toBe('success'); expect('backgroundColor' in s || 'inverse' in s).toBe(false) }
+  for (const s of picked) { expect(s.color).toBeUndefined(); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
   expect(ls.some(l => l.text.includes('全列出來')), 'the picked option shows its one-line description').toBe(true)
   const last = ls[ls.length - 1]
   expect(last.text.trim()).toBe('[ 送出（已選 1/3） ]')

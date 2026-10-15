@@ -2,19 +2,19 @@
 // locales x widths) and now.test.ts (every tab, P5). Test support only: nothing in the pane imports it.
 import type { PaneLine } from './model'
 import type { makeT } from './i18n'
-import { GLYPHS, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
+import { GLYPHS, PALETTE, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
 
 type Tr = ReturnType<typeof makeT>
 // ---- the invariants I1 to I8 and I10 over a tab's lines (line 0, the legacy global header, is P4's: it is unbranded until the verdict header replaces it) ----
 const RAW_TOKENS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', 'BLOCK', 'REJECT', 'READY', 'APPROVE', 'PASS', 'CONDITIONAL', 'STOP', 'REVIEWED', 'NOT_NEEDED', 'WEIRD']
 const hasToken = (text: string): boolean => RAW_TOKENS.some(tok => new RegExp('(^|[^A-Za-z0-9_-])' + tok + '($|[^A-Za-z0-9_-])', 'i').test(text))
 const GLYPH_CHARS = new Set<string>([...Object.values(GLYPHS.state), ...Object.values(GLYPHS.structure), ...Object.values(GLYPHS.chart), ...Object.values(STATES).map(s => s.glyph)].flatMap(g => [...g]))
-const STATE_KEY = new Map<string, string>(Object.values(STATES).map(s => [s.glyph, s.key]))
+const STATE_KEY = new Map<string, string | undefined>(Object.values(STATES).map(s => [s.glyph, s.key]))
 const leading = (text: string): number => text.length - text.trimStart().length
 
 export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
   const out: string[] = []
-  const wordKey = new Map<string, string>(Object.entries(STATES).map(([id, s]) => [t('ui.state.' + id), s.key]))
+  const wordKey = new Map<string, string | undefined>(Object.entries(STATES).map(([id, s]) => [t('ui.state.' + id), s.wordKey]))
   let empties = 0
   lines.forEach((l, i) => {
     const at = 'line ' + (i + 1) + ' ' + JSON.stringify(l.text)
@@ -35,11 +35,8 @@ export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
     }
     if (l.text.includes('▌')) out.push('I4 ' + at + ' contains ▌')
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
-    const needYouRow = (l.kind === 'item' || l.kind === 'kv') && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6); a 各分頁 summary row is the same state made by worst(), so a need_you aggregate (kv) bolds alike
-    const needYouBold = (s: { role?: string }): boolean => needYouRow && (l.kind === 'item' || s.role === 'glyph' || s.role === 'state') // an item may bold mark, word and body; a kv summary row only its state mark and word (§3.6: bold is for the need_you item text), never its values
-    for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, a need_you item, or a meter headline value (fmt pct)
-      const meterHeadline = s.role === 'value' && s.fmt === 'pct' && l.kind === 'meter' // a meter is a line KIND (ui.meter), not a line that happens to draw filled cells: a 0% meter has none
-      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouBold(s) && !meterHeadline && !(l.fact === 'legend.structure' && s.color === 'warning')) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
+    for (const s of l.segs ?? []) { // I4: bold is a whitelist (ui.BOLD_USES): a section header, the verdict line, a tab name (active or needing the owner), and on a decision card the picked option and the send button. Nothing else is bold.
+      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && l.kind !== 'choice' && !(s.role === 'tab' && (s.color === PALETTE.attention || s.color === PALETTE.here))) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside the bold whitelist (header / verdict / picked option / send button)')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
     if (/[️⃣]/u.test(l.text)) out.push('I5 ' + at + ' has VS16 or keycap')
@@ -50,11 +47,12 @@ export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
       if (s.role === 'glyph') {
         for (const ch of s.text.replace(/\d+$/, '')) if (ch !== ' ' && !GLYPH_CHARS.has(ch)) out.push('I5 ' + sat + ' glyph not in GLYPHS')
         const key = STATE_KEY.get(s.text)
-        if (key !== undefined && s.color !== undefined && s.color !== key) out.push('I6 ' + sat + ' glyph colour ' + s.color + ' != ' + key)
+        if (STATE_KEY.has(s.text) && s.color !== key) out.push('I6 ' + sat + ' glyph colour ' + s.color + ' != ' + key)
       }
       if (s.role === 'state') {
+        const known = wordKey.has(s.text.trim())
         const key = wordKey.get(s.text.trim())
-        if (key === undefined || s.color !== key) out.push('I6 ' + sat + ' state word colour ' + String(s.color) + ' != ' + String(key))
+        if (!known || s.color !== key) out.push('I6 ' + sat + ' state word colour ' + String(s.color) + ' != ' + String(key))
       }
       if (s.color === 'suggestion' && s.role !== 'glyph' && s.role !== 'state') out.push('I6 ' + sat + ' suggestion outside a running mark')
       if ((s.role === 'state' || s.role === 'value') && l.kind !== 'detail' && l.kind !== 'command') { // a command is copied verbatim: ids and paths are its text

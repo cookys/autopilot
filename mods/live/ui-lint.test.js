@@ -143,6 +143,52 @@ test('L1 control: each planted violation is reported', () => {
   assert.deepEqual(L1('// the "claude" key\nconst a = drawSeg(s)'), []) // a comment and a plain call are fine
 })
 
+// L8 (owner ruling 2026-10-16, semantic palette): a theme-key literal may appear ONLY in the PALETTE table of ui.ts (and in the ThemeKey type that names the keys).
+// Everything else draws a colour through a role (`PALETTE.attention`), so one colour keeps one meaning and a new use has to pick a role on purpose.
+const PALETTE_DECL = /export const PALETTE\b[^=]*=\s*\{[^}]*\}/
+const THEME_TYPE = /^export type ThemeKey = .*$/m
+const blank = m => m.replace(/[^\n]/g, '')
+const L8 = src => hits(src.replace(PALETTE_DECL, blank).replace(THEME_TYPE, blank), new RegExp(`['"\`](${THEME_KEYS})['"\`]`))
+const SOURCES = () => fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'locales.ts')
+test('L8: no theme-key literal outside the PALETTE table (every source file under mods/live)', () => {
+  const files = SOURCES()
+  assert.ok(files.includes('ui.ts') && files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))
+  for (const f of files) assert.deepEqual(L8(read(f)), [], f)
+  assert.match(read('ui.ts'), PALETTE_DECL, 'ui.ts declares PALETTE') // the exemption must be real: a renamed table would otherwise leave the lint with nothing to exempt
+})
+test('L8 control: a prose segment painted with a literal key is reported, a role is not (negative control, red before green)', () => {
+  // the planted fixture: a prose seg coloured `warning` directly, exactly the regression this lint exists to stop
+  assert.ok(L8("const s = sg(body, { role: 'prose', color: 'warning' })").length > 0)
+  for (const k of THEME_KEYS.split('|')) assert.ok(L8(`const o = { color: '${k}' }`).length > 0, k)
+  assert.deepEqual(L8("const s = sg(body, { role: 'prose', color: PALETTE.attention })"), [])
+  // the real ui.ts with ONE seg repainted by hand turns red; the unmodified file is green
+  const real = read('ui.ts')
+  const planted = real.replace("segs.push(sg(body, { role: 'prose',", "segs.push(sg(body, { color: 'warning', role: 'prose',")
+  assert.notEqual(planted, real, 'the planted edit applied')
+  assert.deepEqual(L8(real), [])
+  assert.equal(L8(planted).length, 1)
+  // and the real model.ts (the band) the same way
+  const band = read('model.ts')
+  const plantedBand = band.replace("sp(m.stage, { color: PALETTE.here,", "sp(m.stage, { color: 'claude',")
+  assert.notEqual(plantedBand, band, 'the planted band edit applied')
+  assert.equal(L8(plantedBand).length, 1)
+  // a comment naming a key is documentation, not a colour
+  assert.deepEqual(L8("// the 'warning' key\nconst a = 1"), [])
+})
+
+// L9: bold is a whitelist. The band draws bold in exactly one place (the verdict word); the pane's bold segments live in ui.ts only (the I4 invariant checks what is drawn).
+const BOLD_PROP = /\bbold\s*:/
+test('L9: the band source (model.ts) is bold only on the verdict slot (plus the legacy PaneLine bold passthrough); tabs.ts, pane.tsx and band.tsx never set bold (L1)', () => {
+  const hit = hits(read('model.ts'), BOLD_PROP)
+  assert.equal(hit.length, 2, JSON.stringify(hit))
+  assert.match(hit[0], /v\.mark \+ ' ' \+ v\.word/)
+  assert.match(hit[1], /const base: Seg\[\]/)
+})
+test('L9 control: a second bold in the band source is reported', () => {
+  const planted = read('model.ts').replace("sp(m.stage, { color: PALETTE.here,", "sp(m.stage, { color: PALETTE.here, bold: true,")
+  assert.equal(hits(planted, BOLD_PROP).length, 3)
+})
+
 test('L2: outside ui.ts no source file carries a glyph; glyphs come from GLYPHS', () => {
   const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'ui.ts' && f !== 'locales.ts')
   assert.ok(files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))

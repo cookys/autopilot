@@ -135,7 +135,7 @@ function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (m === null || m.stage === null) body.push(ui.kv(u, t(KEY_IDS.stage), [ui.absent(t('nodata.stage'))], { fact: F }))
     else {
       const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { tone: 'strong', here: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
+      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { here: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
     }
     if (m === null || m.unit === null || slotUnit(m, t) === null) body.push(ui.kv(u, t(KEY_IDS.unit), [ui.absent(t('nodata.unit'))], { fact: F }))
     else {

@@ -56,17 +56,33 @@ export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
-export const STATES: Record<StateId, { glyph: string; key: ThemeKey; bold: boolean }> = {
-  need_you: { glyph: GLYPHS.state.need_you, key: 'warning', bold: true },
-  failed: { glyph: GLYPHS.state.failed, key: 'error', bold: false },
-  stalled: { glyph: GLYPHS.state.stalled, key: 'error', bold: false },
-  findings: { glyph: GLYPHS.state.findings, key: 'warning', bold: false },
-  running: { glyph: GLYPHS.state.running, key: 'suggestion', bold: false },
-  done: { glyph: GLYPHS.state.done, key: 'success', bold: false },
-  pending: { glyph: GLYPHS.state.pending, key: 'inactive', bold: false },
-  stopped: { glyph: GLYPHS.state.stopped, key: 'inactive', bold: false },
-  skipped: { glyph: GLYPHS.state.skipped, key: 'inactive', bold: false },
-  unknown: { glyph: GLYPHS.state.unknown, key: 'inactive', bold: false },
+// The semantic palette (owner ruling 2026-10-16): ONE colour means ONE thing. This table is the only place in mods/live that names a theme key; every colour the pane
+// and the band draw goes through a ROLE here (ui-lint L8 reads the sources and fails on a theme-key literal anywhere else). A role with no entry (`undefined`) is the
+// default text colour, `dim` is a weight (not a key), and bold is a whitelist (BOLD_USES below).
+//   attention  (warning)    = the owner must look or act        here      (claude)     = you are here
+//   broken     (error)      = failed, stalled or over the cap   done      (success)    = finished
+//   running    (suggestion) = running now                       idle      (inactive)   = nothing to do
+//   structure  (subtle)     = rules, fold marks, separators
+export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure'
+export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle' }
+// the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a picked decision option and the send button. Nothing else is bold.
+export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'picked option', 'send button'] as const
+// a segment option that sets a colour only when there is one (the default text colour is the absence of a key)
+export const tone = (k: ThemeKey | undefined): { color?: ThemeKey } => (k === undefined ? {} : { color: k })
+
+// glyph colour (key) and word colour (wordKey): a need_you row draws only its mark yellow (the owner's attention is drawn once per surface: the verdict line and the tab name
+// carry the yellow words), findings (待修) is not the owner's to act on, so it is default text
+export const STATES: Record<StateId, { glyph: string; key: ThemeKey | undefined; wordKey: ThemeKey | undefined }> = {
+  need_you: { glyph: GLYPHS.state.need_you, key: PALETTE.attention, wordKey: undefined },
+  failed: { glyph: GLYPHS.state.failed, key: PALETTE.broken, wordKey: PALETTE.broken },
+  stalled: { glyph: GLYPHS.state.stalled, key: PALETTE.broken, wordKey: PALETTE.broken },
+  findings: { glyph: GLYPHS.state.findings, key: undefined, wordKey: undefined },
+  running: { glyph: GLYPHS.state.running, key: PALETTE.running, wordKey: PALETTE.running },
+  done: { glyph: GLYPHS.state.done, key: PALETTE.done, wordKey: PALETTE.done },
+  pending: { glyph: GLYPHS.state.pending, key: PALETTE.idle, wordKey: PALETTE.idle },
+  stopped: { glyph: GLYPHS.state.stopped, key: PALETTE.idle, wordKey: PALETTE.idle },
+  skipped: { glyph: GLYPHS.state.skipped, key: PALETTE.idle, wordKey: PALETTE.idle },
+  unknown: { glyph: GLYPHS.state.unknown, key: PALETTE.idle, wordKey: PALETTE.idle },
 }
 // the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
 export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'stopped', 'pending', 'done', 'skipped', 'unknown']
@@ -130,7 +146,7 @@ export function emphasisViolations(line: PaneLine): string[] {
   const out: string[] = []
   const segs = line.segs ?? []
   for (const s of segs) if (s.bold === true && s.dim === true) out.push('segment both bold and dim: ' + JSON.stringify(s.text))
-  if (line.kind !== 'header' && line.kind !== 'verdict') {
+  if (line.kind !== 'header' && line.kind !== 'verdict' && line.kind !== 'choice') { // a decision card's picked option is bold as a whole (head and label)
     const value = (s: Seg): boolean => s.bold === true && s.role !== 'glyph' && s.role !== 'state' // a state's glyph and word are one mark, not a value
     const bolds = segs.filter(s => value(s) && s.here !== true).length + (segs.some(s => value(s) && s.here === true) ? 1 : 0)
     if (bolds > 1) out.push('more than one bold value on a ' + String(line.kind) + ' line')
@@ -282,7 +298,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   },
   attention: a => (a.source === null ? 'acceptance' : 'from:' + a.source.id),
   residueGroup: c => norm(c).toLowerCase(),
-  cleanup: c => (c.errors > 0 ? 'error' : c.done > 0 ? 'done' : 'nothing'),
+  cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
@@ -301,7 +317,7 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   loadSource: { bad: 'need_you', ok: 'done', weird: 'unknown' },
   attention: { acceptance: 'need_you', ...ATTENTION_FROM },
   residueGroup: { dirty: 'need_you', 'clean-integrated': 'need_you', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'need_you', live: 'running', unverifiable: 'unknown' },
-  cleanup: { error: 'failed', done: 'done', nothing: 'skipped' },
+  cleanup: { errors: 'failed', done: 'done', nothing: 'skipped' },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {
   return (CLASSIFY[domain] as (s: Subject[D]) => string)(subject)
@@ -373,7 +389,7 @@ function frag(segs: Seg[], fact?: FactId): Frag {
 export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== null && FRAGS.has(v)
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
-export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule'
+export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab'
 type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
@@ -385,21 +401,21 @@ export const fmtd = (kind: FmtKind, s: string, fact?: FactId): Frag => frag([sg(
 // the state glyph (state colour) and, unless `word: false`, its word (same colour)
 export function stateLead(u: Ctx, s: Stated, o: { word?: boolean; wordW?: number } = {}): Frag {
   const st = STATES[s.id]
-  const segs: Seg[] = [sg(st.glyph, { color: st.key, ...(st.bold ? { bold: true } : {}), role: 'glyph' })]
-  if (o.word !== false) segs.push(sg(' '), sg(padCells(u.t('ui.state.' + s.id), o.wordW ?? 0), { color: st.key, ...(st.bold ? { bold: true } : {}), role: 'state' }))
+  const segs: Seg[] = [sg(st.glyph, { ...tone(st.key), role: 'glyph' })]
+  if (o.word !== false) segs.push(sg(' '), sg(padCells(u.t('ui.state.' + s.id), o.wordW ?? 0), { ...tone(st.wordKey), role: 'state' }))
   return frag(segs)
 }
-// a meter level's theme key: < 80% success, >= 80% warning, >= 100% error (on the raw ratio)
-export const meterKey = (ratio: number): ThemeKey => (ratio >= 1 ? 'error' : ratio >= 0.8 ? 'warning' : 'success')
+// a meter level's theme key: < 80% default text (a healthy level says nothing), >= 80% attention, >= 100% broken (on the raw ratio)
+export const meterKey = (ratio: number): ThemeKey | undefined => (ratio >= 1 ? PALETTE.broken : ratio >= 0.8 ? PALETTE.attention : undefined)
 export function meterValue(value: number, cap: number, o: { cells: number; fact?: FactId }): Frag {
   const ratio = cap > 0 ? value / cap : 0
   const on = Math.max(0, Math.min(o.cells, Math.round(Math.min(1, ratio) * o.cells)))
   const key = meterKey(ratio)
   return frag([
-    sg(GLYPHS.chart.meterOn.repeat(on), { color: key, role: 'glyph' }),
-    ...(o.cells - on > 0 ? [sg(GLYPHS.chart.meterOff.repeat(o.cells - on), { color: 'inactive', role: 'glyph' })] : []),
+    sg(GLYPHS.chart.meterOn.repeat(on), { ...tone(key), role: 'glyph' }),
+    ...(o.cells - on > 0 ? [sg(GLYPHS.chart.meterOff.repeat(o.cells - on), { color: PALETTE.idle, role: 'glyph' })] : []),
     sg('  '),
-    sg(padLeft(pct(ratio), 4), { color: key, bold: true, role: 'value', fmt: 'pct' }),
+    sg(padLeft(pct(ratio), 4), { ...tone(key), role: 'value', fmt: 'pct' }),
   ], o.fact)
 }
 const BADGE_STATES = ['need_you', 'running', 'stalled'] as const
@@ -411,11 +427,8 @@ export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId):
   if (!isBadgeState(s)) throw new Error('badge: state ' + (s as Stated).id + ' has no badge form')
   const st = STATES[s.id]
   if (s.id !== 'need_you' && (n === undefined || n < 1)) throw new Error('badge: ' + s.id + ' needs a count')
-  return frag([sg(st.glyph + (s.id === 'need_you' || n === undefined ? '' : String(n)), { color: st.key, role: 'glyph' })], fact)
+  return frag([sg(st.glyph + (s.id === 'need_you' || n === undefined ? '' : String(n)), { ...tone(st.key), role: 'glyph' })], fact)
 }
-export const residueBadge = (n: number, fact: FactId): Frag => frag([sg(GLYPHS.structure.residue + n, { color: 'warning', role: 'glyph' })], fact)
-// the 待決 tab's badge: the need_you mark and how many questions wait (`▲3`); stateBadge draws no count for need_you, this one always does
-export const decideBadge = (n: number, fact: FactId): Frag => frag([sg(GLYPHS.state.need_you + n, { color: STATES.need_you.key, role: 'glyph' })], fact)
 // a header's spend figures: one fragment per fact, no goto, typed as a projection of the 用量 facts
 export function headerProjection(fact: FactId, s: string, label?: string): Frag {
   if (FACT_OWNER[fact] !== 'spend') throw new Error('headerProjection: ' + fact + ' is not a spend fact')
@@ -433,7 +446,7 @@ export const blank = (): PaneLine => mk({ kind: 'blank', text: '', fact: 'pane.c
 // `▾ Title  chip ────`: foldable section header (the toggle id is the section id); the rule runs to cols - 1
 export function header(u: Ctx, title: string, fold: { id: string; open: boolean }, o: { right?: Frag; fact?: FactId } = {}): PaneLine {
   if (o.right !== undefined && o.fact === undefined) throw new Error('header: a chip needs a fact')
-  const lead: Seg = sg(fold.open ? GLYPHS.structure.open : GLYPHS.structure.folded, { color: 'subtle', role: 'glyph' })
+  const lead: Seg = sg(fold.open ? GLYPHS.structure.open : GLYPHS.structure.folded, { color: PALETTE.structure, role: 'glyph' })
   const chip: Seg[] = o.right === undefined ? [] : [...o.right.segs]
   const titleSeg: Seg = sg(title, { bold: true, role: 'prose' })
   const widthOf = (): number => displayWidth([lead, sg(' '), titleSeg, ...(chip.length > 0 ? [sg('  '), ...chip] : [])].map(s => s.text).join(''))
@@ -452,7 +465,7 @@ export function header(u: Ctx, title: string, fold: { id: string; open: boolean 
   const segs: Seg[] = [lead, sg(' '), titleSeg]
   if (chip.length > 0) segs.push(sg('  '), ...chip)
   const fill = u.cols - 1 - widthOf() - 1
-  if (fill >= 3) segs.push(sg(' ' + GLYPHS.structure.rule.repeat(fill), { color: 'subtle', role: 'rule' }))
+  if (fill >= 3) segs.push(sg(' ' + GLYPHS.structure.rule.repeat(fill), { color: PALETTE.structure, role: 'rule' }))
   return lineOf('header', segs, { toggle: fold.id, ...(o.fact === undefined ? {} : { fact: o.fact }) })
 }
 
@@ -472,7 +485,7 @@ export function item(u: Ctx, s: Stated, body: string, meta: Meta | undefined, o:
   const segs: Seg[] = []
   if (at > 0) segs.push(sg(' '.repeat(at)))
   segs.push(...stateLead(u, s, { word: o.word, wordW: o.wordW }).segs, sg(o.word === false ? ' ' : '  ')) // §5 mockups: two cells after the state word, one after a bare glyph
-  segs.push(sg(body, { role: 'prose', ...(s.id === 'need_you' ? { bold: true } : {}), ...(s.id === 'stopped' ? { dim: true } : {}) }))
+  segs.push(sg(body, { role: 'prose', ...(s.id === 'stopped' ? { dim: true } : {}) }))
   segs.push(...metaSegs(meta))
   return withToggle(u, 'item', segs, o)
 }
@@ -530,17 +543,17 @@ export function more(u: Ctx, n: number, noun: string, id: string, open = false, 
 // ---- the 待決 tab's controls (pick-and-submit). A `choice` line is a row of pressable options: every seg that carries a `press` id is drawn as a Button by
 // pane.tsx, consecutive segs of one id are one Button. A `field` line is a label followed by a text field (pane.tsx draws the Input). Neither is a number or a state. ----
 export type Choice = { label: string; picked: boolean; recommended: boolean; press?: string }
-// the options of one question as rows of at most `cols - 1` cells: `[x] ★ label` (picked: success text) beside `[ ] label`, two cells between options, indent 2.
+// the options of one question as rows of at most `cols - 1` cells: `[x] ★ label` (picked: bold default text) beside `[ ] label`, two cells between options, indent 2.
 // A press-less choice is drawn plain (a question already sent), its picked mark kept.
 export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
   const room = u.cols - 1 - 2
   const piece = (c: Choice): Seg[] => {
     const press = c.press === undefined ? {} : { press: c.press }
-    const tone = c.picked ? { color: 'success' as ThemeKey } : c.press === undefined ? { dim: true } : {}
+    const pick = c.picked ? { bold: true } : c.press === undefined ? { dim: true } : {}
     const head = c.picked ? '[x] ' : '[ ] '
-    const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { color: 'suggestion', role: 'glyph', ...press }), sg(' ', { role: 'prose', ...press })] : []
+    const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { role: 'glyph', ...press }), sg(' ', { role: 'prose', ...press })] : []
     const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
-    return [sg(head, { role: 'prose', ...tone, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...tone, ...press })]
+    return [sg(head, { role: 'prose', ...pick, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...pick, ...press })]
   }
   const rows: Seg[][] = []
   let cur: Seg[] = []
@@ -556,14 +569,14 @@ export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId
   if (cur.length > 0) rows.push(cur)
   return rows.map(r => lineOf('choice', [sg('  '), ...r], { fact: o.fact }))
 }
-// one action row: `[ label ]`, success text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent)
+// one action row: `[ label ]`, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent)
 export function actionRow(u: Ctx, label: string, o: { press?: string; fact: FactId }): PaneLine {
   const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
-  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'prose', color: 'success', press: o.press })], { fact: o.fact })
+  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'prose', bold: true, press: o.press })], { fact: o.fact })
 }
 // the recommendation's reason, one subtle line under the option row: `  ★ <why>`
 export function recommendNote(u: Ctx, why: string, fact: FactId): PaneLine {
-  const lead = sg('  '), mark = sg(GLYPHS.structure.recommend, { color: 'suggestion', role: 'glyph', dim: true })
+  const lead = sg('  '), mark = sg(GLYPHS.structure.recommend, { role: 'glyph', dim: true })
   return lineOf('detail', [lead, mark, sg(' ', { dim: true }), dim(cutProse(why, Math.max(1, u.cols - 1 - 4)), { role: 'prose' })], { fact })
 }
 // a labelled text field: the label is drawn here, the Input after it by pane.tsx (a surface without Input never gets this line: the tab says to answer in the conversation)
@@ -634,14 +647,14 @@ export function chart(u: Ctx, key: string, value: Frag, caption: string | undefi
   if (caption !== undefined) lines.push(lineOf('chart', [sg(' '.repeat(KEY_W)), dim(caption, { role: 'prose' })], { fact }))
   return lines
 }
-// the stage walk `✓─✓─◐─○─○`: done nodes success, the current node `◐` claude bold (tagged `here`), the rest inactive
+// the stage walk `✓─✓─◐─○─○`: done nodes success, the current node `◐` claude (tagged `here`), the rest inactive
 export function walkValue(current: number, n: number): Frag {
   const segs: Seg[] = []
   for (let i = 0; i < n; i++) {
     if (i > 0) segs.push(dim(GLYPHS.structure.rule, { role: 'rule' }))
-    if (i < current) segs.push(sg(STATES.done.glyph, { color: 'success', role: 'glyph' }))
-    else if (i === current) segs.push(sg(GLYPHS.chart.here, { color: 'claude', bold: true, here: true, role: 'glyph' }))
-    else segs.push(sg(STATES.pending.glyph, { color: 'inactive', role: 'glyph' }))
+    if (i < current) segs.push(sg(STATES.done.glyph, { color: PALETTE.done, role: 'glyph' }))
+    else if (i === current) segs.push(sg(GLYPHS.chart.here, { color: PALETTE.here, here: true, role: 'glyph' }))
+    else segs.push(sg(STATES.pending.glyph, { color: PALETTE.idle, role: 'glyph' }))
   }
   return frag(segs)
 }
@@ -693,7 +706,7 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
   const body = rows.map(r => {
     const st = STATES[r.state.id]
     return lineOf('table', [
-      sg(st.glyph, { color: st.key, role: 'glyph' }), sg(' '), sg(padCells(u.t('ui.state.' + r.state.id), stateW), { color: st.key, role: 'state' }),
+      sg(st.glyph, { ...tone(st.key), role: 'glyph' }), sg(' '), sg(padCells(u.t('ui.state.' + r.state.id), stateW), { ...tone(st.wordKey), role: 'state' }),
       ...keep.flatMap(i => [sg('  '), sg(fit(cellText(r.cells[i]), i), { role: 'value', ...cellFmt(r.cells[i]) })]),
     ], { fact: o.fact, ...(r.group === undefined ? {} : { group: r.group }), ...(r.ts === undefined ? {} : { ts: r.ts }) })
   })
@@ -762,7 +775,7 @@ export function projection(tab: PaneTab, fact: FactId, line: PaneLine): PaneLine
 export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project: string; elapsed: string; metrics: readonly Frag[] }): PaneLine[] {
   const st = STATES[v.state.id]
   const left: Seg[] = [
-    sg(st.glyph, { color: st.key, bold: true, role: 'glyph' }), sg(' '), sg(v.word, { color: st.key, bold: true, role: 'state' }), sg('  '),
+    sg(st.glyph, { ...tone(st.key), bold: true, role: 'glyph' }), sg(' '), sg(v.word, { ...tone(st.key), bold: true, role: 'state' }), sg('  '),
     sg(v.project, { bold: true, role: 'value' }), ...(v.elapsed === '' ? [] : [dim(' · ' + v.elapsed, { role: 'value' })]), // no known start: no elapsed segment
   ]
   const metrics: Seg[] = v.metrics.flatMap((m, i) => [...(i > 0 ? [dim(' · ')] : []), ...m.segs.map(s => ({ ...s, dim: true, ...(m.fact === undefined ? {} : { fact: m.fact }) }))])
@@ -781,14 +794,14 @@ export function chip(u: Ctx, s: Stated, meta?: string, fmt?: FmtKind): Frag {
   if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value', ...(fmt === undefined ? {} : { fmt }) })) // a number in the meta is tagged with the formatter that made it (I8)
   return frag(segs)
 }
-// a count of cells as a bar: `on` filled (success; with `here`, the last filled cell is the current one, `claude`, tagged `here`), the rest inactive
+// a count of cells as a bar: `on` filled (done; with `here`, the last filled cell is the current one, tagged `here`), the rest inactive
 export function stepBar(total: number, on: number, o: { here?: boolean } = {}): Frag {
   const k = Math.max(0, Math.min(total, on))
   const done = o.here === true ? Math.max(0, k - 1) : k
   const segs: Seg[] = []
-  if (done > 0) segs.push(sg(GLYPHS.chart.meterOn.repeat(done), { color: 'success', role: 'glyph' }))
-  if (o.here === true && k > 0) segs.push(sg(GLYPHS.chart.meterOn, { color: 'claude', here: true, role: 'glyph' }))
-  if (total - k > 0) segs.push(sg(GLYPHS.chart.meterOff.repeat(total - k), { color: 'inactive', role: 'glyph' }))
+  if (done > 0) segs.push(sg(GLYPHS.chart.meterOn.repeat(done), { color: PALETTE.done, role: 'glyph' }))
+  if (o.here === true && k > 0) segs.push(sg(GLYPHS.chart.meterOn, { color: PALETTE.here, here: true, role: 'glyph' }))
+  if (total - k > 0) segs.push(sg(GLYPHS.chart.meterOff.repeat(total - k), { color: PALETTE.idle, role: 'glyph' }))
   return frag(segs)
 }
 // whether a foldable section is open. `folded` holds the sections the person TOGGLED away from their default (register.ts flips membership on every press),
@@ -803,8 +816,10 @@ export function carry(from: PaneLine, piece: LineInit): PaneLine {
 // P2 (派工) helpers
 
 // a header chip made of a state glyph (no word) and a count: `✓ 32`. The section header names the state, the count says how many.
+// a need_you count is a plain number: the owner's attention is drawn once per surface (the verdict line and the tab name), not again on the section title
 export function countChip(u: Ctx, s: Stated, n: number, fact: FactId): Frag {
-  return frag([...stateLead(u, s, { word: false }).segs, sg(' '), sg(String(n), { role: 'value', fmt: 'count' })], fact)
+  const lead = s.id === 'need_you' ? [] : [...stateLead(u, s, { word: false }).segs, sg(' ')]
+  return frag([...lead, sg(String(n), { role: 'value', fmt: 'count' })], fact)
 }
 
 // a table whose rows go through the same rules as list(): equal `group` keys fold into one row (the newest), rows run in SEVERITY order and, inside a
@@ -828,7 +843,7 @@ export function tableList(u: Ctx, id: string, noun: string, columns: readonly Co
 // several fragments as one (a `chart` takes a single value fragment)
 export const cat = (...fs: Frag[]): Frag => frag(fs.flatMap(f => [...f.segs]))
 // a header chip naming a meter level (正常 / 接近上限 / 已超過), in the level's theme key; the word is the chip, there is no glyph
-export const levelChip = (ratio: number, word: string, fact: FactId): Frag => frag([sg(word, { color: meterKey(ratio), role: 'value' })], fact)
+export const levelChip = (ratio: number, word: string, fact: FactId): Frag => frag([sg(word, { ...tone(meterKey(ratio)), role: 'value' })], fact)
 // a plain share bar of `cells` cells (default text colour: a share is not a level)
 export const barValue = (cells: number): Frag => frag([sg(GLYPHS.chart.meterOn.repeat(Math.max(0, cells)), { role: 'glyph' })])
 
@@ -841,7 +856,7 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
   return { color: s.color, bold: s.bold, dimColor: s.dim }
 }
 
-// `need`: the tab holds something for the owner, so its name is drawn warning bold (the colour of `▲ 要你決定`); `count` (variant B) is the number after the name
+// `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`); `count` (variant B) is the number after the name
 export type StripTab = { id: PaneTab; label: string; need?: boolean; count?: number }
 export type Strip = {
   next: Seg | null // the next-tab chip `›`
@@ -850,14 +865,14 @@ export type Strip = {
   rows: number // drawn rows: the strip's wrapped rows + the baseline
   exact: boolean // the strip fits one row, so `rows` is certain and the `━` mark is drawn
 }
-// Q1 (owner 2026-10-13): no background; the active tab is bold `claude` text plus a run of `━` in the baseline; a strip that wraps falls back to bold alone.
+// Q1 (owner 2026-10-13): no background; the active tab is bold `claude` text plus a run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
 export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNext: boolean): Strip {
-  const next = hasNext ? sg(GLYPHS.structure.goto, { color: 'claude', role: 'glyph' }) : null
+  const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
   const built = tabs.map(tb => {
     const on = tb.id === active
     const needs = tb.need === true
     // the active tab stays claude bold even when it needs the owner (the `━` run already marks it); an inactive one that needs the owner is warning bold, the rest dim
-    const o: SegOpts = on ? { color: 'claude', bold: true, here: true, role: 'value' } : needs ? { color: 'warning', bold: true, role: 'value' } : { dim: true, role: 'value' }
+    const o: SegOpts = on ? { color: PALETTE.here, bold: true, here: true, role: 'tab' } : needs ? { color: PALETTE.attention, bold: true, role: 'tab' } : { dim: true, role: 'tab' }
     const label = sg(' ' + tb.label + ' ', o)
     const badge: readonly Seg[] = needs && tb.count !== undefined && tb.count > 0 ? [sg(String(tb.count), o)] : []
     return { id: tb.id, on, label, badge, width: displayWidth(label.text) + displayWidth(badge.map(s => s.text).join('')) + 1 }
@@ -876,8 +891,8 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   const exact = rows === 1
   const bar = (n: number, glyph: string, o: SegOpts): Seg[] => (n > 0 ? [sg(glyph.repeat(n), { role: 'rule', ...o })] : [])
   const rule: Seg[] = exact && markAt >= 0
-    ? [...bar(markAt, GLYPHS.structure.rule, { color: 'subtle' }), ...bar(markW, GLYPHS.structure.tabMark, { color: 'claude', bold: true, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: 'subtle' })]
-    : bar(u.cols, GLYPHS.structure.rule, { color: 'subtle' })
+    ? [...bar(markAt, GLYPHS.structure.rule, { color: PALETTE.structure }), ...bar(markW, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: PALETTE.structure })]
+    : bar(u.cols, GLYPHS.structure.rule, { color: PALETTE.structure })
   return { next, tabs: built.map(({ id, on, label, badge }) => ({ id, on, label, badge })), rule, rows: rows + 1, exact }
 }
 
@@ -919,20 +934,20 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
   const states = STATE_IDS.map(id => legendRow(u, stateLead(u, stated(id), { wordW }), t('legend.state.' + id), 'legend.states'))
   states.push(legendRow(u, frag([dim(S.empty, { role: 'glyph' })]), t('legend.nodata'), 'legend.states'))
   const ex = (...segs: Seg[]): Frag => frag(segs)
-  const bar = ex(sg(GLYPHS.chart.meterOn, { color: meterKey(0.5), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(0.9), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(1), role: 'glyph' }), sg(GLYPHS.chart.meterOff, { color: 'inactive', role: 'glyph' }))
-  const walk = ex(sg(GLYPHS.state.done, { color: STATES.done.key, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.chart.here, { color: 'claude', here: true, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.state.pending, { color: STATES.pending.key, role: 'glyph' }))
-  const badges = ex(sg(' Aa ', { color: 'warning', bold: true, role: 'value' }))
+  const bar = ex(sg(GLYPHS.chart.meterOn, { ...tone(meterKey(0.5)), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { ...tone(meterKey(0.9)), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { ...tone(meterKey(1)), role: 'glyph' }), sg(GLYPHS.chart.meterOff, { color: PALETTE.idle, role: 'glyph' }))
+  const walk = ex(sg(GLYPHS.state.done, { ...tone(STATES.done.key), role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.chart.here, { color: PALETTE.here, here: true, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.state.pending, { ...tone(STATES.pending.key), role: 'glyph' }))
+  const badges = ex(sg(' Aa ', { color: PALETTE.attention, bold: true, role: 'tab' }))
   const structure = [
     legendRow(u, ex(dim(S.open, { role: 'glyph' }), sg(' '), dim(S.folded, { role: 'glyph' })), t('legend.fold'), 'legend.structure'),
     legendRow(u, ex(dim(S.goto, { role: 'glyph' })), t('legend.goto'), 'legend.structure'),
     legendRow(u, ex(dim(S.bullet, { role: 'glyph' })), t('legend.bullet'), 'legend.structure'),
     legendRow(u, ex(dim(S.detail, { role: 'glyph' }), sg(' '), dim(S.command, { role: 'glyph' })), t('legend.detail'), 'legend.structure'),
-    legendRow(u, ex(sg(S.tabMark, { color: 'claude', bold: true, here: true, role: 'glyph' })), t('legend.tabmark'), 'legend.structure'),
+    legendRow(u, ex(sg(S.tabMark, { color: PALETTE.here, here: true, role: 'glyph' })), t('legend.tabmark'), 'legend.structure'),
     legendRow(u, bar, t('legend.meter'), 'legend.structure'),
     legendRow(u, walk, t('legend.walk'), 'legend.structure'),
     legendRow(u, badges, t('legend.badges'), 'legend.structure'),
     legendRow(u, ex(dim(S.behind, { role: 'glyph' })), t('legend.behind'), 'legend.structure'),
-    legendRow(u, ex(sg(S.recommend, { color: 'suggestion', role: 'glyph' })), t('legend.recommend'), 'legend.structure'),
+    legendRow(u, ex(sg(S.recommend, { role: 'glyph' })), t('legend.recommend'), 'legend.structure'),
   ]
   return {
     states: part('states', t('legend.sec_states'), states),

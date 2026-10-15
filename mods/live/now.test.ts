@@ -153,13 +153,11 @@ const i17 = (ls: PaneLine[]): string[] => {
   for (const l of ls) if (l.fact === 'review.round' && (l.segs ?? []).filter(s => s.role === 'state').length > 1) out.push('review.round row has more than one state segment')
   return out
 }
-// a bare-glyph item (no state word) under a count chip must wear the chip's glyph; a differing state keeps its word
-const glyphOfSeg = (l: PaneLine): string | undefined => (l.segs ?? []).find(s => s.role === 'glyph')?.text
-const bareMismatch = (ls: PaneLine[]): string[] => {
+// the 要你處理 section title carries a PLAIN count (owner 2026-10-16): no state glyph and no colour on the title; the yellow mark lives on the rows under it
+const chipViolations = (ls: PaneLine[]): string[] => {
   const head = ls.find(l => l.kind === 'header' && l.fact === 'now.attention')
-  const chip = head === undefined ? undefined : [...(head.segs ?? [])].reverse().find(s => s.role === 'glyph')?.text
-  if (chip === undefined) return []
-  return ls.filter(l => l.kind === 'item' && l.fact === 'now.attention' && !(l.segs ?? []).some(s => s.role === 'state') && glyphOfSeg(l) !== chip).map(l => JSON.stringify(l.text.trimEnd()))
+  if (head === undefined) return ['no now.attention header']
+  return (head.segs ?? []).filter(s => s.role === 'glyph' && Object.values(ui.STATES).some(st => st.glyph === s.text) || (s.role !== 'glyph' && s.role !== 'rule' && s.color !== undefined)).map(s => JSON.stringify(s.text))
 }
 // the golden table: the (fact, goto, kind) triples of the busy snapshot, in order
 const GOLDEN_NOW = [
@@ -178,11 +176,11 @@ test('I17: every data line of 現況 has a fact; a foreign fact is a kv / item p
     expect(i17([...ls, ls.find(l => l.fact === 'review.round') as PaneLine]).length).toBeGreaterThan(0)
     const rv = ls.find(l => l.fact === 'review.round') as PaneLine
     expect(i17(ls.map(l => (l === rv ? { ...l, segs: [...(l.segs ?? []), { text: 'x', role: 'state' as const }] } : l))).length, 'a second state seg on the review row').toBeGreaterThan(0)
-    // a bare-glyph reason under a chip of another state is flagged; the real render has none, and the stalled reason says its word
-    expect(bareMismatch(ls), loc).toEqual([])
+    // the section title count is plain: no ▲ and no colour; a planted yellow ▲ chip is flagged (negative control)
+    expect(chipViolations(ls), loc).toEqual([])
     const reason = ls.find(l => l.kind === 'item' && l.fact === 'now.attention') as PaneLine
-    expect(reason.segs?.some(s => s.role === 'state'), 'the stalled reason keeps its state word under a louder chip').toBe(true)
-    expect(bareMismatch(ls.map(l => (l === reason ? { ...l, segs: (l.segs ?? []).filter(s => s.role !== 'state') } : l))).length).toBeGreaterThan(0)
+    expect(reason.segs?.some(s => s.role === 'state'), 'the stalled reason keeps its state word').toBe(true)
+    expect(chipViolations(ls.map(l => (l.kind === 'header' && l.fact === 'now.attention' ? { ...l, segs: [...(l.segs ?? []), { text: ui.STATES.need_you.glyph, role: 'glyph' as const, color: 'warning' as const }] } : l))).length).toBeGreaterThan(0)
     // the header: spend.* on the two spend segments, none of them a goto
     const head = headerLines(snap(), ctxOf(t, 120))
     const facts = head.flatMap(l => (l.segs ?? []).flatMap(s => (s.fact === undefined ? [] : [s.fact])))

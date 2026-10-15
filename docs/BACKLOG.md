@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0177 -->
+<!-- next-id: BL-0178 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1816,32 +1816,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: check-plan-graduation.js:168 out.shippedIn = need() is single-valued; :1271 const version = shippedIn || 'shipped' applies to all stems. Accept stem=sha pairs.
 
-### ensure-child refuses to write a child marker without saying why
-- **Id**: BL-0174
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 派出去的 claude 子 session 該留下自己的工作階段標記；如果因為缺 id 或 id 跟父 session 一樣而不寫，程式不會印任何訊息。
-- **Impact**: 低。標記少了一筆時，派工紀錄裡找不到原因，要重跑才查得出來。
-- **Trigger**: D0 重跑時發現子 session 少了標記，或下次動 session-mode.js ensure-child 時
-- **Effort**: XS
-- **Source**: review of lane/dispatch-tree-3b, 2026-10-15
-- **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: ensure-child returns silently on every refusal path; add one stderr line with the reason code, exit unchanged.
-
-### Managed dev-flow admission still compares against the old session id
-- **Id**: BL-0175
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 巢狀的 l5/l6 子 session 在入場檢查時，仍用舊的方式找自己的工作階段標記，沒有用 3b 新的判定規則。
-- **Impact**: 中。啟動環境只帶舊式 session 變數或只有工作目錄時，子 session 的入場會被誤擋，派工停在起點。
-- **Trigger**: 派工追蹤樹 step 5 或 R 開工前，或巢狀 l5/l6 子 session 的入場被拒時
-- **Effort**: S
-- **Source**: review of lane/dispatch-tree-3b, 2026-10-15
-- **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: validateManagedDevFlowAdmission (session-mode.js ~:453-505, compare :489) uses markerPath()/getSessionId(); route it through resolveMarkerWriteTarget.
-
 ### Dispatch-tree 3b live gaps: tmux parent leak, kimi child env
 - **Id**: BL-0176
 - **Status**: open
@@ -1854,3 +1828,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of lane/dispatch-tree-3b, 2026-10-15
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: D6 residual (plan §4). Per-rail mutations done 2026-10-15. tmux leak reproduced: ensurePlainMarker records env P for any new id != P; two options in the sidecar.
+
+### session-mode-null-admission test is red and runs in no suite
+- **Id**: BL-0177
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 有一支檢查「Mission 開啟但入場結果為空時，設定工作階段不會當掉」的測試，目前有兩項失敗，而且它放在主測試入口不會跑到的位置，所以一直沒人發現。
+- **Impact**: 不確定：可能只是測試過時，也可能標記少記欄位；查清楚前這個保護等於沒有。
+- **Trigger**: next touch of session-mode.js set / Mission no-op surface, or before the 3.0.0 cut
+- **Effort**: S
+- **Source**: review of lane/bl0174-0175, 2026-10-15 (red on base feb910b4 and on head, identical lines)
+- **Pointer**: none
+- **Context**: scripts/tests/session-mode-null-admission.test.sh: 2 asserts red (admission=null, mission_noop), also with CC unset; run.sh skips scripts/tests/. Fix and move, or delete.

@@ -63,12 +63,12 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
 
 - Files: `register.ts` (all `$` calls: pointer, marker / paths resolution, envelope, context, job model, tick, toast, pane
   open), `model.ts` (pure parsing / formatting, no `$`), `band.tsx` and `pane.tsx` (pure views over the surface's element
-  table), `live.test.ts`. State between a tick and a render is a module variable plus `$.ui.invalidate('ui.render')`: a
-  `$.state` ref makes `claude plugin validate` demand a `types` contract named in the plugin manifest, and the mod is wired by
-  the `hooks.json` `modules` key alone.
+  table), `live.test.ts`, `decide.test.ts`. What a tick learns goes to the pane through a module variable plus
+  `$.ui.invalidate('ui.render')`; what the owner picks and types on the 待決 tab lives in `$.state` (`autopilot.decide`,
+  contract `mods/live/types/index.d.ts`, named by `types` in `.claude-plugin/plugin.json`), so a hot reload keeps it.
 - Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
   (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
-  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decisions[]` incl. `stale` / `age_s`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
+  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decisions[]` incl. `stale` / `age_s`, `progress`, `phase`). It writes no file and starts no program. The one prompt it sends is the owner's: the 待決 tab's send Button submits the answered questions as one `[待決回覆]` message through `$.prompt.submit` (not `asUser`, so the model can tell the panel sent it; `sendDecide` in `register.ts` is the only call site).
 - **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
   run and how far along, led by one of five verdict words. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
   <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
@@ -93,10 +93,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
     drawn dim, no percent. No model or no count: `—`, never 0. Execution (runs) and progress (deliverables) are separate
     axes: progress never comes from run counts.
   - Moved to the pane: session cost, host cost and context % are the pane's header row (`session $0.42 · host $3.10 ·
-    ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header lists
-    the oldest awaited question (one row, `(+N)` when more); the 待決議事項（N）section right after it lists EVERY open question of the model's
-    `decisions[]` in full and wrapped (question, 背景, `n) label — description` per option, 建議 + 理由, 不回會卡住, 為什麼要你決定 (`not_authorized`), 提出者; fields that do not exist are not
-    shown, and with none open the section is absent); the execution-status table, the gate rows and the review Link stay.
+    ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header (要你處理) holds one row, `▲ 待決議事項 N 件 · 待決 ›`, that opens the 待決 tab; the questions are not repeated on 現況. The 待決 tab draws every open question of the model's `decisions[]` as a compact card (question, background, a row of option Buttons with the recommendation starred and its reason, a note / reply field, one line `卡住：… · 來源：…`; `not_authorized` is deliberately not drawn) and a send Button; a question the asker's own dialog answers (`origin: ask_user_question`) says to answer there. The execution-status table, the gate rows and the review Link stay on 派工.
 - **Every wired source (W3a)**: besides the above the mod reads, all through the live pointer's `live_base` (never computed
   in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`), `attention/<sid>.json` (`autopilot.attention/1`) and `turn/<sid>.json`
   (`autopilot.session-turn/1`, mods P1W TURN: `state` `active` from the UserPromptSubmit, `ended` from Stop, removed at SessionEnd; written by

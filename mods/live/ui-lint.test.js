@@ -117,7 +117,7 @@ const L4 = src => {
   }
   return out
 }
-const LINE_KINDS = 'verdict|header|kv|item|bullet|table|meter|empty|more|command|detail|chart|blank'
+const LINE_KINDS = 'verdict|header|kv|item|bullet|table|meter|empty|more|command|detail|chart|blank|choice|field'
 // a hand-made line: a cast, a typed literal, or a spread of a PaneLine variable into a new object literal
 const L5_HAND = src => [...hits(src, /\bas PaneLine\b/), ...hits(src, /:\s*PaneLine\s*=\s*\{/), ...hits(src, /\{\s*\.\.\.\s*(line|l|piece|head\[[^\]]*\])\s*[,}]/)]
 const L5 = src => [...hits(src, new RegExp(`\\bkind\\s*:\\s*['"](${LINE_KINDS})['"]`)), ...L5_HAND(src)]
@@ -203,4 +203,38 @@ test('L7 control: a state id literal and a table access are reported', () => {
   assert.ok(L7('const g = ui.GLYPHS.state.done').length > 0)
   assert.ok(L7('const g = STATES[s.id]').length > 0)
   assert.deepEqual(L7('const s = ui.stateOf(d, x)'), [])
+})
+
+// docs/plans/2026-10-03-mods-visible-dispatch.md §2.5 (owner ruling 2026-10-15): the pane may send ONE prompt, the owner's own 送出 press, and never as the user.
+// The scan is the plan's `grep -r mods/`: every non-test source under mods/, recursively. A use is `prompt.submit`, `prompt["submit"]` / `prompt['submit']`, or a
+// destructuring of `submit` out of `prompt` (`const { submit } = $.prompt`); a string such as on('prompt.submit', ...) is an event name, not a call, and is not one.
+const SUBMIT_USE = [/\bprompt\s*\.\s*submit\b(?!['"`])/g, /\bprompt\s*\[\s*['"`]submit['"`]\s*\]/g, /\{[^}]*\bsubmit\b[^}]*\}\s*=\s*[^;\n]*\bprompt\b/g]
+const submitUses = src => SUBMIT_USE.flatMap(re => [...code(src).matchAll(re)].map(m => ({ at: m.index, text: m[0] })))
+const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]))
+test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prompt.submit; nothing uses asUser or process spawning', () => {
+  const root = path.join(__dirname, '..')
+  const files = walk(root).filter(f => /\.(ts|tsx|js|mjs|cjs)$/.test(f) && !/\.(test|testkit)\.(ts|js)$/.test(f) && !f.endsWith('locales.ts'))
+  assert.ok(files.some(f => f.endsWith('register.ts')) && files.some(f => f.endsWith(path.join('types', 'index.d.ts')) || f.endsWith('model.ts')))
+  const offenders = []
+  for (const f of files) {
+    const rel = path.relative(root, f)
+    const src = code(fs.readFileSync(f, 'utf8'))
+    if (/\basUser\b/.test(src)) offenders.push(rel + ': asUser')
+    if (/process\.(spawn|run)\b/.test(src)) offenders.push(rel + ': process spawn')
+    const uses = submitUses(src)
+    if (rel !== path.join('live', 'register.ts')) { if (uses.length > 0) offenders.push(rel + ': prompt.submit') ; continue }
+    assert.equal(uses.length, 1, 'exactly one use in register.ts')
+    const from = src.lastIndexOf('async function ', uses[0].at)
+    assert.match(src.slice(from, from + 40), /^async function sendDecide\b/, 'the use is inside sendDecide')
+  }
+  assert.deepEqual(offenders, [])
+})
+test('prompt.submit allowlist controls: the call, the bracket forms, destructuring and asUser are each reported; an event name is not', () => {
+  assert.equal(submitUses('async function other($) { $.prompt.submit({ text }) }').length, 1)
+  assert.equal(submitUses("$.prompt['submit']({ text })").length, 1)
+  assert.equal(submitUses('$.prompt["submit"]({ text })').length, 1)
+  assert.equal(submitUses('const { submit } = $.prompt').length, 1)
+  assert.equal(submitUses("const { a, submit: go } = $.prompt;").length, 1)
+  assert.equal(submitUses("on('prompt.submit', ($, e) => e)").length, 0)
+  assert.ok(/\basUser\b/.test(code('$.prompt.submit({ text, asUser: true })')))
 })

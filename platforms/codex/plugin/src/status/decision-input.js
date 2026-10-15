@@ -57,7 +57,7 @@ function viewOf(e, nowMs, liveBase) {
     id: e.id, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
-    orphaned: sessionGone(e, liveBase),
+    orphaned: sessionGone(e, liveBase), origin: str(e.origin),
   };
 }
 

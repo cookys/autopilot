@@ -236,7 +236,7 @@ function buildJobModel(inputs) {
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
     recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
-    stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null, orphaned: d.orphaned === true,
+    stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null, orphaned: d.orphaned === true, origin: optText(d.origin),
   }));
 
   const progress = buildProgress(o.progressReceipt, root);

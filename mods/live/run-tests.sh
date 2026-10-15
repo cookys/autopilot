@@ -25,7 +25,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 mkdir -p "$tmp/.claude-plugin" "$tmp/hooks" "$tmp/mods"
-printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wrapper for the live mod tests"}' > "$tmp/.claude-plugin/plugin.json"
+printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wrapper for the live mod tests","types":"./mods/live/types/index.d.ts"}' > "$tmp/.claude-plugin/plugin.json"
 printf '%s\n' '{"modules":["../mods/live/register.ts"]}' > "$tmp/hooks/hooks.json"
 cp -r "$here" "$tmp/mods/live"
 rm -f "$tmp/mods/live/run-tests.sh"

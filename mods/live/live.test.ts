@@ -917,7 +917,8 @@ for (const surface of SURFACES) {
     await start($, surface)
     const p = await bandParts($, surface)
     expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
-    expect(p.line2).toBe('要合併 plan 還是拆開？')
+    expect(p.line2).toMatch(/^待決議事項 1 件\s+待決 ›$/) // the Now tab keeps one row that points at 待決; the question itself is on that tab and in the wide band
+    expect((await paneParts($, surface, 'decide')).texts[0]).toBe('▲ 1. 要合併 plan 還是拆開？')
     const lead = walkTexts(p.tree).find(n => textOf(n) === '要你決定') as Node // the verdict word (the tab strip's badges also start with a state glyph)
     expect(lead.props?.bold).toBe(true) // the word is drawn loud, not dim
     expect(lead.props?.dimColor).not.toBe(true)
@@ -1167,13 +1168,13 @@ for (const surface of SURFACES) {
     const rule = pane.texts.findIndex(t => t.startsWith('▾ 要你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
-    expect(pane.texts[rule + 1]).toBe('▲ 要合併 plan 還是拆開？') // one item line: the oldest question; its full text is the 待決議事項 block below
+    expect(pane.texts[rule + 1]).toMatch(/^▲ 待決議事項 1 件\s+待決 ›$/) // one row that points at the 待決 tab (the whole question is not repeated here)
     expect(pane.texts[rule]).toContain('▲ 1') // the section chip counts what awaits you
-    const block = pane.texts.findIndex(t => t.startsWith('▾ 待決議事項（1）'))
-    expect(block).toBeGreaterThan(rule)
-    expect(pane.texts[block + 1]).toBe('▲ 1. 要合併 plan 還是拆開？')
-    expect(pane.texts.some(t => t.includes('1) 合併 — 一次驗收'))).toBe(true) // the options are shown in full, no toggle to press
-    expect(pane.texts.some(t => t.includes('2) 拆開 — 兩次驗收'))).toBe(true)
+    expect(pane.texts.some(t => t.startsWith('▾ 待決議事項'))).toBe(false) // the old block that spread every question over this tab is gone
+    expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
+    const cards = (await paneParts($, surface, 'decide')).texts
+    expect(cards[0]).toBe('▲ 1. 要合併 plan 還是拆開？')
+    expect(cards).toContain('  [ ] 合併  [ ] 拆開') // the options are one row of Buttons; the one-line description of an option shows once it is picked
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
     expect(disp.texts.some(t => t.startsWith('審查 ›'))).toBe(true) // the former 審查關卡 section is one pointer row to 審查
@@ -1183,9 +1184,10 @@ for (const surface of SURFACES) {
     put(w.files, null, { needs_decision: true, decisions: [{ question: '只有問題', options: [] }] })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
-    const at2 = pane.texts.findIndex(t => t.startsWith('▲ 只有問題'))
-    expect(at2).toBeGreaterThanOrEqual(0)
-    expect(pane.texts[at2 + 1]).not.toMatch(/^ *\d\. /)
+    expect(pane.texts.some(t => /^▲ 待決議事項 1 件/.test(t))).toBe(true)
+    const cards2 = (await paneParts($, surface, 'decide')).texts
+    expect(cards2[0]).toBe('▲ 1. 只有問題')
+    expect(cards2.some(t => t.includes('[ ]'))).toBe(false) // a question without options draws no option row
     put(w.files, null, { needs_decision: false, decisions: [] })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
@@ -1451,14 +1453,15 @@ for (const surface of SURFACES) {
     files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: true, age_s: 3 * 86400 + 5 }] }))
     const w = world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（已等 3 天）')
-    expect((await paneParts($, surface, 'now')).texts.some(t => /^▲ 要合併 plan 還是拆開？（已等 3 天）$/.test(t))).toBe(true)
+    expect((await bandLine($, surface, 209)).text).toContain('要合併 plan 還是拆開？（已等 3 天）')
+    expect((await paneParts($, surface, 'decide')).texts.some(t => /^▲ 1\. 要合併 plan 還是拆開？（已等 3 天）$/.test(t))).toBe(true)
     files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: false, age_s: 40 }] }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+    expect((await bandLine($, surface, 209)).text).not.toContain('已等')
+    expect((await paneParts($, surface, 'decide')).texts[0]).toBe('▲ 1. 要合併 plan 還是拆開？')
     files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: true, age_s: 3600 }] })) // stale but under a day
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+    expect((await bandLine($, surface, 209)).text).not.toContain('已等')
   })
 
   test('BL-0163 orphan: an orphaned open decision says the asker session ended in band and pane, a live one does not, and it is never dropped (' + surface + ')', async ($, on) => {
@@ -1466,10 +1469,11 @@ for (const surface of SURFACES) {
     files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, orphaned: true, stale: false, age_s: 40 }] }))
     const w = world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（提問的 session 已結束）')
+    expect((await bandLine($, surface, 209)).text).toContain('要合併 plan 還是拆開？（提問的 session 已結束）')
+    expect((await paneParts($, surface, 'decide')).texts[0]).toBe('▲ 1. 要合併 plan 還是拆開？（提問的 session 已結束）')
     files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, orphaned: false, stale: false, age_s: 40 }] }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+    expect((await bandLine($, surface, 209)).text).not.toContain('提問的 session 已結束')
   })
 
   test('W3a tasks: counts feed an unfrozen progress, the pane lists them, all completed is 完成待驗收, a frozen model progress wins (' + surface + ')', async ($, on) => {
@@ -2101,7 +2105,8 @@ for (const surface of SURFACES) {
     await start($, surface)
     const p = await bandParts($, surface)
     expect(p.line1.startsWith('▲ 要你決定 repo')).toBe(true)
-    expect(p.line2).toBe('要合併 campaign 分支嗎？')
+    expect((await bandLine($, surface, 209)).text).toContain('要合併 campaign 分支嗎？')
+    expect((await paneParts($, surface, 'decide')).texts[0]).toBe('▲ 1. 要合併 campaign 分支嗎？')
   })
 
   test('SCOPE: a marker without campaign_roots reads exactly the marker root, as before (' + surface + ')', async ($, on) => {
@@ -2400,7 +2405,7 @@ for (const surface of SURFACES) {
     const texts = allRows((await pane.drawn()) as Node)
     // the keyboard lands on the first-drawn `›` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(7) // the section headings are Buttons too
+    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(8) // the section headings are Buttons too
     expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
     expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
@@ -2515,7 +2520,7 @@ for (const surface of SURFACES) {
     expect(await activeTab()).toBe('review') // one step on from Dispatch
   })
 
-  test('P7 band: the info press cycles the six tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
+  test('P7 band: the info press cycles the seven tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -2526,9 +2531,11 @@ for (const surface of SURFACES) {
       return tab
     }
     const press = async () => { const ui = await band(); await ui.press({ key: 'info' }); await ui.unmount() }
-    expect([...PANE_TABS]).toEqual(['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
+    expect([...PANE_TABS]).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
     await press() // closed -> Now
     expect(await shownTab()).toBe('now')
+    await press()
+    expect(await shownTab()).toBe('decide')
     await press()
     expect(await shownTab()).toBe('dispatch')
     await press()
@@ -2540,7 +2547,7 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('spend')
     await press()
     expect(await shownTab()).toBe('hygiene')
-    for (const want of ['legend', 'now', 'dispatch']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
+    for (const want of ['legend', 'now', 'decide']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
     // closed again (Escape / the person closes it): the next press is Now, not the tab after Dispatch
     w.panes = []
     await press()
@@ -2551,10 +2558,10 @@ for (const surface of SURFACES) {
   // The first-drawn Button is now the `›` next-tab chip and it alone carries autoFocus.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: Enter on the › chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+  test('keyboard: Enter on the › chip (where the ring lands) steps through all seven tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    for (const want of ['dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'dispatch']) {
+    for (const want of ['decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'decide']) {
       const pane = await paneTabs($, surface)
       await pane.press({ key: 'next' })
       await pane.unmount()
@@ -2578,6 +2585,7 @@ for (const surface of SURFACES) {
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await band.press({ key: 'info' }) // closed -> Now
     const pane = await paneTabs($, surface)
+    await pane.press({ key: 'next' }) // -> Decide
     await pane.press({ key: 'next' }) // -> Dispatch
     await pane.press({ key: 'next' }) // -> Review
     await pane.unmount()
@@ -2636,7 +2644,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
     await pane.unmount()
-    expect(tab).toBe('dispatch') // Now (first press) then Dispatch (second press)
+    expect(tab).toBe('decide') // Now (first press) then Decide (second press)
   })
 
   test('P7 band: a second press while $.ui.panes() is still pending moves on to the next tab, not Now (' + surface + ')', async ($, on) => {
@@ -2654,7 +2662,7 @@ for (const surface of SURFACES) {
     release()
     await Promise.all([pa, pb, pc])
     await a.unmount(); await b.unmount(); await c.unmount()
-    expect(await shownTabOf($, surface)).toBe('review') // closed -> Now, then Dispatch, then Review
+    expect(await shownTabOf($, surface)).toBe('dispatch') // closed -> Now, then Decide, then Dispatch
   })
 
   test('P7 band: a session.start during a pending press does not break later double presses (' + surface + ')', async ($, on) => {
@@ -2681,7 +2689,7 @@ for (const surface of SURFACES) {
     release2()
     await Promise.all([pb, pc])
     await b.unmount(); await c.unmount()
-    expect(await shownTabOf($, surface)).toBe('dispatch') // Now, then Dispatch
+    expect(await shownTabOf($, surface)).toBe('decide') // Now, then Decide
   })
 
   test('P7 band: a non-ok snapshot is one dim line `<reason> │ ⓘ`, the reason cut to fit (' + surface + ')', async ($, on) => {
@@ -2709,20 +2717,24 @@ for (const surface of SURFACES) {
     expect(band.text.includes('\n')).toBe(false)
     expect((await bandLine($, surface, 159)).text).not.toContain('要合併 plan 還是拆開？')
     const now = (await paneParts($, surface, 'now')).texts
-    expect(now.some(t => /^▲ 要合併 plan 還是拆開？$/.test(t))).toBe(true)
-    expect(now.some(t => t.includes('1) 合併 — 一次驗收'))).toBe(true) // whole on the Now tab, options included
+    expect(now.some(t => /^▲ 待決議事項 1 件\s+待決 ›$/.test(t))).toBe(true) // the Now tab points at 待決
+    const cards = (await paneParts($, surface, 'decide')).texts
+    expect(cards[0]).toBe('▲ 1. 要合併 plan 還是拆開？') // whole on the 待決 tab, options included
+    expect(cards).toContain('  [ ] 合併') // this question has one option
   })
 
-  test('P7 panel: the tab strip is six Buttons in contract order, the active one bold, with badges (' + surface + ')', async ($, on) => {
+  test('P7 panel: the tab strip is seven Buttons in contract order, the active one bold, with badges (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
-    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the › chip first (it carries the autoFocus), then the six tabs in contract order
+    expect(buttons).toEqual(['next', 'now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the › chip first (it carries the autoFocus), then the seven tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
+    expect(strip).toContain('待決')
+    expect(strip.slice(strip.indexOf('待決'), strip.indexOf('派工'))).not.toContain('▲') // nothing is pending in this world: the tab carries no badge
     expect(strip).toContain('派工')
     expect(strip).toContain('●2')
     expect(strip).toContain('審查')
@@ -3069,8 +3081,8 @@ test('i18n tables: en and zh-TW carry the same ids and the same placeholders; ke
     expect(displayWidth(ZH_TW[id]), 'zh-TW ' + id).toBeLessThanOrEqual(12)
   }
   // tab words (the owner's wording): 殘留 / 用量 / 審查 translated, `?` is the legend
-  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '派工', '審查', '用量', '殘留', '?'])
-  expect(PANE_TABS.map(t => EN['tab.' + t])).toEqual(['Now', 'Dispatch', 'Review', 'Spend', 'Hygiene', '?'])
+  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '待決', '派工', '審查', '用量', '殘留', '?'])
+  expect(PANE_TABS.map(t => EN['tab.' + t])).toEqual(['Now', 'Decide', 'Dispatch', 'Review', 'Spend', 'Hygiene', '?'])
 })
 
 test('i18n t(): variables, plurals, and the fallback chain locale -> en -> the id itself', () => {
@@ -3237,13 +3249,13 @@ for (const surface of SURFACES) {
   })
 
   for (const locale of ['en', 'zh-TW'] as const) {
-    test('TUI v2 panel: all six tabs render in ' + locale + ', no string id leaks, no placeholder is left unfilled (' + surface + ')', async ($, on) => {
+    test('TUI v2 panel: all seven tabs render in ' + locale + ', no string id leaks, no placeholder is left unfilled (' + surface + ')', async ($, on) => {
       world(on, richWorld(), NOW_FRESH, SID_A, locale)
       await start($, surface)
       const ids = new Set(Object.keys(EN).filter(k => k.includes('.')))
       for (const id of PANE_TABS) {
         const parts = await paneParts($, surface, id)
-        expect(parts.texts.length, id).toBeGreaterThan(3)
+        expect(parts.texts.length, id).toBeGreaterThan(id === 'decide' ? 0 : 3) // nothing is pending in this world: the 待決 tab is its one empty line
         const all = [stripOf(parts.tree), ...parts.texts]
         for (const text of all) {
           for (const word of text.split(/\s+/)) expect(ids.has(word), id + ': ' + word).toBe(false) // a raw id on screen means a missing table entry
@@ -3261,7 +3273,14 @@ for (const surface of SURFACES) {
       for (const width of [60, 76, 90]) {
         for (const id of PANE_TABS) {
           const parts = await paneParts($, surface, id, width)
-          for (const text of [stripOf(parts.tree), ...parts.texts]) {
+          // the strip is Buttons in a wrapping Box: lay its entries out row by row the way a wrapping Box does (an entry that does not fit starts the next row) and hold every ROW to the width
+          const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[0].children || []) as Node[]
+          const rowsW: number[] = [0]
+          for (const e of entries) { const w = displayWidth(fullText(e)); if (rowsW[rowsW.length - 1] > 0 && rowsW[rowsW.length - 1] + w > width) rowsW.push(0); rowsW[rowsW.length - 1] += w }
+          expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 7 tabs)').toBe(8)
+          for (const w of rowsW) expect(w, width + ' ' + id + ' strip row').toBeLessThanOrEqual(width)
+          expect(stripOf(parts.tree).includes('…'), width + ' ' + id + ' strip').toBe(false)
+          for (const text of parts.texts) {
             expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
             if (id !== 'dispatch' || !/^[⊘●✓◌○✗?▲△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
           }
@@ -4667,7 +4686,7 @@ const pressAt = async ($: any, surface: (typeof SURFACES)[number], key: string) 
 }
 
 for (const surface of SURFACES) {
-  test('P4 mounted (I9 b): the global header lines are byte-identical on all six tabs, and the header is drawn above the body (' + surface + ')', async ($, on) => {
+  test('P4 mounted (I9 b): the global header lines are byte-identical on all seven tabs, and the header is drawn above the body (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
     // bodyRows 8 puts every tab over its window, so every header carries its own overflow hint. `pane.overflow` is EXCLUDED from the comparison: it is each tab's own
@@ -4861,5 +4880,169 @@ for (const surface of SURFACES) {
     const narrow = (await paneParts($, surface, 'now', 28, { offset: 0, bodyRows: 5 })).head
     expect(narrow.some(l => l.includes('下方還有')), narrow.join('\n')).toBe(false)
     expect(narrow.join('\n')).toContain('$3.10')
+  })
+}
+
+// ---- the 待決 tab, mounted: option Buttons, note fields, the send Button, the sent state, a phone without Input. The pure half is decide.test.ts. ----
+const DQ1 = { id: 'd-4290499d', question: 'P5 殘留分頁要不要把已清掉的也列出來', background: '殘留分頁現在只列要人處理的。', options: [{ label: 'OK', description: '照現況' }, { label: '完整顯示', description: '全列出來' }], recommendation: 'OK', blocks: '下一個派工' }
+const DQ2 = { id: 'd-c24ecfd9', question: 'U6 要不要把建議也寫進回覆', options: [{ label: '要', description: '' }, { label: '不要', description: '' }] }
+const DQ3 = { id: 'd-0000free', question: '這個分支要叫什麼名字？', options: [] }
+for (const surface of SURFACES) {
+  const decideWorld = (on: any, decisions: object[] = [DQ1, DQ2, DQ3]) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions }))
+    const w = world(on, files)
+    const submits: { text: string; origin: unknown }[] = []
+    on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
+    return { w, files, submits }
+  }
+  const decideRows = async ($: any) => (await paneParts($, surface, 'decide')).texts
+  const act = async ($: any, ...keys: string[]) => {
+    const pane = await paneOn($, surface, 'decide')
+    for (const key of keys) await pane.press({ key })
+    await pane.unmount()
+  }
+  const keysOf = async ($: any, type: string) => {
+    const pane = await paneOn($, surface, 'decide')
+    const found = ((await pane.findAll({ type })) as Drawn[]).map(n => n.props?.key as string)
+    await pane.unmount()
+    return found
+  }
+
+  test('DECIDE mounted: each option is a Button, a text field sits under each question, the send Button is absent until something is chosen (' + surface + ')', async ($, on) => {
+    decideWorld(on)
+    await start($, surface)
+    const rows = await decideRows($)
+    expect(rows[0]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(rows).toContain('  [ ] ★ OK  [ ] 完整顯示')
+    expect(rows).toContain('  [ ] 要  [ ] 不要')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 0/3） ]')
+    const buttons = await keysOf($, 'Button')
+    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1', 'pick:d-c24ecfd9:0', 'pick:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
+    expect(buttons, 'nothing is chosen: the send row is plain text').not.toContain('submit')
+    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d', 'note:d-c24ecfd9', 'note:d-0000free'])
+  })
+
+  test('DECIDE mounted: a press picks, a second press on the same option unpicks, a pick survives the pane being drawn again, and the send Button appears (' + surface + ')', async ($, on) => {
+    decideWorld(on)
+    await start($, surface)
+    await act($, 'pick:d-4290499d:1')
+    let rows = await decideRows($)
+    expect(rows).toContain('  [ ] ★ OK  [x] 完整顯示')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 1/3） ]')
+    expect(await keysOf($, 'Button')).toContain('submit')
+    await act($, 'pick:d-4290499d:0') // another option of the same question replaces the pick
+    expect(await decideRows($)).toContain('  [x] ★ OK  [ ] 完整顯示')
+    await act($, 'pick:d-4290499d:0') // the same one again: unpicked
+    rows = await decideRows($)
+    expect(rows).toContain('  [ ] ★ OK  [ ] 完整顯示')
+    expect(await keysOf($, 'Button')).not.toContain('submit')
+  })
+
+  test('DECIDE mounted: send submits ONE prompt with the answered questions only, not as the user; the cards then read sent and lose their Buttons until the id leaves the file (' + surface + ')', async ($, on) => {
+    const { w, files, submits } = decideWorld(on)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    await pane.press({ key: 'pick:d-4290499d:0' })
+    await pane.press({ key: 'pick:d-c24ecfd9:1' })
+    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' })
+    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    await pane.press({ key: 'submit' })
+    await pane.unmount()
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toBe([
+      '[待決回覆]',
+      'd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK',
+      'd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 不要｜補充：要，但只寫一句',
+      'd-0000free｜這個分支要叫什麼名字？ → 叫 main',
+    ].join('\n'))
+    expect((submits[0].origin as { asUser?: unknown } | undefined)?.asUser, 'the model must be able to tell the panel sent it').toBeUndefined()
+    const rows = await decideRows($)
+    expect(rows[0]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
+    expect(rows).toContain('  [x] ★ OK  [ ] 完整顯示')
+    expect(rows[rows.length - 1]).toBe('  [ 全部已送出，等處理 ]')
+    expect((await keysOf($, 'Button')).filter(k => k.startsWith('pick:') || k === 'submit')).toEqual([])
+    expect(await keysOf($, 'Input')).toEqual([])
+    await w.clock.advance(5000) // the file still lists them: still sent, and nothing is sent twice
+    expect((await decideRows($))[0]).toContain('已送出，等處理')
+    expect(submits.length).toBe(1)
+    // the session closed them (open-decision.js close): the cards are gone
+    files[W_MODEL] = j(model({ needs_decision: false, decisions: [] }))
+    await w.clock.advance(5000)
+    const after = await decideRows($)
+    expect(after.length).toBe(1)
+    expect(after[0]).toContain('目前沒有待你回答的問題')
+  })
+
+  test('DECIDE mounted: a question that is still open can be answered after another was sent; only the new answer goes in the second prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    await act($, 'pick:d-4290499d:0', 'submit')
+    await act($, 'pick:d-c24ecfd9:0', 'submit')
+    expect(submits.map(s => s.text)).toEqual([
+      '[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK',
+      '[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 要',
+    ])
+  })
+
+  test('DECIDE mounted: the strip badges the tab with the number of questions, and the 現況 summary row opens it (' + surface + ')', async ($, on) => {
+    decideWorld(on)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'now')
+    const tree = (await pane.drawn()) as Node
+    await pane.unmount()
+    expect(stripOf(tree)).toContain('待決 ▲3')
+    const rows = rowsOf(tree)
+    const at = rows.findIndex(t => /^▲ 待決議事項 3 件\s+待決 ›$/.test(t))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(rows.some(t => t.includes('P5 殘留分頁'))).toBe(false) // none of the question text is on 現況
+    const now = await paneOn($, surface, 'now')
+    await now.press({ key: 'g' + at })
+    await now.unmount()
+    expect(await shownTabOf($, surface)).toBe('decide')
+  })
+
+  test('DECIDE mounted: two presses on send at the same moment submit ONE prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const a = await paneOn($, surface, 'decide')
+    await a.press({ key: 'pick:d-4290499d:0' })
+    await Promise.all([a.press({ key: 'submit' }), a.press({ key: 'submit' })]) // a double click: both presses run before either has written its marks
+    await a.unmount()
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
+  })
+
+  test('DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (' + surface + ')', async ($, on) => {
+    decideWorld(on, [DQ1, { ...DQ2, origin: 'ask_user_question' }]) // the origin travels model.json -> job model -> pane, nothing is put into a view by hand
+    await start($, surface)
+    const rows = await decideRows($)
+    const at = rows.findIndex(t => t.startsWith('▲ 2. U6'))
+    expect(at).toBeGreaterThan(0)
+    expect(rows[at + 1]).toBe('  [ ] 要  [ ] 不要') // still shown, as plain text
+    expect(rows[at + 2]).toBe('  請在對話框回答。')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 0/1） ]') // only the first question counts
+    const buttons = await keysOf($, 'Button')
+    expect(buttons.filter(k => k.startsWith('pick:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
+    expect(buttons.filter(k => k.startsWith('pick:d-4290499d')).length).toBe(2)
+    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d'])
+  })
+
+  test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {
+    decideWorld(on)
+    await start($, surface)
+    const mountPhone = () => $.ui.mount({ plugin: 'autopilot', surface: 'mobile', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const first = await mountPhone()
+    await first.press({ key: 'decide' })
+    await first.unmount()
+    const phone = await mountPhone()
+    expect(((await phone.findAll({ type: 'Input' })) as Drawn[]).length).toBe(0)
+    const rows = rowsOf((await phone.drawn()) as Node)
+    expect(rows).toContain('  這題請在對話裡回答。')
+    await phone.press({ key: 'pick:d-4290499d:0' })
+    await phone.unmount()
+    const again = await mountPhone()
+    expect(rowsOf((await again.drawn()) as Node)).toContain('  [x] ★ OK  [ ] 完整顯示')
+    await again.unmount()
   })
 }

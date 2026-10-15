@@ -643,6 +643,9 @@ out.decReal = sec(hD, 2).includes('需要你決定') && !sec(hD, 2).includes('�
 // BL-0163: an orphaned question is labelled (heading and summary line), a live one is not; both stay listed
 const hO = r.renderJobHtml(r.buildJobModel({ ...base, decisions: [{ id: 'd-1', question: 'Q-1', options: null, opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 60, orphaned: true }, { id: 'd-2', question: 'Q-2', options: null, opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 60, orphaned: false }] }));
 out.decOrphan = (sec(hO, 3).match(/提問的 session 已結束/g) || []).length === 1 && sec(hO, 3).includes('Q-1') && sec(hO, 3).includes('Q-2') && sec(hO, 2).includes('提問的 session 已結束');
+// the hook-set origin reaches the job model (the live pane leaves a question its asker's dialog answers to that dialog); no origin stays null
+const hG = r.buildJobModel({ ...base, decisions: [{ id: 'd-1', question: 'Q-1', options: null, opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 60, origin: 'ask_user_question' }, { id: 'd-2', question: 'Q-2', options: null, opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 60 }] });
+out.decOrigin = hG.decisions.length === 2 && hG.decisions[0].origin === 'ask_user_question' && hG.decisions[1].origin === null;
 // project index
 const mk = (job, wired, nd) => ({ job, date: '2026-10-04', project: 'p', published_at: '2026-10-04T02:00:00.000Z', axes: { execution: { running: 0, exited: 0, unknown: 0 }, acceptance: 'unknown' }, needs_decision: nd, wired: { decision: wired } });
 const none = r.renderProjectIndex([mk('a', false, false), mk('b', false, false)]);
@@ -660,7 +663,7 @@ out.rootZero = !r.renderRootIndex([{ schema: 'review-project/1', project_key: 'a
 process.stdout.write(JSON.stringify(out));
 JS
 WI="$(node "$SB/wired.js" "$R")"
-for k in dec0_s2 dec0_s3 task0 prog0 planned0 compare0 decE_s2 decE_s3 taskE progE plannedE compareE taskWrongRoot decReal decOrphan idxNone idxNoneRow idxSome idxAll idxLegacy compareWatcher rootNone rootZero; do
+for k in dec0_s2 dec0_s3 task0 prog0 planned0 compare0 decE_s2 decE_s3 taskE progE plannedE compareE taskWrongRoot decReal decOrphan decOrigin idxNone idxNoneRow idxSome idxAll idxLegacy compareWatcher rootNone rootZero; do
   assert_contains "$WI" "\"$k\":true" "W1i wired-state: $k"
 done
 # publish writes project.json: no wired decision source -> decisions_needed null + decisions_source_wired false

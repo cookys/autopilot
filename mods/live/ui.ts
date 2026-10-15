@@ -45,14 +45,14 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
@@ -325,7 +325,8 @@ export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
   'review.decisions': 'review', 'review.ladder': 'review', 'review.undocumented': 'review',
-  'now.attention': 'now', 'now.pending': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
+  'decide.cards': 'decide',
+  'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
@@ -339,7 +340,8 @@ export type FactId = keyof typeof FACT_OWNER
 
 // the order of sections inside each tab (§2.1), as data; and the sections that start folded (要你處理 never does)
 export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
-  now: ['attention', 'questions', 'where', 'tabs', 'background', 'tasks', 'recent'],
+  now: ['attention', 'where', 'tabs', 'background', 'tasks', 'recent'],
+  decide: ['cards'],
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
@@ -352,7 +354,7 @@ export const SECTION_DEFAULTS: Record<string, { folded: boolean }> = { 'now.rece
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // the brand: a PaneLine / Frag exists only if a component made it. `mk` and `frag` are not exported as makers for tab code to call by hand; the WeakSets are private.
 
-export type LineKind = 'verdict' | 'header' | 'kv' | 'item' | 'bullet' | 'table' | 'meter' | 'empty' | 'more' | 'command' | 'detail' | 'chart' | 'blank'
+export type LineKind = 'verdict' | 'header' | 'kv' | 'item' | 'bullet' | 'table' | 'meter' | 'empty' | 'more' | 'command' | 'detail' | 'chart' | 'blank' | 'choice' | 'field'
 declare const FRAG: unique symbol
 export type Frag = { readonly [FRAG]: true; readonly text: string; readonly segs: readonly Seg[]; readonly fact?: FactId }
 const MADE = new WeakSet<object>()
@@ -372,7 +374,7 @@ export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== 
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
 export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule'
-type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind }
+type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
 export type Ctx = { t: Translate; cols: number; expanded?: ReadonlySet<string> }
@@ -412,6 +414,8 @@ export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId):
   return frag([sg(st.glyph + (s.id === 'need_you' || n === undefined ? '' : String(n)), { color: st.key, role: 'glyph' })], fact)
 }
 export const residueBadge = (n: number, fact: FactId): Frag => frag([sg(GLYPHS.structure.residue + n, { color: 'warning', role: 'glyph' })], fact)
+// the 待決 tab's badge: the need_you mark and how many questions wait (`▲3`); stateBadge draws no count for need_you, this one always does
+export const decideBadge = (n: number, fact: FactId): Frag => frag([sg(GLYPHS.state.need_you + n, { color: STATES.need_you.key, role: 'glyph' })], fact)
 // a header's spend figures: one fragment per fact, no goto, typed as a projection of the 用量 facts
 export function headerProjection(fact: FactId, s: string, label?: string): Frag {
   if (FACT_OWNER[fact] !== 'spend') throw new Error('headerProjection: ' + fact + ' is not a spend fact')
@@ -521,6 +525,50 @@ export const empty = (reason: string, fact: FactId): PaneLine => lineOf('empty',
 export function more(u: Ctx, n: number, noun: string, id: string, open = false, bare = false): PaneLine {
   const body = open ? u.t('ui.collapse') : u.t(bare ? 'ui.more_all' : 'ui.more', { n, noun })
   return lineOf('more', [sg('  '), dim(open ? GLYPHS.structure.open : GLYPHS.structure.folded, { role: 'glyph' }), dim(' ' + body, { role: 'prose' })], { toggle: id })
+}
+
+// ---- the 待決 tab's controls (pick-and-submit). A `choice` line is a row of pressable options: every seg that carries a `press` id is drawn as a Button by
+// pane.tsx, consecutive segs of one id are one Button. A `field` line is a label followed by a text field (pane.tsx draws the Input). Neither is a number or a state. ----
+export type Choice = { label: string; picked: boolean; recommended: boolean; press?: string }
+// the options of one question as rows of at most `cols - 1` cells: `[x] ★ label` (picked: success text) beside `[ ] label`, two cells between options, indent 2.
+// A press-less choice is drawn plain (a question already sent), its picked mark kept.
+export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
+  const room = u.cols - 1 - 2
+  const piece = (c: Choice): Seg[] => {
+    const press = c.press === undefined ? {} : { press: c.press }
+    const tone = c.picked ? { color: 'success' as ThemeKey } : c.press === undefined ? { dim: true } : {}
+    const head = c.picked ? '[x] ' : '[ ] '
+    const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { color: 'suggestion', role: 'glyph', ...press }), sg(' ', { role: 'prose', ...press })] : []
+    const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
+    return [sg(head, { role: 'prose', ...tone, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...tone, ...press })]
+  }
+  const rows: Seg[][] = []
+  let cur: Seg[] = []
+  let w = 0
+  for (const c of choices) {
+    const segs = piece(c)
+    const cw = segs.reduce((n, x) => n + displayWidth(x.text), 0)
+    if (cur.length > 0 && w + 2 + cw > room) { rows.push(cur); cur = []; w = 0 }
+    if (cur.length > 0) { cur.push(sg('  ')); w += 2 }
+    cur.push(...segs)
+    w += cw
+  }
+  if (cur.length > 0) rows.push(cur)
+  return rows.map(r => lineOf('choice', [sg('  '), ...r], { fact: o.fact }))
+}
+// one action row: `[ label ]`, success text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent)
+export function actionRow(u: Ctx, label: string, o: { press?: string; fact: FactId }): PaneLine {
+  const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
+  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'prose', color: 'success', press: o.press })], { fact: o.fact })
+}
+// the recommendation's reason, one subtle line under the option row: `  ★ <why>`
+export function recommendNote(u: Ctx, why: string, fact: FactId): PaneLine {
+  const lead = sg('  '), mark = sg(GLYPHS.structure.recommend, { color: 'suggestion', role: 'glyph', dim: true })
+  return lineOf('detail', [lead, mark, sg(' ', { dim: true }), dim(cutProse(why, Math.max(1, u.cols - 1 - 4)), { role: 'prose' })], { fact })
+}
+// a labelled text field: the label is drawn here, the Input after it by pane.tsx (a surface without Input never gets this line: the tab says to answer in the conversation)
+export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: string; value: string; fact: FactId }): PaneLine {
+  return lineOf('field', [sg('  '), dim(cutProse(label, Math.max(1, u.cols - 1 - 4)), { role: 'prose' }), sg(' ')], { fact: o.fact, field: { key: o.key, placeholder: o.placeholder, value: o.value } })
 }
 
 // wrap plain text at spaces, after `/`, and between wide characters; continuation lines hang at `hang` (already part of `first`'s prefix width)
@@ -880,6 +928,7 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
     legendRow(u, walk, t('legend.walk'), 'legend.structure'),
     legendRow(u, badges, t('legend.badges'), 'legend.structure'),
     legendRow(u, ex(dim(S.behind, { role: 'glyph' })), t('legend.behind'), 'legend.structure'),
+    legendRow(u, ex(sg(S.recommend, { color: 'suggestion', role: 'glyph' })), t('legend.recommend'), 'legend.structure'),
   ]
   return {
     states: part('states', t('legend.sec_states'), states),

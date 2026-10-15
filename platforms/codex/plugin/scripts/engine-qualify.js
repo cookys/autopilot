@@ -821,6 +821,10 @@ function normalizeBehavioralWitness(raw, label) {
   return deepFreeze(witness);
 }
 
+// Rule (owner decision A, BL-0161, 2026-10-15): the LAST line that parses as a JSON object is the
+// panel result. Anything before it (progress text, banners, broken or earlier JSON) is ignored,
+// because CLI runners routinely print progress before the answer. A stream with no parseable
+// JSON object, or whose last object breaks the verdict schema, throws and the case is graded fail.
 function parsePanelResult(stdout) {
   const lines = String(stdout).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
   let value = null;
@@ -5944,6 +5948,7 @@ function classifyQualificationOutcome(input) {
 if (require.main === module) main();
 
 module.exports = {
+  parsePanelResult,
   rawRowsText,
   buildEmittedRow,
   buildConsultCaseEnvelope,

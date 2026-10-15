@@ -135,7 +135,7 @@ Allowed `rule_id` values are `error-propagation`, `authorization-bypass`, `exit-
 `path-traversal`, `null-dereference`, `fail-open-fallback`, `untrusted-input-bypass`,
 `invalid-verdict-coercion`, and `cycle-detection-removal`. A pass is exactly
 `{"verdict":"pass","findings":[]}`. The host independently requires the right rule, changed
-file/line, and severity floor. Free-form prose is not an authority input. The structured witness
+file/line, and severity floor. Free-form prose is not an authority input. The host reads the LAST line that parses as a JSON object, so progress text or broken output before it is ignored (CLIs often print progress before the answer); output with no parseable JSON object is graded as a failed case. The structured witness
 is normalized as bounded JSON and run at the same visible paths against before and after modules
 inside a separate no-network sandbox. Generated paths and identifiers expose no outcome label, and
 the host accepts only the nonce-derived valid call domain for that case; it passes only when the

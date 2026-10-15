@@ -16,7 +16,7 @@
 #   0  clean (no new findings; pre-existing findings still allowed)
 #   1  has new findings — gate fails. "New" = uncommitted (staged/working-tree)
 #      OR, in --range mode, committed WITHIN the range (introduced after the base).
-#   2  usage / internal error
+#   2  usage / internal error (incl. --files naming no existing regular file)
 #
 # Output: JSON to stdout. Use `jq` to consume.
 
@@ -44,6 +44,11 @@ while [[ $# -gt 0 ]]; do
                   fi
                   for _p in "${_split[@]}"; do
                     _p="${_p%$'\r'}"
+                    # Trim blanks around the piece unless the untrimmed name is a real file.
+                    if [[ ! -e "$_p" ]]; then
+                      _p="${_p#"${_p%%[![:space:]]*}"}"
+                      _p="${_p%"${_p##*[![:space:]]}"}"
+                    fi
                     [[ -n "$_p" ]] || continue
                     SPLIT_FROM["$_p"]="$1"
                     FILES+=("$_p")
@@ -91,6 +96,7 @@ is_scannable() {
   case "$f" in
     *.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.tar*|*.gz|*.so|*.dylib|*.dll|*.exe|*.bin|*.wasm) return 1 ;;
     *.lock|*lockb|package-lock.json|yarn.lock|Cargo.lock|go.sum|Pipfile.lock|poetry.lock) return 1 ;;
+    */references/completeness-gate.md) return 1 ;;  # documents the markers literally
     */node_modules/*|*/dist/*|*/build/*|*/.git/*|*/vendor/*|*/target/*) return 1 ;;
   esac
   # heuristic: if file(1) says binary, skip
@@ -104,11 +110,12 @@ is_scannable() {
 
 # Pattern definitions (POSIX ERE)
 # Three to five X in a row is a marker; six or more is a mktemp template, not a marker.
-PAT_MARKER='(TODO|FIXME|HACK|TEMP)\b|(^|[^X])X{3,5}\b'
+# Built from pieces so this definition line never matches its own scan.
+PAT_MARKER='(TO''DO|FIX''ME|HA''CK|TE''MP)\b|(^|[^X])X{3,5}\b'
 PAT_EMPTY_IMPL='^[[:space:]]*return[[:space:]]+(\{\}|0)[[:space:]]*;[[:space:]]*$'
 PAT_DISABLED_TEST='(\bDISABLED_[A-Za-z0-9_]+|GTEST_SKIP\(\)|^[[:space:]]*//[[:space:]]*TEST[[:space:]]*\()'
 PAT_PLACEHOLDER_ASSERT='EXPECT_TRUE\([[:space:]]*true[[:space:]]*\)|assert\([[:space:]]*True[[:space:]]*\)'
-PAT_PROTO_TODO='message[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\{[[:space:]]*\}'
+PAT_PROTO_EMPTY='message[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\{[[:space:]]*\}'
 
 # classify_new(file, line) → "true" | "false"
 # A finding is "new" if HEAD's git blame for that line doesn't exist OR points
@@ -175,7 +182,7 @@ scan_file() {
   # proto_empty_message (only .proto files)
   case "$file" in
     *.proto)
-      grep -nE "$PAT_PROTO_TODO" -- "$file" 2>/dev/null | while IFS=: read -r ln rest; do
+      grep -nE "$PAT_PROTO_EMPTY" -- "$file" 2>/dev/null | while IFS=: read -r ln rest; do
         emit_finding "$file" "$ln" "proto_empty" "${rest#"${rest%%[![:space:]]*}"}"
       done
       ;;
@@ -187,6 +194,7 @@ TMPF="$(mktemp)"
 trap 'rm -f "$TMPF"' EXIT
 
 scanned=0
+existing=0
 for f in "${FILES[@]:-}"; do
   [[ -n "$f" ]] || continue
   if [[ ! -e "$f" || ( ! -d "$f" && ! -f "$f" ) ]]; then
@@ -196,10 +204,18 @@ for f in "${FILES[@]:-}"; do
       echo "completeness-scan: skipping '$f' (not a regular file)" >&2
     fi
   fi
+  [[ -f "$f" ]] && existing=$((existing + 1))
   if ! is_scannable "$f"; then continue; fi
   scanned=$((scanned + 1))
   scan_file "$f" >> "$TMPF" || true
 done
+
+# An explicit --files list with no existing regular file is a usage error (a typo must
+# not pass the gate as clean with zero files scanned).
+if [[ "$MODE" == "files" && "$existing" -eq 0 ]]; then
+  echo "completeness-scan: --files named no existing regular file; nothing to scan" >&2
+  exit 2
+fi
 
 # Build JSON
 total="$(wc -l < "$TMPF" | tr -d ' ')"

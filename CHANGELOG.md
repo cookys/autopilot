@@ -86,6 +86,8 @@
 
 ### 修正
 
+- **分包審查接受在較晚版本才第一次審的包**（BL-0118）：基準版本改用 commit 祖先關係選出（所有包都從它延伸出去的那個），不看包的編號順序。某一包第一次是在較晚的版本審的，只要它自己的檔案從基準版本到那個版本之間都沒變，就接受；分支岔開，或它自己的檔案有變，仍然拒絕。
+- **資格考審查題「取最後一個 JSON」的規則寫進文件**（BL-0161）：維持原規則，前面輸出壞掉但最後是合法結果時照最後結果計分；程式註解、engine-onboarding 說明與測試都已固定這條規則。
 - **凍結證據標記有文件、被刪會報出來**（BL-0191）：`references/backlog-entry.md` 說明 `.frozen-evidence` 標記的用途；搬移歸檔版面時跳過凍結證據會回報 `plan_reference_frozen`；新增只回報不阻擋的 `--frozen-base <ref>`，標記檔相對於該 ref 被刪除時回報 `frozen_marker_deleted`。ref 開頭是 `-` 會直接當用法錯誤，不能拿來夾帶 git 參數。
 - **背景派工檢查對字串與清單寫法一致**（BL-0190）：python `Popen`、node `spawn` 不論用字串或清單啟動派工指令，都改成看程式有沒有等它結束（wait／communicate／with 區塊）或明確放手（unref）；字串寫法也會被當成完整腳本解析，補上 `shell:true` 加 `unref()` 漏擋的情況。
 - **派工監看程式收尾更穩**（BL-0099）：沒有 setsid 時，計時用的程序也帶得到可辨識的名字，取消時收得掉；`systemctl --user kill` 偶發失敗時會重試一次。測試專用的三個 `HETERO_TEST_*` 開關，現在要另外設 `AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1` 才會生效，正式執行時設了也沒作用。

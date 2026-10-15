@@ -1254,18 +1254,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
 
-### Packet set: a packet re-collected at a later head can never match the set's G1 head
-- **Id**: BL-0118
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 分包（packet）審查時，如果某一包因分支前進而在較晚的版本重新收集，檢查會要求所有包都在同一版本，導致永遠對不上。目前只能靠暫時分支繞過。 (draft)
-- **Impact**: 遇到這種情況就無法正常通過檢查，只能用麻煩的手動繞法。 (draft)
-- **Trigger**: next packet set where one packet's G1 must be re-collected after the branch moved
-- **Effort**: S
-- **Source**: tmp-residue code review, 2026-10-12
-- **Pointer**: none
-- **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
 
 
 ### dispatch-discuss.js: production prompt lacks the own-axis rule the exam now discloses
@@ -1401,18 +1389,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
 - **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
-### Qualification reviewer last-line rule
-- **Id**: BL-0161
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 程式審查題的回覆如果前面輸出壞掉、最後一行是合法的「通過」，目前算通過。要決定維持這條規則並寫進文件，還是改成格式違規；改成違規可能讓會印進度文字的工具被誤判。
-- **Impact**: 低。符合解析器既定規則，不算誤判通過；只差一個決定和文件。
-- **Trigger**: owner 決定 A（維持並寫文件）或 B（前段雜訊算格式違規）
-- **Effort**: S
-- **Source**: review of 763f77de, 2026-10-14 (UNVERIFIED live behavior)
-- **Pointer**: docs/backlog/qualification-provider-cli-error-text-and-last-line-rule.md
-- **Context**: parsePanelResult takes the last parseable JSON object. Part 1 (exit-0 quota/auth text) shipped as cliQuotaAuthError, merge of lane/q161.
 
 ### Grok and Kimi seats still owe the 2026-10-14 exams
 - **Id**: BL-0167

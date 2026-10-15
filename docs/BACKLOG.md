@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0189 -->
+<!-- next-id: BL-0190 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1254,31 +1254,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
-### Eval campaigns should fail fast on auth and quota errors
-- **Id**: BL-0112
-- **Status**: open
-- **Since**: 2026-10-08
-- **Origin**: self
-- **Problem**: 跑評測（eval）campaign 時，遇到登入過期或額度用完，後面所有測試格都在 2 秒內失敗，浪費整輪時間，卻沒有及時中止。 (draft)
-- **Impact**: 評測整輪白跑，要重跑才能得到資料；下次評測前宜先處理。 (draft)
-- **Trigger**: before the next eval campaign
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: OAuth expiry and weekly-limit each turned the rest of a campaign into 2-second infra_fail cells.
 
-### Eval campaigns should pin the runner version
-- **Id**: BL-0113
-- **Status**: open
-- **Since**: 2026-10-08
-- **Origin**: self
-- **Problem**: 跑評測 campaign 期間 Claude Code 自動更新了版本，導致整輪評測的量測失去可比性，只好作廢，後來靠手動固定版本才解決。 (draft)
-- **Impact**: 評測結果可能因版本變動而作廢；下次評測前要把固定版本變成正式做法。 (draft)
-- **Trigger**: before the next eval campaign
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: Claude Code auto-updated mid-run (INSTRUMENT-INVALID); pinned by hand via PATH pin plus DISABLE_AUTOUPDATER=1.
 
 ### Pre-existing red suites: mods spike artifacts, 4 failures in claude plugin test
 - **Id**: BL-0114
@@ -1608,18 +1584,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
 
-### cost-fuse dispatch exemption misses quoted rail paths
-- **Id**: BL-0183
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 費用保險絲只認不加引號的派工腳本路徑。全倉最常見的寫法是把路徑放在引號裡，這種呼叫一直沒被當成派工、照樣計入警告；這次收緊後，路徑中間夾引號的另一種寫法也從豁免變成不豁免。
-- **Impact**: 低。只影響警告模式，不會擋指令；派工較多的 session 會多看到不該出現的費用警告。
-- **Trigger**: next touch of the cost-fuse dispatch exemption, or an owner report of a spurious cost warning on a dispatch call
-- **Effort**: S
-- **Source**: costfuse lane review 2026-10-15 (merged as 86fbf09e)
-- **Pointer**: none
-- **Context**: quoted REPO_ROOT form (about 134 call sites) never exempt; quoted CLAUDE_PLUGIN_ROOT prefix form exempt before, not after; no test covers quoted forms.
 
 ### session-id scrub case 1b still needs setsid
 - **Id**: BL-0184
@@ -1646,17 +1610,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: uncovered: python Popen list form, node spawn list form, GNU parallel, subshell-body functions, backgrounded brace group. wait with two pid variables is denied by old and new rules.
 
-### status server reads config.json from autopilotHome, not AUTOPILOT_CONFIG_FILE
-- **Id**: BL-0186
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 狀態頁的兩個讀取點是從傳入的資料夾去找設定檔，不看指定設定檔路徑的那個環境變數。其他讀設定的地方都已統一，只剩這兩處走另一套規則。
-- **Impact**: 低。正常使用時兩者指向同一份設定；只有刻意把設定檔放別處（多半是測試）時，狀態頁會讀到另一份。
-- **Trigger**: next touch of the status server config reads, or a status page showing settings that differ from the pinned config
-- **Effort**: S
-- **Source**: cfg2 lane report 2026-10-15 (merged as 673a2c72): src/status review-server and sources-manifest read config.json under the autopilotHome argument
-- **Pointer**: none
 
 ### qualification defaults still compare kimi engine spellings exactly
 - **Id**: BL-0187
@@ -1671,15 +1624,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.
 
-### onboard quality-gate template tells consumers to scan a directory with completeness-scan
-- **Id**: BL-0188
+
+### cost-fuse quoted dispatch exemption counts quotes, not single/double pairs
+- **Id**: BL-0189
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 新專案導入時產生的品質檢查設定，教使用者對整個資料夾跑完整性掃描；這樣從來掃不到檔案，以前假裝通過，現在直接報錯。規則說明也沒提這種情況會報錯。
-- **Impact**: 中低。照模板設定的新專案，每次品質檢查都會在這一步報錯，要自己查原因改掉；以前則是什麼都沒掃卻顯示通過。
-- **Trigger**: next touch of scaffold-config.js or the completeness-gate reference, or a consumer reporting exit 2 from completeness-scan
+- **Problem**: 費用保險絲在提醒模式下會放行派工指令，現在也認加了引號的寫法，但只檢查引號總數是偶數，沒檢查單、雙引號各自成對。目前試不出能繞過的寫法，另外幾種引號內夾特殊符號的形狀也還沒有測試釘住。
+- **Impact**: 低。審查時試過的形狀都擋得住，只是防線靠其他過濾規則，沒有直接的測試。
+- **Trigger**: next touch of hooks/cost-fuse.js isDispatchBash, or a bypass shape reported
 - **Effort**: S
-- **Source**: cscan review 2026-10-15 (BL-0159 merge)
+- **Source**: fuse2 review 2026-10-15 (BL-0183 merge)
 - **Pointer**: none
-- **Context**: scaffold-- **Context**: scaffold-config.js template says "completeness-scan.sh over src/" (directories); use no-arg or --all. completeness-gate.md:34 + mirror still say directories give no warning (separate guidance commit).
+- **Context**: cost-fuse.js:244-247 checks an even total; require even counts per quote kind. Add 11f negatives: ; | $( backtick newline inside quotes, mixed "$X'/..., space inside quotes.

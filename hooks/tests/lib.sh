@@ -185,6 +185,15 @@ export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
 # per-suite directory; suites that exercise the gate pass their own directory per command.
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 
+# BL-0180: the operator config (topology.exclude_seats, run_approval.mode, ...) is read from
+# $AUTOPILOT_CONFIG_FILE (default ~/.autopilot/config.json) by resolve-dispatch-topology.js and
+# run-approval.js, which ~100 suites reach through dispatch-hetero / dispatch-author /
+# resolve-review-loop / dispatch-contract. Pin it to an empty per-suite `{}` so a host config can
+# neither redden nor greenen a suite (BL-0179). run.sh pins the same for L1 and the non-lib.sh
+# suites; a suite that exercises the config overwrites this file or re-exports the variable.
+export AUTOPILOT_CONFIG_FILE="$TEST_TMP/.operator-config.json"
+printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
+
 write_mission_governance() {
   local target="$1"
   local mode="$2"

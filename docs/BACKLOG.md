@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0183 -->
+<!-- next-id: BL-0187 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1217,21 +1217,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
 - **Context**: Rest shipped 2026-10-14 (BL-0101 merge). Row E closed (keep, see pointer). Left: intake file-cap refusal has no test (PREPARED fixture, 4 files). Declined: sweep env knob, symlink escape, rollover guard.
 
-### dispatch-plan-review: terminal-ticket reuse is a silent 0-call run
-- **Id**: BL-0102
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: peer
-- **Reporter**: cuda chatgpt-tunnel
-- **Report**: 01M406CPGN828NHBQJJMAD01M9
-- **Reply**: 2026-10-03 session 76c98aac:1254
-- **Problem**: 有人對已經結案的審查票證再次派工時，系統不報錯，直接回傳舊結論，實際上一個審查席位都沒呼叫，使用者還以為重新審過了。 (draft)
-- **Impact**: 使用者會誤以為審查重跑過；需改成明確提示票證已結案。目前部分已處理。 (draft)
-- **Trigger**: next touch of scripts/dispatch-plan-review.js
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M406CPGN828NHBQJJMAD01M9
-- **Pointer**: docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md
-- **Context**: a reused ticket whose session is terminal returns the old verdict with 0 seat calls; emit a named ticket_session_already_terminal message.
 
 ### v2.36.114 review follow-ups
 - **Id**: BL-0103
@@ -1246,18 +1231,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-36-114-review-follow-ups.md
 - **Context**: Left: run the CLI and assert ADVISORY on stderr plus parseable stdout; fix M1/M4 wording in the test header; move the F asserts off the `# D.` label; no trailing colon when an advisory has no message.
 
-### cost-fuse dispatch exemption prefix and session-id collisions
-- **Id**: BL-0105
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: 成本熔斷（cost-fuse）機制有兩個小漏洞：被豁免的派工指令前綴判斷太寬鬆，帶環境變數或任意路徑前綴也會被放行；另外不同的 session 識別碼經轉換後可能撞號。 (draft)
-- **Impact**: 目前只是警告模式、僅供參考，實際風險很低。 (draft)
-- **Trigger**: next touch of hooks/cost-fuse.js
-- **Effort**: S
-- **Source**: w113 hand I review
-- **Pointer**: docs/backlog/cost-fuse-dispatch-exemption-prefix-and-session-id-collisions.md
-- **Context**: exemption prefix admits an env assignment or any path prefix of the rail (warn-mode, advisory); safe() may collide distinct session ids.
 
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
@@ -1479,18 +1452,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
 
-### residue sweep records integration_ref HEAD after widening to the remote upstream
-- **Id**: BL-0127
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 收尾清理判斷分支是否已整合時，如果改用遠端追蹤分支比對，報告上寫的比對對象仍是本地 HEAD，和實際比對的 commit 對不上。
-- **Impact**: 只影響報告上的文字，清理判斷本身正確；看報告的人可能被誤導。
-- **Trigger**: next touch of scripts/repo-residue-sweep.js
-- **Effort**: XS
-- **Source**: lane N review, 2026-10-13
-- **Pointer**: none
-- **Context**: integration_ref stays HEAD while integration_sha is the upstream's; :1116-1117 resolves @{upstream} twice.
 
 ### mission-terminal-rollover tests read the live registry and sealed graph
 - **Id**: BL-0129
@@ -1518,18 +1479,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Pre-opt-in commits parse legacy-style, so the (Id, Report) pair never appears before the opt-in commit.
 
-### backlog legacy-parity test skips --range for heading and checklist
-- **Id**: BL-0132
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 新舊版 backlog 檢查的對照測試裡，heading 和 checklist 兩種格式的範例列沒有編號，推送範圍比對會略過它們，所以這兩種格式的這一項其實沒測到。另外文件沒寫清楚新欄位是逐欄啟用。
-- **Impact**: 這兩種格式若在推送範圍比對上和舊版不同，測試抓不到；手寫設定的專案可能看不懂為什麼某欄沒被檢查。
-- **Trigger**: next touch of check-backlog-entries.js
-- **Effort**: XS
-- **Source**: lane F review round 6, 2026-10-13
-- **Pointer**: none
-- **Context**: Add Ids to the collision rows (parity test :60,:73); note in backlog-entry.md that opt-in is per field (Since alone leaves Origin extra_content).
 
 ### sealed-docs list covers only part of the sha-bound files
 - **Id**: BL-0133
@@ -1557,18 +1506,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Pre-date 2f3a2477; list via a sha256 scan of docs/mission-*-sources.json. Restore bytes from the sealing commit, never re-seal.
 
-### session-id scrub test needs a real setsid on the host
-- **Id**: BL-0135
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 檢查派工不外洩 session 編號的測試裡，有一個案例要借用主機上真的 setsid 程式；沒有這個程式的主機會誤判成失敗。
-- **Impact**: 只在沒有 setsid 的主機上出現假紅；一般 Linux 都有，影響很小。
-- **Trigger**: next touch of dispatch-runner-session-id-scrub test, or a host without setsid
-- **Effort**: XS
-- **Source**: lane P2 review round 2, 2026-10-13
-- **Pointer**: none
-- **Context**: Case 1c stub calls REAL_SETSID=$(command -v setsid); skip 1c when it is empty.
 
 ### resolve-review-loop alias table and fresh-context seat follow-ups
 - **Id**: BL-0138
@@ -1583,31 +1520,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: resolve-review-loop.sh:1323 has its own alias table; call normalize_agy_alias. Template review-loop-config.md:191 should say the seat must not equal a qc_panel seat. Native fallback sonnet may equal a qc seat.
 
-### bash-launch guard misses several background launch shapes
-- **Id**: BL-0139
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 擋「背景啟動派工 rail 卻沒有喚醒機制」的防護，還漏掉幾種寫法：case 區塊整段丟背景、xargs 平行執行、ionice 包一層、coproc、先定義函式再丟背景。
-- **Impact**: 用這些寫法背景啟動 rail，session 不會被喚醒，結果落地也沒人收；屬於少見寫法，日常影響小。
-- **Trigger**: a missed wakeup traced to one of these shapes, or next touch of scripts/lib/bash-launch-rules.js
-- **Effort**: S
-- **Source**: lane Z review round 4, 2026-10-13
-- **Pointer**: none
-- **Context**: Uncovered: case...esac &, xargs -P, ionice/flock/time wrappers, coproc, f(){...}; f &, triple $(), python os.system. False allow: any waiter in the command. False deny: bash -c 'rail & wait', wait >| f, wait $pid. Each needs a control.
 
-### context-budget and depth0-gate tests leave temp dirs and read the real host config
-- **Id**: BL-0140
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 幾個測試跑完不清自己的暫存目錄，記憶體暫存區已累積一萬三千多個；另外兩個測試會讀這台機器真實的設定檔。
-- **Impact**: 暫存目錄越積越多佔 inode；讀真實設定讓測試結果隨主機設定變動，換台機器可能紅。目前只讀不寫。
-- **Trigger**: next touch of these test files, or a test that turns red only on one host
-- **Effort**: S
-- **Source**: lane L review round 2 and lane Z review round 7, 2026-10-13
-- **Pointer**: none
-- **Context**: context-budget node tests (/dev/shm), hooks/depth0-delegate-gate.test.js (d0gate-home-*), context-budget-window-memory.test.sh, live-dir-xdg-inference.test.sh. Fix: cleanup in finally plus HOME/XDG isolation.
 
 ### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
 - **Id**: BL-0144
@@ -1647,31 +1560,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.
 
-### Codex author failures omit the transport status field
-- **Id**: BL-0150
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 派 codex 寫程式失敗時，輸出結果少了一個欄位，說不出是連線那一層壞掉還是模型本身失敗，其他失敗路徑都有這個欄位。
-- **Impact**: 讀結果的程式不能假設欄位一定存在，排查 codex 失敗時要多翻原始紀錄。
-- **Trigger**: 下次改 codex 寫程式的派工路徑，或有使用端開始讀這個欄位時
-- **Effort**: S
-- **Source**: C2 review, 2026-10-14
-- **Pointer**: none
-- **Context**: scripts/dispatch-author.sh runner_failed for codex (around :1368, :1529-1536 at review time) carries no transport_status; consumers must not assume it.
 
-### Hetero dispatch caller-session filter branch has no test
-- **Id**: BL-0152
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 異質派工裡「只看自己這個對話開出的工作」那段判斷沒有任何測試走到；把它改壞，測試照樣全綠。
-- **Impact**: 這段判斷之後若被改壞，可能把別的對話的工作當成自己的，而測試不會發現。
-- **Trigger**: 下次改異質派工的 marker 或對話過濾邏輯時
-- **Effort**: S
-- **Source**: review of the session-id scrub work, 2026-10-14
-- **Pointer**: none
-- **Context**: scripts/dispatch-hetero.sh: tests pass callerSession undefined, so the if (callerSession) branch (~:1487) never runs; gap since 803b9b89. Add a real-callerSession case plus a mutation control.
 
 ### pkill/pgrep -f self-match guard misses some forms and over-blocks others
 - **Id**: BL-0153
@@ -1803,14 +1692,52 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
 
-### engine-qualify-verdict-stability KR7 red only inside the full suite
-- **Id**: BL-0182
+### cost-fuse dispatch exemption misses quoted rail paths
+- **Id**: BL-0183
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 資格考穩定度那支測試單獨跑全綠，但完整套件裡連兩次都紅：它檢查某個舊版本是否已在遠端主線上，在全套裡判斷成「不在」，實際上一直都在。應該是前面某支測試改了它看到的版本庫狀態。
-- **Impact**: 中。完整套件每次都多一支假紅，真的回歸混在裡面時容易被當成老問題放過。
-- **Trigger**: next full-suite run, or next touch of the KR7 parity check
+- **Problem**: 費用保險絲只認不加引號的派工腳本路徑。全倉最常見的寫法是把路徑放在引號裡，這種呼叫一直沒被當成派工、照樣計入警告；這次收緊後，路徑中間夾引號的另一種寫法也從豁免變成不豁免。
+- **Impact**: 低。只影響警告模式，不會擋指令；派工較多的 session 會多看到不該出現的費用警告。
+- **Trigger**: next touch of the cost-fuse dispatch exemption, or an owner report of a spurious cost warning on a dispatch call
 - **Effort**: S
-- **Source**: full-suite runs 2026-10-15 (bl0180 tree, dt3d+bka tree); solo rerun green; verdict-stability test KR7 block, base 6fdcf5ac
+- **Source**: costfuse lane review 2026-10-15 (merged as 86fbf09e)
+- **Pointer**: none
+- **Context**: quoted REPO_ROOT form (about 134 call sites) never exempt; quoted CLAUDE_PLUGIN_ROOT prefix form exempt before, not after; no test covers quoted forms.
+
+### session-id scrub case 1b still needs setsid
+- **Id**: BL-0184
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 派工身分清除那支測試在沒有 setsid 的主機上，已把兩個需要 setsid 的案例改成略過，但還有一個案例同樣需要 setsid 卻沒有略過，在那種主機上仍會假紅。
+- **Impact**: 低。只影響沒有 setsid 的主機，這台和 CI 都有。
+- **Trigger**: first run on a host without setsid, or next touch of the session-id scrub test
+- **Effort**: XS
+- **Source**: xs3 lane review 2026-10-15 (merged as bfbd8026): hetero_case 1b exercises the setsid --wait branch and is not skipped
+- **Pointer**: none
+
+### bash-launch guard still misses some background launch shapes
+- **Id**: BL-0185
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 背景派工守衛這次補了很多寫法，但還有幾種把派工丟到背景卻不等它的寫法沒認出來，例如用程式語言的清單參數啟動、用平行執行工具、或用小括號定義的函式；另外一次等多個工作的寫法仍會被誤擋。
+- **Impact**: 低。漏掉的寫法在實際文件與技能裡都沒出現；誤擋的寫法新舊規則都一樣，不是這次的退步。
+- **Trigger**: a real dispatch slipping past the guard, or a legitimate multi-pid wait being denied
+- **Effort**: S
+- **Source**: launchguard lane and review 2026-10-15 (merged as c028552b)
+- **Pointer**: none
+- **Context**: uncovered: python Popen list form, node spawn list form, GNU parallel, subshell-body functions, backgrounded brace group. wait with two pid variables is denied by old and new rules.
+
+### status server reads config.json from autopilotHome, not AUTOPILOT_CONFIG_FILE
+- **Id**: BL-0186
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 狀態頁的兩個讀取點是從傳入的資料夾去找設定檔，不看指定設定檔路徑的那個環境變數。其他讀設定的地方都已統一，只剩這兩處走另一套規則。
+- **Impact**: 低。正常使用時兩者指向同一份設定；只有刻意把設定檔放別處（多半是測試）時，狀態頁會讀到另一份。
+- **Trigger**: next touch of the status server config reads, or a status page showing settings that differ from the pinned config
+- **Effort**: S
+- **Source**: cfg2 lane report 2026-10-15 (merged as 673a2c72): src/status review-server and sources-manifest read config.json under the autopilotHome argument
 - **Pointer**: none

@@ -86,6 +86,12 @@
 
 ### 修正
 
+- **背景派工守衛認得更多寫法，也不再誤擋同一層 shell 裡的等待**（BL-0139）：用 `case`、`xargs -P`、`ionice`／`flock`／`taskset`／`chrt` 包一層、`coproc`、函式包裝、五層以內的 `$()` 巢狀，以及 python／perl 交給 shell 的字串把派工丟到背景，現在都會擋。等待指令必須在啟動之後、在前景執行才算數，寫在啟動之前或自己也被丟背景的不再放行。`bash -c 'rail & wait'`、`(rail & wait)`、`wait >| f`、`pid=$!; wait $pid` 不再誤擋。Codex 鏡像同步。
+- **對已結案的審查票證重新派工時，錯誤訊息直接說明原因**（BL-0102）：`dispatch-plan-review.js` 的拒絕訊息改以 `ticket_session_already_terminal` 開頭，附上計畫 id、票證、先前的結論，並註明沒有呼叫任何審查席位、要重審得換新的計畫 id 與票證。結束碼不變。Codex 鏡像同步。
+- **剩下兩個讀設定的腳本也改走共用的路徑函式**（BL-0181 後續）：`run-approval.js` 與 `resolve-dispatch-topology.js` 改用 `scripts/lib/config-path.js`，沒設 `AUTOPILOT_CONFIG_FILE` 時行為不變。幾支測試跑完會清掉自己的暫存目錄、不再讀主機真實設定（BL-0140）。Codex 鏡像同步。
+- **codex 傳輸檢查失敗時也帶 `transport_status`**（BL-0150）：`dispatch-author.sh` 四條 codex 專屬的 `runner_failed` 結果（產物完整性、chrome frame、witness、session id）補上 `"transport_status": "exit_failure"`，和其他失敗結果一致。Codex 鏡像同步。
+- **費用保險絲的派工豁免只認真正的派工指令，session 花費不再互相混帳**（BL-0105）：豁免改成指令字本身必須是 `scripts/` 底下的派工腳本，`FOO=scripts/dispatch-x.sh …` 或 `myscripts/dispatch-x.sh` 不再被豁免。需要轉換字元或截斷的 session id 會加上雜湊尾碼，不同 id 不再共用花費與警告狀態；乾淨的 id 維持原本的 key。找不到 session id 時警告寫「unknown」，不再印 `$0.00`。Codex 鏡像同步。
+- **殘留清理回報實際比較的上游分支**（BL-0127）：`repo-residue-sweep.js` 在基準擴大到遠端上游時，`integration_ref` 記上游的簡稱（例如 `origin/develop`），不再記 `HEAD`。`references/backlog-entry.md` 補充 `required_fields` 是逐欄選用（BL-0132）。Codex 鏡像同步。
 - **hook 與共用程式讀設定時會看 `AUTOPILOT_CONFIG_FILE`**（BL-0181）：新增 `scripts/lib/config-path.js`，17 處原本直接讀 `~/.autopilot/config.json` 的 hook、腳本與 `dispatch-foreman.sh` 改走它；沒設這個變數時行為不變。測試共用的 `hooks/tests/lib.sh` 改把設定釘在假家目錄裡，`config-path-honored.test.sh` 確認 hook 讀的是指定的設定而不是家目錄那份。
 - **子 session 只在 rail 發的身分相符時才記上層**（BL-0176）：在派出去的子 session 裡開的 tmux 等長駐 shell，之後在裡面開的新 session 不會再把舊派工記成自己的上層。rail 為每個 claude 子程序產生一個子身分並交給它，只有 session id 與它相符才記上層；其他 runner、工頭與能力探測一律移除繼承來的子身分。
 - **一次歸檔多份計畫時，每份各記自己的出貨點**（BL-0171）：`check-plan-graduation.js --archive --shipped-in` 改收 `<stem>=<sha>` 配對（可重複或逗號分隔），只給一個不帶 stem 的值時仍套用到每一份。有計畫沒配到、stem 不存在或不唯一、同一個 stem 給兩次，都以結束碼 2 拒絕，一份都不搬。歸檔改寫引用時也會處理 `docs/` 底下的相對連結 `plans/<stem>.md`；`docs/` 以外的檔案和 `docs/mission-*.json` 不改（後者的 `plan_path`／`rubric_path` 由 next-touch-validation 逐字比對）。Codex 鏡像同步。

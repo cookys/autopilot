@@ -24,8 +24,20 @@ const LIB = path.join(__dirname, 'context-budget-lib.js');
 const HOOK = path.join(__dirname, 'context-budget.js');
 const { readContextTokens, budgetDecision } = require(LIB);
 
+// Every temp dir this file makes is registered here and removed when the test process exits
+// (also after failed assertions); BL-0140.
+const madeDirs = [];
+process.on('exit', () => {
+  for (const d of madeDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
+function mkTmp(base, prefix) {
+  const d = fs.mkdtempSync(path.join(base, prefix));
+  madeDirs.push(d);
+  return d;
+}
+
 function tmpFile(lines) {
-  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-')), 't.jsonl');
+  const p = path.join(mkTmp(os.tmpdir(), 'ctxbud-'), 't.jsonl');
   fs.writeFileSync(p, lines.join('\n') + '\n');
   return p;
 }
@@ -143,7 +155,7 @@ function assertUnknownWindowAdvisory(r, kTokens, why) {
 }
 
 function freshEnv(extra = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-'));
+  const dir = mkTmp(os.tmpdir(), 'ctxbud-state-');
   return {
     // HERMETICITY (v2.32.56): both the opt-in check (_shared/opt-in.js) and
     // loadConfig() resolve ~/.autopilot/config.json via os.homedir(). Without
@@ -351,7 +363,7 @@ test('wrapper: 160k with no live file/remembered window ⇒ unknown-window advis
 // lives in scripts/lib/live-state-dir.test.js; here we exercise the real resolver).
 function shmTmp(prefix) {
   const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
-  return fs.mkdtempSync(path.join(base, prefix));
+  return mkTmp(base, prefix);
 }
 
 function writeLiveMain(base, sid, obj) {
@@ -452,7 +464,7 @@ test('dropping below a tier threshold resets it: T1 reminds again on the next cl
 });
 
 test('step from config file applies; env AUTOPILOT_CONTEXT_BUDGET_STEP overrides the config file', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-home-'));
+  const home = mkTmp(os.tmpdir(), 'ctxbud-home-');
   fs.mkdirSync(path.join(home, '.autopilot'));
   fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), JSON.stringify({ context_budget: { step: 10_000 } }));
   const viaCfg = stepSession({ HOME: home, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json') });
@@ -673,7 +685,7 @@ test('state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGE
   const liveDir = shmTmp('ctxbud-live-statedir-');
   const sid = 'live-sid-statedir';
   const p = tmpFile([usageLine(1_000, 1_000, 100, 10)]);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-nooverride-'));
+  const dir = mkTmp(os.tmpdir(), 'ctxbud-state-nooverride-');
   const env = {
     HOME: dir,
     AUTOPILOT_CONFIG_FILE: path.join(dir, '.autopilot', 'config.json'),

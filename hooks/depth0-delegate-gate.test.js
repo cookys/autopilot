@@ -13,11 +13,24 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// Every temp dir this file makes is registered here and removed when the test process exits
+// (also after failed assertions); BL-0140.
+const madeDirs = [];
+process.on('exit', () => {
+  for (const d of madeDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
+function mkTmp(base, prefix) {
+  const d = fs.mkdtempSync(path.join(base, prefix));
+  madeDirs.push(d);
+  return d;
+}
+
+
 const HOOK = path.join(__dirname, 'depth0-delegate-gate.js');
 
 function shmTmp(prefix) {
   const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
-  return fs.mkdtempSync(path.join(base, prefix));
+  return mkTmp(base, prefix);
 }
 
 function runHook(stdinObj, env) {
@@ -36,11 +49,12 @@ process.on('exit', () => {
 });
 
 function freshEnv(extra = {}) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-home-'));
+  const home = mkTmp(os.tmpdir(), 'd0gate-home-');
   const liveDir = shmTmp('d0gate-live-');
   freshDirs.push(home, liveDir);
   return {
     HOME: home,
+    AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json'),
     AUTOPILOT_LIVE_DIR: liveDir,
     ...extra,
   };
@@ -291,7 +305,7 @@ test('state file lands under the resolved live-dir base at depth0-gate/<sid>.jso
 
 test('AUTOPILOT_DEPTH0_GATE_DIR overrides the state directory', () => {
   const env = freshEnv();
-  const override = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-override-'));
+  const override = mkTmp(os.tmpdir(), 'd0gate-override-');
   runHook(payload('Read'), { ...env, AUTOPILOT_DEPTH0_GATE_DIR: override });
   assert.ok(fs.existsSync(path.join(override, 'd0-test-session.json')));
   assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'depth0-gate', 'd0-test-session.json')));
@@ -302,7 +316,7 @@ test('24 concurrent read-class calls are all counted (load→modify→save is lo
   // (24 concurrent ⇒ 22–23 counted, review round 1). Same `withLock` as foreman-guard.js.
   const { spawn } = require('child_process');
   const env = freshEnv();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-parallel-'));
+  const stateDir = mkTmp(os.tmpdir(), 'd0gate-parallel-');
   const N = 24;
   const runs = [];
   for (let i = 0; i < N; i += 1) {
@@ -325,7 +339,7 @@ test('lock held by another writer: waiting costs no CPU, and the 2 s timeout sti
   // then counts without the lock. Measured via bash `time` on the hook process: user+sys CPU
   // must stay well under wall-clock time, and the wait itself must really happen.
   const env = freshEnv();
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-lockwait-'));
+  const stateDir = mkTmp(os.tmpdir(), 'd0gate-lockwait-');
   try {
     const file = path.join(stateDir, 'd0-test-session.json');
     fs.writeFileSync(`${file}.lock`, '');

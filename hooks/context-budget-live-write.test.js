@@ -22,17 +22,30 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// Every temp dir this file makes is registered here and removed when the test process exits
+// (also after failed assertions); BL-0140.
+const madeDirs = [];
+process.on('exit', () => {
+  for (const d of madeDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
+function mkTmp(base, prefix) {
+  const d = fs.mkdtempSync(path.join(base, prefix));
+  madeDirs.push(d);
+  return d;
+}
+
+
 const HOOK = path.join(__dirname, 'context-budget.js');
 const SID = 'w2f-session-aaaa';
 
 function shm(prefix) {
   const base = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
-  return fs.mkdtempSync(path.join(base, prefix));
+  return mkTmp(base, prefix);
 }
 
 // Real transcript shape: assistant rows with message.usage + timestamp, plus user/system noise.
 function transcript(usage, extraLines = []) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w2f-tr-'));
+  const dir = mkTmp(os.tmpdir(), 'w2f-tr-');
   const p = path.join(dir, 't.jsonl');
   const row = (u) => JSON.stringify({
     type: 'assistant', timestamp: '2026-10-05T01:00:00.000Z',
@@ -47,7 +60,7 @@ function transcript(usage, extraLines = []) {
 }
 
 function env(live, extra = {}) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'w2f-home-'));
+  const home = mkTmp(os.tmpdir(), 'w2f-home-');
   return {
     ...process.env,
     HOME: home,
@@ -179,7 +192,7 @@ test('our own fresh file is refreshed (tokens move) and never mistaken for a sta
 
 test('malformed / usage-less transcript ⇒ no file, exit 0', () => {
   const live = shm('w2f-live-');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'w2f-bad-'));
+  const dir = mkTmp(os.tmpdir(), 'w2f-bad-');
   const bad = path.join(dir, 'bad.jsonl');
   fs.writeFileSync(bad, '{not json\n\u0000\u0001garbage\n');
   const r = run(live, bad);

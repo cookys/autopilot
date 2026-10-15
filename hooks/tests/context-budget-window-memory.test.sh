@@ -20,6 +20,9 @@ unset AUTOPILOT_CONTEXT_BUDGET_MODE
 TMP="$(mktemp -d "/dev/shm/context-budget-window-memory-XXXXXX")"
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TMP/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$TMP"' EXIT
+# BL-0140: never read the host operator config (the real ~/.autopilot/config.json).
+export HOME="$TMP/home" AUTOPILOT_CONFIG_FILE="$TMP/home/.autopilot/config.json"
+mkdir -p "$TMP/home/.autopilot"
 
 SID="11111111-2222-3333-4444-555555555555"
 LIVE="$TMP/live"

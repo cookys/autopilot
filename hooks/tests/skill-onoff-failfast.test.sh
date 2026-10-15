@@ -21,6 +21,12 @@ cat > "$STUB" <<'STUBEOF'
 case "${STUB_MODE:-ok}" in
   auth)  echo '{"type":"result","is_error":true,"result":"Invalid API key · Please run /login"}'; exit 1 ;;
   quota) echo '{"type":"result","is_error":true,"result":"You have hit your weekly limit"}'; exit 1 ;;
+  toolnoise) # tool_result is_error line mentioning quota, terminal result is unrelated
+    echo '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"quota exceeded forbidden unauthorized"}]}}'
+    echo '{"type":"result","is_error":true,"result":"crashed for no listed reason"}'; exit 1 ;;
+  manyerr) # 6 tool errors, then a terminal auth failure
+    for i in 1 2 3 4 5 6; do echo '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"ENOENT"}]}}'; done
+    echo '{"type":"result","is_error":true,"result":"Invalid API key · Please run /login"}'; exit 1 ;;
   boom)  echo '{"type":"result","is_error":true,"result":"something odd"}'; exit 1 ;;
   bump)  echo '{"probe":"ok"}'; echo "${STUB_VERSION_NEXT:-v2}" > "$STUB_VERSION_FILE"; exit 0 ;;
   *)     echo '{"probe":"ok"}'; exit 0 ;;
@@ -56,6 +62,18 @@ R="$TEST_TMP/f3.jsonl"; rc=$(STUB_MODE=boom run_matrix "$R" --arms full,card,off
 [ "$rc" = 0 ] || fail "F3 runner_error must not abort the matrix (exit $rc)"
 [ "$(rows "$R")" = 3 ] || fail "F3 ran $(rows "$R") cells (want 3)"
 grep -q '"failure_cause":"runner_error"' "$R" || fail "F3 cause not runner_error"
+
+echo "=== F3b: tool_result noise must not classify (negative control) ==="
+R="$TEST_TMP/f3b.jsonl"; rc=$(STUB_MODE=toolnoise run_matrix "$R")
+[ "$rc" = 0 ] || fail "F3b tool_result quota text aborted the matrix (exit $rc)"
+grep -q '"failure_cause":"runner_error"' "$R" || fail "F3b want runner_error: $(cat "$R")"
+echo "=== F3c: terminal auth line after 6+ tool errors is found ==="
+R="$TEST_TMP/f3c.jsonl"; rc=$(STUB_MODE=manyerr run_matrix "$R")
+[ "$rc" = 4 ] || fail "F3c exit $rc (want 4)"
+grep -q '"failure_cause":"authentication"' "$R" || fail "F3c want authentication: $(cat "$R")"
+echo "=== F3d: aborting cell is retained under ONOFF_KEEP_CELLS_DIR ==="
+K="$TEST_TMP/keep"; R="$TEST_TMP/f3d.jsonl"; rc=$(ONOFF_KEEP_CELLS_DIR="$K" STUB_MODE=auth run_matrix "$R")
+if [ "$rc" != 4 ] || [ ! -f "$K/d4-hotfix/full/1/transcript.jsonl" ]; then fail "F3d aborted cell not retained (exit $rc)"; fi
 
 echo "=== F4: version drift mid-campaign ==="
 VF="$TEST_TMP/ver"; echo v1 > "$VF"; export STUB_VERSION_FILE="$VF"

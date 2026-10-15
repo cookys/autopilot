@@ -121,17 +121,14 @@ for task in "${TASK_ARR[@]}"; do
       fi
       out=$(mktemp -d -t "onoff-cell-XXXXXX")
       echo "── cell $task|$arm|$rep (attempt $((attempts+1)))"
+      abort_cause=""
       MAN=(); [ -z "$ARM_MANIFESTS" ] || MAN=(--arm-manifest "$ARM_MANIFESTS/$arm.json")
       if bash "$BASE_DIR/run-skill-onoff-eval.sh" \
           --task "$task" --arm "$arm" --model "$MODEL" --rep "$rep" "${MAN[@]+"${MAN[@]}"}" \
           --runner "$RUNNER" --out "$out" "${PASS[@]+"${PASS[@]}"}" >/dev/null; then
         cat "$out/result.json" >> "$RESULTS"
         cause=$(node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.failure_class==="infra_fail"?String(j.failure_cause):"")}catch{}' "$out/result.json")
-        case "$cause" in
-          authentication|quota)
-            echo "ABORT: cell $task|$arm|$rep failed with $cause — stopping the campaign (remaining cells would fail the same way). Fix it, then re-run the same command to resume." >&2
-            rm -rf "$out"; exit 4 ;;
-        esac
+        case "$cause" in authentication|quota) abort_cause="$cause" ;; esac
       else
         echo "harness error on $task|$arm|$rep (exit $?)" >&2
       fi
@@ -146,6 +143,10 @@ for task in "${TASK_ARR[@]}"; do
       fi
       rm -rf "$out"
       ran=$((ran+1))
+      if [ -n "$abort_cause" ]; then  # after retention, so a misclassification can be inspected afterwards
+        echo "ABORT: cell $task|$arm|$rep failed with $abort_cause — stopping the campaign (remaining cells would fail the same way). Fix it, then re-run the same command to resume." >&2
+        exit 4
+      fi
     done
   done
 done

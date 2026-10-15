@@ -1393,7 +1393,7 @@ rm -f "$RUNNER_ERR_FILE" 2>/dev/null || true
 # stdout, while any non-empty result must still clear chrome+witness+session.
 if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
   if ! codex_transport_check_all_artifacts "$CODEX_RUN_DIR"; then
-    emit_result "runner_failed" "$RAW_LOG" "codex transport artifact integrity failed" 3
+    emit_result "runner_failed" "$RAW_LOG" "codex transport artifact integrity failed" 3 ", \"transport_status\": \"exit_failure\""
   fi
 fi
 
@@ -1554,14 +1554,14 @@ fi
 # witness or session-id failure. No normalization / fallback / recovery path.
 if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
   if ! codex_transport_has_chrome_frame "$CODEX_STDERR"; then
-    emit_result "runner_failed" "$RAW_LOG" "codex transport chrome frame missing" 3
+    emit_result "runner_failed" "$RAW_LOG" "codex transport chrome frame missing" 3 ", \"transport_status\": \"exit_failure\""
   fi
   if ! codex_transport_verify_witness "$CODEX_STDOUT" "$CODEX_SIDECAR"; then
-    emit_result "runner_failed" "$RAW_LOG" "codex transport witness verification failed" 3
+    emit_result "runner_failed" "$RAW_LOG" "codex transport witness verification failed" 3 ", \"transport_status\": \"exit_failure\""
   fi
   if ! CODEX_SESSION_ID="$(codex_transport_extract_session_id "$CODEX_STDERR")"; then
     CODEX_SESSION_ID=""
-    emit_result "runner_failed" "$RAW_LOG" "codex transport session id extraction failed" 3
+    emit_result "runner_failed" "$RAW_LOG" "codex transport session id extraction failed" 3 ", \"transport_status\": \"exit_failure\""
   fi
 fi
 

@@ -30,7 +30,7 @@ const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
 const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout',
-  'ionice', 'flock', 'chrt', 'taskset', 'xargs']);
+  'ionice', 'flock', 'chrt', 'taskset', 'xargs', 'parallel']);
 // Leading positional words a prefix command consumes before the real command: `flock FILE cmd`, `chrt PRIO cmd`,
 // `taskset MASK cmd` (`taskset -c LIST cmd` has no mask word: handled where the flags are read).
 const POSITIONAL = { flock: 1, chrt: 1, taskset: 1 };
@@ -39,6 +39,9 @@ const VALUE_FLAGS = {
   nice: new Set(['-n']), sudo: new Set(['-u', '-g', '-h', '-p', '-C']), env: new Set(['-u', '-C', '-S']), timeout: new Set(['-s', '-k']),
   ionice: new Set(['-c', '-n', '-p', '-P', '-u']), flock: new Set(['-w', '-E', '--timeout', '--conflict-exit-code']),
   taskset: new Set(['-c', '--cpu-list']), xargs: new Set(['-P', '-n', '-L', '-I', '-d', '-E', '-s', '-a', '-R', '-S']),
+  // GNU parallel: `parallel [options] command {} ::: args` (options per its man page)
+  parallel: new Set(['-j', '--jobs', '-n', '--max-args', '-N', '-S', '--sshlogin', '-a', '--arg-file', '-I', '-d', '--delimiter', '-L', '--max-lines',
+    '--joblog', '--results', '--delay', '--timeout', '--retries', '--workdir', '--tagstring', '--colsep', '-C']),
 };
 // Shell keywords that precede a command: `for …; do CMD &`, `if …; then CMD`, `{ CMD; }`.
 const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '!', '(']);
@@ -155,6 +158,10 @@ function tokens(segText) {
 // Interpreter one-liners whose string argument is run by a shell (python / perl / ruby / node).
 const INTERP_C_RE = /^(?:\S*\/)?(?:python[0-9.]*|perl|ruby|node)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*[ce]\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 const SHELL_CALL_RE = /(os\.(?:system|popen)|subprocess\.(?:run|call|Popen|check_call|check_output|getoutput)|child_process\.(?:exec|execSync|spawn)|\bsystem)\(\s*(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g;
+// List-form launches: python `subprocess.Popen(['rail', ...])`, node `spawn('rail', [args])` / `spawn('bash', ['rail', ...])`.
+const LIST_CALL_RE = /(subprocess\.Popen|child_process\.(?:spawn|execFile)|\b(?:spawn|execFile))\(\s*(\[[^\]]*\]|'[^']*'|"[^"]*")(?:\s*,\s*(\[[^\]]*\]))?/g;
+const LIST_WORD_RE = /'([^']*)'|"([^"]*)"/g;
+const listWords = (txt) => { const o = []; let m; LIST_WORD_RE.lastIndex = 0; while ((m = LIST_WORD_RE.exec(txt)) !== null) o.push(m[1] !== undefined ? m[1] : m[2]); return o; };
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 
 // ---- `$(…)` / backtick scanner -------------------------------------------------------------------
@@ -266,6 +273,21 @@ function expandSegmentsUncached(text, depth) {
         all.push(...expandSegments(script, depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg || asyncCall, sh: true, sub: true })));
       }
     }
+    if (im && seg.text.length <= SEG_MAX_TEXT) {
+      const body = (im[1] !== undefined ? im[1] : im[2]).replace(/\\(["'])/g, '$1');
+      LIST_CALL_RE.lastIndex = 0;
+      let lm;
+      while ((lm = LIST_CALL_RE.exec(body)) !== null) {
+        const py = /Popen/.test(lm[1]);
+        // Python's Popen child outlives the interpreter unless the body waits for it; a node child keeps the event
+        // loop alive (the call blocks) unless it is unref'd (`detached` alone is not enough).
+        if (py ? /\.(?:wait|communicate)\(|\bwith\s+subprocess\.Popen/.test(body) : !/\.unref\(/.test(body)) continue;
+        const words = lm[3] !== undefined ? [...listWords(lm[2]), ...listWords(lm[3])] : listWords(lm[2]);
+        if (!words.length) continue;
+        all.push(...expandSegments(words.map((w) => (/^[\w./:=@%+,-]+$/.test(w) ? w : `'${w.replace(/'/g, '')}'`)).join(' '), depth + 1)
+          .map((x) => ({ ...x, bg: true, sh: true, sub: true })));
+      }
+    }
     for (const sub of (seg.text.length > SEG_MAX_TEXT ? [] : findSubstitutions(seg.text))) {
       // The body of `$(…)` / backticks is a fresh script: strip ITS heredoc bodies and comments too
       // (`git commit -m "$(cat <<'EOF' … EOF)"` — the outer lexer treats the heredoc as quoted data).
@@ -342,10 +364,11 @@ function waitsForAll(rest, pidVar = null) {
     args.push(a);
   }
   if (args.length === 0) return true;
-  if (args.length !== 1) return false;
-  if (/^"?\$!"?$/.test(args[0])) return true;
-  // `pid=$!` taken right after THIS launch, then `wait $pid`: the same job.
-  return !!pidVar && new RegExp(`^"?\\$(?:${pidVar}|\\{${pidVar}\\})"?$`).test(args[0]);
+  if (args.some((a) => a.startsWith('-'))) return false; // `wait -n` returns after ONE job
+  // `wait $P1 $P2` waits for every listed job, so it is enough that one of them is THIS launch's pid:
+  // `$!` itself, or `pid=$!` taken right after this launch.
+  const mine = pidVar ? new RegExp(`^"?\\$(?:${pidVar}|\\{${pidVar}\\})"?$`) : null;
+  return args.some((a) => /^"?\$!"?$/.test(a) || (mine && mine.test(a)));
 }
 
 // `pid=$!` straight after the launch at pos[idx] (same shell level, no other background launch in between).
@@ -363,6 +386,7 @@ function bangVarAfter(pos, idx) {
 
 // Functions whose body runs a rail: name -> rail path. `f(){ rail x; }; f &` backgrounds the rail through f.
 const FUNC_DEF_RE = /^(?:function\s+([A-Za-z_][\w.:-]*)(?:\s*\(\s*\))?|([A-Za-z_][\w.:-]*)\s*\(\s*\))\s*\{\s*(.*)$/;
+const PAREN_FUNC_DEF_RE = /^(?:function\s+([A-Za-z_][\w.:-]*)(?:\s*\(\s*\))?|([A-Za-z_][\w.:-]*)\s*\(\s*\))\s*\(([\s\S]*)$/;
 function functionRails(pos) {
   const map = new Map();
   let open = null;
@@ -370,6 +394,13 @@ function functionRails(pos) {
     const t = p.seg.text;
     const m = FUNC_DEF_RE.exec(t);
     if (!open) {
+      // `f() ( rail x )`: the body is a subshell; the whole body sits in this one segment text.
+      const pm = PAREN_FUNC_DEF_RE.exec(t);
+      if (pm) {
+        const railIn = pm[3].replace(/\)\s*$/, '').split(/[;\n&|]+/).map((x) => commandPosition(x).head).find((h) => isRail(h));
+        if (railIn) map.set(pm[1] || pm[2], railIn);
+        continue;
+      }
       if (!m) continue;
       open = { name: m[1] || m[2], depth: 1, rail: null };
       const h = commandPosition(m[3]).head;

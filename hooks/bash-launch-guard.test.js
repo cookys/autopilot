@@ -282,6 +282,55 @@ test('a REAL detached rail inside a substitution is still denied', () => {
   assert.strictEqual(run('echo "$(nohup scripts/dispatch-review.sh x &)"').deny, true);
 });
 
+// ---- BL-0185: more background-launch shapes (list-form interpreters, parallel, subshell functions) + multi-pid wait ----
+const RV = 'scripts/dispatch-review.sh';
+const BL185_DENY = [
+  `python3 -c "import subprocess; subprocess.Popen(['${RV}', 'x'])"`, // python list form
+  `python3 -c "import subprocess; subprocess.Popen(['bash', '${RV}', 'x'])"`,
+  `python3 -c 'import subprocess; subprocess.Popen(["${RV}", "x"])'`,
+  `node -e "const c=require('child_process').spawn('${RV}', ['x'], {detached: true}); c.unref()"`, // node list form (unref'd)
+  `node -e 'const c=require("child_process").spawn("bash", ["${RV}", "x"], {detached: true}); c.unref()'`,
+  `parallel ${RV} {} ::: a b &`, // GNU parallel backgrounded
+  `parallel -j2 ${RV} {} ::: a b &`,
+  `setsid -f parallel --jobs 2 ${RV} {} ::: a b`,
+  `f() ( ${RV} x )\nf &`, // subshell-body function
+  `f() ( ${RV} x ); f &`,
+  `f() (\n  ${RV} x\n)\nf &`,
+  `{ ${RV} x; } &`, // brace group sent to the background (already caught on base: regression pin)
+  `{\n${RV} x\n} > log 2>&1 &`,
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait -n $P1 $P2`, // wait -n returns after ONE job
+  `${RV} a & P1=$!\nwait 12345`, // waits for an unrelated pid
+];
+for (const cmd of BL185_DENY) {
+  test(`rule1 denies (BL-0185): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+const BL185_ALLOW = [
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait $P1 $P2`, // wait with two pid variables
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait "$P1" "$P2"`,
+  `${RV} a & P1=$!\n${RV} b & P2=$!\nwait \${P1} \${P2}`,
+  `${RV} a &\nwait $! 999`,
+  `{ ${RV} x; } & wait`,
+  `parallel ${RV} {} ::: a b`, // foreground parallel blocks until done
+  `parallel -j2 ${RV} {} ::: a b && echo done`,
+  `parallel -j2 ${RV} {} ::: a b & wait`,
+  `f() ( ${RV} x )\nf`, // subshell function called in the foreground
+  `f() ( ${RV} x )\nf & wait`,
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); p.wait()"`, // python waits for its child
+  `python3 -c "import subprocess; subprocess.Popen(['grep', 'dispatch-review.sh', 'f'])"`, // not a rail
+  `node -e "require('child_process').spawn('${RV}', ['x'])"`, // node keeps running until the child ends
+  `node -e "require('child_process').spawn('grep', ['dispatch-review.sh'], {detached: true}).unref()"`,
+];
+for (const cmd of BL185_ALLOW) {
+  test(`rule1 allows (BL-0185): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}
+
 // ---- Rule 2: pkill/pgrep -f without [x] => DENY by default (BL-0148; was warn-only BL-0019) ----
 // Cases are data, run through the real hook; the command text never reaches a live Bash tool call.
 const PK_DENY = [

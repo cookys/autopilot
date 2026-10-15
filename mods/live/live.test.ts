@@ -4262,6 +4262,20 @@ test('activity: a status notification or a TaskStop ends a row; a Monitor event 
   expect(byUse.map(t => t.id)).toEqual(['b5'])
 })
 
+test('activity: a result flagged backgroundEndsWithFinalResponse ends its row once a later real prompt shows the turn is over; before that it stays', () => {
+  const flagged = (id: string) => bgUse(id, { result: { stdout: '', backgroundTaskId: id, backgroundEndsWithFinalResponse: true } })
+  // same turn (no later prompt): the command is still running, so the row stays
+  expect(scanBackground([U('q'), A('', [flagged('f1')])]).map(t => t.id)).toEqual(['f1'])
+  expect(scanBackground([U('q'), A('', [flagged('f1')]), A('still working', [])]).map(t => t.id)).toEqual(['f1'])
+  // an injected notification is not a new prompt
+  expect(scanBackground([U('q'), A('', [flagged('f1')]), note('zz', '<status>running</status>')]).map(t => t.id)).toEqual(['f1'])
+  // a later real prompt: the final response ended the process and no notification can follow
+  expect(scanBackground([U('q'), A('', [flagged('f1')]), A('done'), U('next')])).toEqual([])
+  // negative control: the same shape without the flag keeps its row across the next prompt, and a task started after the prompt stays
+  const plain = bgUse('p1')
+  expect(scanBackground([U('q'), A('', [plain, flagged('f2')]), A('done'), U('next'), A('', [flagged('f3')])]).map(t => t.id)).toEqual(['p1', 'f3'])
+})
+
 test('activity: labels are one line, redacted and clipped', () => {
   const secret = 'curl -H "Authorization: Bearer ' + 'k'.repeat(30) + '"\nsecond line'
   const [t] = scanBackground([A('', [bgUse('b1', {}, { command: secret, run_in_background: true })])])

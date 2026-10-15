@@ -1702,7 +1702,8 @@ export function collapsedPrompt(prompt: string): string {
 // ================= Background work (rows of the Now tab's working section) =================
 // What the session left running: background Bash commands (asked for, or moved to the background by a timeout) and Monitor watches, scanned from
 // $.session.messages(), plus the subagents $.agent.list() reports running. A task ends on a <task-notification> that carries a <status> (a Monitor
-// event notification has none), or on a TaskStop of its id. Known gap: a task that ends mid-turn keeps its row until the turn ends, because its
+// event notification has none), or on a TaskStop of its id, or, for a result flagged `backgroundEndsWithFinalResponse`, on the next real prompt.
+// A resume after the owning process exited leaves no marker in the messages, so that case is not ended (BL-0002, unverified). Known gap: a task that ends mid-turn keeps its row until the turn ends, because its
 // notification waits in the input queue, not in the messages.
 export type BgKind = 'shell' | 'monitor'
 export type BgTask = { id: string; kind: BgKind; label: string; output: string | null; lastEvent: string | null }
@@ -1723,11 +1724,13 @@ function notesOf(text: string): BgNote[] {
 }
 
 export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
-  const tasks: (BgTask & { toolUseId: string })[] = []
+  const tasks: (BgTask & { toolUseId: string; turn: number; endsWithFinal: boolean })[] = []
   const ended = new Set<string>()
   const events = new Map<string, string>()
+  let turn = 0 // real prompts seen so far: a new one means the turn that started a task has ended
   for (const m of messages) {
     if (m === null || typeof m !== 'object') continue
+    if (isRealPrompt(m)) turn++
     if (m.role === 'user' && typeof m.text === 'string' && m.text.includes('<task-notification>')) {
       for (const n of notesOf(m.text)) {
         if (n.status !== null && !/^(running|pending)$/i.test(n.status)) {
@@ -1767,12 +1770,14 @@ export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
       const label = strOf(input.description) ?? strOf(input.command) ?? id
       // The output file is named after the task id, so only a path ending in `<id>.output` is taken.
       const output = kind === 'shell' ? (new RegExp('written to: (\\S+/' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.output)').exec(text)?.[1] ?? null) : null
-      tasks.push({ id, toolUseId, kind, label: bgLabel(label), output, lastEvent: null })
+      // Claude Code marks a result `backgroundEndsWithFinalResponse` when the command dies with the final response of the turn that started it and no
+      // completion notification can follow. The evidence that the turn is over is a later real prompt; until then the command is still running.
+      tasks.push({ id, toolUseId, kind, label: bgLabel(label), output, lastEvent: null, turn, endsWithFinal: result.backgroundEndsWithFinalResponse === true })
     }
   }
   return tasks
-    .filter(task => !ended.has(task.id) && !(task.toolUseId !== '' && ended.has(task.toolUseId)))
-    .map(({ toolUseId: _u, ...task }) => ({ ...task, lastEvent: events.has(task.id) ? oneLineClip(redactSecrets(events.get(task.id) as string), BG_TAIL_CHARS) : null }))
+    .filter(task => !ended.has(task.id) && !(task.toolUseId !== '' && ended.has(task.toolUseId)) && !(task.endsWithFinal && task.turn < turn))
+    .map(({ toolUseId: _u, turn: _t, endsWithFinal: _e, ...task }) => ({ ...task, lastEvent: events.has(task.id) ? oneLineClip(redactSecrets(events.get(task.id) as string), BG_TAIL_CHARS) : null }))
 }
 
 // The last line a background command printed: escape codes stripped, a progress bar's `\r` redraws reduced to the final one, secrets masked.

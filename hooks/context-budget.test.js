@@ -153,6 +153,7 @@ function freshEnv(extra = {}) {
     // in config breaks the "disabled ⇒ silent" test (config beats env opt-out).
     // Found 2026-07-20 when exactly that happened. Pin it to an empty dir.
     HOME: dir,
+    AUTOPILOT_CONFIG_FILE: path.join(dir, '.autopilot', 'config.json'),
     AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
     AUTOPILOT_CONTEXT_BUDGET_DIR: dir,
     // W2f: the hook now WRITES <live>/context/<sid>.json when no status line does, so a test
@@ -454,10 +455,10 @@ test('step from config file applies; env AUTOPILOT_CONTEXT_BUDGET_STEP overrides
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-home-'));
   fs.mkdirSync(path.join(home, '.autopilot'));
   fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), JSON.stringify({ context_budget: { step: 10_000 } }));
-  const viaCfg = stepSession({ HOME: home });
+  const viaCfg = stepSession({ HOME: home, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json') });
   assert.strictEqual(viaCfg(160_000).status, 2);
   assert.strictEqual(viaCfg(171_000).status, 2, 'config step=10000 honoured');
-  const viaEnv = stepSession({ HOME: home, AUTOPILOT_CONTEXT_BUDGET_STEP: '100000' });
+  const viaEnv = stepSession({ HOME: home, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json'), AUTOPILOT_CONTEXT_BUDGET_STEP: '100000' });
   assert.strictEqual(viaEnv(160_000).status, 2);
   assert.strictEqual(viaEnv(171_000).status, 0, 'env step=100000 overrides config step=10000');
   assert.strictEqual(viaEnv(261_000).status, 2);
@@ -675,6 +676,7 @@ test('state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGE
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-nooverride-'));
   const env = {
     HOME: dir,
+    AUTOPILOT_CONFIG_FILE: path.join(dir, '.autopilot', 'config.json'),
     AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
     AUTOPILOT_LIVE_DIR: liveDir,
     CLAUDE_CODE_SESSION_ID: sid,

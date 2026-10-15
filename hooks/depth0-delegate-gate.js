@@ -72,6 +72,7 @@
 'use strict';
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
@@ -98,7 +99,7 @@ function loadConfig() {
     mode: 'warn', pkillMode: 'deny', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED, waitAdviceEvery: DEFAULT_WAIT_ADVICE_EVERY,
   };
   try {
-    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const file = configPath();
     if (fs.existsSync(file)) {
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       const g = j && j.depth0_delegate_gate;

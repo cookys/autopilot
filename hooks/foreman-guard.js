@@ -51,6 +51,7 @@
 'use strict';
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const { readMarker } = require('../scripts/session-mode.js');
 const { tiersForKnownWindow } = require('./context-budget-lib.js');
@@ -236,7 +237,7 @@ function loadConfig() {
   };
   let fileRoleCaps = null;
   try {
-    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const file = configPath();
     if (fs.existsSync(file)) {
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       const fg = j && j.foreman_guard;
@@ -333,7 +334,7 @@ function resolveRole(payload) {
 function loadContextBudgetTiers() {
   const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
   try {
-    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const file = configPath();
     const user = JSON.parse(fs.readFileSync(file, 'utf8'));
     const cb = user && user.context_budget;
     if (cb && typeof cb === 'object') {

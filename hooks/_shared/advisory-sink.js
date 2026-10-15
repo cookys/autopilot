@@ -22,6 +22,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../../scripts/lib/config-path.js');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -39,7 +40,7 @@ function advisoryMode(hook) {
   const e = norm(process.env[`AUTOPILOT_ADVISORY_BRIDGE_${key}`]) || norm(process.env.AUTOPILOT_ADVISORY_BRIDGE);
   if (e) return e;
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+    const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     const b = cfg && cfg.advisory_bridge;
     if (b && typeof b === 'object') {
       const c = norm(b[String(hook).toLowerCase().replace(/[^a-z0-9]+/g, '_')]) || norm(b.mode);

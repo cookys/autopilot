@@ -180,7 +180,7 @@ fi
 # foreman and a Claude foreman share ONE ironlaw constant (design §4, "two implementations of
 # one ironlaw is the shape that produced 7840hs (4)").
 resolve_tool_cap() {
-  local cap=40 cfg="$HOME/.autopilot/config.json" v
+  local cap=40 cfg="${AUTOPILOT_CONFIG_FILE:-$HOME/.autopilot/config.json}" v
   if [ -f "$cfg" ]; then
     v="$(node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const c=j&&j.foreman_guard&&j.foreman_guard.bash_cap;if(Number.isInteger(c)&&c>0)process.stdout.write(String(c));}catch{}' "$cfg" 2>/dev/null || true)"
     [ -n "$v" ] && cap="$v"

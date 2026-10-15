@@ -191,8 +191,11 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
 # resolve-review-loop / dispatch-contract. Pin it to an empty per-suite `{}` so a host config can
 # neither redden nor greenen a suite (BL-0179). run.sh pins the same for L1 and the non-lib.sh
 # suites; a suite that exercises the config overwrites this file or re-exports the variable.
-export AUTOPILOT_CONFIG_FILE="$TEST_TMP/.operator-config.json"
-printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
+# BL-0181: hooks now honor this variable too, so the pin is the file a hook would read from the fake
+# HOME ($HOOK_HOME/.autopilot/config.json): a suite that writes its config there keeps working.
+mkdir -p "$HOOK_HOME/.autopilot"
+export AUTOPILOT_CONFIG_FILE="$HOOK_HOME/.autopilot/config.json"
+[ -e "$AUTOPILOT_CONFIG_FILE" ] || printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
 
 write_mission_governance() {
   local target="$1"

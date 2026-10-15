@@ -27,6 +27,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
@@ -180,7 +181,7 @@ try {
   try {
     let threshold = 50000000;
     try {
-      const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+      const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
       const t = cfg && cfg.cost_tracker && Number(cfg.cost_tracker.cache_read_warn_tokens);
       if (Number.isFinite(t) && t > 0) threshold = t;
     } catch { /* default */ }
@@ -225,7 +226,7 @@ try {
       // so no /clear advice at all.
       let clearPct = 50;
       try {
-        const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+        const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
         const c = cfg && cfg.cost_tracker && Number(cfg.cost_tracker.context_clear_pct);
         if (Number.isFinite(c) && c > 0) clearPct = c;
       } catch { /* default */ }

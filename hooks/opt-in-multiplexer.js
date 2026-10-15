@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const { spawnSync } = require('child_process');
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
@@ -83,7 +84,7 @@ function main() {
   let userConfig = {};
   try {
     userConfig = JSON.parse(
-      fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'),
+      fs.readFileSync(configPath(), 'utf8'),
     );
   } catch (_e) { /* empty */ }
 

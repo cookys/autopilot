@@ -35,6 +35,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
@@ -61,7 +62,7 @@ function git(cwd, args, opts = {}) {
 
 function loadUserConfig() {
   try {
-    const raw = fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8');
+    const raw = fs.readFileSync(configPath(), 'utf8');
     const cfg = JSON.parse(raw);
     return cfg && typeof cfg === 'object' ? cfg : {};
   } catch {

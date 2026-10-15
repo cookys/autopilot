@@ -55,6 +55,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW,
@@ -81,7 +82,7 @@ function loadConfig() {
   // it must never override a value the user set by hand. (v2.32.56)
   const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false, liveWrite: true, step: 50_000 };
   try {
-    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const file = configPath();
     const user = JSON.parse(fs.readFileSync(file, 'utf8'));
     const cb = user && user.context_budget;
     if (cb && typeof cb === 'object') {

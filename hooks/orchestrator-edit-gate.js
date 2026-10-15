@@ -28,6 +28,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
 const { decide, isAllowlisted } = require('./orchestrator-edit-gate-lib.js');
@@ -37,7 +38,7 @@ function gateMode() {
   const env = process.env.AUTOPILOT_ORCH_EDIT_GATE_MODE;
   if (env === 'block' || env === 'warn' || env === 'off') return env;
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+    const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     const m = cfg && cfg.orchestrator_edit_gate && cfg.orchestrator_edit_gate.mode;
     if (m === 'block' || m === 'warn' || m === 'off') return m;
   } catch { /* defaults */ }

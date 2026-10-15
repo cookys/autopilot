@@ -1262,4 +1262,32 @@ wait')"
   fi
 }
 
+# --- BL-0182: snapshot origin/develop mirrors the real repo's remote-tracking ref, not its local develop ---
+# RED before the fix: clone turns the real repo's LOCAL develop into the snapshot's origin/develop,
+# so a commit that is only on the real origin/develop looked "not an ancestor" inside the snapshot.
+{
+  fx="$TEST_TMP/bl0182"
+  make_fixture "$fx"
+  git -C "$fx" checkout -q -b develop
+  printf 'a\n' >"$fx/f.txt"
+  git -C "$fx" add f.txt
+  git -C "$fx" commit -q -m base
+  git -C "$fx" checkout -q -b side
+  printf 'b\n' >"$fx/f.txt"
+  git -C "$fx" commit -q -am onlyremote
+  remote_sha="$(git -C "$fx" rev-parse HEAD)"
+  git -C "$fx" update-ref refs/remotes/origin/develop "$remote_sha"
+  git -C "$fx" checkout -q develop
+  snap="$TEST_TMP/bl0182-snap"
+  mkdir -p "$snap"
+  rc=0
+  ts_snapshot_build "$fx" "$snap" >/dev/null 2>&1 || rc=$?
+  assert_exit_code "$rc" 0 "BL-0182 build returns 0"
+  assert_eq "$(git -C "$snap/repo" rev-parse origin/develop)" "$remote_sha" "BL-0182 snapshot origin/develop equals real origin/develop"
+  rc=0
+  git -C "$snap/repo" merge-base --is-ancestor "$remote_sha" origin/develop || rc=$?
+  assert_exit_code "$rc" 0 "BL-0182 remote-only commit is an ancestor of snapshot origin/develop"
+  assert_eq "$(git -C "$snap/repo" remote get-url origin)" "/nonexistent/autopilot-test-snapshot-origin" "BL-0182 origin still neutered"
+}
+
 finalize_test

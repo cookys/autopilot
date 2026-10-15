@@ -1504,18 +1504,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### qualification defaults still compare kimi engine spellings exactly
-- **Id**: BL-0187
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: Kimi 席位名稱有兩種寫法，扣點與成績基線已經會當成同一席，但產生與套用官方預設成績的兩支工具、以及成績單分組的地方仍逐字比對，兩種寫法會被當成兩個席位。
-- **Impact**: 低。目前成績單只有一種寫法，沒有實際出錯；哪天兩種寫法同時出現，官方預設可能套不上或同一模型出現兩列。
-- **Trigger**: a scorecard holding both kimi-code spellings, or next touch of the qualification defaults build/adopt scripts
-- **Effort**: S
-- **Source**: kimiprep review 2026-10-15 (merged as f3d50b5b)
-- **Pointer**: none
-- **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.
 
 ### bash-launch guard: string-form Popen/spawn handled unlike list form
 - **Id**: BL-0190

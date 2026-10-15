@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0180 -->
+<!-- next-id: BL-0181 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1816,15 +1816,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: no caller passes --seat-kind brain; computeSeatProjection in topology/scaffold-tier lacks seatKind. Also: HELP lines omit --seat-kind; invalid kind silently = default; no invalidate-strike brain test.
 
-### pending-revocation-fold KR3 has two red asserts
-- **Id**: BL-0179
+### Tests read the host operator config unless each one pins it
+- **Id**: BL-0180
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 一支檢查「撤銷待定」的測試有兩項失敗，在改動之前的版本就已經是紅的，不是這次造成的。
-- **Impact**: 不確定。可能是測試讀到這台機器上的即時文件；查清楚前，這兩項保護沒有作用。
-- **Trigger**: next touch of engine-scorecard pending_revocation, or before the 3.0.0 cut
+- **Problem**: 大約一百支測試會間接讀到這台機器自己的操作員設定檔（例如排除哪些席位）。只要本機設定一改，測試結果就跟著變；BL-0179 那支就是這樣轉紅的。
+- **Impact**: 中。綠燈或紅燈可能只反映本機設定，不反映程式；換一台機器結果不同。
+- **Trigger**: next host-dependent red, or before the 3.0.0 cut
 - **Effort**: S
-- **Source**: review of lane/bl0170, 2026-10-15 (red on base feb910b4 and on merge)
+- **Source**: review of lane/bl0179, 2026-10-15
 - **Pointer**: none
-- **Context**: hooks/tests/pending-revocation-fold.test.sh 67/2: KR3 strike-reason text not found; "unpinned live doc changed the decision bytes".
+- **Context**: config read at resolve-dispatch-topology.js:663 and run-approval.js:37; only resolve-dispatch-topology.test.sh and pending-revocation-fold pin it. Pin AUTOPILOT_CONFIG_FILE once in hooks/tests/run.sh.

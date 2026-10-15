@@ -1761,6 +1761,35 @@ PK_M=$(pk_mutant heads check-phase-review-receipt.js "const ownChanged = " "cons
 PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1C_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet Q1c (mutation): without the own-paths-unchanged check a set pinned to two different ranges passes"
 
+# Q1d: negative control for the ancestry branch - the packets' first heads sit on DIVERGED lines (the branch was reset
+# and amended into a sibling commit with the same tree after P1 was reviewed), so no head is an ancestor of the others.
+px_repo "$TEST_TMP/px1d"
+PX1D_LEDGER="$TEST_TMP/px1d_ledger"; mkdir -p "$PX1D_LEDGER"
+px_fin "$PX1D_LEDGER" P1
+(cd "$PK_REPO" && git commit -q --amend -m "work (sibling commit, same tree)")
+px_fin "$PX1D_LEDGER" P2; px_fin "$PX1D_LEDGER" P3
+PK_OUT=$(pk_check "$CHK" "$PX1D_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1d: packets first reviewed on diverged lines fail the set"
+assert_contains "$PK_OUT" "is not a descendant of" "packet Q1d: the refusal names the ancestry rule"
+
+# Q1e: reverse order. P2 and P3 are first reviewed at the EARLIER head, P1 (sorted first) only at the LATER head, with
+# P1's own file untouched h1..h2 and P3 re-reviewed at h2. h1 is the earliest head regardless of packet-id order, so the
+# set passes (a rule that took the first id's head as h1 would pin h1 to the later head and refuse the earlier packets).
+px_repo "$TEST_TMP/px1e"
+PX1E_LEDGER="$TEST_TMP/px1e_ledger"; mkdir -p "$PX1E_LEDGER"
+px_fin "$PX1E_LEDGER" P2; px_fin "$PX1E_LEDGER" P3
+(cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
+px_fin "$PX1E_LEDGER" P1
+node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PX1E_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" > /dev/null 2>&1
+pk_finalize "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json" P3 2 > /dev/null
+PK_OUT=$(pk_check "$CHK" "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q1e: the earliest first head is h1 whatever the packet-id order, so a later-reviewed first packet passes"
+PK_M=$(pk_mutant anc2 check-phase-review-receipt.js "const isAncestor = (a, b) => spawnSync(" "const isAncestor = (a, b) => true || spawnSync(") || fail "mutation setup failed (Q1d/Q1e)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1D_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_not_contains "$PK_OUT" "is not a descendant of" "packet Q1d (mutation): with ancestry always true the Rule 3 ancestry refusal is gone (only the later staleness rule still blocks the set)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1e (mutation): with ancestry always true h1 is mis-picked and the valid reverse-order set is refused"
+
 # Q2: a file outside every packet enters the range after the packets were reviewed (tip subset cover)
 px_repo "$TEST_TMP/px2"
 PX2_LEDGER="$TEST_TMP/px2_ledger"; mkdir -p "$PX2_LEDGER"

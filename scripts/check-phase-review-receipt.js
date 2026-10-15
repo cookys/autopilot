@@ -1296,7 +1296,7 @@ function validatePacketSet(flags) {
     lastHead[id] = last.head;
   }
   if (problems.length) fail(problems.join('\n'));
-  const isAncestor = (a, b) => spawnSync('git', ['merge-base', '--is-ancestor', a, b], { cwd: repoRoot, encoding: 'utf8' }).status === 0;
+  const isAncestor = (a, b) => spawnSync('git', ['merge-base', '--is-ancestor', '--end-of-options', a, b], { cwd: repoRoot, encoding: 'utf8' }).status === 0;
   const distinctHeads = [...new Set(Object.values(firstHead))];
   const h1 = distinctHeads.find((h) => distinctHeads.every((o) => o === h || isAncestor(h, o))) || firstHead[ids[0]];
   for (const id of ids) {

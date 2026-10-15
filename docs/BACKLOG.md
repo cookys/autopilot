@@ -1370,18 +1370,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Give the suite its own frozen graph + registry fixture instead of the host files.
 
-### peer_report_lost misses a peer row deleted in the opt-in commit
-- **Id**: BL-0131
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 推送前的檢查會抓「外部反映列沒回覆就被刪掉」，但如果刪除剛好發生在專案第一次啟用新格式的同一個提交，前後都看不到該列的反映者欄位，就抓不到。
-- **Impact**: 只有啟用新格式那一次會發生；這個 repo 已啟用且沒刪任何反映列，其他專案啟用時可能漏抓。
-- **Trigger**: a consumer project opts in to reporter fields
-- **Effort**: S
-- **Source**: lane F review round 5, 2026-10-13
-- **Pointer**: none
-- **Context**: Pre-opt-in commits parse legacy-style, so the (Id, Report) pair never appears before the opt-in commit.
 
 
 ### sealed-docs list covers only part of the sha-bound files

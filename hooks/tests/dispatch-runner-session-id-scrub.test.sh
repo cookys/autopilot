@@ -131,6 +131,19 @@ bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner claude-native --model clau
 check_scrubbed "2 review claude-native" "$R_DUMP"
 assert_eq "$(mroot_of sid-review)" "$MROOT" "2 review: manifest root_run_id is the parent session's job root (lookup still saw the binding)"
 
+# 2b: the in-process (non-claude) runner branch is covered by child_session_apply_env, not by an `env` wrapper.
+# claude-native above is covered by the explicit env, so only a codex runner turns red when that call is removed.
+R2_DUMP="$TEST_TMP/review-codex.env"
+cat > "$TEST_TMP/review-codex" <<EOF2
+#!/usr/bin/env bash
+env | LC_ALL=C sort > "$R2_DUMP"
+echo "stub ran"
+EOF2
+chmod +x "$TEST_TMP/review-codex"
+bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-5.5 \
+  --diff-file "$DIFF" --bin "$TEST_TMP/review-codex" --run-id sid-review-codex >"$TEST_TMP/review-codex.out" 2>&1
+check_scrubbed "2b review codex (in-process runner)" "$R2_DUMP"
+
 # ================================================================= 3 dispatch-author (claude-native)
 A_DUMP="$TEST_TMP/author.env"
 make_stub "$TEST_TMP/author-claude" "$A_DUMP"

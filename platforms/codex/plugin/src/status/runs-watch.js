@@ -47,7 +47,7 @@ const { ensureReviewServer } = require('./review-server');
 const { createDecisionsPublisher } = require('./decisions-sidecar');
 const { createForemanPublisher } = require('./foreman-activity');
 const { createQcPublisher } = require('./qc-fact');
-const { createLoadSourcePublisher } = require('./load-source');
+const { createLoadSourcePublisher, isolatedEnv } = require('./load-source');
 const { createReviewPublisher } = require('./review-input');
 const { createResiduePublisher } = require('./residue');
 const { createStageWalkPublisher } = require('./stage-walk');
@@ -904,6 +904,10 @@ function startWatcherDetached({
   interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, render = null,
 }) {
   try {
+    // An isolated test environment (own HOME / CLAUDE_CONFIG_DIR) on the shared live dir must not start a watcher there:
+    // it would write its fake projects and a bogus load-source.json into the real live dir (see src/status/load-source.js).
+    const iso = isolatedEnv(env);
+    if (iso.reason) return { status: 'isolated', message: iso.reason };
     const lock = lockPathOf(env, key);
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
     const probe = spawnSync('flock', ['-n', lock, 'true'], { encoding: 'utf8', timeout: 5000, env });

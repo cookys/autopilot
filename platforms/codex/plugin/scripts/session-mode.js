@@ -568,6 +568,8 @@ function startProjectWatcher(marker, repoRoot) {
       process.stderr.write(`session-mode: watcher already running for project ${marker.project_key} (pid ${r.holder === null || r.holder === undefined ? 'unknown' : r.holder}); not starting another\n`);
     } else if (r.status === 'flock_unavailable') {
       process.stderr.write('session-mode: watcher not started: flock(1) (util-linux) is not available on PATH\n');
+    } else if (r.status === 'isolated') {
+      process.stderr.write(`session-mode: watcher not started: isolated environment on a shared live dir (${r.message})\n`);
     } else if (r.status === 'error') {
       process.stderr.write(`session-mode: watcher not started: ${r.message}\n`);
     }

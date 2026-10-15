@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0193 -->
+<!-- next-id: BL-0194 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1343,18 +1343,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).
 
-### T2 says auto-compact will handle it, though context already passed the window
+### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: self
-- **Problem**: 設了自動壓縮視窗時，T2 新提示要模型「不要停，會自動壓縮」；但 T2 觸發時對話已超過視窗，代表當下壓縮其實沒發生，提示可能不實。
-- **Impact**: 壓縮若真的沒發生，模型會繼續塞 context 而不停。Claude Code 實際何時壓縮尚未驗證。
-- **Trigger**: 有人回報 T2 叫繼續後 context 持續上升沒有壓縮，或查證 Claude Code 壓縮時機時
-- **Effort**: S
-- **Source**: BL-0124 review, 2026-10-14
+- **Problem**: 交接機制已出貨。剩：T2 提示改成先寫交接檔再繼續（指引變更，要 eval 和 owner 同意）；間隔設定只有開 session 的檢查會讀；壓縮點紀錄時機未用真的 Claude Code 驗證。
+- **Impact**: 交接檔要模型自己寫才有，現在的 T2 提示沒叫它寫，所以壓縮後多半只有腳本產生的那部分。
+- **Trigger**: owner 同意改 T2 文字並排 eval 時，或第一筆真實壓縮點紀錄出現時（核對 pre_tokens 是否為這次壓縮）
+- **Effort**: M
+- **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.
+- **Context**: Eval reuses the build-rehydration-bundle quiz/grade on real large transcripts: ON = model handoff file plus script sections, OFF = 20-turn tail. Window 533k, t2 450k, gap 50k.
 
 
 
@@ -1431,5 +1431,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 有人回報這兩種寫法被漏放或誤擋，或下次動 bash-launch-rules.js 的等待判斷
 - **Effort**: S
 - **Source**: frz2 review 2026-10-15
+- **Pointer**: none
+
+### Compaction handoff: leftover review notes
+- **Id**: BL-0193
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 交接機制審查留下的小事：預算檢查自己另讀一份 t2 設定，關掉預算提示時仍會警告；當機的派工會一直顯示執行中；壓縮前最壞約 22 秒；長度測試沒塞滿 git 段。
+- **Impact**: 低。警告多印一次、舊派工被當成執行中、壓縮前稍慢，都不影響正確性。
+- **Trigger**: 有人回報上面任一現象，或下次動 compaction-handoff.js
+- **Effort**: S
+- **Source**: hand review 2026-10-15
 - **Pointer**: none
 

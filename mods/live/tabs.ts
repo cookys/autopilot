@@ -6,6 +6,8 @@ import type { T } from './i18n'
 import * as ui from './ui'
 import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
+import { residueTally } from './model'
+import type { NeedsHumanEntry } from './model'
 import { NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, loadSourceFor, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
@@ -56,11 +58,12 @@ export type ScrollView = { offset: number; bodyRows: number }
 // ---- tab attention: which tab holds something for the owner, visible without opening it. The tab NAME is drawn warning bold (no symbol): 待決 while a question is open, 殘留 while
 // residue needs a person, 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
 export type TabNeed = Record<string, never>
+// what the owner has to judge (residueTally): the one number behind the tab name, the 現況 row, its summary and the band's ⚑N; the cleanable entries are not counted
+const judgeCountOf = (snap: LiveSnapshot): number => (snap.detail.residue === null ? 0 : residueTally(snap.detail.residue).judgeCount)
 export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> {
   const out: Partial<Record<PaneTab, TabNeed>> = {}
   if (snap.detail.qc !== null && ui.isNeedYou(ui.stateOf('qc', snap.detail.qc.state))) out.review = {}
-  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  if (wt > 0) out.hygiene = {}
+  if (judgeCountOf(snap) > 0) out.hygiene = {}
   if (snap.pending.length > 0) out.decide = {}
   return out
 }
@@ -103,7 +106,7 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     put(needYou, bare => ui.item(u, needYou, t('now.pending_sum', { n: pending.length }), undefined, { fact: 'decide.cards', word: !bare, goto: 'decide' }))
   }
   if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
-  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
+  const wt = judgeCountOf(snap)
   if (wt > 0) put(needYou, bare => ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'now.attention', word: !bare, goto: 'hygiene' })) // an attention row of this tab that points at 殘留; the one residue.groups line is the summary kv
   if (entries.length === 0) return nowSection(u, ctx, 'attention', t('now.needs_you'), [ui.empty(t('now.nothing_waits'), 'now.attention')])
   const chip = ui.worst(entries.map(e => e.s))
@@ -219,11 +222,18 @@ function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   {
     const rs = d.residue
     if (rs === null) body.push(ui.kv(u, t('tab.hygiene'), [ui.absent(t('nodata.prefix', { what: t('nodata.residue') }))], { fact: 'residue.groups', goto: 'hygiene' }))
-    else if (rs.needs_human_count === 0) body.push(ui.kv(u, t('tab.hygiene'), [ui.stateLead(u, ui.worst([])), ui.val('  '), ui.val(t('now.sum_no_residue'), { role: 'prose' })], { fact: 'residue.groups', goto: 'hygiene' }))
     else {
-      const parts: Frag[] = [ui.stateLead(u, ui.stateOf('residueGroup', 'dirty')), ui.val('  '), ui.fmtd('count', ui.count(rs.needs_human_count, t('now.sum_residue_unit')))]
-      if (rs.needs_human_bytes !== null) parts.push(dotFrag(), ui.fmtd('size', ui.size(rs.needs_human_bytes)))
-      body.push(ui.kv(u, t('tab.hygiene'), parts, { fact: 'residue.groups', goto: 'hygiene' }))
+      const tl = residueTally(rs)
+      if (tl.judgeCount === 0 && tl.cleanCount === 0) body.push(ui.kv(u, t('tab.hygiene'), [ui.stateLead(u, ui.worst([])), ui.val('  '), ui.val(t('now.sum_no_residue'), { role: 'prose' })], { fact: 'residue.groups', goto: 'hygiene' }))
+      else {
+        const bits: Frag[] = []
+        if (tl.judgeCount > 0) bits.push(ui.fmtd('count', t('now.sum_residue_judge', { n: tl.judgeCount })))
+        if (tl.cleanCount > 0) bits.push(ui.fmtd('count', t('now.sum_residue_clean', { n: tl.cleanCount })))
+        const parts: Frag[] = [ui.stateLead(u, tl.judgeCount > 0 ? ui.stateOf('residueGroup', 'dirty') : ui.worst([])), ui.val('  ')]
+        bits.forEach((x, i) => parts.push(...(i > 0 ? [dotFrag()] : []), x))
+        if (rs.needs_human_bytes !== null) parts.push(dotFrag(), ui.fmtd('size', ui.size(rs.needs_human_bytes)))
+        body.push(ui.kv(u, t('tab.hygiene'), parts, { fact: 'residue.groups', goto: 'hygiene' }))
+      }
     }
   }
   return nowSection(u, ctx, 'tabs', t('now.tabs'), body.map(l => ui.projection('now', l.fact as FactId, l)))
@@ -710,62 +720,90 @@ function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   ]
 }
 
-// ================= Hygiene (殘留): groups that need a person -> automatic cleanup -> plugin load source (§5.5) =================
+// ================= Hygiene (殘留, §12.7): what needs you -> what can simply be cleared -> automatic cleanup -> plugin load source =================
+// Every entry is read where it stands: its name, why, and the command, with no fold to open. What is "yours to judge" and what is "safe to clear" is ui.RESIDUE_KINDS.
 const HYG = (key: string): string => 'sec:hygiene.' + key
 function hygSection(u: UiCtx, ctx: PaneCtx, key: string, title: string, body: readonly PaneLine[], o: { right?: Frag; fact?: FactId } = {}): PaneLine[] {
   const id = HYG(key)
-  const open = U.sectionOpen(ctx.folded, id)
+  const open = U.sectionOpen(ctx.folded, id, U.SECTION_DEFAULTS['hygiene.' + key]?.folded === true)
   return [ui.header(u, title, { id, open }, o.right === undefined ? {} : { right: o.right, fact: o.fact }), ...(open ? body : [])]
 }
+const residueEntries = (es: readonly NeedsHumanEntry[]): U.ResidueEntry[] => es.map(e => ({ kind: e.kind, target: e.target, cls: e.class, ageMs: e.age_days === null ? null : e.age_days * 86_400_000, bytes: e.bytes, reason: e.reason, command: e.command }))
+const sizeTail = (bytes: number | null): Frag[] => (bytes === null || bytes === 0 ? [] : [ui.val(' · ', { tone: 'dim' }), ui.fmtd('size', ui.size(bytes))])
 function residueAttention(u: UiCtx, ctx: PaneCtx, residue: LiveSnapshot['detail']['residue']): PaneLine[] {
   const t = ctx.t
   const title = t('hygiene.need_you')
   if (residue === null) return hygSection(u, ctx, 'attention', title, [ui.empty(t('nodata.prefix', { what: t('nodata.residue') }), 'residue.groups')])
-  const n = residue.needs_human_count
-  if (n === 0) return hygSection(u, ctx, 'attention', title, [ui.empty(t('hygiene.none'), 'residue.groups')])
-  const entries: U.ResidueEntry[] = residue.needs_human.map(e => ({ kind: e.kind, target: e.target, cls: e.class, ageMs: e.age_days === null ? null : e.age_days * 86_400_000, bytes: e.bytes, reason: e.reason, command: e.command }))
-  const chipState = entries.length === 0 ? ui.stateOf('residueGroup', 'dirty') : ui.worst(entries.map(e => ui.stateOf('residueGroup', e.cls)))
-  const chip = ui.cat(ui.countChip(u, chipState, n, 'residue.groups'), ...(residue.needs_human_bytes === null ? [] : [ui.val(' · ', { tone: 'dim' }), ui.fmtd('size', ui.size(residue.needs_human_bytes))]))
-  const body = U.residueGroups(u, entries, chipState)
-  if (n > entries.length) body.push(...ui.detail(u, t('hygiene.more', { n: n - entries.length }), { fact: 'residue.groups' }))
-  return hygSection(u, ctx, 'attention', title, body, { right: chip, fact: 'residue.groups' })
+  const tl = residueTally(residue)
+  if (tl.judgeCount === 0) return hygSection(u, ctx, 'attention', title, [ui.empty(t('hygiene.none'), 'residue.groups')])
+  const body = U.residueRows(u, 'residue.attention', residueEntries(tl.judge), { judge: true })
+  if (tl.unlisted > 0) body.push(...ui.detail(u, t('hygiene.more', { n: tl.unlisted }), { fact: 'residue.groups' }))
+  return hygSection(u, ctx, 'attention', title, body, { right: ui.cat(ui.plainCount(tl.judgeCount, 'residue.groups'), ...sizeTail(tl.judgeBytes)), fact: 'residue.groups' })
+}
+function residueCleanable(u: UiCtx, ctx: PaneCtx, residue: LiveSnapshot['detail']['residue']): PaneLine[] {
+  if (residue === null) return []
+  const tl = residueTally(residue)
+  if (tl.cleanCount === 0) return [] // nothing to clear: the section is not drawn at all
+  const body = U.residueRows(u, 'residue.cleanable', residueEntries(tl.clean), { judge: false })
+  return hygSection(u, ctx, 'cleanable', ctx.t('hygiene.cleanable'), body, { right: ui.cat(ui.plainCount(tl.cleanCount, 'residue.groups'), ...sizeTail(tl.cleanBytes)), fact: 'residue.groups' })
 }
 function residueAuto(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
   const residue = snap.detail.residue
   const title = t('hygiene.auto_title')
+  const key = t('label.auto_last')
   if (residue === null) return hygSection(u, ctx, 'auto', title, [ui.empty(t('nodata.prefix', { what: t('nodata.auto') }), 'residue.cleanup')])
-  if (residue.auto_ran_at === null) return hygSection(u, ctx, 'auto', title, [ui.item(u, ui.stateOf('cleanup', { errors: 0, done: 0 }), t('hygiene.no_auto'), undefined, { fact: 'residue.cleanup' })])
+  if (residue.auto_ran_at === null) return hygSection(u, ctx, 'auto', title, [ui.kv(u, key, [ui.val(t('hygiene.no_auto'), { role: 'prose' })], { fact: 'residue.cleanup' })])
   const ms = Date.parse(residue.auto_ran_at)
   const nowMs = snap.detail.now_ms
-  const age = nowMs !== null && Number.isFinite(ms) ? ui.dur(nowMs - ms) : undefined
   const removed = residue.auto_removed_count ?? 0
   const archived = residue.auto_archived_count ?? 0
-  // the producer publishes no error count (only what it removed and archived), so `errors` is 0 here: the row reads done when anything was cleaned, skipped when nothing was
-  const s = ui.stateOf('cleanup', { errors: 0, done: removed + archived })
-  return hygSection(u, ctx, 'auto', title, [ui.item(u, s, age === undefined ? t('hygiene.auto', { wt: removed, br: archived }) : t('hygiene.auto_at', { age, wt: removed, br: archived }), undefined, { fact: 'residue.cleanup' })]) // the plan 5.5 mockup: the age leads the sentence, so the row is one body with no meta to clip
+  const what = removed + archived === 0 ? ui.val(t('hygiene.auto_none'), { role: 'prose' }) : ui.fmtd('count', t('hygiene.auto_done', { wt: removed, br: archived }))
+  const when: Frag[] = nowMs !== null && Number.isFinite(ms) ? [ui.fmtd('ago', ui.ago(nowMs - ms, t)), dotFrag()] : []
+  return hygSection(u, ctx, 'auto', title, [ui.kv(u, key, [...when, what], { fact: 'residue.cleanup' })])
 }
+// the load-source facts that really put the owner on the wrong copy; a flag outside this list (stale_cache_dirs: old copies nobody runs) is information, not a request
+const BAD_SOURCE_FLAGS = ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']
+const shq = (x: string): string => (/^[\w@%+=:,./-]+$/.test(x) ? x : "'" + x.replace(/'/g, "'\\''") + "'")
 function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
   const ls = snap.detail.load_source
   const title = t('hygiene.load')
-  if (ls === null) return hygSection(u, ctx, 'source', title, [ui.empty(t('nodata.prefix', { what: t('nodata.load_source') }), 'residue.source')])
-  const behind = ls.behind_upstream
-  const s = ui.stateOf('loadSource', { source: ls.source, behind: behind ?? 0, flags: ls.flags.length + (ls.marketplace === 'missing' ? 1 : 0) })
-  const isOpen = u.expanded?.has('residue:source') === true
-  const meta: ui.MetaPart[] = [{ text: 'v' + (ls.plugin_version ?? '—'), fmt: 'id' }, ...(behind !== null && behind > 0 ? [{ text: t('hygiene.behind') + ' ' + behind, fmt: 'count' as const }] : [])]
-  const details: PaneLine[] = []
-  if (isOpen) {
-    details.push(...ui.detail(u, t('label.marketplace') + ' ' + ls.marketplace, { attached: true }))
-    if (ls.flags.length > 0) details.push(...ui.detail(u, t('label.flags') + ' ' + ls.flags.join(', '), { attached: true }))
-    for (const dir of ls.stale_cache_dirs) details.push(...ui.detail(u, t('hygiene.cache_dir', { dir: dir.dir, pids: dir.in_use_pids.join(', ') || '—', alive: dir.alive.join(', ') || '—' }), { attached: true }))
+  const F = 'residue.source' as const
+  if (ls === null) return hygSection(u, ctx, 'source', title, [ui.empty(t('nodata.prefix', { what: t('nodata.load_source') }), F)])
+  const behind = ls.behind_upstream ?? 0
+  const s = ui.stateOf('loadSource', { source: ls.source, behind, flags: ls.flags.filter(f => BAD_SOURCE_FLAGS.includes(f)).length + (ls.marketplace === 'missing' ? 1 : 0) })
+  const src = ls.source.toLowerCase()
+  const isDev = src === 'dev' || src === 'directory'
+  const cacheV = src.startsWith('cache:') ? ls.source.slice('cache:'.length) : null
+  const body = isDev ? t('src.dev') : cacheV !== null ? t('src.cache', { v: cacheV }) : t('src.unknown')
+  const mpath = ls.marketplace_path ?? null // a hand-built view (a fixture) may predate the field
+  const ver: ui.MetaPart[] = ls.plugin_version === null ? [] : [{ text: 'v' + ls.plugin_version, fmt: 'id' }]
+  const meta: ui.MetaPart[] = isDev ? [...(mpath === null ? [] : [{ text: mpath, fmt: 'id' as const }]), ...ver] : cacheV !== null ? [] : ver
+  const lines: PaneLine[] = [ui.item(u, s, body, meta, { fact: F, word: false })]
+  const setup = mpath !== null && mpath.startsWith('/') ? 'bash ' + shq(mpath + '/scripts/dev-setup.sh') : null
+  let setupShown = false
+  const fixIt = (): PaneLine[] => { if (setup === null || setupShown) return []; setupShown = true; return ui.command(u, setup) }
+  for (const dir of ls.stale_cache_dirs) {
+    const v = dir.dir.split('/').filter(x => x !== '').pop() ?? dir.dir
+    if (dir.alive.length === 0) lines.push(...ui.detail(u, t('src.stale_free', { v }), { fact: F }), ...ui.command(u, 'rm -rf ' + shq(dir.dir + '/')))
+    else lines.push(...ui.detail(u, t('src.stale_busy', { v, pids: dir.alive.join(', ') }), { fact: F }))
   }
-  const row = ui.item(u, s, loadSourceFor(ls, null), meta, { fact: 'residue.source', toggle: { id: 'residue:source', open: isOpen }, ...(ui.isNeedYou(s) ? { word: false } : {}) })
-  return hygSection(u, ctx, 'source', title, [row, ...details], { right: ui.chip(u, s), fact: 'residue.source' })
+  let marketShown = false
+  const market = (): void => { if (marketShown) return; marketShown = true; lines.push(...ui.detail(u, t('src.marketplace'), { fact: F }), ...fixIt()) }
+  for (const f of ls.flags) {
+    if (f === 'stale_cache_dirs') continue // said above, per directory
+    if (f === 'marketplace_not_directory' || f === 'marketplace_not_this_repo') market()
+    else if (f === 'dev_link_missing_or_stale') lines.push(...ui.detail(u, t('src.devlink'), { fact: F }), ...fixIt())
+    else lines.push(...ui.detail(u, t('src.flag', { flag: f }), { fact: F }))
+  }
+  if (ls.marketplace === 'missing') market()
+  if (behind > 0) lines.push(...ui.detail(u, t('src.behind', { n: behind }), { fact: F }))
+  return hygSection(u, ctx, 'source', title, lines, {})
 }
 function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u = uiCtxOf(ctx)
-  return U.sections('hygiene', { attention: residueAttention(u, ctx, snap.detail.residue), auto: residueAuto(u, ctx, snap), source: residueSource(u, ctx, snap) })
+  return U.sections('hygiene', { attention: residueAttention(u, ctx, snap.detail.residue), cleanable: residueCleanable(u, ctx, snap.detail.residue), auto: residueAuto(u, ctx, snap), source: residueSource(u, ctx, snap) })
 }
 
 // ================= ? (the legend: generated from STATES, the structure glyphs and the meter levels, §5.6) =================

@@ -391,7 +391,7 @@ const everyTab = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, 
     if (l.kind === 'header') { emptiesInSection = 0; if (l.toggle === undefined) out.push(at + ' is a header with no toggle (fold)') }
     if (l.kind === 'empty' && l.text.startsWith(ui.GLYPHS.structure.empty) && ++emptiesInSection > 1) out.push(at + ' is a second empty line in one section (empty)')
     if (l.toggle !== undefined) { if (seenToggle.has(l.toggle)) out.push(at + ' repeats toggle ' + l.toggle); seenToggle.add(l.toggle) }
-    if (!expanded && l.kind === 'command') out.push(at + ' is a command in the default render (command)')
+    if (!expanded && l.kind === 'command' && tab !== 'hygiene') out.push(at + ' is a command in the default render (command)') // 殘留 (§12.7) shows each entry's command as it stands: the owner copies it
     if (l.fact === 'pane.chrome' || l.fact === 'pane.overflow') return
     const owner = ui.FACT_OWNER[l.fact]
     if (owner !== tab) {
@@ -403,12 +403,12 @@ const everyTab = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, 
   return out
 }
 test('every tab: made lines, kind and fact, width, one empty per section, unique toggles, no command by default, foreign facts carry goto and appear once', () => {
-  const ids = (tab: (typeof ALL_TABS)[number], ls: PaneLine[]) => ls.filter(l => l.kind === 'item' && l.toggle !== undefined).map(l => l.toggle as string).concat(tab === 'hygiene' ? ['res:worktree|dirty', 'res:branch|unintegrated-branch'] : [])
+  const ids = (tab: (typeof ALL_TABS)[number], ls: PaneLine[]) => ls.filter(l => l.kind === 'item' && l.toggle !== undefined).map(l => l.toggle as string).concat(tab === 'hygiene' ? ['more:residue.attention', 'more:residue.cleanable'] : [])
   for (const [loc, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const tab of ALL_TABS) {
     const dflt = tabLinesOf(tab, richSnap(), ctxOf(t, cols))
     expect(everyTab(tab, dflt, cols, false), loc + ' ' + cols + ' default').toEqual([])
     // every toggle the default render offers, plus the residue ones, opened at once
-    const open = ctxOf(t, cols, { expanded: [...ids(tab, dflt), ...dflt.filter(l => l.toggle !== undefined).map(l => l.toggle as string), 'resitem:/home/u/proj/.claude/worktrees/hands-x', 'resitem:feature/old'] })
+    const open = ctxOf(t, cols, { expanded: [...ids(tab, dflt), ...dflt.filter(l => l.toggle !== undefined).map(l => l.toggle as string)] })
     expect(everyTab(tab, tabLinesOf(tab, richSnap(), open), cols, true), loc + ' ' + cols + ' expanded').toEqual([])
   }
 })
@@ -421,7 +421,10 @@ test('every tab: negative controls, each invariant is reported when its line is 
   expect(bent(l => ui.carry(l, { ...l, text: 'x'.repeat(80) }) /* an item 80 wide */).some(v => v.includes('(width)')), 'width').toBe(true)
   expect(bent(l => Object.assign(ui.carry(l, { ...l }), { fact: 'review.round' as const, goto: undefined })).some(v => v.includes('(owner)')), 'owner').toBe(true)
   expect(everyTab('hygiene', [...ls, ui.empty('x', 'residue.groups'), ui.empty('y', 'residue.groups')], 76, false).some(v => v.includes('(empty)')), 'empty').toBe(true)
-  expect(everyTab('hygiene', [...ls, ...ui.command(({ t, cols: 76 }) as never, 'git status')], 76, false).some(v => v.includes('(command)')), 'command').toBe(true)
+  const spend = tabLinesOf('spend', richSnap(), ctxOf(t, 76))
+  expect(everyTab('spend', [...spend, ...ui.command(({ t, cols: 76 }) as never, 'git status')], 76, false).some(v => v.includes('(command)')), 'command').toBe(true)
+  expect(everyTab('hygiene', ls, 76, false).some(v => v.includes('(command)')), 'hygiene shows its commands by design').toBe(false)
+  expect(ls.some(l => l.kind === 'command'), 'and does show them').toBe(true)
 })
 
 // ---- P5: I1-I8 and I10 (the checker review.test.ts runs over the Review tab) over EVERY tab, fixtures x locales x widths, default and with every toggle open ----
@@ -436,7 +439,7 @@ test('every tab: I1-I8 and I10 hold on all seven tabs, in both locales, at 40-16
   const ids = (ls: PaneLine[]) => ls.filter(l => l.toggle !== undefined).map(l => l.toggle as string)
   for (const [, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const tab of ALL_TABS) {
     const dflt = tabLinesOf(tab, richSnap(), ctxOf(t, cols))
-    const open = ctxOf(t, cols, { expanded: [...ids(dflt), 'resitem:/home/u/proj/.claude/worktrees/hands-x', 'resitem:feature/old'] })
+    const open = ctxOf(t, cols, { expanded: [...ids(dflt)] })
     for (const ls of [dflt, tabLinesOf(tab, richSnap(), open)]) for (const v of tabViolations(tab, ls, cols, t)) found.add(v.replace(/ line \d+/, ''))
   }
   expect([...found]).toEqual([])
@@ -449,25 +452,23 @@ test('every tab: a percentage is never written with a space before the sign (§3
   // control: the checked pattern does catch the old legend wording
   expect(/\d\s%/.test('warns at 80 % and 100 %')).toBe(true)
 })
-test('hygiene: a residue class the status map has no row for is the unknown state with the producer text in a detail line, never a raw string id', () => {
+test('hygiene: a residue class the table has no row for is yours to judge: the unknown mark, the class and the producer text as detail lines, never a raw string id', () => {
   const withClass = (cls: string): LiveSnapshot => {
-    const s = richSnap() as never as { detail: { residue: { needs_human: { class: string }[] } } }
-    s.detail.residue.needs_human = [{ ...s.detail.residue.needs_human[0], class: cls }]
+    const s = richSnap() as never as { detail: { residue: { needs_human: { class: string; reason: string | null }[] } } }
+    s.detail.residue.needs_human = [{ ...s.detail.residue.needs_human[0], class: cls, reason: 'producer words' }]
     return s as never
   }
   for (const [loc, t] of LOCALES) {
-    const open = ctxOf(t, 76, { expanded: ['res:worktree|weird-class'] })
-    const lines = hygieneTabLines(withClass('weird-class'), open)
+    const lines = hygieneTabLines(withClass('weird-class'), ctxOf(t, 76))
     const text = lines.map(l => l.text).join('\n')
-    expect(/residue\.class/.test(text), loc + ' raw id').toBe(false)
-    expect(text, loc + ' word').toContain(t('residue.class.unknown'))
-    expect(text, loc + ' producer text').toContain('weird-class')
-    expect(lines.some(l => l.kind === 'detail' && l.text.includes('weird-class')), loc + ' detail line').toBe(true)
-    expect(lines.some(l => l.kind === 'item' && l.text.includes(t('ui.state.unknown'))), loc + ' unknown state').toBe(true)
-    // control: a class the map knows keeps its own word and has no detail line for it
-    const known = hygieneTabLines(withClass('dirty'), ctxOf(t, 76, { expanded: ['res:worktree|dirty'] }))
+    expect(/residue\.(class|why)/.test(text), loc + ' raw id').toBe(false)
+    expect(lines.some(l => l.kind === 'detail' && l.text.includes('weird-class')), loc + ' class detail').toBe(true)
+    expect(lines.some(l => l.kind === 'detail' && l.text.includes('producer words')), loc + ' producer text').toBe(true)
+    expect(lines.some(l => l.kind === 'item' && l.text.startsWith(ui.STATES.unknown.glyph)), loc + ' unknown mark').toBe(true)
+    // control: a class the table knows has no raw-class line
+    const known = hygieneTabLines(withClass('dirty'), ctxOf(t, 76))
     expect(known.some(l => l.text.includes(t('residue.class_raw', { cls: 'dirty' }))), loc + ' known has no raw line').toBe(false)
-    expect(known.map(l => l.text).join('\n'), loc + ' known word').toContain(t('residue.class.dirty'))
+    expect(known.some(l => l.text.includes('producer words')), loc + ' known hides the producer text').toBe(false)
   }
 })
 test('every tab: the shared checker flags a hand-written number, a bold mark without here and a claude mark without here on any tab; the legend exemption covers nothing else', () => {

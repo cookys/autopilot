@@ -2256,10 +2256,11 @@ function richWorld(): Tree {
     behind_upstream: 3, flags: [], stale_cache_dirs: [],
   })
   files[LIVE + '/runs/' + KEY + '.residue.json'] = j({ schema: 'autopilot.residue/1', project_key: KEY, at: PUBLISHED, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1 }, source: 'repo-residue-sweep scan',
-    needs_human_count: 2, needs_human_bytes: 3 * 1048576, auto_ran_at: '2026-10-04T07:00:30.000Z', auto_removed_count: 2, auto_archived_count: 1,
+    needs_human_count: 3, needs_human_bytes: 4 * 1048576, auto_ran_at: '2026-10-04T07:00:30.000Z', auto_removed_count: 2, auto_archived_count: 1,
     needs_human: [
       { kind: 'worktree', path: '/home/u/proj/.claude/worktrees/hands-x', class: 'dirty', age_days: 4.2, bytes: 2097152, reason: 'failure', command: 'git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x' },
       { kind: 'branch', branch: 'feature/old', class: 'unintegrated-branch', age_days: 20, bytes: null, reason: null, command: 'git branch -D feature/old' },
+      { kind: 'worktree', path: '/home/u/proj/.claude/worktrees/hands-old', class: 'clean-integrated', age_days: 9, bytes: 1048576, reason: 'HEAD is an ancestor of the integration ref', command: 'git -C /home/u/proj worktree remove /home/u/proj/.claude/worktrees/hands-old' },
     ] })
   files[LIVE + '/stage/' + SID_A + '.json'] = j({
     schema: 'autopilot.stage-walk/1', sid: SID_A, size: 'M', urgent: true, bug: false, high_risk: false, units: 5,
@@ -2850,14 +2851,21 @@ for (const surface of SURFACES) {
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
-    // P5: the groups, the cleanup row and the plugin source are `item` rows on the shared components; a group is folded until its toggle is pressed
-    expect(has(hygiene.texts, '要你處理', ' 2 ', '3.0 MB')).toBe(true)
-    expect(has(hygiene.texts, '▲ worktree', '有未提交變更', '1 個', '2.0 MB')).toBe(true)
-    expect(has(hygiene.texts, '▲ 分支', '分支未整合', '1 條')).toBe(true)
-    expect(hygiene.texts).toContain('✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支')
-    expect(has(hygiene.texts, '外掛來源', '要你處理')).toBe(true)
-    expect(has(hygiene.texts, '▲ dev', 'v2.37.0', '落後 upstream 3')).toBe(true)
-    expect(hygiene.texts.some(t => t.includes('/home/u/proj/.claude/worktrees/hands-x')), 'the worktree path is behind the folded group').toBe(false)
+    // §12.7: two sections (what needs you, what can simply be cleared), each entry its name, its reason and its command; the cleanable one is not in the 2 that need you
+    expect(has(hygiene.texts, '▾ 要你處理', ' 2 ', '3.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '▲ hands-x', '4d04h', '2.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '有沒提交的檔案，先看內容再決定要不要刪')).toBe(true)
+    expect(has(hygiene.texts, '▲ feature/old', '20d')).toBe(true)
+    expect(has(hygiene.texts, '分支還沒合併；確定不要了才刪')).toBe(true)
+    expect(has(hygiene.texts, '▾ 可以直接清掉', ' 1 ', '1.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '◦ hands-old', '9d', '1.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '已合併，可以刪')).toBe(true)
+    expect(hygiene.texts.some(t => t.includes('worktree remove /home/u/proj/.claude/worktrees/hands-old') || t.includes('hands-old')), 'the command of the cleanable entry').toBe(true)
+    expect(has(hygiene.texts, '上次', '3h00m 前', '刪了 2 個 worktree、封存 1 條分支')).toBe(true)
+    expect(has(hygiene.texts, '▾ 外掛來源')).toBe(true)
+    expect(hygiene.texts.find(t => t.includes('▾ 外掛來源')), 'the source header carries no state chip').not.toContain('要你處理')
+    expect(has(hygiene.texts, '▲ 開發目錄', 'v2.37.0')).toBe(true)
+    expect(has(hygiene.texts, '落後遠端 3 個提交')).toBe(true)
     expectThemeOnly(hygiene.tree as Drawn, true)
   })
 
@@ -3487,26 +3495,27 @@ test('band phase: a task-sourced phase renders in the session locale, not the pr
   expect(bandView({}, model({ code: 'c', label: '審查', source: 'campaign' }), 'p', 0, undefined, makeT('en')).phase).toBe('審查')
 })
 
-test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60 columns', () => {
+test('hygiene tab: a long cache dir and a long worktree command wrap in full at 60 columns; the name loses only its tail', () => {
   const dir = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'
-  const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here'
+  const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here-and-then-some-more-words'
   const snap = {
     header: 'h', sections: NO_SECTIONS,
     detail: {
       now_ms: 1000,
-      load_source: { source: 'dev', plugin_version: '3.0.0', marketplace: 'directory', flags: [], behind_upstream: null, stale_cache_dirs: [{ dir, in_use_pids: [18089, 18090], alive: [18089] }] },
-      residue: { needs_human_count: 1, needs_human_bytes: 1000, needs_human: [{ kind: 'worktree', target, class: 'dirty', age_days: 4, bytes: 1000, reason: 'a long explanatory reason that must stay readable to the end', command: 'git worktree remove ' + target }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
+      load_source: { source: 'dev', plugin_version: '3.0.0', marketplace: 'directory', flags: ['stale_cache_dirs'], behind_upstream: null, stale_cache_dirs: [{ dir, in_use_pids: [18089, 18090], alive: [] }] },
+      residue: { needs_human_count: 1, needs_human_bytes: 1000, needs_human: [{ kind: 'worktree', target, class: 'dirty', age_days: 4, bytes: 1000, reason: '12 uncommitted path(s)', command: 'git worktree remove ' + target }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
     },
   } as never
   for (const locale of ['en', 'zh-TW'] as const) {
-    // the group, the item and the plugin source are collapsed by default (P5); the long strings are what an owner sees once they open them
-    const lines = hygieneTabLines(snap, { t: makeT(locale), cols: 60, expanded: new Set(['res:worktree|dirty', 'resitem:' + target, 'residue:source']) })
+    const lines = hygieneTabLines(snap, { t: makeT(locale), cols: 60 })
     const flat = lines.map(l => l.text.trim()).join('')
-    // a residue item's bullet shows the id tail by design (plan 5.5: `agent-a3379d38`); the full path is the command beneath it, which is what must never clip
-    for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); if (l.kind !== 'bullet') expect(l.text.includes('…'), l.text).toBe(false) }
+    // the name row is one line and may lose its tail; every other row (the reason, the command, the cache sentence) is whole
+    for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); if (l.kind !== 'item' && l.kind !== 'bullet') expect(l.text.includes('…'), l.text).toBe(false) }
+    const name = lines.find(l => l.kind === 'item' && l.text.startsWith('▲ some-very-long'))
+    expect(name !== undefined && name.text.includes('…') && !name.text.includes('words'), 'the name keeps its head and loses its tail').toBe(true)
     expect(flat.replace(/\s/g, '').includes(dir.replace(/\s/g, ''))).toBe(true)
     expect(flat.replace(/\s/g, '').includes(target)).toBe(true)
-    expect(flat.replace(/\s/g, '').includes('mustreadabletotheend'.replace(/\s/g, '')) || flat.replace(/\s/g, '').includes('readabletotheend')).toBe(true)
+    expect(lines.some(l => l.kind === 'detail' && l.text.includes('12') ), 'the reason carries the number from the producer').toBe(true)
   }
 })
 
@@ -4809,27 +4818,19 @@ for (const surface of SURFACES) {
 // ---- P5 (live-pane plan §7): the mounted I18 / I19 / I23 for the residue toggles ----
 for (const surface of SURFACES) {
   const hyg = async ($: any, cols?: number): Promise<string[]> => (await paneParts($, surface, 'hygiene', cols)).texts
-  test('P5 mounted (I18): a residue group opens its items, an item opens its reason and command, a second press restores each (' + surface + ')', async ($, on) => {
+  test('P5 mounted (I18): every residue entry is read where it stands: name, reason and command on screen by default, nothing to press open (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const closed = await hyg($)
-    expect(closed.some(t => t.includes('hands-x')), 'the default render lists no item').toBe(false)
-    expect(closed.some(t => t.includes('git -C /home/u/proj worktree remove')), 'the default render has no command').toBe(false)
-    const isGroup = (t: string) => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸')
-    await pressRow($, surface, 'hygiene', isGroup)
-    const group = await hyg($)
-    expect(group.length, 'the group adds exactly its item row').toBe(closed.length + 1)
-    expect(group.some(t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))).toBe(true)
-    const itemRow = (t: string) => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▸')
-    expect(group.some(itemRow), group.join('\n')).toBe(true)
-    await pressRow($, surface, 'hygiene', itemRow)
-    const item = await hyg($)
-    expect(item.some(t => t.includes('└ failure')), 'the reason is an attached detail').toBe(true)
-    expect(item.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove --force')), 'the command sits under its own item').toBe(true)
-    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▾'))
-    expect(await hyg($)).toEqual(group)
-    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))
-    expect(await hyg($)).toEqual(closed)
+    const out = await hyg($)
+    expect(out.some(t => t.startsWith('▲ hands-x') && t.trimEnd().endsWith('4d04h · 2.0 MB')), out.join('\n')).toBe(true)
+    expect(out).toContain('  有沒提交的檔案，先看內容再決定要不要刪')
+    expect(out.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove --force')), 'the command sits under its own entry').toBe(true)
+    expect(out.some(t => t.startsWith('▲ feature/old')), 'a branch is named by the branch').toBe(true)
+    expect(out.some(t => t.startsWith('◦ hands-old') && t.trimEnd().endsWith('9d · 1.0 MB')), 'the cleanable entry is a neutral row in its own section').toBe(true)
+    const sectionOf = (name: string) => out.findIndex(t => t.startsWith('▾ ' + name))
+    expect(sectionOf('要你處理')).toBeLessThan(out.findIndex(t => t.startsWith('▲ hands-x')))
+    expect(out.findIndex(t => t.startsWith('◦ hands-old'))).toBeGreaterThan(sectionOf('可以直接清掉'))
+    expect(out.some(t => /[▸▾]$/.test(t.trimEnd()) && !/^[▸▾] /.test(t)), 'no row carries a fold mark at its right edge').toBe(false)
   })
 
   test('P5 mounted (I19): each residue section header flips its fold and a second press restores it; the default is SECTION_DEFAULTS (' + surface + ')', async ($, on) => {
@@ -4837,9 +4838,9 @@ for (const surface of SURFACES) {
     await start($, surface)
     const first = await hyg($)
     const heads = first.filter(t => /^[▾▸] \S/.test(t))
-    expect(heads.length).toBe(3)
+    expect(heads.length).toBe(4)
     for (const h of heads) expect(h.startsWith('▾'), 'residue sections start open: ' + h).toBe(true)
-    for (const prefix of ['▾ 要你處理', '▾ 自動清理', '▾ 外掛來源']) {
+    for (const prefix of ['▾ 要你處理', '▾ 可以直接清掉', '▾ 自動清理', '▾ 外掛來源']) {
       await pressRow($, surface, 'hygiene', t => t.startsWith(prefix))
       const folded = await hyg($)
       expect(folded.some(t => t.startsWith('▸' + prefix.slice(1))), prefix).toBe(true)
@@ -4849,24 +4850,10 @@ for (const surface of SURFACES) {
     }
   })
 
-  test('P5 mounted (I23 golden): the 殘留 tab at 76 columns with the first group and its item opened (' + surface + ')', async ($, on) => {
+  test('P5 mounted (I23 golden): the 殘留 tab at 76 columns (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸'))
-    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x'))
-    expect(await hyg($, 76)).toEqual([
-      "▾ 要你處理  2 · 3.0 MB ────────────────────────────────────────────────────",
-      "▲ worktree  有未提交變更 · 1 個 · 2.0 MB                                  ▾",
-      "◦ hands-x · 4d04h · 2.0 MB                                                ▾",
-      "  └ failure",
-      "  $ git -C /home/u/proj worktree remove --force /home/u/proj/.claude/",
-      "    worktrees/hands-x",
-      "▲ 分支  分支未整合 · 1 條                                                 ▸",
-      "▾ 自動清理 ────────────────────────────────────────────────────────────────",
-      "✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支",
-      "▾ 外掛來源  ▲ 要你處理 ────────────────────────────────────────────────────",
-      "▲ dev · v2.37.0 · 落後 upstream 3                                         ▸",
-    ])
+    expect(await hyg($, 76)).toEqual(HYGIENE_GOLDEN_76)
   })
 }
 
@@ -5077,3 +5064,24 @@ for (const surface of SURFACES) {
     await again.unmount()
   })
 }
+// the 殘留 tab of richWorld() at 76 columns (zh-TW): two to judge, one to clear, the cleanup kv, the source with its behind-upstream sentence
+const HYGIENE_GOLDEN_76: string[] = [
+  "▾ 要你處理  2 · 3.0 MB ────────────────────────────────────────────────────",
+  "▲ hands-x                                                    4d04h · 2.0 MB",
+  "  有沒提交的檔案，先看內容再決定要不要刪",
+  "  $ git -C /home/u/proj worktree remove --force /home/u/proj/.claude/",
+  "    worktrees/hands-x",
+  "▲ feature/old                                                           20d",
+  "  分支還沒合併；確定不要了才刪",
+  "  $ git branch -D feature/old",
+  "▾ 可以直接清掉  1 · 1.0 MB ────────────────────────────────────────────────",
+  "◦ hands-old                                                     9d · 1.0 MB",
+  "  已合併，可以刪",
+  "  $ git -C /home/u/proj worktree remove /home/u/proj/.claude/worktrees/",
+  "    hands-old",
+  "▾ 自動清理 ────────────────────────────────────────────────────────────────",
+  "上次        3h00m 前 · 刪了 2 個 worktree、封存 1 條分支",
+  "▾ 外掛來源 ────────────────────────────────────────────────────────────────",
+  "▲ 開發目錄 · v2.37.0",
+  "  落後遠端 3 個提交",
+]

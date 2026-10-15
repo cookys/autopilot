@@ -15,7 +15,8 @@
  * getSessionId is deliberately not used.
  *
  * API:
- *   collect({ sessionId, cwd, now?, dirs?, git? }) -> { lines: string[], sources: {name: 'ok'|'absent'} }
+ *   collect({ sessionId, cwd, now?, dirs?, git? }) -> { lines: string[], sources: {name: 'ok'|'absent'},
+ *     bySource: {name: string[]}, marker: object|null }   (bySource/marker serve a hook's own section layout)
  *   render(snapshot, { maxBytes }) -> string   (whole lines only; ends with "... N lines omitted" if cut)
  *   snapshotText({ ...collect opts, maxBytes }) -> string
  * dirs (all optional, for tests): sessionMode, live, taskCard, dispatchRuns.
@@ -290,10 +291,12 @@ function collect(opts = {}) {
   };
   const sources = {};
   const lines = [];
+  const bySource = {};
   const run = (name, fn) => {
     let res;
     try { res = fn(ctx); } catch (e) { res = absent(name, `error: ${clip(e && e.message, 80)}`); }
     sources[name] = res.ok ? 'ok' : 'absent';
+    bySource[name] = res.lines;
     lines.push(...res.lines);
   };
   if (!ctx.sessionId) {
@@ -314,7 +317,7 @@ function collect(opts = {}) {
     run('dispatches', srcDispatches);
     run('subagents', srcRoster);
   }
-  return { lines, sources };
+  return { lines, sources, bySource, marker: ctx.marker };
 }
 
 function render(snapshot, { maxBytes = 3000 } = {}) {

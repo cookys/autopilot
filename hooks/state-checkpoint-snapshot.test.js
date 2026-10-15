@@ -59,20 +59,20 @@ function checkpoint(sb, extraEnv = {}) {
   return { r, content: fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null };
 }
 
-test('PreCompact: the saved file leads with the snapshot, before the machine state and the tail', () => {
+test('PreCompact: the saved file leads with the repo state, then the marker lines, before the machine state and the tail', () => {
   const sb = sandbox();
   try {
     const { r, content } = checkpoint(sb);
     assert.strictEqual(r.status, 0, r.stderr);
     assert.ok(content, 'checkpoint file written');
-    assert.ok(content.startsWith('# Autopilot Compaction Checkpoint\n## Workflow Snapshot\n'), content.slice(0, 120));
+    assert.ok(content.startsWith('# Autopilot Compaction Checkpoint\n## Project and Git State\n'), content.slice(0, 120));
     const iSnap = content.indexOf('level l4 · size M · stage implement');
     const iMachine = content.indexOf('## Machine State');
     const iTail = content.indexOf('## Transcript Tail');
     assert.ok(iSnap > 0 && iSnap < iMachine && iMachine < iTail, `order ${iSnap} ${iMachine} ${iTail}`);
     assert.match(content, /next legal node after implement: verify/);
     assert.match(content, /task card — goal: keep the workflow across compaction/);
-    assert.match(content, /git: branch feat\/snap/);
+    assert.match(content, /^branch: feat\/snap$/m);
   } finally { sb.cleanup(); }
 });
 
@@ -86,12 +86,12 @@ test('PreCompact: stdout is the bounded snapshot addressed to the summarizer', (
   } finally { sb.cleanup(); }
 });
 
-test('PreCompact: AUTOPILOT_PRECOMPACT_STDOUT=0 prints nothing but the file still leads with the snapshot', () => {
+test('PreCompact: AUTOPILOT_PRECOMPACT_STDOUT=0 prints nothing but the file still leads with the repo state', () => {
   const sb = sandbox();
   try {
     const { r, content } = checkpoint(sb, { AUTOPILOT_PRECOMPACT_STDOUT: '0' });
     assert.strictEqual(r.stdout, '');
-    assert.ok(content.startsWith('# Autopilot Compaction Checkpoint\n## Workflow Snapshot\n'));
+    assert.ok(content.startsWith('# Autopilot Compaction Checkpoint\n## Project and Git State\n'));
   } finally { sb.cleanup(); }
 });
 
@@ -139,7 +139,7 @@ test('PreCompact: with every disk source missing the file is still written, each
     assert.strictEqual(r.status, 0);
     assert.match(content, /session: absent \(no unexpired session-mode marker\)/);
     assert.match(content, /task card: absent/);
-    assert.match(content, /git: branch feat\/snap/);
+    assert.match(content, /^branch: feat\/snap$/m);
   } finally { sb.cleanup(); }
 });
 

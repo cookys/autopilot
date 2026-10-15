@@ -51,8 +51,9 @@ const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
 // The tail is the supplement, not the state: the workflow snapshot leads the file (plan
-// docs/plans/2026-10-13-workflow-snapshot-at-compaction.md). 6 turns / 3 KB of text-bearing turns.
-const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '6', 10);
+// docs/plans/2026-10-13-workflow-snapshot-at-compaction.md). 4 turns / 3 KB of text-bearing turns, and the
+// tail now goes LAST, after the repo/dispatch/marker/model-handoff sections (scripts/lib/compaction-handoff.js).
+const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '4', 10);
 const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '3072', 10);
 const SNAPSHOT_FILE_BYTES = 6000;
 const SNAPSHOT_STDOUT_BYTES = 3000;
@@ -222,27 +223,26 @@ function postCompactCheck(input) {
     const failureCount = readFailureCounter();
     const collectedSnapshot = collectWorkflowSnapshot(input);
     const snapshotFile = renderWorkflowSnapshot(collectedSnapshot, SNAPSHOT_FILE_BYTES);
-    let stateContent = `# Autopilot Compaction Checkpoint
-## Workflow Snapshot
-${snapshotFile}
-
-## Machine State (guaranteed accurate)
+    // snapshotFile (the flat one-block rendering) is no longer written to the file: its sources are
+    // split across the handoff sections below. The same snapshot still feeds the PreCompact stdout.
+    void snapshotFile;
+    const machineState = `## Machine State (guaranteed accurate)
 - Timestamp: ${timestamp}
 - Hostname: ${os.hostname()}
 - Session: ${sessionId}
 - Failure counter: ${failureCount}
 - Compaction trigger: ${trigger}
 - Hook: state-checkpoint.js (v2.7.2+, Node JSONL parser)
-
 `;
+    let tailBlock = null; // { header, body }, placed last by buildHandoff
 
     // Extract transcript tail
     if (!transcriptPath) {
-      stateContent += emitFailure('empty transcript_path', 'stdin parse');
+      tailBlock = { header: '', body: emitFailure('empty transcript_path', 'stdin parse') };
       status = 'failed';
       failureReason = 'empty_transcript_path';
     } else if (!fs.existsSync(transcriptPath)) {
-      stateContent += emitFailure('transcript file not found', 'fs.existsSync check', transcriptPath);
+      tailBlock = { header: '', body: emitFailure('transcript file not found', 'fs.existsSync check', transcriptPath) };
       status = 'failed';
       failureReason = 'transcript_not_found';
     } else {
@@ -252,11 +252,11 @@ ${snapshotFile}
         if (!realTranscript.startsWith(os.homedir())) {
           // Include the resolved $HOME so the user can see WHY the path was
           // rejected (e.g. CLAUDE_CONFIG_DIR override / cross-volume symlink).
-          stateContent += emitFailure(
+          tailBlock = { header: '', body: emitFailure(
             'transcript path resolves outside HOME',
             'symlink check',
             `resolved=${realTranscript} (HOME=${os.homedir()})`
-          );
+          ) };
           status = 'failed';
           failureReason = 'transcript_outside_home';
         } else {
@@ -268,7 +268,7 @@ ${snapshotFile}
           kept = metadata.kept;
           bytesUsed = metadata.bytesUsed;
 
-          stateContent += `## Transcript Tail (hook-extracted)
+          tailBlock = { header: `## Transcript Tail (hook-extracted, auxiliary reference)
 - Method: Node JSONL parser (v2.7.2)
 - Hostname: ${os.hostname()}
 - Turns captured: ${kept} (of ${parsed.turns.length} filtered turns / ${total} total records)
@@ -276,15 +276,15 @@ ${snapshotFile}
 - Bytes used: ${bytesUsed} (cap: ${TRANSCRIPT_BYTE_CAP})
 - Order: newest-first selection, output chronological
 
-${body}`;
+`, body };
 
           if (kept === 0 && parsed.turns.length > 0) {
-            stateContent += `\n[NOTE: all turns filtered or empty after content extraction — check transcript or filter logic]\n`;
+            tailBlock.body += `\n[NOTE: all turns filtered or empty after content extraction — check transcript or filter logic]\n`;
           }
           status = 'ok';
         }
       } catch (err) {
-        stateContent += emitFailure(err.message || 'unknown parse error', 'parseTranscript', err.stack ? err.stack.split('\n')[0] : '');
+        tailBlock = { header: '', body: emitFailure(err.message || 'unknown parse error', 'parseTranscript', err.stack ? err.stack.split('\n')[0] : '') };
         status = 'failed';
         failureReason = err.message;
       }
@@ -305,6 +305,17 @@ ${body}`;
     // established as a preference/constraint/boundary — quoted EXACTLY, not
     // paraphrased, (4) current state of the work, (5) open items / what
     // remains, (6) exact names, paths, and values.
+    // Handoff sections (scripts/lib/compaction-handoff.js): repo state, dispatches, marker/ledger, model note,
+    // machine state, then the transcript tail. Every section is fail-open and bounded.
+    let handoffBody;
+    try {
+      handoffBody = require('../scripts/lib/compaction-handoff.js').buildHandoff({
+        sessionId: input.session_id, cwd: input.cwd || process.cwd(), snapshot: collectedSnapshot, machineState, tail: tailBlock,
+      });
+    } catch (err) {
+      handoffBody = `## Handoff sections\nunavailable: ${String(err && err.message).slice(0, 120)}\n\n${machineState}\n${tailBlock ? tailBlock.header + tailBlock.body : ''}`;
+    }
+    let stateContent = `# Autopilot Compaction Checkpoint\n${handoffBody}`;
     stateContent += `
 
 ## LLM Context (Claude-appended, optional supplement)

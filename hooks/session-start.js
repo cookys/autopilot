@@ -546,8 +546,29 @@ function run() {
       updateNotice = '';
     }
 
+    // Any source: t2 + gap must fit under window - 33000, else T2 is never reached. One line, no changes made.
+    let budgetWarning = '';
+    try {
+      budgetWarning = require('../scripts/lib/compaction-handoff.js').budgetWarning({
+        projectDir: process.env.CLAUDE_PROJECT_DIR || cwd,
+        model: typeof payload.model === 'string' ? payload.model : undefined,
+      }) || '';
+    } catch { budgetWarning = ''; }
+    // Compact only: log where compaction really happened (calibration for the 33000 buffer constant).
+    if (source === 'compact') {
+      try {
+        require('../scripts/lib/compaction-handoff.js').recordCompactionPoint({
+          sessionId: payload.session_id,
+          transcriptPath: payload.transcript_path,
+          projectDir: process.env.CLAUDE_PROJECT_DIR || cwd,
+          model: typeof payload.model === 'string' ? payload.model : undefined,
+        });
+      } catch { /* calibration is best-effort */ }
+    }
+
     const context = composeSessionStartContext({
       compactionRecovery,
+      budgetWarning,
       handoffInjected,
       intentHint,
       disableWarning,

@@ -1790,19 +1790,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
 
-### Plan graduation --archive applies one --shipped-in to every stem
-- **Id**: BL-0171
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 一次歸檔多份計畫時，出貨版本只能給一個值，每份計畫在專案索引的版本欄都會被寫成同一個值，要手動改回各自的合併點。改寫引用時也漏掉腳本清單文件裡的相對連結。
-- **Impact**: 低。歸檔後 INDEX 記錯合併點，連結斷掉要靠 doc-drift-gate 抓。
-- **Trigger**: 下次一次歸檔兩份以上計畫，或動 check-plan-graduation.js 時
-- **Effort**: S
-- **Source**: archive-shipped lane, 2026-10-15
-- **Pointer**: none
-- **Context**: check-plan-graduation.js:168 out.shippedIn = need() is single-valued; :1271 const version = shippedIn || 'shipped' applies to all stems. Accept stem=sha pairs.
-
 ### Dispatch-tree 3b live gaps: tmux parent leak, kimi child env
 - **Id**: BL-0176
 - **Status**: open

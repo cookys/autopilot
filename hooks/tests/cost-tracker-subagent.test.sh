@@ -131,5 +131,13 @@ printf '%s' '{"agentType":"x","parentAgentId":"zzz"}' > "$TSUB/agent-dep1.meta.j
 ROWS_BEFORE="$(wc -l < "$LEDGER")"
 run_hook cost-tracker.js "$TP"
 assert_eq "$ROWS_BEFORE" "$(wc -l < "$LEDGER")" "unchanged agent files: no new rows"
+# BL-0120: the skipped-file check above cannot fail (no rows -> no sidecar fields to compare). Grow dep1 and the
+# rewritten sidecar must now be read: the NEW row carries the rewritten parent/type, the old rows keep theirs.
+{ line d5 e5 5 100 10 ',"isSidechain":true,"agentId":"dep1"'; } >> "$TSUB/agent-dep1.jsonl"
+run_hook cost-tracker.js "$TP"
+assert_eq "$((ROWS_BEFORE + 1))" "$(wc -l < "$LEDGER")" "grown agent file: exactly its new turn appended"
+newrow() { node -e 'const r=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse).filter(x=>x.agent_id==="dep1").pop();process.stdout.write(String(r[process.argv[2]]))' "$LEDGER" "$1"; }
+assert_eq "zzz" "$(newrow parent_agent_id)" "grown agent file: new row gets the rewritten sidecar's parent"
+assert_eq "x" "$(newrow agent_type)" "grown agent file: new row gets the rewritten sidecar's type"
 
 finalize_test

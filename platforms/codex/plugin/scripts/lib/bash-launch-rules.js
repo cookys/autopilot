@@ -29,10 +29,16 @@ const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|for
 const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
-const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout']);
+const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout',
+  'ionice', 'flock', 'chrt', 'taskset', 'xargs']);
+// Leading positional words a prefix command consumes before the real command: `flock FILE cmd`, `chrt PRIO cmd`,
+// `taskset MASK cmd` (`taskset -c LIST cmd` has no mask word: handled where the flags are read).
+const POSITIONAL = { flock: 1, chrt: 1, taskset: 1 };
 // Flags of a prefix command that consume the NEXT word as their value.
 const VALUE_FLAGS = {
   nice: new Set(['-n']), sudo: new Set(['-u', '-g', '-h', '-p', '-C']), env: new Set(['-u', '-C', '-S']), timeout: new Set(['-s', '-k']),
+  ionice: new Set(['-c', '-n', '-p', '-P', '-u']), flock: new Set(['-w', '-E', '--timeout', '--conflict-exit-code']),
+  taskset: new Set(['-c', '--cpu-list']), xargs: new Set(['-P', '-n', '-L', '-I', '-d', '-E', '-s', '-a', '-R', '-S']),
 };
 // Shell keywords that precede a command: `for …; do CMD &`, `if …; then CMD`, `{ CMD; }`.
 const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '!', '(']);
@@ -41,6 +47,7 @@ const CLOSERS = [
   { close: /^\}(?:\s|$)/, open: /^\{(?:\s|$)/ },
   { close: /^done(?:\s|$)/, open: /^(?:for|while|until|select)\s/ },
   { close: /^fi(?:\s|$)/, open: /^if\s/ },
+  { close: /^esac(?:\s|$)/, open: /^case\s/ },
 ];
 
 // Cost bounds: the closer pull-back below scans backwards (quadratic over `} & } & …`), and `$(…)` scans
@@ -62,10 +69,14 @@ function segments(text) {
   const big = s.length > SEG_MAX_TEXT;
   let pipeNext = false; // the next segment is the right-hand side of a `|` / `|&`
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
+  // `lvl`: which shell a segment runs in. A `wait` only sees jobs of its OWN shell level (the script itself, or one
+  // `( … )` subshell of it); expandSegments prefixes the script id so `bash -c` / `$( )` bodies are levels of their own.
+  const lvlStack = [0];
+  let lvlN = 0;
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext }); pipeNext = false; }
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, lvl: lvlStack[lvlStack.length - 1] }); pipeNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -95,17 +106,18 @@ function segments(text) {
     if (c === '\\' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
     if (c === "'" || c === '"') { q = c; cur += c; continue; }
     if (c === '`') { bt = !bt; cur += c; continue; }
-    if (c === '(' && cur.trim() === '') { subDepth += 1; continue; } // leading subshell paren
+    if (c === '(' && cur.trim() === '') { subDepth += 1; lvlN += 1; lvlStack.push(lvlN); continue; } // leading subshell paren
     if (c === '(') { inner += 1; cur += c; continue; }
     if (c === ')') {
       if (inner > 0) inner -= 1;
-      else if (subDepth > 0) { push(false); subDepth -= 1; continue; } // closes a subshell
+      else if (subDepth > 0) { push(false); subDepth -= 1; lvlStack.pop(); continue; } // closes a subshell
       cur += c; continue;
     }
     // Inside an unquoted `$( … )` or backtick pair the separators belong to that substitution: keep it one segment (it is
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
     if ((inner > 0 || bt) && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
     if (c === '\n' || c === ';') { push(false, true); continue; }
+    if (c === '|' && s[i - 1] === '>') { cur += c; continue; } // `>|` clobber redirect, not a pipe
     if (c === '|') {
       push(false);
       if (s[i + 1] === '|') { i += 1; continue; } // `||`
@@ -140,6 +152,9 @@ function tokens(segText) {
   return out;
 }
 
+// Interpreter one-liners whose string argument is run by a shell (python / perl / ruby / node).
+const INTERP_C_RE = /^(?:\S*\/)?(?:python[0-9.]*|perl|ruby|node)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*[ce]\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
+const SHELL_CALL_RE = /(os\.(?:system|popen)|subprocess\.(?:run|call|Popen|check_call|check_output|getoutput)|child_process\.(?:exec|execSync|spawn)|\bsystem)\(\s*(?:'([^']*)'|"((?:\\.|[^"\\])*)")/g;
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 
 // ---- `$(…)` / backtick scanner -------------------------------------------------------------------
@@ -221,6 +236,8 @@ function findSubstitutions(text) {
 // Flatten `bash -c '…'` bodies and `$(…)` / backtick bodies into extra segments (they are executed).
 // One-entry cache: rules 1 and 2 expand the very same executable text in the same hook call (read-only).
 let lastExpanded = { text: null, out: null };
+let scriptSeq = 0; // one id per parsed script text, so segments of different scripts never share a wait level
+const MAX_EXPAND_DEPTH = 5; // `$($($(rail &)))` is 3 deep; deeper nesting is not worth the cost, and stays silent
 function expandSegments(text, depth = 0) {
   if (depth === 0 && lastExpanded.text === text) return lastExpanded.out;
   const out = expandSegmentsUncached(text, depth);
@@ -229,11 +246,26 @@ function expandSegments(text, depth = 0) {
 }
 function expandSegmentsUncached(text, depth) {
   const all = [];
+  const sid = (scriptSeq += 1);
   for (const seg of segments(text)) {
+    seg.lvl = `${sid}:${seg.lvl}`;
     all.push(seg);
-    if (depth >= 2) continue;
+    if (depth >= MAX_EXPAND_DEPTH) continue;
     const m = SHELL_C_RE.exec(seg.text);
     if (m) all.push(...expandSegments(m[1] !== undefined ? m[1] : m[2], depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg, sh: true, sub: true })));
+    // `python3 -c "import os; os.system('rail &')"`: the string handed to a shell-running call is a script too.
+    const im = INTERP_C_RE.exec(seg.text);
+    if (im && seg.text.length <= SEG_MAX_TEXT) {
+      const body = im[1] !== undefined ? im[1] : im[2];
+      SHELL_CALL_RE.lastIndex = 0;
+      let cm;
+      while ((cm = SHELL_CALL_RE.exec(body)) !== null) {
+        const script = cm[2] !== undefined ? cm[2] : cm[3];
+        // Popen / spawn return at once: the child outlives the call even with no `&` in the string.
+        const asyncCall = /Popen|spawn/.test(cm[1]);
+        all.push(...expandSegments(script, depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg || asyncCall, sh: true, sub: true })));
+      }
+    }
     for (const sub of (seg.text.length > SEG_MAX_TEXT ? [] : findSubstitutions(seg.text))) {
       // The body of `$(…)` / backticks is a fresh script: strip ITS heredoc bodies and comments too
       // (`git commit -m "$(cat <<'EOF' … EOF)"` — the outer lexer treats the heredoc as quoted data).
@@ -252,26 +284,46 @@ const unq = (w) => w.replace(/^['"]|['"]$/g, '');
 function commandPosition(segText) {
   const w = tokens(segText).map((t) => unq(t.raw));
   let detach = false;
+  let armStart = false;
+  let bg = false; // `coproc`: always asynchronous, but a plain background job (`wait` does see it)
   let i = 0;
   while (i < w.length) {
     const a = w[i];
     if (/^[A-Za-z_]\w*=/.test(a) || KEYWORDS.has(a)) { i += 1; continue; }
+    if (a === 'coproc') {
+      bg = true; i += 1;
+      if (/^[A-Za-z_]\w*$/.test(w[i] || '') && w[i + 1] === '{') i += 1; // `coproc NAME { … }`
+      continue;
+    }
+    // `case $x in a) CMD` and later arms `b) CMD`: skip the `case … in` head and the arm label.
+    if (a === 'case') {
+      const k = w.indexOf('in', i + 1);
+      if (k < 0) return { head: null, detach, bg, rest: [] };
+      i = k + 1; armStart = true; continue;
+    }
+    // A label right after `case … in` is always a label (even `dispatch-review.sh)`); at the start of a later
+    // arm's segment it is one unless it is a bare rail path.
+    if (/^\(?[^()]*\)$/.test(a) && (armStart || (i === 0 && !isRail(a.replace(/\)+$/, ''))))) { i += 1; armStart = false; continue; }
+    armStart = false;
     const base = a.replace(/^.*\//, '');
     if (PREFIX_CMDS.has(base)) {
       i += 1;
+      let positional = POSITIONAL[base] || 0;
       while (i < w.length && /^-/.test(w[i])) {
+        if (base === 'taskset' && (w[i] === '-c' || w[i] === '--cpu-list')) positional = 0;
         if (VALUE_FLAGS[base] && VALUE_FLAGS[base].has(w[i])) i += 1;
         if (i >= w.length) break;
         if (base === 'setsid' && (w[i] === '-f' || w[i] === '--fork')) detach = true;
-        if (/^-[a-zA-Z]*c$/.test(w[i]) && ['bash', 'sh', 'zsh', 'dash'].includes(base)) return { head: null, detach, rest: [] };
+        if (/^-[a-zA-Z]*c$/.test(w[i]) && ['bash', 'sh', 'zsh', 'dash'].includes(base)) return { head: null, detach, bg, rest: [] };
         i += 1;
       }
+      i = Math.min(w.length, i + positional);
       if (base === 'timeout' && i < w.length && /^\d/.test(w[i])) i += 1; // the duration
       continue;
     }
-    return { head: a.replace(/\)+$/, ''), detach, rest: w.slice(i + 1) };
+    return { head: a.replace(/\)+$/, ''), detach, bg, rest: w.slice(i + 1) };
   }
-  return { head: null, detach, rest: [] };
+  return { head: null, detach, bg, rest: [] };
 }
 
 function isRail(head) {
@@ -281,15 +333,57 @@ function isRail(head) {
 
 // Only a bare `wait` or `wait $!` / `wait "$!"` is guaranteed to wait for the rail just launched
 // (`wait 999` waits for pid 999; redirections do not change that).
-function waitsForAll(rest) {
+function waitsForAll(rest, pidVar = null) {
   const args = [];
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
-    if (/^(?:\d*[<>]{1,2}&?|&>>?)$/.test(a)) { i += 1; continue; } // bare operator: skip its target word too
+    if (/^(?:\d*(?:>\||[<>]{1,2}&?)|&>>?)$/.test(a)) { i += 1; continue; } // bare operator (`>|` too): skip its target word too
     if (/^(?:\d*[<>]|&>)/.test(a)) continue; // operator with the target attached
     args.push(a);
   }
-  return args.length === 0 || (args.length === 1 && /^"?\$!"?$/.test(args[0]));
+  if (args.length === 0) return true;
+  if (args.length !== 1) return false;
+  if (/^"?\$!"?$/.test(args[0])) return true;
+  // `pid=$!` taken right after THIS launch, then `wait $pid`: the same job.
+  return !!pidVar && new RegExp(`^"?\\$(?:${pidVar}|\\{${pidVar}\\})"?$`).test(args[0]);
+}
+
+// `pid=$!` straight after the launch at pos[idx] (same shell level, no other background launch in between).
+function bangVarAfter(pos, idx) {
+  const lvl = pos[idx].seg.lvl;
+  for (let k = idx + 1; k < pos.length; k += 1) {
+    const q = pos[k];
+    if (q.seg.lvl !== lvl) continue;
+    const m = /^([A-Za-z_]\w*)=("?)\$!\2$/.exec(q.seg.text);
+    if (m) return { name: m[1], at: k };
+    if (q.seg.bg || q.detach || q.bg) return null; // `$!` would name a later job
+  }
+  return null;
+}
+
+// Functions whose body runs a rail: name -> rail path. `f(){ rail x; }; f &` backgrounds the rail through f.
+const FUNC_DEF_RE = /^(?:function\s+([A-Za-z_][\w.:-]*)(?:\s*\(\s*\))?|([A-Za-z_][\w.:-]*)\s*\(\s*\))\s*\{\s*(.*)$/;
+function functionRails(pos) {
+  const map = new Map();
+  let open = null;
+  for (const p of pos) {
+    const t = p.seg.text;
+    const m = FUNC_DEF_RE.exec(t);
+    if (!open) {
+      if (!m) continue;
+      open = { name: m[1] || m[2], depth: 1, rail: null };
+      const h = commandPosition(m[3]).head;
+      if (isRail(h)) open.rail = h;
+      continue;
+    }
+    if (m || /^\{(?:\s|$)/.test(t)) open.depth += 1;
+    if (!open.rail && isRail(p.head)) open.rail = p.head;
+    if (/^\}(?:\s|$)/.test(t)) {
+      open.depth -= 1;
+      if (open.depth === 0) { if (open.rail) map.set(open.name, open.rail); open = null; }
+    }
+  }
+  return map;
 }
 
 // Does this detached rail launch carry every ledger arg its kind needs (stage rails: --ledger/--run-id/--stage,
@@ -312,22 +406,27 @@ function detectDetachNoWake(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '');
   const segs = expandSegments(text);
   const pos = segs.map((s) => ({ seg: s, ...commandPosition(s.text) }));
-  // Wake-up only counts when the waiter script is itself a command word, or — for a plain trailing `&`
-  // directly in the SAME shell level — a later `wait` in that same level. A `wait` cannot see a job that
-  // was `setsid -f` forked, that lives in a `( … )` subshell, or that runs inside `$(…)` / `bash -c`.
-  const waiter = pos.some((p) => p.head && WAKE_SCRIPT_RE.test(p.head));
-  if (waiter) return null;
+  const funcRail = functionRails(pos);
+  // Wake-up only counts when the waiter script is itself a command word that runs AFTER the launch and in the
+  // foreground (a waiter before the launch, or itself backgrounded, waits for nothing), or — for a plain trailing
+  // `&` — a later `wait` in the SAME shell level (the script itself, one `( … )` subshell, or one `bash -c` / `$( )`
+  // body: `bash -c 'rail & wait'` is fine). A `wait` cannot see a job that was `setsid -f` forked or that lives in
+  // another shell level.
   for (let idx = 0; idx < pos.length; idx += 1) {
     const p = pos[idx];
-    if (!p.head || !(p.detach || p.seg.bg)) continue;
-    if (!isRail(p.head)) continue;
+    if (!p.head || !(p.detach || p.bg || p.seg.bg)) continue;
+    const railHead = isRail(p.head) ? p.head : (funcRail.get(p.head) || null);
+    if (!railHead) continue;
+    if (pos.some((q, k) => k > idx && q.head && WAKE_SCRIPT_RE.test(q.head) && !q.seg.bg)) continue;
     // A `setsid -f` rail launched with EVERY ledger arg its kind needs lands `<ledger>.results/<id>.<stage>.exit`;
     // the NEXT call (an until-loop / Monitor on that file) is the wake-up, so this call needs no waiter.
-    if (p.detach && writesExitFile(p)) continue;
+    if (p.detach && railHead === p.head && writesExitFile(p)) continue;
     const shape = p.detach ? 'setsid-f' : 'amp';
-    if (shape === 'amp' && !p.seg.sub
-      && pos.slice(idx + 1).some((q) => q.head === 'wait' && !q.seg.sub && !q.seg.bg && !q.seg.pipe && waitsForAll(q.rest))) continue;
-    const rm = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(p.head);
+    const bv = shape === 'amp' ? bangVarAfter(pos, idx) : null;
+    if (shape === 'amp'
+      && pos.some((q, k) => k > idx && q.head === 'wait' && q.seg.lvl === p.seg.lvl && !q.seg.bg && !q.seg.pipe
+        && waitsForAll(q.rest, bv && k > bv.at ? bv.name : null))) continue;
+    const rm = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(railHead);
     return {
       rule: 'detach-no-wake',
       shape,

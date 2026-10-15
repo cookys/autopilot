@@ -168,6 +168,102 @@ for (const cmd of [
   });
 }
 
+// ---- BL-0139: launch shapes the first guard missed (each denial case was red on the previous rules) ----
+const BL0139_DENY = [
+  // case block backgrounded as a whole (single arm, multi-arm, label with a pipe)
+  'case $x in a) scripts/dispatch-review.sh x;; esac &',
+  'case $x in\n a) echo hi;;\n b) scripts/dispatch-review.sh x;;\nesac &',
+  'case $x in a|b) scripts/dispatch-review.sh x;; esac &',
+  // xargs -P fan-out launched in the background
+  'ls | xargs -P 4 -n1 scripts/dispatch-review.sh &',
+  'printf "%s\\n" a b | xargs -I {} -P2 scripts/dispatch-review.sh --seat {} &',
+  // scheduler / lock wrappers
+  'ionice -c3 scripts/dispatch-review.sh x &',
+  'ionice -c 2 -n 7 scripts/dispatch-review.sh x &',
+  'flock /tmp/l scripts/dispatch-review.sh x &',
+  'flock -n /tmp/l scripts/dispatch-review.sh x &',
+  'taskset -c 0,1 scripts/dispatch-review.sh x &',
+  'taskset 0x3 scripts/dispatch-review.sh x &',
+  'chrt -b 0 scripts/dispatch-review.sh x &',
+  'setsid -f ionice -c3 scripts/dispatch-review.sh x',
+  // coproc is always asynchronous
+  'coproc scripts/dispatch-review.sh x',
+  'coproc REV { scripts/dispatch-review.sh x; }',
+  // function wrapping the launch
+  'f(){ scripts/dispatch-review.sh x; }; f &',
+  'f() { scripts/dispatch-review.sh x; }\nf &',
+  'function f { scripts/dispatch-review.sh x; }; f &',
+  // substitution nested three deep
+  'echo $(echo $(echo $(scripts/dispatch-review.sh x &)))',
+  // python / perl one-liners handing the string to a shell
+  `python3 -c "import os; os.system('scripts/dispatch-review.sh x &')"`,
+  `python3 -c "import subprocess; subprocess.Popen('scripts/dispatch-review.sh x', shell=True)"`,
+  `perl -e 'system("scripts/dispatch-review.sh x &")'`,
+  // a waiter that cannot wake this launch
+  'node scripts/wait-dispatch-results.js --ledger L --expect old.s; nohup scripts/dispatch-review.sh x &', // runs BEFORE the launch
+  'nohup scripts/dispatch-review.sh x & node scripts/wait-dispatch-results.js --ledger L --expect R.S &', // waiter itself backgrounded
+  // wait on a pid that is not the launched job
+  'scripts/dispatch-review.sh x & wait $other',
+  'scripts/dispatch-review.sh x & wait $pid', // pid never captured from $!
+  'scripts/dispatch-review.sh a & scripts/dispatch-review.sh b & pid=$!; wait $pid', // first launch is still unwaited
+  'scripts/dispatch-review.sh x & pid=$!; sleep 1; wait $pid2',
+  // a wait that sits in another shell level does not see the job
+  '(scripts/dispatch-review.sh x &); wait',
+  "bash -c 'scripts/dispatch-review.sh x &'; wait",
+];
+for (const cmd of BL0139_DENY) {
+  test(`BL-0139 denies: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+
+const BL0139_ALLOW = [
+  // look-alikes: same shapes, but foreground, waited, or not a rail
+  'case $x in a) scripts/dispatch-review.sh x;; esac',
+  'case $x in a) scripts/dispatch-review.sh x;; esac &\nwait',
+  'case $x in a) echo hi;; esac &',
+  'case "$rail" in dispatch-review.sh) echo ok;; esac &', // the rail name is only a case label
+  'ls | xargs -n1 scripts/dispatch-review.sh',
+  'ls | xargs -P 4 -n1 scripts/dispatch-review.sh & wait',
+  'ls | xargs -P 4 echo &',
+  'ionice -c3 scripts/dispatch-review.sh x',
+  'ionice -c3 scripts/dispatch-review.sh x & wait',
+  'flock /tmp/l scripts/dispatch-review.sh x',
+  'flock /tmp/l echo hi &',
+  'taskset -c 0 scripts/dispatch-review.sh x',
+  'coproc echo hi',
+  'echo coproc scripts/dispatch-review.sh x',
+  'coproc scripts/dispatch-review.sh x & wait',
+  'f(){ scripts/dispatch-review.sh x; }; f',
+  'f(){ scripts/dispatch-review.sh x; }; f & wait',
+  'f(){ echo hi; }; f &', // function that never runs a rail
+  'f(){ scripts/dispatch-review.sh x; }; g(){ echo hi; }; g &',
+  'echo $(echo $(echo $(scripts/dispatch-review.sh x)))', // deep, but foreground
+  `python3 -c "import os; os.system('scripts/dispatch-review.sh x')"`, // foreground
+  `python3 -c "print('scripts/dispatch-review.sh x &')"`, // string never reaches a shell
+  `python3 -c "import os; os.system('echo hi &')"`,
+  // waits that DO cover the launch (previously false denials)
+  "bash -c 'scripts/dispatch-review.sh x & wait'",
+  'echo "$(scripts/dispatch-review.sh x & wait)"',
+  '(scripts/dispatch-review.sh x & wait)',
+  'scripts/dispatch-review.sh x & wait >| /tmp/o',
+  'scripts/dispatch-review.sh x & wait >| /tmp/o 2>&1',
+  'scripts/dispatch-review.sh x & pid=$!\nwait $pid',
+  'scripts/dispatch-review.sh x & pid=$!; wait "$pid"',
+  'scripts/dispatch-review.sh x & rpid=$!; wait ${rpid}',
+  'node scripts/wait-dispatch-results.js --ledger L --expect R.S & scripts/dispatch-review.sh x', // foreground rail, no launch
+  'nohup scripts/dispatch-review.sh x & node scripts/wait-dispatch-results.js --ledger L --expect R.S',
+];
+for (const cmd of BL0139_ALLOW) {
+  test(`BL-0139 allows: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+    assert.doesNotMatch(r.ctx, /detach-no-wake/);
+  });
+}
+
 // ---- heredoc bodies inside "$(…)" are data (commit / PR messages) ----
 const MSG_HEREDOC = [
   'git commit -m "$(cat <<\'EOF\'\nnohup scripts/dispatch-review.sh x & \n\nEOF\n)"',

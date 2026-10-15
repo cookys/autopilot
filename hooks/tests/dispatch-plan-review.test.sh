@@ -542,6 +542,9 @@ assert_artifact_schema "$OUT" "generation-2 artifact matches schema"
 OUT="$(run_manifest panel 2 "$PANEL_MANIFEST" "$GEN2_SEQUENCE" "$DISPOSITION" 2>&1)"; EXIT=$?
 assert_exit_code "$EXIT" "3" "terminal logical plan cannot reacquire"
 assert_contains "$OUT" "already terminal" "terminal cap is durable"
+assert_contains "$OUT" "ticket_session_already_terminal: prs-fixture-plan READY" \
+  "terminal reuse names the condition, logical id and old verdict (BL-0102)"
+assert_contains "$OUT" "0 seat calls" "terminal reuse states that no seat was called (BL-0102)"
 
 # Same logical plan under a new ticket returns the canonical ticket; no reset.
 ALT="$TEST_TMP/alt-ticket.json"

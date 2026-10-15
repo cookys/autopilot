@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
@@ -152,10 +153,10 @@ function collectUpdateHeadlines(changelogText, lastSeenTuple, currentTuple) {
 
 function readOptOutFlag(homeDir) {
   if (process.env.AUTOPILOT_UPDATE_CHECK === '0') return true;
-  const configPath = path.join(homeDir, '.autopilot', 'config.json');
+  const cfgFile = configPath({ home: homeDir });
   try {
-    if (!fs.existsSync(configPath)) return false;
-    const raw = fs.readFileSync(configPath, 'utf8');
+    if (!fs.existsSync(cfgFile)) return false;
+    const raw = fs.readFileSync(cfgFile, 'utf8');
     const cfg = JSON.parse(raw);
     return cfg && cfg.update_check === false;
   } catch {
@@ -279,7 +280,7 @@ function resolveRepoRoot(payloadCwd) {
 
 function handoffEnabled(homeDir) {
   if (process.env.AUTOPILOT_HANDOFF_INJECT === '1') return true;
-  const configFile = path.join(homeDir, '.autopilot', 'config.json');
+  const configFile = configPath({ home: homeDir });
   try {
     if (!fs.existsSync(configFile)) return false;
     const raw = fs.readFileSync(configFile, 'utf8');
@@ -439,7 +440,7 @@ function run() {
   try {
     const homeDir = os.homedir();
     const stateDir = path.join(homeDir, '.autopilot');
-    const configFile = path.join(homeDir, '.autopilot', 'config.json');
+    const configFile = configPath({ home: homeDir });
     const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
     const payload = loadPayload();
     const source = payload.source || '';

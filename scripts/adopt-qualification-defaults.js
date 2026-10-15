@@ -94,6 +94,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { configPath } = require('./lib/config-path.js');
 const { spawnSync } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
@@ -195,7 +196,7 @@ function safeBlock(value, max = 8000) {
 }
 
 function readConfiguredFeedUrl() {
-  const file = path.join(os.homedir(), '.autopilot', 'config.json');
+  const file = configPath();
   try {
     const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
     const url = cfg && cfg.qualification_feed && cfg.qualification_feed.url;

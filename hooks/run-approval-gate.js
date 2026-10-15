@@ -67,6 +67,7 @@
 'use strict';
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 // `require`d lazily inside main(), AFTER the mode check: these two pull in a filesystem
 // probe and the session-mode module (~38ms combined), and the default-off majority pays
@@ -82,7 +83,7 @@ const VALID_MODES = new Set(['off', 'ask-once']);
 function loadMode() {
   let mode = 'off';
   try {
-    const file = path.join(os.homedir(), '.autopilot', 'config.json');
+    const file = configPath();
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (j && j.run_approval && typeof j.run_approval.mode === 'string') mode = j.run_approval.mode;
   } catch { /* absent/corrupt config ⇒ default */ }

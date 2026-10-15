@@ -21,6 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { tierOf } = require('../cost-digest.js');
+const { configPath } = require('./config-path.js');
 
 const DEFAULT_DAILY_USD_BRAIN = 150;
 const DEFAULT_MODE = 'warn';
@@ -39,7 +40,7 @@ function loadCostFuseConfig(opts = {}) {
   };
 
   try {
-    const file = path.join(homeOf(opts), '.autopilot', 'config.json');
+    const file = configPath({ env: opts && opts.env, home: homeOf(opts) });
     if (fs.existsSync(file)) {
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       const cf = j && j.cost_fuse;

@@ -20,6 +20,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { configPath } = require('./config-path.js');
 
 const DEFAULTS = Object.freeze({ auto_reap: true, tmp_prune: true, lease_hours: 72, archive_branch_days: 14, archive_remind_days: 90, branch_prefixes: Object.freeze([]) });
 
@@ -31,7 +32,7 @@ function loadResidueConfig(opts = {}) {
   const home = opts.home || env.HOME || os.homedir();
   const cfg = { auto_reap: DEFAULTS.auto_reap, tmp_prune: DEFAULTS.tmp_prune, lease_hours: DEFAULTS.lease_hours, archive_branch_days: DEFAULTS.archive_branch_days, archive_remind_days: DEFAULTS.archive_remind_days, branch_prefixes: [] };
   try {
-    const file = path.join(home, '.autopilot', 'config.json');
+    const file = configPath({ env, home });
     if (fs.existsSync(file)) {
       const r = JSON.parse(fs.readFileSync(file, 'utf8')).residue;
       if (r && typeof r === 'object') {

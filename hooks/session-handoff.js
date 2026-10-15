@@ -22,6 +22,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
@@ -239,7 +240,7 @@ function renderHandoff({ workflow, timestamp, branch, statusSb, recentCommits, l
 // session-start reader/inject half: writing a snapshot nobody injects is wasted work.
 function handoffEnabled() {
   if (process.env.AUTOPILOT_HANDOFF_INJECT === '1') return true;
-  const configFile = path.join(STATE_DIR, 'config.json');
+  const configFile = configPath({ home: os.homedir() });
   try {
     if (!fs.existsSync(configFile)) return false;
     const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));

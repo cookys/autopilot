@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { loadResidueConfig } = require('../scripts/lib/residue-config.js');
@@ -33,7 +34,7 @@ function isOff(v) {
 
 function userConfig() {
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME || os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+    const cfg = JSON.parse(fs.readFileSync(configPath({ home: process.env.HOME || os.homedir() }), 'utf8'));
     return cfg && typeof cfg === 'object' ? cfg : {};
   } catch (_error) {
     return {};

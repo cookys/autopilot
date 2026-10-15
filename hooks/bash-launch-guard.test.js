@@ -256,7 +256,7 @@ test('rule2 knob via config.json', () => {
   const home = mk('blg-cfg-');
   fs.mkdirSync(path.join(home, '.autopilot'));
   fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), JSON.stringify({ depth0_delegate_gate: { pkill_self_match: 'warn' } }));
-  const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: mk('blg-live-'), AUTOPILOT_BASH_GUARD_SHELL: 'bash' };
+  const env = { ...process.env, HOME: home, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json'), AUTOPILOT_LIVE_DIR: mk('blg-live-'), AUTOPILOT_BASH_GUARD_SHELL: 'bash' };
   delete env.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({ tool_name: 'Bash', session_id: 'blg', cwd: home, tool_input: { command: 'pgrep -f foo' } }),

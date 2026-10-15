@@ -20,6 +20,7 @@
  */
 const fs = require('fs');
 const os = require('os');
+const { configPath } = require('../../scripts/lib/config-path.js');
 const path = require('path');
 
 // Affirmative iff a clearly-on value. Accepts boolean true, number 1, and the
@@ -42,7 +43,7 @@ function envFlag(name) {
 
 function configFlag(name) {
   try {
-    const configFile = path.join(os.homedir(), '.autopilot', 'config.json');
+    const configFile = configPath();
     if (!fs.existsSync(configFile)) return false;
     const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
     return !!(cfg && cfg.hooks && isAffirmative(cfg.hooks[name]));

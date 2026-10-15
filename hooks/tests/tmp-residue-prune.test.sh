@@ -87,7 +87,7 @@ assert_file_exists "$FX/dispatch-review-log-OLD3" "case3: env opt-out deletes no
 assert_file_absent "$XDG2/autopilot-tmp-prune.stamp" "case3: env opt-out does not claim the stamp"
 HOME2="$TEST_TMP/home2"; mkdir -p "$HOME2/.autopilot"
 printf '{"residue":{"tmp_prune":false}}\n' > "$HOME2/.autopilot/config.json"
-OUT="$(sweep "$XDG2" HOME="$HOME2")"
+OUT="$(sweep "$XDG2" HOME="$HOME2" AUTOPILOT_CONFIG_FILE="$HOME2/.autopilot/config.json")"
 assert_eq "$(jget "$OUT" 'j.tmp_prune.skipped')" "disabled" "case3: residue.tmp_prune=false gives skipped=disabled"
 assert_file_exists "$FX/dispatch-review-log-OLD3" "case3: config opt-out deletes nothing"
 assert_file_absent "$XDG2/autopilot-tmp-prune.stamp" "case3: config opt-out does not claim the stamp"

@@ -454,10 +454,15 @@ function validateManagedDevFlowAdmission({
   repoRoot,
   effectiveLevel,
   campaignContract,
-  markerFile = markerPath(),
+  markerFile,
   now = Date.now(),
 } = {}) {
   const reject = (reason) => ({ valid: false, reason });
+  // BL-0175: the marker this session reads is the one its writers write -- ONE resolver (3b), not getSessionId().
+  // Below a rail (AUTOPILOT_PARENT_SESSION_ID set) an inherited id must not select the marker to judge.
+  const target = resolveMarkerWriteTarget();
+  if (target.refused) return reject(`session marker session unresolved: ${target.reason}`);
+  if (!markerFile) markerFile = path.join(markerDir(), `${target.id}.json`);
   let stat;
   try {
     stat = fs.lstatSync(markerFile);
@@ -484,7 +489,7 @@ function validateManagedDevFlowAdmission({
       || typeof marker.repo_root !== 'string' || !path.isAbsolute(marker.repo_root)) {
     return reject('session marker malformed: identity fields are invalid');
   }
-  if (marker.session_id !== getSessionId()) {
+  if (marker.session_id !== target.id) {
     return reject('session marker session mismatch');
   }
   const startedAt = Date.parse(marker.started_at);
@@ -724,14 +729,22 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
 // touches another session's marker (the parent's file is not even opened); an existing marker is kept. Fail-open:
 // always exit 0 with no stdout (SessionStart stdout becomes model context).
 function cmdEnsureChild() {
+  // BL-0174: every skip prints one stderr line `ensure-child: skipped (<code>): <why>`. The exit code stays 0.
+  const skip = (code, why) => process.stderr.write(`session-mode ensure-child: skipped (${code}): ${why}\n`);
   let payload = {};
-  try { payload = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (_error) { return 0; }
-  if (!payload || typeof payload !== 'object' || typeof payload.session_id !== 'string') return 0;
+  try { payload = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (_error) { skip('payload_unreadable', 'stdin is not a JSON SessionStart payload'); return 0; }
+  if (!payload || typeof payload !== 'object' || typeof payload.session_id !== 'string') {
+    skip('no_session_id', 'payload carries no string session_id');
+    return 0;
+  }
   try {
     const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
-    ensurePlainMarker({ sessionId: payload.session_id, repoRoot: cwd, scope: { repo_identity: null, project_key: null } });
+    const result = ensurePlainMarker({ sessionId: payload.session_id, repoRoot: cwd, scope: { repo_identity: null, project_key: null } });
+    if (result === 'skipped') skip('empty_session_id', 'session_id normalizes to an empty id');
+    else if (result === 'refused_parent') skip('child_is_parent', 'the payload session_id equals AUTOPILOT_PARENT_SESSION_ID; a child never writes the parent marker');
+    else if (result === 'kept_unreadable') skip('marker_unreadable', 'an existing marker for this session is unreadable or malformed and was left untouched');
   } catch (error) {
-    process.stderr.write(`session-mode ensure-child: marker not ensured: ${error.message}\n`);
+    skip('write_failed', `marker not ensured: ${error.message}`);
   }
   return 0;
 }

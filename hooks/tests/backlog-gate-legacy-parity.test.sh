@@ -57,7 +57,7 @@ h_row() {
   case "$1" in
     plain) printf '%s\n' '### Plain row' '- **Id**: 0007' '- **Status**: open' '- **Trigger**: when it fires' \
       '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' '' ;;
-    collided) printf '%s\n' '### Collided row' '- **Status**: open' '- **Since**: last week' '- **Origin**: external' \
+    collided) printf '%s\n' '### Collided row' '- **Id**: 0008' '- **Status**: open' '- **Since**: last week' '- **Origin**: external' \
       '- **Reporter**: cuda' '- **Report**: ticket 12' '- **Reply**: will look' '- **Problem**: `scripts/x.js:12` broke' \
       '- **Impact**: slow' '- **Trigger**: when it fires' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' '' ;;
     long) printf '%s\n' '### Long row' '- **Status**: open' "- **Since**: $L300" "- **Trigger**: $T230" '- **Effort**: S' \
@@ -70,7 +70,7 @@ c_row() {
   case "$1" in
     plain) printf '%s\n' '- [ ] [Minor] Plain row' '  - Id: T-12' '  - Status: open' '  - Trigger: when it fires' \
       '  - Effort: S' '  - Source: suite' '  - Pointer: docs/plans/ok.md' ;;
-    collided) printf '%s\n' '- [ ] [Minor] Collided row' '  - Status: open' '  - Since: last week' '  - Origin: external' \
+    collided) printf '%s\n' '- [ ] [Minor] Collided row' '  - Id: T-13' '  - Status: open' '  - Since: last week' '  - Origin: external' \
       '  - Reporter: cuda' '  - Report: ticket 12' '  - Reply: will look' '  - Problem: `scripts/x.js:12` broke' \
       '  - Impact: slow' '  - Trigger: when it fires' '  - Effort: S' '  - Source: suite' '  - Pointer: docs/plans/ok.md' ;;
     long) printf '%s\n' '- [ ] [Minor] Long row' '  - Status: open' "  - Since: $L300" "  - Trigger: $T230" '  - Effort: S' \
@@ -186,6 +186,18 @@ done
 for s in "${STYLES[@]}"; do
   d="$(new_corpus_repo "marked-$s" "$s" mark)"
   assert_contains "$(parity "$GATE" "$d" "$TEST_TMP/cfg-full-$s.md")" "DIFF" "control $s: with a next-id mark the reporter fields are read"
+done
+
+# Control for --range: the range rule keys rows by Id, so a collided row without one is invisible to it
+# (BL-0132: the heading and checklist rows had none, leaving this comparison vacuous for them). With the
+# Id and a next-id mark, deleting the unanswered row must raise peer_report_lost in the new gate.
+for s in "${STYLES[@]}"; do
+  d="$TEST_TMP/marked-$s"
+  corpus "$s" mark plain long dup > "$d/docs/BACKLOG.md"
+  git -C "$d" add -A
+  git -C "$d" commit -q -m "drop the colliding row"
+  out="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --config "$TEST_TMP/cfg-full-$s.md" --range HEAD~1..HEAD 2>/dev/null)"
+  assert_contains "$out" '"code":"peer_report_lost"' "control $s: with a next-id mark, deleting the colliding row is seen by --range"
 done
 
 # ---------------------------------------------------------------------------------------------

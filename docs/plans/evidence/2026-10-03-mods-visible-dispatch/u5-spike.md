@@ -143,6 +143,8 @@ What U5 should NOT do: add a per-subagent percentage (no source), read `/tmp/aut
 4. **Should the pane use codeforge's subagent status line for the richest step text?** Recommended: use it when present, fall back to last tool + age when not, and show nothing extra otherwise.
 5. **Is it OK to call U5 done after U5a and U5b, and move lineage into the dispatch-tree plan's schedule?** Recommended: yes; U5c only if P2 supports it.
 
+**Owner ruling 2026-10-16** (decision d-75aeb796, answered 「全照建議」): Q1–Q5 are all accepted as recommended above.
+
 ## 8. Suggested status line for U5 in `mods-visible-dispatch.md`
 
 `U5 | pane 看不出現在在跑什麼 | S+S (U5a agent 目前步驟、U5b task activeForm), M 條件式 (U5c run stage), 譜系歸 dispatch-tree | spike 完成，先跑 probe P1/P2 | evidence/2026-10-03-mods-visible-dispatch/u5-spike.md`

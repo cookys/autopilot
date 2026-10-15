@@ -93,7 +93,10 @@ for file in next-config.md project-lifecycle-config.md dispatch-config.md qualit
 done
 
 assert_contains "$(cat "$TARGET/.claude/quality-gate-config.md")" "pnpm -r typecheck && pnpm -r test:ci" "quality gate includes typecheck+test"
-assert_contains "$(cat "$TARGET/.claude/quality-gate-config.md")" "packages/relay/src/" "scan uses real detected source paths (not bare package names)"
+QG="$(cat "$TARGET/.claude/quality-gate-config.md")"
+assert_contains "$QG" "completeness-scan.sh\` with no arguments (staged diff), or \`--all\`" "scan names modes that really select files (BL-0188)"
+assert_not_contains "$QG" "completeness-scan.sh\` over" "scan never tells consumers to pass directories (exit 2 under --files)"
+assert_not_contains "$QG" "packages/relay/src/" "scan line carries no directory targets"
 assert_not_contains "$(cat "$TARGET/.claude/quality-gate-config.md")" "node scripts/completeness-scan.sh" "scan does not invoke the shell script with node"
 assert_contains "$(cat "$TARGET/.claude/test-strategy-config.md")" "95" "coverage table contains threshold values"
 assert_contains "$(cat "$TARGET/.claude/qc-gate-config.md")" "mode: warn" "qc gate mode is warn"

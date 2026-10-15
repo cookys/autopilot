@@ -27,16 +27,11 @@
  */
 'use strict';
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { configPath } = require('./lib/config-path.js');
 
 const VALID_MODES = new Set(['off', 'ask-once']);
 const DEFAULT_MODE = 'off';
-
-function configPath() {
-  return process.env.AUTOPILOT_CONFIG_FILE
-    || path.join(os.homedir(), '.autopilot', 'config.json');
-}
 
 function readConfig(file) {
   try {

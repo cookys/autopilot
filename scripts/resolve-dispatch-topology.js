@@ -29,6 +29,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { configPath } = require('./lib/config-path.js');
 const { normalizeEffort } = require('./lib/effort-scale.js');
 const { spawnSync } = require('child_process');
 
@@ -659,13 +660,8 @@ function dedupeSeats(seats) {
 // A missing file or missing key means no exclusions. A file that exists but cannot be parsed,
 // or a key of the wrong shape, is a hard error: silently ignoring it would revive retired
 // seats on the next regeneration, which is the failure this list exists to prevent.
-function operatorConfigPath() {
-  return process.env.AUTOPILOT_CONFIG_FILE
-    || path.join(os.homedir(), '.autopilot', 'config.json');
-}
-
 function loadOperatorExcludeSeats() {
-  const file = operatorConfigPath();
+  const file = configPath();
   if (!fs.existsSync(file)) return [];
   let cfg;
   try {

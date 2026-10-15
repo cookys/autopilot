@@ -23,9 +23,13 @@ bad()  { FAIL=$((FAIL+1)); printf 'FAIL — %s\n' "$1"; }
 
 UID_N="$(id -u)"
 
+# BL-0140: every case registers its scratch dir so an early exit still removes it.
+TMPS=()
+trap 'for d in "${TMPS[@]:-}"; do [ -n "$d" ] && rm -rf "$d"; done' EXIT
+
 assert_r1_split_env_reader_finds_writer() {
   local TMP ROOT PROC SID OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-split-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-split-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -76,7 +80,7 @@ process.stdout.write(JSON.stringify({ writer, reader, live }));
 
 assert_r1_group_bits_tightened() {
   local TMP ROOT PROC CAND PARENT OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-group-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-group-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -113,7 +117,7 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 
 assert_r3_0777_under_private_parent_accepted() {
   local TMP ROOT PROC CAND PARENT OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r3-777-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r3-777-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -149,7 +153,7 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 
 assert_r3_production_0775_under_private_parent_accepted() {
   local TMP ROOT PROC CAND PARENT OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r3-775-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r3-775-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -185,7 +189,7 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 
 assert_r1_public_parent_rejected() {
   local TMP ROOT PROC CAND PARENT MODE_AFTER OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-pubparent-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-pubparent-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -224,7 +228,7 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 
 assert_r1_missing_parent_skipped() {
   local TMP ROOT PROC PARENT OUT
-  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-missing-XXXXXX")"
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/r1-missing-XXXXXX")"; TMPS+=("$TMP")
   ROOT="$TMP/run-user"
   mkdir -p "$ROOT"
   PROC="$TMP/mounts"
@@ -261,7 +265,7 @@ assert_r1_context_budget_reads_1m() {
   # The only existing seam for which live-state directory it reads is
   # AUTOPILOT_LIVE_DIR (override). Falling back to that env var explicitly.
   local TMP LIVE SID TRANSCRIPT PAYLOAD RC ERR
-  TMP="$(mktemp -d "/dev/shm/r1-ctxbudget-XXXXXX")"
+  TMP="$(mktemp -d "/dev/shm/r1-ctxbudget-XXXXXX")"; TMPS+=("$TMP")
   SID="bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
   LIVE="$TMP/live"
   mkdir -p "$LIVE/context" "$TMP/state"
@@ -284,7 +288,7 @@ JSON
   export AUTOPILOT_CONTEXT_BUDGET_DIR="$TMP/state"
   export CLAUDE_CODE_SESSION_ID="$SID"
   unset XDG_RUNTIME_DIR || true
-  printf '%s' "$PAYLOAD" | node "$HOOK" 2>"$TMP/err.txt"
+  printf '%s' "$PAYLOAD" | HOME="$TMP/home" node "$HOOK" 2>"$TMP/err.txt"
   RC=$?
   ERR="$(cat "$TMP/err.txt")"
   unset AUTOPILOT_LIVE_DIR AUTOPILOT_CONTEXT_BUDGET_DIR CLAUDE_CODE_SESSION_ID AUTOPILOT_CONFIG_FILE

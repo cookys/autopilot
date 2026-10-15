@@ -114,5 +114,41 @@ cap() { ( unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP AUTOPILOT_CONFIG_FILE; export H
 [ "$(cap "$OTHER")" = "22" ] && ok "6: resolve_tool_cap followed AUTOPILOT_CONFIG_FILE" || bad "6: resolve_tool_cap got $(cap "$OTHER") (want 22)"
 [ "$(cap)" = "11" ] && ok "6c: control: variable unset -> HOME config used" || bad "6c: control: got $(cap) (want 11)"
 
+# --- 7. scripts/run-approval.js: status reads and persist writes the file AUTOPILOT_CONFIG_FILE names (BL-0181 follow-up) ---
+ra() { # <AUTOPILOT_CONFIG_FILE value or ""> args... ; run under the fake HOME
+  local f="$1"; shift
+  env -u AUTOPILOT_CONFIG_FILE -u AUTOPILOT_RUN_APPROVAL_MODE HOME="$H" ${f:+AUTOPILOT_CONFIG_FILE="$f"} node "$ROOT/scripts/run-approval.js" "$@"
+}
+printf '{"run_approval":{"mode":"off"}}\n' >"$H/.autopilot/config.json"      # HOME: off
+printf '{"run_approval":{"mode":"ask-once"}}\n' >"$OTHER"                      # OTHER: ask-once
+out="$(ra "$OTHER" status)"
+case "$out" in *'"mode":"ask-once"'*"$OTHER"*) ok "7: run-approval status followed AUTOPILOT_CONFIG_FILE";; *) bad "7: run-approval status ignored AUTOPILOT_CONFIG_FILE (got: $out)";; esac
+out="$(ra "" status)"
+case "$out" in *'"mode":"off"'*"$H/.autopilot/config.json"*) ok "7c: control: variable unset -> HOME config used";; *) bad "7c: control: got $out";; esac
+HOME_BEFORE="$(cat "$H/.autopilot/config.json")"
+PERSIST="$SCRATCH/persist-target.json"; rm -f "$PERSIST"
+ra "$PERSIST" persist --mode ask-once >/dev/null 2>&1
+if [ -f "$PERSIST" ] && grep -q '"ask-once"' "$PERSIST" && [ "$(cat "$H/.autopilot/config.json")" = "$HOME_BEFORE" ]; then
+  ok "7p: run-approval persist wrote the AUTOPILOT_CONFIG_FILE target and left the HOME config alone"
+else
+  bad "7p: run-approval persist did not write the AUTOPILOT_CONFIG_FILE target (or touched the HOME config)"
+fi
+
+# --- 8. scripts/resolve-dispatch-topology.js: topology.exclude_seats comes from the named file ---------------
+# A malformed file is a hard error naming its path, so the path actually read is observable.
+topo() { # [AUTOPILOT_CONFIG_FILE value] -> "<exit> <stderr>"
+  local err rc
+  err="$(env -u AUTOPILOT_CONFIG_FILE HOME="$H" ENGINE_SCORECARD_DIR="$SCRATCH/sc" ${1:+AUTOPILOT_CONFIG_FILE="$1"} \
+    node "$ROOT/scripts/resolve-dispatch-topology.js" --json --out "$SCRATCH/topology.json" 2>&1 >/dev/null)"; rc=$?
+  printf '%s %s' "$rc" "$err"
+}
+mkdir -p "$SCRATCH/sc"
+printf '{}\n' >"$H/.autopilot/config.json"        # HOME: valid
+printf '{not json\n' >"$OTHER"                      # OTHER: malformed
+out="$(topo "$OTHER")"
+case "$out" in "1 Operator config unreadable at $OTHER"*) ok "8: topology followed AUTOPILOT_CONFIG_FILE (rejected the named file)";; *) bad "8: topology ignored AUTOPILOT_CONFIG_FILE (got: ${out:0:200})";; esac
+out="$(topo)"
+case "$out" in 0*) ok "8c: control: variable unset -> valid HOME config used";; *) bad "8c: control: got ${out:0:200}";; esac
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -237,6 +237,32 @@ if cmp -s "$GATE" "$MUT_NONORM"; then fail "table compat mutation did not apply"
 out="$(range_check "$TC_COMPAT_DIR" HEAD~1..HEAD "$MUT_NONORM")"; rc=$?
 assert_eq "$rc:$(json_count "$out" peer_report_lost)" "1:1" "table compat mutation: without parse-layer normalisation the legacy delete blocks (the suite can tell)"
 
+# ---------------------------------------------------------------------------------------------
+# BL-0131 — the opt-in commit itself deletes an unanswered peer row. Before it, the file carries
+# no next-id mark, so the history parse read the row legacy-style and never saw the (Id, Report)
+# pair; the opt-in commit's own text no longer has the row. The loss must still be caught, while a
+# file that never opts in keeps the legacy reading (tc-compat above).
+bare_backlog() { # <repo> [rows...] -> a backlog WITHOUT the next-id mark
+  local d="$1"; shift
+  { printf '# BACKLOG\n\n'; local r; for r in "$@"; do printf '%s\n\n' "$r"; done; } > "$d/docs/BACKLOG.md"
+}
+d="$(new_repo optin-delete)"
+bare_backlog "$d" "$(row 'Peer row one' BL-0001 cuda '2026-09-05 fleet' none)" "$KEEP"
+BASE="$(commit_all "$d" "pre-opt-in")"
+write_backlog "$d" 3 "$KEEP"
+HEADSHA="$(commit_all "$d" "opt in and delete the unanswered row in one commit")"
+out="$(range_check "$d" "$BASE..$HEADSHA")"; rc=$?
+assert_eq "$rc:$(json_count "$out" peer_report_lost)" "1:1" "BL-0131: delete in the opt-in commit blocks"
+assert_contains "$out" "BL-0001" "BL-0131: the violation names the Id"
+# Negative control: the same history without the opt-in at head is an ordinary legacy delete.
+d="$(new_repo optin-never)"
+bare_backlog "$d" "$(row 'Peer row one' BL-0001 cuda '2026-09-05 fleet' none)" "$KEEP"
+BASE="$(commit_all "$d" "legacy")"
+bare_backlog "$d" "$KEEP"
+HEADSHA="$(commit_all "$d" "legacy delete")"
+out="$(range_check "$d" "$BASE..$HEADSHA")"; rc=$?
+assert_eq "$(json_count "$out" peer_report_lost)" "0" "BL-0131 control: a file that never opts in keeps the legacy reading"
+
 # No config (mode warn): reported, never blocks — a downstream repo is not wedged.
 d="$(new_repo warn)"
 rm -f "$d/.claude/backlog-config.md"

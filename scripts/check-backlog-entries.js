@@ -1108,10 +1108,16 @@ function peerReportLost(repoRoot, rel, baseSha, headSha, headEntries, style, cfg
   if (r.status !== 0) return { error: `git rev-list failed: ${String(r.stderr || '').trim()}` };
   const shas = (baseSha ? [baseSha] : []).concat(String(r.stdout).split('\n').filter(Boolean));
   const last = new Map();
+  // BL-0131: judge every historic version by head's opt-in. A pre-opt-in version carries no
+  // next-id mark, so read legacy-style it yields no pairs, and a row deleted in the opt-in commit
+  // itself would never be seen. A file that is not opted in at head keeps the legacy reading.
+  const headText = showAt(repoRoot, headSha, rel);
+  const headCfg = withNextIdMark(cfg, headText);
+  const histCfg = fieldOptedIn(headCfg, 'Reporter') ? Object.assign({}, cfg || {}, { next_id_mark: true }) : cfg;
   for (const sha of shas) {
     const text = showAt(repoRoot, sha, rel);
     if (text == null) continue;
-    for (const p of rowPairs(collectEntries(text, style, cfg))) last.set(p.key, Object.assign({ sha }, p));
+    for (const p of rowPairs(collectEntries(text, style, histCfg))) last.set(p.key, Object.assign({ sha }, p));
   }
   const headKeys = new Set(rowPairs(headEntries).map((p) => p.key));
   const plansDir = resolvePlansDir(repoRoot);

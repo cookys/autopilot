@@ -48,6 +48,11 @@ real_token_hits() {
 
 # fake HOME: a cell that writes ~/.autopilot lands here, never in the host's real home
 FAKE_HOME="$TEST_TMP/home"; mkdir -p "$FAKE_HOME"; export HOME="$FAKE_HOME"
+# BL-0181: lib.sh pins AUTOPILOT_CONFIG_FILE to $HOOK_HOME/.autopilot/config.json, and HOOK_HOME is this
+# FAKE_HOME, so it created ~/.autopilot here and tripped the "no cell wrote ~/.autopilot" assertion at the end.
+# This suite needs no config of its own: move the pin (still an empty {}, BL-0180) outside FAKE_HOME.
+rm -rf "$FAKE_HOME/.autopilot"
+printf '{}\n' >"$TEST_TMP/operator-config-pin.json"; export AUTOPILOT_CONFIG_FILE="$TEST_TMP/operator-config-pin.json"
 
 # fake XDG runtime dir on tmpfs: every stub cell resolves "the real live dir" HERE, never the host's
 FAKE_XDG=""

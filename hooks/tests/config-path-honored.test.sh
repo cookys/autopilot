@@ -9,6 +9,8 @@
 # Negative control (shown red, then green, in the BL-0181 change): revert one hook to
 # path.join(os.homedir(), '.autopilot', 'config.json') -> its case goes red.
 set -uo pipefail
+# git-invoking: lib.sh scrubs inherited GIT_* vars (test-identity-guard inventory two).
+. "$(dirname "$0")/lib.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PASS=0; FAIL=0
@@ -16,7 +18,7 @@ ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
 
 SCRATCH="$(mktemp -d)"
-trap 'rm -rf "$SCRATCH"' EXIT
+trap 'rm -rf "$SCRATCH"; cleanup_test_tmp' EXIT
 H="$SCRATCH/home"; mkdir -p "$H/.autopilot" "$H/.claude"
 OTHER="$SCRATCH/other-config.json"
 

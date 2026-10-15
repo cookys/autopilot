@@ -25,7 +25,7 @@ export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CA
 export DISPATCH_QUIET=1 AUTOPILOT_RUNS_WATCH_AUTOSTART=0
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
-  CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID \
+  CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID \
   AUTOPILOT_SESSION_MODE_DIR 2>/dev/null || true
 
 SM="$REPO_ROOT/scripts/session-mode.js"
@@ -94,8 +94,8 @@ eq "$BEFORE" "$(sha "$MD/$P.json")" "(a) hook, payload==P, expired P.json: bytes
 seed "$P" null "$PAST"; BEFORE="$(sha "$MD/$P.json")"
 ( cd "$SBX" && printf '{"session_id":"%s","cwd":"%s"}' "$P" "$SBX" | env AUTOPILOT_SESSION_MODE_DIR="$MD" AUTOPILOT_PARENT_SESSION_ID="$P" "$NODE" "$SM" ensure-child >/dev/null 2>&1 )
 eq "$BEFORE" "$(sha "$MD/$P.json")" "(a) ensure-child, payload==P, expired P.json: bytes unchanged"
-( cd "$SBX" && printf '{"session_id":"%s","cwd":"%s"}' "$C" "$SBX" | env AUTOPILOT_SESSION_MODE_DIR="$MD" AUTOPILOT_PARENT_SESSION_ID="$P" "$NODE" "$SM" ensure-child >/dev/null 2>&1 )
-eq "$P" "$(mf_get "$MD/$C.json" parent_session_id)" "(a) control: ensure-child with another payload id writes that marker, parent P"
+( cd "$SBX" && printf '{"session_id":"%s","cwd":"%s"}' "$C" "$SBX" | env AUTOPILOT_SESSION_MODE_DIR="$MD" AUTOPILOT_PARENT_SESSION_ID="$P" AUTOPILOT_CHILD_SESSION_ID="$C" "$NODE" "$SM" ensure-child >/dev/null 2>&1 )
+eq "$P" "$(mf_get "$MD/$C.json" parent_session_id)" "(a) control: ensure-child with another payload id writes that marker, parent P (payload = C, 3d)"
 rm -f "$MD/$C.json"
 
 # ---- (b) CLAUDE_CODE_SESSION_ID == P and P exported: every writer refuses, P.json untouched ----------------------

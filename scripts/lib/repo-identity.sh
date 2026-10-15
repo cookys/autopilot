@@ -121,7 +121,7 @@ child_session_env_setup() {
   if [ "${_CHILD_SESSION_PINNED:-0}" = "1" ]; then   # resolved by child_session_pin before the rail scrubbed its own env
     CHILD_SESSION_UNSET=("${_CHILD_SESSION_PIN_UNSET[@]}"); CHILD_SESSION_PARENT="$_CHILD_SESSION_PIN_PARENT"; return 0
   fi
-  CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID)
+  CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID)   # 3d: an inherited C never reaches a child; a claude launch re-adds its own AFTER this list
   CHILD_SESSION_PARENT=""
   local sm
   if [ -n "${1:-}" ]; then sm="$1/session-mode.js"; else sm="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/session-mode.js"; fi

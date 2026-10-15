@@ -8,6 +8,9 @@ STATE_CLI="$SELF_DIR/engine-capability-state.js"
 # dispatch-tree 3b rule 3: the probe's `claude -p` children get this process's write target as the parent id.
 # shellcheck source=lib/repo-identity.sh
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# dispatch-tree 3d: no probe invocation mints a child id (no manifest, no --session-id), so an inherited AUTOPILOT_CHILD_SESSION_ID must not reach any runner,
+# the --version calls included; this runs before the first runner invocation.
+unset AUTOPILOT_CHILD_SESSION_ID
 
 RUNNER=""
 MODEL=""

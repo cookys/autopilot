@@ -215,12 +215,15 @@ function modelNoteSection({ sessionId, now, dirs }) {
   const shown = file.length > 80 ? `…${file.slice(-79)}` : file;
   const cap = SECTION_CAPS.model;
   const noFollow = fs.constants.O_NOFOLLOW || 0;
+  // O_NONBLOCK: opening a FIFO with no writer would block forever (and hang PreCompact); with it open() returns
+  // at once and the fstat().isFile() check below refuses the FIFO.
+  const nonBlock = fs.constants.O_NONBLOCK || 0;
   let fd;
   try {
     if (!noFollow) { // no O_NOFOLLOW on this platform: fall back to an lstat check
-      if (fs.lstatSync(file).isSymbolicLink()) return unavailable(`${shown} is not a regular file (symlinks are refused)`);
+      if (!fs.lstatSync(file).isFile()) return unavailable(`${shown} is not a regular file (symlinks and special files are refused)`);
     }
-    fd = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | noFollow | nonBlock);
   } catch (e) {
     if (e && e.code === 'ENOENT') return `the model left no handoff file (expected path: ${shown})`;
     if (e && e.code === 'ELOOP') return unavailable(`${shown} is not a regular file (symlinks are refused)`);

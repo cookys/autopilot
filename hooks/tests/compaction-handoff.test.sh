@@ -99,6 +99,19 @@ assert_contains "$C" "is not a regular file" "negative: symlinked note refused"
 assert_not_contains "$C" "NOTE-FROM-MODEL" "negative: symlink target content not merged"
 rm -f "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 
+# FIFO as the note: open() must not block (O_NONBLOCK); refused as not a regular file, hook ends within the timeout
+mkfifo "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
+out=$(timeout 8 node -e '
+const h=require(process.argv[1]);
+console.log(h.modelNoteSection({sessionId:process.argv[2],now:Date.now(),dirs:{handoff:process.argv[3]}}));
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$AUTOPILOT_MODEL_HANDOFF_DIR"); rc=$?
+assert_eq "$rc" "0" "negative: FIFO note does not hang the reader (rc 124 = timeout)"
+assert_contains "$out" "is not a regular file" "negative: FIFO note refused"
+HOME="$HOOK_HOME" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" timeout 8 node "$HOOKS_DIR/state-checkpoint.js" <<< "{\"transcript_path\":\"$TR\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}" >/dev/null 2>&1
+assert_eq "$?" "0" "negative: PreCompact hook ends normally with a FIFO note"
+assert_contains "$(cat "$FILE")" "is not a regular file" "negative: FIFO refusal is in the checkpoint file"
+rm -f "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
+
 # oversized model note: cut at its cap, tail omitted or cut, file bounded
 head -c 20000 /dev/zero | tr '\0' 'N' > "$AUTOPILOT_MODEL_HANDOFF_DIR/$SID.md"
 run_hook state-checkpoint.js "{\"transcript_path\":\"$TR\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
@@ -178,6 +191,18 @@ ROW=$(tail -n 1 "$AUTOPILOT_COMPACTION_POINTS_FILE")
 assert_contains "$ROW" '"pre_tokens":null' "negative: only a stale boundary -> pre_tokens null"
 assert_contains "$ROW" "stale compact_boundary" "negative: stale row says why"
 assert_not_contains "$ROW" "111111" "negative: the stale number is not recorded"
+# the PreCompact checkpoint's own mtime is the floor: a state file exists, the boundary is older than it
+# but still inside the 10 minute window (5 minutes ago) -> null, not a number from an earlier compaction
+run_hook state-checkpoint.js "{\"transcript_path\":\"$TR\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
+assert_file_exists "$FILE" "checkpoint exists before the compact SessionStart"
+OLD5Z="$(date -u -d '5 minutes ago' +%FT%TZ)"
+T5="$HOOK_HOME/boundary-5min.jsonl"
+printf '{"type":"system","subtype":"compact_boundary","timestamp":"%s","version":"2.1.300","compactMetadata":{"trigger":"auto","preTokens":222222}}\n' "$OLD5Z" > "$T5"
+ss compact "$T5"
+ROW=$(tail -n 1 "$AUTOPILOT_COMPACTION_POINTS_FILE")
+assert_contains "$ROW" '"pre_tokens":null' "boundary older than the checkpoint (inside the 10 min window) -> null"
+assert_contains "$ROW" "PreCompact checkpoint" "note names the checkpoint as the floor"
+assert_not_contains "$ROW" "222222" "the older boundary's number is not recorded"
 ss compact "$TR"
 ROW=$(tail -n 1 "$AUTOPILOT_COMPACTION_POINTS_FILE")
 assert_contains "$ROW" '"pre_tokens":null' "negative: no boundary in transcript -> pre_tokens null"

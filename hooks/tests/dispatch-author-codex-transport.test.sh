@@ -551,6 +551,14 @@ assert_authored() {
   assert_eq "$DISPATCH_STATUS" "authored" "$label: status"
 }
 
+# BL-0150: every codex runner_failed carries transport_status (consumers may rely on it).
+assert_runner_failed_has_transport_status() {
+  local label="$1"
+  if [ "$DISPATCH_STATUS" = "runner_failed" ]; then
+    assert_contains "$DISPATCH_JSON" '"transport_status": "' "$label: runner_failed carries transport_status"
+  fi
+}
+
 assert_rejected() {
   local label="$1"
   assert_neq "$DISPATCH_RC" "0" "$label: dispatcher must fail closed"
@@ -711,7 +719,15 @@ for scenario in no_chrome sidecar_missing sidecar_empty sidecar_mismatch sidecar
   assert_rejected "witness $scenario"
   assert_eq "$(fake_run_count)" "1" "witness $scenario: one attempt"
   assert_not_contains "$DISPATCH_JSON" "$CANDIDATE_BYTES" "witness $scenario: no body in result"
+  assert_runner_failed_has_transport_status "witness $scenario"
 done
+# Pin the gate paths so the conditional helper cannot pass vacuously.
+run_dispatch no_chrome --runner codex --model gpt-5.5 --effort xhigh
+assert_eq "$DISPATCH_STATUS" "runner_failed" "no_chrome: runner_failed"
+assert_contains "$DISPATCH_JSON" '"transport_status": "exit_failure"' "no_chrome: transport_status exit_failure"
+run_dispatch sidecar_mismatch --runner codex --model gpt-5.5 --effort xhigh
+assert_eq "$DISPATCH_STATUS" "runner_failed" "sidecar_mismatch: runner_failed"
+assert_contains "$DISPATCH_JSON" '"transport_status": "exit_failure"' "sidecar_mismatch: transport_status exit_failure"
 
 # ---------------------------------------------------------------------------
 # Exit truth precedes complete-looking stdout/sidecar/chrome content.
@@ -741,7 +757,11 @@ for scenario in session_missing session_duplicate session_malformed session_inje
   assert_eq "$(fake_run_count)" "1" "session $scenario: one attempt"
   assert_not_contains "$DISPATCH_JSON" "$UUID_A" "session $scenario: UUID_A not adopted"
   assert_not_contains "$DISPATCH_JSON" "$UUID_B" "session $scenario: UUID_B not adopted"
+  assert_runner_failed_has_transport_status "session $scenario"
 done
+run_dispatch session_missing --runner codex --model gpt-5.5 --effort xhigh
+assert_eq "$DISPATCH_STATUS" "runner_failed" "session_missing: runner_failed"
+assert_contains "$DISPATCH_JSON" '"transport_status": "exit_failure"' "session_missing: transport_status exit_failure"
 
 # ---------------------------------------------------------------------------
 # Post-run inode integrity: same-user runner cannot swap/link the witness path.

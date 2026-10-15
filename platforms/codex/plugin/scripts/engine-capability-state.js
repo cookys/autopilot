@@ -42,7 +42,7 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
-  node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>]
+  node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain]
   node scripts/engine-capability-state.js pin-seat --engine <token> --runner <token> --role <token> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who> [--store <path>]
   node scripts/engine-capability-state.js unpin-seat --role <token> [--engine <token> --runner <token> [--endpoint <name|@none>]] [--store <path>]
   node scripts/engine-capability-state.js pins [--role <token>] [--store <path>]
@@ -859,7 +859,19 @@ function normalizeSeatEffort(effort) {
 //
 // engine-scorecard.js's seatIdentityHash MUST stay identical to this; a divergence silently
 // detaches every strike from the seat it was recorded against.
-function normalizeSeatIdentity({ engine, runner, role, effort }) {
+//
+// BL-0170: `seatKind` ('brain') joins the identity ONLY for brain-seat exams (owner_brain_seat),
+// which share role `owner` with the foreman exam. Omitted / 'default' adds nothing, so every
+// foreman/legacy seat_hash already recorded stays byte-identical. A brain-seat strike is its own
+// seat's strike, never the foreman's (and the reverse).
+function normalizeSeatKind(seatKind) {
+  if (seatKind === undefined || seatKind === null || seatKind === 'default') return 'default';
+  if (seatKind === 'brain') return 'brain';
+  throw new Error(`seat-kind must be 'brain' or 'default', got '${seatKind}'`);
+}
+
+// (`seat_kind` is accepted too: seatHashOf re-normalizes an already-normalized identity.)
+function normalizeSeatIdentity({ engine, runner, role, effort, seatKind, seat_kind: seatKindWire }) {
   return {
     engine: normalizeEngineToken(engine, 'engine'),
     runner: normalizeSeatToken(runner, 'runner'),
@@ -872,6 +884,7 @@ function normalizeSeatIdentity({ engine, runner, role, effort }) {
       // validity, and the two sides of the seat must agree on the vocabulary or the seat is not
       // one seat.
       : { effort: normalizeSeatEffort(effort) }),
+    ...(normalizeSeatKind(seatKind === undefined ? seatKindWire : seatKind) === 'brain' ? { seat_kind: 'brain' } : {}),
   };
 }
 
@@ -1918,17 +1931,17 @@ function parseCommandLineArgs(argv) {
     ['strike', new Set(['identity-file', 'source', 'receipt-ref', 'now', 'store'])],
     ['brain-status', new Set(['identity-file', 'now', 'store'])],
     ['strike-seat', new Set([
-      'engine', 'runner', 'role', 'effort', 'class', 'predicate-id', 'cause-class', 'writer',
+      'engine', 'runner', 'role', 'effort', 'seat-kind', 'class', 'predicate-id', 'cause-class', 'writer',
       'dedup-key', 'detector-id', 'detector-version', 'artifact-sha256', 'receipt-ref',
       'now', 'store',
     ])],
     ['invalidate-strike', new Set([
-      'engine', 'runner', 'role', 'effort', 'invalidates-event-id',
+      'engine', 'runner', 'role', 'effort', 'seat-kind', 'invalidates-event-id',
       'proof-artifact-sha256', 'proof-detector-id',
       'writer', 'dedup-key', 'detector-id', 'detector-version',
       'artifact-sha256', 'receipt-ref', 'now', 'store',
     ])],
-    ['seat-hash', new Set(['engine', 'runner', 'role', 'effort'])],
+    ['seat-hash', new Set(['engine', 'runner', 'role', 'effort', 'seat-kind'])],
     ['pin-seat', new Set([
       'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires', 'store',
     ])],
@@ -2190,6 +2203,7 @@ function main() {
         // Without this a strike lands on the LEGACY seat hash while an effort-partitioned seat's
         // projection reads a different one — the strike would be recorded and never counted.
         effort: options.effort,
+        seatKind: options['seat-kind'],
         klass: options.class,
         predicateId: Object.prototype.hasOwnProperty.call(options, 'predicate-id') ? options['predicate-id'] : null,
         causeClass: options['cause-class'],
@@ -2226,6 +2240,7 @@ function main() {
         // computes the LEGACY hash, finds no target, and (before the end-to-end fixture existed)
         // this looked like a working flag because the option was merely ACCEPTED.
         effort: options.effort,
+        seatKind: options['seat-kind'],
         invalidatesEventId: options['invalidates-event-id'],
         proofArtifactSha256: options['proof-artifact-sha256'],
         proofDetectorId: options['proof-detector-id'],
@@ -2257,6 +2272,7 @@ function main() {
         // Omitted --effort is the legacy partition, not a default — passing undefined
         // reproduces the pre-effort hash byte-for-byte.
         effort: options.effort,
+        seatKind: options['seat-kind'],
       });
     } catch (error) {
       failValidation(`seat-hash: ${error.message}`);

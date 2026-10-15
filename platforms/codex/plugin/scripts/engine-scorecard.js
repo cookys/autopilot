@@ -136,7 +136,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
-  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--now <ISO-date>]\n\
+  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--seat-kind brain|default] [--now <ISO-date>]\n\
     [--require-evidence --scope-file <path> [--identity-file <path>]] [--role-default-scope]\n\
   node scripts/engine-scorecard.js relabel-effort --to default --reason <text> [--event-id <N>]... [--evidence-event-id <N>]... [--dry-run]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
@@ -1693,12 +1693,15 @@ function engineToken(value) {
 // This MUST stay identical to engine-capability-state.js's normalizeSeatIdentity/seatHashOf. The
 // two are deliberate duplicates of one two-line algorithm; a divergence silently detaches every
 // strike from the seat it was recorded against, and no test that looks at only one side sees it.
-function seatIdentityHash(engine, runner, role, effort) {
+function seatIdentityHash(engine, runner, role, effort, seatKind = 'default') {
   return sha256(canonicalJson({
     engine: String(engine),
     runner: String(runner),
     role: String(role),
     ...(effort === undefined || effort === null ? {} : { effort: String(effort) }),
+    // BL-0170: brain-seat strikes are their own seat's; omitted for foreman/legacy so every
+    // recorded seat_hash stays valid.
+    ...(seatKind === 'brain' ? { seat_kind: 'brain' } : {}),
   }));
 }
 
@@ -2007,7 +2010,7 @@ function strikeEnforcementMode() {
 function computeSeatProjection(
   engine, runner, role, nowMs, effort = undefined, storeDir = CAPABILITY_DIR, seatKind = 'default',
 ) {
-  const seatHashValue = seatIdentityHash(engine, runner, role, effort);
+  const seatHashValue = seatIdentityHash(engine, runner, role, effort, seatKind);
   const partition = readStorePartition(true);
   const baseline = findSeatBaseline(
     engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds, effort, seatKind,
@@ -2240,6 +2243,7 @@ function parseSeatStatusArgs(args) {
   let runner = null;
   let role = null;
   let effort;
+  let seatKind = 'default';
   let now;
   let requireEvidence = false;
   let scope = null;
@@ -2268,6 +2272,12 @@ function parseSeatStatusArgs(args) {
     if (arg === '--effort') {
       if (i + 1 >= args.length) failUsage('--effort requires a value');
       effort = args[++i];
+      continue;
+    }
+    if (arg === '--seat-kind') {
+      if (i + 1 >= args.length) failUsage('--seat-kind requires a value');
+      seatKind = args[++i];
+      if (seatKind !== 'brain' && seatKind !== 'default') failUsage(`invalid --seat-kind '${seatKind}' (brain|default)`);
       continue;
     }
     if (arg === '--now') {
@@ -2343,6 +2353,7 @@ function parseSeatStatusArgs(args) {
     runner: runnerToken,
     role: roleToken,
     effort: effortToken,
+    seatKind,
     nowMs,
     requireEvidence,
     scope,
@@ -2490,11 +2501,12 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
 
 function cmdSeatStatus(args) {
   const {
-    engine, runner, role, effort, nowMs, requireEvidence, scope, identity,
+    engine, runner, role, effort, seatKind, nowMs, requireEvidence, scope, identity,
   } = parseSeatStatusArgs(args);
+  if (requireEvidence && seatKind !== 'default') failUsage('--seat-kind brain is not supported with --require-evidence');
   const result = requireEvidence
     ? computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity, effort)
-    : computeSeatProjection(engine, runner, role, nowMs, effort);
+    : computeSeatProjection(engine, runner, role, nowMs, effort, CAPABILITY_DIR, seatKind);
   process.stdout.write(`${JSON.stringify({
     ...result.projection,
     // Which partition answered. `null` is the legacy partition (rows with no effort), which is a
@@ -2995,6 +3007,7 @@ module.exports = {
   // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver
   // pending_revocation is a projection of this result — never a second reader.
   seatIdentityHash,
+  seatKindOf,
   engineToken,
   seatToken,
   // Execution-role normalizer, byte-identical behavior: resolve-scaffold-tier.js

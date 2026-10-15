@@ -150,5 +150,21 @@ case "$out" in "1 Operator config unreadable at $OTHER"*) ok "8: topology follow
 out="$(topo)"
 case "$out" in 0*) ok "8c: control: variable unset -> valid HOME config used";; *) bad "8c: control: got ${out:0:200}";; esac
 
+# --- 9. src/status: review.port (review-server) and the sources manifest knob read the named file (BL-0186) ------
+# autopilotHome stays an injectable seam: with the variable unset (the control) it still decides the file.
+AH="$SCRATCH/ah"; mkdir -p "$AH"
+printf '{"review":{"port":8111},"hooks":{"awaiting-owner":false}}\n' >"$AH/config.json"   # autopilotHome: port 8111, knob off
+printf '{"review":{"port":8222}}\n' >"$OTHER"                                                # OTHER: port 8222, knob not off
+st() { # [AUTOPILOT_CONFIG_FILE value] -> "<review port> <awaiting-owner enabled>"
+  env -u AUTOPILOT_CONFIG_FILE ${1:+AUTOPILOT_CONFIG_FILE="$1"} node -e "
+    const {readReviewPort}=require(process.argv[1]+'/src/status/review-server.js');
+    const {buildSourcesManifest}=require(process.argv[1]+'/src/status/sources-manifest.js');
+    const ah=process.argv[2];
+    const m=buildSourcesManifest({pluginRoot:process.argv[1],env:process.env,autopilotHome:ah,scope:{}});
+    process.stdout.write(readReviewPort(ah,process.env)+' '+m.sources.attention.enabled)" "$ROOT" "$AH"
+}
+[ "$(st "$OTHER")" = "8222 true" ] && ok "9: review-server + sources-manifest followed AUTOPILOT_CONFIG_FILE" || bad "9: src/status ignored AUTOPILOT_CONFIG_FILE (got: $(st "$OTHER"))"
+[ "$(st)" = "8111 false" ] && ok "9c: control: variable unset -> autopilotHome config used" || bad "9c: control: got $(st)"
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

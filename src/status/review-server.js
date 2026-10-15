@@ -18,6 +18,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
 const { pointerPath } = require('./live-pointer');
+const { configPath } = require('../../scripts/lib/config-path');
 
 const DEFAULT_PORT = 8787;
 const BIND = '127.0.0.1';
@@ -52,9 +53,12 @@ function paths({ env, liveDir, autopilotHome }) {
   };
 }
 
-function readReviewPort(autopilotHome) {
+// BL-0186: the operator config is the file $AUTOPILOT_CONFIG_FILE names (scripts/lib/config-path.js); only when
+// that is unset does the caller's autopilotHome (default $HOME/.autopilot, or the session-mode-dir seam) apply.
+function readReviewPort(autopilotHome, env = process.env) {
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(autopilotHome, 'config.json'), 'utf8'));
+    const file = env && env.AUTOPILOT_CONFIG_FILE ? configPath({ env }) : path.join(autopilotHome, 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
     const port = cfg && cfg.review && cfg.review.port;
     if (Number.isInteger(port) && port >= 1 && port <= 65535) return port;
   } catch (_error) { /* missing or unreadable config: default */ }
@@ -123,7 +127,8 @@ function ensureReviewServer({ env = process.env, liveDir, autopilotHome, port, s
   let usePort;
   try {
     p = paths({ env, liveDir, autopilotHome });
-    usePort = port || readReviewPort(p.home);
+    // an explicit autopilotHome (the injection seam) outranks the env pin: hand it an env without one
+    usePort = port || readReviewPort(p.home, autopilotHome ? {} : env);
     fs.mkdirSync(p.root, { recursive: true, mode: 0o700 });
     fs.mkdirSync(p.liveReview, { recursive: true, mode: 0o700 });
     const probe = spawnSync('flock', ['-n', p.lock, 'true'], { encoding: 'utf8', timeout: 5000, env });

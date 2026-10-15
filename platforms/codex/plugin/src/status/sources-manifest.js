@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { configPath } = require('../../scripts/lib/config-path');
 
 const OFF = new Set(['off', 'false', '0', 'no']);
 
@@ -32,7 +33,9 @@ function knobIsOff(name, stem, env, config) {
 
 function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, scope }) {
   const hooksText = readText(path.join(pluginRoot, 'hooks', 'hooks.json')) || '';
-  const config = autopilotHome ? readJson(path.join(autopilotHome, 'config.json')) : null;
+  // BL-0186: $AUTOPILOT_CONFIG_FILE (in the passed env) names the operator config; else autopilotHome/config.json.
+  const configFile = env && env.AUTOPILOT_CONFIG_FILE ? configPath({ env }) : (autopilotHome ? path.join(autopilotHome, 'config.json') : null);
+  const config = configFile ? readJson(configFile) : null;
   const hookInstalled = (file) => hooksText.includes(`/hooks/${file}`) && exists(path.join(pluginRoot, 'hooks', file));
   // A hook module's work can run inside ANOTHER hook process (mods P1W PERF: audit-log.js and advisory-relay.js host
   // awaiting-owner's handlers). The hosts are derived from the code: every hooks/*.js that `require('./<file>')`s it.

@@ -238,7 +238,13 @@ function isDispatchBash(cmd) {
   // BL-0105: the command word itself must be the rail: an optional `bash|node`, then a plain path (no `=`, so
   // `FOO=scripts/dispatch-x.sh ...` is an env assignment, not the rail) whose `scripts/` is a whole directory
   // segment (not `myscripts/`).
-  return /^(?:(?:bash|node)\s+)?\/?(?:[A-Za-z0-9._~${}-]+\/)*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)(?:\s|$)/.test(t);
+  // BL-0183: quotes may wrap the whole path (`"$REPO_ROOT/scripts/dispatch-x.sh"`) or just a leading variable
+  // (`"${CLAUDE_PLUGIN_ROOT}"/scripts/dispatch-x.sh`). A quote is only allowed at the path start/end or right
+  // after a segment; `=` stays excluded, so quoted env-assignment disguises still fail. Quotes must balance.
+  const m = /^(?:(?:bash|node)\s+)?(["']?)\/?(?:[A-Za-z0-9._~${}-]+["']?\/)*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)["']?(?:\s|$)/.exec(t);
+  if (!m) return false;
+  const q = m[0].match(/["']/g) || [];
+  return q.length % 2 === 0;
 }
 
 (function main() {

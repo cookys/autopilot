@@ -248,12 +248,14 @@ out('s_model_has_manifest', model('R1').sources_manifest ? 'yes' : 'no');
 world.rows = [mkRow('r-c', 'R1'), mkRow('r-5', 'R5')]; settle();
 out('s_compare_text_unwired', html('R5').includes('來源未接') ? 'yes' : 'no');
 process.env.AUTOPILOT_SESSION_TASKS = 'off';
+const cfgPin = process.env.AUTOPILOT_CONFIG_FILE; process.env.AUTOPILOT_CONFIG_FILE = path.join(home, 'config.json'); // BL-0186: the pin outranks the home seam, so point it at the seam
 W(path.join(home, 'config.json'), { hooks: { 'awaiting-owner': false } });
 tasksFile('s-g', { tasks: [{ id: '1', subject: 'x', status: 'pending', started_seq: null }] }); // force a republish
 settle(); sc = sidecar('R1');
 out('s_tasks_off', sc && `${sc.sources.tasks.installed}/${sc.sources.tasks.enabled}`);
 out('s_attention_cfg_off', sc && `${sc.sources.attention.installed}/${sc.sources.attention.enabled}`);
 delete process.env.AUTOPILOT_SESSION_TASKS; fs.unlinkSync(path.join(home, 'config.json'));
+if (cfgPin === undefined) delete process.env.AUTOPILOT_CONFIG_FILE; else process.env.AUTOPILOT_CONFIG_FILE = cfgPin;
 
 // ---- item 6: marker stage (read side; the §2.9 fields; the old marker phase fields are gone since P2b) ------------------------------------------------------------------------
 world.rows = [mkRow('r-3', 'R3'), mkRow('r-4', 'R4'), mkRow('r-c', 'R1')];

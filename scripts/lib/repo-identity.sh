@@ -153,6 +153,7 @@ child_session_apply_env() {
   child_session_env_setup "$@"
   local _a
   for _a in "${CHILD_SESSION_UNSET[@]}"; do [ "$_a" = "-u" ] || unset "$_a"; done
+  unset AUTOPILOT_CHILD_SESSION_ID   # 3d: stated here too, so an in-process runner never depends on the list's contents
   [ -n "$CHILD_SESSION_PARENT" ] && export AUTOPILOT_PARENT_SESSION_ID="$CHILD_SESSION_PARENT"
   return 0
 }

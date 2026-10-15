@@ -261,7 +261,7 @@
   "legend.fold": "section open / folded; press to toggle",
   "legend.goto": "press to open the tab that holds the detail (dim: it is an action, not a place)",
   "legend.detail": "a detail line / a command you can run",
-  "legend.tabmark": "the tab you are on (orange bold name, this bar under it)",
+  "legend.tabmark": "the tab you are on (bold name, this orange bar under it)",
   "legend.meter": "bar filled up to the amount; plain below 80%, yellow from 80%, red at 100%",
   "legend.walk": "stage walk: done, you are here, to come",
   "legend.badges": "tab name in yellow bold: this tab holds something that needs you",

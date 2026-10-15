@@ -107,10 +107,13 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
   const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind: 'meter' as const, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l)
   expect(i4(meterRow).length).toBeGreaterThan(0) // a bold meter percent is flagged
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), pct] } : l)).length).toBeGreaterThan(0) // and so is a bold pct on a plain kv row
-  // positives: a tab name wearing the here or attention colour may be bold (the strip and the ? tab); a bold tab-role seg in any other colour may not
-  const tabSeg = (color: 'warning' | 'claude' | 'success') => (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), { text: ' Aa ', role: 'tab' as const, bold: true, color }] } : l)
+  // positives: a tab name wearing the attention colour, or the active one (here) in default text, may be bold; a bold tab-role seg in any other colour may not,
+  // and since 2026-10-16 neither may a claude-coloured one
+  const tabSeg = (color: 'warning' | 'claude' | 'success' | undefined, here = false) => (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), { text: ' Aa ', role: 'tab' as const, bold: true, ...(color ? { color } : {}), ...(here ? { here: true } : {}) }] } : l)
   expect(i4(tabSeg('warning'))).toEqual([])
-  expect(i4(tabSeg('claude'))).toEqual([])
+  expect(i4(tabSeg(undefined, true))).toEqual([])
+  expect(i4(tabSeg(undefined)).length).toBeGreaterThan(0)
+  expect(i4(tabSeg('claude', true)).length).toBeGreaterThan(0)
   expect(i4(tabSeg('success')).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short

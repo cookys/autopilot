@@ -71,7 +71,7 @@ export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'ne
 export function boldUseOf(line: PaneLine, s: Seg): (typeof BOLD_USES)[number] | null {
   if (line.kind === 'verdict') return 'verdict line'
   if (line.kind === 'header' && s.role === 'prose') return 'header title'
-  if (s.role === 'tab') return s.color === PALETTE.here ? 'active tab name' : s.color === PALETTE.attention ? 'needing tab name' : null
+  if (s.role === 'tab') return s.here === true && (s.color === undefined || s.color === PALETTE.attention) ? 'active tab name' : s.color === PALETTE.attention ? 'needing tab name' : null
   if (line.kind === 'choice' && s.role === 'pick') return 'picked option'
   if (line.kind === 'choice' && s.role === 'send' && s.press !== undefined) return 'send button'
   return null
@@ -874,14 +874,16 @@ export type Strip = {
   rows: number // drawn rows: the strip's wrapped rows + the baseline
   exact: boolean // the strip fits one row, so `rows` is certain and the `━` mark is drawn
 }
-// Q1 (owner 2026-10-13): no background; the active tab is bold `claude` text plus a run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
+// Q1 (owner 2026-10-13, revised 2026-10-16): no background; the active tab name is bold default text (attention bold when it needs the owner) and the `here` colour
+// is only the run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
 export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNext: boolean): Strip {
   const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
   const built = tabs.map(tb => {
     const on = tb.id === active
     const needs = tb.need === true
-    // the active tab stays claude bold even when it needs the owner (the `━` run already marks it); an inactive one that needs the owner is warning bold, the rest dim
-    const o: SegOpts = on ? { color: PALETTE.here, bold: true, here: true, role: 'tab' } : needs ? { color: PALETTE.attention, bold: true, role: 'tab' } : { dim: true, role: 'tab' }
+    // any tab that needs the owner is attention bold (the active one too: the `━` run marks where you are); the active one otherwise default bold, the rest dim.
+    // `here` tags the active label for I4 and the strip test; it is not a colour
+    const o: SegOpts = on ? { ...(needs ? { color: PALETTE.attention } : {}), bold: true, here: true, role: 'tab' } : needs ? { color: PALETTE.attention, bold: true, role: 'tab' } : { dim: true, role: 'tab' }
     const label = sg(' ' + tb.label + ' ', o)
     return { id: tb.id, on, label, width: displayWidth(label.text) + 1 }
   })

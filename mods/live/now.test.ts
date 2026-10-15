@@ -322,7 +322,7 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     const st = stripOf(s, c, 'now', true)
     expect(st.rule.some(g => g.text.includes('━')), loc + ': a wrapped strip draws no ━ under-mark').toBe(false)
     const on = st.tabs.find(x => x.on)!
-    expect(on.label.bold === true && on.label.color === 'claude', loc + ': the active label falls back to bold claude').toBe(true)
+    expect(on.label.bold === true && on.label.here === true && on.label.color === undefined, loc + ': the active label falls back to bold alone').toBe(true)
     const one = stripOf(s, ctxOf(t, 76), 'now', true)
     expect(one.rule.some(g => g.text.includes('━')), loc + ': control: an unwrapped strip does draw it').toBe(true)
     // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
@@ -496,13 +496,14 @@ test('every tab: the shared checker flags a hand-written number, a bold mark wit
   expect(tabViolations('legend', legend.map(l => ({ ...l, segs: [...(l.segs ?? []), { text: ' 7m', role: 'value' as const }] })), 120, t).some(v => v.includes(' I8 ')), 'legend I8').toBe(true)
 })
 
-test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here', () => {
+test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here, and claude is only on the ━ run', () => {
   for (const [loc, t] of LOCALES) {
     const sr = stripOf(snap(), ctxOf(t, 120), 'now', true)
     const marked = [...sr.tabs.map(x => x.label), ...sr.rule]
     for (const s of marked) if ((s.bold === true || s.color === 'claude') && s.color !== 'warning') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
     expect(sr.tabs.filter(x => x.on).length).toBe(1)
     expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
+    expect(sr.tabs.some(x => x.label.color === 'claude'), loc + ': no tab name is claude').toBe(false)
   }
 })
 
@@ -582,11 +583,11 @@ test('tab colour: a running dispatch never marks 派工; no symbol badge is draw
   const text = [...sr.tabs.map(x => x.label), ...sr.rule].map(g => g.text).join('')
   expect(text).not.toMatch(/[▲●⚑⊘]/)
 })
-test('tab colour: the active tab stays claude bold with its ━ run even when it needs the owner', () => {
+test('tab colour: the active tab that needs the owner is warning bold, with its claude ━ run under it (owner 2026-10-16)', () => {
   const sr = stripOf(needSnap({ pending: true }), ctxOf(makeT('zh-TW'), 120), 'decide', true)
   const on = sr.tabs.find(x => x.on)!
   expect(on.id).toBe('decide')
-  expect(on.label.color).toBe('claude')
+  expect(on.label.color).toBe('warning')
   expect(on.label.bold).toBe(true)
   expect(sr.rule.some(g => g.text.includes('━') && g.color === 'claude')).toBe(true)
 })

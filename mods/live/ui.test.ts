@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import {
   GLYPHS, STATES, SEVERITY, STATE_IDS, FRESH_MS, isStale, stateOf, worst, classify, isMade, isFrag, blank, header, kv, item, bullet, empty, more, command, detail, meter, table, val,
-  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W, PALETTE, meterKey, countChip, strip,
+  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W, PALETTE, meterKey, countChip, strip, boldUseOf,
 } from './ui'
 import type { Ctx, BadgeStated } from './ui'
 import { wrapLines } from './model'
@@ -255,13 +255,25 @@ test('palette: a need_you count on a section title is a plain number; any other 
   expect(fail.segs[0].color).toBe(PALETTE.broken)
 })
 
-test('palette: the tab strip draws the active name here+bold, a needing name attention+bold, the rest dim, and the next-page button dim (not the here colour)', () => {
+test('palette: the tab strip draws the active name default bold, a needing name attention+bold (active or not), the rest dim, the here colour only on the ━ run, and the next-page button dim', () => {
   const sr = strip(ctx(76), 'now' as never, [{ id: 'now' as never, label: 'Now' }, { id: 'decide' as never, label: 'Decide', need: true }, { id: 'spend' as never, label: 'Spend' }], true)
   expect(sr.next).toMatchObject({ dim: true })
   expect(sr.next?.color).toBeUndefined()
   const [now, decide, spend] = sr.tabs
-  expect([now.label.color, now.label.bold]).toEqual([PALETTE.here, true])
+  expect([now.label.color, now.label.bold, now.label.here]).toEqual([undefined, true, true])
   expect([decide.label.color, decide.label.bold]).toEqual([PALETTE.attention, true])
   expect([spend.label.color, spend.label.bold, spend.label.dim]).toEqual([undefined, undefined, true])
   expect(sr.rule.some(g => g.color === PALETTE.here && g.bold !== true)).toBe(true)
+  expect(sr.tabs.some(x => x.label.color === PALETTE.here)).toBe(false)
+  const onNeed = strip(ctx(76), 'decide' as never, [{ id: 'now' as never, label: 'Now' }, { id: 'decide' as never, label: 'Decide', need: true }], false).tabs[1].label
+  expect([onNeed.color, onNeed.bold, onNeed.here]).toEqual([PALETTE.attention, true, true])
+})
+
+test('palette: I4 accepts a bold tab name only when it is the active one (here) or one that needs the owner; a planted bold inactive name is a violation', () => {
+  const line = { kind: 'kv', text: '' } as never
+  expect(boldUseOf(line, { text: ' Now ', bold: true, here: true, role: 'tab' })).toBe('active tab name')
+  expect(boldUseOf(line, { text: ' Decide ', bold: true, color: PALETTE.attention, role: 'tab' })).toBe('needing tab name')
+  // negative controls: a bold tab with no here mark and no attention colour, and the pre-2026-10-16 claude-coloured active name
+  expect(boldUseOf(line, { text: ' Spend ', bold: true, role: 'tab' })).toBeNull()
+  expect(boldUseOf(line, { text: ' Now ', bold: true, here: true, color: PALETTE.here, role: 'tab' })).toBeNull()
 })

@@ -2294,7 +2294,7 @@ function walkAll(n: Drawn, out: Drawn[] = []): Drawn[] {
   return out
 }
 // every drawn node uses theme keys as text colour only: no backgroundColor, no inverse, no raw colour
-// (P5: the panel's active tab is bold `claude` text with a `━` under it; no background anywhere, so the second argument is kept only for the callers' sake)
+// (P5: the panel's active tab is a bold name with a `claude` `━` under it; no background anywhere, so the second argument is kept only for the callers' sake)
 function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
   for (const n of walkAll(tree)) {
     const p = n.props || {}
@@ -2305,12 +2305,28 @@ function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
 }
 const joined = (texts: string[]) => texts.join('')
 
-// the tab showing: its Button wraps a bold Text (bold `claude`); the others wrap a plain one, and the `next` chip is no tab
-const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string' && (c as Drawn).props?.bold === true && (c as Drawn).props?.color === 'claude')
+// the tab showing (owner 2026-10-16: its name is bold default text, or attention bold when it needs the owner, so no colour tells it apart from a
+// needing tab): the one strip Button that starts at the column where the baseline's `━` run starts. The strip Buttons come first in draw order
+// (the `next` chip, then the tabs), each followed by a one-cell gap; the baseline is the first Text made only of `─` / `━`, its leading `─` run as
+// wide as everything left of the active label.
+async function activeKeyOf(p: any): Promise<string | undefined> {
+  const texts = (await p.findAll({ type: 'Text' })) as Drawn[]
+  const rule = texts.map(n => textOf(n as Node)).filter(x => x !== '' && /^[─━]+$/u.test(x))
+  const at = rule.findIndex(x => x.startsWith('━'))
+  if (at < 0) return undefined
+  const markAt = rule.slice(0, at).reduce((w, x) => w + displayWidth(x), 0)
+  let x = 0
+  for (const b of (await p.findAll({ type: 'Button' })) as Drawn[]) {
+    if (b.props?.key !== 'next' && x === markAt) return b.props?.key as string
+    x += displayWidth(fullText(b as Node)) + 1 // fullText: the `next` chip may carry its glyph as a label prop
+    if (x > markAt) return undefined
+  }
+  return undefined
+}
 
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+  const tab = (await activeKeyOf(pane))
   await pane.unmount()
   return tab
 }
@@ -2469,7 +2485,7 @@ for (const surface of SURFACES) {
       await band.press({ key: slot })
       await band.unmount()
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const active = (await activeKeyOf(pane))
       await pane.unmount()
       expect([slot, active]).toEqual([slot, tab])
     }
@@ -2514,7 +2530,7 @@ for (const surface of SURFACES) {
     await b.unmount()
     const activeTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2532,7 +2548,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2617,7 +2633,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      const tab = (await activeKeyOf(pane))
       await pane.unmount()
       return tab
     }
@@ -2648,7 +2664,7 @@ for (const surface of SURFACES) {
     await first.unmount()
     await second.unmount()
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+    const tab = (await activeKeyOf(pane))
     await pane.unmount()
     expect(tab).toBe('decide') // Now (first press) then Decide (second press)
   })
@@ -2752,11 +2768,12 @@ for (const surface of SURFACES) {
     expect(nameNode('hygiene').props?.bold).toBe(true)
     for (const id of ['dispatch', 'decide', 'spend']) { expect(nameNode(id).props?.color, id).toBeUndefined(); expect(nameNode(id).props?.bold, id).not.toBe(true) }
     expect(strip).not.toMatch(/殘留 \d/) // variant A: colour only, no number
-    // the active tab (Now) is bold `claude` text with a `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1)
+    // the active tab (Now) is bold default text with a `claude` `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1, 2026-10-16)
     const stripNodes = walkAll(((tree.children || [])[0]) as Drawn)
     expect(stripNodes.filter(n => n.props?.backgroundColor !== undefined).length).toBe(0)
     const boldNodes = stripNodes.filter(n => n.type === 'Text' && n.props?.bold === true)
-    expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === 'claude')).toBe(true)
+    expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === undefined)).toBe(true)
+    expect(stripNodes.some(n => n.type === 'Text' && n.props?.color === 'claude' && !textOf(n as Node).includes('━'))).toBe(false) // claude only on the ━ run
     expect(boldNodes.some(n => textOf(n as Node).includes('派工'))).toBe(false)
     expect(fullText(((tree.children || []) as Node[])[0])).toContain('━')
     await pane.unmount()
@@ -3790,7 +3807,7 @@ for (const surface of SURFACES) {
     await nav.press({ key: 'g' + ptr })
     await nav.unmount()
     const review = await mountPane()
-    const active = ((await review.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+    const active = (await activeKeyOf(review))
     await review.unmount()
     expect(active).toBe('review')
   })
@@ -4610,7 +4627,7 @@ for (const surface of SURFACES) {
     await band.press({ key: 'quota' })
     await band.unmount()
     const pane = await mountPane()
-    const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+    const active = (await activeKeyOf(pane))
     await pane.unmount()
     expect(active).toBe('spend')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
@@ -4756,7 +4773,7 @@ for (const surface of SURFACES) {
     const activeAfter = async (key: string): Promise<string> => {
       await pressAt($, surface, key)
       const pane = await mountOn($, surface)
-      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key as string
+      const active = (await activeKeyOf(pane)) as string
       await pane.unmount()
       return active
     }

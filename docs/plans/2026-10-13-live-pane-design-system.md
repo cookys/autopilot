@@ -736,11 +736,13 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 
 **Owner ruling 2026-10-16** (after the tab names went yellow): 「整個 panel 顏色盤點重整，考慮視覺重量跟顏色代表的意涵，盡量讓介面清楚明瞭，然後更新為預設開發 design pattern」. Resolved in §12: one colour, one meaning; bold is a whitelist; the owner's attention is drawn in yellow once per surface. This is the default design pattern for every mod surface from now on.
 
+**Owner ruling 2026-10-16, Q1 revised** (decision `d-5723c838`, answered 「合併＋白字」 after comparing both renders): the active tab name is no longer orange. It is bold default text, or bold yellow when that tab needs the owner; orange (`here`) stays only on the `━` run under it. This replaces the 2026-10-13 Q1 mark wherever it says "bold `claude` text" (§3.6, §4, Q1 above, §9); §12.5 has the rule.
+
 ## 9. Unverified (each is checked in the named phase)
 
 Verified as of 2026-10-14 (struck items below):
 - ~~One-cell rendering of `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`~~ confirmed by the owner in ssh + tmux on 2026-10-13 (`GLYPHS.verified`, `glyph-check.js`).
-- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to bold `claude` text alone when it wraps (Q1); covered by `mods/live/now.test.ts:324-329` (a wrapped strip draws no `━`, the active label stays bold `claude`; 76-column unwrapped control alongside).
+- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to the bold name alone when it wraps (Q1; bold `claude` until 2026-10-16, bold default text since, §12.5); covered by `mods/live/now.test.ts` "hint: a tab strip that wraps" (a wrapped strip draws no `━`, the active label stays bold; 76-column unwrapped control alongside).
 
 - Whether the owner's 殘留 screenshot (17 lane worktrees as unintegrated) predates the producer fix: awaiting confirmation on the owner's machine (P5 acceptance); the producer is fixed (`dc30d96c`, `793880e6`; stale-develop case in `hooks/tests/repo-residue-sweep.test.sh`).
 - `bodyColumns` overstating the drawable width (P0 a).
@@ -820,13 +822,13 @@ Method: every use of a theme key in `mods/live` was inventoried (file and line),
 | Role (`PALETTE` in `ui.ts`) | Theme key | The one meaning | Used for |
 |---|---|---|---|
 | `attention` | `warning` (yellow) | the owner must look or act | the `need_you` mark `▲`, the top verdict `要你決定`, the name of a tab that needs the owner, QC owed (`QC▲`), residue to handle (`⚑`), a meter at 80% and above, a plugin source behind upstream |
-| `here` | `claude` (orange) | you are here | the active tab name and its `━` run, the current stage node `◐`, the current unit cell |
+| `here` | `claude` (orange) | you are here | the `━` run under the active tab (not its name, §12.5), the current stage node `◐`, the current unit cell |
 | `broken` | `error` (red) | broken or probably broken | `failed`, `stalled`, a meter at 100% and above |
 | `done` | `success` (green) | finished | `done` `✓`, QC `✓`, a finished stage node `✓` (pane and band) |
 | `running` | `suggestion` (blue) | running now | `running` `●`, in the pane and in the band's `●N` |
 | `idle` | `inactive` (grey) | nothing to do | `pending`, `stopped`, `skipped`, `unknown` marks, the empty part of a bar |
 | `structure` | `subtle` (dark grey) | structure | section rules, fold marks, the strip baseline, the band `│` |
-| (none) | default text | content | values, names, prose, `findings` (`△ 待修`), a recommendation `★`, a meter below 80% |
+| (none) | default text | content | values, names, prose, the active tab name (bold), `findings` (`△ 待修`), a recommendation `★`, a meter below 80% |
 | (weight) | `dim` | secondary | key columns, units, times, hints, inactive tab names, the `›` next-page button |
 
 Consequences that were ambiguous before: `findings` is not the owner's to act on (the author fixes it), so it is default text and no longer yellow; a healthy meter says nothing, so a 2% bar is default text and no longer green; `★` is a recommendation, not a state, so it is default text and no longer blue; the `›` button is an action, not a place, so it is `dim` and no longer orange; the picked option and the send button on a decision card are bold default text and no longer green. `stalled` keeps the red of `failed` (the §3.2 vocabulary does not change).
@@ -847,4 +849,6 @@ Bold is allowed on exactly these: a section title, the verdict line, the active 
 
 ### 12.5 Tab strip
 
-The tab strip draws the active tab as bold `here` text with a `━` run under it, and a tab that needs the owner as bold `attention` text, replacing the strip's count badges (§3.2 b). When the active tab also needs the owner, orange (here) wins and the name does not show the need; the top verdict line and the tab's own content do. An alternative that keeps yellow on the active tab (name in bold default text or bold yellow, orange only on the `━` run) was rendered and compared on 2026-10-16 and left unadopted; it is recorded for the owner to choose, not shipped.
+The tab strip draws a tab that needs the owner as bold `attention` text, replacing the strip's count badges (§3.2 b), and the active tab as a bold name with an orange (`here`) `━` run under it. The active name is bold default text, or bold `attention` when that tab needs the owner: the need stays visible on the tab you are looking at, and orange appears in the strip only on the `━` run (owner 2026-10-16, decision `d-5723c838`, 「合併＋白字」; the first build of this revision kept the name orange, as the 2026-10-13 Q1 had it, and was compared side by side before the ruling). A strip that wraps draws no `━` and keeps the bold name alone; there an active tab that needs the owner looks like any other needing tab, and the top verdict line still says it.
+
+The active label carries the `here` tag without the `here` colour: I4 reads the tag to tell the active name from a stray bold tab (`boldUseOf` in `ui.ts`; a bold tab name with neither the tag nor the attention colour, or one painted `claude`, is a violation, with a negative control in `ui.test.ts`). Tests find the active tab by the column of the `━` run, not by colour (`activeKeyOf` in `live.test.ts`).

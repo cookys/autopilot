@@ -1803,19 +1803,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
 - **Context**: D6 residual (plan §4). Per-rail mutations done 2026-10-15. tmux leak reproduced: ensurePlainMarker records env P for any new id != P; two options in the sidecar.
 
-### Brain-seat strikes have no writer yet
-- **Id**: BL-0178
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 腦力題和工頭題的扣點現在能分開記，但目前沒有任何程式會用「腦力席位」的身分去記扣點，所以分開記的功能還沒真的被用到。
-- **Impact**: 低。現在不會算錯；等第一筆腦力題扣點要進來時，得先把寫入端接上，否則會記到工頭席位。
-- **Trigger**: 第一筆腦力題 strike 進成績單之前（同 BL-0170 原觸發條件）
-- **Effort**: S
-- **Source**: review of lane/bl0170, 2026-10-15
-- **Pointer**: none
-- **Context**: no caller passes --seat-kind brain; computeSeatProjection in topology/scaffold-tier lacks seatKind. Also: HELP lines omit --seat-kind; invalid kind silently = default; no invalidate-strike brain test.
-
 ### Hooks read ~/.autopilot/config.json directly, ignoring AUTOPILOT_CONFIG_FILE
 - **Id**: BL-0181
 - **Status**: open

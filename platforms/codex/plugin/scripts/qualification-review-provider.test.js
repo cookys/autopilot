@@ -2163,6 +2163,23 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   equal(prose.child.status, 0, 'a long unparseable prose answer mentioning rate limit is handed back for grading');
 }
 
+// parsePanelResult (the host parser that grades this provider's panel output) takes the LAST parseable
+// JSON object; noise before it is allowed (BL-0161 owner decision A). Pinned here with its negative controls.
+{
+  const { parsePanelResult } = require('./engine-qualify');
+  const pass = '{"verdict":"pass","findings":[]}';
+  const noisy = `Reviewing the diff...\n{not json at all\n{"verdict":"fail","findings":[]\n${pass}\n`;
+  equal(parsePanelResult(noisy).verdict, 'pass', 'noise and broken JSON before a final valid pass object still grade as pass');
+  equal(parsePanelResult(`${pass}\n`).verdict, 'pass', 'a bare pass object grades as pass');
+  equal(parsePanelResult(`{"verdict":"fail","findings":[]}\n${pass}`).verdict, 'pass', 'the last parseable object wins over an earlier valid one');
+  let threw = null;
+  try { parsePanelResult('Reviewing the diff...\nno json here\n[1,2]\n'); } catch (error) { threw = error; }
+  check(threw && /panel result must be/.test(threw.message), 'output with no parseable JSON object is rejected (graded as a failed case)');
+  threw = null;
+  try { parsePanelResult(`${pass}\n{"verdict":"maybe","findings":[]}`); } catch (error) { threw = error; }
+  check(threw, 'a final object that breaks the verdict schema is rejected even when an earlier object was valid');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 454) throw new Error(`qualification-review-provider: expected exactly 454 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 459) throw new Error(`qualification-review-provider: expected exactly 459 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

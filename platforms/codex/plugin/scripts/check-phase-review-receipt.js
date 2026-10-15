@@ -1282,17 +1282,30 @@ function validatePacketSet(flags) {
   }
   if (problems.length) fail(problems.join('\n'));
 
-  // Rule 3: same first reviewed head everywhere; the cover equals the range's changed list exactly.
-  let h1 = null;
+  // Rule 3: one pinned range h1 = the earliest first reviewed head; the cover equals h1's changed list exactly.
+  // A packet may be first reviewed at a later head h2 only if none of its OWN paths changed between h1 and h2
+  // (what it reviewed is then identical to what it would have seen at h1). BL-0118.
+  const firstHead = {};
   const lastHead = {};
   for (const id of ids) {
     const finalized = chains[id].filter((e) => e && e.status === 'finalized');
     const first = finalized[0];
     const last = finalized[finalized.length - 1];
     if (!first || !first.head || !last || !last.head) { problems.push(`packet '${id}' has no finalized generation`); continue; }
-    if (h1 === null) h1 = first.head;
-    else if (first.head !== h1) problems.push(`packet '${id}' was first reviewed at a different head (${first.head}, not ${h1}): every packet must pin the same full range`);
+    firstHead[id] = first.head;
     lastHead[id] = last.head;
+  }
+  if (problems.length) fail(problems.join('\n'));
+  const isAncestor = (a, b) => spawnSync('git', ['merge-base', '--is-ancestor', '--end-of-options', a, b], { cwd: repoRoot, encoding: 'utf8' }).status === 0;
+  const distinctHeads = [...new Set(Object.values(firstHead))];
+  const h1 = distinctHeads.find((h) => distinctHeads.every((o) => o === h || isAncestor(h, o))) || firstHead[ids[0]];
+  for (const id of ids) {
+    if (firstHead[id] === h1) continue;
+    const why = `packet '${id}' was first reviewed at a different head (${firstHead[id]}, not ${h1})`;
+    if (!isAncestor(h1, firstHead[id])) { problems.push(`${why}: it is not a descendant of ${h1}, so the packets do not pin one range`); continue; }
+    const own = new Set(packets[id]);
+    const ownChanged = reviewPackets.rangeNames(repoRoot, h1, firstHead[id]).filter((n) => own.has(n));
+    if (ownChanged.length) problems.push(`${why}: its own path(s) changed between them (${ownChanged.join(', ')}), so every packet must pin the same full range`);
   }
   if (problems.length) fail(problems.join('\n'));
   try {

@@ -1721,18 +1721,74 @@ px_fin() { # <ledger> <packet> -> collect then finalize that packet of the ps se
 }
 PK_REPO_MAIN="$PK_REPO"; PK_BASE_MAIN="$PK_BASE"
 
-# Q1: packets first reviewed at different heads (P1 at h1; a covered file changes; P2/P3 at h2) -> the set is refused
+# Q1: a packet first reviewed at a LATER head h2 is refused when that packet's OWN files changed between h1 and h2.
+# P1 is first reviewed at h1; d/e.txt (a P3 file) then changes; P2 and P3 are first collected at h2. P2's own files
+# (d/b.txt) did not change h1..h2 so P2 alone would be accepted, but P3's did -> the set is refused, naming P3 only.
 px_repo "$TEST_TMP/px1"
 PX1_LEDGER="$TEST_TMP/px1_ledger"; mkdir -p "$PX1_LEDGER"
 px_fin "$PX1_LEDGER" P1
 (cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
 px_fin "$PX1_LEDGER" P2; px_fin "$PX1_LEDGER" P3
 PK_OUT=$(pk_check "$CHK" "$PX1_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
-assert_exit_code "$PK_RC" "1" "packet Q1: packets first reviewed at different heads fail the set"
-assert_contains "$PK_OUT" "first reviewed at a different head" "packet Q1: the refusal says the heads differ"
-PK_M=$(pk_mutant heads check-phase-review-receipt.js "else if (first.head !== h1) problems.push(" "else if (false) problems.push(") || fail "mutation setup failed (Q1)"
-PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
-assert_exit_code "$PK_RC" "0" "packet Q1 (mutation): without the same-first-head rule a set pinned to two different ranges passes"
+assert_exit_code "$PK_RC" "1" "packet Q1: a packet first reviewed at a later head over its own changed file fails the set"
+assert_contains "$PK_OUT" "packet 'P3' was first reviewed at a different head" "packet Q1: the refusal names the packet whose own file changed"
+assert_not_contains "$PK_OUT" "packet 'P2' was first reviewed" "packet Q1: the packet whose own files did not change is not refused"
+
+# Q1b (BL-0118): a packet first reviewed at a later head h2 is ACCEPTED when none of its own paths changed h1..h2.
+# P1 and P3 are first reviewed at h1; d/e.txt (P3) changes; P2 is first collected at h2 (d/b.txt untouched) and P3 is
+# re-reviewed at h2 as generation 2. Exact cover is still checked at h1.
+px_repo "$TEST_TMP/px1b"
+PX1B_LEDGER="$TEST_TMP/px1b_ledger"; mkdir -p "$PX1B_LEDGER"
+px_fin "$PX1B_LEDGER" P1; px_fin "$PX1B_LEDGER" P3
+(cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
+px_fin "$PX1B_LEDGER" P2
+node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PX1B_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" > /dev/null 2>&1
+pk_finalize "$PX1B_LEDGER" "$TEST_TMP/pk_packets.json" P3 2 > /dev/null
+PK_OUT=$(pk_check "$CHK" "$PX1B_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q1b: a packet first reviewed at a later head over untouched own paths passes the set"
+
+# Q1c: negative control for Q1b - the same shape, but the later-collected packet's OWN file changed h1..h2 -> refused.
+# P1 and P3 at h1; d/b.txt (a P2 file) changes; P2 first collected at h2.
+px_repo "$TEST_TMP/px1c"
+PX1C_LEDGER="$TEST_TMP/px1c_ledger"; mkdir -p "$PX1C_LEDGER"
+px_fin "$PX1C_LEDGER" P1; px_fin "$PX1C_LEDGER" P3
+(cd "$PK_REPO" && echo "between" >> d/b.txt && git add d/b.txt && git commit -q -m "between")
+px_fin "$PX1C_LEDGER" P2
+PK_OUT=$(pk_check "$CHK" "$PX1C_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1c: a later-collected packet whose own file changed h1..h2 fails the set"
+assert_contains "$PK_OUT" "first reviewed at a different head" "packet Q1c: the refusal says the heads differ"
+PK_M=$(pk_mutant heads check-phase-review-receipt.js "const ownChanged = " "const ownChanged = [] || ") || fail "mutation setup failed (Q1c)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1C_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q1c (mutation): without the own-paths-unchanged check a set pinned to two different ranges passes"
+
+# Q1d: negative control for the ancestry branch - the packets' first heads sit on DIVERGED lines (the branch was reset
+# and amended into a sibling commit with the same tree after P1 was reviewed), so no head is an ancestor of the others.
+px_repo "$TEST_TMP/px1d"
+PX1D_LEDGER="$TEST_TMP/px1d_ledger"; mkdir -p "$PX1D_LEDGER"
+px_fin "$PX1D_LEDGER" P1
+(cd "$PK_REPO" && git commit -q --amend -m "work (sibling commit, same tree)")
+px_fin "$PX1D_LEDGER" P2; px_fin "$PX1D_LEDGER" P3
+PK_OUT=$(pk_check "$CHK" "$PX1D_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1d: packets first reviewed on diverged lines fail the set"
+assert_contains "$PK_OUT" "is not a descendant of" "packet Q1d: the refusal names the ancestry rule"
+
+# Q1e: reverse order. P2 and P3 are first reviewed at the EARLIER head, P1 (sorted first) only at the LATER head, with
+# P1's own file untouched h1..h2 and P3 re-reviewed at h2. h1 is the earliest head regardless of packet-id order, so the
+# set passes (a rule that took the first id's head as h1 would pin h1 to the later head and refuse the earlier packets).
+px_repo "$TEST_TMP/px1e"
+PX1E_LEDGER="$TEST_TMP/px1e_ledger"; mkdir -p "$PX1E_LEDGER"
+px_fin "$PX1E_LEDGER" P2; px_fin "$PX1E_LEDGER" P3
+(cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
+px_fin "$PX1E_LEDGER" P1
+node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PX1E_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" > /dev/null 2>&1
+pk_finalize "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json" P3 2 > /dev/null
+PK_OUT=$(pk_check "$CHK" "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q1e: the earliest first head is h1 whatever the packet-id order, so a later-reviewed first packet passes"
+PK_M=$(pk_mutant anc2 check-phase-review-receipt.js "const isAncestor = (a, b) => spawnSync(" "const isAncestor = (a, b) => true || spawnSync(") || fail "mutation setup failed (Q1d/Q1e)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1D_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_not_contains "$PK_OUT" "is not a descendant of" "packet Q1d (mutation): with ancestry always true the Rule 3 ancestry refusal is gone (only the later staleness rule still blocks the set)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1e (mutation): with ancestry always true h1 is mis-picked and the valid reverse-order set is refused"
 
 # Q2: a file outside every packet enters the range after the packets were reviewed (tip subset cover)
 px_repo "$TEST_TMP/px2"

@@ -243,8 +243,28 @@ function isDispatchBash(cmd) {
   // after a segment; `=` stays excluded, so quoted env-assignment disguises still fail. Quotes must balance.
   const m = /^(?:(?:bash|node)\s+)?(["']?)\/?(?:[A-Za-z0-9._~${}-]+["']?\/)*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)["']?(?:\s|$)/.exec(t);
   if (!m) return false;
-  const q = m[0].match(/["']/g) || [];
-  return q.length % 2 === 0;
+  // The command word (up to the end of the rail path) must be paired on its own: a span that runs on
+  // through the whitespace after the path makes the whole thing one word, not the rail.
+  return quotesPaired(m[0]) && quotesPaired(t);
+}
+
+/**
+ * BL-0189: true only when every quote in `s` is genuinely paired: a `'` or `"` opens a span that
+ * only the SAME quote character closes (the other kind is literal inside it), and no span is left
+ * open. Counting parity per kind is not enough: `"$X'/scripts/...` has one of each. A backslash
+ * outside single quotes escapes the next character. Applied to the whole command, so a stray
+ * quote in the arguments also disqualifies the exemption.
+ */
+function quotesPaired(s) {
+  let open = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (open === "'") { if (c === "'") open = null; continue; }
+    if (c === '\\') { i++; continue; }
+    if (open === '"') { if (c === '"') open = null; continue; }
+    if (c === '"' || c === "'") open = c;
+  }
+  return open === null;
 }
 
 (function main() {

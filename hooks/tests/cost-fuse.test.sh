@@ -312,7 +312,20 @@ for cmd in \
   'bash -c=scripts/dispatch-x.sh' \
   'bash "$REPO_ROOT/scripts/dispatch-x.sh' \
   'bash "$REPO_ROOT/scripts/dispatch-x.sh"; git push origin x' \
-  'bash "$REPO_ROOT/scripts/dispatch-x.sh" && rm -rf build'; do
+  'bash "$REPO_ROOT/scripts/dispatch-x.sh" && rm -rf build' \
+  'bash "$X'"'"'/scripts/dispatch-x.sh --a "' \
+  'bash "$X'"'"'/scripts/dispatch-x.sh --a' \
+  "bash '\$X\"/scripts/dispatch-x.sh --a '" \
+  'bash "$X/scripts/dispatch-x.sh" --a "b' \
+  "bash \"\$X/scripts/dispatch-x.sh\" --a 'b" \
+  'bash "a b/scripts/dispatch-x.sh"' \
+  'bash "/tmp/a b/scripts/dispatch-x.sh" --x' \
+  'bash "$X/scripts/dispatch-x.sh" --a "b;c"' \
+  'bash "$X/scripts/dispatch-x.sh" --a "b|c"' \
+  'bash "$X/scripts/dispatch-x.sh" --a "$(id)"' \
+  'bash "$X/scripts/dispatch-x.sh" --a "`id`"' \
+  'bash "$X/scripts/dispatch-x.sh" --a "b
+c"'; do
   i=$((i+1))
   rm -rf "$AUTOPILOT_COST_FUSE_DIR"
   run_hook cost-fuse.js "$(make_payload Bash "$cmd" 'fuse-session-1')"

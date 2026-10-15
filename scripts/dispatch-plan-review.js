@@ -1879,7 +1879,12 @@ function main() {
       }
       commitLogicalBinding(binding);
       if (state.terminal) {
-        throw new CliError(`plan-review session already terminal: ${state.terminal_verdict}`, 3);
+        throw new CliError(
+          `ticket_session_already_terminal: ${state.logical_plan_id} ${state.terminal_verdict} `
+          + `(ticket ${state.ticket}; plan-review session already terminal; 0 seat calls made, `
+          + 'the verdict is the earlier one - re-review needs a new logical_plan_id and ticket)',
+          3,
+        );
       }
       if (!Number.isInteger(state.max_generations)
           || state.max_generations < 1

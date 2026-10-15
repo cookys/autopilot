@@ -297,6 +297,14 @@ const PK_DENY = [
   "cat > f <<'EOF'\ndata\nEOF\npkill -f vllm",
   "pkill -f 'vllm serve'",
   'git commit -m "see `pgrep -f x`"',
+  // BL-0153: shapes that really match the shell running the call
+  "bash <<'EOF'\npgrep -f foo\nEOF", "cat <<'EOF' | bash\npkill -f foo\nEOF",
+  "cat > /tmp/x.sh <<'EOF'\npgrep -f foo\nEOF\nbash /tmp/x.sh", "cat > x.sh <<'EOF'\npkill -f foo\nEOF\nchmod +x x.sh\n./x.sh",
+  'P=foo; pgrep -f "$P"', 'P=foo\npkill -f ${P}', 'a=fo; b=o; pgrep -f "$a$b"; echo foo',
+  'echo 1 | xargs pkill -f foo', 'eval "pkill -f foo"', "eval 'pgrep -f foo'", 'watch pgrep -f foo', "watch -n 2 'pgrep -f foo'",
+  '\\pkill -f foo', "'pkill' -f foo", 'command pkill -f foo',
+  "pgrep -f '[f]oo'; echo foo", // the bracket guards one occurrence, the other still matches
+  'pkill -f -HUP foo', 'pgrep -f -d , foo', 'pgrep -if FOO; echo foo',
 ];
 for (const cmd of PK_DENY) {
   test(`rule2 denies: ${JSON.stringify(cmd)}`, () => {
@@ -316,6 +324,13 @@ const PK_ALLOW = [
   'cat > f <<EOF\npkill -f vllm\nEOF',
   "echo 'use `pgrep -f x` never'",
   "pgrep -f '[s]elftest'",
+  // BL-0153 look-alikes: patterns that cannot match this call's own text
+  "pkill -f '[fF]oo'", "pgrep -f '^x'", "pgrep -f 'x\\.py'", "pgrep -f -d , '[f]oo'", "pgrep -d , -f '^zzz'", 'pgrep -f "foo$"',
+  'a=fo; b=o; pgrep -f "$a$b"', 'P=[f]oo; pgrep -f "$P"', 'kill "$(cat x.pid)"', 'pgrep -x foo', 'pgrep -fx "[f]oo"',
+  'echo "pkill -f foo" | cat', 'echo "eval pkill -f foo"', 'grep -n "watch pgrep -f" notes.md', 'echo "\\pkill -f foo"',
+  "cat > x.sh <<'EOF'\npgrep -f foo\nEOF\ncat x.sh", // written, never run: data
+  "cat <<'EOF' | grep pgrep\npgrep -f foo\nEOF",
+  'eval "pkill -x foo"', "watch -n 2 'pgrep -fa [f]oo'", 'pkill -f "[v]llm"; true',
 ];
 for (const cmd of PK_ALLOW) {
   test(`rule2 allows: ${JSON.stringify(cmd)}`, () => {

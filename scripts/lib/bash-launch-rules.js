@@ -491,47 +491,173 @@ function launchAdvice(shape, rail, nested = false) {
   return parts.join(' ');
 }
 
-const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F']);
-const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal']);
+const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F', 'd', 'r', 'O']);
+const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal',
+  '--delimiter', '--runstates', '--older', '--ns', '--nslist', '--env']);
+const POSIX_CLASS = { alpha: 'a-zA-Z', digit: '0-9', alnum: 'a-zA-Z0-9', upper: 'A-Z', lower: 'a-z', space: '\\s', blank: ' \\t' };
+// What the Bash tool's own shell shows in /proc/<pid>/cmdline: the shell path first, then the call text verbatim
+// (quotes, heredocs and comments included). `pgrep -f` matches its pattern against exactly that.
+const SELF_CMDLINE_PREFIX = '/bin/bash -c eval ';
+
+// Shell word -> the string the command receives (quotes removed, `\x` unescaped). Variables stay as `$name`.
+function dequote(w) {
+  let out = '';
+  for (let i = 0; i < w.length; i += 1) {
+    const c = w[i];
+    if (c === "'") { const j = w.indexOf("'", i + 1); const e = j < 0 ? w.length : j; out += w.slice(i + 1, e); i = e; continue; }
+    if (c === '"') {
+      i += 1;
+      for (; i < w.length && w[i] !== '"'; i += 1) {
+        if (w[i] === '\\' && /["\\$`]/.test(w[i + 1] || '')) i += 1;
+        out += w[i];
+      }
+      continue;
+    }
+    if (c === '\\' && i + 1 < w.length) { i += 1; out += w[i]; continue; }
+    out += c;
+  }
+  return out;
+}
+
+// Plain `NAME=literal` assignment segments of this call (no `$`, backtick or glob in the value).
+function literalAssignments(segs) {
+  const vars = new Map();
+  for (const sg of segs) {
+    const m = /^(?:export\s+)?([A-Za-z_]\w*)=(\S*)$/.exec(sg.text);
+    if (!m) continue;
+    const v = dequote(m[2]);
+    if (!/[$`]/.test(v)) vars.set(m[1], v);
+  }
+  return vars;
+}
+
+const SHELL_RE = '(?:\\S*\\/)?(?:bash|sh|zsh|dash)';
+const SAME_FILE = (a, b) => a.replace(/^\.\//, '') === b.replace(/^\.\//, '');
+
+// Does some segment of the call execute `file` (`./f`, `bash f`, `source f`, `. f`)?
+function executesFile(segs, file) {
+  return segs.some((sg) => {
+    const w = tokens(sg.text).map((t) => dequote(t.raw));
+    const k = w.findIndex((x) => !/^[A-Za-z_]\w*=/.test(x));
+    if (k < 0) return false;
+    if (SAME_FILE(w[k], file)) return true;
+    const h = w[k].replace(/^.*\//, '');
+    if (['bash', 'sh', 'zsh', 'dash'].includes(h) || w[k] === 'source' || w[k] === '.') {
+      return w.slice(k + 1).some((x) => !x.startsWith('-') && SAME_FILE(x, file));
+    }
+    return false;
+  });
+}
+
+// Heredoc bodies the call RUNS: fed straight to a shell (`bash <<EOF`, `cat <<EOF | bash`), or written to a file
+// (`cat > f <<EOF`) that another segment then executes. A heredoc that is only data (never run) is not returned.
+function runHeredocBodies(raw, segs) {
+  const out = [];
+  const lines = String(raw).split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = /<<(-?)[ \t]*(?:'([^']+)'|"([^"]+)"|\\?([A-Za-z_]\w*))/.exec(lines[i]);
+    if (!m || lines[i][m.index + 2] === '<') continue;
+    const tag = m[2] || m[3] || m[4];
+    const body = [];
+    let j = i + 1;
+    for (; j < lines.length; j += 1) { if ((m[1] ? lines[j].replace(/^\t+/, '') : lines[j]) === tag) break; body.push(lines[j]); }
+    const intro = lines[i];
+    let runs = new RegExp(`^\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`).test(intro)
+      || new RegExp(`\\|\\s*(?:(?:sudo|env|exec)\\s+)*${SHELL_RE}\\b`).test(intro.slice(m.index));
+    if (!runs) {
+      const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
+      const file = fm && (fm[1] || fm[2] || fm[3]);
+      runs = !!file && executesFile(segs, file);
+    }
+    if (runs) out.push(body.join('\n'));
+    i = j;
+  }
+  return out;
+}
+
+// Would `pgrep -f <pattern>` match this very call's shell? Test the pattern (ERE ~ JS RegExp) against the text the
+// shell's cmdline carries. null = cannot tell (unresolved variable, unparsable regex): the caller falls back.
+function patternMatchesSelf(pattern, raw, vars, flags) {
+  let pat = pattern;
+  if (/\$[A-Za-z_{]/.test(pat)) {
+    pat = pat.replace(/\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/g, (all, a, b) => (vars.has(a || b) ? vars.get(a || b) : all));
+    if (/\$[A-Za-z_{(]/.test(pat)) return null; // an unknown variable / substitution: unknowable
+  }
+  if (/\$\(|`/.test(pat)) return null;
+  pat = pat.replace(/\[:([a-z]+):\]/g, (all, n) => POSIX_CLASS[n] || all);
+  if (flags.exact) pat = `^(?:${pat})$`;
+  try { return new RegExp(pat, flags.icase ? 'i' : '').test(SELF_CMDLINE_PREFIX + raw); } catch { return null; }
+}
 
 // Rule 2. Returns { rule, why, pattern } or null.
+// A pattern is a self-match when it really matches the call's own command line (so `[fF]oo`, `^x`, `x\.py` are
+// fine and `P=foo; pgrep -f "$P"` is not); the shapes scanned include heredoc scripts the call runs, `eval` /
+// `watch` bodies, `\pkill` and `xargs pkill`.
 function detectPkillSelfMatch(cmd) {
-  const text = executableText(typeof cmd === 'string' ? cmd : '');
-  for (const seg of expandSegments(text)) {
-    const { head, rest } = commandPosition(seg.text);
-    if (!head) continue;
-    const name = head.replace(/^.*\//, '');
-    if (name !== 'pkill' && name !== 'pgrep') continue;
-    let full = false;
-    for (const a of rest) {
-      if (a === '--full' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a)) full = true;
+  const raw = typeof cmd === 'string' ? cmd : '';
+  const top = expandSegments(executableText(raw));
+  const vars = literalAssignments(top);
+  const scripts = [top];
+  for (const body of runHeredocBodies(raw, top)) scripts.push(expandSegments(executableText(body)));
+  for (let si = 0; si < scripts.length && si < 8; si += 1) {
+    for (const seg of scripts[si]) {
+      const { head, rest } = commandPosition(seg.text);
+      if (!head) continue;
+      const name = dequote(head).replace(/^.*\//, '');
+      if (name === 'eval' || name === 'watch') {
+        // the words after `eval` / `watch [-n N …]` are a script
+        let k = 0;
+        if (name === 'watch') while (k < rest.length && /^-/.test(rest[k])) k += (rest[k] === '-n' || rest[k] === '--interval') ? 2 : 1;
+        const bodyText = dequote(rest.slice(k).join(' '));
+        if (bodyText) scripts.push(expandSegments(executableText(bodyText)));
+        continue;
+      }
+      if (name !== 'pkill' && name !== 'pgrep') continue;
+      const flags = { icase: false, exact: false };
+      let full = false;
+      for (const a of rest) {
+        if (a === '--full') full = true;
+        else if (a === '--ignore-case') flags.icase = true;
+        else if (a === '--exact') flags.exact = true;
+        else if (/^-[a-zA-Z]+$/.test(a) && !/^-[A-Z]{2,}$/.test(a)) {
+          if (a.includes('f')) full = true;
+          if (a.includes('i')) flags.icase = true;
+          if (a.includes('x')) flags.exact = true;
+        }
+      }
+      if (!full) continue;
+      // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
+      // Options that take a value (`-u me`, `-P 1`, `-d ,`, `--uid me`) skip that value, so it is never the pattern.
+      const toks = tokens(seg.text).map((t) => t.raw);
+      const hi = toks.findIndex((t) => dequote(t).replace(/^.*\//, '') === name);
+      let word;
+      for (let i = hi + 1; i < toks.length; i++) {
+        const t = toks[i];
+        if (/^--[a-z-]+$/.test(t)) { if (PGREP_LONG_VALUE.has(t)) i += 1; continue; }
+        if (/^-[a-zA-Z0-9]+$/.test(t)) {
+          const signal = /^-[A-Z]{2,}[0-9]*$/.test(t) || /^-[0-9]/.test(t); // `-HUP`, `-9`: a signal, takes no value
+          if (!signal && PGREP_VALUE_FLAGS.has(t[t.length - 1])) i += 1;
+          continue;
+        }
+        if (t.startsWith('-')) continue;
+        word = t; break;
+      }
+      if (word === undefined) continue;
+      const pattern = dequote(word);
+      const hit = patternMatchesSelf(pattern, raw, vars, flags);
+      if (hit === false) continue;
+      // Unjudgeable (unknown $VAR, unparsable regex): keep the old stance — a `[x]` bracket or a `$` means "assume fine".
+      if (hit === null && (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern))) continue;
+      return {
+        rule: 'pkill-self-match',
+        pattern,
+        why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line (the shell running it), `
+          + 'so it can match and kill its own shell. Instead: read the PID from a pidfile (`kill "$(cat x.pid)"`), '
+          + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
+          + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; an unresolvable `$VAR` pattern is not flagged), or bracket one '
+          + "character (`'[f]oo'`)",
+      };
     }
-    if (!full) continue;
-    // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
-    // Walk the words after the command: options that take a value (`-u me`, `-P 1`, `--uid me`) skip that
-    // value, so `me` is never mistaken for the pattern.
-    const toks = tokens(seg.text).map((t) => t.raw);
-    const hi = toks.findIndex((t) => t.replace(/^.*\//, '') === name);
-    let word;
-    for (let i = hi + 1; i < toks.length; i++) {
-      const t = toks[i];
-      if (/^--[a-z-]+$/.test(t)) { if (PGREP_LONG_VALUE.has(t)) i += 1; continue; }
-      if (/^-[a-zA-Z0-9]+$/.test(t)) { if (PGREP_VALUE_FLAGS.has(t[t.length - 1]) && !/^-[0-9]/.test(t)) i += 1; continue; }
-      if (t.startsWith('-')) continue;
-      word = t; break;
-    }
-    if (word === undefined) continue;
-    const pattern = word.replace(/^(['"])([\s\S]*)\1$/, '$2');
-    if (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern)) continue; // `[f]oo` self-exclusion; `$PAT` unknowable
-    return {
-      rule: 'pkill-self-match',
-      pattern,
-      why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line (the shell running it), `
-        + 'so it can match and kill its own shell. Instead: read the PID from a pidfile (`kill "$(cat x.pid)"`), '
-        + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
-        + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; a `$VAR` pattern is not flagged), or bracket one '
-        + "character (`'[f]oo'`)",
-    };
   }
   return null;
 }

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0188 -->
+<!-- next-id: BL-0189 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1166,18 +1166,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: product call whether author rails should suppress panel-intake notes; tests now read JSON from stdout only, so this is noise, not breakage.
 
-### "park does not consume the finding-recurrence budget" is guaranteed only by code order — no test pins it
-- **Id**: BL-0098
-- **Status**: open
-- **Since**: 2026-09-23
-- **Origin**: self
-- **Problem**: 修復流程遇到沒有路徑的審查意見時，「暫停」不該消耗重複次數的額度，但這個行為只靠程式碼的先後順序維持，沒有任何測試守住。 (draft)
-- **Impact**: 日後有人改動順序，這個行為可能被無聲破壞；目前實際行為正確，影響很小。 (draft)
-- **Trigger**: next edit to the pathless-finding repair path in autopilot-engine
-- **Effort**: S
-- **Source**: 2026-09-23 CI repair, dispatch cluster (620ef6ed fallback order: task_surface → round changed files → park)
-- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
-- **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.
 
 ### dispatch-hetero watchdog round-2 cleanups: dead _watchdog_pgid_has_live, test-helper hygiene, HETERO_TEST_* knobs
 - **Id**: BL-0099
@@ -1204,32 +1192,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md
 - **Context**: with `timeout` giving each test file its own process group, a group INT reaches the file only after bash finishes the foreground child, so interrupt latency is bounded by the longest running file.
 
-### v2.36.112 review follow-ups
-- **Id**: BL-0101
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: v2.36.112 版審查留下的小項目大多已修完，只剩一個收件檔數上限的拒絕路徑沒有測試。
-- **Impact**: 都是低嚴重度的小瑕疵，不修也不會壞；下次動到對應檔案時順便處理。 (draft)
-- **Trigger**: next touch of the respective file
-- **Effort**: S
-- **Source**: v2.36.112 per-row and landing reviews (🔵)
-- **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
-- **Context**: Rest shipped 2026-10-14 (BL-0101 merge). Row E closed (keep, see pointer). Left: intake file-cap refusal has no test (PREPARED fixture, 4 files). Declined: sweep env knob, symlink escape, rollover guard.
 
 
-### v2.36.114 review follow-ups
-- **Id**: BL-0103
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: 主項目已在 2026-10-14 合併；剩下的是測試品質小項：建議事項輸出到 stderr 這件事只用原始碼字串比對來測，沒有實際跑 CLI；突變紀錄的文字有兩處跟實際紅的列對不上。
-- **Impact**: 低。若有人把建議事項改寫到 stdout，JSON 輸出會被污染但測試不會紅；紀錄文字不準會誤導之後對照斷言的人。
-- **Trigger**: next touch of src/engine/implementation-campaign.js / campaign-intake.js
-- **Effort**: S
-- **Source**: v2.36.114 landing reviews (🔵)
-- **Pointer**: docs/backlog/v2-36-114-review-follow-ups.md
-- **Context**: Left: run the CLI and assert ADVISORY on stderr plus parseable stdout; fix M1/M4 wording in the test header; move the F asserts off the `# D.` label; no trailing colon when an advisory has no message.
 
 
 ### Sealed-campaign review-station migration
@@ -1387,18 +1351,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
 
-### cost-digest --tree: review follow-ups (test strength, cycle placement, label collisions)
-- **Id**: BL-0120
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 成本統計工具 cost-digest 的 --tree 功能經審查通過，但留下小問題：一個測試永遠不會失敗、缺少循環關係的測試、循環下的節點會變成孤立、五字元標籤可能撞名。 (draft)
-- **Impact**: 只是測試強度與邊角情況，不影響主要使用；下次動到成本工具時處理。 (draft)
-- **Trigger**: next touch of cost-tracker or cost-digest
-- **Effort**: S
-- **Source**: code review of `34dd3c33` (merge `7362f914`), 2026-10-12, verdict SHIP
-- **Pointer**: none
-- **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.
 
 ### dispatch-discuss.js: production prompt lacks the own-axis rule the exam now discloses
 - **Id**: BL-0121
@@ -1603,18 +1555,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: qualification-review-provider.js has no owner mode (brain rides role owner but is a different exam); an owner-provider.js was drafted but never committed. engine-qualify --role owner needs a foreman-corpus provider.
 
-### completeness-scan follow-ups left by the BL-0119 review
-- **Id**: BL-0159
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 完整性掃描還有三個小毛病：指定的檔案全部不存在時仍回報乾淨並放行；掃到這支掃描器自己的規則那一行會誤報；換行分隔的檔名清單不會去掉行首空白。
-- **Impact**: 低。第一項最值得修：檔名打錯時檢查會默默放行；其餘兩項只會多報或少掃，人看得出來。
-- **Trigger**: 下次改 completeness-scan，或有人回報掃描放行了不存在的檔案
-- **Effort**: S
-- **Source**: BL-0119 review rounds 1-3, 2026-10-14
-- **Pointer**: docs/backlog/completeness-scan-follow-ups-after-bl-0119.md
-- **Context**: (1) --files all missing → clean:true exit 0; (2) --range over the PAT_MARKER line or the gate.md marker row self-reports; (3) newline-split pieces keep leading blanks.
 
 ### Qualification wall cap and truncation rules after run-to-completion
 - **Id**: BL-0160
@@ -1730,3 +1670,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: kimiprep review 2026-10-15 (merged as f3d50b5b)
 - **Pointer**: none
 - **Context**: adopt-qualification-defaults.js engine equality (two sites); build-qualification-defaults.js seat_hash from the raw engine; engine-scorecard.js grouping and dedupe by the raw engine.
+
+### onboard quality-gate template tells consumers to scan a directory with completeness-scan
+- **Id**: BL-0188
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 新專案導入時產生的品質檢查設定，教使用者對整個資料夾跑完整性掃描；這樣從來掃不到檔案，以前假裝通過，現在直接報錯。規則說明也沒提這種情況會報錯。
+- **Impact**: 中低。照模板設定的新專案，每次品質檢查都會在這一步報錯，要自己查原因改掉；以前則是什麼都沒掃卻顯示通過。
+- **Trigger**: next touch of scaffold-config.js or the completeness-gate reference, or a consumer reporting exit 2 from completeness-scan
+- **Effort**: S
+- **Source**: cscan review 2026-10-15 (BL-0159 merge)
+- **Pointer**: none
+- **Context**: scaffold-- **Context**: scaffold-config.js template says "completeness-scan.sh over src/" (directories); use no-arg or --all. completeness-gate.md:34 + mirror still say directories give no warning (separate guidance commit).

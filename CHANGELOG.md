@@ -86,6 +86,9 @@
 
 ### 修正
 
+- **完整性掃描不再假裝通過**（BL-0159）：`completeness-scan.sh --files` 給的名稱沒有一個是存在的檔案時，改以結束碼 2 失敗（以前回報 `clean:true`）；規則字樣改用拼接，不再掃到自己；列出標記字樣的規則文件不再被當成違規；換行分隔的檔名清單會去掉前後空白（原名存在時不動）。
+- **花費樹不再把掛在循環下的節點當孤兒**（BL-0120）：`cost-digest --tree` 遇到父子循環時只切斷循環本身；agent 標籤撞名時才延長 id 前綴；補上 sidecar 重讀的測試。
+- **收件提示訊息不再多一個冒號**（BL-0103、BL-0098）：沒有訊息內容的 ADVISORY 行不再以冒號結尾；測試改走真的 CLI 釘住提示走 stderr、JSON 走 stdout，並釘住停放的無路徑問題不消耗重現次數。
 - **Kimi 資格考改用不能動工具的模式，考完檢查作答紀錄**（BL-0156、BL-0157）：`qualification-review-provider.js` 的 kimi 分支帶 `--agent-file` 無工具 agent，沒設 `QRP_CLI_HOME` 就拒絕啟動；複製出來的 HOME 先清掉舊 session，考完用 `auditKimiRun` 檢查這次的紀錄，有動工具或沒有紀錄就作廢該題答案。`engine-scorecard.js` 讀取時把 `kimi-code/X` 和 `kimi-code-X` 視為同一個 engine，扣點與成績基線不會漏算；jsonl 檔不改寫。Codex 鏡像同步。
 - **背景派工守衛認得更多寫法，也不再誤擋同一層 shell 裡的等待**（BL-0139）：用 `case`、`xargs -P`、`ionice`／`flock`／`taskset`／`chrt` 包一層、`coproc`、函式包裝、五層以內的 `$()` 巢狀，以及 python／perl 交給 shell 的字串把派工丟到背景，現在都會擋。等待指令必須在啟動之後、在前景執行才算數，寫在啟動之前或自己也被丟背景的不再放行。`bash -c 'rail & wait'`、`(rail & wait)`、`wait >| f`、`pid=$!; wait $pid` 不再誤擋。Codex 鏡像同步。
 - **對已結案的審查票證重新派工時，錯誤訊息直接說明原因**（BL-0102）：`dispatch-plan-review.js` 的拒絕訊息改以 `ticket_session_already_terminal` 開頭，附上計畫 id、票證、先前的結論，並註明沒有呼叫任何審查席位、要重審得換新的計畫 id 與票證。結束碼不變。Codex 鏡像同步。

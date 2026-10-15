@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dispatch-tree-3d-2026-10-15",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "2e8d1ebc5aacd75bbc34a91fdae90e610e92804a53bcba740f546b575d1ab342",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: dispatch-foreman.sh:354-358 copies --env-passthrough names into FOREMAN_ENV and excludes only AUTOPILOT_SESSION_ID, so an allowlist-only exclusion lets C back in. Folded: the foreman row removes C from both routes; case (f) runs the foreman once inherited and once via --env-passthrough; separate negative controls for the allowlist filter and the passthrough exclusion."
+    },
+    {
+      "fingerprint": "b38e0de8496cf10113711ba4b06121b7613ff7cd78a63963a6b6b0abc137337b",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: probe-engine-capability.sh:181-252 runs each runner's --version before any child-session helper call (:459, :466). Folded: the probe unsets C once at entry, before the first runner invocation; case (f) checks every stub invocation including --version and a run with no live command; negative control removes the entry unset and expects every probe case red."
+    },
+    {
+      "fingerprint": "2f9f0994ef7bcdb170849011e54a98f3518797d8eaf7ef888113609ec9d7713a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Correct: the existing control removes two protections together. Folded: case (f) adds hetero codex with the helper absent so the :3653 fallback runs, and a control drops only the fallback's C removal and expects that case red."
+    },
+    {
+      "fingerprint": "4b6510681eadbadf9ca93b19354239066b6aa05181c2f009455ea8d625fecfb3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "No plan change. The seat could not see those files; depth-0 checked the G1-cited lines with grep -n on develop (see g1-disp). The implementation brief tells the lane to re-derive every cited range before editing and report drift, including the -u before NAME=VALUE ordering."
+    },
+    {
+      "fingerprint": "32ec983770cd14c0ec84cf710b8fbc1a3672d161bbf03be8d9708b114189020b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "No plan change: the seat confirms case (a) is limited to the full path and that the writer-rule control covers both call sites through ensurePlainMarker. Fast-path staging stays out of scope as stated in the plan."
+    },
+    {
+      "fingerprint": "0bc5475739aa4389c4efa0dbede68c22081581a3bd680a030b42aea70f5afd2d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Already done: section 7 row d2 carries the after-3d expectation in the same plan revision, and 'R still waits on kimi, agy and opencode' is kept verbatim in step 3d."
+    }
+  ]
+}

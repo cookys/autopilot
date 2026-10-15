@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dispatch-tree-3d-2026-10-15",
+  "logical_plan_id": "dispatch-tree-3d-2026-10-15",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "ee21708a510175523f261969ff6fc5351a5da53e6a05466135e340f3f5fc9a79",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "5f13943732504f9daeba0d3ae06e0a165c8904189da807afab64d1748d4d078b",
+  "manifest_sha256": "c64d5ff2d556324e40466e9f95c8c99a8e27bebef406c625700ed12c619761a3",
+  "plan_sha256": "2504a4fffe8cfdc04966d47f55e7c9213a1b1e400bbbdffa042f97d2a8e5e688",
+  "growth_ratio": {
+    "numerator": 3867,
+    "denominator": 3775
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "4860f0c628cc6e19bbeaca84a495ec80affdff1f1eb8cc598b306b85edf703c8"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b7170326c18ce1b95c44c859e20578a0f9d41a78838e63e1d148b19b7cd909ee",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-2eQJvB/stdout",
+          "digest": "b7170326c18ce1b95c44c859e20578a0f9d41a78838e63e1d148b19b7cd909ee"
+        },
+        "receipt_digest": "d2ab4604405aaa1167e82d5e82be8d0379f11390380976979f28f491e76e90dc"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "22fabbb03bed20bc8a693e335675ec53a88676a51817ea368b50775c526b56cc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f47e8f615bc0c69d1ebee7b50a4321a9fb3aed01b602831f801fb95a5ce78982",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-YISm3P",
+          "digest": "f47e8f615bc0c69d1ebee7b50a4321a9fb3aed01b602831f801fb95a5ce78982"
+        },
+        "receipt_digest": "fec016ba02f343a8805b5ea37881909f3409d4088cac0c6082fb2e4b35586e13"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_consult",
+      "target_id": "glm_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "operation": "plan-review",
+          "request_digest": "e885254144a43260e1aad9bbe776a81ac1220d9cdef6afcee59db538c5ff202f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-FJV7JC",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "a399fe517e507ca2cc5087bce986565269f3105966ea1e52b677b5b0df2c5e5e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "glm_consult",
+      "target_id": "glm_consult",
+      "family": "zhipu",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 3d foreman environment filtering and acceptance case (f)",
+      "claim": "Excluding C only from the AUTOPILOT_* allowlist leaves explicit environment passthrough able to restore an inherited child id.",
+      "evidence": "The plan specifies the allowlist exclusion at approximately lines 345-352. The separate loop at lines 355-358 appends requested environment variables and excludes only AUTOPILOT_SESSION_ID. Replaying these loops with the proposed allowlist exclusion and --env-passthrough AUTOPILOT_CHILD_SESSION_ID still produces AUTOPILOT_CHILD_SESSION_ID=inherited-C in FOREMAN_ENV. The hand receives that array through env -i; the helper's unset array is not applied to it.",
+      "evidence_reference": "Plan §4 step 3d foreman launch row and acceptance (f); scripts/dispatch-foreman.sh:351-358,367-371,409; hooks/tests/dispatch-runner-session-id-scrub.test.sh:168-174.",
+      "repair": "Explicitly exclude AUTOPILOT_CHILD_SESSION_ID from both the allowlist and --env-passthrough paths, or remove it from the completed launch environment. Add acceptance and mutation controls for both routes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2e8d1ebc5aacd75bbc34a91fdae90e610e92804a53bcba740f546b575d1ab342"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 3d capability-probe launch coverage",
+      "claim": "Routing live probe branches through the helper does not scrub the earlier runner-version launches.",
+      "evidence": "Before the live branches cited at lines 388-489, the probe executes codex, agy, grok, qoderclicn, cursor-agent, claude, kimi and opencode with --version at lines 181-252. These launches inherit the probe environment and precede the current child-session helper calls. The revision specifies routing live branches through the helper but gives no removal boundary for these earlier invocations. A probe started with inherited C therefore can still pass it to an unnamed runner process, including when no live probe runs.",
+      "evidence_reference": "Plan §4 step 3d probe launch row and acceptance (f); scripts/probe-engine-capability.sh:175-252,388-489.",
+      "repair": "Specify C removal before the first runner invocation or wrap every version and live invocation with the scrub. Assert C absence on every stub invocation, including --version and the path without a live command, and demonstrate a targeted negative control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b38e0de8496cf10113711ba4b06121b7613ff7cd78a63963a6b6b0abc137337b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Step 3d detached fallback acceptance and mutation controls",
+      "claim": "The detached negative control removes two protections together and does not independently verify the fallback scrub.",
+      "evidence": "The revision adds C removal to both child_session_env_setup and the helper-absent fallback. Its negative control removes the helper from detach serialization while also requiring the fallback to lack C removal. The ordinary detached acceptance case uses the helper, so deleting only the fallback's C removal leaves that case green.",
+      "evidence_reference": "Plan §4 step 3d mechanism, acceptance (f) and negative controls; scripts/dispatch-hetero.sh:3653,4971.",
+      "repair": "Add an acceptance case that deliberately selects the helper-absent fallback and checks C absence. Remove only the fallback's C scrub in that case and require red, then restore it and require green.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2f9f0994ef7bcdb170849011e54a98f3518797d8eaf7ef888113609ec9d7713a"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "SessionStart writer rule and rail child launch: session-mode.js, dispatch-author.sh, dispatch-review.sh, dispatch-hetero.sh, dispatch-explore.sh, dispatch-foreman.sh, probe-engine-capability.sh, src/runners/kimi.js, stage-advance.js, src/engine/autopilot-engine.js",
+      "claim": "Every cited file:line and every statement about current behaviour in the revision matches the code on develop.",
+      "evidence": "The provided source confirms hooks/runs-watch-autostart.js around :275 calls ensurePlainMarker({sessionId: sid, repoRoot: fast.repo_root, scope}) on the SessionStart fast path and the full path around :293 calls ensurePlainMarker({sessionId: sid, repoRoot: topLevel(cwd), scope}), and scripts/lib/repo-identity.sh contains child_session_mint (minting from /proc/sys/kernel/random/uuid, uuidgen, or node crypto.randomUUID) plus child_session_env_setup that initializes CHILD_SESSION_UNSET to -u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID and child_session_pin that copies CHILD_SESSION_UNSET into _CHILD_SESSION_PIN_UNSET; child_session_apply_env iterates CHILD_SESSION_UNSET and unsets each. But session-mode.js (cited at 175-185, 535-575, 663-695, 696-713, 742, 822-888, 909-1030, 1106-1134), stage-advance.js (351-358), src/engine/autopilot-engine.js (9725-9731), dispatch-author.sh (1130, 1199-1223, 1269, 1289), dispatch-review.sh (1113, 1537-1570, 1558, 1588), dispatch-hetero.sh (339-361, 3653, 3671-3715, 3737-3738, 3756, 4971), dispatch-explore.sh (186, 206), dispatch-foreman.sh (345-352), probe-engine-capability.sh (388-489, 456, 460, 462, 467), and src/runners/kimi.js (57, 133, 150) are not in the source context and the cited ranges cannot be cross-checked from this review.",
+      "evidence_reference": "§4 step 3d; §6; §7 rows d2 and l",
+      "repair": "No current change; follow-up only - implementer must re-derive each cited line range on develop before landing 3d and report any drift, in particular the env argv ordering on the claude branches so every -u NAME precedes any NAME=VALUE.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4b6510681eadbadf9ca93b19354239066b6aa05181c2f009455ea8d625fecfb3"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/child-parent-record.test.sh case (a)",
+      "claim": "Each guard has a negative control that would actually turn red if that guard were removed.",
+      "evidence": "Case (a) replays a tmux-held environment through ensure-child and the runs-watch-autostart.js full path and explicitly disclaims staging the fast path at :275 live because starting a real watcher inside the test is not attempted. Both call the same ensurePlainMarker with the same id and scope shape, so the writer rule is statically covered; however no negative control isolates the fast-path writer call from the full path's. The plan's last negative control ('writer compares to P only (today's rule) -> (a) red') flips the rule itself in ensurePlainMarker and so catches the fast path as well as the full path because both converge on the same function.",
+      "evidence_reference": "§4 step 3d case (a) parenthetical and last negative control",
+      "repair": "No current change; follow-up only - optional follow-up to add a fast-path case that pre-seeds autostart/<sha1(cwd)>.json with repo_root and a stub watcher envelope so the :275 path is staged end-to-end; not required for R1 closure because the fast path reuses ensurePlainMarker.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "32ec983770cd14c0ec84cf710b8fbc1a3672d161bbf03be8d9708b114189020b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§7 row d2 expected outcome wording",
+      "claim": "Old environments, rollback, and the interaction with steps 5 and R are stated, the failure direction is not traced rather than a wrong edge, and no earlier conclusion (step 5 blocked, R waiting on kimi/agy/opencode) is silently changed.",
+      "evidence": "Plan states P without C produces no parent_session_id and the write target is unchanged; C without P is ignored; the failure direction is child_marker_absent, never a wrong edge; no fallback to P alone. Rollback is revert; markers written meanwhile keep or lack parent_session_id and expire on TTL. 3d is independent of step 5 and a bad row h leaves 3d shipped; R still waits on kimi, agy, and opencode. The d2 expected behavior IS changed from 'names the outer session as parent' to 'carries no parent' for a non-Claude harness, but the change is explicit (Row d2 effect subsection) and the 'R waits on kimi/agy/opencode' conclusion is preserved verbatim; the earlier codex pass in d0-summary.md is acknowledged as measured against the old wording and is re-run for the codex path after 3d.",
+      "evidence_reference": "§4 step 3d 'Old environments', 'Order and scope', 'Row d2 effect'; §7 row d2",
+      "repair": "No current change; follow-up only - update §7 row d2 wording to the new expectation in the same commit so the live d2 re-run matches and a reader sees one consistent expectation; preserve 'R still waits on kimi/agy/opencode' exactly.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0bc5475739aa4389c4efa0dbede68c22081581a3bd680a030b42aea70f5afd2d"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "2f9f0994ef7bcdb170849011e54a98f3518797d8eaf7ef888113609ec9d7713a",
+      "rubric_id": "R5",
+      "affected_surface": "Step 3d detached fallback acceptance and mutation controls",
+      "claim": "The detached negative control removes two protections together and does not independently verify the fallback scrub.",
+      "evidence_reference": "Plan §4 step 3d mechanism, acceptance (f) and negative controls; scripts/dispatch-hetero.sh:3653,4971.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4b6510681eadbadf9ca93b19354239066b6aa05181c2f009455ea8d625fecfb3",
+      "rubric_id": "R4",
+      "affected_surface": "SessionStart writer rule and rail child launch: session-mode.js, dispatch-author.sh, dispatch-review.sh, dispatch-hetero.sh, dispatch-explore.sh, dispatch-foreman.sh, probe-engine-capability.sh, src/runners/kimi.js, stage-advance.js, src/engine/autopilot-engine.js",
+      "claim": "Every cited file:line and every statement about current behaviour in the revision matches the code on develop.",
+      "evidence_reference": "§4 step 3d; §6; §7 rows d2 and l",
+      "disposition": null
+    },
+    {
+      "fingerprint": "32ec983770cd14c0ec84cf710b8fbc1a3672d161bbf03be8d9708b114189020b",
+      "rubric_id": "R5",
+      "affected_surface": "hooks/tests/child-parent-record.test.sh case (a)",
+      "claim": "Each guard has a negative control that would actually turn red if that guard were removed.",
+      "evidence_reference": "§4 step 3d case (a) parenthetical and last negative control",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0bc5475739aa4389c4efa0dbede68c22081581a3bd680a030b42aea70f5afd2d",
+      "rubric_id": "R6",
+      "affected_surface": "§7 row d2 expected outcome wording",
+      "claim": "Old environments, rollback, and the interaction with steps 5 and R are stated, the failure direction is not traced rather than a wrong edge, and no earlier conclusion (step 5 blocked, R waiting on kimi/agy/opencode) is silently changed.",
+      "evidence_reference": "§4 step 3d 'Old environments', 'Order and scope', 'Row d2 effect'; §7 row d2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-15T03:16:04.916Z"
+}

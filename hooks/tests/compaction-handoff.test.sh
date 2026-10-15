@@ -168,6 +168,19 @@ const h=require(process.argv[1]);
 console.log(h.dispatchSection({sessionId:"s",roots:new Set(),now:Date.now(),dirs:{dispatchRuns:process.argv[2]},deadlineAt:Date.now()-1}));
 ' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_DISPATCH_RUNS_DIR")
 assert_contains "$out" "unavailable: handoff deadline reached" "deadline: dispatch section past the deadline is unavailable"
+# a dispatch-status call that hangs is cut at the deadline, not at its own limit (boundedTimeout = min(own, time left))
+printf 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,3000);\n' > "$TEST_TMP/slow-status.js"
+out=$(node -e '
+const h=require(process.argv[1]);
+const t0=Date.now();
+const md=h.dispatchSection({sessionId:process.argv[2],roots:new Set(),now:Date.now(),dirs:{dispatchRuns:process.argv[3]},statusScript:process.argv[4],deadlineAt:Date.now()+300});
+console.log("elapsed="+(Date.now()-t0));
+console.log(md);
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$LIVEDIR" "$TEST_TMP/slow-status.js")
+el=$(printf '%s' "$out" | sed -n 's/^elapsed=//p')
+if [ "${el:-99999}" -lt 1000 ]; then assert_eq 1 1 "deadline: a hung liveness probe is cut at the deadline (${el} ms)"; else assert_eq "$el" "<1000" "deadline: hung probe ran past the deadline"; fi
+assert_contains "$out" "ETIMEDOUT" "deadline: the hung dispatch-status call is reported as timed out"
+assert_not_contains "$out" "RUNNING" "deadline: nothing is shown RUNNING when dispatch-status was cut"
 
 # the PreCompact worst case is fixed: no per-section timeout sum above the deadline constant
 cap=$(node -e 'console.log(require(process.argv[1]).HANDOFF_DEADLINE_MS)' "$REPO_ROOT/scripts/lib/compaction-handoff.js")
@@ -206,19 +219,14 @@ AUTOPILOT_CONTEXT_BUDGET_MODE=off ss startup
 assert_not_contains "$__RUN_STDOUT" "T2 is never reached" "off: AUTOPILOT_CONTEXT_BUDGET_MODE=off -> no budget warning"
 ss startup
 assert_contains "$__RUN_STDOUT" "T2 is never reached" "off: control - mode left on still warns"
-# one parse for both consumers: whatever the hook reads for t2/gap/mode, the warning reads
-parity=$(node -e '
-const {readContextBudget}=require(process.argv[1]); const h=require(process.argv[2]);
-const env={AUTOPILOT_CONFIG_FILE:process.argv[3]};
-const a=readContextBudget({env}); const b=h.readBudget({env});
-console.log(a.t2===b.t2&&a.gap===b.gap?"same":"differ "+JSON.stringify([a.t2,a.gap,b]));
-' "$REPO_ROOT/scripts/lib/config-path.js" "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_CONFIG_FILE")
-assert_eq "$parity" "same" "readBudget agrees with the shared context_budget parse"
+# readBudget reads the literal config values (t2 and gap), not its own defaults
+printf '{"context_budget":{"t2":321000,"gap":12000}}\n' > "$AUTOPILOT_CONFIG_FILE"
+lit=$(node -e 'const b=require(process.argv[1]).readBudget({env:{AUTOPILOT_CONFIG_FILE:process.argv[2]}});console.log(b.t2+" "+b.gap)' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_CONFIG_FILE")
+assert_eq "$lit" "321000 12000" "readBudget takes t2 and gap from the config file"
 # a non-positive t2 in the config is read the way the hook reads it (any finite number), not skipped
 printf '{"context_budget":{"t2":-5}}\n' > "$AUTOPILOT_CONFIG_FILE"
 t2v=$(node -e 'console.log(require(process.argv[1]).readBudget({env:{AUTOPILOT_CONFIG_FILE:process.argv[2]}}).t2)' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$AUTOPILOT_CONFIG_FILE")
 assert_eq "$t2v" "-5" "readBudget takes t2 from the same rule as the hook (config: any finite number)"
-printf '{"context_budget":{"t2":450000}}\n' > "$AUTOPILOT_CONFIG_FILE"
 printf '{"context_budget":{"t2":450000}}\n' > "$AUTOPILOT_CONFIG_FILE"
 unset CLAUDE_CODE_AUTO_COMPACT_WINDOW
 ss startup

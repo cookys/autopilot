@@ -201,7 +201,7 @@ function dispatchSection({ sessionId, roots, now, dirs, statusScript, deadlineAt
   for (const m of running) lines.push(fmt(m, stateOf.get(m)));
   if (openRows.length > RUNNING_CAP) lines.push(`  ... ${openRows.length - RUNNING_CAP} more without ended_at (not probed)`);
   for (const m of ended) lines.push(fmt(m, 'ended'));
-  lines.push('(RUNNING = lock held or pid alive; GONE = lock free or pid dead, no ended_at written; UNKNOWN = no lock or pid to probe)');
+  lines.push('(RUNNING = lock held or pid alive; GONE = lock free or pid dead, no ended_at written; UNKNOWN = no lock or pid to probe, or the probe failed or ran out of time)');
   return lines.join('\n');
 }
 

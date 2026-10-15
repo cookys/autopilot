@@ -1,7 +1,7 @@
 'use strict';
 // config-path.js — the ONE place that decides which operator config file to read.
 //   configPath({ env?, home? }) -> $AUTOPILOT_CONFIG_FILE when set (non-empty), else <home>/.autopilot/config.json
-// `home` defaults to os.homedir(). Path only: parsing and defaults stay with each caller. BL-0181.
+// `home` defaults to os.homedir(). The path decision is the only shared rule for most callers, which keep their own parsing; context_budget is the exception (below). BL-0181.
 // Shell callers inline the same rule: "${AUTOPILOT_CONFIG_FILE:-$HOME/.autopilot/config.json}".
 //
 // readContextBudget({ env?, home? }) is the one parse of the context_budget block (config file + env), shared by

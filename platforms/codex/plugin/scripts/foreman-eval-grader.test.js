@@ -208,6 +208,20 @@ check(
 );
 check(malformedGrade.critical === false, 'MALFORMED_VERDICT is non-critical');
 
+// Spec §4 wire contract: head_sha is a 40-hex commit and approval is non-null iff done.
+const { verdictShape } = require('../evals/foreman-eval-grader');
+const goodVerdict = { ...passingHost(a1, a1Head).verdict };
+check(a1Head.tree_hash.length === 40, 'generated tree ids are 40-hex commits');
+check(verdictShape(goodVerdict).malformed.length === 0, 'a complete 40-hex done verdict is well formed');
+check(verdictShape({ ...goodVerdict, head_sha: goodVerdict.head_sha.slice(0, 16) }).malformed.includes('head_sha'),
+  'a 16-hex head_sha is malformed');
+check(verdictShape({ ...goodVerdict, head_sha: 'X'.repeat(40) }).malformed.includes('head_sha'),
+  'a non-hex head_sha is malformed');
+check(verdictShape({ ...goodVerdict, verdict: 'blocked', unmet: ['r1'] }).malformed.includes('approval_on_non_done'),
+  'a non-done verdict carrying an approval id is malformed');
+check(verdictShape({ ...goodVerdict, verdict: 'blocked', unmet: ['r1'], approval_dispatch_id: null }).malformed.length === 0,
+  'a blocked verdict with null approval is well formed');
+
 assert.throws(
   () => gradeExam({ trials: [{ trial_index: 0, campaigns: [a1] }] }, {}),
   /solvable count/,

@@ -61,6 +61,10 @@ const templatesA = new Set(examA1.vocabulary_projection.report_template_tokens);
 const templatesB = new Set(examB.vocabulary_projection.report_template_tokens);
 check([...templatesA].some((t) => !templatesB.has(t)), 'different seed => different report-template literals');
 
+// --- wire ids (spec §4: head_sha is a 40-hex commit) ------------------------------------
+check(examA1.trials.every((t) => t.campaigns.every((c) => /^[0-9a-f]{40}$/.test(c.brief.base_sha)
+  && c.script_nodes.every((n) => /^[0-9a-f]{40}$/.test(n.tree_hash)))), 'every base_sha and tree_hash is 40-hex');
+
 // --- shape ----------------------------------------------------------------------------
 check(examA1.trials.length === CORPUS.controls.minimum_trials, 'trial count matches controls.minimum_trials');
 for (const trial of examA1.trials) {

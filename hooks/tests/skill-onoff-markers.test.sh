@@ -51,6 +51,10 @@ git_c() { git -C "$1" -c user.name=T -c user.email=t@t -c commit.gpgsign=false "
 echo "=== (i) no-op probes: every task, pristine repo + empty transcript ==="
 for taskdir in "$BASE/tasks"/*/; do
   task=$(basename "$taskdir")
+  # qs-common is a shared fixture dir (build-fixture.sh, weights.json), not a task.
+  # Skip ONLY it by name: any other dir without markers.sh is a real failure.
+  [ "$task" = "qs-common" ] && continue
+  [ -f "$taskdir/markers.sh" ] || fail "$task: task dir has no markers.sh"
   repo=$(make_repo "$task")
   empty="$TEST_TMP/empty-$task.jsonl"; : > "$empty"
   out=$(run_markers "$task" "$repo" "$empty")

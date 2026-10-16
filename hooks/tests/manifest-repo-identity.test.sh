@@ -20,7 +20,17 @@ export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR
 # Live dir must be tmpfs and mode 0700 or live-state-dir.js silently ignores the override and falls through to
 # the real /run/user/<uid>/autopilot ($TEST_TMP is ext4 and mkdir -p gives 0755). mktemp -d gives 0700.
 export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-mri-XXXXXX)"
-trap 'rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
+# PID trap (BL-0109): the rails run stub runners under timeout; kill any process still holding an argv
+# under TEST_TMP before the directory goes. /proc scan by exact path (no pkill/pgrep -f self-match).
+kill_stragglers() {
+  local d pid self="$BASHPID" c
+  for d in /proc/[0-9]*; do
+    pid="${d#/proc/}"; [ "$pid" = "$self" ] && continue; [ "$pid" = "$$" ] && continue
+    { c="$(tr '\0' ' ' <"$d/cmdline")"; } 2>/dev/null || continue
+    case "$c" in *"$TEST_TMP"*) kill -9 "$pid" 2>/dev/null || true ;; esac
+  done
+}
+trap 'kill_stragglers; rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CAPABILITY_DIR"
 export AUTOPILOT_GROK_EFFORT_PROBE=0
@@ -180,5 +190,31 @@ eq "0" "$?" "old manifest without repo_identity still listed (reader tolerant) a
 CTL="$(bash -c '. "$1"; _repo_identity_json_str "$(printf "a\tb\rc\001d\"e")"' _ "$REPO_ROOT/scripts/lib/repo-identity.sh")"
 node -e 'JSON.parse("\"" + process.argv[1] + "\"")' "$CTL" 2>/dev/null
 eq "0" "$?" "json string helper: tab/CR/control bytes still yield valid JSON"
+
+# --- non-repo directory: the diagnostic says so instead of blaming git (BL-0109) ---
+NR_ERR="$(bash -c '. "$1"; repo_identity_of "$2"' _ "$LIB" "$NOGIT" 2>&1 >/dev/null)"
+eq "repo-identity: $NOGIT is not inside a git repository" "$NR_ERR" "non-repo dir: diagnostic names the directory, not a git failure"
+GONE_ERR="$(bash -c '. "$1"; repo_identity_of "$2"' _ "$LIB" "$TEST_TMP/missing-dir" 2>&1 >/dev/null)"
+case "$GONE_ERR" in *"git rev-parse failed in"*) : ;; *) fail "missing dir keeps the generic git diagnostic, got: $GONE_ERR" ;; esac
+
+# --- resolver cache keyed on its inputs (BL-0109) ---
+CACHE_OUT="$(bash -c '
+  . "$1"
+  repo_identity_resolve_fields "$2" ""; a="$REPO_IDENTITY_FIELDS"
+  PATH="$4:$PATH"                                   # git now fails: a same-input call must come from the cache
+  repo_identity_resolve_fields "$2" ""; [ "$REPO_IDENTITY_FIELDS" = "$a" ] || { echo "same-input call not cached"; exit 1; }
+  PATH="${PATH#"$4:"}"
+  repo_identity_resolve_fields "$3" ""              # different input: must recompute, not return repo A
+  [ "$REPO_IDENTITY_FIELDS" != "$a" ] || { echo "different input returned the stale cache"; exit 1; }
+  case "$REPO_IDENTITY_FIELDS" in *"$5"*) : ;; *) echo "recompute did not yield repo B"; exit 1 ;; esac
+' _ "$LIB" "$SBX" "$OTHER" "$FAKEBIN" "$EXPECT_B" 2>&1)"
+eq "" "$CACHE_OUT" "resolver cache: same inputs hit, different inputs recompute"
+
+# --- PID trap kills a straggler holding an argv under TEST_TMP (BL-0109) ---
+bash -c 'sleep 300; :' "$TEST_TMP/straggler" & STRAG=$!
+sleep 0.2; kill -0 "$STRAG" 2>/dev/null || fail "straggler did not start"
+kill_stragglers; sleep 0.2
+if kill -0 "$STRAG" 2>/dev/null; then fail "PID trap left the straggler alive"; fi
+wait "$STRAG" 2>/dev/null || true
 
 finalize_test

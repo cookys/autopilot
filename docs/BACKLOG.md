@@ -789,7 +789,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
-- **Context**: 2026-10-16: most items fixed (see sidecar); remaining: repo-identity.sh cache, non-repo diagnostic, manifest-suite PID trap, and the roots-set bound.
+- **Context**: 2026-10-17: everything fixed except the watcher roots-set bound (P3 owns it; see sidecar).
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110

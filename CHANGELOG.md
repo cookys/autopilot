@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0109: `repo_identity_resolve_fields` caches per (root, consuming) input pair instead of per process, `repo_identity_of` names a non-repo directory as such, the manifest-repo-identity suite gains a PID trap, and `skill-onoff-markers.test.sh` skips the shared `qs-common` fixture dir (while failing any other task dir without `markers.sh`).
+
 - BL-0146 D4: `adoption.return_review` (`full` default | `incremental`, sealed, schema + checker + `docs/review-candidate.md`) wires the incremental return review into the engine: on a returned head the seats receive only the re-check set (new `incremental` option of `buildReviewPacket`), the receipt discloses `review_scope` with the carried and re-check sets, earlier findings stay open unless explicitly closed, and any failed eligibility test falls back to the unchanged full path. Also refuses an unbound `incremental_return` gate key (no shared sentinel), duplicate or overlapping set paths, and hardens `evaluateClosure` / `normalizeSeatReview` (positive-integer quorum, seat map must equal the sealed panel, evidence path must be in the packet). The default (`full`) path is unchanged.
 
 - BL-0146 D3 (explicit closure only, not wired): seat output may carry `resolutions[]` (`normalizeSeatReview`), and `evaluateClosure` closes a prior finding only when every sealed-panel seat answers resolved/invalid with path:line evidence and none says still_present; silence never closes; the prior-round addendum stays an off-by-default seam pending owner ruling d-3cf4dc4c.

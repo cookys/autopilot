@@ -54,29 +54,47 @@ if (o.baselineKeys) {
   let ref = o.baseRef;
   if (!ref) {
     try { ref = git(['describe', '--tags', '--abbrev=0']).trim(); } catch { ref = null; }
-    if (!ref) die('no release tag found; pass --base-ref <ref>', 2);
+    if (!ref) die('no release tag found (or git failed); pass --base-ref <ref>', 2);
   }
   baseLabel = ref;
-  try { git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); } catch { die(`base ref does not exist: ${ref}`, 2); }
-  let hasFile = true;
-  try { git(['cat-file', '-e', `${ref}:${KEYS_REL}`]); } catch { hasFile = false; }
-  // ref exists but has no registry file => first registration (bootstrap)
-  if (hasFile) base = userMap(git(['show', `${ref}:${KEYS_REL}`]), `${ref}:${KEYS_REL}`);
+  try { git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); } catch { die(`base ref does not exist (or git failed): ${ref}`, 2); }
+  let listing;
+  try { listing = git(['ls-tree', ref, '--', KEYS_REL]); } catch (e) { die(`git ls-tree failed for ${ref}: ${e.message}`, 2); }
+  // ref exists and the path is definitely absent => first registration (bootstrap)
+  if (listing.trim()) {
+    let raw;
+    try { raw = git(['show', `${ref}:${KEYS_REL}`]); } catch (e) { die(`git show failed for ${ref}:${KEYS_REL}: ${e.message}`, 2); }
+    base = userMap(raw, `${ref}:${KEYS_REL}`);
+  }
 }
 
-const changelog = fs.readFileSync(path.resolve(REPO, o.changelog), 'utf8').split(/\r?\n/);
+let changelogText;
+try { changelogText = fs.readFileSync(path.resolve(REPO, o.changelog), 'utf8'); }
+catch (e) { die(`cannot read changelog ${o.changelog}: ${e.message}`, 2); }
+const changelog = changelogText.split(/\r?\n/);
+
+// One heading rule for both default-section choice and extraction: `## <h>` exactly,
+// or `## <h> — ...`; lines inside code fences never count.
+const headingMatches = (l, h) => l === '## ' + h || l.startsWith('## ' + h + ' — ');
+const hasHeading = (h) => {
+  let fence = false;
+  for (const l of changelog) {
+    if (/^\s*(```|~~~)/.test(l)) { fence = !fence; continue; }
+    if (!fence && headingMatches(l, h)) return true;
+  }
+  return false;
+};
 let heading = o.section;
 if (!heading) {
   let ver = '';
   try { ver = JSON.parse(fs.readFileSync(path.join(REPO, '.claude-plugin/plugin.json'), 'utf8')).version; } catch { /* fall through */ }
-  const has = (h) => changelog.some((l) => l.startsWith('## ' + h));
-  heading = has('Unreleased') ? 'Unreleased' : 'v' + ver;
+  heading = hasHeading('Unreleased') ? 'Unreleased' : 'v' + ver;
 }
 // Extract `## <heading>` section, then its `### Settings changes` subsection (fence-aware).
 let inFence = false; let inSec = false; let inSub = false; let sub = null;
 for (const l of changelog) {
   if (/^\s*(```|~~~)/.test(l)) { inFence = !inFence; if (inSub) sub += l + '\n'; continue; }
-  if (!inFence && /^## /.test(l)) { inSec = l === '## ' + heading || l.startsWith('## ' + heading + ' — '); inSub = false; continue; }
+  if (!inFence && /^## /.test(l)) { inSec = headingMatches(l, heading); inSub = false; continue; }
   if (!inSec) continue;
   if (!inFence && /^### /.test(l)) { inSub = /^### Settings changes\s*$/i.test(l); if (inSub && sub === null) sub = ''; continue; }
   if (inSub) sub += l + '\n';

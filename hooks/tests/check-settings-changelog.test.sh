@@ -51,4 +51,12 @@ assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog 
 VER=$(node -p "require('$REPO_ROOT/.claude-plugin/plugin.json').version")
 printf '# C\n\n## v%s \xe2\x80\x94 d\n\n### Settings changes\n\n- see docs/settings-reference.md\n' "$VER" > "$D/cl-v.md"
 assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl-v.md" >/dev/null 2>&1; echo $?)" "default section falls back to v<plugin version>"
+# default section: "## Unreleased notes" must not win; fenced "## Unreleased" must not win
+printf '# C\n\n## Unreleased notes\n\nx\n\n## v%s \xe2\x80\x94 d\n\n### Settings changes\n\n- see docs/settings-reference.md\n' "$VER" > "$D/cl-un.md"
+assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl-un.md" >/dev/null 2>&1; echo $?)" "Unreleased notes => falls back to v<version>"
+printf '# C\n\n```\n## Unreleased\n```\n\n## v%s \xe2\x80\x94 d\n\n### Settings changes\n\n- see docs/settings-reference.md\n' "$VER" > "$D/cl-fz.md"
+assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl-fz.md" >/dev/null 2>&1; echo $?)" "fenced Unreleased ignored for default"
+# io / git failures => exit 2
+node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/nope.md" --section Unreleased >/dev/null 2>&1; assert_eq "2" "$?" "missing --changelog => 2"
+GIT_DIR="$TEST_TMP/nogit" node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl.md" --section Unreleased >/dev/null 2>&1; assert_eq "2" "$?" "broken git env => 2"
 finalize_test

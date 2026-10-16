@@ -143,9 +143,20 @@ const verdictDiff = armEdit((adj) => { adj.verdict = adj.verdict === 'accept' ? 
 check(verdictDiff.pair_deltas.length === 1 && verdictDiff.pair_deltas[0].struct_id === defectPair.struct_id,
   'verdict difference across arms yields 1 pair delta');
 // (c) severity differs -> 1 delta
-const sevDiff = armEdit((adj) => { adj.verdict = 'reject'; adj.severity = adj.severity === 'critical' ? 'minor' : 'critical'; });
+const sevDiff = gradeWith((trace, all) => {
+  // isolate severity: both sides get the same verdict, only severity differs
+  defectPair.arms.forEach((arm, k) => {
+    for (const row of all[arm.trial_index]) {
+      const adj = row.adjudications.find((x) => x.artifact_id === arm.artifact_id);
+      if (adj) { adj.verdict = 'reject'; adj.severity = k === 0 ? 'critical' : 'minor'; }
+    }
+  });
+});
 check(sevDiff.pair_deltas.length === 1 && sevDiff.pair_deltas[0].struct_id === defectPair.struct_id,
   'severity difference across arms yields 1 pair delta');
+const sevD = sevDiff.pair_deltas[0] && sevDiff.pair_deltas[0].delta;
+check(sevD && sevD.verdict[0] === sevD.verdict[1] && sevD.severity[0] !== sevD.severity[1],
+  'severity delta has equal verdicts and different severities');
 const biased = verdictDiff;
 check(biased.subjects.fairness === false, 'pair delta fails 公平 even when correctness holds');
 
@@ -386,5 +397,5 @@ check(twinRound !== undefined, 'a verified-but-unclosed control exists in trial 
 check(twinRound.oracle.expected_flags.every((p) => p.plant_kind !== 'reversal'),
   'the verified-but-unclosed control carries no reversal plant');
 
-if (assertions !== 62) throw new Error(`brain-eval-grader: expected exactly 62 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 63) throw new Error(`brain-eval-grader: expected exactly 63 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`brain grader: ${assertions} assertions passed\n`);

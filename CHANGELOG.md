@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review packets may now exclude `evals/skill-onoff/packs/**` via the consumer exclude allowlist: those frozen eval arm packs are verbatim pinned copies that can add ~70k lines to a campaign diff, too large for a packet; reviewers read the arm manifests, prereg and scorer instead.
+
 - Backlog: BL-0020 (peer-reported by openclaw, agy flash/low implementer no-go) closed as stale: no shipped default or ladder rung uses agy flash/low any more (implementer default is grok-4.7/low). The original fleet message has expired, so the reply could not be threaded; recorded here instead.
 
 - The qualification case broker client now sends `payload.format: case_content` (was the misnomer `unified_diff`) and `CLIENT_PROTOCOL` is `qualification-case-client-v2`; broker, provider and tests changed together with no dual-read (BL-0053).

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Landed the foreman whole-campaign exam harness (`evals/foreman-eval-*`, `foreman_trial` evidence schema, `QRP_PROMPT_MODE=foreman`) squashed from `hetero/foreman-phase-5` onto lane/foreman; the 8 known spec deviations (BL-0010) are still open, so sittings run on it stay non-conformant.
+
 - BREAKING (BL-0115, no shim): removed `dispatch-hetero.sh --gc` (with `--reap-unmarked` / `--yes`), `gc_stale_worktrees`, the orphan-log retry that only `--gc` ran, and the `stale_reaper_age_days` / `reaper_scope` keys of `worktree-teardown-config.md` (this repo's own override and the template included). The old flags now fail with a message pointing at `node scripts/repo-residue-sweep.js reap --auto --yes` (the SessionStart hook runs it); a teardown config that still carries either key is rejected by `resolve-worktree-teardown.sh` (exit 2) and `dispatch-hetero.sh` (precondition failure). `hooks/tests/dispatch-hetero-gc.test.sh` is replaced by `dispatch-hetero-gc-removed.test.sh`.
 
 - BL-0146 D4 review follow-ups: the round index now keeps the review payload and roster it was taken from, and a returned round re-derives `review_input_digest`, the verification argv hash and `roster_digest` from them (a forged index falls back to full, `prior_round_unverified`); the incremental seat context no longer carries a placeholder seat cell (a context without a seat index has no store file); the packet's `diff_paths` come from the same list as `recheck_diff`, and `buildReviewPacket` refuses a descriptor whose re-check file changed in the range without a hunk; `options.packet` is validated in `src/runners/review.js`; `docs/review-candidate.md` lists `seat_store_unavailable` and `evaluation_failed`. The default (`full`) path is unchanged.

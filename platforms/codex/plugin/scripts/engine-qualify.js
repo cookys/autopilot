@@ -41,6 +41,7 @@ const {
 } = require('../evals/brain-eval-generator');
 const { gradeAdministration } = require('../evals/brain-eval-grader');
 const campaignState = require('../evals/brain-campaign-state');
+const { runForemanQualification } = require('../evals/foreman-eval-runner');
 const {
   CORPUS: VA_CORPUS,
   GENERATOR_VERSION: VA_GENERATOR_VERSION,
@@ -240,7 +241,7 @@ const ACTIVE_SESSION_RUNS = new Map();
 // same-role bundle's README (docs/plans/evidence/<date>-*-qualification-*/*/README.md)
 // and edit only the seat identity, rather than reconstructing flags from memory.
 const HELP = `Usage:
-  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss>
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss|foreman>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
@@ -351,7 +352,7 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss']
+  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss', 'foreman']
     .includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
@@ -439,6 +440,17 @@ function parseArgs(argv) {
     const value = argv[++index];
     if (scalarName) options[scalarName] = value;
     else options[repeatedName].push(value);
+  }
+  // Foreman --plan is a precondition dry-run: asset pins, conformance hash,
+  // and the case list. It does not open a panel and does not sit the model.
+  if (options.role === 'foreman' && options.plan) {
+    return options;
+  }
+  // A salted foreman sitting is the inadmissible puppet administration from
+  // spec §9.6. It does not open a panel and does not require an engine identity.
+  if (options.role === 'foreman' && process.env.AUTOPILOT_QUALIFY_SEED) {
+    options.test_mode = true;
+    return options;
   }
   for (const name of [
     'engine',
@@ -531,8 +543,8 @@ function parseArgs(argv) {
   // --dispatch-timeout) still exits 2 regardless of this check's order,
   // because those flags are unconditionally rejected below for every
   // non-implementer role, --plan or not.
-  if (options.plan && !['consult', 'discuss'].includes(options.role)) {
-    usage(2, '--plan is only supported for the consult and discuss roles');
+  if (options.plan && !['consult', 'discuss', 'foreman'].includes(options.role)) {
+    usage(2, '--plan is only supported for the consult, discuss, and foreman roles');
   }
   if (options.role === 'implementer') {
     // Live-rail transport: no broker XOR. Reject broker-only flags outright so
@@ -5118,6 +5130,11 @@ function runPlanDryRun(options) {
 
 function runQualification(options) {
   const role = options.role || 'reviewer';
+  if (role === 'foreman' && options.plan) {
+    const plan = runForemanQualification({ plan: true });
+    process.stdout.write(`${JSON.stringify(plan, null, 1)}\n`);
+    process.exit(0);
+  }
   if (options.plan) return runPlanDryRun(options);
   if (role === 'consult' || role === 'discuss') {
     // Live administration wiring (Board authorization 2026-08-28, see
@@ -5126,6 +5143,12 @@ function runQualification(options) {
     // enforces the --execute spend guard, seal verification, and the
     // identity-bound transport requirement — see runConsultDiscussQualification.
     return runConsultDiscussQualification(options);
+  }
+  if (role === 'foreman') {
+    return runForemanQualification({
+      ...options,
+      test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
+    });
   }
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
@@ -5984,6 +6007,7 @@ module.exports = {
   qualificationLabelTiers,
   qualificationReasonPrefixTiers,
   runBrainQualification,
+  runForemanQualification,
   runConsultDiscussQualification,
   recoverConsultProtocolReason,
   runConsultQualification,

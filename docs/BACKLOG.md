@@ -51,7 +51,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: hetero review g1 (gpt-5.6-sol), depth-0 verified 8/8
 - **Pointer**: docs/backlog/foreman-exam-harness-spec-conformance.md
-- **Context**: no `shell` tool, wrong budgets, and tip-anchored grading; the muse-spark sitting on develop is non-conformant.
+- **Context**: 已接入 lane/foreman（squash 自 hetero/foreman-phase-5），8 項修補中。Original gaps: no `shell` tool, wrong budgets, and tip-anchored grading; the muse-spark sitting on develop is non-conformant.
 
 ### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
 - **Id**: BL-0011

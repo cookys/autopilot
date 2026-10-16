@@ -239,7 +239,7 @@ console.log("Starting independent verification tests for Controller Execution...
   let barriers = {};
 
   // Positive: recordFullDiffBarrier creates barrier record
-  barriers = ctrl.recordFullDiffBarrier(barriers, 0, { success: true, review_digest: 'd1', candidate_ref: 'c1' });
+  barriers = ctrl.recordFullDiffBarrier(barriers, 0, { kind: 'full_diff_review', success: true, review_digest: 'd1', candidate_ref: 'c1' });
   assert.ok(barriers['0']);
   assert.strictEqual(barriers['0'].kind, 'full_diff_review');
   assert.strictEqual(barriers['0'].success, true);
@@ -251,6 +251,7 @@ console.log("Starting independent verification tests for Controller Execution...
     fullDiffBarriers: barriers,
     focusedOnly: false,
     verticalFailed: false,
+    candidateRef: 'c1',
   });
   assert.strictEqual(check1.ok, true);
   assert.strictEqual(check1.allow_repair, true);

@@ -746,6 +746,14 @@ function runCampaignComposition(input = {}, adapters = {}) {
     BOUNDARY_REJECTED,
     'DISPOSITION_RESUMED',
   ]);
+  // A boundary stop or a budget stop before the first implementation has no
+  // candidate; that is stated as an explicit `candidate: null`, never by omission.
+  const candidateOptionalPhases = new Set([
+    BOUNDARY_REJECTED,
+    'BOUNDARY_REJECTED',
+    AWAITING_CONVERGENCE,
+    'AWAITING_CONVERGENCE_ADJUDICATION',
+  ]);
   // Awaiting-disposition resume may reuse bound candidate without re-implementation.
   // Awaiting-convergence requires explicit adjudication authority (not auto no-op).
   // Boundary-rejected is durable non-success (not labeled exact no-op unless bound).
@@ -754,11 +762,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
         || !resumablePhases.has(resume.phase)
         || !Number.isSafeInteger(resume.repair_generation)
         || resume.repair_generation < 0
-        || !resume.candidate
-        || typeof resume.candidate !== 'object'
-        || (resume.candidate.committed !== true
-          && resume.phase !== BOUNDARY_REJECTED
-          && resume.phase !== 'BOUNDARY_REJECTED'))) {
+        || !Object.prototype.hasOwnProperty.call(resume, 'candidate')
+        || (resume.candidate === null
+          ? !candidateOptionalPhases.has(resume.phase)
+          : (typeof resume.candidate !== 'object'
+            || (resume.candidate.committed !== true
+              && resume.phase !== BOUNDARY_REJECTED
+              && resume.phase !== 'BOUNDARY_REJECTED'))))) {
     throw new CampaignCompositionError(
       'INVALID_RESUME_CHECKPOINT',
       'campaign resume requires a bound durable checkpoint with sealed candidate state',
@@ -909,6 +919,15 @@ function runCampaignComposition(input = {}, adapters = {}) {
       });
     }
   };
+
+  // BL-0080: a budget stop is a durable, resumable wait, so its payload carries
+  // the resume-checkpoint fields (repair_generation, candidate) the validator
+  // demands. `candidate: null` states "no candidate yet" explicitly.
+  const budgetStopBinding = (admission, generation = repairGeneration) => (
+    admission && admission.budget
+      ? { repair_generation: generation, candidate: candidate || null }
+      : {}
+  );
 
   const preEffectAdmit = (wouldCreateWorktree = false) => {
     if (typeof adapters.preEffectAdmit === 'function') {
@@ -1481,6 +1500,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
           phase: AWAITING_CONVERGENCE,
           reason: budgetCheck.reason,
           exceeded: budgetCheck.exceeded,
+          // Resume-checkpoint fields, so this payload validates verbatim. The
+          // repair generation is that of the candidate being repaired (the counter
+          // was advanced before this check), and the candidate is null before the
+          // first implementation.
+          repair_generation: kind === 'initial' ? repairGeneration : Math.max(0, repairGeneration - 1),
+          candidate: candidate || null,
           controller,
           trace,
           final_panel_count: 0,
@@ -1503,6 +1528,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           && !(fullDiffBarriers[String(barrierGeneration)]
             && fullDiffBarriers[String(barrierGeneration)].success === true),
         verticalFailed: kind === 'vertical_repair',
+        candidateRef: candidate && (candidate.commit || candidate.tree_sha) || null,
       });
       if (!barrier.allow_repair) {
         return {
@@ -1556,6 +1582,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           trace,
           {
             code: mutationAdmission.code,
+            ...budgetStopBinding(mutationAdmission, kind === 'initial' ? repairGeneration : Math.max(0, repairGeneration - 1)),
             durable_wait: true,
             terminalize: false,
             controller,
@@ -1837,7 +1864,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
         };
       }
       const bound = boundaryRejected(boundary, trace, {
-        candidate,
+        candidate: candidate || null,
+        repair_generation: repairGeneration,
         controller,
         durable_wait: true,
         terminalize: false,
@@ -2071,7 +2099,16 @@ function runCampaignComposition(input = {}, adapters = {}) {
       reviewer_digest: canonicalDigest(reviewAuthority.reviewer),
       review_authority_digest: reviewAuthorityDigest,
       vertical_failed: verticalFailed === true,
-      ...(reviewStation === 'panel' ? { station: reviewStation } : {}),
+      // BL-0080: at the panel station the full-diff verdict IS the sealed roster's,
+      // so a different roster / seat set must not reuse it. A single-reviewer
+      // station is already keyed by its own reviewer tuple above; the roster there
+      // belongs to the joint review, which carries its own roster key.
+      ...(reviewStation === 'panel'
+        ? {
+          station: reviewStation,
+          reviewer_roster_digest: input.jointReviewRosterDigest || null,
+        }
+        : {}),
     };
     const reusable = findReusableGate(controller.gate_journal, 'full_diff_review', gateInput);
     if (reusable
@@ -2080,6 +2117,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         && reusable.result.review_authority_digest === reviewAuthorityDigest) {
       trace.push('full_diff_gate_reused');
       fullDiffBarriers = recordFullDiffBarrier(fullDiffBarriers, repairGeneration, {
+        kind: 'full_diff_review',
         success: true,
         review_digest: reusable.result.review_digest || null,
         candidate_ref: candidateRef,
@@ -2112,6 +2150,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           trace,
           {
             code: reviewAdmission.code,
+            ...budgetStopBinding(reviewAdmission, repairGeneration),
             candidate,
             durable_wait: true,
             terminalize: false,
@@ -2275,6 +2314,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       };
     }
     fullDiffBarriers = recordFullDiffBarrier(fullDiffBarriers, repairGeneration, {
+        kind: 'full_diff_review',
       success: true,
       review_digest: fullDiff.review_digest || fullDiff.receipt_digest || null,
       candidate_ref: candidateRef,
@@ -2387,6 +2427,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
             trace,
             {
               code: verifyAdmission.code,
+              ...budgetStopBinding(verifyAdmission, repairGeneration),
               candidate,
               durable_wait: true,
               terminalize: false,
@@ -2543,6 +2584,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           trace,
           {
             code: focusedAdmission.code,
+            ...budgetStopBinding(focusedAdmission, repairGeneration),
             candidate,
             durable_wait: true,
             terminalize: false,
@@ -2665,6 +2707,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
             trace,
             {
               code: suiteAdmission.code,
+              ...budgetStopBinding(suiteAdmission, repairGeneration),
               candidate,
               durable_wait: true,
               terminalize: false,
@@ -2790,6 +2833,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
               review: lastReview,
               findings: (reparkClass.missing && reparkClass.missing.findings) || [],
               repair_generations: repairGeneration,
+              repair_generation: repairGeneration,
               full_diff_barriers: fullDiffBarriers,
               work_order_resumable: true,
               controller,
@@ -2864,6 +2908,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
             review: lastReview,
             findings: missing.findings || adjudication.must_fix_now || [],
             repair_generations: repairGeneration,
+            repair_generation: repairGeneration,
             full_diff_barriers: fullDiffBarriers,
             work_order_resumable: true,
             controller,
@@ -3120,6 +3165,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           trace,
           {
             code: panelAdmission.code,
+            ...budgetStopBinding(panelAdmission, repairGeneration),
             candidate,
             durable_wait: true,
             terminalize: false,
@@ -3257,6 +3303,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         review: terminalReview,
         findings: (finalClass.missing && finalClass.missing.findings) || [],
         repair_generations: repairGeneration,
+        repair_generation: repairGeneration,
         full_diff_barriers: fullDiffBarriers,
         work_order_resumable: true,
         controller,

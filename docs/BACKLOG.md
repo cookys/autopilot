@@ -911,19 +911,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Durable resume and review authority binding
-- **Id**: BL-0080
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 自動續跑與審查的重用判斷，沒有把審查者名單與席位身分算進去，輪替審查者後可能誤用舊審查結果。目前自動續跑尚未開啟。 (draft)
-- **Impact**: 自動續跑開啟前不會發生；開啟後可能沿用不同審查者的結論。 (draft)
-- **Trigger**: Before automatic durable resume, reviewer roster rotation, seat retry, or more than one candidate per repair generation is enabled.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/durable-resume-and-review-authority-binding.md
-- **Context**: Make all durable stop payloads pass verbatim resume validation, bind full-diff barriers to the exact candidate and review kind, and include sealed reviewer roster/seat identities in full-diff and joint-review reuse keys.
-
 ### Mission graph and campaign capacity boundary hardening
 - **Id**: BL-0081
 - **Status**: open

@@ -705,6 +705,8 @@ function requireFullDiffBeforeRepair({
   fullDiffBarriers,
   focusedOnly = false,
   verticalFailed = false,
+  // BL-0080: the barrier authorizes repair of ONE candidate. Callers state which.
+  candidateRef = null,
 }) {
   const gen = Number.isSafeInteger(generation) ? generation : 0;
   const barriers = isObj(fullDiffBarriers) ? fullDiffBarriers : {};
@@ -728,10 +730,26 @@ function requireFullDiffBeforeRepair({
       generation: gen,
     };
   }
+  if (!isStr(candidateRef) || barrier.candidate_ref !== candidateRef) {
+    return {
+      ok: false,
+      allow_repair: false,
+      reason: 'full-diff barrier is not bound to the candidate being repaired; '
+        + 'a barrier from another candidate in the same generation cannot authorize this repair',
+      code: 'FULL_DIFF_BARRIER_CANDIDATE_MISMATCH',
+      generation: gen,
+    };
+  }
   return { ok: true, allow_repair: true, barrier };
 }
 
 function recordFullDiffBarrier(barriers, generation, receipt) {
+  // BL-0080: only an authoritative full-diff review mints this barrier. A focused
+  // or supplemental receipt forwarded here must not become one, so the kind is
+  // taken from the receipt and checked, never stamped on whatever arrives.
+  if (!isObj(receipt) || receipt.kind !== 'full_diff_review') {
+    fail('INVALID_FULL_DIFF_BARRIER', 'a full-diff barrier can only be recorded from a full_diff_review receipt');
+  }
   const next = { ...(barriers || {}) };
   next[String(generation)] = {
     kind: 'full_diff_review',

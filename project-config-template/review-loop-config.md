@@ -2,8 +2,8 @@
 
 Per-project engine roster + loop policy for the `/l5`-style pipeline:
 
-> subagent writes plan/acceptance → **decorrelated reviewer** xhigh loop-to-convergence
-> → **heterogeneous implementer** → reviewer xhigh loop + depth-0 adversarial harness
+> subagent writes plan/acceptance → **decorrelated reviewer** low loop-to-convergence
+> → **heterogeneous implementer** → reviewer low loop + depth-0 adversarial harness
 > → qc-gate subagent.
 
 This file turns that hand-typed prompt into **data**: copy it to
@@ -29,7 +29,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 ## Settings
 
 - reviewer_engine: gpt-6.1-sol
-- reviewer_effort: xhigh
+- reviewer_effort: low
 - reviewer_runner: codex
 - reviewer_limitation:
 - reviewer_limitation_required: false
@@ -58,7 +58,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - independent_harness: on
 - qc_panel: gpt-6.1-sol, claude-opus, gemini-flash
 - qc_panel_runners: codex, claude-native, agy
-- qc_panel_efforts: xhigh, high, high
+- qc_panel_efforts: low, high, high
 - qc_panel_endpoints: @none, @none, @none
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical

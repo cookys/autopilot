@@ -17,10 +17,10 @@ cat > "$TOPO_PRESENT_SEATS" <<'JSON'
     { "engine": "gpt-5.6-sol", "effort": "max", "runner": "codex", "endpoint": "ep-sol" }
   ],
   "reviewer_ladder": [
-    { "engine": "gpt-6.1-sol", "effort": "xhigh", "runner": "codex", "endpoint": "" }
+    { "engine": "gpt-6.1-sol", "effort": "low", "runner": "codex", "endpoint": "" }
   ],
   "consult_ladder": [
-    { "engine": "gpt-6.1-sol", "effort": "xhigh", "runner": "codex", "endpoint": "" },
+    { "engine": "gpt-6.1-sol", "effort": "low", "runner": "codex", "endpoint": "" },
     { "engine": "MiniMax-M3", "effort": "high", "runner": "cc-shim", "endpoint": "" }
   ]
 }

@@ -254,7 +254,7 @@ cat > "$ENUM_CFG" <<'CFG'
 - provider_readiness_fallback_family_constraint: invent
 CFG
 ENUM_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ENUM_CFG" bash "$SCRIPT" 2>/dev/null)"
-assert_eq "$(json_get "$ENUM_OUT" reviewer_effort)" "xhigh" "invalid reviewer_effort falls back to xhigh"
+assert_eq "$(json_get "$ENUM_OUT" reviewer_effort)" "low" "invalid reviewer_effort falls back to the default (low)"
 assert_eq "$(json_get "$ENUM_OUT" implementer_effort)" "high" "invalid implementer_effort falls back to high"
 assert_eq "$(json_get "$ENUM_OUT" spec_review)" "on" "invalid spec_review falls back to on"
 assert_eq "$(json_get "$ENUM_OUT" independent_harness)" "on" "invalid independent_harness falls back to on"

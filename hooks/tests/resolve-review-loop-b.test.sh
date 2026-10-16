@@ -14,7 +14,7 @@ assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "d
 assert_eq "gpt-6.1-sol claude-opus gemini-4-argon-high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
 assert_eq "true" "$(json_get "$OUT" qc_panel_seats_complete)" \
   "built-in panel has a complete exact-tuple roster"
-assert_eq '[{"role":"qc","runner":"codex","model":"gpt-6.1-sol","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-4-argon-high","effort":"high","endpoint":null,"family":"google"}]' \
+assert_eq '[{"role":"qc","runner":"codex","model":"gpt-6.1-sol","effort":"low","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-4-argon-high","effort":"high","endpoint":null,"family":"google"}]' \
   "$(json_get "$OUT" qc_panel_seats)" \
   "built-in QC seats bind runner, model, effort, endpoint, role, and family"
 assert_eq "300" "$(json_get "$OUT" provider_readiness_receipt_ttl_seconds)" \

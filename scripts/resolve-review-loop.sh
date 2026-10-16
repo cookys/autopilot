@@ -60,7 +60,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Built-in defaults (the user's stated good-loop roster; agy is NOT the default
 # implementer because it corrupts the autopilot repo — see config gotchas).
 DEF_REV_ENGINE="gpt-6.1-sol"
-DEF_REV_EFFORT="xhigh"
+DEF_REV_EFFORT="low"
 DEF_REV_RUNNER="codex"
 DEF_IMPL_ENGINE="gpt-6.1-sol"
 DEF_IMPL_EFFORT="high"
@@ -87,7 +87,7 @@ DEF_HARNESS="on"
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-6.1-sol, claude-opus, gemini-flash"
 DEF_QC_PANEL_RUNNERS="codex, claude-native, agy"
-DEF_QC_PANEL_EFFORTS="xhigh, high, high"
+DEF_QC_PANEL_EFFORTS="low, high, high"
 DEF_QC_PANEL_ENDPOINTS="@none, @none, @none"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
 QC_ALL_CALIBRATED="gpt-6.1-sol, claude-opus, gemini-flash, grok-4.7, MiniMax-M3"

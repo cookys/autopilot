@@ -543,6 +543,7 @@ function createCampaignSession(campaign) {
   session.restart = () => {
     session.sessionIndex += 1;
     session.restarts += 1;
+    if (session.preKillHead === undefined) session.preKillHead = session.tip;
     session.turns = [];
     return session.visible();
   };
@@ -771,6 +772,7 @@ function createCampaignSession(campaign) {
       budget_exhausted: session.verdict === null,
       ancestry: session.ancestry,
       returned_tree: session.tip,
+      pre_kill_head: session.preKillHead,
       verification_witness: true,
       tool_calls_used: session.toolCalls,
       tokens_used: session.tokens || 0,

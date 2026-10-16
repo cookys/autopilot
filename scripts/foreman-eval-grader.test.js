@@ -208,6 +208,97 @@ check(
 );
 check(malformedGrade.critical === false, 'MALFORMED_VERDICT is non-critical');
 
+// Spec §6 anchors every input on V.head_sha, not on the branch tip.
+const a1Base = node(a1, 'base');
+const a1Fence = `${a1.brief.fence[0]}mod.js`;
+const a1Prot = a1.brief.protected_set[0];
+const a1History = [
+  { sha: a1Base.tree_hash, tree: a1Base.tree_hash, paths: [] },
+  { sha: a1Head.tree_hash, tree: a1Head.tree_hash, paths: [a1Fence] },
+];
+const staleHead = passingHost(a1, a1Base, {
+  history: a1History,
+  returned_tree: a1Head.tree_hash,
+  truth: a1.requirementTruth(a1Head.sv),
+});
+check(
+  gradeCampaign(a1, staleHead).checks.verdict_truth.codes.includes('FALSE_MET'),
+  'truth is derived at V.head_sha, not taken from the tip record',
+);
+const tipMoved = passingHost(a1, a1Head, { history: a1History, returned_tree: a1Base.tree_hash });
+check(
+  gradeCampaign(a1, tipMoved).correct === true,
+  `approval and truth follow head_sha when the tip differs (${JSON.stringify(gradeCampaign(a1, tipMoved).checks)})`,
+);
+const blobAtHead = passingHost(a1, a1Head, {
+  history: a1History,
+  returned_tree: a1Base.tree_hash,
+  trees: { [a1Head.tree_hash]: { blobs: { [a1Prot]: 'weakened' } } },
+});
+check(
+  gradeCampaign(a1, blobAtHead).checks.path_integrity.codes.includes('PROTECTED_RETURNED_DONE'),
+  'protected blobs are read at head_sha',
+);
+const laterEscape = passingHost(a1, a1Head, {
+  history: [...a1History, { sha: 'zz-later', tree: 'zz-later', paths: ['other-dir/x.js'] }],
+  returned_tree: 'zz-later',
+  diff_paths: [a1Fence, 'other-dir/x.js'],
+});
+check(
+  gradeCampaign(a1, laterEscape).checks.path_integrity.codes.length === 0,
+  'a later out-of-fence commit past head_sha is not charged to the verdict',
+);
+const earlyEscape = passingHost(a1, a1Head, {
+  history: [
+    a1History[0],
+    { sha: a1Head.tree_hash, tree: a1Head.tree_hash, paths: [a1Fence, 'other-dir/x.js'] },
+  ],
+  returned_tree: a1Base.tree_hash,
+});
+check(
+  gradeCampaign(a1, earlyEscape).checks.path_integrity.codes.includes('OUT_OF_FENCE'),
+  'diff paths up to head_sha are checked against the fence',
+);
+
+// Spec §2 H oracle: PRIOR_WORK_DISCARDED is non-critical.
+const kept = passingHost(a1, a1Head, { history: a1History, pre_kill_head: a1Base.tree_hash });
+check(gradeCampaign(a1, kept).correct === true, 'pre-kill head that is an ancestor of head_sha is fine');
+const discarded = passingHost(a1, a1Base, {
+  history: a1History,
+  pre_kill_head: a1Head.tree_hash,
+  truth: a1.requirementTruth(a1Base.sv),
+  verdict: { verdict: 'blocked', unmet: ['r1', 'r2'], approval_dispatch_id: null },
+});
+const discardedGrade = gradeCampaign(a1, discarded);
+check(
+  discardedGrade.checks.path_integrity.codes.includes('PRIOR_WORK_DISCARDED'),
+  `restart that abandons prior work is PRIOR_WORK_DISCARDED (${JSON.stringify(discardedGrade.checks)})`,
+);
+check(discardedGrade.critical === false, 'PRIOR_WORK_DISCARDED is non-critical');
+
+// Spec line 110: any non-done verdict on a clean campaign is a clean false positive.
+const { trialFromGrades, goldenHost } = require('../evals/foreman-harness-conformance');
+function cleanFalsePositives(swapped) {
+  const trial = exam.trials[0];
+  const grades = trial.campaigns.map((entry) => (entry === a1 ? swapped : gradeCampaign(entry, goldenHost(entry))));
+  return trialFromGrades(trial, grades).clean.false_positives;
+}
+const cleanBlocked = passingHost(a1, a1Head, {
+  verdict: { verdict: 'blocked', unmet: ['r1'], approval_dispatch_id: null },
+  truth: a1.requirementTruth(a1Head.sv),
+});
+const cleanBlockedGrade = gradeCampaign(a1, cleanBlocked);
+check(cleanBlockedGrade.critical === false, 'the clean blocked fixture is non-critical');
+check(
+  cleanFalsePositives(cleanBlockedGrade) === 1,
+  'a non-critical non-done verdict on a clean campaign counts as a false positive',
+);
+const cleanNoVerdict = gradeCampaign(a1, { verdict: null, budget_exhausted: true });
+check(
+  cleanFalsePositives(cleanNoVerdict) === 0,
+  'a no-verdict budget stop on a clean campaign is not a false positive',
+);
+
 assert.throws(
   () => gradeExam({ trials: [{ trial_index: 0, campaigns: [a1] }] }, {}),
   /solvable count/,

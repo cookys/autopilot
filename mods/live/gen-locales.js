@@ -19,7 +19,7 @@ const path = require('path');
 const dir = __dirname;
 const SOURCES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'register.ts', 'i18n.ts'];
 // ids the code builds from a prefix (`t('tab.' + id)`, `'stage.' + node`, ...): an en id under one of these is considered used
-const DYNAMIC_PREFIXES = ['ui.state.', 'tab.', 'stage.', 'legend.', 'residue.kind.', 'residue.class.', 'residue.measure.', 'verdict.', 'spend.mode_', 'reason.permission', 'reason.question'];
+const DYNAMIC_PREFIXES = ['ui.state.', 'tab.', 'stage.', 'legend.', 'residue.why.', 'verdict.', 'spend.mode_', 'reason.permission', 'reason.question'];
 const KEY_COLUMN_CELLS = 12;
 
 function readJson(file) {

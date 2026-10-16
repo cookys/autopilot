@@ -740,6 +740,8 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 
 **Owner ruling 2026-10-16, 待決 tab** (answered in conversation): 「這個 IA 跟排版你調過又壞了? 完整盤點跟整理一下?」. Resolved in §12.6: the 待決 card gets a section header, a bold wrapping question and the pane's key/value rows, and the blank lines that were never drawn are drawn.
 
+**Owner ruling 2026-10-16** (after the 殘留 tab was reshaped): 「殘留還是亂亂的」. Resolved in §12.7: two sections (what needs you / what can simply be cleared), every entry read where it stands, one count everywhere.
+
 ## 9. Unverified (each is checked in the named phase)
 
 Verified as of 2026-10-14 (struck items below):
@@ -886,3 +888,36 @@ The owner reviewed the 待決 tab (76 columns, three questions) and found its IA
 **Blank lines are now drawn.** `blank()` had always been emitted (the header's trailing blank, and the one after each card), but `pane.tsx` drew it as an empty `<Text>`, which takes no row, so no blank was ever on screen, including the line §4 requires between the header and the first section. `pane.tsx` now draws a blank as a one-cell Text, on every tab, and `treeRowCount` counts every line as a row. The rule of §4 is unchanged except for one exception: a 待決 card is closed by one blank, so cards are told apart by a drawn empty row; the other tabs have no blank in the body.
 
 **Wrapping.** `wrapPlain` no longer starts a continuation line with a closing mark (`）」』、。，；：！？`): the character before it goes down with it.
+
+### 12.7 The 殘留 tab
+
+The owner called the tab 「亂亂的」. Seven defects: (1) a worktree that is merged and safe to delete shared the yellow `▲` and the count of one that needs a decision, which inflated the tab name, 現況's row and summary and the band's `⚑N`; (2) an entry needed two folds (group, then item) to show its reason and command, and the fold mark sat at the right edge while section headers fold at the left; (3) an item was named by a tail cut of its path (`…390b66014e3cf`); (4) the reason was the producer's English (`1349 uncommitted path(s)`); (5) a group row repeated the item count of the rows under it; (6) the auto-cleanup row opened with `∅ 不需要`; (7) any `stale_cache_dirs` flag made the plugin source `▲`, twice (header and row), and raw codes (`dev`, `marketplace_not_directory`) said nothing about what to do.
+
+**Two kinds, one table.** `ui.RESIDUE_KINDS` maps a producer class to `judge` (the owner decides: `dirty`, `clean-unintegrated`, `unintegrated-branch`, `unverifiable`, and any class the table does not name), `clean` (safe to clear: `clean-integrated`, `missing-dir`) or `live` (in use, never listed). Every count comes from `residueTally` (model.ts), which reads that table: the tab's chip, the tab name's attention (`tabNeeds`), 現況's `now.residue` row, 現況's summary row, and the band's `⚑N` (including the no-scope path that reads the auto-reap result file). The producer's list is capped at 20; an entry it counted but did not list is counted as `judge` (the safe side). A `clean` entry never counts as needing the owner. 現況's summary reads `1 個要你看 · 2 個可清 · 598 MB` (`en`: `1 to look at · 2 to clear · 598 MB`) and is not yellow when nothing is to judge.
+
+**Sections**, in `SECTION_ORDER.hygiene`: `attention` (要你處理, `N · size` chip, the empty line when nothing is to judge), `cleanable` (可以直接清掉, the same chip, not drawn when empty; registered in `SECTION_DEFAULTS`, open), `auto`, `source`. At most 5 entries per section; the rest sit behind the shared `還有 N 項` row (`more:residue.attention` / `more:residue.cleanable`).
+
+```
+▾ 要你處理  1 · 285 MB ───────────────────────────────────────────────────
+▲ agent-a16d390b66014e3cf                                    1d04h · 285 MB
+  有 1349 個檔案沒提交，先看內容再決定要不要刪
+  $ git -C '/home/cookys/projects/autopilot/.claude/worktrees/
+    agent-a16d390b66014e3cf' status --short
+▾ 可以直接清掉  2 · 313 MB ────────────────────────────────────────────────
+◦ release-3.0.0                                              4d12h · 313 MB
+  已合併，可以刪
+  $ git -C '/home/cookys/projects/autopilot' worktree remove '...'
+▾ 自動清理 ───────────────────────────────────────────────────────────────
+上次        23h51m 前 · 沒有清掉東西
+▾ 外掛來源 ───────────────────────────────────────────────────────────────
+✓ 開發目錄 · /home/cookys/projects/autopilot · v3.0.0-alpha.6
+  舊版快取 2.36.36 沒有程式在用，可以刪
+  $ rm -rf /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/
+```
+
+- **Entry** (`ui.residueRows`): a name row (the state's mark for `judge`, the neutral `◦` for `clean`; the last path segment whole, a branch by its name; too long, it is cut from the **tail** with `…`; dim `age · size` at the right edge), the reason at column 2 (dim, `residue.why.<class>` in both locales; `dirty` takes its number from `^(\d+) uncommitted` and falls back to a sentence without one; an unmapped class shows `residue.class_raw` and the producer's text), and the producer's `command` through `ui.command` (`$`, wrapped, never cut), omitted when there is none. Nothing folds.
+- **Auto cleanup** is a key/value row, key `上次` (`last run`): `{age} 前 · 沒有清掉東西`, `{age} 前 · 刪了 {wt} 個 worktree、封存 {br} 條分支`, or `還沒跑過`. No state mark.
+- **Plugin source**: the section header carries no state chip (§12.2: the attention is drawn once per surface). The row is a mark, the source's name (`dev` → 開發目錄, `cache:<v>` → 快取版 <v>, anything else → 讀不到外掛來源) and dim meta (the marketplace path for `dev`, the version). It is `▲` only when the owner would run the wrong copy: the source is not the dev directory, `marketplace_not_directory`, `marketplace_not_this_repo`, `dev_link_missing_or_stale`, or `behind_upstream > 0`; otherwise `✓`. A stale cache directory alone is information, not a request. One dim sentence per flag follows, with a command where there is a fix: a stale directory no live process uses → `舊版快取 {v} 沒有程式在用，可以刪` + `$ rm -rf {dir}/`; one with a live pid → `…還有程式在用（pid …），先不要刪` and no command; a marketplace or dev-link flag → the sentence + `$ bash {marketplace_path}/scripts/dev-setup.sh` (no command when the path is not absolute); `behind_upstream` → `落後遠端 {n} 個提交`; an unknown flag → `其他旗標：{flag}`. Nothing folds.
+- **Tab name and the plugin source:** the 殘留 tab name reads the residue judge count and the shared `sourceStateOf` (tabs.ts): it turns yellow when something needs judgement or when the 外掛來源 row shows ▲, and not for an old cache copy alone. 現況's attention row and the band's `⚑N` stay residue-only; the band's source chip keeps its own text.
+
+**Enforcement.** `mods/live/hygiene.test.ts` pins the owner's real data at 76 columns and each rule; each control breaks a rule on purpose (a `clean` class counted as `judge`; a stale-only source drawn `▲`) and the suite must go red. The command is now drawn in the default render of this tab only, so the "no command by default" check of `now.test.ts` exempts `hygiene` and keeps its control on the other tabs.

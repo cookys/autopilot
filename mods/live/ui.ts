@@ -324,9 +324,9 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   qc: { OK: 'done', OWED: 'need_you', NOT_NEEDED: 'skipped', UNKNOWN: 'unknown' },
   background: { exitN: 'failed', exit0: 'done', fresh: 'running', quiet: 'stopped' },
   task: { COMPLETED: 'done', IN_PROGRESS: 'running', PENDING: 'pending' },
-  loadSource: { bad: 'need_you', ok: 'done', weird: 'unknown' },
+  loadSource: { bad: 'need_you', ok: 'done', weird: 'need_you' }, // a source that is neither the dev directory nor a known cache copy is not the copy the owner expects
   attention: { acceptance: 'need_you', ...ATTENTION_FROM },
-  residueGroup: { dirty: 'need_you', 'clean-integrated': 'need_you', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'need_you', live: 'running', unverifiable: 'unknown' },
+  residueGroup: { dirty: 'need_you', 'clean-integrated': 'done', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'done', live: 'running', unverifiable: 'unknown' }, // a 'clean' class (RESIDUE_KINDS) is drawn as a neutral row, never as a mark
   cleanup: { errors: 'failed', done: 'done', nothing: 'skipped' },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {
@@ -371,11 +371,11 @@ export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
-  hygiene: ['attention', 'auto', 'source'],
+  hygiene: ['attention', 'cleanable', 'auto', 'source'],
   legend: ['states', 'structure', 'keys'],
 }
 // the sections that start folded: read by recentLines (now.recent) through sectionOpen; review.plan folds only while it is stale (F2, I11), by passing `stale` to sectionOpen
-export const SECTION_DEFAULTS: Record<string, { folded: boolean }> = { 'now.recent': { folded: true }, 'review.plan': { folded: true } }
+export const SECTION_DEFAULTS: Record<string, { folded: boolean }> = { 'now.recent': { folded: true }, 'review.plan': { folded: true }, 'hygiene.cleanable': { folded: false } }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // the brand: a PaneLine / Frag exists only if a component made it. `mk` and `frag` are not exported as makers for tab code to call by hand; the WeakSets are private.
@@ -866,7 +866,7 @@ export function carry(from: PaneLine, piece: LineInit): PaneLine {
 // a need_you count is a plain number: the owner's attention is drawn once per surface (the verdict line and the tab name), not again on the section title
 export function countChip(u: Ctx, s: Stated, n: number, fact: FactId): Frag {
   const lead = s.id === 'need_you' ? [] : [...stateLead(u, s, { word: false }).segs, sg(' ')]
-  return frag([...lead, sg(String(n), { role: 'value', fmt: 'count' })], fact)
+  return frag([...lead, ...plainCount(n, fact).segs], fact)
 }
 
 // a table whose rows go through the same rules as list(): equal `group` keys fold into one row (the newest), rows run in SEVERITY order and, inside a
@@ -1004,39 +1004,63 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
   }
 }
 
-// ---- 殘留 (§5.5) ----
+// ---- 殘留 (§12.7) ----
 export type ResidueEntry = { kind: string; target: string; cls: string; ageMs: number | null; bytes: number | null; reason: string | null; command: string | null }
-const RES_SEP = '|'
-// one group row per (kind, class): the item row carries the toggle, the open group lists its items as bullets, an open item its reason (`detail`) and its own command (I22)
-export function residueGroups(u: Ctx, entries: readonly ResidueEntry[], chip: Stated, o: { cap?: number } = {}): PaneLine[] {
-  const t = u.t
-  const groups = new Map<string, ResidueEntry[]>()
-  for (const e of entries) groups.set(e.kind + RES_SEP + e.cls, [...(groups.get(e.kind + RES_SEP + e.cls) ?? []), e])
-  const rows: RowSpec[] = [...groups.entries()].map(([key, es]) => {
-    const state = stateOf('residueGroup', es[0].cls)
-    const bytes = es.every(e => e.bytes === null) ? null : es.reduce((a, e) => a + (e.bytes ?? 0), 0)
-    const id = 'res:' + key
-    const open = u.expanded?.has(id) === true
-    // §3.3: a class the status map has no row for is the `unknown` state; its word is "unknown" and the producer's own text goes into a detail line
-    const knownCls = Object.prototype.hasOwnProperty.call(STATUS_MAP.residueGroup, norm(es[0].cls).toLowerCase())
-    const children = open ? [...(knownCls ? [] : detail(u, t('residue.class_raw', { cls: es[0].cls }), { fact: 'residue.groups' })), ...es.flatMap(e => {
-      const itemId = 'resitem:' + e.target
-      const itemOpen = u.expanded?.has(itemId) === true
-      const name = idTail(e.target.split('/').filter(x => x !== '').pop() ?? e.target, 14)
-      const meta: MetaPart[] = [...(e.ageMs === null ? [] : [{ text: dur(e.ageMs), fmt: 'dur' as const }]), ...(e.bytes === null ? [] : [{ text: size(e.bytes), fmt: 'size' as const }])]
-      const lines: PaneLine[] = [bullet(u, name, meta, { fact: 'residue.groups', toggle: { id: itemId, open: itemOpen } })]
-      if (itemOpen) {
-        if (e.reason !== null) lines.push(...detail(u, e.reason, { attached: true }))
-        if (e.command !== null) lines.push(...command(u, e.command))
-      }
-      return lines
-    })] : []
-    return {
-      group: key, ts: -Math.min(...es.map(e => e.ageMs ?? 0)), state, fact: 'residue.groups', toggle: id, ...(state.id === chip.id ? { word: false } : {}),
-      body: t('residue.kind.' + es[0].kind) + '  ' + t(knownCls ? 'residue.class.' + norm(es[0].cls).toLowerCase().replace(/-/g, '_') : 'residue.class.unknown'), meta: [{ text: count(es.length, t('residue.measure.' + es[0].kind)), fmt: 'count' as const }, ...(bytes === null ? [] : [{ text: size(bytes), fmt: 'size' as const }])], children,
-    } satisfies RowSpec
-  })
-  return list(u, 'residue.groups', t('residue.noun'), rows, { ...(o.cap === undefined ? {} : { cap: o.cap }) })
+// which residue classes need the owner's judgement ('judge'), which can simply be cleared ('clean'), and which are in use ('live', never listed). Every count on every
+// surface (the tab's chip, 現況's row and summary, the tab name, the band's ⚑N) is derived from this one table; a class it does not name is 'judge'.
+export type ResidueKind = 'judge' | 'clean' | 'live'
+export const RESIDUE_KINDS: Record<string, ResidueKind> = {
+  dirty: 'judge', 'clean-unintegrated': 'judge', 'unintegrated-branch': 'judge', unverifiable: 'judge',
+  'clean-integrated': 'clean', 'missing-dir': 'clean',
+  live: 'live',
+}
+export const residueKindOf = (cls: string): ResidueKind => (Object.prototype.hasOwnProperty.call(RESIDUE_KINDS, norm(cls).toLowerCase()) ? RESIDUE_KINDS[norm(cls).toLowerCase()] : 'judge')
+// the name of an entry: a worktree's last path segment (whole, cut from the tail only when the row cannot hold it), a branch's own name
+export const residueNameOf = (e: ResidueEntry): string => (e.kind === 'branch' ? e.target : (e.target.split('/').filter(x => x !== '').pop() ?? e.target))
+// the owner-facing reason lines of an entry: the class's sentence from the string table; a class the table does not name keeps the producer's own words
+export function residueWhy(t: Translate, e: ResidueEntry): string[] {
+  const cls = norm(e.cls).toLowerCase()
+  if (!Object.prototype.hasOwnProperty.call(RESIDUE_KINDS, cls) || RESIDUE_KINDS[cls] === 'live') return [t('residue.class_raw', { cls: e.cls }), ...(e.reason === null ? [] : [e.reason])]
+  if (cls === 'dirty') {
+    const m = /^(\d+) uncommitted/.exec(e.reason ?? '')
+    return [m === null ? t('residue.why.dirty_unknown') : t('residue.why.dirty', { n: m[1] })]
+  }
+  return [t('residue.why.' + cls.replace(/-/g, '_'))]
+}
+// a plain count, no state mark: a header chip whose section name already says what the number is
+export const plainCount = (n: number, fact: FactId): Frag => frag([sg(String(n), { role: 'value', fmt: 'count' })], fact)
+const dimParts = (parts: readonly { text: string; fmt: FmtKind }[]): Seg[] => parts.flatMap((p, i) => [...(i > 0 ? [dim(' · ', { role: 'prose' })] : []), dim(p.text, { role: 'value', fmt: p.fmt })])
+// one residue entry's name row: the mark (the state's glyph, or the neutral `◦`), the name from the left, the dim `age · size` at the right edge. A name too long loses its tail.
+function residueNameRow(u: Ctx, e: ResidueEntry, state: Stated | null): PaneLine {
+  const parts: { text: string; fmt: FmtKind }[] = [...(e.ageMs === null ? [] : [{ text: dur(e.ageMs), fmt: 'dur' as const }]), ...(e.bytes === null ? [] : [{ text: size(e.bytes), fmt: 'size' as const }])]
+  const lead: Seg[] = state === null ? [dim(GLYPHS.structure.bullet, { role: 'glyph' }), sg(' ')] : [...stateLead(u, state, { word: false }).segs, sg(' ')]
+  const leadW = 2
+  let meta = dimParts(parts)
+  let metaW = displayWidth(meta.map(s => s.text).join(''))
+  if (u.cols - 1 - leadW - metaW - 2 < 8) { meta = []; metaW = 0 } // no room for the name beside the meta: the name wins
+  const room = u.cols - 1 - leadW - (metaW > 0 ? metaW + 2 : 0)
+  const name = cutProse(residueNameOf(e), room)
+  const segs: Seg[] = [...lead, sg(name, { role: 'prose' })]
+  if (metaW > 0) segs.push(sg(' '.repeat(room - displayWidth(name) + 2)), ...meta)
+  return lineOf(state === null ? 'bullet' : 'item', segs, { fact: 'residue.groups' })
+}
+// one residue section's rows: newest first (judge rows by severity first), each entry the name row, its reason (dim, column 2) and its command (`$`, never cut), at most
+// `cap` entries and a `more` row for the rest. No grouping, no per-row fold: what the owner has to read is on the screen.
+// newest first; an entry with no age goes last, and two with no age keep their order (Infinity - Infinity is NaN, which a comparator must never return)
+const ageOrder = (a: number | null, b: number | null): number => (a === null ? (b === null ? 0 : 1) : b === null ? -1 : a - b)
+export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[], o: { judge: boolean; cap?: number }): PaneLine[] {
+  const cap = o.cap ?? 5
+  const rows = entries.map(e => ({ e, state: o.judge ? stateOf('residueGroup', e.cls) : null }))
+  rows.sort((a, b) => (a.state === null || b.state === null ? 0 : SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id)) || ageOrder(a.e.ageMs, b.e.ageMs))
+  const expanded = u.expanded?.has('more:' + id) === true
+  const shown = expanded ? rows : rows.slice(0, cap)
+  const out = shown.flatMap(({ e, state }) => [
+    residueNameRow(u, e, state),
+    ...residueWhy(u.t, e).flatMap(w => detail(u, w, { fact: 'residue.groups' })),
+    ...(e.command === null ? [] : command(u, e.command)),
+  ])
+  if (rows.length > cap) out.push(more(u, rows.length - cap, u.t('residue.noun'), 'more:' + id, expanded))
+  return out
 }
 
 // the one dim line of a snapshot that is not ok (no band): the state text as published, nothing invented around it

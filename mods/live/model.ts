@@ -648,6 +648,7 @@ export type LoadSourceView = {
   plugin_version: string | null
   source: string // "dev" | "cache:<semver>" | "unknown"
   marketplace: string
+  marketplace_path: string | null
   behind_upstream: number | null
   flags: string[]
   stale_cache_dirs: { dir: string; in_use_pids: string[]; alive: string[] }[]
@@ -659,7 +660,7 @@ export function readLoadSource(text: string | null): LoadSourceView | null {
   const v = parsed.value
   const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : [])
   return {
-    plugin_version: str(v.plugin_version), source: str(v.source) || 'unknown', marketplace: str(v.marketplace) || 'missing',
+    plugin_version: str(v.plugin_version), source: str(v.source) || 'unknown', marketplace: str(v.marketplace) || 'missing', marketplace_path: str(v.marketplace_path),
     behind_upstream: finite(v.behind_upstream) && Number.isInteger(v.behind_upstream) && v.behind_upstream >= 0 ? v.behind_upstream : null,
     flags: strs(v.flags),
     stale_cache_dirs: (Array.isArray(v.stale_cache_dirs) ? v.stale_cache_dirs : []).filter(isObject).map(d => ({ dir: str(d.dir) || '?', in_use_pids: strs(d.in_use_pids), alive: strs(d.alive) })),
@@ -1168,6 +1169,23 @@ export type ResidueView = {
   needs_human_count: number; needs_human_bytes: number | null; needs_human: NeedsHumanEntry[]
   auto_ran_at: string | null; auto_removed_count: number | null; auto_archived_count: number | null
 }
+// the producer's own list of what a person must act on (path, branch or ref names the target); at most 20 entries are read
+function readNeedsHuman(list: unknown): NeedsHumanEntry[] {
+  const rows: NeedsHumanEntry[] = []
+  if (!Array.isArray(list)) return rows
+  for (const e of list) {
+    if (!isObject(e)) continue
+    const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
+    if (target === null) continue
+    rows.push({
+      kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
+      age_days: typeof e.age_days === 'number' && Number.isFinite(e.age_days) ? e.age_days : null,
+      bytes: isCount(e.bytes) ? e.bytes : null, reason: str(e.reason), command: str(e.command),
+    })
+    if (rows.length >= 20) break
+  }
+  return rows
+}
 export function readResidue(text: string | null, projectKey: string): ResidueView | null {
   if (text === null) return null
   const parsed = parseJson(text)
@@ -1176,20 +1194,7 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   if (!isCount(v.reapable_worktrees)) return null
   const by: Record<string, number> = {}
   if (isObject(v.by_class)) for (const k of Object.keys(v.by_class)) if (isCount(v.by_class[k])) by[k] = v.by_class[k] as number
-  const rows: NeedsHumanEntry[] = []
-  if (Array.isArray(v.needs_human)) {
-    for (const e of v.needs_human) {
-      if (!isObject(e)) continue
-      const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
-      if (target === null) continue
-      rows.push({
-        kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
-        age_days: typeof e.age_days === 'number' && Number.isFinite(e.age_days) ? e.age_days : null,
-        bytes: isCount(e.bytes) ? e.bytes : null, reason: str(e.reason), command: str(e.command),
-      })
-      if (rows.length >= 20) break
-    }
-  }
+  const rows = readNeedsHuman(v.needs_human)
   return {
     reapable: v.reapable_worktrees, by_class: by, at: str(v.at),
     needs_human_count: isCount(v.needs_human_count) ? v.needs_human_count : 0,
@@ -1200,13 +1205,30 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   }
 }
 
-// `reap --auto`'s own result file (<git-common-dir>/autopilot-residue-auto.json): needs_human_count when it is a positive integer, else 0.
+// What the owner has to judge versus what can simply be cleared (ui.RESIDUE_KINDS, the one table). The producer's list is capped (20), so entries it counted but did not
+// list have no class here: they are counted as 'judge' (the safe side), never as 'clean'. Bytes: needs_human_bytes covers both kinds; the cleanable share is the listed
+// 'clean' entries' own bytes, and the judge share is what is left.
+export type ResidueTally = { judge: NeedsHumanEntry[]; clean: NeedsHumanEntry[]; judgeCount: number; judgeBytes: number | null; cleanCount: number; cleanBytes: number | null; unlisted: number }
+export function residueTally(r: { needs_human_count: number; needs_human_bytes: number | null; needs_human: readonly NeedsHumanEntry[] }): ResidueTally {
+  const judge = r.needs_human.filter(e => U.residueKindOf(e.class) === 'judge')
+  const clean = r.needs_human.filter(e => U.residueKindOf(e.class) === 'clean')
+  const unlisted = Math.max(0, r.needs_human_count - r.needs_human.length)
+  const cleanKnown = clean.some(e => e.bytes !== null)
+  const cleanBytes = cleanKnown ? clean.reduce((a, e) => a + (e.bytes ?? 0), 0) : null
+  return {
+    judge, clean, unlisted, judgeCount: judge.length + unlisted, cleanCount: clean.length, cleanBytes,
+    judgeBytes: r.needs_human_bytes === null ? null : Math.max(0, r.needs_human_bytes - (cleanBytes ?? 0)),
+  }
+}
+
+// `reap --auto`'s own result file (<git-common-dir>/autopilot-residue-auto.json): what the owner has to judge (residueTally.judgeCount), else 0.
 export function autoResidueCount(text: string | null): number {
   if (text === null) return 0
   const parsed = parseJson(text)
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== 'autopilot.residue-auto/1') return 0
   const n = parsed.value.needs_human_count
-  return isCount(n) ? n : 0
+  if (!isCount(n)) return 0
+  return residueTally({ needs_human_count: n, needs_human_bytes: null, needs_human: readNeedsHuman(parsed.value.needs_human) }).judgeCount
 }
 
 // Absolute path with `.`/`..` segments folded (never above the root).
@@ -1395,10 +1417,10 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
   }
 }
 
-// hygieneChip text (`dev↓3`, the arrow dim) + ` ⚑<n>` (n = needs_human_count = what a person must act on, n > 0 only; the owner reminder, never dropped)
+// hygieneChip text (`dev↓3`, the arrow dim) + ` ⚑<n>` (n = residueTally(...).judgeCount = what a person must judge, the cleanable entries not counted, n > 0 only; the owner reminder, never dropped)
 export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null): Slot | null {
   const chip = hygieneChip(ls)
-  const wt = residue !== null && residue.needs_human_count > 0 ? residue.needs_human_count : 0
+  const wt = residue === null ? 0 : residueTally(residue).judgeCount // what the owner has to judge; the cleanable ones are not a reminder
   if (chip === null && wt === 0) return null
   const segs: Seg[] = []
   if (chip !== null) {

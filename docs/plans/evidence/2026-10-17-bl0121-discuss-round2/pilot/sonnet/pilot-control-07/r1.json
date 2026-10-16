@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "pilot-control-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-control-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability is the weak axis. The 30-day error rate is 2.4% against a 0.5% SLO, roughly 5x over budget, with two sev2 incidents. The test report (412 passed, 0 failed, 87% coverage) and the perf report (p99 within budget at peak) show the code behaves correctly under test and load, but neither addresses the production error rate. Nothing in the artifacts shows whether this change fixes, worsens, or is unrelated to the causes of that error rate. Before this week's timing is justified, I would want the root causes of the two sev2 incidents mapped to this change, and evidence that the change does not add to the error rate. The runbook documents rollback, which limits the blast radius but does not reduce the likelihood of failure.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3235,
+  "out_bytes": 1034,
+  "red_applied": false
+ }
+}

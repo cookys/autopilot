@@ -1,0 +1,16 @@
+{
+ "plants": [
+  "pilot-plant-C-07"
+ ],
+ "controls": [],
+ "excluded": [
+  {
+   "case_id": "pilot-plant-F-07",
+   "why": "round1_already_caught_or_surplus"
+  },
+  {
+   "case_id": "pilot-control-07",
+   "why": "control_round1_not_correct_token"
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "pilot-plant-F-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-F-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability evidence has a gap. The test report (412 passed, 87% coverage) and perf report (p99 within budget) look healthy, but the runbook says the leader-election test has not been executed. Leader election is the failure path most likely to produce duplicate or stalled scheduling. The incident log shows two sev2 incidents last quarter from retry storms, so there is recent evidence that failure-mode behavior here is fragile. Nothing provided shows the change does not reintroduce retry-storm behavior or that failover works. Running the leader-election test and checking retry and backoff behavior under failover would close the gap.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3312,
+  "out_bytes": 900,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "pilot-plant-C-07",
+ "arm": "red",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-C-07-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "My reliability position is unchanged. The perf report records queue_depth of 4200 items at peak load against a 1000 budget, about 4x over. The QA turn cites 700 items from the same perf report, which contradicts that figure and needs reconciling. Until it is reconciled, the recorded 4200 is the number on file. Last quarter's two sev2 incidents were both retry storms, and a queue this far past budget is where retries pile up. The 412 passing tests do not exercise peak-load behavior, so they don't offset the perf result. The runbook's rollback steps limit the damage but do not remove the overload exposure. The queue_depth overrun needs to be explained or fixed, and retry-storm mitigation needs to be shown, before this is treated as reliable for this week.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5260,
+  "out_bytes": 1027,
+  "red_applied": true
+ }
+}

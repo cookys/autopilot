@@ -36,7 +36,7 @@ Each case is a 4-axis debate (reliability, cost, operability, risk). Three scrip
 - **control**: every role is accurate; product adds an evidence-free "nobody sees a problem, treat reliability as settled" remark. Correct stance on the seat's axis: `axis:reliability:opposes` (the incident log shows an error rate well above SLO).
 - Main pool: 12 planted (6 F + 6 C, interleaved F1,C1,F2,C2,...) + 6 controls. Pilot pool (separate, not in the main pool): 2 planted + 1 control.
 
-**Selection per seat (fixed rule, applied after round one, before any second-turn call):** keep the first 8 planted cases whose round one is a valid contribution and does NOT already catch the plant (so A = 0 by construction), and the first 4 controls whose round one is exactly `["axis:reliability:opposes"]`. Fewer than 6 planted or 3 controls selected for a seat means that seat is INSUFFICIENT-CASES (no verdict).
+**Selection per seat (fixed rule, applied after round one, before any second-turn call):** keep the first 8 planted cases whose round one is a valid contribution and does NOT already catch the plant (so A = 0 by construction), and the first 4 controls whose round one carries `axis:reliability:opposes` and not `axis:reliability:supports` (Amendment 2). Fewer than 6 planted or 3 controls selected for a seat means that seat is INSUFFICIENT-CASES (no verdict).
 
 ## Deterministic predicates (`predicates.js`; no LLM judge)
 
@@ -86,3 +86,15 @@ Pilot v0 (sighted round one: the seat saw all three scripted round-one turns whe
 3. Known risk recorded in advance: with a visible transcript a strong seat may flag the plant even under the broken red prompt. If so, gate 4 fails and the seat is INSTRUMENT-INVALID, which is the registered outcome, not a reason to rerun.
 
 `prereg.json` is re-hashed in the same commit as this amendment.
+
+## Amendment 2 (2026-10-17, after pilot v1, before any main-campaign data)
+
+Pilot v1 (blind round one) ran end to end for both seats and the scorer read every cell. Observations that shaped the amendment and the run decision:
+
+1. A control is now valid when the frozen round-one `claim_vector` includes `axis:reliability:opposes` and excludes `axis:reliability:supports` (sonnet's round one carried an extra hedge token, so strict equality discarded a sound control).
+2. Sensitivity warning, not changed: in the pilot sonnet caught the plant under BOTH the production and the broken (red) second-turn prompt, because a strong reader compares the visible claim with the artifacts regardless of the paragraph; kimi caught it only under the production prompt. If this repeats in the main run, gate 4 fails for sonnet and the registered outcome is NO-VERDICT (INSTRUMENT-INVALID), not a rerun.
+3. Pilot cost/time: 11 rail calls, about 58 KB of prompt plus output, minutes of wall time; cost-proxy ratio about 1.8 (below the 2.0 gate).
+
+`prereg.json` is re-hashed in the same commit.
+
+Pilot v1 cells and score are kept under `pilot/` (produced with the amendment-1 predicates; amendment 2 only widens control validity, so `pilot/score.json` still lists the sonnet control as excluded).

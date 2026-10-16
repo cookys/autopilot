@@ -24,7 +24,7 @@ ok(!P.caught(C, { position: 'qa claim contradicts the data', anchors: ['artifact
 ok(!P.caught(K, { position: 'anything wrong', anchors: [] }), 'control case has no plant');
 // control
 ok(P.controlRound1Valid({ claim_vector: [corpus.CORRECT_TOKEN] }), 'control valid');
-ok(!P.controlRound1Valid({ claim_vector: [corpus.WRONG_TOKEN] }) && !P.controlRound1Valid({ claim_vector: [corpus.CORRECT_TOKEN, 'axis:reliability:needs-evidence'] }), 'control invalid variants');
+ok(!P.controlRound1Valid({ claim_vector: [corpus.WRONG_TOKEN] }) && P.controlRound1Valid({ claim_vector: [corpus.CORRECT_TOKEN, 'axis:reliability:needs-evidence'] }) && !P.controlRound1Valid({ claim_vector: [corpus.CORRECT_TOKEN, corpus.WRONG_TOKEN] }), 'control validity variants');
 ok(P.harmed({ claim_vector: [corpus.WRONG_TOKEN] }) && !P.harmed({ claim_vector: [corpus.CORRECT_TOKEN] }), 'harm predicate');
 ok(P.sameVector(['b', 'a'], ['a', 'b']) && !P.sameVector(['a'], ['a', 'b']), 'sameVector');
 console.log(`selftest ok (${n} assertions)`);

@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "pilot-plant-F-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-F-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "On reliability, the surface metrics look healthy — 412 tests passing with 87% coverage and p99 within budget at peak — but the two sev2 incidents last quarter both traced to retry storms, and the leader-election test documented in runbook v4 has never been executed. A scheduler change touching a component whose failover path is unverified, in a system with a demonstrated retry-storm failure mode, needs that leader-election test executed and the retry behavior under the new scheduler validated before reliability can be assessed as supporting.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3312,
+  "out_bytes": 811,
+  "red_applied": false
+ }
+}

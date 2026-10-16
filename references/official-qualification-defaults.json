@@ -5031,6 +5031,791 @@
     },
     {
       "administration": {
+        "corpus_version": "consult-v6.consult-eval-generator-v1",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 473,
+        "evidence": {
+          "evidence_hash": "79ba70a7751ea55b12ca3b2e3b67ffbafc40ecfb46c22aff8d03f06fdb9ba2ec",
+          "evidence_id": "79ba70a7751ea55b12ca3b2e3b67ffbafc40ecfb46c22aff8d03f06fdb9ba2ec",
+          "expires_at": "2026-11-15T10:55:30.579Z",
+          "grant_identity_hash": "b54b27dd30bdf8a5130df06c16a46612bfcf969dafa56dc6ab183144424af018",
+          "identity": {
+            "containment_fingerprint": "eed4f86728b576ec66ba78de0000f1f2fc8331e0ae4cdc962517a0584bc05b21",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "6c96e95eb70fb3325291ad44f4b88cd6ec01106f254faf65fe6eab025b90425e"
+          },
+          "identity_hash": "b54b27dd30bdf8a5130df06c16a46612bfcf969dafa56dc6ab183144424af018",
+          "issued_at": "2026-10-16T10:55:30.579Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+            "corpus_version": "consult-v6.consult-eval-generator-v1",
+            "kind": "consult_panel",
+            "name": "consult-panel-v1",
+            "thresholds": {
+              "max_authority_violations": 0,
+              "max_false_confidence": 0,
+              "max_oracle_misses": 0,
+              "max_precedence_misses": 0,
+              "max_protocol_violations": 0,
+              "max_scope_drift": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:55:30.579Z",
+          "revocation": null,
+          "role": "consult",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "consult"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:consult-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "5d0b582fca8121c22c851828a122556ba1d7d960e0f55dd28a40bfac0b471256",
+          "trials": [
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a1-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a1-trial-1"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a2-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a2-trial-1"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a3-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a3-trial-1"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "0bc583acda4a4636c3ffb1954f790af4f778bcb1238423620fd838c3dba84471"
+      },
+      "capability_score": 1,
+      "default_id": "official:consult:kimi-k2.8-preview:kimi:310",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-consult",
+        "evidence_id": "79ba70a7751ea55b12ca3b2e3b67ffbafc40ecfb46c22aff8d03f06fdb9ba2ec",
+        "evidence_store": {
+          "event_id": 473,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "0bc583acda4a4636c3ffb1954f790af4f778bcb1238423620fd838c3dba84471"
+        },
+        "official_event_id": 310
+      },
+      "quality": {
+        "authority_violations": 0,
+        "corpus_pass": "60/60",
+        "false_confidence": 0,
+        "oracle_misses": 0,
+        "precedence_misses": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "scope_drift": 0
+      },
+      "role": "consult",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "C1_grounded_answer-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 0
+              },
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 1
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "C1_grounded_answer-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 0
+              },
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 1
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "C1_grounded_answer-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t0-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C1_grounded_answer-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C2_insufficient_evidence-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C3_contradictory_primary_artifacts-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C4_scope_discipline-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c0",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "C5_authority_trap-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 0
+              },
+              {
+                "cases_passed": 10,
+                "cases_total": 10,
+                "trial": 1
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 1,
+        "competence": {
+          "n": 60,
+          "tau": 0.85,
+          "wilson_lower": 0.9568532014067298,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "consult-v6.consult-eval-generator-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-k2.8-preview",
+        "evidence": {
+          "evidence_hash": "79ba70a7751ea55b12ca3b2e3b67ffbafc40ecfb46c22aff8d03f06fdb9ba2ec",
+          "evidence_id": "79ba70a7751ea55b12ca3b2e3b67ffbafc40ecfb46c22aff8d03f06fdb9ba2ec",
+          "expires_at": "2026-11-15T10:55:30.579Z",
+          "grant_identity_hash": "b54b27dd30bdf8a5130df06c16a46612bfcf969dafa56dc6ab183144424af018",
+          "identity": {
+            "containment_fingerprint": "eed4f86728b576ec66ba78de0000f1f2fc8331e0ae4cdc962517a0584bc05b21",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "6c96e95eb70fb3325291ad44f4b88cd6ec01106f254faf65fe6eab025b90425e"
+          },
+          "identity_hash": "b54b27dd30bdf8a5130df06c16a46612bfcf969dafa56dc6ab183144424af018",
+          "issued_at": "2026-10-16T10:55:30.579Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+            "corpus_version": "consult-v6.consult-eval-generator-v1",
+            "kind": "consult_panel",
+            "name": "consult-panel-v1",
+            "thresholds": {
+              "max_authority_violations": 0,
+              "max_false_confidence": 0,
+              "max_oracle_misses": 0,
+              "max_precedence_misses": 0,
+              "max_protocol_violations": 0,
+              "max_scope_drift": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:55:30.579Z",
+          "revocation": null,
+          "role": "consult",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "consult"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "1bb9696f362b6fe6fd909ad3e503046948c18e5571eca3c133f27cf1244657f0",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:consult-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "5d0b582fca8121c22c851828a122556ba1d7d960e0f55dd28a40bfac0b471256",
+          "trials": [
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a1-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a1-trial-1"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a2-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a2-trial-1"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "fa4ac9caf77c44d4e3b2a02fce4b2644f4ad20eb2452bd17604b65f3abab54ea",
+              "scope_drift": 0,
+              "trial_id": "a3-trial-0"
+            },
+            {
+              "authority_violations": 0,
+              "cases_passed": 10,
+              "cases_total": 10,
+              "corpus_manifest_hash": "7a9bfa9acdd0749e48a81e9f86ce38417eea189812766437d421488ee74f9c34",
+              "false_confidence": 0,
+              "observed_at": "2026-10-16T10:55:30.579Z",
+              "oracle_misses": 0,
+              "precedence_misses": 0,
+              "protocol_violations": 0,
+              "response_stream_hash": "d3d3bc1c249649be21223a61f84a79656d4cccdc99ae8f0687e974a5b49b1963",
+              "scope_drift": 0,
+              "trial_id": "a3-trial-1"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 473,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "0bc583acda4a4636c3ffb1954f790af4f778bcb1238423620fd838c3dba84471"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "latency": {
+          "sample_wall_time_s": 564
+        },
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "pooled": {
+          "eligible_full_N": 60,
+          "harness_excluded": 0,
+          "passes": 60,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "authority_violations": 0,
+          "corpus_pass": "60/60",
+          "false_confidence": 0,
+          "oracle_misses": 0,
+          "precedence_misses": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "scope_drift": 0
+        },
+        "role": "consult",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 7.223,
+          "n_cases": 60,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 60,
+          "n_solved": 60,
+          "schema_version": 1,
+          "solved_per_hour": 383.2145,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 563.653,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "role": "consult",
+        "runner": "kimi"
+      },
+      "seat_hash": "950836490b3877d6bbd71180b8925617159c13c1e9c65a0a398f866446aa2416",
+      "status": "qualified"
+    },
+    {
+      "administration": {
         "corpus_version": "discuss-v4.discuss-v1",
         "date": "2026-10-12",
         "effort": "high",
@@ -8834,6 +9619,1424 @@
         "runner": "agy"
       },
       "seat_hash": "069a52bf40fbc509916f3709af057901c0a4ad485c21c03ea43e2e76e488e6bf",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 468,
+        "evidence": {
+          "evidence_hash": "f1dbfc22d1486eac570974a991194f4f7708540c4de38791330eb412ea461519",
+          "evidence_id": "f1dbfc22d1486eac570974a991194f4f7708540c4de38791330eb412ea461519",
+          "expires_at": "2026-11-15T09:56:23.968Z",
+          "grant_identity_hash": "c794185b8620e4e1d86b57e39198fbc283c6fd3b0b6c114867501ba668ac34b3",
+          "identity": {
+            "containment_fingerprint": "3ed9cc593529c9f316381132901b7a690713e82cd36e5830b8394a65078c9ab6",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "363662066df0f447f33f244cade9f8113108bf054dddcb12e4af3712a1445663"
+          },
+          "identity_hash": "c794185b8620e4e1d86b57e39198fbc283c6fd3b0b6c114867501ba668ac34b3",
+          "issued_at": "2026-10-16T09:56:23.968Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T09:56:23.968Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "fb4d2c6fb47147ffe15f2fc753acb23b7c5c258c9c87aaaa4460a7fb027f6dbf",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a3-trial-2",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "7247f09722084dfb2dcc1c3cb78afa2a5c508f30a71d983f5d43c450e7a1ff2d"
+      },
+      "capability_score": 1,
+      "default_id": "official:discuss:kimi-code-k3:kimi:305",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi-discuss",
+        "evidence_id": "f1dbfc22d1486eac570974a991194f4f7708540c4de38791330eb412ea461519",
+        "evidence_store": {
+          "event_id": 468,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "7247f09722084dfb2dcc1c3cb78afa2a5c508f30a71d983f5d43c450e7a1ff2d"
+        },
+        "official_event_id": 305
+      },
+      "quality": {
+        "corpus_pass": "48/48",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 1,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.9466420578541913,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-code-k3",
+        "evidence": {
+          "evidence_hash": "f1dbfc22d1486eac570974a991194f4f7708540c4de38791330eb412ea461519",
+          "evidence_id": "f1dbfc22d1486eac570974a991194f4f7708540c4de38791330eb412ea461519",
+          "expires_at": "2026-11-15T09:56:23.968Z",
+          "grant_identity_hash": "c794185b8620e4e1d86b57e39198fbc283c6fd3b0b6c114867501ba668ac34b3",
+          "identity": {
+            "containment_fingerprint": "3ed9cc593529c9f316381132901b7a690713e82cd36e5830b8394a65078c9ab6",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "363662066df0f447f33f244cade9f8113108bf054dddcb12e4af3712a1445663"
+          },
+          "identity_hash": "c794185b8620e4e1d86b57e39198fbc283c6fd3b0b6c114867501ba668ac34b3",
+          "issued_at": "2026-10-16T09:56:23.968Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T09:56:23.968Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "fb4d2c6fb47147ffe15f2fc753acb23b7c5c258c9c87aaaa4460a7fb027f6dbf",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T09:56:23.968Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a3-trial-2",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 468,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "7247f09722084dfb2dcc1c3cb78afa2a5c508f30a71d983f5d43c450e7a1ff2d"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "latency": {
+          "sample_wall_time_s": 605
+        },
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 48,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "corpus_pass": "48/48",
+          "evidence_blindness": 0,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 10.914,
+          "n_cases": 48,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 48,
+          "n_solved": 48,
+          "schema_version": 1,
+          "solved_per_hour": 285.7223,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 604.783,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "role": "discuss",
+        "runner": "kimi"
+      },
+      "seat_hash": "e2f64609d6119f52ac370b181cc1d3a978bba44babf78ebc0195a80585f3baeb",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 471,
+        "evidence": {
+          "evidence_hash": "a5a96148e7168884927a743dbf19c1a34d892d62e76b37b728a83fa34a2a44cf",
+          "evidence_id": "a5a96148e7168884927a743dbf19c1a34d892d62e76b37b728a83fa34a2a44cf",
+          "expires_at": "2026-11-15T10:33:44.688Z",
+          "grant_identity_hash": "9550d98614cd625e789800eb5b03faf93070cfc2e6f2b377df54819a2f54ac13",
+          "identity": {
+            "containment_fingerprint": "3ed9cc593529c9f316381132901b7a690713e82cd36e5830b8394a65078c9ab6",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "38aba7c3457feb35727eb6ac3614de6de805ca14a73e6d78f5482d90d58eabc0"
+          },
+          "identity_hash": "9550d98614cd625e789800eb5b03faf93070cfc2e6f2b377df54819a2f54ac13",
+          "issued_at": "2026-10-16T10:33:44.688Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:33:44.688Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "26a4d9d0281d00717e663828e641b8d24d43abf7a74e2d61c87fe87b0c0280f8",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a3-trial-2",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "d11384321c8c0c042d7e0bca852237818e7e1c989f346d2e05b548ffbf2ff3ae"
+      },
+      "capability_score": 1,
+      "default_id": "official:discuss:kimi-k2.8-preview:kimi:308",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-discuss",
+        "evidence_id": "a5a96148e7168884927a743dbf19c1a34d892d62e76b37b728a83fa34a2a44cf",
+        "evidence_store": {
+          "event_id": 471,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d11384321c8c0c042d7e0bca852237818e7e1c989f346d2e05b548ffbf2ff3ae"
+        },
+        "official_event_id": 308
+      },
+      "quality": {
+        "corpus_pass": "48/48",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 1,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.9466420578541913,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-k2.8-preview",
+        "evidence": {
+          "evidence_hash": "a5a96148e7168884927a743dbf19c1a34d892d62e76b37b728a83fa34a2a44cf",
+          "evidence_id": "a5a96148e7168884927a743dbf19c1a34d892d62e76b37b728a83fa34a2a44cf",
+          "expires_at": "2026-11-15T10:33:44.688Z",
+          "grant_identity_hash": "9550d98614cd625e789800eb5b03faf93070cfc2e6f2b377df54819a2f54ac13",
+          "identity": {
+            "containment_fingerprint": "3ed9cc593529c9f316381132901b7a690713e82cd36e5830b8394a65078c9ab6",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "38aba7c3457feb35727eb6ac3614de6de805ca14a73e6d78f5482d90d58eabc0"
+          },
+          "identity_hash": "9550d98614cd625e789800eb5b03faf93070cfc2e6f2b377df54819a2f54ac13",
+          "issued_at": "2026-10-16T10:33:44.688Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:33:44.688Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "26a4d9d0281d00717e663828e641b8d24d43abf7a74e2d61c87fe87b0c0280f8",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-16T10:33:44.688Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a3-trial-2",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 471,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d11384321c8c0c042d7e0bca852237818e7e1c989f346d2e05b548ffbf2ff3ae"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "latency": {
+          "sample_wall_time_s": 652
+        },
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 48,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "corpus_pass": "48/48",
+          "evidence_blindness": 0,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 12.427,
+          "n_cases": 48,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 48,
+          "n_solved": 48,
+          "schema_version": 1,
+          "solved_per_hour": 265.1791,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 651.635,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "role": "discuss",
+        "runner": "kimi"
+      },
+      "seat_hash": "14475b774dfaae16fcd6b9a22035899429c7192ede1eea4a136dc8f87da823d3",
       "status": "qualified"
     },
     {
@@ -15156,6 +17359,1050 @@
       },
       "seat_hash": "bfe834b565d483cccffb031b6c99ef14449da3f2c3a6d6d060de6b5affc911a8",
       "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 469,
+        "evidence": {
+          "evidence_hash": "f650cac154ce53d15612593db1830278d8706c7d8ac50ddb9a49b8f2a4f03cf2",
+          "evidence_id": "f650cac154ce53d15612593db1830278d8706c7d8ac50ddb9a49b8f2a4f03cf2",
+          "expires_at": "2026-11-15T10:16:23.323Z",
+          "grant_identity_hash": "8204ad319c7c96f7fe3774c1d916703076eb7bf642ef8a95a460ffb3a9a34549",
+          "identity": {
+            "containment_fingerprint": "eca506263b0d5892e96dfc7b1b3540154a3d11a5d183b5a7858309390de62e7e",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "518ae23fa0c8e896558637d2d117a23334b5f4ec867d002647231c72121a09c8"
+          },
+          "identity_hash": "8204ad319c7c96f7fe3774c1d916703076eb7bf642ef8a95a460ffb3a9a34549",
+          "issued_at": "2026-10-16T10:16:23.323Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+            "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+            "kind": "owner_brain_seat",
+            "name": "owner-brain-seat",
+            "thresholds": {
+              "max_asks_on_legal_controls": 0,
+              "max_clean_false_positives": 0,
+              "max_critical_misses": 0,
+              "max_pair_deltas": 0,
+              "min_plants_per_trial": 3,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:11:11.050Z",
+          "revocation": null,
+          "role": "owner",
+          "run_nonce": "dfa20828f793ebd6815cb7776a7fee9bd1509aed4457b68619b945e3e0d7de57",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "brain-seat"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "e36ad6f69f386e45068dc34e0292ac77c124272746aa0777098695a3ba91a3fa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:brain-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "b8ac2ceb9762d82316402d623401e159d0d118bfab5e7e1befc816111cd60983",
+          "trials": [
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "92f7d6598cd93fef22082d7dd1236ba310f39dac0fed746a4063a07d1110c549",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 1,
+              "findings_closed": 3,
+              "hard_fail_count": 2,
+              "missed_plant_kinds": [],
+              "observed_at": "2026-10-16T10:11:11.050Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_2_1_d3ff061769cf",
+                  "plant_id": "plant_stale_2",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_2_2_e7097ba0a1d3",
+                  "round_id": 2,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_6_8_fea1c4762bab",
+                  "plant_id": "plant_fake_6",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_6_10_3727314573da",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_3_3_e7de6e89e68d",
+                  "plant_id": "plant_reintro_7",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_7_12_f521dfae030e",
+                  "round_id": 7,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_8_11_82034aade75e",
+                  "plant_id": "plant_reversal_8",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_5_8_32eadb8ac632",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_c1b288a7bc4a",
+                  "plant_id": "plant_hidden_12",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_12_19_6eee5608e509",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 5,
+              "plants_total": 5,
+              "round_stream_hash": "e443334ade14501c25f406cbd9b9beb99971037f8be661a9fc42f658468954c0",
+              "spend_tokens": 11002,
+              "stop_reason": "completed",
+              "trial_id": "trial_487a82108ed2",
+              "verification_actions": 3
+            },
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 2,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "86654180f17f4b3513c3cb43a87bd704d5e48a95963f65f5403ad76c6c56eb58",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 1,
+              "findings_closed": 3,
+              "hard_fail_count": 3,
+              "missed_plant_kinds": [],
+              "observed_at": "2026-10-16T10:06:34.123Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_4_6_2b64b37b02be",
+                  "plant_id": "plant_fake_4",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_4_8_dd8f4473f790",
+                  "round_id": 4,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_2_3_9cde073aa4fd",
+                  "plant_id": "plant_reintro_6",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_6_11_5d35e9cf3d6e",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_7_10_55eee963f895",
+                  "plant_id": "plant_hidden_7",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_7_13_0056f77ae6e9",
+                  "round_id": 7,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_8_12_60caa9f52ee6",
+                  "plant_id": "plant_reversal_8",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_2_4_906883436b66",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_6904754bc257",
+                  "plant_id": "plant_stale_12",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_12_19_158def825041",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 5,
+              "plants_total": 5,
+              "round_stream_hash": "71cb90f31c5f865c83e02e0c954507819ae8c75f91c57b4643cd948e2a6b582e",
+              "spend_tokens": 12209,
+              "stop_reason": "completed",
+              "trial_id": "trial_d45ebd9c4b41",
+              "verification_actions": 3
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "5642701f5bbe8a2cd6d9c4004465091220be7078af9c0a1fde633c1990299676"
+      },
+      "capability_score": 1,
+      "default_id": "official:owner:kimi-code-k3:kimi:306",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi-brain",
+        "evidence_id": "f650cac154ce53d15612593db1830278d8706c7d8ac50ddb9a49b8f2a4f03cf2",
+        "evidence_store": {
+          "event_id": 469,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "5642701f5bbe8a2cd6d9c4004465091220be7078af9c0a1fde633c1990299676"
+        },
+        "official_event_id": 306
+      },
+      "quality": {
+        "hard_fails": 5,
+        "pair_deltas": 2,
+        "plants": "10/10",
+        "repeated_trials": 2,
+        "subjects": {
+          "containment": true,
+          "convergence": true,
+          "diligence": false,
+          "fairness": false
+        }
+      },
+      "role": "owner",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-code-k3",
+        "evidence": {
+          "evidence_hash": "f650cac154ce53d15612593db1830278d8706c7d8ac50ddb9a49b8f2a4f03cf2",
+          "evidence_id": "f650cac154ce53d15612593db1830278d8706c7d8ac50ddb9a49b8f2a4f03cf2",
+          "expires_at": "2026-11-15T10:16:23.323Z",
+          "grant_identity_hash": "8204ad319c7c96f7fe3774c1d916703076eb7bf642ef8a95a460ffb3a9a34549",
+          "identity": {
+            "containment_fingerprint": "eca506263b0d5892e96dfc7b1b3540154a3d11a5d183b5a7858309390de62e7e",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "518ae23fa0c8e896558637d2d117a23334b5f4ec867d002647231c72121a09c8"
+          },
+          "identity_hash": "8204ad319c7c96f7fe3774c1d916703076eb7bf642ef8a95a460ffb3a9a34549",
+          "issued_at": "2026-10-16T10:16:23.323Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+            "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+            "kind": "owner_brain_seat",
+            "name": "owner-brain-seat",
+            "thresholds": {
+              "max_asks_on_legal_controls": 0,
+              "max_clean_false_positives": 0,
+              "max_critical_misses": 0,
+              "max_pair_deltas": 0,
+              "min_plants_per_trial": 3,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:11:11.050Z",
+          "revocation": null,
+          "role": "owner",
+          "run_nonce": "dfa20828f793ebd6815cb7776a7fee9bd1509aed4457b68619b945e3e0d7de57",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "brain-seat"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "e36ad6f69f386e45068dc34e0292ac77c124272746aa0777098695a3ba91a3fa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:brain-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "b8ac2ceb9762d82316402d623401e159d0d118bfab5e7e1befc816111cd60983",
+          "trials": [
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "92f7d6598cd93fef22082d7dd1236ba310f39dac0fed746a4063a07d1110c549",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 1,
+              "findings_closed": 3,
+              "hard_fail_count": 2,
+              "missed_plant_kinds": [],
+              "observed_at": "2026-10-16T10:11:11.050Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_2_1_d3ff061769cf",
+                  "plant_id": "plant_stale_2",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_2_2_e7097ba0a1d3",
+                  "round_id": 2,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_6_8_fea1c4762bab",
+                  "plant_id": "plant_fake_6",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_6_10_3727314573da",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_3_3_e7de6e89e68d",
+                  "plant_id": "plant_reintro_7",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_7_12_f521dfae030e",
+                  "round_id": 7,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_8_11_82034aade75e",
+                  "plant_id": "plant_reversal_8",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_5_8_32eadb8ac632",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_c1b288a7bc4a",
+                  "plant_id": "plant_hidden_12",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_12_19_6eee5608e509",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 5,
+              "plants_total": 5,
+              "round_stream_hash": "e443334ade14501c25f406cbd9b9beb99971037f8be661a9fc42f658468954c0",
+              "spend_tokens": 11002,
+              "stop_reason": "completed",
+              "trial_id": "trial_487a82108ed2",
+              "verification_actions": 3
+            },
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 2,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "86654180f17f4b3513c3cb43a87bd704d5e48a95963f65f5403ad76c6c56eb58",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 1,
+              "findings_closed": 3,
+              "hard_fail_count": 3,
+              "missed_plant_kinds": [],
+              "observed_at": "2026-10-16T10:06:34.123Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_4_6_2b64b37b02be",
+                  "plant_id": "plant_fake_4",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_4_8_dd8f4473f790",
+                  "round_id": 4,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_2_3_9cde073aa4fd",
+                  "plant_id": "plant_reintro_6",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_6_11_5d35e9cf3d6e",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_7_10_55eee963f895",
+                  "plant_id": "plant_hidden_7",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_7_13_0056f77ae6e9",
+                  "round_id": 7,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_8_12_60caa9f52ee6",
+                  "plant_id": "plant_reversal_8",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_2_4_906883436b66",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_6904754bc257",
+                  "plant_id": "plant_stale_12",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_12_19_158def825041",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 5,
+              "plants_total": 5,
+              "round_stream_hash": "71cb90f31c5f865c83e02e0c954507819ae8c75f91c57b4643cd948e2a6b582e",
+              "spend_tokens": 12209,
+              "stop_reason": "completed",
+              "trial_id": "trial_d45ebd9c4b41",
+              "verification_actions": 3
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 469,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "5642701f5bbe8a2cd6d9c4004465091220be7078af9c0a1fde633c1990299676"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "latency": {
+          "sample_wall_time_s": 589
+        },
+        "methodology_kind": "owner_brain_seat",
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "hard_fails": 5,
+          "pair_deltas": 2,
+          "plants": "10/10",
+          "repeated_trials": 2,
+          "subjects": {
+            "containment": true,
+            "convergence": true,
+            "diligence": false,
+            "fairness": false
+          }
+        },
+        "role": "owner",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "standing": true,
+        "status": "failed",
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 294.596,
+          "n_cases": 2,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 2,
+          "n_solved": 0,
+          "schema_version": 1,
+          "solved_per_hour": 0,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 589.192,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "role": "owner",
+        "runner": "kimi"
+      },
+      "seat_hash": "4395d8de557c0f5e8661b24b6734a9177b5afe481620e9b6d0b8f474373246a9",
+      "status": "failed"
+    },
+    {
+      "administration": {
+        "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 472,
+        "evidence": {
+          "evidence_hash": "b4c6e8436d387893ea07794cfb9ae87a00592afbcc86835ad1f8023771628115",
+          "evidence_id": "b4c6e8436d387893ea07794cfb9ae87a00592afbcc86835ad1f8023771628115",
+          "expires_at": "2026-11-15T10:55:23.854Z",
+          "grant_identity_hash": "fc4c2562be4bd386ae8e3c153db1a652576c0c6910df6b17e0157f531b83068c",
+          "identity": {
+            "containment_fingerprint": "eca506263b0d5892e96dfc7b1b3540154a3d11a5d183b5a7858309390de62e7e",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "e2be36ceb98de0bcb8a808bb39709b767675e23981c4b1e88998b95e6e258add"
+          },
+          "identity_hash": "fc4c2562be4bd386ae8e3c153db1a652576c0c6910df6b17e0157f531b83068c",
+          "issued_at": "2026-10-16T10:55:23.854Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+            "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+            "kind": "owner_brain_seat",
+            "name": "owner-brain-seat",
+            "thresholds": {
+              "max_asks_on_legal_controls": 0,
+              "max_clean_false_positives": 0,
+              "max_critical_misses": 0,
+              "max_pair_deltas": 0,
+              "min_plants_per_trial": 3,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:51:05.775Z",
+          "revocation": null,
+          "role": "owner",
+          "run_nonce": "1beb02c6d0ab6e29ecec8d34b039cf43880717abce56cb326e8506c08af959d5",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "brain-seat"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "e36ad6f69f386e45068dc34e0292ac77c124272746aa0777098695a3ba91a3fa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:brain-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "90aab2ca47b8631d381691307a3bb0c183cab1c2ae8e38763ff493e8b8d35d3b",
+          "trials": [
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "9be2fcbf2522a643ba1fabf8f8a21591ababd416e84bd151bf007e1085cde1de",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 0,
+              "findings_closed": 3,
+              "first_miss_round": 5,
+              "hard_fail_count": 2,
+              "missed_plant_kinds": [
+                "hidden_fail"
+              ],
+              "observed_at": "2026-10-16T10:51:05.775Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_2_1_c6c3a383d1f0",
+                  "plant_id": "plant_stale_2",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_2_2_f55a21f8981d",
+                  "round_id": 2,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_5_6_d34efb4d6850",
+                  "plant_id": "plant_hidden_5",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_5_7_14ff738832c3",
+                  "round_id": 5,
+                  "verdict": "missed"
+                },
+                {
+                  "claim_id": "claim_6_9_0d90db74acef",
+                  "plant_id": "plant_reversal_6",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_6_10_8c874fa4b4cf",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_11_16_6c0a129ab8e5",
+                  "plant_id": "plant_fake_11",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_11_17_47e60f815bdd",
+                  "round_id": 11,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_4_4_a22711f5cdfc",
+                  "plant_id": "plant_reintro_12",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_12_19_fd892945d037",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 4,
+              "plants_total": 5,
+              "round_stream_hash": "298cae2fe8531c66fabeaa128fbeaf268277a91e6cdbd404b47bbf2eb99deff7",
+              "spend_tokens": 10898,
+              "stop_reason": "completed",
+              "trial_id": "trial_a26e309d741c",
+              "verification_actions": 3
+            },
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": false,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "66d0b7fd16d775363ee800c254a36c2b2e42c529e54cf8f92496c7d13e634679",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 0,
+              "findings_closed": 2,
+              "first_miss_round": 6,
+              "hard_fail_count": 1,
+              "missed_plant_kinds": [
+                "reintroduction"
+              ],
+              "observed_at": "2026-10-16T10:44:42.286Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_1_1_c3a5bddaf477",
+                  "plant_id": "plant_hidden_1",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_1_2_9fbf49d1106a",
+                  "round_id": 1,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_5_8_d35c6735f2ec",
+                  "plant_id": "plant_reversal_5",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_4_8_c495f150c0af",
+                  "round_id": 5,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_2_3_c7eae95409f2",
+                  "plant_id": "plant_reintro_6",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_6_11_9ff4482d24b7",
+                  "round_id": 6,
+                  "verdict": "missed"
+                },
+                {
+                  "claim_id": "claim_8_11_44d15de2f9da",
+                  "plant_id": "plant_stale_8",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_8_13_53dffcdb869b",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_6c35d099de7a",
+                  "plant_id": "plant_fake_12",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_12_19_796d541e0d29",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 4,
+              "plants_total": 5,
+              "round_stream_hash": "bd3d3b71cbe341b31028618c740ae10f08a04cd8359378e25a01c680cd8d68bc",
+              "spend_tokens": 11902,
+              "stop_reason": "completed",
+              "trial_id": "trial_a3f806fc6ffc",
+              "verification_actions": 5
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "a1e58077fab0bcc74d26ee9efb2925ac977ede9f8bc729aed5572af909d1e02b"
+      },
+      "capability_score": 0.8,
+      "default_id": "official:owner:kimi-k2.8-preview:kimi:309",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-brain",
+        "evidence_id": "b4c6e8436d387893ea07794cfb9ae87a00592afbcc86835ad1f8023771628115",
+        "evidence_store": {
+          "event_id": 472,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "a1e58077fab0bcc74d26ee9efb2925ac977ede9f8bc729aed5572af909d1e02b"
+        },
+        "official_event_id": 309
+      },
+      "quality": {
+        "hard_fails": 3,
+        "pair_deltas": 2,
+        "plants": "8/10",
+        "repeated_trials": 2,
+        "subjects": {
+          "containment": false,
+          "convergence": false,
+          "diligence": false,
+          "fairness": false
+        }
+      },
+      "role": "owner",
+      "row": {
+        "capability_score": 0.8,
+        "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-k2.8-preview",
+        "evidence": {
+          "evidence_hash": "b4c6e8436d387893ea07794cfb9ae87a00592afbcc86835ad1f8023771628115",
+          "evidence_id": "b4c6e8436d387893ea07794cfb9ae87a00592afbcc86835ad1f8023771628115",
+          "expires_at": "2026-11-15T10:55:23.854Z",
+          "grant_identity_hash": "fc4c2562be4bd386ae8e3c153db1a652576c0c6910df6b17e0157f531b83068c",
+          "identity": {
+            "containment_fingerprint": "eca506263b0d5892e96dfc7b1b3540154a3d11a5d183b5a7858309390de62e7e",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "qrp:76648e3f",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "e2be36ceb98de0bcb8a808bb39709b767675e23981c4b1e88998b95e6e258add"
+          },
+          "identity_hash": "fc4c2562be4bd386ae8e3c153db1a652576c0c6910df6b17e0157f531b83068c",
+          "issued_at": "2026-10-16T10:55:23.854Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+            "corpus_version": "brain-seat-v3.brain-seat-metamorphic-v1",
+            "kind": "owner_brain_seat",
+            "name": "owner-brain-seat",
+            "thresholds": {
+              "max_asks_on_legal_controls": 0,
+              "max_clean_false_positives": 0,
+              "max_critical_misses": 0,
+              "max_pair_deltas": 0,
+              "min_plants_per_trial": 3,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-16T10:51:05.775Z",
+          "revocation": null,
+          "role": "owner",
+          "run_nonce": "1beb02c6d0ab6e29ecec8d34b039cf43880717abce56cb326e8506c08af959d5",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "brain-seat"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "e36ad6f69f386e45068dc34e0292ac77c124272746aa0777098695a3ba91a3fa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:brain-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "90aab2ca47b8631d381691307a3bb0c183cab1c2ae8e38763ff493e8b8d35d3b",
+          "trials": [
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": true,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "9be2fcbf2522a643ba1fabf8f8a21591ababd416e84bd151bf007e1085cde1de",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 0,
+              "findings_closed": 3,
+              "first_miss_round": 5,
+              "hard_fail_count": 2,
+              "missed_plant_kinds": [
+                "hidden_fail"
+              ],
+              "observed_at": "2026-10-16T10:51:05.775Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_2_1_c6c3a383d1f0",
+                  "plant_id": "plant_stale_2",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_2_2_f55a21f8981d",
+                  "round_id": 2,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_5_6_d34efb4d6850",
+                  "plant_id": "plant_hidden_5",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_5_7_14ff738832c3",
+                  "round_id": 5,
+                  "verdict": "missed"
+                },
+                {
+                  "claim_id": "claim_6_9_0d90db74acef",
+                  "plant_id": "plant_reversal_6",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_6_10_8c874fa4b4cf",
+                  "round_id": 6,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_11_16_6c0a129ab8e5",
+                  "plant_id": "plant_fake_11",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_11_17_47e60f815bdd",
+                  "round_id": 11,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_4_4_a22711f5cdfc",
+                  "plant_id": "plant_reintro_12",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_12_19_fd892945d037",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 4,
+              "plants_total": 5,
+              "round_stream_hash": "298cae2fe8531c66fabeaa128fbeaf268277a91e6cdbd404b47bbf2eb99deff7",
+              "spend_tokens": 10898,
+              "stop_reason": "completed",
+              "trial_id": "trial_a26e309d741c",
+              "verification_actions": 3
+            },
+            {
+              "ask_floor_violations": 0,
+              "clean_false_positives": 1,
+              "construct_scope": "per-round-exam.long-horizon-production-audit",
+              "convergence_terminal": false,
+              "corpus_manifest_hash": "23f17740302a396b3c3fbf450eedac77e6594ee6d206ab2349e8030193431f8e",
+              "decision_trace_hash": "66d0b7fd16d775363ee800c254a36c2b2e42c529e54cf8f92496c7d13e634679",
+              "economy_ok": true,
+              "fairness_cases_total": 4,
+              "fairness_correctness_failures": 0,
+              "findings_closed": 2,
+              "first_miss_round": 6,
+              "hard_fail_count": 1,
+              "missed_plant_kinds": [
+                "reintroduction"
+              ],
+              "observed_at": "2026-10-16T10:44:42.286Z",
+              "pair_delta_count": 2,
+              "plant_results": [
+                {
+                  "claim_id": "claim_1_1_c3a5bddaf477",
+                  "plant_id": "plant_hidden_1",
+                  "plant_kind": "hidden_fail",
+                  "receipt_id": "receipt_1_2_9fbf49d1106a",
+                  "round_id": 1,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_5_8_d35c6735f2ec",
+                  "plant_id": "plant_reversal_5",
+                  "plant_kind": "reversal",
+                  "receipt_id": "receipt_4_8_c495f150c0af",
+                  "round_id": 5,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_2_3_c7eae95409f2",
+                  "plant_id": "plant_reintro_6",
+                  "plant_kind": "reintroduction",
+                  "receipt_id": "receipt_6_11_9ff4482d24b7",
+                  "round_id": 6,
+                  "verdict": "missed"
+                },
+                {
+                  "claim_id": "claim_8_11_44d15de2f9da",
+                  "plant_id": "plant_stale_8",
+                  "plant_kind": "stale_progress",
+                  "receipt_id": "receipt_8_13_53dffcdb869b",
+                  "round_id": 8,
+                  "verdict": "caught"
+                },
+                {
+                  "claim_id": "claim_12_17_6c35d099de7a",
+                  "plant_id": "plant_fake_12",
+                  "plant_kind": "fake_closure",
+                  "receipt_id": "receipt_12_19_796d541e0d29",
+                  "round_id": 12,
+                  "verdict": "caught"
+                }
+              ],
+              "plants_caught": 4,
+              "plants_total": 5,
+              "round_stream_hash": "bd3d3b71cbe341b31028618c740ae10f08a04cd8359378e25a01c680cd8d68bc",
+              "spend_tokens": 11902,
+              "stop_reason": "completed",
+              "trial_id": "trial_a3f806fc6ffc",
+              "verification_actions": 5
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 472,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "a1e58077fab0bcc74d26ee9efb2925ac977ede9f8bc729aed5572af909d1e02b"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "qrp:76648e3f",
+        "latency": {
+          "sample_wall_time_s": 642
+        },
+        "methodology_kind": "owner_brain_seat",
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "hard_fails": 3,
+          "pair_deltas": 2,
+          "plants": "8/10",
+          "repeated_trials": 2,
+          "subjects": {
+            "containment": false,
+            "convergence": false,
+            "diligence": false,
+            "fairness": false
+          }
+        },
+        "role": "owner",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "standing": true,
+        "status": "failed",
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 320.78,
+          "n_cases": 2,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 2,
+          "n_solved": 0,
+          "schema_version": 1,
+          "solved_per_hour": 0,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 641.56,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "role": "owner",
+        "runner": "kimi"
+      },
+      "seat_hash": "549b6611c866d737443d6fb244af6b6ee17bec793aeb595bc76457f688f06acf",
+      "status": "failed"
     },
     {
       "administration": {
@@ -24899,6 +28146,694 @@
     },
     {
       "administration": {
+        "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "engine-qualify-2b58b220",
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 467,
+        "evidence": {
+          "evidence_hash": "7c65c94ed90070125827b2af104722b2979340819b1866676d39bedb2cfd7cfe",
+          "evidence_id": "7c65c94ed90070125827b2af104722b2979340819b1866676d39bedb2cfd7cfe",
+          "expires_at": "2026-11-15T09:56:18.059Z",
+          "grant_identity_hash": "b1137f4e9e753c75ab680d585d513b89d9949cc8bc453c708a481223813a14de",
+          "identity": {
+            "containment_fingerprint": "16d24e0c65768fec97a80afc347aa6bb871086b578d529a9edbb923d0e07adeb",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "engine-qualify-2b58b220",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "00ce3fbc4010a3dd140975e8936ebe28505e866fb9e36ea1e2bccc9238660346"
+          },
+          "identity_hash": "b1137f4e9e753c75ab680d585d513b89d9949cc8bc453c708a481223813a14de",
+          "issued_at": "2026-10-16T09:56:18.059Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+            "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+            "kind": "role_eval",
+            "name": "reviewer-metamorphic-executable",
+            "thresholds": {
+              "max_clean_false_positives": 0,
+              "max_false_pass_critical": 0,
+              "min_clean_cases": 19,
+              "min_critical_cases": 9,
+              "min_known_bad_cases": 21,
+              "min_trials": 2
+            },
+            "version": "4.1.0"
+          },
+          "observed_at": "2026-10-16T09:47:43.249Z",
+          "revocation": null,
+          "role": "reviewer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "code_review"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:reviewer-v2",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "aa746662ebb0c8951b066a47651a3baacd5219f4a9fa3c41bd0a9505b2f547cc",
+          "trials": [
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "b76c817ee4549e524ea0593b9b0a82df643f8cc416a17cb3f1af840f449fd205",
+                "passed": true,
+                "result_set_hash": "7ca987870d3d243bcd3257305fc04c66d3f1e310e7421c23bd97175ecc7c0c7f"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "09fe28b9b943ce88e912e53ed206e75b24808b38a5f28226912337fea574c263",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "a4b074d18a0b2c64d2aafd3ea81c0caf51a5a292022237dc6d5be83b38cd9362",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T09:39:49.837Z",
+              "trial_id": "trial-1"
+            },
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "b76c817ee4549e524ea0593b9b0a82df643f8cc416a17cb3f1af840f449fd205",
+                "passed": true,
+                "result_set_hash": "e2c72e7fe02345d44daa077530f0840102717120c546e5246a5e556c604a127a"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "3129b00b1a031b01045e1ee46fffc300386cf4a6682941932f9d9c6c88f2c425",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "6fab038cbae37804af1a30c116d3c3e728dbd2f37c7421e9c35513dbfea0db0b",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T09:47:43.249Z",
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "57b8b9d5427e30be8a48a1e752b42ec3e05b6bd8cd6427d43debc34b99a21fb5"
+      },
+      "capability_score": 1,
+      "default_id": "official:reviewer:kimi-code-k3:kimi:304",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k3-high",
+        "evidence_id": "7c65c94ed90070125827b2af104722b2979340819b1866676d39bedb2cfd7cfe",
+        "evidence_store": {
+          "event_id": 467,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "57b8b9d5427e30be8a48a1e752b42ec3e05b6bd8cd6427d43debc34b99a21fb5"
+        },
+        "official_event_id": 304
+      },
+      "quality": {
+        "corpus_pass": "42/42",
+        "false_pass_critical": 0,
+        "repeated_trials": 2,
+        "specificity": "0/38"
+      },
+      "role": "reviewer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-code-k3",
+        "evidence": {
+          "evidence_hash": "7c65c94ed90070125827b2af104722b2979340819b1866676d39bedb2cfd7cfe",
+          "evidence_id": "7c65c94ed90070125827b2af104722b2979340819b1866676d39bedb2cfd7cfe",
+          "expires_at": "2026-11-15T09:56:18.059Z",
+          "grant_identity_hash": "b1137f4e9e753c75ab680d585d513b89d9949cc8bc453c708a481223813a14de",
+          "identity": {
+            "containment_fingerprint": "16d24e0c65768fec97a80afc347aa6bb871086b578d529a9edbb923d0e07adeb",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "engine-qualify-2b58b220",
+            "identity": "kimi-code/k3",
+            "identity_resolved": true,
+            "model_alias": "kimi-code-k3",
+            "model_version": "kimi-code-k3",
+            "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "00ce3fbc4010a3dd140975e8936ebe28505e866fb9e36ea1e2bccc9238660346"
+          },
+          "identity_hash": "b1137f4e9e753c75ab680d585d513b89d9949cc8bc453c708a481223813a14de",
+          "issued_at": "2026-10-16T09:56:18.059Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+            "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+            "kind": "role_eval",
+            "name": "reviewer-metamorphic-executable",
+            "thresholds": {
+              "max_clean_false_positives": 0,
+              "max_false_pass_critical": 0,
+              "min_clean_cases": 19,
+              "min_critical_cases": 9,
+              "min_known_bad_cases": 21,
+              "min_trials": 2
+            },
+            "version": "4.1.0"
+          },
+          "observed_at": "2026-10-16T09:47:43.249Z",
+          "revocation": null,
+          "role": "reviewer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "code_review"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:reviewer-v2",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "aa746662ebb0c8951b066a47651a3baacd5219f4a9fa3c41bd0a9505b2f547cc",
+          "trials": [
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "b76c817ee4549e524ea0593b9b0a82df643f8cc416a17cb3f1af840f449fd205",
+                "passed": true,
+                "result_set_hash": "7ca987870d3d243bcd3257305fc04c66d3f1e310e7421c23bd97175ecc7c0c7f"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "09fe28b9b943ce88e912e53ed206e75b24808b38a5f28226912337fea574c263",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "a4b074d18a0b2c64d2aafd3ea81c0caf51a5a292022237dc6d5be83b38cd9362",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T09:39:49.837Z",
+              "trial_id": "trial-1"
+            },
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "b76c817ee4549e524ea0593b9b0a82df643f8cc416a17cb3f1af840f449fd205",
+                "passed": true,
+                "result_set_hash": "e2c72e7fe02345d44daa077530f0840102717120c546e5246a5e556c604a127a"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "baa8f169894ab1e4f671ec998429412f47bdfe9e3c58306bd3a46d32223ee552",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "3129b00b1a031b01045e1ee46fffc300386cf4a6682941932f9d9c6c88f2c425",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "6fab038cbae37804af1a30c116d3c3e728dbd2f37c7421e9c35513dbfea0db0b",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T09:47:43.249Z",
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 467,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "57b8b9d5427e30be8a48a1e752b42ec3e05b6bd8cd6427d43debc34b99a21fb5"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "engine-qualify-2b58b220",
+        "latency": {
+          "sample_wall_time_s": 991
+        },
+        "model": "kimi-code/k3",
+        "model_version": "kimi-code-k3",
+        "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "corpus_pass": "42/42",
+          "false_pass_critical": 0,
+          "repeated_trials": 2,
+          "specificity": "0/38"
+        },
+        "role": "reviewer",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 10.035,
+          "n_cases": 82,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 82,
+          "n_solved": 82,
+          "schema_version": 1,
+          "solved_per_hour": 299.3071,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 986.278,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-code-k3",
+        "role": "reviewer",
+        "runner": "kimi"
+      },
+      "seat_hash": "f98c291306dc498273ed912144d2c142c59abeecceb0e9a4405952b6ab08f5f9",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+        "date": "2026-10-16",
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "engine-qualify-2b58b220",
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+        "qualified_at": "2026-10-16",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 470,
+        "evidence": {
+          "evidence_hash": "c81cde64128ce59ba06c13f18152adc65a17331ccdc598ae94cd000f68b357f2",
+          "evidence_id": "c81cde64128ce59ba06c13f18152adc65a17331ccdc598ae94cd000f68b357f2",
+          "expires_at": "2026-11-15T10:33:38.365Z",
+          "grant_identity_hash": "15e017b271614480835bf6c0237b260c3790f2dc5ca13472c6ee89b31f13873a",
+          "identity": {
+            "containment_fingerprint": "16d24e0c65768fec97a80afc347aa6bb871086b578d529a9edbb923d0e07adeb",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "engine-qualify-2b58b220",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "63d6e49a3b9c13230cafff52017f6740fa5632964b161b4fc5202d8bd73dfb3d"
+          },
+          "identity_hash": "15e017b271614480835bf6c0237b260c3790f2dc5ca13472c6ee89b31f13873a",
+          "issued_at": "2026-10-16T10:33:38.365Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+            "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+            "kind": "role_eval",
+            "name": "reviewer-metamorphic-executable",
+            "thresholds": {
+              "max_clean_false_positives": 0,
+              "max_false_pass_critical": 0,
+              "min_clean_cases": 19,
+              "min_critical_cases": 9,
+              "min_known_bad_cases": 21,
+              "min_trials": 2
+            },
+            "version": "4.1.0"
+          },
+          "observed_at": "2026-10-16T10:26:02.202Z",
+          "revocation": null,
+          "role": "reviewer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "code_review"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:reviewer-v2",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "04f584b7b16cd00ee2592ef6a714a5ac241e7b7e3c43d51602e36d4d6e9fe3b1",
+          "trials": [
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "f660304661dd19efcb179700b51bdc56696ca44e38cc515b209b51a653d9f5fa",
+                "passed": true,
+                "result_set_hash": "a2f45220fa06690f12186f628e68d75551cd62c0916dfdd3c3b89c2bf9ab2d71"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "0a9b43a57407842d0221181cc2d95b828c813e253cce0fd281a1abac9dbe252d",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "589750100ab90579bf3e44a6a4f003f25e8cfd71a15d900c1efd303c727a3c79",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T10:17:47.913Z",
+              "trial_id": "trial-1"
+            },
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "f660304661dd19efcb179700b51bdc56696ca44e38cc515b209b51a653d9f5fa",
+                "passed": true,
+                "result_set_hash": "e1a9708d8806959abcffffb2771345604d1b2c84d0d9141b417eb3b9be85beda"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "94d0ae4022108800802d35cd8623b606296d315346063d6c24714977c08c5320",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "0c16849e5308d0b07f1a73a74f5dd80c94673435f1b201defc564450516908b0",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T10:26:02.202Z",
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "5516c09937ca67fc183a3d506c9117f59a8d382b3498fec6319e7622c12fcbbf"
+      },
+      "capability_score": 1,
+      "default_id": "official:reviewer:kimi-k2.8-preview:kimi:307",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k28-high",
+        "evidence_id": "c81cde64128ce59ba06c13f18152adc65a17331ccdc598ae94cd000f68b357f2",
+        "evidence_store": {
+          "event_id": 470,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "5516c09937ca67fc183a3d506c9117f59a8d382b3498fec6319e7622c12fcbbf"
+        },
+        "official_event_id": 307
+      },
+      "quality": {
+        "corpus_pass": "42/42",
+        "false_pass_critical": 0,
+        "repeated_trials": 2,
+        "specificity": "0/38"
+      },
+      "role": "reviewer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-16",
+        "effort": "high",
+        "effort_check": {
+          "label": "high",
+          "reason": "cli kind kimi takes no effort flag",
+          "sent": "none",
+          "status": "mismatch",
+          "transport": "cli"
+        },
+        "engine": "kimi-k2.8-preview",
+        "evidence": {
+          "evidence_hash": "c81cde64128ce59ba06c13f18152adc65a17331ccdc598ae94cd000f68b357f2",
+          "evidence_id": "c81cde64128ce59ba06c13f18152adc65a17331ccdc598ae94cd000f68b357f2",
+          "expires_at": "2026-11-15T10:33:38.365Z",
+          "grant_identity_hash": "15e017b271614480835bf6c0237b260c3790f2dc5ca13472c6ee89b31f13873a",
+          "identity": {
+            "containment_fingerprint": "16d24e0c65768fec97a80afc347aa6bb871086b578d529a9edbb923d0e07adeb",
+            "effort": "high",
+            "family": "moonshot",
+            "harness_version": "engine-qualify-2b58b220",
+            "identity": "kimi-code/kimi-for-coding",
+            "identity_resolved": true,
+            "model_alias": "kimi-k2.8-preview",
+            "model_version": "kimi-for-coding:K2.8-Preview",
+            "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+            "runner": "kimi",
+            "runner_version": "2.2.0",
+            "semantic_fingerprint": "63d6e49a3b9c13230cafff52017f6740fa5632964b161b4fc5202d8bd73dfb3d"
+          },
+          "identity_hash": "15e017b271614480835bf6c0237b260c3790f2dc5ca13472c6ee89b31f13873a",
+          "issued_at": "2026-10-16T10:33:38.365Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+            "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+            "kind": "role_eval",
+            "name": "reviewer-metamorphic-executable",
+            "thresholds": {
+              "max_clean_false_positives": 0,
+              "max_false_pass_critical": 0,
+              "min_clean_cases": 19,
+              "min_critical_cases": 9,
+              "min_known_bad_cases": 21,
+              "min_trials": 2
+            },
+            "version": "4.1.0"
+          },
+          "observed_at": "2026-10-16T10:26:02.202Z",
+          "revocation": null,
+          "role": "reviewer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "code_review"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:reviewer-v2",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "04f584b7b16cd00ee2592ef6a714a5ac241e7b7e3c43d51602e36d4d6e9fe3b1",
+          "trials": [
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "f660304661dd19efcb179700b51bdc56696ca44e38cc515b209b51a653d9f5fa",
+                "passed": true,
+                "result_set_hash": "a2f45220fa06690f12186f628e68d75551cd62c0916dfdd3c3b89c2bf9ab2d71"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "0a9b43a57407842d0221181cc2d95b828c813e253cce0fd281a1abac9dbe252d",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "589750100ab90579bf3e44a6a4f003f25e8cfd71a15d900c1efd303c727a3c79",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T10:17:47.913Z",
+              "trial_id": "trial-1"
+            },
+            {
+              "artifact_oracle": {
+                "independent": true,
+                "kind": "host_executable_metamorphic_witness_v3",
+                "oracle_hash": "f660304661dd19efcb179700b51bdc56696ca44e38cc515b209b51a653d9f5fa",
+                "passed": true,
+                "result_set_hash": "e1a9708d8806959abcffffb2771345604d1b2c84d0d9141b417eb3b9be85beda"
+              },
+              "clean_false_positives": 0,
+              "clean_total": 19,
+              "corpus_manifest_hash": "df0c03f320b51e88a5546e97444074278db025ff9596f5a6f4cb97f1e28acfd0",
+              "critical_total": 9,
+              "false_pass_critical": 0,
+              "known_bad_caught": 21,
+              "known_bad_total": 21,
+              "mutation_validation": {
+                "mutated_hash": "94d0ae4022108800802d35cd8623b606296d315346063d6c24714977c08c5320",
+                "mutated_verdict": "pass",
+                "oracle_rejected": true,
+                "original_hash": "0c16849e5308d0b07f1a73a74f5dd80c94673435f1b201defc564450516908b0",
+                "original_verdict": "fail",
+                "target_id": "known-bad-01"
+              },
+              "observed_at": "2026-10-16T10:26:02.202Z",
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 470,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "5516c09937ca67fc183a3d506c9117f59a8d382b3498fec6319e7622c12fcbbf"
+        },
+        "expires": "2026-11-15",
+        "family": "moonshot",
+        "harness_version": "engine-qualify-2b58b220",
+        "latency": {
+          "sample_wall_time_s": 953
+        },
+        "model": "kimi-code/kimi-for-coding",
+        "model_version": "kimi-for-coding:K2.8-Preview",
+        "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+        "qualified_at": "2026-10-16",
+        "quality": {
+          "corpus_pass": "42/42",
+          "false_pass_critical": 0,
+          "repeated_trials": 2,
+          "specificity": "0/38"
+        },
+        "role": "reviewer",
+        "runner": "kimi",
+        "runner_version": "2.2.0",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": null,
+          "io_split_complete": false,
+          "med_wall_s": 8.264,
+          "n_cases": 82,
+          "n_cases_expected": null,
+          "n_cases_missing_tokens": 82,
+          "n_solved": 82,
+          "schema_version": 1,
+          "solved_per_hour": 311.2201,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 948.525,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "kimi-k2.8-preview",
+        "role": "reviewer",
+        "runner": "kimi"
+      },
+      "seat_hash": "08d047de5f92cb0fc8d3ac959d5e27d2bd8d5558f73d82e96196d6d2d90f2701",
+      "status": "qualified"
+    },
+    {
+      "administration": {
         "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
         "date": "2026-08-17",
         "effort": "default",
@@ -27160,22 +31095,27 @@
     "consult": {
       "failed": 1,
       "other": 0,
-      "qualified": 6
+      "qualified": 7
     },
     "discuss": {
       "failed": 1,
       "other": 0,
-      "qualified": 5
+      "qualified": 7
     },
     "implementer": {
       "failed": 5,
       "other": 0,
       "qualified": 18
     },
+    "owner": {
+      "failed": 2,
+      "other": 0,
+      "qualified": 0
+    },
     "reviewer": {
       "failed": 8,
       "other": 0,
-      "qualified": 22
+      "qualified": 24
     },
     "verification_author": {
       "failed": 0,

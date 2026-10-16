@@ -410,6 +410,41 @@
       "event_id": 303,
       "role": "reviewer",
       "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-grok-4.7-low"
+    },
+    {
+      "event_id": 304,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k3-high"
+    },
+    {
+      "event_id": 305,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi-discuss"
+    },
+    {
+      "event_id": 306,
+      "role": "owner",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi-brain"
+    },
+    {
+      "event_id": 307,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k28-high"
+    },
+    {
+      "event_id": 308,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-discuss"
+    },
+    {
+      "event_id": 309,
+      "role": "owner",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-brain"
+    },
+    {
+      "event_id": 310,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-consult"
     }
   ]
 }

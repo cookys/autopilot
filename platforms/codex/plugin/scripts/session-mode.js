@@ -557,10 +557,11 @@ function parseArgs(argv) {
 
 // Start the project watcher (mods plan P1a "誰起 watcher"). Fail-open: every outcome is at most one
 // stderr line; the marker is already written and `set`'s exit code never depends on this.
-// AUTOPILOT_RUNS_WATCH_AUTOSTART=0 disables it (hooks/tests/lib.sh exports 0 for every suite).
+// AUTOPILOT_RUNS_WATCH_AUTOSTART=0|false|off|no disables it, and so does leaving it unset under `node --test` (src/status/autostart-gate.js;
+// hooks/tests/lib.sh exports 0 for every shell suite).
 // stderr, not stdout: stdout is the marker JSON that callers parse.
 function startProjectWatcher(marker, repoRoot) {
-  if (!marker.project_key || process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return;
+  if (!marker.project_key || require('../src/status/autostart-gate').autostartDisabled(process.env)) return;
   try {
     const { startWatcherDetached } = require('../src/status/runs-watch');
     const r = startWatcherDetached({ key: marker.project_key, cwd: repoRoot, env: process.env, render: true });

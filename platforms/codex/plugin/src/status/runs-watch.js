@@ -846,6 +846,14 @@ function runWatchCli(opts) {
     stderr.write(project ? '--project must be a 16-hex project key\n' : 'status runs --watch|--stop requires --project <key> (or run inside a git repo)\n');
     return 2;
   }
+  // Same guard as startWatcherDetached, for a watcher started by hand: an isolated test environment (own HOME /
+  // CLAUDE_CONFIG_DIR) on the shared live dir must not write its fake project there (BL-0195).
+  const iso = isolatedEnv(env);
+  if (!stop && iso.reason) {
+    stderr.write(`watcher not started: isolated environment on a shared live dir (${iso.reason}); set AUTOPILOT_LIVE_DIR to a private dir\n`);
+    return 1;
+  }
+
   // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): report it, do nothing.
   try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); return 1; }
 
@@ -890,6 +898,15 @@ function watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, re
   return ['-c', WRAPPER, 'sh', lock, ...inner];
 }
 
+// Is `name` an executable file somewhere on env.PATH? (no shell, no spawn)
+function onPath(name, env) {
+  for (const dir of String((env && env.PATH) || '').split(path.delimiter)) {
+    if (!dir) continue;
+    try { fs.accessSync(path.join(dir, name), fs.constants.X_OK); return true; } catch (_e) { /* next */ }
+  }
+  return false;
+}
+
 const DEFAULT_BIN_PATH = path.join(__dirname, '..', '..', 'bin', 'autopilot.js');
 
 /**
@@ -914,6 +931,10 @@ function startWatcherDetached({
     if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };
     if (probe.status === 1) return { status: 'busy', holder: holderFromEnvelope(env, key) };
     if (probe.status !== 0) return { status: 'error', message: `flock probe exited ${probe.status}` };
+    // The spawn below is async: a missing nohup/sh would only surface on the child's 'error' event, after 'started' was returned (BL-0109).
+    for (const bin of ['nohup', 'sh']) {
+      if (!onPath(bin, env)) return { status: 'error', message: `${bin} is not on PATH` };
+    }
     const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     const fd = fs.openSync(logFile, 'a');
@@ -1014,5 +1035,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

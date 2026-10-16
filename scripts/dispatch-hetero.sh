@@ -271,6 +271,7 @@ QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for 
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
+REPO_IDENTITY_FIELDS=""   # manifest repo-identity JSON members, cached by repo_identity_resolve_fields; init early so it is SET for the detach declare -p and an ambient value is never copied verbatim (BL-0109)
 KIMI_EDIT_ONLY=""       # kimi EDIT-ONLY directive text, computed once at the pre-spend argv
                         # gate and reused verbatim by the run arm; init early for declare -p
                         # (KIMI_ARGV_LIMIT is NOT pre-declared here — it is a user env-override

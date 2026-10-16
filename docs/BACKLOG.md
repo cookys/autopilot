@@ -1022,13 +1022,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-04
 - **Origin**: self
-- **Problem**: mods 第一階段（P1a）審查留下幾項尚未處理的強化事項：游標檔案鎖、啟動程序錯誤處理、自動啟動的開關、專案身分識別的邊角情況。 (draft)
+- **Problem**: mods 第一階段（P1a）審查留下的強化事項，游標檔案鎖、啟動程序錯誤處理、自動啟動開關已修；剩下前景啟動器收不到 SIGTERM、flock 訊息誤導、專案身分識別的邊角情況。 (draft)
 - **Impact**: 都是強化項，不影響目前功能；預計在下一階段（P1b）開始時處理。 (draft)
 - **Trigger**: P1b start
 - **Effort**: M
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
-- **Context**: unfixed hardening items from the P1a reviews: cursor-file lock, spawn errors, autostart gate, repo-identity edge cases.
+- **Context**: 2026-10-16: cursor merge, spawn preflight, autostart gate and clock fixed; foreground launcher SIGTERM, flock message and identity-source items remain (see sidecar).
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110
@@ -1129,8 +1129,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next touch of mods/live pane keyboard focus, or an owner report of needing keyboard expand
 - **Effort**: S
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
-- **Pointer**: none
-- **Context**: Ctrl+x Tab focuses the pane, but Enter then hits the leading next-tab Button; Tab/Down never reached a group Button in tmux. Mouse click expands. Check focus order of Buttons inside the pane.
+- **Pointer**: docs/backlog/mods-live-recent-groups-keyboard.md
+- **Context**: Re-run 2026-10-16: Tab/Down/Right cycle only the 7 tab Buttons; group Buttons are never reached. Needs an owner call (hotkey or host change), see sidecar.
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
 - **Id**: BL-0124
@@ -1257,18 +1257,5 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
 - **Context**: 2026-10-17: P1, P2, P3 and P4a autopilot side merged; P4a llm-playground side in review (two owner decisions pending); P4b remains, plus llm-playground r4/t15 SKIP follow-up (see plan Progress line).
-
-
-### A runs watcher started directly in a test env still writes to the shared live dir
-- **Id**: BL-0195
-- **Status**: open
-- **Since**: 2026-10-16
-- **Origin**: self
-- **Problem**: 77ccec9b 讓隔離的測試環境（假 HOME 或假 CLAUDE_CONFIG_DIR）不再寫共用的 load-source.json、也不自動起 watcher。但如果有人在這種環境裡直接手動啟動 runs watcher，它仍會把該專案的 runs 檔寫進共用的 live 目錄（$XDG_RUNTIME_DIR/autopilot）。
-- **Impact**: 低。要在測試環境刻意直接啟動 watcher 才會發生；發生時面板會看到一個假專案的資料，刪掉那幾個檔就好。
-- **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
-- **Effort**: S
-- **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
-- **Pointer**: none
 
 

@@ -76,3 +76,13 @@ node harness.js score --phase main --out <cells-root> --seats sonnet,kimi
 ```
 
 Pinned inputs: see `prereg.json` (sha256 of `corpus.js`, `predicates.js`, `harness.js`, `author-wrap.js`, `scripts/dispatch-discuss.js`).
+
+## Amendment 1 (2026-10-17, after pilot v0, before any main-campaign data)
+
+Pilot v0 (sighted round one: the seat saw all three scripted round-one turns when it first spoke) showed that both seats (sonnet, kimi) flagged the planted error in their FIRST turn in 4 of 4 sighted planted cases, so the selection rule "round one did not catch it" left 0 and 1 usable planted cases and the instrument could not run. Two predicate gaps also showed: kimi named the drill by description rather than by id, and sonnet's "does not match" was not in the rebuttal lexicon. Changes (all made before any main-campaign cell exists; pilot v0 cells are not part of the data):
+
+1. **Round one is blind.** In the new protocol every seat speaks round one before anyone sees the others, so the seat's first turn now has an empty transcript (`taken_axes` still lists the three other roles' axes, which forces the free axis). The scripted roles' round-one turns, including the planted claim, appear only in the second-turn bundle. A therefore stays at 0 by construction for a real reason (the seat cannot have seen the claim), and B measures what the second turn adds.
+2. `predicates.js`: plant-F also accepts the drill/test description (`thing`) as naming the claim; plant-C additionally requires naming the claimed number or the role `qa` (so an independent mention of the real number alone is not a rebuttal); the rebuttal lexicon gains `does not match`, `conflict`, `disagree`, `differs from`, `not supported`, `no support`, `overstat`, `never ran`, `hasn't been`, `has never` and similar. `selftest.js` covers the new accept/reject cases.
+3. Known risk recorded in advance: with a visible transcript a strong seat may flag the plant even under the broken red prompt. If so, gate 4 fails and the seat is INSTRUMENT-INVALID, which is the registered outcome, not a reason to rerun.
+
+`prereg.json` is re-hashed in the same commit as this amendment.

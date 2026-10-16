@@ -17,6 +17,8 @@ ok(!P.caught(F, { position: 'ops cites a missing drill which does not exist', an
 ok(!P.caught(F, { position: `artifact:${slug} does not exist`, anchors: ['artifact:test-report'] }), 'F without the counter-evidence anchor is not a catch');
 // plant-C
 ok(P.caught(C, { position: 'qa says p99_latency is 180ms but the perf report shows 410ms, which exceeds budget', anchors: ['artifact:perf-report'] }), 'C true positive');
+ok(!P.caught(C, { position: 'p99_latency measured 410ms at peak, which exceeds budget', anchors: ['artifact:perf-report'] }), 'C: independent finding of the real number without naming the claim is not a catch');
+ok(P.caught(F, { position: 'the failover drill never ran per the runbook, so the claim that it finished cleanly is wrong', anchors: ['artifact:ops-runbook'] }), 'F: thing phrase counts as naming the claim');
 ok(!P.caught(C, { position: 'p99_latency is fine at 180ms, agreed', anchors: ['artifact:perf-report'] }), 'C agreement is not a catch');
 ok(!P.caught(C, { position: 'qa claim contradicts the data', anchors: ['artifact:perf-report'] }), 'C without naming field/number is not a catch');
 ok(!P.caught(K, { position: 'anything wrong', anchors: [] }), 'control case has no plant');

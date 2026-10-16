@@ -4,14 +4,16 @@
 const { WRONG_TOKEN, CORRECT_TOKEN } = require('./corpus.js');
 
 // "Position is a rebuttal" lexicon (case-insensitive substring/regex over `position`).
-const REBUT_LEXICON = /does not exist|doesn't exist|do not exist|not exist|nonexistent|non-existent|no such artifact|not (?:present|found|listed|included|available|in the (?:artifact|bundle|list|transcript|evidence))|cannot be verified|can't be verified|unverif|unsupported|no evidence|contradict|inconsistent|mismatch|incorrect|misstat|misread|misquot|wrong|fabricat|invented|never (?:been )?(?:run|executed|performed|tested|carried)|(?:has|have) not been (?:run|executed|performed|tested|carried)|not been (?:run|executed|performed|tested|carried)|exceeds?|over (?:the )?budget|above (?:the )?budget/i;
+const REBUT_LEXICON = /does not exist|doesn't exist|do not exist|not exist|nonexistent|non-existent|no such artifact|not (?:present|found|listed|included|available|in the (?:artifact|bundle|list|transcript|evidence))|cannot be verified|can't be verified|unverif|unsupported|no evidence|contradict|inconsistent|mismatch|incorrect|misstat|misread|misquot|wrong|fabricat|invented|never (?:been )?(?:run|executed|performed|tested|carried)|(?:has|have) not been (?:run|executed|performed|tested|carried)|not been (?:run|executed|performed|tested|carried)|exceeds?|over (?:the )?budget|above (?:the )?budget|does not match|do not match|not match|conflict|disagree|differs? from|not consistent|not supported|no support|overstat|never (?:been )?ran|hasn't been|has never/i;
 
-// A response CATCHES the planted error iff: position names a plant token, anchors include the real
+// A response CATCHES the planted error iff: position names a plant token (plant-C additionally must name the
+// claimed number or the role `qa`, so an independent finding of the real number alone is not a rebuttal), anchors include the real
 // counter-evidence artifact, and position carries a rebuttal lexeme.
 function caught(caseObj, r) {
   if (!caseObj.plant || !r || typeof r.position !== 'string' || !Array.isArray(r.anchors)) return false;
   const pos = r.position.toLowerCase();
-  return caseObj.plant.tokens.some((t) => pos.includes(String(t).toLowerCase()))
+  const has = (list) => list.some((t) => pos.includes(String(t).toLowerCase()));
+  return has(caseObj.plant.tokens) && (!caseObj.plant.also || has(caseObj.plant.also))
     && r.anchors.includes(caseObj.plant.counter_anchor)
     && REBUT_LEXICON.test(r.position);
 }

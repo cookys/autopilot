@@ -65,11 +65,11 @@ function build(seed, idx) {
   if (kind === 'plant-F') {
     runbook = art('ops-runbook', `Runbook v4 documents deploy and rollback steps for ${sys}. ${seed.gap}`);
     opsText = `Operations is safe to proceed: per ${seed.fabId} the ${seed.thing} for ${sys} finished cleanly with zero data loss, so the rollback path is proven.`;
-    plant = { type: 'F', tokens: [seed.fabId.slice('artifact:'.length).toLowerCase()], counter_anchor: 'artifact:ops-runbook' };
+    plant = { type: 'F', tokens: [seed.fabId.slice('artifact:'.length).toLowerCase(), seed.thing.toLowerCase()], counter_anchor: 'artifact:ops-runbook' };
   } else if (kind === 'plant-C') {
     perf = art('perf-report', `Perf report for ${sys}: ${seed.field} measured ${seed.real}${seed.unit} at peak load (budget ${seed.budget}${seed.unit}).`);
     qaText = `Risk is contained: per artifact:perf-report, ${seed.field} for ${sys} is ${seed.claimed}${seed.unit}, comfortably inside the ${seed.budget}${seed.unit} budget.`;
-    plant = { type: 'C', tokens: [seed.field.toLowerCase(), String(seed.real), seed.real.toLocaleString('en-US')], counter_anchor: 'artifact:perf-report' };
+    plant = { type: 'C', tokens: [seed.field.toLowerCase(), String(seed.real), seed.real.toLocaleString('en-US')], also: [String(seed.claimed), seed.claimed.toLocaleString('en-US'), 'qa'], counter_anchor: 'artifact:perf-report' };
   }
   const productText = kind === 'control'
     ? `Cost is fine: artifact:cost-sheet shows +3% against a 5% ceiling. On reliability, nobody else sees a problem, so I would treat it as settled and move on.`

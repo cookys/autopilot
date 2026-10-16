@@ -40,10 +40,17 @@
   },
   "budget_usd": 40,
   "sha256": {
-    "corpus.js": "7fb8f2a278c0cf67fea8061e151bb042afbd15ae084fec562f154db55c663eb0",
-    "predicates.js": "6048ad98d6f7690feb82065785a7f9a76555808be0bb3c29011321dad6ad3733",
-    "harness.js": "d2b13fb7141d05183661653f79545c1e2f6884a254164e940f77bbe79defcc0a",
+    "corpus.js": "6b657040feaef37b6dfb30064dfd0ab1b5ca8ce0753e8435c6b571ad90d396fe",
+    "predicates.js": "e925ab2eef6805f131173d75613091f2e38ce34099d580b3b9652257d812469c",
+    "harness.js": "61b554220ba2ce1c89454c72170daece04e1f355453b3db8008ffa5cdc5e243d",
     "author-wrap.js": "a242da6e854c851d856a46a00fec90137cc0c815569c88cd2166a0bc047abe42",
     "scripts/dispatch-discuss.js": "6cc965a38dffc1503f8304c68534b35ad88f214d3cf54ee5d5b646b945cfa79b"
-  }
+  },
+  "amendments": [
+    {
+      "n": 1,
+      "date": "2026-10-17",
+      "why": "pilot v0: sighted round one catches the plant; blind round one + predicate fixes"
+    }
+  ]
 }

@@ -92,6 +92,14 @@ async function pooled(items, fn) {
   await Promise.all(Array.from({ length: CONC }, worker));
   return results;
 }
+// Amendment 1: round one is BLIND. In the new protocol all seats speak round one before anyone sees the
+// others; the seat's first turn therefore has an empty transcript (the other roles' axes stay listed in
+// taken_axes so the seat lands on the free axis). The scripted roles' round-one turns appear only in round two.
+function round1Bundle(c) {
+  const b = JSON.parse(JSON.stringify(c.bundle));
+  b.transcript = [];
+  return b;
+}
 function round2Bundle(c, r1) {
   const b = JSON.parse(JSON.stringify(c.bundle));
   b.round_id = `${c.case_id}-r2`;
@@ -105,7 +113,7 @@ async function run() {
   for (const seat of seatNames) {
     // Round one (frozen once, shared by A, B and red).
     const all = plants.concat(controls);
-    const r1s = await pooled(all, (c) => cell(seat, c, 'r1', 0, c.bundle, cellFile(seat, c.case_id, 'r1')));
+    const r1s = await pooled(all, (c) => cell(seat, c, 'r1', 0, round1Bundle(c), cellFile(seat, c.case_id, 'r1')));
     if (r1s.some((r) => r.status === 'abort')) { console.error(`abort: resolver/usage refusal for seat ${seat}: ${r1s.find((r) => r.status === 'abort').stderr}`); process.exit(3); }
     const byId = new Map(all.map((c, i) => [c.case_id, { c, r1: r1s[i] }]));
     const selPlants = plants.filter((c) => byId.get(c.case_id).r1.status === 'ok' && !P.caught(c, byId.get(c.case_id).r1.contribution)).slice(0, NEED.plants);

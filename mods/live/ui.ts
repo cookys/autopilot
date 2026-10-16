@@ -97,8 +97,8 @@ export const STATES: Record<StateId, { glyph: string; key: ThemeKey | undefined;
 // the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
 export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'stopped', 'pending', 'done', 'skipped', 'unknown']
 
-// freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); every comparison is strict (`>`): exactly at the threshold is still fresh
-export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
+// freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); abandonedPlan = a non-terminal plan review untouched for 7 d fades to one line; every comparison is strict (`>`): exactly at the threshold is still fresh
+export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, abandonedPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
 export type FreshKind = keyof typeof FRESH_MS
 export const isStale = (kind: FreshKind, ageMs: number): boolean => ageMs > FRESH_MS[kind]
 
@@ -217,7 +217,7 @@ export function idTail(id: string, width: number): string {
     out = chars[i] + out
     w += cw
   }
-  return '…' + out
+  return '…' + out.replace(/^[-_.]+/, '')
 }
 // prose too long: cut from the right with `…`
 export function cutProse(text: string, width: number): string {

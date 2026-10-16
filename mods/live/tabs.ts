@@ -150,7 +150,7 @@ function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       body.push(ui.kv(u, t(KEY_IDS.unit), [ui.stepBar(cells, on, { here: true }), ui.fmtd('count', ' ' + index + '/' + total), ui.val(extra, { role: 'prose', tone: 'dim' })], { fact: F }))
     }
   }
-  body.push(ui.kv(u, t(KEY_IDS.progress), [ui.val(b.progress, { role: 'prose', ...(b.progressDim ? { tone: 'dim' } : {}) })], { fact: F }))
+  body.push(ui.kv(u, t(KEY_IDS.progress), [ui.val(b.progress, { role: 'prose' }), ...(b.progressDim ? [dotFrag(), ui.val(t('progress.no_total'), { role: 'prose', tone: 'dim' })] : [])], { fact: F }))
   if (!ui.hasStageArrow(b.phase)) body.push(ui.kv(u, t(KEY_IDS.phase), [ui.val(b.phase, { role: 'prose' })], { fact: F }))
   return nowSection(u, ctx, 'where', t('now.where'), body.map(l => (l.fact === undefined ? l : ui.ownerRow('now', l.fact, l))))
 }
@@ -163,6 +163,17 @@ function codeRound(c: CodeReviewView, snap: LiveSnapshot): { age: number | null;
   const states = c.seats.map(s => U.stateOf('seat', seatSubject('code', s)))
   const round = U.stateOf('round', { stale, converged: c.converged, seats: states })
   return { age, stale, states, round, findings: states.filter(ui.isFindings).length, unknown: states.filter(ui.isUnknown).length }
+}
+
+// 審查 ›, the one pointer row 現況 and 派工 both draw: the code-review round only (§2.6), its state, the round id and how many seats have findings
+function reviewPointer(u: UiCtx, snap: LiveSnapshot): PaneLine {
+  const t = u.t
+  const c = snap.review?.code ?? null // a dispatch-only snapshot may carry no review at all
+  if (c === null) return ui.kv(u, t('tab.review'), [ui.absent(t('nodata.review'))], { fact: 'review.round', goto: 'review' })
+  const r = codeRound(c, snap)
+  const parts: Frag[] = [ui.stateLead(u, r.round), ui.val('  '), ui.val(t('review.code'), { role: 'prose' }), ui.val(' '), ui.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
+  if (r.findings > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.sum_review_fix', { n: r.findings })))
+  return ui.kv(u, t('tab.review'), parts, { fact: 'review.round', goto: 'review' })
 }
 
 function limitWins(t: T, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): LimitWin[] {
@@ -198,17 +209,7 @@ function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       body.push(ui.kv(u, t('tab.dispatch'), parts, { fact: 'dispatch.counts', goto: 'dispatch' }))
     }
   }
-  // 審查 ›: the code-review round only (§2.6): its state, the round id and how many seats have findings
-  {
-    const c = snap.review === null ? null : snap.review.code
-    if (c === null) body.push(ui.kv(u, t('tab.review'), [ui.absent(t('nodata.review'))], { fact: 'review.round', goto: 'review' }))
-    else {
-      const r = codeRound(c, snap)
-      const parts: Frag[] = [ui.stateLead(u, r.round), ui.val('  '), ui.val(t('review.code'), { role: 'prose' }), ui.val(' '), ui.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
-      if (r.findings > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.sum_review_fix', { n: r.findings })))
-      body.push(ui.kv(u, t('tab.review'), parts, { fact: 'review.round', goto: 'review' }))
-    }
-  }
+  body.push(reviewPointer(u, snap)) // 審查 ›
   // 用量 ›: the most-used of the brain cap, 5 h and 7 d (one fact, `usage.limit_max`)
   {
     const wins = limitWins(t, d.spend, snap.account === undefined ? [] : snap.account.quota, d.now_ms)
@@ -393,7 +394,7 @@ function foremanLines(u: UiCtx, snap: LiveSnapshot, nowMs: number | null): PaneL
   const t = u.t
   const f = snap.sections.foreman
   const fact = 'dispatch.runs' as const
-  if (f === null) return snap.sections.foremanNotWired ? ui.detail(u, t('foreman.not_wired', { nw: t(NOT_WIRED_ID) }), { fact }) : []
+  if (f === null) return [] // the watcher deletes the sidecar while no agent and no stage are live: idle, said once by 執行中's empty line
   const out: PaneLine[] = ui.detail(u, f.binding === 'session' ? t('foreman.head_session') : t('foreman.head_bound', { b: f.binding }), { fact })
   const age = (at: number | null, published: number | null): string => ui.ago(at !== null && nowMs !== null ? Math.max(0, nowMs - at) : published === null ? NaN : published * 1000, t)
   const rows: U.RowSpec[] = f.agents.map((g, i) => ({
@@ -458,14 +459,12 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     const finChip = finishedAll.length === 0 ? undefined : ui.countChip(u, ui.worst(finishedAll), finishedAll.length, 'dispatch.counts')
     out.push(...sec(DISPATCH_SEC.finished, t('dispatch.done'), finChip, finBody.map(own)))
   }
-  // 其他分頁: one pointer row to 審查 (a projection, §2.6) and the snapshot note. No review verdict, no spend stamps.
-  const gates = snap.gates
-  const pointer = gates === null ? ui.val(t('dispatch.no_review_page'), { role: 'prose' }) : gates.length === 0 ? ui.val(t('dispatch.no_receipt'), { role: 'prose' }) : ui.fmtd('count', t('dispatch.gate_count', { n: gates.length }))
+  // 其他分頁: the same 審查 pointer row 現況 draws (a projection, §2.6; one source, so the two tabs cannot disagree) and the snapshot note. No seat verdict, no spend stamps.
   const parts = [t('dispatch.note')]
   const pubMs = snap.published_at === null ? NaN : Date.parse(snap.published_at)
   if (Number.isFinite(pubMs)) parts.push(t('dispatch.snapshot', { at: ui.clock(pubMs, nowMs ?? pubMs) })) // the producer publishes an ISO string; HH:MM per §3.5
   out.push(...sec(DISPATCH_SEC.other, t('dispatch.others'), undefined, [
-    ui.projection('dispatch', 'review.gates', ui.kv(u, t('tab.review'), [pointer], { fact: 'review.gates', goto: 'review' })),
+    ui.projection('dispatch', 'review.round', reviewPointer(u, snap)),
     ...ui.detail(u, parts.join(' · '), { fact: 'dispatch.counts' }).map(own),
   ]))
   return out
@@ -533,7 +532,7 @@ function qcSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (!open) return [head]
   const value: U.Frag[] = []
   if (q.range !== null) value.push(U.fmtd('sha', U.sha(q.range)), U.val(' · ', { tone: 'dim' }))
-  value.push(U.fmtd('count', t('review.protected', { n: q.protected_files_count })))
+  value.push(q.protected_files_count === 0 ? U.val(t('review.no_protected'), { role: 'prose' }) : U.fmtd('count', t('review.protected', { n: q.protected_files_count })))
   return [head, U.kv(u, t('label.scope'), value, { fact: 'review.qc' })]
 }
 
@@ -563,9 +562,8 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
     }
   })
   out.push(...U.list(u, 'review.decisions', t('review.noun_decisions'), rows, {})) // §2.4: newest first (the ledger is oldest first, so a row's index is its time); past the cap the oldest go behind more
-  if (dv.undocumented > 0) out.push(U.kv(u, t('label.undocumented'), [U.fmtd('count', t('review.undocumented', { n: dv.undocumented }))], { fact: 'review.undocumented' }))
-  if (dv.ladder === null) out.push(U.kv(u, t('label.ladder'), [U.absent(t('nodata.ladder'))], { fact: 'review.ladder' }))
-  else {
+  if (dv.undocumented > 0) out.push(U.kv(u, t('label.undocumented'), [U.val(t('review.undocumented', { n: dv.undocumented }), { fmt: 'count', tone: 'dim' })], { fact: 'review.undocumented' })) // a note, not a fault: dim
+  if (dv.ladder !== null) { // no rung climbed: no row (nothing to say)
     const rung = dv.ladder.rung
     const n = Math.max(0, Math.min(5, Number(rung.slice(1)) || 0))
     const age = ageMsOf(snap.detail.now_ms, dv.ladder.at)
@@ -583,6 +581,9 @@ function planSection(u: U.Ctx, p: PlanReviewView | null, snap: LiveSnapshot, ctx
   const age = ageMsOf(snap.detail.now_ms, p.updated_at)
   if (p.terminal && age !== null && U.isStale('terminalPlan', age)) { // F3: a finished plan review fades to one history line
     return U.detail(u, t('review.plan_history', { id: p.logical_plan_id ?? '—', ago: U.ago(age, t) }), { fact: 'review.plan' })
+  }
+  if (!p.terminal && age !== null && U.isStale('abandonedPlan', age)) { // F6: one that stopped and was never closed fades the same way, worded as stopped (it did not end)
+    return U.detail(u, t('review.plan_abandoned', { id: p.logical_plan_id ?? '—', ago: U.ago(age, t) }), { fact: 'review.plan' })
   }
   const stale = !p.terminal && age !== null && U.isStale('planReview', age) // F2
   const states = p.seats.map(s => U.stateOf('seat', seatSubject('plan', s)))

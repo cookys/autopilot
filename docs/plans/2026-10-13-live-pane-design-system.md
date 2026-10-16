@@ -104,12 +104,13 @@ The rules apply in the model, before any glyph is chosen. A line can only show `
 |---|---|---|
 | background command | its last output line matches `^\[exited with code (\d+)\]$` | `✓ 完成` (code 0) or `✗ 失敗` (non-zero), moved behind `▸ N 項已結束` |
 | background command | no exit marker and `quietMs > 1_800_000` | `◌ 已停 · 6h04m 前有輸出`, behind the same toggle |
-| plan review | not `terminal` and `now − updated_at > 86_400_000` | section header `◌ 已停 · 27d 前`, folded by default, moved to the bottom of 審查 |
+| plan review | not `terminal` and `now − updated_at > 86_400_000` (F2) | section header `◌ 已停 · 2d00h 前`, folded by default, moved to the bottom of 審查 |
 | plan review | `terminal` and `now − updated_at > 604_800_000` | one dim line inside 審查's history; no section |
+| plan review | not `terminal` and `now − updated_at > 604_800_000` (F6) | one dim line, `計畫審查 {id} 在 {ago}停下，沒有收尾`; no section (it stopped; it did not end) |
 | code review | not converged and `now − at > 86_400_000` | `◌ 已停`, same treatment |
-| dispatch row | finished (`rc` or `final_status` set) and `now − (started_at + elapsed_s·1000) > 86_400_000` | counted in the header chip only, not listed |
+| dispatch row | finished (`rc` or `final_status` set) and `now − (started_at + elapsed_s·1000) > 21_600_000` | counted in the header chip only, not listed |
 
-Every comparison is strict (`>`): an item exactly at its threshold is still fresh, one millisecond past it is stale. The five timed predicates are named F1 (background quiet, `FRESH_MS.quiet` = 1_800_000), F2 (non-terminal plan review, `FRESH_MS.planReview` = 86_400_000), F3 (terminal plan review, `FRESH_MS.terminalPlan` = 604_800_000), F4 (code review, `FRESH_MS.codeReview` = 86_400_000) and F5 (finished dispatch, `FRESH_MS.dispatch` = 86_400_000); equal values do not share a name. The exit marker is not a timed predicate: X0 (marker with code 0) and X1 (marker with a non-zero code) are two untimed branches. `classify` (§3.3) uses the same predicates, so the table and the classifier cannot disagree.
+Every comparison is strict (`>`): an item exactly at its threshold is still fresh, one millisecond past it is stale. The six timed predicates are named F1 (background quiet, `FRESH_MS.quiet` = 1_800_000), F2 (non-terminal plan review, `FRESH_MS.planReview` = 86_400_000), F3 (terminal plan review, `FRESH_MS.terminalPlan` = 604_800_000), F4 (code review, `FRESH_MS.codeReview` = 86_400_000), F5 (finished dispatch, `FRESH_MS.dispatch` = 21_600_000, six hours since BL-0149) and F6 (non-terminal plan review untouched, `FRESH_MS.abandonedPlan` = 604_800_000); F3 and F6 happen to share a value but not a name. The exit marker is not a timed predicate: X0 (marker with code 0) and X1 (marker with a non-zero code) are two untimed branches. `classify` (§3.3) uses the same predicates, so the table and the classifier cannot disagree.
 
 `FRESH_MS` lives in the ui module (§6), not in each tab.
 
@@ -132,7 +133,7 @@ Rules:
 
 1. A projection is a `kv` or `item` line with `goto` (§4) and a `fact` tag. A line whose `fact` is owned by another tab without `goto` is a defect.
 2. A projection is one line per fact. It never lists the owner's rows.
-3. 派工 draws no review verdict. Its former 「審查關卡」 section becomes one pointer row, `審查 ›  <count of review pages or 還沒有審查頁>`, in a section 其他分頁.
+3. 派工 draws no review verdict. Its former 「審查關卡」 section becomes one pointer row, `審查 ›  <the code-review round, from the same reviewPointer() as 現況; §12.8>`, in a section 其他分頁.
 4. The 要你處理 list in 現況 is the one place that mixes owners; each of its items is either 現況's own (tasks) or a projection with `goto`.
 5. The ownership table is data in `ui.ts` (`FACT_OWNER`), and invariant I17 checks it (§6.3).
 6. **Granularity is the fragment.** A `FactId` names one value set (`spend.session`, `review.round`, `usage.limit_max`). A body line carries exactly one fact, and a line that would show two is two lines (so the review row of 現況 drops QC and the 用量 row drops the second window). The one multi-fact line is the global header's metrics line, where each spend figure is its own fragment with its own `FactId`; that exception is stated here and in `verdictHeader` (§4) and nowhere else.
@@ -256,14 +257,14 @@ Components are of two kinds. **Line builders** (`header`, `kv`, `item`, `bullet`
 
 ```
 ▾ 程式碼審查  △ 待修 ─────────────────────────────────────────────────────
-▸ 計畫審查  ◌ 已停 · 27d 前 ──────────────────────────────────────────────
+▸ 計畫審查  ◌ 已停 · 2d00h 前 ───────────────────────────────────────────
 ```
 
 **`kv(key, …value, {fact, goto?})`** (kind `kv`): key dim, padded to 12 cells; value at column 12. An absent value is `—` followed by a dim reason; a `kv` built with no value at all is a bare key that heads the `item` rows beneath it (`席位`). The value may lead with one state glyph and word taken from the line's own `stateOf` / `worst` result (the 現況 summary rows do), or with a `meterValue` fragment; I17 allows no other state segment. `fact` is required (§2.6 rule 7). With `goto`, the key gets a trailing ` ›` and the whole row is a press target; the summary rows in 現況 are these.
 
 ```
 輪次        R1 · 4abd667f..10c5c086
-升級階梯    — 沒有紀錄
+範圍        5a2706ad..HEAD · 沒有改到受保護檔案
 ```
 
 **`item(stated, text, meta?, {fact, at: 0 | 12, goto?, toggle?, word?})`** (kind `item`): state glyph, the state word padded to the widest word in the list, the text, then dim meta after ` · `. A `toggle` puts `▸`/`▾` at the right edge of the row. The state word is required, with one exception: `word: false` is allowed only inside a list whose section header chip already names the same state (the 要你處理 list under `▲ 要你處理`, the 殘留 groups under their chip), so the word is never lost, only not repeated on every line. I21 checks that the chip state equals the item state. `group` (the grouping key: kind plus reason) and `ts` (sort time) are required fields of the row spec that `list()` takes (below); tab code does not call `item` or `bullet` for list rows directly.
@@ -403,7 +404,7 @@ With live work, the 背景工作 section reads `● 執行中  等 P2 collect �
 ✓ 完成  …2031596-3077  reviewer  claude-native / claude-fa…  1m    6h04m 前
   ▸ 還有 27 筆已完成
 ▾ 其他分頁 ────────────────────────────────────────────────────────────────
-審查 ›      還沒有審查頁
+審查 ›      △ 待修  程式碼審查 R1 · 1 席待修
   這是執行狀態，不是進度 · 快照 01:42
 ```
 
@@ -422,7 +423,7 @@ With live work, the 背景工作 section reads `● 執行中  等 P2 collect �
 ✓ 完成  review-1791801313-2031596-3077  reviewer  claude-native / claude-fable-5-1        1m    6h04m 前
   ▸ 還有 27 筆已完成
 ▾ 其他分頁 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-審查 ›      還沒有審查頁
+審查 ›      △ 待修  程式碼審查 R1 · 1 席待修
   這是執行狀態，不是進度 · 快照 01:42
 ```
 
@@ -441,15 +442,14 @@ With a live run, the 執行中 table adds a `最後回報` column (priority 3) i
             △ 待修  s1 · zhipu                                            ▸
             ✓ 完成  s2 · minimax                                          ▸
             ✓ 完成  s3 · alibaba                                          ▸
-▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────
-範圍        5a2706ad..HEAD · 0 個受保護檔案
-▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────
+▾ 推送前檢查  ∅ 不需要 ───────────────────────────────────────────────────
+範圍        5a2706ad..HEAD · 沒有改到受保護檔案
+▾ 我替你決定的事  3 件 · 0 件不可逆 ───────────────────────────────────────
 ◦ verify-17-1  verify node, no qualified verifier seat (engine-s…         ▸
 ◦ intent-17-2  Owner answered (supersedes intent-17-1): directio…         ▸
 ◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/w…        ▸
-未記錄      32 件派工沒有決策紀錄
-升級階梯    — 沒有紀錄
-▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────
+沒寫理由    32 次派工
+  計畫審查 blind-review-packet-2026-09-16 在 27d 前停下，沒有收尾
 ```
 
 A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays where it was and gains `▾`; the rationale is an attached `detail` (`└` at column 2, text from column 4; prose, so it may hold English text) and the veto is a `command` (I23 pins this render):
@@ -478,15 +478,14 @@ A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays wher
             △ 待修  s1 · zhipu                                                                                        ▸
             ✓ 完成  s2 · minimax                                                                                      ▸
             ✓ 完成  s3 · alibaba                                                                                      ▸
-▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────────────────────────────────────────────────
-範圍        5a2706ad..HEAD · 0 個受保護檔案
-▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────────────────────────────────────────────────
+▾ 推送前檢查  ∅ 不需要 ───────────────────────────────────────────────────────────────────────────────────────────────
+範圍        5a2706ad..HEAD · 沒有改到受保護檔案
+▾ 我替你決定的事  3 件 · 0 件不可逆 ───────────────────────────────────────────────────────────────────────────────
 ◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard current --role verifier: none admissible…    ▸
 ◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (h…   ▸
 ◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktrees root for hand/native worktrees, no Worktr…  ▸
-未記錄      32 件派工沒有決策紀錄
-升級階梯    — 沒有紀錄
-▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────────────────────────────────────────────────
+沒寫理由    32 次派工
+  計畫審查 blind-review-packet-2026-09-16 在 27d 前停下，沒有收尾
 ```
 
 Seats are a valueless `席位` key (`kv` with no value) followed by one `item` per seat at column 12, each with its own toggle, at every width. Opening the first seat (I18, I23) shows its raw verdict as an attached `detail`; a detail under an item at column 12 moves right by 12 cells (`└` at 14, text at 16):
@@ -650,7 +649,7 @@ These are pure calls of the tab builders over fixture snapshots; a mount is need
 | I8 | formats, one assertion per formatter kind of §3.5: money (`/\$[\d,]+\.\d\d/`), percent (no `/\d %/`), duration (`/\b\d+h\d\dm\b/`, never `/\b\d+h\dm\b/`), relative time, clock, size, sha (8 hex), `idTail` (a cut identifier starts with `…`), prose cut (ends with `…`), count (no `/\d\*/`); and every number in a non-prose, non-identifier segment must come from a segment the formatters tagged (`fmt:`), so a hand-typed `'12 MB'` is red |
 | I9 | (a) no tab builder emits `kind:'verdict'` (pure, over the matrix): only `pane.tsx` draws the header; (b) mounted: for each `PaneTab`, the rendered lines between the strip and the first body line are byte-identical for the same snapshot. Part (a) is what stops a tab drawing its own header; (b) alone would compare one function with itself |
 | I10 | at most one `kind:'empty'` line per section (consecutive or not); `沒有資料` text appears only in `empty` lines |
-| I11 | freshness (`busyWorld`): for each of the five timed predicates F1-F5 of §2.5 three fixtures at `T−1 ms`, exactly `T` and `T+1 ms` (`T` from that predicate's own `FRESH_MS` constant); X0 and X1 are separate fixtures with no clock. At `T−1` and at `T` the item keeps its ordinary form; at `T+1` it takes the stale form: non-terminal plan review `◌` and folded; terminal plan review one dim history line, no section; non-converged code review `◌`; finished dispatch counted in the chip, not listed; background quiet `◌ 已停`. Exit marker `0` -> `✓ 完成`, non-zero -> `✗ 失敗`, and never `●` for either; 現況's 背景工作 section is `empty` + one `more` |
+| I11 | freshness (`busyWorld`): for each of the six timed predicates F1-F6 of §2.5 three fixtures at `T−1 ms`, exactly `T` and `T+1 ms` (`T` from that predicate's own `FRESH_MS` constant); X0 and X1 are separate fixtures with no clock. At `T−1` and at `T` the item keeps its ordinary form; at `T+1` it takes the stale form: non-terminal plan review `◌` and folded; terminal plan review one dim history line, no section; non-terminal plan review untouched past F6 one dim line saying it stopped, no section; non-converged code review `◌`; finished dispatch counted in the chip, not listed; background quiet `◌ 已停`. Exit marker `0` -> `✓ 完成`, non-zero -> `✗ 失敗`, and never `●` for either; 現況's 背景工作 section is `empty` + one `more` |
 | I12 | collapse (`busyWorld`, 76 cols): 派工 has ≤ 22 lines, 0 `kv` lines in the runs sections, exactly 5 finished `table` rows and 1 `more`; every run is one line at every width ≥ 40. The same five-row cap with one `more` is asserted for every list category by I18 |
 | I13 | mapping coverage and precedence: every subject in the fixtures classifies to a state that is not `unknown`; a planted token `WEIRD` renders `? 未知`, and `WEIRD` itself appears only in a `detail` line; **pairwise conflict fixtures** pin each precedence row of §3.3: run `stall:true` + `rc 0` -> done, fresh `final_status WEIRD` with no `rc` and no stall -> unknown, `WEIRD` + `stall:true` -> unknown, `WEIRD` + `rc 0` -> done, `WEIRD` + `rc 1` -> failed, absent `final_status` + no `rc` + fresh -> running, `stall:true` + `rc 1` -> failed, `rc 0` + `final_status failed` -> failed; round with findings + a running seat -> running, with a failed seat + findings -> failed; background exit marker 0 + quiet 6 h -> done; loadSource `dev` + behind 54 -> need_you, `dev` + behind 0 -> done, `cache:x` + behind 0 -> need_you; lowercase and padded tokens classify like upper-case ones |
 | I14 | the tab strip has exactly one active tab, no background (if Q1 is accepted); in both the strip and the band every badge is a `Frag` made by `stateBadge` or `residueBadge`, matches `^(▲|●\d+|⊘\d+|⚑\d+)$`, and its glyph colour is its state's theme key (`⚑`: `warning`, a count glyph in the structure table); a `done`, `findings` or `stopped` badge does not type-check and is red if forced |
@@ -685,7 +684,7 @@ Every normative rule has an assertion and one named planted violation that must 
 | Raw tokens only in detail (§3.3) | I7, I13 | M19: `SHIP-AS-IS` in a `kv` value; M20: lowercase `ship-as-is` |
 | Total mapping and precedence (§3.3) | I13 | M21: swap the `run` precedence so `stall` beats `rc`; M22: planted token `WEIRD` shown raw outside detail; M50: a fresh run with unrecognised `final_status` drawn `running` |
 | Uniform-list state word (§4 `item`) | I21 | M23: `word:false` under a chip of another state |
-| Freshness, every row of §2.5 | I11 | M24a-e: flip `>` to `>=` in F1-F5, one mutation each; M24f-j: remove F1-F5, one mutation each; M24k: X0 mapped to running; M24l: X1 mapped to done |
+| Freshness, every row of §2.5 | I11 | M24a-f: flip `>` to `>=` in F1-F6, one mutation each; M24g-l: remove F1-F6, one mutation each; M24m: X0 mapped to running; M24n: X1 mapped to done |
 | Five-item cap and one-line items | I12, I18 | M25: restore the block fallback; M26: decisions list uncapped; M52a-e: running dispatches, unfinished tasks, live background, recent prompts and seats each uncapped; M53: a row spec built without `group` or `ts` |
 | Details and commands hidden by default | I18 | M27: a `command` line in the default render |
 | `goto` switches tab | I19 | M28: a `goto` line whose press handler is missing |
@@ -921,3 +920,16 @@ The owner called the tab 「亂亂的」. Seven defects: (1) a worktree that is 
 - **Tab name and the plugin source:** the 殘留 tab name reads the residue judge count and the shared `sourceStateOf` (tabs.ts): it turns yellow when something needs judgement or when the 外掛來源 row shows ▲, and not for an old cache copy alone. 現況's attention row and the band's `⚑N` stay residue-only; the band's source chip keeps its own text.
 
 **Enforcement.** `mods/live/hygiene.test.ts` pins the owner's real data at 76 columns and each rule; each control breaks a rule on purpose (a `clean` class counted as `judge`; a stale-only source drawn `▲`) and the suite must go red. The command is now drawn in the default render of this tab only, so the "no command by default" check of `now.test.ts` exempts `hygiene` and keeps its control on the other tabs.
+
+### 12.8 Dispatch, review and now: wording and one source (2026-10-16)
+
+An audit of the three tabs found facts that were drawn from two places, words an owner has to translate, and states that said nothing. Six changes:
+
+1. **No idle foreman line.** The dispatch tab no longer draws `工頭狀態：來源未接` when no foreman runs. The watcher deletes the foreman sidecar when it idles, so `null` means "no foreman now", not "not wired". `PaneSections.foremanNotWired` and the string `foreman.not_wired` are removed; a foreman line exists only while there is something to say.
+2. **One review pointer.** The 其他分頁 `審查 ›` row on 派工 is now the same `reviewPointer()` (tabs.ts) as on 現況, with the same fact `review.round`. It no longer reads the job page's gates, so the old strings (`沒有審查回執`, `N 道審查關卡`, `還沒有審查頁`) are gone and the two tabs cannot disagree.
+3. **`idTail` never starts with a separator.** The left cut of an identifier dropped its head and could leave `…-1349925-c899`; the leading `-`/`_`/`.` after the ellipsis is now removed (`…1349925-c899`). Negative control: without the strip the `idTail` test is red.
+4. **審查 wording.** `推送前 QC` is `推送前檢查`; the scope row says `沒有改到受保護檔案` for zero and `改到 N 個受保護檔案` otherwise; `代你決定` is `我替你決定的事` (empty: `— 還沒有替你做決定`; the status line says `替你決定 N 件`); `未記錄 N 件派工沒有決策紀錄` is the dim kv `沒寫理由  N 次派工`; `升級階梯` is `卡關升級` and the row is not drawn when there is no record; `沒有 QC 狀態` is `沒有推送前檢查的狀態`. English follows.
+5. **F6, an abandoned plan review.** A non-terminal plan review untouched for more than `FRESH_MS.abandonedPlan` (604_800_000, §2.5) used to stay a `◌ 已停` section forever. It now fades to one dim line, `計畫審查 {id} 在 {ago}停下，沒有收尾` (key `review.plan_abandoned`), as F3 does for a finished one; it is worded as stopped, because it did not end. The I11 fixtures at `T−1`, `T`, `T+1` pin it (the second still a section, the third one line).
+6. **Progress without a total.** `progress.unfrozen` reads `已完成 {n} 項` (no `*`; §3.5 says never `N*`), on the status line too. 現況's `進度` row adds a dim ` · 沒有固定總數` when the total is not frozen, so the missing denominator is said in words; a frozen total is the percent and nothing after it.
+
+Enforcement: `review.test.ts` (F6, the busy-world golden, which now shows the 27-day plan review as one line), `ui.test.ts` (`idTail`), `live.test.ts` (the 現況 progress row, the shared pointer, no idle foreman line).

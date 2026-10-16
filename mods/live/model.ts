@@ -71,9 +71,8 @@ export type PaneSections = {
   tasksNote: 'todo_hint' | 'not_wired' | null // why `tasks` is null
   decisionsNotWired: boolean
   foreman: ForemanView | null
-  foremanNotWired: boolean
 }
-export const NO_SECTIONS: PaneSections = { attention: null, attentionNotWired: false, tasks: null, tasksNote: null, decisionsNotWired: false, foreman: null, foremanNotWired: false }
+export const NO_SECTIONS: PaneSections = { attention: null, attentionNotWired: false, tasks: null, tasksNote: null, decisionsNotWired: false, foreman: null }
 
 // The two band lines of an ok snapshot. Every ok band carries one of five words; the fifth, 待命, is the idle word.
 export type BandView = {
@@ -85,7 +84,7 @@ export type BandView = {
   verdict: string
   head: string // "<project> · <phase> · <elapsed> · " (the progress follows it)
   progress: string
-  progressDim: boolean // an unfrozen denominator is drawn dim
+  progressDim: boolean // no frozen denominator: 現況 adds 「沒有固定總數」 (§3.5, never `N*`)
   reason: string | null
   project: string // P7 Now tab row: verdict + project + elapsed; progress and phase are their own lines
   elapsed: string
@@ -313,7 +312,7 @@ export function ageText(s: number): string {
 
 export type JobProgress = { frozen: boolean; percent: number | null; done: number | null; total: number | null }
 
-// frozen: "62.5%（5/8）" (the percent as the job model published it). Not frozen: "3 done*", drawn dim. No count: an em dash.
+// frozen: "62.5%（5/8）" (the percent as the job model published it). Not frozen: "3 done" with dim set, so 現況 names the missing total. No count: an em dash.
 export function progressView(p: JobProgress | null, t: T = T_EN): { text: string; dim: boolean } {
   if (p === null) return { text: '—', dim: false }
   if (p.frozen && p.percent !== null && p.done !== null && p.total !== null) return { text: t('progress.frozen', { pct: p.percent, done: p.done, total: p.total }), dim: false }
@@ -1056,7 +1055,6 @@ export function buildSections(src: Sources, foreman: ForemanView | null): PaneSe
     tasksNote: tk !== null ? null : liveSource(m, 'tasks') === true ? 'todo_hint' : liveSource(m, 'tasks') === false ? 'not_wired' : null,
     decisionsNotWired: src.decisions === null && notWired(m, ['ledger_engine', 'ledger_depth0']),
     foreman,
-    foremanNotWired: foreman === null,
   }
 }
 

@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import {
   GLYPHS, STATES, SEVERITY, STATE_IDS, FRESH_MS, isStale, stateOf, worst, classify, isMade, isFrag, blank, header, kv, item, bullet, empty, more, command, detail, meter, table, val,
-  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W, PALETTE, meterKey, countChip, strip, boldUseOf,
+  stateLead, stateBadge, isBadgeState, verifiedOk, idTail, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W, PALETTE, meterKey, countChip, strip, boldUseOf,
 } from './ui'
 import type { Ctx, BadgeStated } from './ui'
 import { wrapLines } from './model'
@@ -105,6 +105,15 @@ test('FRESH_MS: exactly at the threshold is fresh, one ms over is stale (T-1, T,
   }
   expect(classify('background', { exit: null, quietMs: FRESH_MS.quiet })).toBe('fresh')
   expect(classify('background', { exit: null, quietMs: FRESH_MS.quiet + 1 })).toBe('quiet')
+})
+
+test('idTail: the cut tail never starts with a separator, and fits the width (the cut fell on a `-` here)', () => {
+  const id = 'review-1792100439-1349925-c899'
+  const out = idTail(id, 14)
+  expect(out).toBe('…1349925-c899')
+  expect(out.startsWith('…-')).toBe(false)
+  expect(displayWidth(out)).toBeLessThanOrEqual(14)
+  expect(idTail('short-id', 14)).toBe('short-id') // fits: untouched
 })
 
 test('classify run: an undefined or missing rc is no exit code; only a number counts', () => {

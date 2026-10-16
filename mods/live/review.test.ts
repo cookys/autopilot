@@ -49,6 +49,8 @@ const busyDecisions = (over: Record<string, unknown> = {}) => ({
 const QC_NOT_NEEDED = { state: 'not_needed', range: '5a2706ad1111111111..HEAD', protected_files_count: 0, evidence: null }
 
 const busy = () => snap({ review: { plan: planReview(), code: codeRound() }, qc: QC_NOT_NEEDED, decisions: busyDecisions() })
+// the busy world with its plan review stopped 2 days ago (past F2, inside F6): still a folded 「◌ 已停」 section, not the one-line note
+const busyStopped = () => snap({ review: { plan: planReview({ updated_at: iso(2 * DAY) }), code: codeRound() }, qc: QC_NOT_NEEDED, decisions: busyDecisions() })
 const rich = () => snap({
   review: {
     plan: planReview({ updated_at: iso(60_000), seats: [seat('sol_chair', 'openai', 'running'), seat('grok_deep', 'xai', 'CONDITIONAL')] }),
@@ -133,15 +135,14 @@ const GOLDEN_DEFAULT = [
   '            △ 待修  s1 · zhipu                                            ▸',
   '            ✓ 完成  s2 · minimax                                          ▸',
   '            ✓ 完成  s3 · alibaba                                          ▸',
-  '▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────',
-  '範圍        5a2706ad..HEAD · 0 個受保護檔案',
-  '▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────',
+  '▾ 推送前檢查  ∅ 不需要 ────────────────────────────────────────────────────',
+  '範圍        5a2706ad..HEAD · 沒有改到受保護檔案',
+  '▾ 我替你決定的事  3 件 · 0 件不可逆 ───────────────────────────────────────',
   '◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard… ▸',
   '◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A … ▸',
   '◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktree… ▸',
-  '未記錄      32 件派工沒有決策紀錄',
-  '升級階梯    — 沒有紀錄',
-  '▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────',
+  '沒寫理由    32 次派工',
+  '  計畫審查 blind-review-packet-2026-09-16 在 27d 前停下，沒有收尾', // 27 d, never closed: past F6, one line and no section
 ]
 test('golden (76 columns, zh-TW): the default render of the owner\'s busy world is the §5.3 mockup', () => {
   expect(textsOf(render(busy(), 76))).toEqual(GOLDEN_DEFAULT)
@@ -225,7 +226,7 @@ test('120 columns: the round line gains the seat count, the decision rows fill t
 
 // ---- what the tab shows ----
 test('seats keep seat order, one item per seat at column 12, each with its own toggle; the default has no detail and no command (I18, default part)', () => {
-  const lines = render(busy(), 76)
+  const lines = render(busyStopped(), 76)
   const seats = lines.filter(l => l.toggle?.startsWith('seat:code:') === true)
   expect(seats.map(l => l.toggle)).toEqual(['seat:code:s0', 'seat:code:s1', 'seat:code:s2', 'seat:code:s3'])
   expect(seats.every(l => l.kind === 'item' && l.fact === 'review.seats' && leading(l.text) === 12)).toBe(true)
@@ -258,13 +259,13 @@ test('a round holding a seat the mapping does not know is unknown, not stopped (
 })
 
 test('QC chip: not_needed is `∅ 不需要`, owed needs you, unknown is unknown; the protected-file count reads as a count', () => {
-  const qc = (state: string, n = 0) => textsOf(render(snap({ qc: { ...QC_NOT_NEEDED, state, protected_files_count: n } }), 76)).filter(l => l.includes('推送前 QC') || l.startsWith('範圍'))
+  const qc = (state: string, n = 0) => textsOf(render(snap({ qc: { ...QC_NOT_NEEDED, state, protected_files_count: n } }), 76)).filter(l => l.includes('推送前檢查') || l.startsWith('範圍'))
   expect(qc('not_needed')[0]).toContain('∅ 不需要')
   expect(qc('ok')[0]).toContain('✓ 完成')
   expect(qc('owed', 2)[0]).toContain('要你處理')
   expect(qc('unknown')[0]).toContain('? 未知')
-  expect(qc('owed', 2)[1]).toBe('範圍        5a2706ad..HEAD · 2 個受保護檔案')
-  expect(textsOf(render(snap({ qc: QC_NOT_NEEDED }), 76, { t: en })).find(l => l.startsWith('scope'))).toBe('scope       5a2706ad..HEAD · 0 protected files')
+  expect(qc('owed', 2)[1]).toBe('範圍        5a2706ad..HEAD · 改到 2 個受保護檔案')
+  expect(textsOf(render(snap({ qc: QC_NOT_NEEDED }), 76, { t: en })).find(l => l.startsWith('scope'))).toBe('scope       5a2706ad..HEAD · no protected file changed')
 })
 
 test('decisions: one line each in ledger order; more than five fold into a `more` item that opens and closes (I18, pure part)', () => {
@@ -281,18 +282,18 @@ test('decisions: one line each in ledger order; more than five fold into a `more
 test('decisions: a row with no decision_id says why it cannot be vetoed; no sidecar reuses the not-wired note; no decisions say so once', () => {
   const noId = snap({ decisions: busyDecisions({ rows: [decision(1, 'x', { decision_id: null })], count: 1 }) })
   expect(render(noId, 76, { expanded: ['dec:#0'] }).map(l => l.text).join('\n')).toContain('沒有 decision_id，無法 veto')
-  expect(textsOf(render(snap({ note: '代你決定：來源未接' }), 76)).filter(l => l.includes('來源未接'))).toEqual(['— 代你決定：來源未接'])
-  expect(textsOf(render(snap({ decisions: busyDecisions({ rows: [], count: 0, undocumented: 0 }) }), 76)).filter(l => l.startsWith('— '))).toContain('— 尚無代你決定的事')
+  expect(textsOf(render(snap({ note: '替你決定的事：來源未接' }), 76)).filter(l => l.includes('來源未接'))).toEqual(['— 替你決定的事：來源未接'])
+  expect(textsOf(render(snap({ decisions: busyDecisions({ rows: [], count: 0, undocumented: 0 }) }), 76)).filter(l => l.startsWith('— '))).toContain('— 還沒有替你做決定')
 })
 
 test('the escalation ladder: bar of six cells, the rung, U0 ─ U5 and how long ago', () => {
-  const line = textsOf(render(rich(), 76)).find(l => l.startsWith('升級階梯'))!
-  expect(line).toBe('升級階梯    ▰▰▰▱▱▱  U2  U0 ─ U5 · 3h00m 前')
+  const line = textsOf(render(rich(), 76)).find(l => l.startsWith('卡關升級'))!
+  expect(line).toBe('卡關升級    ▰▰▰▱▱▱  U2  U0 ─ U5 · 3h00m 前')
   expect([...line].filter(c => c === '▰' || c === '▱').length).toBe(6)
 })
 
 test('every fold: a header toggles its section; a folded section is the header alone', () => {
-  const lines = render(busy(), 76, { folded: ['sec:review.code', 'sec:review.plan'] })
+  const lines = render(busyStopped(), 76, { folded: ['sec:review.code', 'sec:review.plan'] })
   const texts = textsOf(lines)
   expect(texts[0].startsWith('▸ 程式碼審查')).toBe(true) // code was open by default: toggled away
   expect(texts.some(l => l.startsWith('輪次        R1'))).toBe(false)
@@ -301,10 +302,10 @@ test('every fold: a header toggles its section; a folded section is the header a
 })
 
 test('opened, the stale plan review shows plan, round bar and seats; raw CONDITIONAL / READY / STOP stay in each seat\'s detail', () => {
-  const lines = render(busy(), 76, { folded: ['sec:review.plan'], expanded: ['seat:plan:codex_operations_skeptic'] })
+  const lines = render(busyStopped(), 76, { folded: ['sec:review.plan'], expanded: ['seat:plan:codex_operations_skeptic'] })
   const texts = textsOf(lines)
   const at = texts.findIndex(l => l.startsWith('▾ 計畫審查'))
-  expect(texts[at]).toContain('◌ 已停 · 27d 前')
+  expect(texts[at]).toContain('◌ 已停 · 2d00h 前')
   expect(texts.slice(at + 1, at + 4)).toEqual(['計畫        blind-review-packet-2026-09-16 · △ 待修', '輪次        ▰▱  R1／上限 2', '席位'])
   expect(texts[at + 4]).toMatch(/^ {12}✓ 完成 {2}glm_architecture · zhipu +▸$/)
   expect(texts[at + 5]).toMatch(/^ {12}△ 待修 {2}codex_operations_skeptic · openai +▾$/)
@@ -339,6 +340,22 @@ test('I11 F3: a terminal plan review fades to one dim history line, no section, 
   expect(note[0].text.trim()).toBe('計畫審查 blind-review-packet-2026-09-16 已終結 · 7d 前')
 })
 
+const T_F6 = 604_800_000
+test('I11 F6: a non-terminal plan review untouched for 7 days stays a stopped section at T-1 and T, and is one line saying it stopped one ms after', () => {
+  const at = (ms: number) => render(snap({ review: { plan: planReview({ updated_at: iso(ms) }), code: null } }), 76)
+  for (const ms of [T_F6 - 1, T_F6]) {
+    const lines = at(ms)
+    expect(textsOf(lines).some(l => l.startsWith('▸ 計畫審查') && l.includes('◌ 已停'))).toBe(true)
+    expect(lines.some(l => l.kind === 'detail' && l.text.includes('停下，沒有收尾'))).toBe(false)
+  }
+  const stale = at(T_F6 + 1)
+  expect(textsOf(stale).some(l => l.startsWith('▾ 計畫審查') || l.startsWith('▸ 計畫審查'))).toBe(false)
+  const note = stale.filter(l => l.kind === 'detail')
+  expect(note.length).toBe(1)
+  expect(note[0].text.trim()).toMatch(/^計畫審查 blind-review-packet-2026-09-16 在 .*停下，沒有收尾$/)
+  expect(note[0].text).toContain('7d')
+})
+
 test('I11 F4: a non-converged code review stops being fresh one ms after 24 h (chip ◌ 已停, folded); a converged one never does', () => {
   const at = (ms: number, converged = false) => textsOf(render(snap({ review: { plan: null, code: codeRound({ at: iso(ms), converged }) } }), 76))
   for (const ms of [T_F4 - 1, T_F4]) {
@@ -365,7 +382,7 @@ test('I11 X0 / X1: with no clock, or a timestamp that does not parse, nothing is
 test('the empty world: every section says what is missing, once; nothing throws', () => {
   const lines = render(empty(), 76)
   expect(lines.map(l => l.kind)).toEqual(['header', 'empty', 'header', 'empty', 'header', 'empty'])
-  expect(lines.filter(l => l.kind === 'empty').map(l => l.text)).toEqual(['— 沒有審查資料', '— 沒有 QC 狀態', '— 沒有決策資料'])
+  expect(lines.filter(l => l.kind === 'empty').map(l => l.text)).toEqual(['— 沒有審查資料', '— 沒有推送前檢查的狀態', '— 沒有決策資料'])
 })
 
 test('narrow (40 columns): no line is wider than the pane, and a toggle line keeps its mark at the right edge', () => {

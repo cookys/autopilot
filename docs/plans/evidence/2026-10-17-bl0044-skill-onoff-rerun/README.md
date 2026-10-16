@@ -126,3 +126,11 @@ on arm `evals/skill-onoff/arms/dc-sg/change.json` (= the evaluated v10 `change` 
 `change` arm only (the planted-red arm of that row was already shown to separate in v10). Pass = at least 10 of 12 briefs pass (>= 2 of 3 reps each, as in the row's scorer).
 Swap `skills/dev-flow/SKILL.md` only if BOTH the dc verdict is SHIP-GATE-MET AND this gate passes. Below 10/12: record "dc SHIP-GATE-MET, stage-graph coverage NOT-SHIP", no swap,
 and the card is not edited to restore the paragraph (a card edit invalidates the CARD rows).
+
+### Second gate result (2026-10-17)
+
+36 cells (12 briefs x 3 reps, card in the evaluated v10 `change` arm), 0 infra failures, same binary 2.1.301 and prefix. The scorer's `change` count is **10 of 12** briefs
+(per brief: xs-feature 3, s-feature 3, m-feature 3, l-feature 3, xl-deliverable 3, xs-bug 3, m-bug 2, s-urgent 3, m-urgent-high 3, l-u0-known 2, l-research-a 0, l-research-b 0 of 3),
+the same 10/12 as the evaluated v10 body, with the same two research briefs failing structurally in headless. The scorer's own verdict reads STOP only because the red and generic arms
+were deliberately not run for this gate (registered above). Rows: `results-sg-card-change.jsonl`, `score-sg-card.json`. Boundary again: 10 is the threshold.
+Both gates pass, so `skills/dev-flow/SKILL.md` is replaced by the frozen card in a separate commit.

@@ -194,7 +194,7 @@ function consultRequest(overrides = {}) {
     request_id: 'a'.repeat(48),
     role: 'consult',
     payload: {
-      format: 'unified_diff',
+      format: 'case_content',
       content: JSON.stringify({
         question: 'Does this diff introduce a null-deref on the empty-input path?',
         bundle: { artifacts: [{ id: 'artifact:diff-1', kind: 'diff', text: sampleDiff }] },
@@ -210,7 +210,7 @@ function discussRequest(overrides = {}) {
     request_id: 'b'.repeat(48),
     role: 'discuss',
     payload: {
-      format: 'unified_diff',
+      format: 'case_content',
       content: JSON.stringify({
         transcript: [
           { round: 1, role: 'product', axis_id: 'axis:scope', position: 'Ship it.', risk_tags: ['minor'], anchors: [] },
@@ -343,7 +343,7 @@ function partB() {
     const { child } = runProvider({
       env: { QRP_PROMPT_MODE: 'consult' },
       request: consultRequest({
-        payload: { format: 'unified_diff', content: JSON.stringify({ bundle: {} }) },
+        payload: { format: 'case_content', content: JSON.stringify({ bundle: {} }) },
       }),
       stubOutput: CONSULT_STUB_OUTPUT,
     });
@@ -356,7 +356,7 @@ function partB() {
     const { child } = runProvider({
       env: { QRP_PROMPT_MODE: 'discuss' },
       request: discussRequest({
-        payload: { format: 'unified_diff', content: JSON.stringify({ bundle: {} }) },
+        payload: { format: 'case_content', content: JSON.stringify({ bundle: {} }) },
       }),
       stubOutput: DISCUSS_STUB_OUTPUT,
     });

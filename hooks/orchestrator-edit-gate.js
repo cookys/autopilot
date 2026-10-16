@@ -14,6 +14,8 @@
  * foremen/workers pass; depth-0 doesn't. Territory: realpath containment in
  * marker.repo_root, or a `.autopilot-worktree` marker above the target
  * (worktrees are WORKER territory — gated for depth-0, WHERE-not-WHO).
+ * The repo's main checkout counts as repo territory even when the marker's repo_root is a linked
+ * worktree (BL-0005). Explicit release: --solo re-entry, mode off, or hooks.orchestrator-edit-gate=false.
  * Allowlist: docs/projects/, docs/plans/, .claude/, .autopilot/.
  *
  * Modes (env AUTOPILOT_ORCH_EDIT_GATE_MODE or ~/.autopilot/config.json
@@ -33,6 +35,7 @@ const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
 const { decide, isAllowlisted } = require('./orchestrator-edit-gate-lib.js');
 const { readMarker } = require('../scripts/session-mode.js');
+const { mainCheckout } = require('../scripts/resolve-repo-placement.js');
 
 function gateMode() {
   const env = process.env.AUTOPILOT_ORCH_EDIT_GATE_MODE;
@@ -104,16 +107,32 @@ function inMarkedNestedWorktree(repoRoot, target) {
     if (!rawTarget) process.exit(0);
     const target = resolveReal(rawTarget);
     const repoRoot = resolveReal(marker.repo_root);
+    let mainRoot = null;
     // A marked rail worktree under <repo>/.claude/worktrees/ is a dispatch worktree, not the repo
     // (the .claude/ allowlist would otherwise let depth-0 edit it). Unmarked ones stay repo paths.
-    const inRepoRoot = contains(repoRoot, target) && !inMarkedNestedWorktree(repoRoot, target);
+    const inMarkerRoot = contains(repoRoot, target) && !inMarkedNestedWorktree(repoRoot, target);
+    // BL-0005: once the marker follows the session into a linked worktree, the repo's main checkout
+    // is still product territory (owner ruling 2026-10-17). Same rules as the marker root; marked
+    // dispatch worktrees nested under it stay worker territory. Fail-open: unresolvable ⇒ not in it.
+    let inMainCheckout = false;
+    if (!inMarkerRoot) {
+      try {
+        const main = mainCheckout(repoRoot);
+        if (main) {
+          const mainReal = resolveReal(main);
+          inMainCheckout = contains(mainReal, target) && !inMarkedNestedWorktree(mainReal, target);
+          if (inMainCheckout) mainRoot = mainReal;
+        }
+      } catch { /* fail-open */ }
+    }
+    const inRepoRoot = inMarkerRoot || inMainCheckout;
 
     const d = decide({
       markerLevel: marker.level,
       isSubagent: Boolean(payload.agent_id), // SPIKE-1 identity
       inRepoRoot,
       inDispatchWorktree: !inRepoRoot && hasWorktreeMarkerAbove(target),
-      allowlisted: inRepoRoot && isAllowlisted(path.relative(repoRoot, target)),
+      allowlisted: inRepoRoot && isAllowlisted(path.relative(inMainCheckout ? mainRoot : repoRoot, target)),
     });
 
     if (d.action === 'gate') {

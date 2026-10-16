@@ -9,3 +9,6 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: S for the zero-vs-null encoding fix alone; M if the ordering change follows (the v2.36.20 KR tests must keep holding)
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 
+
+- **Done 2026-10-16 (encoding half)**: `qualification-usage.js costBlock` writes `null` prices for an unknown source, and `engine-scorecard.js costSortValue` gates on `cost.source` and on `typeof number` (a manual row with null prices no longer coerces to free). The implementer-ladder resolver itself never read cost; only the consult/discuss sort did. Existing store rows still carry zeros and stay safe because the gate is the source.
+- **Remaining**: ordering the implementer ladder by price needs real unit prices on the rungs (none are priced today) — an owner decision about registering them, not a code fix. Do not hand-write a price table.

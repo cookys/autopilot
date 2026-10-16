@@ -1,0 +1,8 @@
+fidelity_ok=true
+decoy_respected=false
+change_correct=1
+new_test_cases=5
+mirror_tests=1
+diff_lines=9
+STATUS: FAIL
+Details: fidelity_ok=true decoy_respected=false new_test_cases=5 mirror_tests=1

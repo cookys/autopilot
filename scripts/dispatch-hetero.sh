@@ -271,6 +271,7 @@ QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for 
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
+REPO_IDENTITY_FIELDS=""   # manifest repo-identity JSON members, cached by repo_identity_resolve_fields; init early so it is SET for the detach declare -p and an ambient value is never copied verbatim (BL-0109)
 KIMI_EDIT_ONLY=""       # kimi EDIT-ONLY directive text, computed once at the pre-spend argv
                         # gate and reused verbatim by the run arm; init early for declare -p
                         # (KIMI_ARGV_LIMIT is NOT pre-declared here — it is a user env-override
@@ -564,6 +565,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/json-emit.sh"
 # shellcheck source=lib/dispatch-branch-ledger.sh
 . "$SELF_DIR/lib/dispatch-branch-ledger.sh"
+# shellcheck source=lib/worktree-intent.sh
+. "$SELF_DIR/lib/worktree-intent.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$SELF_DIR/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
@@ -2057,9 +2060,16 @@ set_runner_flags() {
   RUNNER_RESOLVED=1
 }
 
-D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
-D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
-D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
+D2_AGY_USAGE_CLAIM="cap-v1-60b3c8d855d3cfb31c4ebf9cce62c4fc5c564f7b340abf2c75614e4cb269d64d"
+# The validator requires and emits the ids sorted ascending; they are content-derived, so their order
+# is not a constant. Hold them sorted once and use that for both the --claim-id arguments and the compare.
+if [[ "$D2_AGY_RESPONSE_CLAIM" < "$D2_AGY_USAGE_CLAIM" ]]; then
+  D2_AGY_CLAIM_LO="$D2_AGY_RESPONSE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_USAGE_CLAIM"
+else
+  D2_AGY_CLAIM_LO="$D2_AGY_USAGE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_RESPONSE_CLAIM"
+fi
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_CLAIM_LO\",\"$D2_AGY_CLAIM_HI\"]"
 validate_d2_agy_claims() {
   local receipt validator observed rc=0
   receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
@@ -2067,7 +2077,7 @@ validate_d2_agy_claims() {
   [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
     || die_precondition "D2 capability claim validation failed"
   observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
-    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --claim-id "$D2_AGY_CLAIM_LO" --claim-id "$D2_AGY_CLAIM_HI" \
     --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
@@ -3085,24 +3095,13 @@ if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
     die_resource_budget "$WT_BUDGET_COUNT" "$_wt_budget_limit"
   fi
 
-  _wt_pending_tmp="$(mktemp "$_wt_common_dir/autopilot-worktree-creation/${WT_RUN_ID}.XXXXXX.tmp")" \
+  worktree_intent_write "$_wt_common_dir" "$WORKTREE_ROOT_RUN_ID" "$WT_RUN_ID" "$WT_LOOP_ID" "$BRANCH" "$BASE_SHA" "$WT" \
     || {
       exec {WT_BUDGET_LOCK_FD}>&-
       WT_BUDGET_LOCK_FD=""
-      die_precondition "cannot allocate worktree creation record"
+      die_precondition "cannot publish worktree creation record: $WORKTREE_INTENT_ERROR"
     }
-  WT_PENDING_RECORD="${_wt_pending_tmp%.tmp}.json"
-  (umask 077; printf '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
-    "$(json_escape "$WORKTREE_ROOT_RUN_ID")" "$(json_escape "$WT_RUN_ID")" \
-    "$(json_escape "$WT_LOOP_ID")" "$(json_escape "$BRANCH")" \
-    "$BASE_SHA" "$(json_escape "$WT")" > "$_wt_pending_tmp") \
-    && mv -f -- "$_wt_pending_tmp" "$WT_PENDING_RECORD" \
-    || {
-      rm -f -- "$_wt_pending_tmp"
-      exec {WT_BUDGET_LOCK_FD}>&-
-      WT_BUDGET_LOCK_FD=""
-      die_precondition "cannot publish worktree creation record"
-    }
+  WT_PENDING_RECORD="$WORKTREE_INTENT_RECORD"
   _wt_creation_test_checkpoint after-pending
 elif [ "$WORKTREE_REUSED" -eq 0 ]; then
   _wt_prepare_common_excludes \

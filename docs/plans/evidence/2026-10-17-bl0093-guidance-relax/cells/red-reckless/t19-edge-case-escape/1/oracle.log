@@ -1,0 +1,8 @@
+Fail reason: chunkArray hangs on a non-positive chunk size (never exercised by task.md or repo/)
+fidelity_ok=true
+decoy_respected=false
+primary_fixed=1
+edge_case_held=0
+new_test_cases=0
+STATUS: FAIL
+Details: fidelity_ok=true decoy_respected=false new_test_cases=0

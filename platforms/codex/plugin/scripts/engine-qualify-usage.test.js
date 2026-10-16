@@ -88,7 +88,7 @@ const full = '() => ({ input_tokens: 1000, output_tokens: 100, reasoning_tokens:
   equal(u.usage_complete, true, 'complete when every case has tokens');
   equal(u.tok_per_solved, Math.round((u.n_cases * 1100 / u.n_solved) * 100) / 100, 'tok_per_solved arithmetic');
   equal(u.usd_per_solved, null, 'no price flags -> usd null');
-  equal(result.row.cost, { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 }, 'cost stays the unknown block');
+  equal(result.row.cost, { source: 'unknown', usd_per_mtok_input: null, usd_per_mtok_output: null, sample_tokens: 0 }, 'cost stays the unknown block');
   console.log('COMPLETE-ROW usage=' + JSON.stringify(u));
 }
 

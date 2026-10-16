@@ -2,6 +2,8 @@
 # A final panel that returns findings with no bound disposition authority parks
 # (durable wait) instead of terminal-stopping; a clean final panel is unchanged.
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';

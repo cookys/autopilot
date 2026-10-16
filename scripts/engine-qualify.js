@@ -3273,6 +3273,15 @@ function resolveImplEndpoint(name) {
 }
 
 function runImplQualification(options) {
+  // The administration always runs exactly trials_per_administration trials;
+  // an accepted --trials N would be recorded as repeated_trials without N ever
+  // running (VA / brain / consult-discuss already refuse this).
+  // Runs first: needs neither bwrap nor the endpoint, so it is testable anywhere.
+  if (options.trials !== implGrader.CORPUS.budget.trials_per_administration) {
+    throw new Error(
+      `implementer qualification requires exactly ${implGrader.CORPUS.budget.trials_per_administration} trials`,
+    );
+  }
   if (options.endpoint) {
     options = { ...options, endpointBinding: resolveImplEndpoint(options.endpoint) };
     if (options.endpointBinding.transport_security === 'plaintext_private') {
@@ -5971,6 +5980,7 @@ module.exports = {
   createSessionRoleCapabilityVerifier,
   foldPooledVerdict,
   ownerRuleViolations,
+  parseOwnerPanelResult,
   qualificationLabelTiers,
   qualificationReasonPrefixTiers,
   runBrainQualification,

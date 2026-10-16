@@ -647,6 +647,7 @@ const composition = runCampaignComposition({ promptBytes: 0, maxRepairGeneration
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   preEffectAdmit({ wouldCreateWorktree }) {
     compositionPreEffects += 1;
     compositionWorktreeProjection.push(wouldCreateWorktree === true);
@@ -742,6 +743,7 @@ const dispositionConflict = runCampaignComposition({ promptBytes: 0, maxRepairGe
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   implement: () => ({ committed: true, tree_sha: TREE_A }),
   scopeCheck: () => ({ passed: true }),
   verify: () => ({ passed: true, receipt_digest: '6'.repeat(64) }),
@@ -782,6 +784,7 @@ const evidenceConflict = runCampaignComposition({ promptBytes: 0, maxRepairGener
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   implement: () => ({ committed: true, tree_sha: TREE_A }),
   scopeCheck: () => ({ passed: true }),
   verify: () => ({ passed: true, receipt_digest: '8'.repeat(64) }),
@@ -815,6 +818,7 @@ const missingRetentionEvidence = runCampaignComposition({ promptBytes: 0, maxRep
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   implement: () => ({ committed: true, tree_sha: TREE_A }),
   scopeCheck: () => ({ passed: true }),
   verify: () => ({ passed: true, receipt_digest: 'a'.repeat(64) }),
@@ -849,6 +853,7 @@ const incomplete = runCampaignComposition({ promptBytes: 0, maxRepairGenerations
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   implement() {
     incompleteMutations += 1;
     return { committed: true, tree_sha: TREE_A };
@@ -879,6 +884,7 @@ const vertical = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit, the default no longer admits without a repository
   preEffectAdmit({ wouldCreateWorktree }) {
     verticalPreEffects += 1;
     verticalWorktreeProjection.push(wouldCreateWorktree === true);

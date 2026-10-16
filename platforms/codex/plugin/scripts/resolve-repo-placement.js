@@ -79,6 +79,15 @@ function resolveMain(from) {
   };
 }
 
+// One line for the owner when the main checkout lags its upstream; null when it does not (or cannot be
+// measured). The command is the one references/worktree-placement.md gives. BL-0006: printed by
+// repo-residue-sweep.js close-session --yes, which finish-flow's close-out row already runs.
+function behindHint(from) {
+  const r = resolveMain(from);
+  if (r.main_checkout === null || !(r.behind > 0)) return null;
+  return `main checkout is ${r.behind} commit${r.behind === 1 ? '' : 's'} behind origin; run in the main checkout: git -C ${r.main_checkout} pull --ff-only`;
+}
+
 function worktreeTemplate(from, prefix, slug) {
   const name = `${prefix}-${slug.replace(/\//g, '-')}-XXXXXX`;
   const main = mainCheckout(from);
@@ -184,6 +193,6 @@ function main(argv) {
   return 0;
 }
 
-module.exports = { mainCheckout, resolveMain, worktreeTemplate, clearHandoffKey, handoffPath };
+module.exports = { mainCheckout, resolveMain, behindHint, worktreeTemplate, clearHandoffKey, handoffPath };
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

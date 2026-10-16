@@ -10,6 +10,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { gitEquivalentPathBytes } = require('./sealed-zero-diff-validator');
 
 const CONTROLLER_SCHEMA = 1;
 const PROGRESS_RECEIPT_ARTIFACT = 'controller_progress_receipt';
@@ -270,7 +271,23 @@ function checkJointRepairBudget(usage, limits, {
 } = {}) {
   const u = { ...emptyBudgetUsage(), ...(usage || {}) };
   const lim = defaultBudgetLimits(limits || {});
-  const projected = isObj(projectedDelta) ? projectedDelta : {};
+  // BL-0077: a caller that does not state its projected spend is not "spending
+  // nothing" -- an equality-at-cap state would otherwise admit. Say `{}` to
+  // project no spend explicitly.
+  if (!isObj(projectedDelta)) {
+    return {
+      ok: false,
+      status: 'budget_projection_required',
+      code: 'BUDGET_PROJECTION_REQUIRED',
+      exceeded: [],
+      usage: u,
+      limits: lim,
+      allow_spend: false,
+      projected: null,
+      reason: 'joint repair budget check requires an explicit projectedDelta object; pass {} to project no spend',
+    };
+  }
+  const projected = projectedDelta;
   const exceeded = [];
   for (const axis of REPAIR_BUDGET_AXES) {
     if (axis === 'fresh_input_tokens') {
@@ -669,7 +686,17 @@ function controllerStateDigest(state) {
 function attachControllerState(workOrder, controllerState) {
   if (!isObj(workOrder)) fail('INVALID_WORK_ORDER', 'work order required');
   const next = { ...workOrder };
-  next.controller = emptyControllerState(controllerState || workOrder.controller || {});
+  // BL-0077: omitting the state preserves the stored controller; supplying one
+  // replaces it, and an empty or non-object replacement is rejected rather than
+  // silently resetting the whole controller state.
+  if (controllerState === undefined || controllerState === null) {
+    next.controller = emptyControllerState(workOrder.controller || {});
+    return next;
+  }
+  if (!isObj(controllerState) || Object.keys(controllerState).length === 0) {
+    fail('INVALID_CONTROLLER_STATE', 'controller replacement must be a non-empty object; omit it to keep the stored controller');
+  }
+  next.controller = emptyControllerState(controllerState);
   return next;
 }
 
@@ -678,6 +705,8 @@ function requireFullDiffBeforeRepair({
   fullDiffBarriers,
   focusedOnly = false,
   verticalFailed = false,
+  // BL-0080: the barrier authorizes repair of ONE candidate. Callers state which.
+  candidateRef = null,
 }) {
   const gen = Number.isSafeInteger(generation) ? generation : 0;
   const barriers = isObj(fullDiffBarriers) ? fullDiffBarriers : {};
@@ -701,10 +730,26 @@ function requireFullDiffBeforeRepair({
       generation: gen,
     };
   }
+  if (!isStr(candidateRef) || barrier.candidate_ref !== candidateRef) {
+    return {
+      ok: false,
+      allow_repair: false,
+      reason: 'full-diff barrier is not bound to the candidate being repaired; '
+        + 'a barrier from another candidate in the same generation cannot authorize this repair',
+      code: 'FULL_DIFF_BARRIER_CANDIDATE_MISMATCH',
+      generation: gen,
+    };
+  }
   return { ok: true, allow_repair: true, barrier };
 }
 
 function recordFullDiffBarrier(barriers, generation, receipt) {
+  // BL-0080: only an authoritative full-diff review mints this barrier. A focused
+  // or supplemental receipt forwarded here must not become one, so the kind is
+  // taken from the receipt and checked, never stamped on whatever arrives.
+  if (!isObj(receipt) || receipt.kind !== 'full_diff_review') {
+    fail('INVALID_FULL_DIFF_BARRIER', 'a full-diff barrier can only be recorded from a full_diff_review receipt');
+  }
   const next = { ...(barriers || {}) };
   next[String(generation)] = {
     kind: 'full_diff_review',
@@ -716,10 +761,35 @@ function recordFullDiffBarrier(barriers, generation, receipt) {
   return next;
 }
 
+// BL-0078: mutation_failed / unknown_status are derived from the rail evidence,
+// never written as constants. A boundary_rejected outcome is only a clean,
+// durable boundary stop when the rail did not also report a failed mutation,
+// an unknown status, or an effect it cannot point at (possibly_effectful with
+// no candidate ref). Anything else is returned as not-clean so callers refuse
+// to treat it as a resumable boundary.
+function deriveBoundaryOutcomeFlags(dispatchResult) {
+  const r = isObj(dispatchResult) ? dispatchResult : {};
+  const candidateRef = r.commit || r.candidate_ref || r.tip || null;
+  const mutationFailed = r.mutation_failed === true;
+  const unknownStatus = r.unknown_status === true
+    || (r.possibly_effectful === true && !candidateRef)
+    || (r.mutation_failed !== undefined && typeof r.mutation_failed !== 'boolean')
+    || (r.unknown_status !== undefined && typeof r.unknown_status !== 'boolean');
+  return {
+    mutation_failed: mutationFailed,
+    unknown_status: unknownStatus,
+    clean: !mutationFailed && !unknownStatus,
+  };
+}
+
 function classifyBoundaryRejected(dispatchResult) {
   if (!isObj(dispatchResult)) return null;
   const status = dispatchResult.status || dispatchResult.dispatch_status;
   if (status !== BOUNDARY_REJECTED) return null;
+  const flags = deriveBoundaryOutcomeFlags(dispatchResult);
+  // Contradictory evidence is not a boundary stop: let the caller fall through
+  // to its generic non-success handling instead of a durable resumable wait.
+  if (!flags.clean) return null;
   return {
     status: BOUNDARY_REJECTED,
     phase: BOUNDARY_REJECTED,
@@ -728,8 +798,8 @@ function classifyBoundaryRejected(dispatchResult) {
       || 'boundary rejected',
     boundary_code: dispatchResult.boundary_code || 'scope_or_budget_boundary',
     possibly_effectful: Boolean(dispatchResult.commit || dispatchResult.candidate_ref),
-    mutation_failed: false,
-    unknown_status: false,
+    mutation_failed: flags.mutation_failed,
+    unknown_status: flags.unknown_status,
   };
 }
 
@@ -1600,6 +1670,7 @@ function adoptOrphanLeafMechanical({
 }) {
   const {
     isCompleteIdentity,
+    isProcessLiveStrict,
     createOrUpdateWorkOrder,
     readJsonStrict,
     resolveGitCommonDir,
@@ -1756,6 +1827,47 @@ function adoptOrphanLeafMechanical({
       reason: 'controller death could not be proven',
       preserve_evidence: true, duplicate_mutation: 0,
     };
+  }
+  // BL-0082: a dead controller does not mean a dead leaf. The leaf (or the process
+  // supervising it) can still be committing into the worktree being adopted, which
+  // is an ownership race. The persisted runner identity (dispatch heartbeat
+  // `--runner self`) is re-observed here: an absent or partial identity is no proof,
+  // an unknowable process table is no proof, and a live one forbids adoption.
+  {
+    const runner = workOrder.runner;
+    const runnerFields = isObj(runner)
+      ? [runner.pid, runner.process_start_time, runner.pgid, runner.sid] : [];
+    if (runnerFields.length === 0 || runnerFields.every((v) => v == null)) {
+      return {
+        ok: false, status: 'stopped', code: 'ADOPTION_LEAF_IDENTITY_MISSING',
+        reason: 'no persisted leaf/runner process identity: leaf death cannot be proven, so the leaf worktree is not adopted',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    if (!isCompleteIdentity(runner)) {
+      return {
+        ok: false, status: 'stopped', code: 'ADOPTION_LEAF_IDENTITY_INCOMPLETE',
+        reason: 'persisted leaf/runner identity is incomplete (pid/start/pgid/sid all required)',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    let leafLive;
+    try {
+      leafLive = isProcessLiveStrict(runner);
+    } catch (error) {
+      return {
+        ok: false, status: 'stopped', code: 'LEAF_DEATH_UNKNOWN',
+        reason: `leaf/runner liveness could not be observed: ${error.message || String(error)}`,
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    if (leafLive !== false) {
+      return {
+        ok: false, status: 'stopped', code: 'LEAF_STILL_LIVE',
+        reason: 'the persisted leaf/runner process is still live; adopting its worktree would race it',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
   }
   if (!isObj(leafResult) || leafResult.committed !== true) {
     return {
@@ -2051,6 +2163,137 @@ function adoptOrphanLeafMechanical({
 }
 
 /**
+ * BL-0082: re-derive inventory rows that Git no longer corroborates instead of
+ * trusting the flags a previous generation stored on them.
+ *
+ *  - A worktree row whose path is not a registered worktree cannot be `active`
+ *    (unless it is backed by a terminal receipt): the claim is dropped.
+ *  - A path that still exists on disk but is not registered is unknown residue.
+ *  - When the worktree is gone but its branch ref remains and the branch has moved
+ *    past the tip the controller recorded (or none was recorded), uniqueness is
+ *    re-read from the branch, so an orphan branch carrying commits is still debt.
+ *    A branch still at its recorded tip keeps the controller's own observation.
+ */
+function rederiveStaleRows({
+  byPath, registeredWorktrees, gitCwd, baseSha, execFileSync,
+}) {
+  if (!(registeredWorktrees instanceof Set)) return;
+  for (const row of byPath.values()) {
+    if ((row.kind || 'worktree') !== 'worktree') continue;
+    const rowPath = row.path || row.worktree;
+    if (!isStr(rowPath)) continue;
+    let rowReal = rowPath;
+    try { rowReal = fs.realpathSync(rowPath); } catch (_e) { /* path gone */ }
+    const registered = registeredWorktrees.has(rowPath) || registeredWorktrees.has(rowReal);
+    if (registered) continue;
+    row.worktree_registered = false;
+    if (row.active === true && row.terminal !== true) {
+      row.active = false;
+      row.active_rederived = 'worktree_not_registered';
+    }
+    if (fs.existsSync(rowPath)) {
+      // On disk but unknown to Git: residue we cannot classify -- unless the
+      // controller already closed it with a terminal receipt (finished evidence it
+      // recorded itself), which is the retained-candidate case.
+      if (row.terminal !== true) {
+        row.identity_known = false;
+        row.unregistered_path_exists = true;
+      }
+      continue;
+    }
+    if (!isStr(row.branch)) continue;
+    let tip = null;
+    try {
+      tip = execFileSync(
+        'git',
+        ['-C', gitCwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${row.branch}^{commit}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+    } catch (_e) {
+      row.branch_exists = false;
+      continue;
+    }
+    row.branch_exists = true;
+    // The controller recorded this exact tip with its own outcome (the normal
+    // retained-candidate case): the stored observation still describes the branch.
+    // Only a branch that has MOVED since, or was never recorded with a tip, is
+    // re-read -- that is the leaf that kept committing after the controller died.
+    if (isCanonicalGitObjectId(row.tip) && row.tip === tip) continue;
+    row.tip_before_rederivation = isStr(row.tip) ? row.tip : null;
+    row.tip = tip;
+    const frozenBase = isCanonicalGitObjectId(row.base_sha)
+      ? row.base_sha
+      : (isCanonicalGitObjectId(baseSha) ? baseSha : null);
+    if (!frozenBase) {
+      row.unique = null;
+      row.identity_known = false;
+      row.unique_reason = 'frozen_base_unavailable';
+      continue;
+    }
+    try {
+      const baseCommit = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${frozenBase}^{commit}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      const tipTree = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${tip}^{tree}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      const baseTree = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${baseCommit}^{tree}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      row.base_sha = baseCommit;
+      row.unique = tip !== baseCommit && tipTree !== baseTree;
+    } catch (_e) {
+      row.unique = null;
+      row.identity_known = false;
+      row.unique_reason = 'branch_observation_failed';
+    }
+  }
+}
+
+/**
+ * BL-0082: read the worktree-creation intent records dispatch-hetero.sh publishes
+ * under `<git-common-dir>/autopilot-worktree-creation/` BEFORE `git worktree add`.
+ * A crash between the add and the controller's registration leaves only this record,
+ * so the controller inventory must be able to see it. Pure re-derivation: the record
+ * is a claim about a path/branch; Git decides whether anything exists there.
+ * Fail-closed: an unreadable directory or an unparseable/incomplete record throws
+ * (a record we cannot attribute to a root may belong to this one).
+ */
+function readWorktreeCreationIntents({ gitCwd, execFileSync }) {
+  const common = execFileSync('git', ['-C', gitCwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+  const dir = path.join(common, 'autopilot-worktree-creation');
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return [];
+    throw error;
+  }
+  const records = [];
+  for (const name of names.sort()) {
+    if (!name.endsWith('.json')) continue;
+    const file = path.join(dir, name);
+    let rec;
+    try {
+      rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (error) {
+      throw new Error(`worktree creation intent unreadable: ${file}: ${error.message}`);
+    }
+    if (!isObj(rec) || !isStr(rec.root_run_id) || !isStr(rec.planned_path)
+        || !path.isAbsolute(rec.planned_path) || !isStr(rec.branch)) {
+      throw new Error(`worktree creation intent malformed: ${file}`);
+    }
+    records.push({ file, ...rec });
+  }
+  return records;
+}
+
+/**
  * Reconstruct current *owned* worktree inventory from Git + controller state.
  * The primary checkout (gitCwd) is never counted as campaign-owned residue.
  * Linked worktrees are owned only when:
@@ -2125,6 +2368,7 @@ function reconstructOwnedInventory({
     };
   }
   let mainAbs = null;
+  let registeredWorktrees = null;
   try {
     mainAbs = fs.realpathSync(path.resolve(gitCwd));
   } catch (_e) {
@@ -2135,6 +2379,26 @@ function reconstructOwnedInventory({
     const porcelain = execFileSync('git', ['-C', gitCwd, 'worktree', 'list', '--porcelain'], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
+    // Creation intents of THIS root become owned rows, so a worktree that exists
+    // but was never registered by the controller is inventoried (and then judged by
+    // the Git observations below like any other row).
+    const intentPaths = new Set();
+    if (isStr(rootRunId)) {
+      for (const rec of readWorktreeCreationIntents({ gitCwd, execFileSync })) {
+        if (rec.root_run_id !== rootRunId) continue;
+        intentPaths.add(rec.planned_path);
+        put({
+          resource_id: rec.planned_path,
+          kind: 'worktree',
+          path: rec.planned_path,
+          worktree: rec.planned_path,
+          branch: rec.branch,
+          base_sha: isCanonicalGitObjectId(rec.base_sha) ? rec.base_sha : null,
+          identity_known: true,
+          from_creation_intent: true,
+        }, { live: false });
+      }
+    }
     let current = null;
     const linked = [];
     for (const line of porcelain.split('\n')) {
@@ -2157,6 +2421,11 @@ function reconstructOwnedInventory({
       }
     }
     if (current) linked.push(current);
+    registeredWorktrees = new Set();
+    for (const item of linked) {
+      registeredWorktrees.add(item.path);
+      try { registeredWorktrees.add(fs.realpathSync(item.path)); } catch (_e) { /* path gone */ }
+    }
     for (const item of linked) {
       let abs = item.path;
       try { abs = fs.realpathSync(item.path); } catch (_e) { /* keep */ }
@@ -2216,6 +2485,18 @@ function reconstructOwnedInventory({
         item.identity_known = false;
       }
       put(item, { live: true });
+    }
+    rederiveStaleRows({
+      byPath, registeredWorktrees, gitCwd, baseSha, execFileSync,
+    });
+    // An intent whose crash came before the add left nothing: no worktree, no
+    // path, no branch. It is not a resource; keep only what Git corroborates.
+    for (const [key, row] of [...byPath.entries()]) {
+      if (row.from_creation_intent !== true || !intentPaths.has(row.path)) continue;
+      if (row.worktree_registered === false && !fs.existsSync(row.path)
+          && row.branch_exists !== true) {
+        byPath.delete(key);
+      }
     }
   } catch (error) {
     if (failClosedOnGitError) {
@@ -2872,13 +3153,11 @@ function bytesEqual(a, b) {
 /** Canonical sha256 of raw file bytes (not UTF-8-normalized text). */
 function pathContentDigest(repoRoot, relativePath) {
   if (!isStr(repoRoot) || !isStr(relativePath)) return null;
-  const abs = path.join(repoRoot, relativePath);
-  try {
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return null;
-    return crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-  } catch (_e) {
-    return null;
-  }
+  // BL-0079: hash the bytes Git stores (a symlink is its target string), not the
+  // bytes the link points at, so this agrees with `git show <base>:<path>`.
+  const bytes = gitEquivalentPathBytes(repoRoot, relativePath);
+  if (bytes === null) return null;
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 function admitExecutableMissionDelta({
@@ -2906,8 +3185,23 @@ function admitExecutableMissionDelta({
   const outputs = (outputPaths || []).map(String);
   const reasons = [];
 
+  // BL-0077: this helper must not depend on its callers' normalizers. A path
+  // that is absolute, empty, or has a ./.. / empty segment, a backslash or NUL
+  // can satisfy the string-prefix allow check while resolving elsewhere.
+  function unsafeRelPath(p) {
+    if (typeof p !== 'string' || p.length === 0) return true;
+    if (p.includes('\0') || p.includes('\\') || p.startsWith('/')) return true;
+    return p.split('/').some((seg) => seg === '' || seg === '.' || seg === '..');
+  }
+
   function underAllowed(p) {
     return allowed.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+  }
+
+  for (const p of [...required, ...outputs, ...creates, ...(extraDeclaredPaths || []).map(String)]) {
+    if (unsafeRelPath(p)) {
+      reasons.push({ code: 'PATH_TRAVERSAL', path: p });
+    }
   }
 
   for (const p of [...required, ...outputs]) {
@@ -4115,6 +4409,7 @@ module.exports = {
   requireFullDiffBeforeRepair,
   recordFullDiffBarrier,
   classifyBoundaryRejected,
+  deriveBoundaryOutcomeFlags,
   classifyMissingDisposition,
   classifyResourceOutcome,
   recoveryBundleIdentityDigest,

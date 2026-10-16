@@ -44,7 +44,7 @@ server.listen(0, '127.0.0.1', () => {
   const child = spawn('node', [path.join(repo, 'scripts/qualification-review-provider.js')], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let err = '';
   child.stderr.on('data', (c) => { err += c; });
-  child.stdin.end(JSON.stringify({ schema_version: 1, request_id: 'capture-1', role: 'reviewer', payload: { format: 'unified_diff', content: diff } }));
+  child.stdin.end(JSON.stringify({ schema_version: 1, request_id: 'capture-1', role: 'reviewer', payload: { format: 'case_content', content: diff } }));
   child.on('close', (code) => {
     server.close();
     const rec = { requested: { model, effort, thinking }, provider_exit: code, provider_stderr: err.slice(0, 300), first_request: captured[0] || null, requests_seen: captured.length };

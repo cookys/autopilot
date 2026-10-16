@@ -118,6 +118,7 @@ assert_eq "$(git -C "$SBX" worktree list --porcelain | grep -c '^worktree .*/for
 [ -e "$SBX/.claude" ] && fail "2: precondition — sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 run_foreman complete r2 --env-passthrough PASS_ME --model kimi-code/k3
 assert_eq "$RC" "0" "2: completed → exit 0"
+assert_eq "$(ls "$SBX/.git/autopilot-worktree-creation" 2>/dev/null | wc -l | tr -d ' ')" "0" "2: a completed foreman leaves no creation-intent record"
 assert_eq "$(field "$OUT" status)" "completed" "2: status completed"
 assert_eq "$(field "$OUT" report_written)" "true" "2: report_written"
 assert_eq "$(field "$OUT" tool_calls)" "3" "2: three Bash calls counted, the raw leak line NOT counted"
@@ -362,6 +363,37 @@ assert_contains "$OUT" 'sibling-ref-prefix' "13: …naming the flag"
 OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --run-id r13e --run-dir "$RUNS/r13e" --sibling-path-prefix /abs 2>/dev/null)"; RC=$?
 assert_eq "$RC" "2" "13: --sibling-path-prefix /abs (not checkout-relative) is refused"
 assert_contains "$OUT" 'sibling-path-prefix' "13: …naming the flag"
+
+# ======================================================================= 14 creation intent (BL-0082)
+# A foreman killed between `git worktree add` and the marker write leaves a worktree nobody registered.
+# The intent record written BEFORE the add makes it discoverable, to the JS inventory too.
+INTENT_DIR="$SBX/.git/autopilot-worktree-creation"
+OUT="$(cd "$SBX" && FOREMAN_TEST_CRASH_AFTER_ADD=1 AUTOPILOT_WORKTREE_ROOT_RUN_ID=root14 PATH="$STUBDIR:$PATH" \
+  bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --run-id r14 --run-dir "$RUNS/r14" 2>/dev/null)"; RC=$?
+assert_eq "$(ls "$INTENT_DIR"/r14.*.json 2>/dev/null | wc -l | tr -d ' ')" "1" "14: a crash after the add leaves its creation-intent record"
+REC="$(ls "$INTENT_DIR"/r14.*.json | head -1)"
+assert_eq "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write([j.schema,j.root_run_id,j.run_id,j.loop_id,/^foreman\//.test(j.branch)||j.branch,j.base_sha,require("fs").existsSync(j.planned_path)].join("|"))' "$REC")" \
+  "1|root14|r14|r14|true|$BASE|true" "14: record has the dispatch-hetero shape and names the built worktree"
+INV="$(node -e 'const c=require(process.argv[1]+"/src/engine/controller-execution");const r=c.reconstructOwnedInventory({gitCwd:process.argv[2],controller:{resource_inventory:[]},rootRunId:"root14",baseSha:process.argv[3]});process.stdout.write(String(r.ok)+"|"+r.inventory.filter(x=>x.from_creation_intent).length)' "$REPO_ROOT" "$SBX" "$BASE")"
+assert_eq "$INV" "true|1" "14: the JS inventory sees the unregistered foreman worktree through its intent"
+
+# 14b: the shared writer under a first-time race and with bad input.
+LIBREPO="$TEST_TMP/intent-lib-repo"; git init -q "$LIBREPO"
+iw() { # <repo> <run> -> runs one write in a fresh shell; prints rc|error
+  bash -c '. "$1/scripts/lib/json-emit.sh"; . "$1/scripts/lib/worktree-intent.sh"
+    worktree_intent_write "$2/.git" root1 "$3" "$3" "b-$3" "'"$BASE"'" "/tmp/wt-$3"; printf "%s|%s" "$?" "$WORKTREE_INTENT_ERROR"' _ "$REPO_ROOT" "$1" "$2"
+}
+rm -rf "$LIBREPO/.git/autopilot-worktree-creation"
+iw "$LIBREPO" ra > "$TEST_TMP/iw.a" & iw "$LIBREPO" rb > "$TEST_TMP/iw.b" & iw "$LIBREPO" rc > "$TEST_TMP/iw.c" & wait
+assert_eq "$(cat "$TEST_TMP/iw.a" "$TEST_TMP/iw.b" "$TEST_TMP/iw.c")" "0|0|0|" "14b: three concurrent first-time writers all succeed"
+assert_eq "$(ls "$LIBREPO/.git/autopilot-worktree-creation"/*.json | wc -l | tr -d ' ')" "3" "14b: ...and each left its record"
+assert_eq "$(iw "$LIBREPO" rd)" "0|" "14b: the directory already existing is fine"
+assert_contains "$(iw "$LIBREPO" 'bad id')" "invalid arguments" "14b: a bad id is reported as invalid arguments"
+chmod 500 "$LIBREPO/.git/autopilot-worktree-creation"
+if [ "$(id -u)" != "0" ]; then
+  assert_contains "$(iw "$LIBREPO" re)" "filesystem" "14b: an unwritable directory is reported as a filesystem failure"
+fi
+chmod 700 "$LIBREPO/.git/autopilot-worktree-creation"
 
 # --- cleanup: retained worktrees + branches in the sandbox --------------------------------
 git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print $2}' | grep -v "^$SBX$" | while read -r wt; do

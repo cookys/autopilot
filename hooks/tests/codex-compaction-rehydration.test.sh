@@ -1022,6 +1022,7 @@ const writtenWo = woMod.createOrUpdateWorkOrder(common, {
   base_sha: baseSha,
   worktree: repo,
   owner: deadOwner,
+  runner: deadOwner, // BL-0082: persisted leaf/runner identity, re-observed dead at adoption
   paths: { checkpoint: path.join(adoptDir, 'cp.json') },
   sealed_scope: {
     allow_paths: ['orphan-leaf.txt'],

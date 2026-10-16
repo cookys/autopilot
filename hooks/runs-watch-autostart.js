@@ -259,7 +259,7 @@ function writeCache(base, cwd, key, scope, repoRoot) {
 }
 
 function run(payload) {
-  if (process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return;
+  try { if (require(path.join(__dirname, '..', 'src/status/autostart-gate')).autostartDisabled(process.env)) return; } catch (_error) { if (process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return; }
   const cwd = path.resolve(typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd());
   const root = path.resolve(__dirname, '..');
   let base = null;

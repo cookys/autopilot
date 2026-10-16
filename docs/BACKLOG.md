@@ -34,50 +34,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 一個專案的工作要派到另一個專案的程式庫去做時，目前沒有規則說明該用哪個專案的工作樹、標記檔與交接文件。當初規劃工作樹位置規則時，刻意把這一項延後。 (draft)
 - **Impact**: 跨專案派工時各 session 可能各做各的、交接位置不一致；平常很少遇到。 (draft)
-- **Trigger**: a session in repo A dispatches a rail at repo B
+- **Trigger**: the first real cross-repo dispatch that goes wrong (worktree, marker or handoff location disagrees)
 - **Effort**: M
 - **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
-- **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
-
-### orchestrator-edit-gate stops gating the main checkout once the marker follows into a worktree
-- **Id**: BL-0005
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 當工作階段把標記檔帶進某個工作樹之後，編輯檢查就不再擋住主目錄的修改。審查時有人提出這個缺口，但擁有者是否希望連主目錄也繼續受管，尚未決定。 (draft)
-- **Impact**: 主目錄可能在工作樹作業期間被意外直接修改；需要擁有者表態是否要擋。 (draft)
-- **Trigger**: owner wants depth-0 edits to the main checkout gated while the session works in a worktree
-- **Effort**: S
-- **Source**: worktree-placement qc-gate reviewer, Suggestion 1, 2026-10-12
-- **Pointer**: docs/backlog/edit-gate-main-checkout-after-marker-follow.md
-- **Context**: once D5 moves repo_root into a worktree, a main-checkout path is outside it with no marker above, so decide() allows it (hooks/orchestrator-edit-gate-lib.js:85). Fix: treat repo_identity's main checkout as in-repo.
-
-### finish-flow does not tell the owner how to update the main checkout after a push
-- **Id**: BL-0006
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 一輪工作推送完成後，finish-flow 收尾流程不會告訴擁有者主目錄已落後遠端、該如何更新。工作樹位置規劃時把這一項刻意延後。 (draft)
-- **Impact**: 擁有者可能不知道主目錄已過期，繼續用舊版本；補一行提示即可，但屬規則變更需先有評測證據。 (draft)
-- **Trigger**: owner approves a finish-flow guidance change (needs eval ON/OFF evidence first, scorecard-first)
-- **Effort**: S
-- **Source**: worktree-placement gap 8, deferred by the plan (D12), 2026-10-12
-- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
-- **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
-
-### Qwen3.8-Max-Preview via qoderclicn returned truncated output as the /l6 verification author
-- **Id**: BL-0008
-- **Status**: open
-- **Since**: 2026-10-06
-- **Origin**: self
-- **Problem**: /l6 把驗證測試的撰寫交給 Qwen3.8-Max-Preview（經 qoderclicn）時，輸出被截斷、格式缺漏而失敗。這個席位至今仍設定在驗證作者的位置上。 (draft)
-- **Impact**: /l6 若派到這個席位會直接失敗並浪費一次派工；需要擁有者決定重新考核或換引擎。 (draft)
-- **Trigger**: FIRED — mods P1W W4 gate run l6b, 2026-10-06
-- **Effort**: S
-- **Source**: depth-0 verified (author status truncated, frame_missing, exit 5)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: first live author dispatch after an owner-authorized quota probe; 583-byte garbled log; a qualification signal for that seat, not a band defect.
+- **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
 ### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
 - **Id**: BL-0010
@@ -142,7 +103,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: 2026-09-20 remote-branch triage (decision branch merged at 47b52eac; deliverable absent)
 - **Pointer**: docs/backlog/host-conformance-tool.md
-- **Context**: needs its own registered plan; the decision doc lists the six report sections.
+- **Context**: Owner 2026-10-17: stays approved, wait for the trigger. Needs its own registered plan; the decision doc lists the six report sections.
 
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
 - **Id**: BL-0015
@@ -171,22 +132,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
 - **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
-
-### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
-- **Id**: BL-0020
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: peer
-- **Reporter**: openclaw（hangar-bridge）
-- **Report**: msg_01M2KNFAB7P7TGGMF4K5QYQFYH
-- **Reply**: none
-- **Problem**: openclaw 回報：agy 的 flash/low 實作席位在真實簡報上不可用，建議依簡報長度與是否自己跑測試來考核。但之後的考核紀錄顯示該席位 24 場全過，兩者互相矛盾。 (draft)
-- **Impact**: 可能錯誤地排除或錯誤地信任一個便宜席位；需看考核簡報長度或再問 openclaw。 (draft)
-- **Trigger**: next agy implementer qualification, or a consumer config that still defaults the implementer to agy
-- **Effort**: S
-- **Source**: `openclaw` via hangar-bridge 2026-09-16, msg `msg_01M2KNFAB7P7TGGMF4K5QYQFYH`
-- **Pointer**: none
-- **Context**: agy `-p` self-aborts at 5 min, a >~40-line brief at low ends in silent no_op, `run_command` 10 s cap backgrounds test loops; add scorecard dimensions or auto-degrade the seat with a warning.
 
 ### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
 - **Id**: BL-0021
@@ -238,10 +183,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 實作者的升級階梯有 17 級，其中 11 級位於同一個努力等級，成本排序幾乎失效。原因是未知成本被記成 0，導致排序無法區分。 (draft)
-- **Impact**: 選擇便宜席位時排序不準，可能多花錢；先修成本記錄方式即可改善。 (draft)
+- **Problem**: 階梯排序仍近乎退化；未知成本記成 0 的編碼已修，但各席位都沒有單價，排序缺依據。 (draft)
+- **Impact**: 挑便宜席位仍不準；需 owner 決定是否登記單價。 (draft)
 - **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
-- **Effort**: S
+- **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
 - **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.
@@ -314,19 +259,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/release-time-payload-branch-b.md
 - **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user…
 
-### `finalize` closes an earlier verified finding by absence in a later generation
-- **Id**: BL-0032
-- **Status**: open
-- **Since**: 2026-09-04
-- **Origin**: self
-- **Problem**: 審查流程的收尾步驟，會因為後面某一輪沒再提到某個已驗證的問題，就把它當成已解決。這等於用「沒人提」代替「有人確認修好」。 (draft)
-- **Impact**: 真正未修的問題可能被悄悄關掉；需要先決定要不要改成必須明確重驗。 (draft)
-- **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
-- **Effort**: S
-- **Source**: same ledger dir as above
-- **Pointer**: docs/backlog/finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation.md
-- **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
-
 ### autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting
 - **Id**: BL-0033
 - **Status**: open
@@ -334,24 +266,24 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: autopilot 的努力等級詞彙沒有「最低」一級，導致 muse-spark 這類貢獻者席位無法用最便宜的設定來考核。是否擴充詞彙要由董事會或擁有者決定。 (draft)
 - **Impact**: 便宜設定的席位無法被考核；影響範圍很小，屬選擇性改進。 (draft)
-- **Trigger**: a Board request to examine or route a seat at `minimal` (asked 2026-09-03 for opencode-go/muse-spark-1.3-contributor), or a second provider whose cheapest reasoning tier is below `low`.
+- **Trigger**: a second real need for a `minimal` effort tier appears (the muse-spark request of 2026-09-03 counts as the first)
 - **Effort**: L
 - **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
 - **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
-- **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
+- **Context**: Owner 2026-10-17: do not add `minimal` now; wait for a second need. `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
 
-### Contract-first escalation and local-repair gates — P6D incident follow-up
+### Dispatch justification check for acceptance-oracle tasks — P6D incident follow-up
 - **Id**: BL-0035
 - **Status**: open
 - **Since**: 2026-08-21
 - **Origin**: self
-- **Problem**: 為了處理 P6D 事故，已出貨一部分檢查（暫存區清單檢查、無狀態拒絕），但「派工理由檢查」那一段還沒做。需要擁有者批准後續專案，或把條目縮小到未出貨的部分。 (draft)
-- **Impact**: 事故類似的失誤仍可能發生在未涵蓋的那一段；已出貨部分擋住了最主要情況。 (draft)
-- **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy…
+- **Problem**: P6D 事故的後續只剩「派工理由檢查」尚未出貨：已有完整驗收依據的工作，派去重量級流程前要先說明理由。暫存區清單檢查與無狀態拒絕已出貨。
+- **Impact**: 沒有派工理由檢查時，簡單且驗收明確的工作仍可能被送進過重的流程；其餘兩段已擋住。
+- **Trigger**: an owner-approved project opens the dispatch-justification check; it must ship a planted negative case showing unjustified heavy dispatch for an acceptance-oracle task is blocked
 - **Effort**: L
 - **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md) (incl. Fable 5 judgment).
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
-- **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
+- **Context**: Owner 2026-10-17: narrowed to the unshipped dispatch-justification control, keep waiting. Origin: a bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Id**: BL-0037
@@ -364,7 +296,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`docs/plans/2026-08-22-implementer-qualification-suite.md` §6-§8。
 - **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
-- **Context**: v2.34.34 round-1 review 裁 CUT 的殘項(五個 MUST-FIX 已修:partial-corpus fail-open 雙層拒收、preflight prose-justification、dispatcher_called ETIMEDOUT 歸因、HELP、Stage-0 明文 operator-run):(1) **Stage-0 probe…
+- **Context**: 2026-10-16 landed fixtures, TTL and --trials tests; open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling. Detail in the sidecar.
 
 ### agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)
 - **Id**: BL-0038
@@ -378,19 +310,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 - **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
-
-### `engine-qualify-impl.test.js` 單次無法重現的紅(1/24 solo,訊息未捕獲)
-- **Id**: BL-0040
-- **Status**: open
-- **Since**: 2026-08-23
-- **Origin**: self
-- **Problem**: 一個引擎考核的測試檔曾在 2026-08-23 單獨執行時紅過一次（24 次中 1 次），訊息沒保留，之後 7 週沒有再出現，原因不明。現已加上輸出保存以便下次抓到。 (draft)
-- **Impact**: 偶發失敗可能代表隱藏的競態；但已七週未重現，可考慮結案。 (draft)
-- **Trigger**: 下一次它在 full-suite / CI 或 solo 跑紅(歸因半件)。**保存半件已做(2026-08-23)**:`hooks/tests/run.sh` L1 現在把 `node --test` 全輸出 tee 進…
-- **Effort**: S
-- **Source**: 2026-08-23 v2.34.37 收尾實測(run `fix-bundle-l4`),foreman 直接觀察。
-- **Pointer**: docs/backlog/engine-qualify-impl-test-js-1-24-solo.md
-- **Context**: 2026-08-23 v2.34.37 收尾期間,`node --test scripts/engine-qualify-impl.test.js` 在約 24 次 solo 連跑中出現**一次** `pass 0 / fail 1`;當時的 harness 只 grep 摘要行、沒有保留 log,`AssertionError` 的 message…
 
 ### Brain-seat sittings in the shipped qualification defaults (v2 artifact)
 - **Id**: BL-0041
@@ -457,18 +376,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
-### Capability-claim identity is coupled to its observation timestamp
-- **Id**: BL-0048
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 平台能力的憑證編號是連同觀察時間一起算出來的，每次更新時間，編號就變，而派工腳本裡又寫死了這些編號，所以每次換憑證都得同步改好幾個腳本。 (draft)
-- **Impact**: 每次更新能力憑證都要手動改多處，漏改就出錯；是維護麻煩而非立即故障。 (draft)
-- **Trigger**: When a receipt refresh is next needed, or before adding a fourth consumer to `platform-capability-claims.js`.
-- **Effort**: M
-- **Source**: 2026-08-18 capability-receipt expiry investigation.
-- **Pointer**: docs/backlog/capability-claim-identity-is-coupled-to-its-observation-timestamp.md
-- **Context**: `claim_id = sha256(claim body)` and the body includes `live_evidence.observed_at` + `freshness.expires_at`, while the required IDs are hardcoded constants in `dispatch-hetero.sh:1653-1654`, `dispatch-review.sh:169-170`,…
 
 ### Outcome-shaped quality-gate enforcer (opt-in) — replaces the rejected invocation check
 - **Id**: BL-0050
@@ -508,19 +415,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.34.15 pre-merge review; hardening round 2026-08-17.
 - **Pointer**: docs/backlog/qualification-cli-transport-runtime-identity-capture.md
 - **Context**: CLI transports return no model id, so administered identity is operator-asserted (pre-run probe recorded per the v2.34.15 governance rule; the HTTP path caught glm-5.2→glm-5.3 exactly via its runtime echo).
-
-### Broker payload format token rename (unified_diff misnomer)
-- **Id**: BL-0053
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 資格測試的中介程式把所有送出的內容都標成「差異檔」格式，實際上很多是 JSON，名稱不符。審查時被指出，因改動需同步調整協定版本而延後。 (draft)
-- **Impact**: 純命名不準確，會讓新接手的人困惑，不影響功能。 (draft)
-- **Trigger**: Next time the broker client protocol version bumps for any reason, or before onboarding a fourth non-diff payload family.
-- **Effort**: S
-- **Source**: VA suite plan v3 §6 (G1-F11 deferral); v2.34.17 pre-merge review.
-- **Pointer**: docs/backlog/broker-payload-format-token-rename-unified-diff-misnomer.md
-- **Context**: `qualification-case-broker.js` hardcodes `payload.format: unified_diff` in its sandbox client; brain round bundles (v2.34.14) and VA spec envelopes (v2.34.17) ship JSON content under that diff-named token (VA plan G1-F11; the reviewer…
 
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Id**: BL-0054
@@ -781,97 +675,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Controller helper API fail-closed hardening
-- **Id**: BL-0077
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 控制器的幾個輔助函式遇到缺漏輸入（如沒給費用預估、倉庫權限）時會預設放行，而不是拒絕。目前只被內部固定呼叫，尚未外露。 (draft)
-- **Impact**: 只有未來把這些函式開放給外部呼叫時才會出問題；現在影響很小。 (draft)
-- **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/controller-helper-api-fail-closed-hardening.md
-- **Context**: Close the helper-level fail-open edges recorded as CED-N01, CED-N02, CED-N03, CED-N05, and CED-N06: require explicit spend projection, preserve/reject empty controller replacement, require repository authority, reject traversal…
-
-### Boundary outcome and root dispatch semantics
-- **Id**: BL-0078
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 引擎把「合併失敗」「狀態不明」兩個結果寫死為否，沒有真的判斷；另外同一個根下的派工互相排斥是否是故意設計也還沒定案。 (draft)
-- **Impact**: 若以後依這些結果自動復原或平行派工，會得到錯誤判斷；現在無影響。 (draft)
-- **Trigger**: Before boundary receipts drive automated recovery or parallel independent graph nodes under one root are enabled.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/boundary-outcome-and-root-dispatch-semantics.md
-- **Context**: Derive or remove mutation_failed/unknown_status instead of hardcoding them, and decide whether root-wide nonterminal exclusion is intentional; if not, retain root CAS while scoping dispatch blockers to the exact graph node.
-
-### Portable byte and Work Order lifecycle hardening
-- **Id**: BL-0079
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 工作單處理幾個邊緣情形不夠嚴謹：符號連結的雜湊與 git 不一致、非過期紀錄不該帶處置收據、讀不到程序表時應明確拒絕。其中一項似乎已處理。 (draft)
-- **Impact**: 只有出現符號連結或受限平台時才會踩到，目前很少見。 (draft)
-- **Trigger**: Before Mission paths may contain symlinks, generic Work Order imports are accepted, or reconciliation runs on restricted process-table platforms.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/portable-byte-and-work-order-lifecycle-hardening.md
-- **Context**: Unify symlink byte hashing with Git, reject/strip disposition_receipt on non-stale records, and convert PROCESS_TABLE_UNREADABLE into an explicit fail-closed Work Order classification.
-
-### Durable resume and review authority binding
-- **Id**: BL-0080
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 自動續跑與審查的重用判斷，沒有把審查者名單與席位身分算進去，輪替審查者後可能誤用舊審查結果。目前自動續跑尚未開啟。 (draft)
-- **Impact**: 自動續跑開啟前不會發生；開啟後可能沿用不同審查者的結論。 (draft)
-- **Trigger**: Before automatic durable resume, reviewer roster rotation, seat retry, or more than one candidate per repair generation is enabled.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/durable-resume-and-review-authority-binding.md
-- **Context**: Make all durable stop payloads pass verbatim resume validation, bind full-diff barriers to the exact candidate and review kind, and include sealed reviewer roster/seat identities in full-diff and joint-review reuse keys.
-
-### Mission graph and campaign capacity boundary hardening
-- **Id**: BL-0081
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 任務圖檔案驗證與讀取之間可能被改動，且 campaign 容量上限只在結構定義裡有，實際執行的檢查沒有同樣限制。目前還不支援這些情境。 (draft)
-- **Impact**: 只有開放熱載入或自訂容量時才有風險，現在不影響。 (draft)
-- **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/mission-graph-and-campaign-capacity-boundary-hardening.md
-- **Context**: Read Mission graph bytes once or bind the validation read to the inspected digest, and mirror max_owned_worktrees/temp_capacity_limit/max_prompt_bytes/max_finding_recurrence schema caps in the executable validator.
-
-### Orphan leaf liveness and resource reconstruction
-- **Id**: BL-0082
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 控制器或建立工作樹中途當機後，沒有記住孤兒工作者的程序身分，也找不到未登記的分支與工作樹，無法可靠重建資源清單。 (draft)
-- **Impact**: 當機後可能留下殘留分支或工作樹，要人工清理。 (draft)
-- **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/orphan-leaf-liveness-and-resource-reconstruction.md
-- **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
-
-### Terminal status and receipt trust boundary
-- **Id**: BL-0083
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 終態狀態沒有嚴格限制只能是規定的幾種值，還有一個沒用到的「attached」處置沒清掉；外部來源的收據也沒有信任邊界說明。 (draft)
-- **Impact**: 目前只有自己的控制器產生收據，風險低，等開放外部來源再處理。 (draft)
-- **Trigger**: Before external/legacy terminal receipts cross a trust boundary or the threat model expands beyond confused controllers.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/terminal-status-and-receipt-trust-boundary.md
-- **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller…
-
 ### HETO task-return detection can miss completed work
 - **Id**: BL-0084
 - **Status**: open
@@ -928,22 +731,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
 
-### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
-- **Id**: BL-0092
-- **Status**: open
-- **Since**: 2026-09-05
-- **Origin**: peer
-- **Reporter**: 7840hs（llm-playground）
-- **Report**: 2026-09-05 peer
-- **Reply**: 2026-09-05 session e1e51201:1034
-- **Problem**: 7840hs 的 llm-playground 專案回報：舊版本寫入的審查鏈資料帶有過期標記，之後收據被拒絕，除了重開新一代別無修復方法。 (draft)
-- **Impact**: 遇到者只能重新做一輪審查；目前僅一次回報。 (draft)
-- **Trigger**: a second field report of a receipt refused with "attributes … to generation N, which is aborted", or a request to re-finalize without re-collecting.
-- **Effort**: S
-- **Source**: 7840hs / llm-playground plan 066 ledger, 2026-09-05
-- **Pointer**: docs/backlog/stale-closed-findings-stamps-on-chain-entries-written-by-pre-v2-36-3-finalize-ha.md
-- **Context**: v2.36.3 made `review-chain-derive` evidence-only (chain-entry `closed_findings` stamps are output, ignored as input) and the checker refuses a receipt whose `closed_findings` names an aborted generation.
-
 ### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
 - **Id**: BL-0093
 - **Status**: open
@@ -954,7 +741,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-09-05 session e1e51201:1496
 - **Problem**: cuda 專案審計我方技能後提出：CEO 與開發流程的指引太極端（例如「完成成本近乎零」的說法）、缺少任務工具時的處理沒說清、可逆候選的發版檢查過嚴，希望放寬。 (draft)
 - **Impact**: 外部專案認為指引不合比例；改動需先有評測證據，擁有者尚未決定。 (draft)
-- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule — an unevidenced rewrite of ceo-agent/dev-flow prose is an unevidenced trust change).
+- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule). Point 1 (Boil the Lake) was evaluated 2026-10-17: UNINFORMATIVE, no change; only points 2 and 3 plus an optional point-1 re-try remain.
 - **Effort**: M
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
@@ -996,13 +783,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-04
 - **Origin**: self
-- **Problem**: mods 第一階段（P1a）審查留下幾項尚未處理的強化事項：游標檔案鎖、啟動程序錯誤處理、自動啟動的開關、專案身分識別的邊角情況。 (draft)
+- **Problem**: mods 第一階段（P1a）審查留下的強化事項，游標檔案鎖、啟動程序錯誤處理、自動啟動開關已修；剩下前景啟動器收不到 SIGTERM、flock 訊息誤導、專案身分識別的邊角情況。 (draft)
 - **Impact**: 都是強化項，不影響目前功能；預計在下一階段（P1b）開始時處理。 (draft)
 - **Trigger**: P1b start
 - **Effort**: M
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
-- **Context**: unfixed hardening items from the P1a reviews: cursor-file lock, spawn errors, autostart gate, repo-identity edge cases.
+- **Context**: 2026-10-16: most items fixed (see sidecar); remaining: repo-identity.sh cache, non-repo diagnostic, manifest-suite PID trap, and the roots-set bound.
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110
@@ -1028,7 +815,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 3.0.0 正式版時，要移除 dispatch-hetero 的舊清理功能（--gc 旗標與 stale_reaper_age_days 設定），因為新的自動清理已取代，且舊功能預設就是關閉。 (draft)
 - **Impact**: 不移除會留下重複又無用的功能與設定，增加維護負擔；屬刻意延到正式版的破壞性移除。 (draft)
-- **Trigger**: the 3.0.0 final cut
+- **Trigger**: the 3.0.0 final cut (checked 2026-10-16: still present, scripts/dispatch-hetero.sh --gc at L1890 and stale_reaper_age_days in resolve-worktree-teardown.sh; remove then, not before)
 - **Effort**: S
 - **Source**: residue auto-reap contract, 2026-10-09
 - **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
@@ -1077,7 +864,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: before think-tank enables a discuss seat in production
 - **Effort**: S
 - **Source**: discuss exam fix `eec239a8`, 2026-10-12
-- **Pointer**: none
+- **Pointer**: docs/backlog/dispatch-discuss-own-axis-rule-needs-design-decision.md
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
 ### Find what rewrites the committed t7-config-rename fixture outside the suite
@@ -1091,7 +878,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: discuss-exam-fix full suite 2026-10-12; narrowed by BL-0122 lane 2026-10-14
 - **Pointer**: none
-- **Context**: The only writer found: t7's own tests/tool.test.js writes {"timeout":5} to repo/config.json when run in place (eval hands, bare node --test). orchestration-eval.test.sh now digests evals/orchestration/tasks before/after.
+- **Context**: Not recurring as of 2026-10-16 (no fixture change in git status or commits since 10-12). Known writer: t7 tests/tool.test.js run in place.
 
 ### mods/live recent conversation: groups expand by mouse only
 - **Id**: BL-0123
@@ -1100,11 +887,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: mods/live 介面的「最近對話」區塊，群組只能用滑鼠點開；在 tmux 裡用鍵盤無法移到群組並展開，按 Enter 反而觸發前面的切換分頁按鈕。 (draft)
 - **Impact**: 只用鍵盤或 ssh 的使用者無法展開群組；擁有者若要用鍵盤才需處理。 (draft)
-- **Trigger**: next touch of mods/live pane keyboard focus, or an owner report of needing keyboard expand
+- **Trigger**: Claude Code 支援 pane 內非分頁 Button 的鍵盤焦點或 hotkey 時
 - **Effort**: S
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
-- **Pointer**: none
-- **Context**: Ctrl+x Tab focuses the pane, but Enter then hits the leading next-tab Button; Tab/Down never reached a group Button in tmux. Mouse click expands. Check focus order of Buttons inside the pane.
+- **Pointer**: docs/backlog/mods-live-recent-groups-keyboard.md
+- **Context**: 2026-10-17 measured on Claude Code 2.1.301: in-pane Button hotkey draws its prefix but keys go to the input box; focus stays on top tabs only. Host blocks it; reported to Claude Code.
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
 - **Id**: BL-0124
@@ -1151,8 +938,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 外部呼叫方回報帶回重審的費用過高，或同一個 campaign 經常帶回兩次以上
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
-- **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).
+- **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
+- **Context**: Plan written 2026-10-17 (reuse key, touched-files re-check, context packet; ~5-6 days build + 1.5 days evidence, 5 deliverables, 3 owner decisions in section 8); no code yet.
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
@@ -1171,20 +958,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-
-
-### Owner-role qualification has no exam provider
-- **Id**: BL-0158
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 「工頭」這個角色目前沒辦法考資格：考試程式缺少把工頭題目送給模型作答的那一段，所以不管哪個模型都考不了，只能沿用舊成績或不派這個角色。
-- **Impact**: 中。新模型（MiniMax-M3.1、GLM-5.3、Qwen3.8-Max、Kimi K3）都沒有工頭成績，派工頭時只能靠人工指定。
-- **Trigger**: 想讓非 Claude 模型擔任工頭，或下一輪全角色資格考前
-- **Effort**: M
-- **Source**: 2026-10-14 all-role requalify matrix
-- **Pointer**: none
-- **Context**: qualification-review-provider.js has no owner mode (brain rides role owner but is a different exam); an owner-provider.js was drafted but never committed. engine-qualify --role owner needs a foreman-corpus provider.
 
 
 ### Qualification wall cap and truncation rules after run-to-completion
@@ -1231,18 +1004,5 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
 - **Context**: 2026-10-17: P1, P2, P3 and P4a autopilot side merged; P4a llm-playground side in review (two owner decisions pending); P4b remains, plus llm-playground r4/t15 SKIP follow-up (see plan Progress line).
-
-
-### A runs watcher started directly in a test env still writes to the shared live dir
-- **Id**: BL-0195
-- **Status**: open
-- **Since**: 2026-10-16
-- **Origin**: self
-- **Problem**: 77ccec9b 讓隔離的測試環境（假 HOME 或假 CLAUDE_CONFIG_DIR）不再寫共用的 load-source.json、也不自動起 watcher。但如果有人在這種環境裡直接手動啟動 runs watcher，它仍會把該專案的 runs 檔寫進共用的 live 目錄（$XDG_RUNTIME_DIR/autopilot）。
-- **Impact**: 低。要在測試環境刻意直接啟動 watcher 才會發生；發生時面板會看到一個假專案的資料，刪掉那幾個檔就好。
-- **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
-- **Effort**: S
-- **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
-- **Pointer**: none
 
 

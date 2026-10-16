@@ -80,6 +80,8 @@
      scripts/build-qualification-defaults.js from the recipe and evidence bundles; reviewers read
      the recipe, and build --check re-derives the artifact. -->
 - exclude_allowlist: references/official-qualification-defaults.json
+<!-- exclude_allowlist below: evals/skill-onoff/packs/ holds frozen eval arm packs — verbatim copies of skill files and fixtures pinned by each campaign's pre-registration; a campaign diff can add ~70k lines there, too large for a review packet. Reviewers read the arm manifests, prereg and scorer; the depth-0 merger checks the shipped SKILL.md is byte-identical to the evaluated pack. -->
+- exclude_allowlist: evals/skill-onoff/packs/**
 <!-- review_packet_deny_extra: comma-separated extra packet deny patterns (additive
      floor = DEFAULT_PACKET_DENY_LIST). Empty = []. Grammar: normalizeDenyList. -->
 - review_packet_deny_extra:

@@ -767,6 +767,9 @@ cat << 'EOF' > "$TEST_TMP/disp_fin7_g2.json"
   "generation": 2,
   "findings": [
     { "id": "finding_g2_minor", "disposition": "refuted", "rationale": "not a problem" }
+  ],
+  "resolutions": [
+    { "id": "finding_g1_crit", "rationale": "re-read the fixed parser: bounds check present" }
   ]
 }
 EOF
@@ -777,6 +780,69 @@ assert_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"verdict": "SHIP-AS-IS"'
 CHAIN_P7=$(cat "$LEDGER/review-p_fin7/chain.json")
 assert_contains "$CHAIN_P7" '"closed_by_generation": 2' "case 7 (fin): gen 1 entry recorded closed_by_generation: 2"
 assert_contains "$CHAIN_P7" '"finding_g1_crit"' "case 7 (fin): closed finding id matches finding_g1_crit"
+
+# Case 7x (BL-0032): same flow, but gen 2 does NOT resolve finding_g1_crit explicitly -> absence closes nothing
+mkdir -p "$LEDGER/review-p_fin7x"
+cp -r "$LEDGER/review-p_fin7/g1" "$LEDGER/review-p_fin7x/g1"
+printf '[\n  { "generation": 1, "base": "sha_base1", "head": "sha_head1", "seats": ["s0"], "status": "pending" }\n]\n' > "$LEDGER/review-p_fin7x/chain.json"
+rm -f "$LEDGER/review-p_fin7x/g1/dispositions.json" "$LEDGER/review-p_fin7x/g1/hands-brief.md"
+node -e '
+  const fs = require("fs"); const [src, dst, phase, gen, withRes] = process.argv.slice(1);
+  const d = JSON.parse(fs.readFileSync(src, "utf8")); d.phase = phase; d.generation = Number(gen);
+  if (withRes === "ghost") d.resolutions = [{ id: "ghost_finding", rationale: "never existed" }]; else delete d.resolutions;
+  fs.writeFileSync(dst, JSON.stringify(d, null, 2));
+' "$TEST_TMP/disp_fin7_g1.json" "$TEST_TMP/disp_fin7x_g1.json" p_fin7x 1 none
+node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7x --generation 1 --dispositions "$TEST_TMP/disp_fin7x_g1.json" >/dev/null 2>&1
+mkdir -p "$LEDGER/review-p_fin7x/g2"
+cp "$LEDGER/review-p_fin7/g2/range.json" "$LEDGER/review-p_fin7x/g2/range.json"
+cp "$LEDGER/review-p_fin7/g2/findings.json" "$LEDGER/review-p_fin7x/g2/findings.json"
+node -e '
+  const fs = require("fs"); const p = process.argv[1];
+  const chain = JSON.parse(fs.readFileSync(p, "utf8"));
+  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+  fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
+' "$LEDGER/review-p_fin7x/chain.json"
+node -e '
+  const fs = require("fs"); const [src, dst, phase, gen, withRes] = process.argv.slice(1);
+  const d = JSON.parse(fs.readFileSync(src, "utf8")); d.phase = phase; d.generation = Number(gen);
+  if (withRes === "ghost") d.resolutions = [{ id: "ghost_finding", rationale: "never existed" }]; else delete d.resolutions;
+  fs.writeFileSync(dst, JSON.stringify(d, null, 2));
+' "$TEST_TMP/disp_fin7_g2.json" "$TEST_TMP/disp_fin7x_g2.json" p_fin7x 2 none
+node -e '
+  const fs = require("fs"); const [src, dst, phase, gen, withRes] = process.argv.slice(1);
+  const d = JSON.parse(fs.readFileSync(src, "utf8")); d.phase = phase; d.generation = Number(gen);
+  if (withRes === "ghost") d.resolutions = [{ id: "ghost_finding", rationale: "never existed" }]; else delete d.resolutions;
+  fs.writeFileSync(dst, JSON.stringify(d, null, 2));
+' "$TEST_TMP/disp_fin7_g2.json" "$TEST_TMP/disp_fin7y_g2.json" p_fin7x 2 ghost
+# Case 7y first (refused, nothing written), then 7x proper on the same pending gen 2
+FIN7Y_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7x --generation 2 --dispositions "$TEST_TMP/disp_fin7y_g2.json" 2>&1); FIN7Y_RC=$?
+assert_exit_code "$FIN7Y_RC" "1" "case 7y (fin): resolution naming no open verified finding exits 1"
+assert_contains "$FIN7Y_OUT" "names no open verified finding" "case 7y (fin): refusal names the rule"
+FIN7X_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7x --generation 2 --dispositions "$TEST_TMP/disp_fin7x_g2.json" 2>&1); FIN7X_RC=$?
+assert_exit_code "$FIN7X_RC" "0" "case 7x (fin): gen 2 finalize without resolutions exits 0"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7x.json")" '"verdict": "FIX-THEN-SHIP"' "case 7x (fin): absence did not close the verified Critical (BL-0032)"
+assert_not_contains "$(cat "$LEDGER/review-p_fin7x/chain.json")" 'closed_by_generation' "case 7x (fin): no closure stamped"
+
+# Case 7r (BL-0092): refinalize repairs a stale stamp on a finalized chain; refuses when evidence changed
+node -e '
+  const fs = require("fs"); const cp = process.argv[1], rp = process.argv[2];
+  const chain = JSON.parse(fs.readFileSync(cp, "utf8")); chain[0].closed_findings = [{ id: "stale", closed_by_generation: 9 }];
+  fs.writeFileSync(cp, JSON.stringify(chain, null, 2) + "\n");
+  const r = JSON.parse(fs.readFileSync(rp, "utf8")); r.chain = chain; r.closed_findings = [{ id: "stale", closed_by_generation: 9 }]; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
+' "$LEDGER/review-p_fin7/chain.json" "$LEDGER/receipt-p_fin7.json"
+cp "$LEDGER/review-p_fin7/g1/findings.json" "$TEST_TMP/fin7_g1_findings.bak"
+echo ' ' >> "$LEDGER/review-p_fin7/g1/findings.json"
+FIN7R_BAD_OUT=$(node "$SCRIPT" refinalize --ledger "$LEDGER" --phase p_fin7 --generation 2 2>&1); FIN7R_BAD_RC=$?
+assert_exit_code "$FIN7R_BAD_RC" "1" "case 7r (refin): changed findings.json -> refused"
+assert_contains "$FIN7R_BAD_OUT" "no longer matches" "case 7r (refin): refusal names the sha mismatch"
+assert_contains "$(cat "$LEDGER/review-p_fin7/chain.json")" '"stale"' "case 7r (refin): refused run left chain.json untouched"
+cp "$TEST_TMP/fin7_g1_findings.bak" "$LEDGER/review-p_fin7/g1/findings.json"
+FIN7R_OUT=$(node "$SCRIPT" refinalize --ledger "$LEDGER" --phase p_fin7 --generation 2 2>&1); FIN7R_RC=$?
+assert_exit_code "$FIN7R_RC" "0" "case 7r (refin): refinalize on intact evidence exits 0"
+assert_not_contains "$(cat "$LEDGER/review-p_fin7/chain.json")" '"stale"' "case 7r (refin): stale stamp discarded from chain.json"
+assert_not_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"stale"' "case 7r (refin): stale stamp discarded from receipt chain"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"id": "finding_g1_crit"' "case 7r (refin): top-level receipt closed_findings re-derived (stale value replaced)"
+assert_contains "$(cat "$LEDGER/review-p_fin7/chain.json")" '"closed_by_generation": 2' "case 7r (refin): true closure re-stamped from evidence"
 
 # Case 7a (finalize): a misspelled disposition value makes finalize exit 1
 mkdir -p "$LEDGER/review-p_fin7a/g1"

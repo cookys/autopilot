@@ -7,6 +7,7 @@ Source: the review-only external candidate plan (BL-0090), archived 2026-10-15 a
   whole `base..new_head`, and a seat outcome is reused only when its full input binding is identical. Delta-only review
   needs a new reuse key, a re-check of files the delta touches, and a read-only context packet for the cumulative range
   (option (a)); seats have no context channel today. Write a plan for those three rulings before any code.
+  2026-10-16: re-checked, still open and not started; it is a plan-first item of more than half a day.
 - **BL-0155 — repair branch numbering ignores remote branches.** The P5 hardening merged 2026-10-15 (`-rN` suffix,
   `%(refname:lstrip=2)` listing, fail-closed `review_candidate_repair_seed_invalid`, seed written before close, prompt
   says "a repair campaign"). Left open: `listRepairBranches` counts `refs/heads/repair/` only, so a same-named branch

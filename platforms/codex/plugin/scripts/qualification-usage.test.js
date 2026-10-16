@@ -97,8 +97,8 @@ const rec = (over = {}) => U.caseRecord({
   const cost = U.costBlock(s, price);
   equal(cost, { source: 'manual', usd_per_mtok_input: 2, usd_per_mtok_output: 10, sample_tokens: 2400, price_as_of: '2026-10-01', price_ref: 'vendor page' },
     'given a price the cost block carries the stated source, prices and as-of date');
-  equal(U.costBlock(U.summarize(recs), null), { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 },
-    'no price -> the historic unknown block, byte for byte');
+  equal(U.costBlock(U.summarize(recs), null), { source: 'unknown', usd_per_mtok_input: null, usd_per_mtok_output: null, sample_tokens: 0 },
+    'no price -> the unknown block with null prices (never 0)');
   equal(U.costBlock(U.summarize([rec({ usage: null })], price), price).source, 'unknown',
     'a price that could not be applied (incomplete usage) never relabels the row as priced');
   const totalOnly = U.summarize([rec({ usage: { total_tokens: 900 } })], price);
@@ -239,6 +239,20 @@ fs.rmSync(dir, { recursive: true, force: true });
   assert.throws(() => U.validateUsageBlock({ ...incompleteTokens, n_cases_missing_tokens: 0 }), /n_cases_missing_tokens/); assertions += 1;
   assert.throws(() => U.validateUsageBlock({ ...incompleteTokens, usd_unavailable_reason: undefined, usd_per_solved: null, usage_complete: false, tok_per_solved: null, total_tokens: null, n_cases_missing_tokens: 0 }), /n_cases_missing_tokens/); assertions += 1;
   check(noPrice.usd_unavailable_reason === undefined, 'priced complete block has no unavailable reason');
+}
+
+// ── BL-0024: an unpriced seat never sorts as free ───────────────────────────
+{
+  const { costSortValue } = require('./engine-scorecard');
+  const unknownBlock = U.costBlock(U.summarize([rec({})]), null);
+  equal(costSortValue({ cost: unknownBlock }), Infinity, 'the writer\'s unknown block (null prices) sorts last');
+  equal(costSortValue({ cost: { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0 } }), Infinity,
+    'a legacy unknown block that stored 0 still sorts last (gate is cost.source, not the number)');
+  equal(costSortValue({ cost: { source: 'manual', usd_per_mtok_input: null, usd_per_mtok_output: null } }), Infinity,
+    'a manual row with null prices is unpriced, not free (Number(null) === 0 must not leak)');
+  equal(costSortValue({ cost: { source: 'manual', usd_per_mtok_input: 2, usd_per_mtok_output: 10 } }), 12, 'a priced row sorts by its price');
+  check(costSortValue({ cost: { source: 'manual', usd_per_mtok_input: 2, usd_per_mtok_output: 10 } }) < costSortValue({ cost: unknownBlock }),
+    'priced beats unpriced');
 }
 
 console.log(`qualification-usage: ${assertions} assertions passed`);

@@ -84,4 +84,18 @@ assert_eq "$([ -e "$OWN/runs/$KEY.lock" ] && echo yes || echo no)" "yes" "autost
 [ -n "$WPID" ] && kill -9 "$WPID" 2>/dev/null
 rm -rf "$OWN"
 
+# --- hand-started watcher (BL-0195): `status runs --watch` in an isolated env on the shared live dir must refuse and write nothing
+XDG2="$(mktemp -d -p /dev/shm autopilot-test-lsi-hand-XXXXXX)"; chmod 700 "$XDG2"
+hand_watch() { # <extra env...>
+  ( cd "$REPO" && env -u AUTOPILOT_LIVE_DIR HOME="$SB/home" CLAUDE_CONFIG_DIR="$SB/emptycfg" XDG_RUNTIME_DIR="$XDG2" \
+      AUTOPILOT_DISPATCH_RUNS_DIR="$SB/dr" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 "$@" \
+      timeout 5 node "$REPO_ROOT/bin/autopilot.js" status runs --watch --project "$KEY" --idle-exit 2 >/dev/null 2>"$SB/hand.err" )
+  echo $?
+}
+RC="$(hand_watch)"
+assert_neq "$RC" "0" "hand-started watcher: isolated env on the shared live dir exits non-zero"
+assert_eq "$(ls -A "$XDG2" 2>/dev/null | wc -l | tr -d ' ')" "0" "hand-started watcher: nothing written under the shared live dir"
+assert_contains "$(cat "$SB/hand.err")" "isolated environment" "hand-started watcher: says why it refused"
+rm -rf "$XDG2"
+
 finalize_test

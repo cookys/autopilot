@@ -17,6 +17,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const pathMod = require('path');
 const { execFileSync } = require('child_process');
 
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -56,6 +57,36 @@ function isPlainObject(value) {
 
 function sha256Bytes(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * The bytes Git would store for a worktree path (BL-0079).
+ *
+ * Git hashes a symlink as a blob holding the link target and does not index a
+ * path that sits behind a symlinked directory. fs.statSync / readFileSync follow
+ * the link and so would hash the target's content, giving a digest that disagrees
+ * with `git show <base>:<path>`. This returns the same bytes Git has, or null when
+ * Git has no such entry (missing, a directory, a special file, or reached through
+ * a symlinked directory).
+ */
+function gitEquivalentPathBytes(root, relativePath) {
+  if (!nonEmptyString(root) || !nonEmptyString(relativePath)) return null;
+  const parts = relativePath.split('/');
+  try {
+    let cur = root;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      cur = pathMod.join(cur, parts[i]);
+      const st = fs.lstatSync(cur);
+      if (!st.isDirectory()) return null; // a symlinked dir reports isSymbolicLink, not isDirectory
+    }
+    const abs = pathMod.join(root, relativePath);
+    const leaf = fs.lstatSync(abs);
+    if (leaf.isSymbolicLink()) return fs.readlinkSync(abs, { encoding: 'buffer' });
+    if (leaf.isFile()) return fs.readFileSync(abs);
+    return null;
+  } catch (_e) {
+    return null;
+  }
 }
 
 function sha256Json(value) {
@@ -230,13 +261,12 @@ function validateReceipt(receipt, context = {}) {
 
   // Postcheck mode: recompute digests from a live worktree (zero-change candidate).
   if (context.verifyWorktree && nonEmptyString(context.worktree)) {
-    const pathMod = require('path');
     for (const relativePath of Object.keys(receipt.path_byte_digests).sort()) {
-      const abs = pathMod.join(context.worktree, relativePath);
-      if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      const liveBytes = gitEquivalentPathBytes(context.worktree, relativePath);
+      if (liveBytes === null) {
         return fail('path_missing', `path missing in worktree: ${relativePath}`);
       }
-      const live = sha256Bytes(fs.readFileSync(abs));
+      const live = sha256Bytes(liveBytes);
       if (live !== receipt.path_byte_digests[relativePath]) {
         return fail('byte_digest_mismatch', `worktree byte digest mismatch: ${relativePath}`);
       }
@@ -386,4 +416,5 @@ module.exports = {
   validateZeroDiffReceiptForContract,
   sha256Json,
   sha256Bytes,
+  gitEquivalentPathBytes,
 };

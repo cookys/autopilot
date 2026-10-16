@@ -172,7 +172,7 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 |---|---|---|---|
 | `ui.locale` (config.json) | Language of the live band and pane: "en", "zh-TW" or "auto" (follow Claude Code). | auto | `AUTOPILOT_LOCALE`: en or zh-TW; used when ui.locale is auto or absent. |
 | `review.port` (config.json) | Port of the local review page server (bound to 127.0.0.1 only). A busy port is reported, never replaced. | `8787` | `AUTOPILOT_REVIEW_SERVER_AUTOSTART`: Set to "0" to stop the runs watcher from starting the review page server. |
-| `AUTOPILOT_RUNS_WATCH_AUTOSTART` | Set to "0" to stop sessions from starting the live runs watcher. | on |  |
+| `AUTOPILOT_RUNS_WATCH_AUTOSTART` | Set to "0" (or false, off, no) to stop sessions from starting the live runs watcher. | on |  |
 | `AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S` | Seconds of idleness before the runs watcher exits (positive integer). | unset |  |
 | `AUTOPILOT_RUNS_WATCH_INTERVAL_S` | Seconds between runs watcher polls (positive integer). | unset |  |
 

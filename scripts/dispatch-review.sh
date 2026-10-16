@@ -100,17 +100,15 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
-#   opencode runner: drives the OpenCode CLI (`opencode run`). Probe-verified 2026-09-07
-#   (opencode 1.18.27): `--dir <scratch-cwd>` anchors the run outside the repo (the diff
-#   is TEXT in the prompt, this rail needs no repo access at all — scratch cwd is the
-#   ACTUAL containment, same as kimi/cursor below); `--agent plan` denies `edit` for
-#   every path except its own plan-file directory (verified via `opencode agent list`,
-#   NOT the implementer rail's default `build` agent) but is BEST-EFFORT, NOT a hard
-#   sandbox: a live adversarial probe (asked it to run `hostname`) showed `--agent plan`
-#   does NOT block bash/tool execution — the model ran the command and returned the real
-#   host's hostname. So opencode stays OUT of the AUTOPILOT_BLIND_DISCOVERY no-tools
-#   allowlist, same tier as kimi/grok/cursor (see qualification-review-provider.js's
-#   opencode kind, which refuses entirely for the stricter exam-integrity threshold).
+#   opencode runner: drives the OpenCode CLI (`opencode run`). Containment is a real
+#   deny-all (live adversarial probe 2026-10-16, opencode 1.19.2, docs
+#   https://opencode.ai/docs/permissions/): inline OPENCODE_CONFIG_CONTENT sets global
+#   `permission {"*":"deny"}` AND a custom primary agent `locked` that is also deny-all,
+#   run as `--agent locked` with `--dir <EMPTY scratch dir>` (the diff is TEXT in the
+#   prompt; nothing to read). Single owner: scripts/lib/opencode-containment.js. The earlier
+#   `--agent plan` posture denied only `edit` (a `hostname` bash call ran) and is gone.
+#   Whether opencode joins the AUTOPILOT_BLIND_DISCOVERY no-tools allowlist is a separate
+#   decision and is NOT changed here (this edit is containment only).
 #   `--pure` disables external plugins; the prompt is read from STDIN (no positional
 #   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
 #   newline-delimited JSON events — the final assistant text is the LAST
@@ -286,9 +284,16 @@ done
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
 
-D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
-D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
-D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
+D2_AGY_USAGE_CLAIM="cap-v1-60b3c8d855d3cfb31c4ebf9cce62c4fc5c564f7b340abf2c75614e4cb269d64d"
+# The validator requires and emits the ids sorted ascending; they are content-derived, so their order
+# is not a constant. Hold them sorted once and use that for both the --claim-id arguments and the compare.
+if [[ "$D2_AGY_RESPONSE_CLAIM" < "$D2_AGY_USAGE_CLAIM" ]]; then
+  D2_AGY_CLAIM_LO="$D2_AGY_RESPONSE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_USAGE_CLAIM"
+else
+  D2_AGY_CLAIM_LO="$D2_AGY_USAGE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_RESPONSE_CLAIM"
+fi
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_CLAIM_LO\",\"$D2_AGY_CLAIM_HI\"]"
 validate_d2_agy_claims() {
   local receipt validator observed rc=0
   receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$_REVIEW_SELF_DIR/../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
@@ -296,7 +301,7 @@ validate_d2_agy_claims() {
   [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
     || die_precondition "D2 capability claim validation failed"
   observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
-    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --claim-id "$D2_AGY_CLAIM_LO" --claim-id "$D2_AGY_CLAIM_HI" \
     --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
@@ -859,6 +864,7 @@ CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
 OPENCODE_CLEAN="" # extracted final-assistant-text scratch file; reaped on EXIT if interrupted
@@ -890,6 +896,7 @@ cleanup() {
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
+  [ -n "$OPENCODE_HOME_ROOT" ] && rm -rf "$OPENCODE_HOME_ROOT"
   [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
   [ -n "$OPENCODE_ERR" ] && rm -f "$OPENCODE_ERR"
   [ -n "$OPENCODE_CLEAN" ] && rm -f "$OPENCODE_CLEAN"
@@ -1517,18 +1524,43 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   OPENCODE_ERR="$(mktemp -t dispatch-review-opencode-err-XXXXXX)"
   OPENCODE_CWD="$(mktemp -d -t dispatch-review-opencodecwd-XXXXXX)"
   OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
-  # --agent plan denies `edit` (best-effort, NOT a hard sandbox — see header comment:
-  # a live probe showed it does not block bash/tool execution). --dir anchors the run
-  # at the scratch cwd (the ACTUAL containment, never the repo). Prompt via STDIN (no
-  # ARG_MAX wall). --format json for machine-parseable events.
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$3" --agent plan --variant "$4" --format json < "$5"' \
-      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+  # Deny-all containment (opencode 1.19.2 probe 2026-10-16; lib/opencode-containment.js is
+  # the one owner): inline OPENCODE_CONFIG_CONTENT = global permission "*":deny PLUS a custom
+  # primary agent "locked" that is also deny-all, run with --agent locked in an EMPTY --dir
+  # (no project opencode.json / agent md to read). --agent plan was NOT enough: it only
+  # denies `edit`. Prompt via STDIN (no ARG_MAX wall). --format json for parseable events.
+  OC_LIB="$_REVIEW_SELF_DIR/lib/opencode-containment.js"
+  OPENCODE_CONFIG_JSON="$(node "$OC_LIB" config)" || die_precondition "could not derive the opencode deny-all config (lib/opencode-containment.js)"
+  [[ -n "$OPENCODE_CONFIG_JSON" ]] || die_precondition "empty opencode deny-all config — refusing to spawn opencode uncontained"
+  # Clean HOME/XDG tree holding only auth.json: ~/.config/opencode agents/MCP/plugins are never
+  # loaded. OPENCODE_CONFIG / OPENCODE_CONFIG_DIR are removed below with env -u.
+  OPENCODE_HOME_ROOT="$(mktemp -d -t dispatch-review-opencodehome-XXXXXX)"
+  mapfile -t OC_HOME_ENV < <(node "$OC_LIB" prepare-home "$OPENCODE_HOME_ROOT")
+  [[ "${#OC_HOME_ENV[@]}" -ge 5 ]] || die_precondition "could not prepare the opencode clean HOME (lib/opencode-containment.js prepare-home)"
+  OC_ARGS=(run --dir "$OPENCODE_CWD" --pure -m "$MODEL" --agent locked --variant "$OPENCODE_VARIANT" --format json)
+  # Verify the final argv + config right before spawn (same check the exam provider uses):
+  # any drift (no --pure, other agent, non-empty --dir, --dir under a git worktree) refuses.
+  # ONE env prefix array is used for BOTH the assert and the spawn, so the verified environment
+  # is exactly the spawned one (an operator-exported OPENCODE_CONFIG is stripped in both).
+  OC_ENV_PREFIX=(env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${OC_HOME_ENV[@]}" OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON")
+  OC_BREACH="$("${OC_ENV_PREFIX[@]}" node "$OC_LIB" assert "${OC_ARGS[@]}" 2>&1)" \
+    || die_precondition "opencode containment verification failed: ${OC_BREACH} — refusing to spawn opencode uncontained"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+      _ "$OPENCODE_CWD" "$PROMPT_FILE" \
+      "${OC_ENV_PREFIX[@]}" "$OPENCODE_BIN" "${OC_ARGS[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
   OPENCODE_RC=$?
   wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
-  rm -rf "$OPENCODE_CWD"; OPENCODE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  rm -rf "$OPENCODE_CWD" "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # clear so the EXIT trap doesn't rm the paths a 2nd time
   cat "$OPENCODE_OUT" > "$RAW_LOG"
   printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  # Containment audit BEFORE normalising: a clean exit proves nothing, so ANY tool event in the
+  # NDJSON voids the seat (never salvage an answer from a run that touched a tool).
+  if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" 2>&1)"; then
+    printf '\n[dispatch-review: opencode containment breach: %s]\n' "$OC_AUDIT" >> "$RAW_LOG"
+    SALVAGE_CAPTURE=/dev/null
+    emit_no_verdict "opencode containment breach: ${OC_AUDIT} — answer discarded"
+  fi
   # --format json is newline-delimited JSON events, not the plain VERDICT text every other
   # rail's parser expects — extract the LAST {"type":"text",...} event's .part.text (the
   # final assistant message; probe-verified one complete event per turn, no incremental
@@ -1942,7 +1974,7 @@ if [ "$PARSE_RC" -ne 0 ]; then
     3) FORMAT_REJECT=1; emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
     5) emit_no_verdict "frame began but derived END marker was never found" ;;
     6) FORMAT_REJECT=1; emit_no_verdict "trailing non-blank content after the derived END marker" ;;
-    7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
+    7) FORMAT_REJECT=1; emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
     8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
     9) emit_no_verdict "leading chrome echoed prompt/diff structure — the skipped prefix is held to the same leak rule as the block" ;;
     *) emit_no_verdict "response did not start with the expected wrapped block" ;;

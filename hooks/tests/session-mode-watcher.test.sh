@@ -162,6 +162,8 @@ eq "same" "$("$NODE" "$SB/ident.js" "$REPO_ROOT" "$REPO" "$SB/repo-wt" "$SB/repo
 (cd "$REPO" && wenv TMPDIR="$SB/does/not/exist" "$NODE" "$CLI" status runs --watch --project "$KEY" > "$SB/tmp.out" 2> "$SB/tmp.err" < /dev/null)
 eq "2" "$?" "unwritable TMPDIR -> exit 2 flock_unavailable (no stack trace)"
 eq "yes" "$(grep -q flock_unavailable "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: stderr names flock_unavailable"
+eq "yes" "$(grep -q TMPDIR "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: the message names TMPDIR (BL-0109)"
+eq "no" "$(grep -q "required on PATH" "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: not blamed on a missing flock(1)"
 eq "no" "$(grep -q "    at " "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: no stack trace on stderr"
 
 # --- 9. R4 fold: final-publish fallback uses the project-wide fresh bound, and lastRuns is maintained ------

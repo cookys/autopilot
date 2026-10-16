@@ -77,7 +77,7 @@ repo_identity_of() {
 }
 
 _repo_identity_json_str() {
-  printf '%s' "$1" | tr '\n' ' ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+  printf '%s' "$1" | tr '\000-\037' ' ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
 # manifest_session_id_json -- prints the JSON value for a manifest's "session_id" member: the

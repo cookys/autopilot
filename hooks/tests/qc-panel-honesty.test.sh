@@ -4,6 +4,8 @@
 # preservation guard (green at base): false for ['qc_panel'], ['qc_panel[0]'] vs index 1,
 #   and when the key is absent (index-insensitive match would admit the mismatch).
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';

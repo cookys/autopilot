@@ -81,11 +81,25 @@ function loadState(file, dir) {
   } catch (_e) { /* absent or corrupt → start over */ }
   return { cursor: null, order: [], probes: {} };
 }
+// Merge-on-save (BL-0109): every `status runs` caller and every watcher shares this file with no lock, so a plain overwrite let the
+// last writer erase another's probes. Before writing, re-read the file and keep, for each run this caller still considers live
+// (state.probes holds only those), whichever probe is newer. The cursor and order stay this caller's own (last writer wins there
+// is harmless: rotation just resumes a little earlier or later). Fail-open as before.
+function mergeProbes(mine, theirs) {
+  const out = { ...mine };
+  for (const id of Object.keys(mine)) {
+    const t = theirs && theirs[id];
+    if (t && typeof t === 'object' && Date.parse(t.observed_at) > Date.parse(mine[id].observed_at)) out[id] = t;
+  }
+  return out;
+}
 function saveState(file, dir, state) {
   if (!file) return;
   try {
+    const current = loadState(file, dir);
+    const probes = mergeProbes(state.probes, current.probes);
     const tmp = `${file}.tmp.${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, dir, cursor: state.cursor, order: state.order, probes: state.probes }), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, dir, cursor: state.cursor, order: state.order, probes }), { mode: 0o600 });
     fs.renameSync(tmp, file);
   } catch (_e) { /* fail-open: rotation restarts from the top next call */ }
 }
@@ -137,7 +151,7 @@ function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = ''
     const s = probeRun(id);
     if (s) {
       state.probes[id] = {
-        observed_at: new Date(Date.now()).toISOString(),
+        observed_at: new Date(nowMs).toISOString(),
         phase: s.phase,
         alive: s.alive === undefined ? null : s.alive,
         stall: s.stall === undefined ? null : s.stall,
@@ -221,5 +235,5 @@ function applySelectors(rows, { project = null, root = null, since = null } = {}
 }
 
 module.exports = {
-  buildRunRows, applySelectors, matchesProject, rotationPick, DEFAULT_ENRICH_CAP, CURSOR_FILE,
+  buildRunRows, applySelectors, matchesProject, rotationPick, DEFAULT_ENRICH_CAP, CURSOR_FILE, loadState, saveState,
 };

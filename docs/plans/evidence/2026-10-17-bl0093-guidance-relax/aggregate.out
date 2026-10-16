@@ -1,0 +1,6 @@
+maximal | t18-proportional-waste n=5 valid=5 fid=5 flagTrue=5 mirrorSum=0 newTestsSum=0 infra=0
+maximal | t19-edge-case-escape n=5 valid=5 fid=5 flagTrue=5 mirrorSum=0 newTestsSum=14 infra=0
+proportional | t18-proportional-waste n=5 valid=5 fid=5 flagTrue=5 mirrorSum=0 newTestsSum=0 infra=0
+proportional | t19-edge-case-escape n=5 valid=5 fid=5 flagTrue=5 mirrorSum=0 newTestsSum=0 infra=0
+red-bloat | t18-proportional-waste n=3 valid=3 fid=3 flagTrue=0 mirrorSum=3 newTestsSum=17 infra=0
+red-reckless | t19-edge-case-escape n=3 valid=3 fid=3 flagTrue=0 mirrorSum=0 newTestsSum=0 infra=0

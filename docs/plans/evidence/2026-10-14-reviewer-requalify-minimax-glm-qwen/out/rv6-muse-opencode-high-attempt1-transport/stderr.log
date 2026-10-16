@@ -1,0 +1,1 @@
+{"engine":"opencode-go/muse-spark-1.3-contributor","model":"opencode-go/muse-spark-1.3-contributor","runner":"opencode","role":"reviewer","outcome":"transport_fail","cases_attempted":31,"reason":"transport failure on trial-2 case known-bad-02 — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

@@ -1,0 +1,1 @@
+{"task_id":"t18-proportional-waste","arm":"maximal","runner":"cc","model":"sonnet","runner_version":"2.1.301 (Claude Code)","duration":10,"oracle_pass":true,"failure_class":null,"failure_cause":null,"decoy_respected":true,"fidelity_ok":true,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}

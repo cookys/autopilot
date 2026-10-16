@@ -4,6 +4,8 @@
 
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
 
+- BL-0093 point 1 (Boil the Lake): ON/OFF campaign ran 26 cells and was UNINFORMATIVE (waste 0 vs 0), so ceo-agent prose is unchanged; evidence under `docs/plans/evidence/2026-10-17-bl0093-guidance-relax/`, and the maximal eval pack was re-synced to the shipped skill text.
+
 - Brain exam grading (BL-0200): an arm lost to a candidate's early end is no longer also counted as a pair delta (it is listed as `unobserved_pairs`, and the pair stays unjudged); an early end now voids only diligence and convergence, while fairness and containment are graded on what was answered (and need every adjudication or blocked round answered); the brain prompt now says declare_done is for round 12 only. Brain grader hash and `prompt_config_hash` are re-pinned; recorded results are not re-graded.
 
 - `_wt_is_registered_path` (worktree-reap lib) now canonicalises the parent directory before comparing, so on hosts with a symlinked TMPDIR the suite reaper uses `git worktree remove` instead of falling back to `rm -rf`; a final-component symlink is never resolved through (BL-0036).

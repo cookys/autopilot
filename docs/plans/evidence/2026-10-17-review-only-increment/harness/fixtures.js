@@ -43,7 +43,7 @@ const KW = {
 };
 const old = (id, name, fixed) => ({ id, kind: fixed ? 'old_fixed' : 'old_unfixed', path: f(name), line: plantedLine(name), keyword: KW[name] });
 
-function buildSpec(names, extra) {
+function buildSpec(names, extra, loc) {
   const lines = names.filter((n) => !(extra && extra.omit && extra.omit.includes(n))).map((n) => `- ${BY_NAME[n].contract}`);
   return [
     '# Order pricing library: review specification',
@@ -56,6 +56,7 @@ function buildSpec(names, extra) {
     ...lines,
     `- ${CHECKOUT_SPEC_FULL}`,
     `- ${INVOICE_SPEC}`,
+    ...(loc ? ['', '## Reporting format', 'Start the claim of every finding with the file and line it concerns, written path:line (for example src/a.js:12), then state the defect.'] : []),
     '',
   ].join('\n');
 }
@@ -64,17 +65,17 @@ const SEVEN = ['clamp', 'bulk', 'coupon', 'tax', 'ship', 'fee', 'split'];
 
 const SCENARIOS = {
   // 1 single-file fix: coupon fixed; bulk stays wrong (an old finding on a file the author did not touch)
-  s1: () => {
+  s1: (o) => {
     const names = SEVEN;
     const h0 = headMap(names, { coupon: 'bad', bulk: 'bad' });
     const h1 = { ...h0, [f('coupon')]: src('coupon', 'good') };
-    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names), truth: {
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, null, o && o.loc), truth: {
       h0: [old('O1', 'coupon'), old('O3', 'bulk')],
       h1: [old('O1', 'coupon', true), old('O3', 'bulk', false)],
     } };
   },
   // 2 ten-file fix: 26-file range, 11 defects, 10 fixed, one (minorder) left
-  s2: () => {
+  s2: (o) => {
     const names = MODULES.map((m) => m.name);
     const badOnes = ['coupon', 'tax', 'ship', 'bulk', 'clamp', 'loyalty', 'refund', 'fee', 'split', 'cap', 'minorder'];
     const variants = Object.fromEntries(badOnes.map((n) => [n, 'bad']));
@@ -82,20 +83,20 @@ const SCENARIOS = {
     const h1 = { ...h0 };
     const fixed = badOnes.filter((n) => n !== 'minorder');
     for (const n of fixed) h1[f(n)] = src(n, 'good');
-    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names), truth: {
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, null, o && o.loc), truth: {
       h0: badOnes.map((n, i) => old(`O${i + 1}`, n)),
       h1: badOnes.map((n, i) => old(`O${i + 1}`, n, fixed.includes(n))),
     } };
   },
   // 3 cross-file regression: coupon is fixed, and rewritten to return the discounted subtotal;
   // unchanged checkout.js still subtracts it (double discount). coupon has no contract line of its own.
-  s3: () => {
+  s3: (o) => {
     const names = SEVEN;
     const h0 = headMap(names, { coupon: 'bad' });
     const couponH1 = "'use strict';\n// couponCents(subtotal, pct) returns the subtotal left after the percentage discount, in integer cents.\nfunction couponCents(subtotal, pct) {\n  const p = Math.min(100, Math.max(0, pct));\n  return subtotal - Math.round((subtotal * p) / 100);\n}\nmodule.exports = { couponCents };\n";
     const h1 = { ...h0, [f('coupon')]: couponH1 };
     const checkoutLine = lineOf(h1['src/checkout.js'], 'const discounted');
-    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, { omit: ['coupon'] }), truth: {
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, { omit: ['coupon'] }, o && o.loc), truth: {
       h0: [old('O1', 'coupon')],
       h1: [
         { id: 'O1', kind: 'old_fixed', path: f('coupon'), line: plantedLine('coupon'), keyword: KW.coupon },
@@ -104,7 +105,7 @@ const SCENARIOS = {
     } };
   },
   // 4 rename: tax.js -> vat.js (function renamed), checkout updated, invoice.js still requires ./tax
-  s4: () => {
+  s4: (o) => {
     const names = SEVEN;
     const h0 = headMap(names, { tax: 'bad' });
     const vatSrc = src('tax', 'good').replace(/taxCents/g, 'vatCents').replace('returns the tax', 'returns the VAT');
@@ -113,7 +114,7 @@ const SCENARIOS = {
     h1[f('vat')] = vatSrc;
     h1['src/checkout.js'] = checkoutSource('vat', 'discount').replace(CHECKOUT_SPEC, CHECKOUT_SPEC_FULL);
     const invLine = lineOf(h1['src/invoice.js'], "require('./tax')");
-    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names), renames: [[f('tax'), f('vat')]], truth: {
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, null, o && o.loc), renames: [[f('tax'), f('vat')]], truth: {
       h0: [old('O1', 'tax')],
       h1: [
         { id: 'O1', kind: 'old_fixed', path: f('tax'), line: plantedLine('tax'), alt_paths: [{ path: f('vat'), line: 4 }], keyword: KW.tax },
@@ -122,13 +123,13 @@ const SCENARIOS = {
     } };
   },
   // 5 R2 anchoring: coupon and ship old defects fixed, each fix lands next to a NEW defect
-  s5: () => {
+  s5: (o) => {
     const names = SEVEN;
     const h0 = headMap(names, { coupon: 'bad', ship: 'bad' });
     const couponH1 = src('coupon', 'good').replace('Math.max(0, pct)', 'Math.max(1, pct)');
     const shipH1 = src('ship', 'good').replace('if (weightG <= 0) return 0;', 'if (weightG < 0) return 0;');
     const h1 = { ...h0, [f('coupon')]: couponH1, [f('ship')]: shipH1 };
-    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names), truth: {
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, null, o && o.loc), truth: {
       h0: [old('O1', 'coupon'), old('O2', 'ship')],
       h1: [
         old('O1', 'coupon', true), old('O2', 'ship', true),

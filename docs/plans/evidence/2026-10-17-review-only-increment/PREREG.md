@@ -85,4 +85,18 @@ to keep `full`. No threshold is tuned after the data.
 
 ## 9. Amendments
 
-(none yet; every change after the first model call is appended here with its reason and the cells it touches)
+Every change after the first model call is appended here with its reason and the cells it touches.
+
+- A1 (after the pilot cells `s1-inc-r1` and `s1-full-r1`, before any other cell): the pilot arm `inc` fell back to `full` with
+  reason `finding_unmapped`. The real seats wrote their findings as `[id] MUST-FIX claim ...` with no `path:line`, and the
+  engine maps a finding to a path only from a `path:line` token in the claim (`review-increment-wiring.js`, `findingPathFromClaim`);
+  the review protocol (`scripts/dispatch-review.sh`) never asks for one. Consequences: (1) the pilot cells are kept as the
+  *raw* condition and renamed `s1-incraw-r1` and `s1-fullraw-r1` (spec without a reporting-format line); (2) every cell of the main
+  grid uses a spec with one added paragraph, `## Reporting format`, asking each finding's claim to start with `path:line`
+  (`specVariant: loc`, now the harness default; `harness/fixtures.js` `buildSpec`); (3) the raw condition is also run once for the
+  other four scenarios as `s<k>-incraw-r1` (arm `inc` only), to report how often the shipped protocol reaches the incremental path
+  at all. The raw cells are reported separately and are not in the pairs, savings or miss figures. Nothing about metrics or
+  definitions in sections 5 to 8 changes.
+- Estimated cost (note, not a change): the runners report no `usage` (`null` for all seats, and `dispatch-status.js --usage-only`
+  returns `null` on the raw logs), so every cost figure is the byte-derived estimate of section 5. Calls and bytes are measured;
+  cost is a model of bytes and is labelled so in the README.

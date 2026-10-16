@@ -113,7 +113,7 @@ const { AutopilotEngine, runCampaignIntake, compileCampaignDispositionPolicy } =
 const git = (repo, ...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 // ---- fixture repo --------------------------------------------------------------------------------------------
-const sc = SCENARIOS[ctx.scenario]();
+const sc = SCENARIOS[ctx.scenario]({ loc: ctx.specVariant !== 'raw' });
 const writeMap = (dir, map) => {
   // remove tracked src files not in map, then write
   const srcDir = path.join(dir, 'src');
@@ -174,7 +174,7 @@ const seal = spawnSync(process.execPath, [
   '--mission-mode', 'shadow', '--out', sealPath,
 ], { cwd: sbx, encoding: 'utf8' });
 const record = {
-  tag: ctx.tag, scenario: ctx.scenario, arm: ctx.arm, base, h0, h1, sealed_head: sealed, delta_files: deltaFiles, range_files: rangeFiles,
+  tag: ctx.tag, scenario: ctx.scenario, arm: ctx.arm, spec_variant: ctx.specVariant || 'loc', base, h0, h1, sealed_head: sealed, delta_files: deltaFiles, range_files: rangeFiles,
   truth: sc.truth, started_at: new Date().toISOString(),
 };
 const finish = (extra) => {

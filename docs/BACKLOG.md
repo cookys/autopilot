@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0195 -->
+<!-- next-id: BL-0196 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1446,3 +1446,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: owner 2026-10-15: review or discussion goes through the hetero engine, not fleet peers. Exams run inside the llm-playground project (a project, not a machine); scheduling around its GPU jobs is that project's concern.
 
+
+### A runs watcher started directly in a test env still writes to the shared live dir
+- **Id**: BL-0195
+- **Status**: open
+- **Since**: 2026-10-16
+- **Origin**: self
+- **Problem**: 77ccec9b 讓隔離的測試環境（假 HOME 或假 CLAUDE_CONFIG_DIR）不再寫共用的 load-source.json、也不自動起 watcher。但如果有人在這種環境裡直接手動啟動 runs watcher，它仍會把該專案的 runs 檔寫進共用的 live 目錄（$XDG_RUNTIME_DIR/autopilot）。
+- **Impact**: 低。要在測試環境刻意直接啟動 watcher 才會發生；發生時面板會看到一個假專案的資料，刪掉那幾個檔就好。
+- **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
+- **Effort**: S
+- **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
+- **Pointer**: none

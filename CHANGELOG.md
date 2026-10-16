@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Brain exam grading (BL-0200): an arm lost to a candidate's early end is no longer also counted as a pair delta (it is listed as `unobserved_pairs`, and the pair stays unjudged); an early end now voids only diligence and convergence, while fairness and containment are graded on what was answered (and need every adjudication or blocked round answered); the brain prompt now says declare_done is for round 12 only. Brain grader hash and `prompt_config_hash` are re-pinned; recorded results are not re-graded.
+
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
 - `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.

@@ -68,6 +68,14 @@ const SEMANTIC_LEAK_TOKENS = ['missing-null-guard', 'null-guard', 'null guard', 
   // value — refuse the shape (the walker above genuinely sees them now).
   assert.ok(!promptBody.includes('\\`'),
     'BRAIN_SYSTEM_PROMPT must not contain escaped backticks (source-hash vs runtime divergence)');
+  // BL-0200 (c): the prompt must not both forbid ending early and allow declare_done
+  // whenever findings are closed; declare_done belongs to round 12 only, said twice alike.
+  assert.ok(promptBody.includes('never declare_done before round 12'),
+    'brain prompt states declare_done is for round 12 only (convergence section)');
+  assert.ok(promptBody.includes('use it on round 12 only'),
+    'brain prompt rule 4 agrees: declare_done on round 12 only');
+  assert.ok(!/legal once every open\s+finding is closed — a stream/.test(promptBody),
+    'brain prompt no longer says declare_done is legal at any round once findings are closed');
   const promptHash = crypto.createHash('sha256').update(promptBody).digest('hex');
   const identity = JSON.parse(fs.readFileSync(
     path.join(__dirname, '..', '.claude', 'brain-seat-identity.json'), 'utf8',

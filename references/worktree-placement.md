@@ -79,6 +79,8 @@ branch: git refuses to update a branch checked out elsewhere, and the session's 
 aimed at the main checkout, including the owner's `!` commands typed into that session. After a push, the owner runs
 this from a terminal that is not the isolated session:
 
+`repo-residue-sweep.js close-session --yes` prints the line for you when the main checkout lags; the manual form:
+
 ```bash
 node <plugin>/scripts/resolve-repo-placement.js main --from <any worktree of the repo>
 # {"main_checkout": "...", "behind": N, ...}  — N commits behind its upstream
@@ -88,5 +90,5 @@ git -C <main_checkout> pull --ff-only
 ## Not covered
 
 - A session in repo A dispatching a rail at repo B: no rule yet (BACKLOG row).
-- Telling the owner the pull line from finish-flow automatically: BACKLOG row (a guidance change, so it needs eval
-  evidence first).
+- (done) The pull line is printed automatically: `repo-residue-sweep.js close-session --yes`, which finish-flow's
+  Dispatch-branch close-out row already runs, writes it to stderr when the main checkout is behind its upstream.

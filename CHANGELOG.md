@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Brain exam pair-consistency grading now compares only verdict and severity; the optional repair_scope no longer counts as a pair delta (owner decision d-ae7892b0). The grader hash pin in engine-qualify.js moves with it, so new rows are distinguishable from old ones; past results are not recomputed or retroactively changed (old rows stand as graded).
+
 - Kimi K3 and K2.8 sat the 2026-10-16 retake exams (events 304-310; reviewer v6, discuss and K2.8 consult qualified, both brain seats failed); the shipped qualification defaults now carry them (74 to 79 rows; the two failed brain-seat rows, events 306 and 309, are not shipped per policy), evidence under docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen, and BL-0199 tracks the exam-credential rotation hazard.
 
 ### Settings changes

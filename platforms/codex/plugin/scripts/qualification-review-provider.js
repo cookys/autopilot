@@ -339,8 +339,8 @@ production rules; nothing here names any particular round's content):
   contract for the diff beside it. A diff that lacks the protection it names is
   a defect, and the severity you report is the severity that text names — not a
   stricter or looser one. A diff that includes the protection is clean: accept
-  it. repair_scope is optional; if you set it, use the same string for the same
-  code on every view, or omit it on every view.
+  it. repair_scope is optional and is not counted in the cross-view
+  consistency check.
 - Convergence: scoped work over wholesale churn. Verify a finding's own surface
   (verify_scoped with that finding as target) before closing it (close_finding
   with the same target). Full-suite reverification of scoped findings

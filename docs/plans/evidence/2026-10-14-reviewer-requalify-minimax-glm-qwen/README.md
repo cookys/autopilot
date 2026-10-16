@@ -63,3 +63,30 @@ first; failed rows are append-only.
   high are labels too, not endpoint settings, so `max` here is NOT comparable as the same effort to them.
 - max_tokens: the default 8192 is shared with thinking, and a lone thinking block fails the case (provider header ~:109-117).
   Because this model thinks at max by default, `QRP_MAX_TOKENS=32768` is set and listed in `--provider-env`.
+
+## 2026-10-16 Kimi retake (BL-0167)
+
+Kimi quota reset; both Kimi seats sat the exams skipped on 2026-10-14. Scorecard event ids are 304-310 (record-out.json
+also prints a second, ledger-side id 467-473; the store key is the 304-310 one).
+
+| Model | Role | Effort | Result | Score | Event | Directory |
+|-------|------|--------|--------|-------|-------|-----------|
+| kimi-code-k3 | reviewer v6 | high | qualified | 42/42, 0 false-pass-critical, specificity 0/38 | 304 | out/rv6-kimi-k3-high |
+| kimi-code-k3 | discuss | high | qualified | 48/48 | 305 | out/m-kimi-discuss |
+| kimi-code-k3 | brain (owner seat) | high | failed | plants 10/10, hard_fails 5, diligence/fairness false | 306 | out/m-kimi-brain |
+| kimi-k2.8-preview | reviewer v6 | high | qualified | 42/42, 0/38 | 307 | out/rv6-kimi-k28-high |
+| kimi-k2.8-preview | discuss | high | qualified | 48/48 | 308 | out/m-kimi28-discuss |
+| kimi-k2.8-preview | brain (owner seat) | high | failed | plants 8/10, all four subjects false | 309 | out/m-kimi28-brain |
+| kimi-k2.8-preview | consult | high | qualified | 60/60 | 310 | out/m-kimi28-consult |
+
+New scripts: `cell-kimi-rv6.sh`, `run-kimi-retake.sh`, `run-kimi28-retake.sh`. `kimi28-stage-probe.sh` now keeps the newest
+usable credential when it rebuilds the exam home. Superseded attempts are kept under `out/m-kimi-brain-attempt1-credential-no_verdict`,
+`out/m-kimi28-reviewer-v4-prior` and `out/rv6-kimi-k28-high-attempt1-credential`.
+
+### Credential rotation incident
+
+The exam home used the owner's real Kimi credential. Kimi rotates the refresh token on use, so the first K2.8 attempt was
+rejected (credential, no verdict, kept as attempt1) and the owner's own copy was invalidated. The retake used an exam-home
+relay (exam home refreshed and handed on between runs); afterwards the newest credential was written back to the owner's
+`~/.kimi-code` with a backup taken first. No credential, token or kimi-home file is stored in this evidence (secret scan of every
+added or changed file found none; no file is over 5 MB). Follow-up: BL-0199.

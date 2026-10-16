@@ -1,0 +1,4 @@
+kimi-auth-probe rc=1: kimi version 2.1.1 error: failed to run prompt: provider.auth_error: 403 You've reached your weekly (7-day) usage limit. Your quota will reset when the current 
+2026-10-14T16:07:39+08:00 kimi credential unusable (owner must log in again)
+2026-10-14T16:07:39+08:00 lane=kimi role=brain END rc=3 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=3

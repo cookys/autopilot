@@ -42,7 +42,7 @@ pilot-informed choice and is disclosed as such: F5/F6/I7 stay measured and print
 | 2 | 60 (3 reps FULL/OFF, 3 families load-bearing: F1 8/0, F2 7/0, F3 8/0; F5 4/3, F6 0/0) | F8 discovered from the transcripts; ledger became 2/6 vs 0 once the fixture had a tree |
 
 Pilot totals: 160 cells, 17.66 USD (list price from `modelUsage.costUSD`), transcripts in
-`/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/pilot*`.
+the lane scratchpad (not in git), directories `pilot*`.
 
 ## Arms (all frozen packs, digest-verified by the harness; `evals/skill-onoff/arms/dc/{full,card,off,red}.json`)
 
@@ -85,7 +85,7 @@ prefix `Use dev-flow:` in every arm, 3 reps, resume-by-cell, `ONOFF_KEEP_CELLS_D
 Run 2026-10-16 23:21 to 2026-10-17 00:25 (CST), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
 runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD; the stage-graph coverage gate below adds 9.35 USD (36 cells), 44.55 USD overall. Rows and scorer output:
 `results-pa-full-off.jsonl`, `results-pr-red.jsonl`, `results-pc-card.jsonl`, `score-final.json`, `score-redcheck.json`.
-Raw per-cell transcripts (not in git): `/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
+Raw per-cell transcripts (not in git): the lane scratchpad (not in git), `gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
 
 ### P-A + P-C (n = 9 per counted family)
 
@@ -113,7 +113,7 @@ The red arm invoked the skill 30/30, so the drop is the body's content, not rout
 - Two boundary passes (F1 6 vs the threshold 6; F4 4 vs 4). A one-count shift would have turned them into ITERATE-CARD. The verdict stands under the frozen rule; the margin is thin and is recorded rather than smoothed.
 - The card's F3 at 9/9 against FULL 8/9 and F4 4 vs 6 are within the noise of n=9 per arm at one model; no card advantage is claimed.
 - Claim scope: single-turn headless `claude -p`, sonnet-5-5, explicit `Use dev-flow:` invocation prefix, small fixtures. Not measured: routing, interactive sessions, L/XL walks (headless L stops at the plan), the quality gate on M (documented-only, 0/6 in both arms), red-first (the live body has no inline rule), opus-class behaviour.
-- BL-0049 answer: with a fixture that already has the ledger tree, F4 is FULL 6/9 vs OFF 1/9 (the 0/3 in 2026-08 was the missing tree, as suspected). No enforcer is warranted on this evidence; the rule stays `documented-only` in `references/four-layer-design.md` S2 and the number is updated there.
+- BL-0049 answer: with a fixture that already has the ledger tree, F4 is FULL 6/9 vs OFF 1/9 (the 0/3 in 2026-08 was the missing tree, as suspected). No enforcer is warranted on this evidence; the rule stays `documented-only`. `references/four-layer-design.md` S2 has NOT been updated (editing it would trigger the guidance gate); the closing numbers live in this README and the BL-0049 closing commit `3aca2e1ae`.
 - F6 stays at 0/6 with the dev-flow body loaded: the M-size quality-pipeline invocation is still not followed in headless sonnet. This is an independent finding about the live rule, unchanged by the card.
 
 
@@ -134,3 +134,9 @@ and the card is not edited to restore the paragraph (a card edit invalidates the
 the same 10/12 as the evaluated v10 body, with the same two research briefs failing structurally in headless. The scorer's own verdict reads STOP only because the red and generic arms
 were deliberately not run for this gate (registered above). Rows: `results-sg-card-change.jsonl`, `score-sg-card.json`. Boundary again: 10 is the threshold.
 Both gates pass, so `skills/dev-flow/SKILL.md` is replaced by the frozen card in a separate commit.
+
+### Budget accounting and registration times
+
+- The dc prereg cap of 150 cells covers the 120 formal cells only (60 + 30 + 30). The 36-cell stage-graph coverage gate belongs to the other frozen prereg (`prereg/stage-graph.json`); the two budgets are accounted separately.
+- Second gate registered at commit `1dcebbc7a`, 2026-10-16 23:50:15 +0800; its cells started a few minutes before that commit and finished by 2026-10-17 00:03:21 +0800; the result commit `578e70a41` is 00:04:53. The rule text is the frozen stage-graph threshold, not derived from the outcome. Formal dc cells ran 2026-10-16 23:21 to 2026-10-17 00:25 per the Results section above, before the registration commit's cells, with the prereg frozen in `8c5534e5c`.
+- OFF rows with `skill_invoked=true` (dc-bug-multi rep 2, dc-m-gate-a rep 1) have all markers false: in both the model called `Skill(dev-flow)` as its first tool call (because of the prefix) and got `Unknown skill: dev-flow`, then worked without it. The harness flag matches on the skill name, not on a successful load; it is not a leak of the skill into the OFF arm. V1 is only evaluated on FULL and CARD.

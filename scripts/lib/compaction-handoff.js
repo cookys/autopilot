@@ -11,8 +11,8 @@
  *      ledger -> model handoff note -> (caller's machine state) -> transcript tail. Every section
  *      that cannot be read says "unavailable: <reason>" instead of failing the hook. The size is
  *      bounded: each section has its own cap and the tail gets what is left.
- *   2. budgetWarning() — SessionStart (any source): t2 + gap must fit under window - 33000, else T2
- *      can never be reached before Claude Code compacts. One line, nothing is changed.
+ *   2. budgetWarning() — SessionStart (any source): t2 + gap must fit under window - 33000, else Claude
+ *      Code compacts before T2 can remind (with auto-compact set, T2 is only a handoff reminder). One line, nothing is changed.
  *   3. recordCompactionPoint() — SessionStart(compact): append the last compact_boundary's
  *      preTokens plus the resolved window and CC version to a calibration jsonl, so the real
  *      compaction point can be compared with the buffer constant below.
@@ -344,7 +344,7 @@ function budgetWarning(opts = {}) {
   const suggested = t2 + gap + AUTOCOMPACT_BUFFER_TOKENS;
   const k = (n) => `${Math.round(n / 1000)}k`;
   return `Context budget config: auto-compact window ${k(win.configured)} puts the compaction point at ${k(compactAt)} (window - ${k(AUTOCOMPACT_BUFFER_TOKENS)} buffer), `
-    + `but T2 ${k(t2)} + gap ${k(gap)} = ${k(t2 + gap)} is above it, so T2 is never reached before Claude Code compacts. `
+    + `but T2 ${k(t2)} + gap ${k(gap)} = ${k(t2 + gap)} is above it, so T2 is never reached before Claude Code compacts (with auto-compact set T2 is only a handoff reminder, so this only means no handoff reminder comes first). `
     + `Window that fits: ${suggested} (t2 + gap + ${AUTOCOMPACT_BUFFER_TOKENS}); takes effect on the next session start. Nothing was changed.`;
 }
 

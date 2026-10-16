@@ -1,0 +1,37 @@
+{
+ "mode": "selective",
+ "required": [],
+ "extra_runners": [],
+ "kind": "prose",
+ "all_suites": [
+  "hooks/tests/check-js-syntax.test.sh",
+  "hooks/tests/codex-plugin-package.test.sh",
+  "hooks/tests/g01-extra.test.sh",
+  "hooks/tests/g01-lib.test.sh",
+  "hooks/tests/g01-script.test.sh",
+  "hooks/tests/g02-extra.test.sh",
+  "hooks/tests/g02-lib.test.sh",
+  "hooks/tests/g02-script.test.sh",
+  "hooks/tests/g03-extra.test.sh",
+  "hooks/tests/g03-lib.test.sh",
+  "hooks/tests/g03-script.test.sh",
+  "hooks/tests/g04-extra.test.sh",
+  "hooks/tests/g04-lib.test.sh",
+  "hooks/tests/g04-script.test.sh",
+  "hooks/tests/g05-extra.test.sh",
+  "hooks/tests/g05-lib.test.sh",
+  "hooks/tests/g05-script.test.sh",
+  "hooks/tests/g06-extra.test.sh",
+  "hooks/tests/g06-lib.test.sh",
+  "hooks/tests/g06-script.test.sh",
+  "hooks/tests/g07-lib.test.sh",
+  "hooks/tests/g07-script.test.sh",
+  "hooks/tests/mods-panel.test.sh",
+  "hooks/tests/solo.test.sh"
+ ],
+ "always_run": [
+  "hooks/tests/check-js-syntax.test.sh",
+  "hooks/tests/codex-plugin-package.test.sh"
+ ],
+ "authored_by": "hand, from the planted mention graph in tasks/qs-common/build-fixture.sh; check-qs-answers.js asserts it equals the frozen selector output (s6: the task text overrides the selector, so the selector mode is selective and the required set is the whole run.sh)"
+}

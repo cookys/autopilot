@@ -38,7 +38,7 @@ A returned round reviews:
 
 ### 2.2 Incremental review is allowed only when every eligibility test passes; otherwise the round is today's full round
 
-Eligibility is computed by a pure module (new `src/engine/review-increment.js`) from Git and the stored prior round. Any failing test returns `{ mode: 'full', reason }` and the engine runs exactly today's path, with the reason recorded. **Priority:** tests run in the numbered order below and the first failure names the reason (within a test, in the order listed); the reason strings are `opt_in_off`, `prior_round_incremental`, `no_carriable_seat`, `finding_unmapped`, `base_changed`, `roster_changed`, `spec_changed`, `verify_cmd_changed`, `verification_red`, `changed_ratio`, `delta_packet_size`, `recheck_content_size`, `shared_surface`, `reference_cap`. Tests:
+Eligibility is computed by a pure module (new `src/engine/review-increment.js`) from Git and the stored prior round. Any failing test returns `{ mode: 'full', reason }` and the engine runs exactly today's path, with the reason recorded. **Priority:** tests run in the numbered order below and the first failure names the reason (within a test, in the order listed); the reason strings are `opt_in_off` (test 1), `no_carriable_seat` (2), `prior_round_incremental` (3), `finding_unmapped` (4), `base_changed`, `roster_changed`, `spec_changed`, `verify_cmd_changed` (5), `verification_red` (6), then in test 7 `changed_ratio`, `delta_packet_size`, `reference_cap` (raised while section 2.3 builds the re-check set, which test 7 needs before it can measure content), `recheck_content_size`, and last `shared_surface` (8). Tests:
 
 1. Contract opt-in (section 2.7).
 2. The prior round exists. Per seat (not per round): a seat with a stored `reviewed` artifact for the prior binding that **re-derives** (same rule as `final-panel-seat-store.js`: artifact type, binding, tuple, findings re-normalize, `review_digest` re-derives) is carried; a seat with no such artifact (`no_verdict`, `transport_failed`, tuple changed) is **not carried and gets the full-range packet** while the round stays incremental. This is the one rule, used in 2.6 and A5/A12. If no seat can be carried the round is `full` (`no_carriable_seat`).
@@ -104,7 +104,15 @@ Rules:
 
 - `defaultAdoptionAdmission` is unchanged: scope and file cap stay cumulative (`campaign-intake.js:2023`).
 - On `returnedHead`, before the review station, call the eligibility module. `incremental` builds the delta diff file, the re-check cumulative diff file and the spec addendum, and runs the existing `prepareReview` with `review_input_mode: 'incremental_return'`; `full` runs today's code untouched.
-- The incremental packet is three files: `delta.diff` (H0..H1), `recheck.diff` (cumulative `base..H1` diff of the changed paths in the re-check set) and `recheck-files/` (for every re-check path **not** in the cumulative diff, i.e. unchanged since base, the complete file content at H1, each marked with its path; a changed path is read through its diff, since a seat that knows a path but sees no code cannot judge it). Total `recheck.diff` plus `recheck-files/` is capped at `increment_recheck_content_bytes`; over the cap is `full` with reason `recheck_content_size`, never a truncated file and the spec with the section 2.5 addendum. The full packet is today's single `base..H1` diff plus the unmodified spec. The final panel is the same panel and roster; per section 2.2 test 2, seats with a re-derivable prior artifact get the incremental packet, the others get the full packet, and the round stays incremental. Quorum and family rules are unchanged and are evaluated on the union.
+- Packets, per section 2.2 test 2 (the round stays incremental; each seat gets one of these):
+  - **Incremental packet**, four items:
+    1. `delta.diff`: the diff H0..H1.
+    2. `recheck.diff`: the cumulative `base..H1` diff of the changed paths in the re-check set.
+    3. `recheck-files/`: for every re-check path not in the cumulative diff (unchanged since base), the complete file content at H1, each marked with its path. A changed path is read through its diff; a seat that knows a path but sees no code cannot judge it.
+    4. The spec, with the section 2.5 addendum appended.
+    Items 2 and 3 together are capped at `increment_recheck_content_bytes`; over the cap is `full` with reason `recheck_content_size`, never a truncated file.
+  - **Full packet** (seats with no re-derivable prior artifact): today's single `base..H1` diff plus the unmodified spec.
+- The final panel is the same panel and roster. Quorum and family rules are unchanged and are evaluated on the union.
 - The result is still a `base..head` verdict for the receipt: carried clean paths from the prior artifacts, re-checked paths from this round, findings from both. `review_scope` and the carried/re-check sets are written into the receipt (additive fields).
 
 ### 2.7 Contract surface
@@ -130,7 +138,7 @@ Each check ships red before green (the repo rule). Fixtures use a temp repo and 
 | ID | Behaviour | Negative control (must go red when the check is removed) |
 |---|---|---|
 | A1 | A return that changes 1 of N files dispatches each seat once with a packet of the re-check set only; the carried N-1 files are not in any seat input | Disable the carry: seat inputs contain all N files and the test fails |
-| A2 | A prior open finding on an unchanged file keeps that file in the re-check set; the finding stays open when the seat is silent | Drop the open-finding rule: the finding closes by silence and the test fails |
+| A2 | A prior open finding on a file unchanged since H0 keeps that file in the re-check set; the finding stays open when the seat is silent | Drop the open-finding rule: the finding closes by silence and the test fails |
 | A3 | Silence never closes: a seat that omits a finding id leaves it open and the campaign parks again | Treat omission as resolved: test fails |
 | A4 | A planted cross-file regression (delta edits A, breaks caller B unchanged) is caught: B is pulled in by reference expansion | Remove reference expansion: the planted break is missed and the test fails |
 | A5 | Each fallback gives `mode: full` plus its reason and the full path runs: shared-surface file touched, ratio over limit, reference cap hit, spec/roster/base/`verify_cmd` changed, delta packet over the size ceiling, re-check content over its cap, prior round incremental, unmappable finding, no carriable seat, `return_review: full` | For each, force `incremental`: test fails |

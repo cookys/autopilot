@@ -1173,9 +1173,14 @@ function admitMissionRouting(options = {}) {
   let deltaAdmission = { noop_adoptions: [] };
   try {
     const artifacts = loadRoutingConfig(repo.root);
+    // BL-0081: the graph file is read ONCE. The digest sealed by inspectGraph and
+    // the per-node delta validation below both consume this single parse, so a file
+    // swapped between two reads cannot certify a graph that was never inspected.
+    const graphJson = readJson(artifacts.graph, 'Mission execution graph');
     graphResult = inspectGraph({
       governance: policy.governance_path,
       graph: artifacts.graph,
+      graphObject: graphJson,
       sources: artifacts.sources,
     });
     requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
@@ -1188,7 +1193,6 @@ function admitMissionRouting(options = {}) {
     // Pre-spend: resolve HEAD once per admission, then validate frozen graph
     // specs against that exact SHA using the already-checked routing graph.
     const admissionBaseSha = resolveAuthoritativeHead(repo.root);
-    const graphJson = readJson(artifacts.graph, 'Mission execution graph');
     validateGraphSpecsAtBase(
       repo.root,
       graphJson,

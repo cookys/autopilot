@@ -256,7 +256,12 @@ function checkOutputPathMirrors(graph, mirrorRoots) {
 
 function inspect(options) {
   const governance = readJson(options.governance, 'governance');
-  const graph = readJson(options.graph, 'graph');
+  // BL-0081: a caller that already holds the parsed graph passes it, so the bytes
+  // it validates are the bytes it inspected -- a second read of the path could
+  // see a different file. A copy keeps the inspected object out of the caller's reach.
+  const graph = options.graphObject !== undefined
+    ? JSON.parse(JSON.stringify(options.graphObject))
+    : readJson(options.graph, 'graph');
   const missionPolicy = resolveMissionPolicy(governance);
   const coverage = loadSourceCoverageManifest(options.sources);
   const mirrorRoots = options.mirrorRoots ? loadMirrorRoots(options.mirrorRoots) : null;

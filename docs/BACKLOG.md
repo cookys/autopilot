@@ -911,19 +911,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Mission graph and campaign capacity boundary hardening
-- **Id**: BL-0081
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 任務圖檔案驗證與讀取之間可能被改動，且 campaign 容量上限只在結構定義裡有，實際執行的檢查沒有同樣限制。目前還不支援這些情境。 (draft)
-- **Impact**: 只有開放熱載入或自訂容量時才有風險，現在不影響。 (draft)
-- **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/mission-graph-and-campaign-capacity-boundary-hardening.md
-- **Context**: Read Mission graph bytes once or bind the validation read to the inspected digest, and mirror max_owned_worktrees/temp_capacity_limit/max_prompt_bytes/max_finding_recurrence schema caps in the executable validator.
-
 ### Orphan leaf liveness and resource reconstruction
 - **Id**: BL-0082
 - **Status**: open

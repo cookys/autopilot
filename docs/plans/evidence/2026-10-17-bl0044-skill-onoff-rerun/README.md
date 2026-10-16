@@ -116,3 +116,13 @@ The red arm invoked the skill 30/30, so the drop is the body's content, not rout
 - BL-0049 answer: with a fixture that already has the ledger tree, F4 is FULL 6/9 vs OFF 1/9 (the 0/3 in 2026-08 was the missing tree, as suspected). No enforcer is warranted on this evidence; the rule stays `documented-only` in `references/four-layer-design.md` S2 and the number is updated there.
 - F6 stays at 0/6 with the dev-flow body loaded: the M-size quality-pipeline invocation is still not followed in headless sonnet. This is an independent finding about the live rule, unchanged by the card.
 
+
+## Second gate before any swap: stage-graph coverage (registered 2026-10-17, before its cells finished)
+
+The card relocates the ladder `--terms` paragraph (the v5 rule that took stage-graph to 10/12) and the anti-patterns table, and the dc tasks
+contain no research or ladder walk. `scripts/check-guidance-eval.js` also requires any guidance change at a cut to match an evaluated stage-graph pack.
+So the dc verdict alone does not license the swap. Rule, from the frozen `prereg/stage-graph.json` (no new thresholds): the 12 stage-graph briefs x 3 reps
+on arm `evals/skill-onoff/arms/dc-sg/change.json` (= the evaluated v10 `change` arm with `dev-flow` replaced by `dev-flow-dc-card`), same prefix, same pinned binary,
+`change` arm only (the planted-red arm of that row was already shown to separate in v10). Pass = at least 10 of 12 briefs pass (>= 2 of 3 reps each, as in the row's scorer).
+Swap `skills/dev-flow/SKILL.md` only if BOTH the dc verdict is SHIP-GATE-MET AND this gate passes. Below 10/12: record "dc SHIP-GATE-MET, stage-graph coverage NOT-SHIP", no swap,
+and the card is not edited to restore the paragraph (a card edit invalidates the CARD rows).

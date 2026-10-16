@@ -549,7 +549,7 @@ function run() {
       updateNotice = '';
     }
 
-    // Any source: t2 + gap must fit under window - 33000, else T2 is never reached. One line, no changes made.
+    // Any source: t2 + gap must fit under window - 33000, else compaction comes before the T2 handoff reminder (with auto-compact set T2 never asks to stop). One line, no changes made.
     let budgetWarning = '';
     try {
       budgetWarning = require('../scripts/lib/compaction-handoff.js').budgetWarning({

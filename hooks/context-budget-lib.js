@@ -241,9 +241,11 @@ function budgetDecision(state, cfg) {
           'on a 1M window this is early and no action is needed.',
       };
     }
-    // An auto-compact window at or below T2 is set and compaction is on: Claude Code will reset
-    // this context itself, so stopping for a human /clear only adds an interruption (BL-0124).
-    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0 && cfg.autocompactWindow <= cfg.t2) {
+    // An auto-compact window is set (finite > 0) and compaction is on (the hook passes a number only
+    // then): Claude Code resets this context itself, so stopping for a human /clear only adds an
+    // interruption (BL-0124). The window's position relative to T2 does not matter: T2 is then only a
+    // handoff reminder.
+    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0) {
       return {
         tier: 't2',
         message:
@@ -260,7 +262,9 @@ function budgetDecision(state, cfg) {
         'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
         'then tell the user to /clear or restart the session — context cost compounds ' +
         'quadratically with session length. [USER: after the handoff lands, /clear or ' +
-        'start a fresh session to reset the context.]',
+        'start a fresh session to reset the context.] ' +
+        'To avoid being asked to stop: set `autoCompactWindow` in ~/.claude/settings.json (or run /autocompact) ' +
+        'so Claude Code compacts the session itself; T2 then stays a handoff reminder only.',
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {

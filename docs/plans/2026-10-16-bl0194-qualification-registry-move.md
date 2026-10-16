@@ -1,6 +1,7 @@
 # Plan — BL-0194 qualification registry moves to llm-playground
 
 > Status: frozen after G2 (depth-0 terminal adjudication); owner decision d-1f0c5e99: A2 + B1 + C1. Cross-repo, phases P1-P4b.
+> Progress 2026-10-16: P1 merged in llm-playground (c844d625; owner-authorised in the root session, four independent root reviews). Follow-up (lone surrogates, invalid UTF-8, BOM rejected on both sides): llm-playground 65876e18, autopilot 23bb5e8b. P2 (autopilot reads qualification-metrics.json for ordering only): autopilot 0ae6c42f. Remaining: P3, P4, and an llm-playground follow-up: r4 node_gate and t15 do not catch FileNotFoundError when calling node (validator present, node not installed raises instead of SKIP; CI unaffected). Next time r4 is touched: catch it, SKIP with the reason, add a test with no node on PATH, and record it in llm-playground doc/plan/078 follow-ups.
 > Placement: autopilot `docs/plans/2026-10-16-bl0194-qualification-registry-move.md` (INDEX row `active`); llm-playground `doc/plan/<next after 075>-qualification-registry.md` plus a `doc/plan/README.md` row.
 
 ## 0. Thesis

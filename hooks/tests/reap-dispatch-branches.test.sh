@@ -258,6 +258,40 @@ test_sha256_recorded_tip_is_reaped_with_bundle() {
 
 test_sha256_recorded_tip_is_reaped_with_bundle
 
+# BL-0063: the persisted ack must round-trip for both object formats; wrong lengths and non-hex are dropped.
+test_ack_roundtrip_both_object_formats() {
+  local fmt repo cand tip ackf rc
+  for fmt in sha1 sha256; do
+    repo="$TEST_TMP/ack-$fmt"
+    git init -q --object-format="$fmt" -b develop "$repo"
+    git -C "$repo" config user.email test@example.com
+    git -C "$repo" config user.name "Test User"
+    git -C "$repo" commit -q --allow-empty -m base
+    git -C "$repo" checkout -q -b ceo-integration-candidate-r1
+    git -C "$repo" commit -q --allow-empty -m cand
+    git -C "$repo" checkout -q develop
+    tip=$(git -C "$repo" rev-parse ceo-integration-candidate-r1)
+    ackf="$repo/.git/autopilot-reap-ack"
+    bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 >/dev/null 2>&1
+    assert_eq "$?" 0 "$fmt: --ack clears the gate"
+    set +e
+    bash "$SCRIPT" check --repo "$repo" --into develop >/dev/null 2>&1; rc=$?
+    set -e
+    assert_eq "$rc" 0 "$fmt: persisted ack still clears the gate on the next check"
+    assert_contains "$(cat "$ackf")" "ceo-integration-candidate-r1 $tip" "$fmt: ack line kept"
+    # negative controls: malformed shas in the ack file are dropped and re-arm the gate
+    for bad in "${tip:0:39}" "${tip}0" "${tip:0:30}" "$(printf 'g%.0s' $(seq 1 ${#tip}))"; do
+      printf 'ceo-integration-candidate-r1 %s\n' "$bad" > "$ackf"
+      set +e
+      bash "$SCRIPT" check --repo "$repo" --into develop >/dev/null 2>&1; rc=$?
+      set -e
+      assert_eq "$rc" 1 "$fmt: malformed ack sha (${#bad} chars) is rejected"
+    done
+  done
+}
+
+test_ack_roundtrip_both_object_formats
+
 test_exact_inventory_recovers_after_post_delete_crash() {
   local repo="$TEST_TMP/post-delete-crash" base common identity inventory hook out rc
   new_repo "$repo"

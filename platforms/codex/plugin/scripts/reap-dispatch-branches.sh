@@ -805,7 +805,7 @@ if [ "$command_name" = check ]; then
     for ack_line in "${ack_lines[@]}"; do
       saved_name=""; saved_sha=""; extra=""
       IFS=' ' read -r saved_name saved_sha extra <<< "$ack_line"
-      if [ -z "${saved_name:-}" ] || [ -n "${extra:-}" ] || [[ ! "${saved_sha:-}" =~ ^[0-9a-f]{40}$ ]] \
+      if [ -z "${saved_name:-}" ] || [ -n "${extra:-}" ] || [[ ! "${saved_sha:-}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] \
          || [ "${snapshot_tip[${saved_name:-}]:-}" != "$saved_sha" ]; then
         printf 'WARN: dropped stale or malformed ack for %s\n' "${saved_name:-<empty>}" >&2
         continue

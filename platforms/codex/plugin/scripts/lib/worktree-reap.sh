@@ -338,10 +338,24 @@ _wt_is_registered_path() {
     _WT_REGISTRATION_ERROR=1
     return 2
   }
+  # Compare after canonicalising the parent directory of each side, so a symlinked
+  # TMPDIR (macOS /tmp, /var) matches git's recorded real path. The final component
+  # is kept as-is: an entry that is itself a symlink never resolves to its target.
+  local want have
+  want="$(_wt_canon_parent "$expected")"
   while IFS= read -r line; do
-    [ "${line#worktree }" = "$expected" ] && return 0
+    have="${line#worktree }"
+    [ "$have" = "$expected" ] && return 0
+    [ "$(_wt_canon_parent "$have")" = "$want" ] && return 0
   done < <(printf '%s\n' "$list" | sed -n '/^worktree /p')
   return 1
+}
+
+_wt_canon_parent() { # <path> — physical parent dir + literal basename; raw path if the parent is unresolvable
+  local p="${1%/}" dir
+  case "$p" in /*/*) ;; *) printf '%s' "$1"; return 0 ;; esac
+  dir="$(cd -P -- "${p%/*}" 2>/dev/null && pwd -P)" || { printf '%s' "$1"; return 0; }
+  printf '%s/%s' "${dir%/}" "${p##*/}"
 }
 
 _wt_is_clean() {

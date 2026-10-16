@@ -3358,6 +3358,19 @@ WATCHDOG_PID=""
 WATCHDOG_TOKEN_FILE=""
 WATCHDOG_DISARMED=0
 
+# Job control for worker launches. With a controlling tty, `set -m` puts the worker
+# in a background process group, so a worker reading /dev/tty takes SIGTTIN and
+# stops (state T). Ignoring TTIN across the launch makes the disposition inherit
+# through exec, so the read fails with EIO instead of stopping (BL-0099).
+_job_control_on() {
+  trap '' TTIN 2>/dev/null || true
+  set -m 2>/dev/null || true
+}
+_job_control_off() {
+  set +m 2>/dev/null || true
+  trap - TTIN 2>/dev/null || true
+}
+
 _self_pgid() {
   ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
 }
@@ -3665,13 +3678,13 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
       rp=$!
       WORKER_SID="$rp"
     else
-      set -m 2>/dev/null || true
+      _job_control_on
       env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
       _verify_no_setsid_watchdog_or_disarm
-      set +m 2>/dev/null || true
+      _job_control_off
     fi
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_CGROUP" -eq 1 ]; then
@@ -3679,7 +3692,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     CONTAINMENT="cgroup"
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
-    set -m 2>/dev/null || true
+    _job_control_on
     systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
@@ -3688,7 +3701,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     if [ -n "$pg" ] && [ "$pg" != "$$" ] && [ -n "$selfpg" ] && [ "$pg" != "$selfpg" ]; then
       WORKER_FALLBACK_PGID="$pg"
     fi
-    set +m 2>/dev/null || true
+    _job_control_off
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
@@ -3704,13 +3717,13 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
       rp=$!
       WORKER_SID="$rp"
     else
-      set -m 2>/dev/null || true
+      _job_control_on
       env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_CLAUDE_ENV[@]+"${CHILD_SESSION_CLAUDE_ENV[@]}"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
       _verify_no_setsid_watchdog_or_disarm
-      set +m 2>/dev/null || true
+      _job_control_off
     fi
     _wait_worker_with_watchdog "$rp"
   fi

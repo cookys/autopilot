@@ -392,19 +392,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
-### Suite reaper — symlinked-TMPDIR hosts fall back to rm -rf (git-worktree-remove path never engages)
-- **Id**: BL-0036
-- **Status**: open
-- **Since**: 2026-08-28
-- **Origin**: self
-- **Problem**: 在暫存目錄是符號連結的機器上，清理工作樹的腳本因路徑字串比對失敗，會退回直接 rm -rf，而不是用 git 的正規移除方式。審查時順手發現。 (draft)
-- **Impact**: 只影響特殊機器，且會改走較粗暴的刪除；一般環境不受影響。 (draft)
-- **Trigger**: first report of dangling `.git/worktrees` entries on a host with symlinked `/tmp`
-- **Effort**: S
-- **Source**: depth-0 qc panel 🔵, 2026-08-28.
-- **Pointer**: docs/backlog/suite-reaper-symlinked-tmpdir-hosts-fall-back-to-rm-rf-git-worktree-remove-path.md
-- **Context**: `_wt_is_registered_path` exact-string-compares realpath'd entry vs git's raw
-
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Id**: BL-0037
 - **Status**: open
@@ -729,19 +716,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
 - **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
 - **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
-
-### Dispatch-branch lifecycle — SHA-256 `check --ack` residual
-- **Id**: BL-0063
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: 清理派工分支的工具在手動確認時，只接受 40 位的 SHA-1 編號，用 SHA-256 的 git 倉庫就無法確認。其餘部分已支援。 (draft)
-- **Impact**: 目前沒有人用 SHA-256 倉庫，幾乎沒有影響。 (draft)
-- **Trigger**: 第一個 SHA-256 object-format repository 要使用 manual `check --ack`／restore acknowledgment。
-- **Effort**: S
-- **Source**: 2026-07-31 code/backlog audit。
-- **Pointer**: docs/backlog/dispatch-branch-lifecycle-sha-256-check-ack-residual.md
-- **Context**: inventory、reap 與 restore tests 已支援 SHA-256；剩餘缺口是 acknowledgment validator 仍只接受 40-hex SHA-1。
 
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Id**: BL-0064
@@ -1101,23 +1075,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-09-23 PEACE-side CI repair (34 tests had rotted between releases; `.github/workflows/test.yml` path filter = `.claude-plugin/plugin.json` only)
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
-
-
-
-
-### dispatch-hetero: with a tty, set -m makes a worker that reads /dev/tty take SIGTTIN
-- **Id**: BL-0099
-- **Status**: open
-- **Since**: 2026-09-29
-- **Origin**: self
-- **Problem**: 派工監看程式在有終端機（tty）的環境下會開啟工作控制（set -m），這時如果被派出去的程式去讀終端機，會被系統暫停（SIGTTIN），卡住不動。
-- **Impact**: 低。一般派工不讀終端機，headless 也沒有 tty；只有互動式手動跑、而且派出的程式要讀終端機時才會卡住。
-- **Trigger**: a dispatched worker is seen stopped (state T) under an interactive run, or next dispatch-hetero job-control change
-- **Effort**: S
-- **Source**: v2.36.104 landing review rounds 1-4
-- **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md
-
-
 
 
 

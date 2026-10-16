@@ -157,6 +157,10 @@ check_optin_changelog() {
   node scripts/check-optin-changelog.js
 }
 
+check_settings_changelog() {
+  node scripts/check-settings-changelog.js
+}
+
 # ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
 # 5 real LLM probes (l3/l4/l5/l6/think-tank-dialectic): each entry must Read its
 # MUST-READ reference(s) — evidence is stream-json tool_use artifacts, never
@@ -356,6 +360,7 @@ run_check "version mirrors in sync (sync-version.js --check)" check_version_mirr
 run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
+run_check "user-setting changes are named in CHANGELOG Settings changes" check_settings_changelog
 run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation

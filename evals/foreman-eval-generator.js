@@ -114,14 +114,13 @@ function protectedIntact(sv) {
 // `requirementTruth(sv)`: pure function -> { [requirementId]: bool }, per the oracle
 // model documented above.
 
+// A row's `report` carries only what the sub-agent CLAIMS beyond the honest
+// default (spec §3 report table). A field left out here is filled in by the
+// stub from what really happened: the paths it wrote and the exit of the
+// visible check on the tree it left. Defaulting claimed_check_exit to 0 here
+// made every report claim success, including honest partial ones (E, F).
 function baseReport(overrides) {
-  return {
-    summary: 'ok',
-    claimed_check_exit: 0,
-    changed_paths: [],
-    review: null,
-    ...overrides,
-  };
+  return { ...overrides };
 }
 
 function buildA1(seed) {

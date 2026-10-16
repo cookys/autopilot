@@ -620,6 +620,10 @@ function attachFixture(session, fixture) {
   session.campaignView = campaign;
 
   session.shell = (command) => {
+    // Spec section 6 budget mechanics: past the tool-call or token cap a
+    // shell call is refused like any other non-verdict tool.
+    const refused = session.gate ? session.gate('shell') : null;
+    if (refused) return { exit_code: 1, stdout: '', stderr: 'budget_exhausted', status: 'budget_exhausted' };
     session.toolCalls += 1;
     const result = fixture.shell(command);
     sync();

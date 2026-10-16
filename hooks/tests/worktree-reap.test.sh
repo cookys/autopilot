@@ -235,4 +235,16 @@ TEARDOWN_HOOK=""
 AUTOPILOT_WORKTREE_ROOT_RUN_ID=""
 export AUTOPILOT_WORKTREE_ROOT_RUN_ID
 
+# BL-0036: a symlinked TMPDIR must not hide a registered worktree from _wt_is_registered_path.
+SYM_BASE="$TEST_TMP/symtmp"; mkdir -p "$SYM_BASE/real" 
+ln -s "$SYM_BASE/real" "$SYM_BASE/link"
+SYM_REPO="$SYM_BASE/real/repo"; mkdir -p "$SYM_REPO"; setup_repo "$SYM_REPO"
+git -C "$SYM_REPO" worktree add -q -b symwt "$SYM_BASE/real/wt" >/dev/null 2>&1
+_wt_is_registered_path "$SYM_REPO" "$SYM_BASE/real/wt"; assert_eq "$?" 0 "real path is registered"
+_wt_is_registered_path "$SYM_REPO" "$SYM_BASE/link/wt"; assert_eq "$?" 0 "symlinked-parent path is registered"
+_wt_is_registered_path "$SYM_REPO" "$SYM_BASE/link/other"; assert_eq "$?" 1 "unregistered sibling under symlink is not registered"
+# negative control: an entry that is itself a symlink to a registered worktree is not resolved through
+ln -s "$SYM_BASE/real/wt" "$SYM_BASE/real/wt-alias"
+_wt_is_registered_path "$SYM_REPO" "$SYM_BASE/real/wt-alias"; assert_eq "$?" 1 "final-component symlink is not treated as registered"
+
 finalize_test

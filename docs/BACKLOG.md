@@ -392,19 +392,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
-### Suite reaper — symlinked-TMPDIR hosts fall back to rm -rf (git-worktree-remove path never engages)
-- **Id**: BL-0036
-- **Status**: open
-- **Since**: 2026-08-28
-- **Origin**: self
-- **Problem**: 在暫存目錄是符號連結的機器上，清理工作樹的腳本因路徑字串比對失敗，會退回直接 rm -rf，而不是用 git 的正規移除方式。審查時順手發現。 (draft)
-- **Impact**: 只影響特殊機器，且會改走較粗暴的刪除；一般環境不受影響。 (draft)
-- **Trigger**: first report of dangling `.git/worktrees` entries on a host with symlinked `/tmp`
-- **Effort**: S
-- **Source**: depth-0 qc panel 🔵, 2026-08-28.
-- **Pointer**: docs/backlog/suite-reaper-symlinked-tmpdir-hosts-fall-back-to-rm-rf-git-worktree-remove-path.md
-- **Context**: `_wt_is_registered_path` exact-string-compares realpath'd entry vs git's raw
-
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Id**: BL-0037
 - **Status**: open

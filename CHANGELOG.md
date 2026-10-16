@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `_wt_is_registered_path` (worktree-reap lib) now canonicalises the parent directory before comparing, so on hosts with a symlinked TMPDIR the suite reaper uses `git worktree remove` instead of falling back to `rm -rf`; a final-component symlink is never resolved through (BL-0036).
+
 - `reap-dispatch-branches.sh check --ack` now persists and re-reads acknowledgments for SHA-256 repositories (64-hex tips) as well as SHA-1 (40-hex); other lengths and non-hex are still dropped (BL-0063).
 
 - `dispatch-hetero.sh` now ignores SIGTTIN around job-controlled worker launches, so a worker that reads `/dev/tty` under an interactive run gets EIO instead of being stopped (BL-0099).

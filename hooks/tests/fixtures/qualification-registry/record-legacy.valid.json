@@ -1,0 +1,83 @@
+{
+ "cost": {
+  "sample_tokens": 0,
+  "source": "manual",
+  "usd_per_mtok_input": 0,
+  "usd_per_mtok_output": 0
+ },
+ "evidence": null,
+ "imported_at": "2026-09-02T03:44:28+00:00",
+ "importer": "import-autopilot-qualification.py@1",
+ "latency": {
+  "sample_wall_time_s": 0
+ },
+ "origin_host": "cookys-7840hs",
+ "raw": {
+  "capability_score": 0.7,
+  "corpus_version": "spike-e2e@2026-06-29",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "manual",
+   "usd_per_mtok_input": 0,
+   "usd_per_mtok_output": 0
+  },
+  "date": "2026-07-17",
+  "engine": "grok-4.5",
+  "event_id": 130,
+  "expires": "2026-10-15",
+  "family": "xai",
+  "harness_version": "dispatch-hetero@v2.32.42",
+  "latency": {
+   "sample_wall_time_s": 0
+  },
+  "model_version": "grok-4.5",
+  "prompt_config_hash": "sha256:identity-containment-unit",
+  "qualified_at": "2026-07-17",
+  "quality": {
+   "corpus_pass": "1/1",
+   "false_pass_critical": 0,
+   "specificity": "1/1"
+  },
+  "role": "implementer",
+  "runner": "grok",
+  "runner_version": "grok-cli",
+  "status": "qualified",
+  "version_source": "manual"
+ },
+ "record_id": "04e036f96185d78087e8123acdbb637a6d6c1403f2868158e7366ba65f568c3d",
+ "record_id_basis": "row_digest",
+ "schema": 1,
+ "seat": {
+  "corpus_version": "spike-e2e@2026-06-29",
+  "effort": null,
+  "engine": "grok-4.5",
+  "family": "xai",
+  "harness_version": "dispatch-hetero@v2.32.42",
+  "model": null,
+  "model_version": "grok-4.5",
+  "prompt_config_hash": "sha256:identity-containment-unit",
+  "role": "implementer",
+  "runner": "grok",
+  "runner_version": "grok-cli",
+  "version_source": "manual"
+ },
+ "source": {
+  "event_id": null,
+  "kind": "autopilot-scorecard",
+  "line": 130,
+  "path": "~/.autopilot/engine-scorecard/scorecard.jsonl",
+  "producer": null
+ },
+ "verdict": {
+  "capability_score": 0.7,
+  "date": "2026-07-17",
+  "expires": "2026-10-15",
+  "qualified_at": "2026-07-17",
+  "quality": {
+   "corpus_pass": "1/1",
+   "false_pass_critical": 0,
+   "specificity": "1/1"
+  },
+  "status": "qualified"
+ }
+}

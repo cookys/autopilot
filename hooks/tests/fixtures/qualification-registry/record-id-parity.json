@@ -1,0 +1,196 @@
+{
+ "about": "Cross-language key parity. Python computed every id once (check_qualification_feed.py); autopilot's Node implementation MUST reproduce each value exactly from `inputs`. canonical_json = keys sorted by code point, separators ',' and ':', non-ASCII raw (JS JSON.stringify of a key-sorted value). record_id/entry_id hash a JSON ARRAY whose seat element is the 6-field object {effort,engine,model,model_version,role,runner} (sorted), NOT a string. effort is a token string or JSON null and is hashed exactly as recorded: a legacy null stays null and is NOT the same seat as 'default' (default = effort not sent, endpoint default ran). Only rows carrying transcript_hash (basis v1) have a record_id that importer and ingest must agree on; legacy rows keep evidence_id / row_digest ids and are never recomputed.",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "record_id_cases": [
+  {
+   "name": "plain-effort-low",
+   "inputs": {
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer",
+     "effort": "low",
+     "family": "xai",
+     "version_source": "runtime",
+     "runner_version": "grok-1.0.5",
+     "harness_version": "engine-qualify-e9eb3890",
+     "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+     "corpus_version": "impl-live-rail-v1"
+    },
+    "corpus_version": "impl-live-rail-v1",
+    "administered_at": "2026-10-12T10:00:00Z"
+   },
+   "canonical_json": "[\"engine-qualify-v2\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",{\"effort\":\"low\",\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},\"impl-live-rail-v1\",\"2026-10-12T10:00:00Z\"]",
+   "record_id": "5739c4897fc62c5b2b38293c9cbb5756af525a1d8bc6c2429a83884aa717dd3d"
+  },
+  {
+   "name": "effort-default",
+   "inputs": {
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "reviewer",
+     "effort": "default",
+     "family": "xai",
+     "version_source": "runtime",
+     "runner_version": "grok-1.0.5",
+     "harness_version": "engine-qualify-e9eb3890",
+     "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+     "corpus_version": "impl-live-rail-v1"
+    },
+    "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
+    "administered_at": "2026-10-12T10:00:00.250Z"
+   },
+   "canonical_json": "[\"engine-qualify-v2\",\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",{\"effort\":\"default\",\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"reviewer\",\"runner\":\"grok\"},\"reviewer-known-bad-clean-v2.reviewer-metamorphic-v4\",\"2026-10-12T10:00:00.250Z\"]",
+   "record_id": "484e11dbaefcc31e93b09b90bbdaa34637ba16a2018005de3d500e1a53b02ad7"
+  },
+  {
+   "name": "effort-null-legacy",
+   "inputs": {
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "anthropic-compatible",
+     "role": "implementer",
+     "effort": null,
+     "family": "xai",
+     "version_source": "runtime",
+     "runner_version": "grok-1.0.5",
+     "harness_version": "engine-qualify-e9eb3890",
+     "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+     "corpus_version": "impl-live-rail-v1"
+    },
+    "corpus_version": "impl-live-rail-v1",
+    "administered_at": "2026-10-12T10:00:00Z"
+   },
+   "canonical_json": "[\"engine-qualify-v2\",\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",{\"effort\":null,\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"anthropic-compatible\"},\"impl-live-rail-v1\",\"2026-10-12T10:00:00Z\"]",
+   "record_id": "25d641bb51d6bef1c79955d0528b65daeacd1640c3304fda750152d8b8e872fa"
+  },
+  {
+   "name": "non-ascii-and-escapes",
+   "inputs": {
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "seat": {
+     "engine": "模型-é\"q\\1",
+     "model": "m/ x",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer",
+     "effort": "low",
+     "family": "xai",
+     "version_source": "runtime",
+     "runner_version": "grok-1.0.5",
+     "harness_version": "engine-qualify-e9eb3890",
+     "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+     "corpus_version": "impl-live-rail-v1"
+    },
+    "corpus_version": "cé-v1",
+    "administered_at": "2026-10-12T10:00:00Z"
+   },
+   "canonical_json": "[\"engine-qualify-v2\",\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",{\"effort\":\"low\",\"engine\":\"模型-é\\\"q\\\\1\",\"model\":\"m/ x\",\"model_version\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},\"cé-v1\",\"2026-10-12T10:00:00Z\"]",
+   "record_id": "778e251ea71ef5192933e01632e86ca2b2d6dc8d3bd746beb6c0b7f161ca8f23"
+  }
+ ],
+ "entry_id_cases": [
+  {
+   "name": "benchmark",
+   "inputs": {
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer",
+     "effort": "low"
+    },
+    "kind": "benchmark_observation",
+    "instrument_id": "inst",
+    "window_end": "2026-10-11T08:00:00Z"
+   },
+   "canonical_json": "[{\"effort\":\"low\",\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},\"benchmark_observation\",\"inst\",\"2026-10-11T08:00:00Z\"]",
+   "entry_id": "e6e1dd866b758929034fc27e83919f9511bdc2499d484bc60bc514cce0f1569c"
+  },
+  {
+   "name": "qualification",
+   "inputs": {
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "reviewer",
+     "effort": "default"
+    },
+    "kind": "qualification",
+    "instrument_id": "inst",
+    "window_end": "2026-10-11T08:00:00Z"
+   },
+   "canonical_json": "[{\"effort\":\"default\",\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"reviewer\",\"runner\":\"grok\"},\"qualification\",\"inst\",\"2026-10-11T08:00:00Z\"]",
+   "entry_id": "129a438d418539fa4a46fe3a8c3e74d2549deca3ee57becf1a7500b6be1d4191"
+  },
+  {
+   "name": "effort-null",
+   "inputs": {
+    "seat": {
+     "engine": "grok-4.6",
+     "model": "grok-4.6",
+     "model_version": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer",
+     "effort": null
+    },
+    "kind": "qualification",
+    "instrument_id": "inst",
+    "window_end": "2026-10-11T08:00:00Z"
+   },
+   "canonical_json": "[{\"effort\":null,\"engine\":\"grok-4.6\",\"model\":\"grok-4.6\",\"model_version\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},\"qualification\",\"inst\",\"2026-10-11T08:00:00Z\"]",
+   "entry_id": "ce439e89437751beabd681b8adb8835c6dc8fc5fd5800c6194a917cc9e5e6f57"
+  }
+ ],
+ "strike_id_cases": [
+  {
+   "name": "effort-low",
+   "inputs": {
+    "seat": {
+     "engine": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer"
+    },
+    "effort": "low",
+    "reason": "engine_unavailable",
+    "administered_at": "2026-10-01T00:00:00Z",
+    "record_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+   },
+   "canonical_json": "[{\"engine\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},\"low\",\"engine_unavailable\",\"2026-10-01T00:00:00Z\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"]",
+   "strike_id": "16daca19c48d59a43882cec349715961ea2dcd1447b1ba5f77ef0214336307c1"
+  },
+  {
+   "name": "effort-null-legacy",
+   "inputs": {
+    "seat": {
+     "engine": "grok-4.6",
+     "runner": "grok",
+     "role": "implementer"
+    },
+    "effort": null,
+    "reason": "engine_unavailable",
+    "administered_at": "2026-10-01T00:00:00Z",
+    "record_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+   },
+   "canonical_json": "[{\"engine\":\"grok-4.6\",\"role\":\"implementer\",\"runner\":\"grok\"},null,\"engine_unavailable\",\"2026-10-01T00:00:00Z\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"]",
+   "strike_id": "5f035c63124e9b52967c50a5018f6c98217c0f349dcd34768ae3a6357ce7fdec"
+  }
+ ]
+}

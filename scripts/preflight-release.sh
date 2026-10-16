@@ -343,6 +343,13 @@ check_config_docs_gate() {
   node scripts/check-config-docs.js >&2
 }
 
+# BL-0194 P4a: when the recipe records a feed snapshot (build-qualification-defaults.js build --from-snapshot),
+# the official defaults must not be derived from one older than 30 days. A build-time gate, not a runtime
+# advisory. No snapshot recorded (the store-derived path) passes.
+check_defaults_snapshot_age() {
+  node scripts/build-qualification-defaults.js --check-snapshot-age >&2
+}
+
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
   if check_slash_entry_probe; then
     exit 0
@@ -365,6 +372,7 @@ run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SL
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
+run_check "official defaults snapshot age (build-qualification-defaults.js --check-snapshot-age, <= 30 days)" check_defaults_snapshot_age
 run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
 
 # ─── advisory: roster-field report ───────────────────────────────────────────

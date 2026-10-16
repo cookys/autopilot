@@ -26,7 +26,7 @@ makes the tradeoff visible instead of implicit.
 | [`official-qualification-defaults.json`](official-qualification-defaults.json) | The artifact. Versioned, schema-validated, **derived — never hand-edit it.** |
 | [`official-qualification-defaults.recipe.json`](official-qualification-defaults.recipe.json) | The *selection*: which official event ids are in scope per role, each one's evidence-bundle path, and the recorded rationale for every exclusion. |
 | [`../schemas/official-qualification-defaults.schema.json`](../schemas/official-qualification-defaults.schema.json) | The mechanical shape gate — in particular it makes the disclosure block non-droppable. |
-| [`../scripts/build-qualification-defaults.js`](../scripts/build-qualification-defaults.js) | Derives the artifact from a scorecard store + capability store + recipe. `--check` re-derives and byte-compares. |
+| [`../scripts/build-qualification-defaults.js`](../scripts/build-qualification-defaults.js) | Derives the artifact from a scorecard store + capability store + recipe. `--check` re-derives and byte-compares. `--from-snapshot <feed>` derives from a feed snapshot instead (see Regeneration). |
 | [`../scripts/adopt-qualification-defaults.js`](../scripts/adopt-qualification-defaults.js) | The consumer side: `list` (with disclosure) and `adopt` (copy into the local stores). |
 
 ## ADR-0001: this is DISCLOSURE, not attestation
@@ -199,6 +199,24 @@ node scripts/validate-json-schema.js \
   --schema schemas/official-qualification-defaults.schema.json \
   --document references/official-qualification-defaults.json   # exits 0 on the real bytes
 ```
+
+### Regenerating from a feed snapshot (BL-0194 P4a / B1)
+
+Instead of the maintainer's local stores, the artifact can be derived from a saved qualification-feed
+snapshot (a v1 feed, or a v2 feed, which is a superset). Fetch explicitly first, then build; nothing
+auto-regenerates:
+
+```bash
+node scripts/build-qualification-defaults.js build --from-snapshot <feed.json>   # writes the artifact and records snapshot {digest, generated_at, feed_schema} in the recipe
+node scripts/build-qualification-defaults.js --check --from-snapshot <feed.json> # byte-identical; fails when the file's sha256 is not the recorded digest
+node scripts/build-qualification-defaults.js --check-snapshot-age                # release gate: fails past 30 days (preflight-release.sh runs it)
+```
+
+The snapshot is read through the strict feed reader (`scripts/lib/qualification-feed.js`), and the derived
+bytes still pass the artifact schema. A recipe that records a snapshot cannot be `--check`ed without it.
+The digest is a re-derivation input, not a signature (ADR-0001). The committed artifact is still the
+store-derived one; no snapshot is recorded until the owner rebuilds from a real feed.
+
 
 > **`capability_score` is a real JSON number.** `validate-json-schema.js` preflights its *document*
 > before any schema keyword is evaluated, and it accepts a non-integer numeric literal iff it

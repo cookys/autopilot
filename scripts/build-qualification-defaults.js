@@ -42,6 +42,20 @@
 //   --artifact    artifact to verify (--check). Default: same as --out default.
 //   --repo-root   repo root used to resolve default paths and evidence bundles.
 //                 Default: the parent directory of this script's directory.
+//   --from-snapshot <path>   (BL-0194 P4a / B1) derive the artifact from a qualification-feed SNAPSHOT
+//                 (a v1 feed, or a v2 feed — v2 is a superset — saved to a local file or taken from the feed
+//                 cache) instead of the local scorecard store. Read through the strict feed reader
+//                 (scripts/lib/qualification-feed.js: strict UTF-8, JSON preflight, no symlink, size cap).
+//                 `build` records {digest, generated_at, feed_schema} of the snapshot under `snapshot` in the
+//                 recipe; `--check --from-snapshot` fails when the file's sha256 is not the recorded digest
+//                 (tamper) and otherwise byte-compares the re-derived artifact. A path only, never a URL: the
+//                 operator fetches explicitly (qualification-feed fetch), then builds. The store/capability
+//                 flags are unused in this mode. A recipe that records a snapshot cannot be `--check`ed without
+//                 the snapshot. Disclosure, not attestation (ADR-0001): the digest is a cache key and a
+//                 re-derivation input, not a signature.
+//   --check-snapshot-age [--max-days <n>] [--now <iso>]   release gate used by preflight-release.sh: exit 1
+//                 when the recipe records a snapshot whose generated_at is older than n days (default 30), or
+//                 is missing, malformed or in the future; exit 0 when the recipe records no snapshot.
 //   --check       re-derive in memory and byte-compare against the artifact on
 //                 disk. This is the anti-hand-edit gate: any manual edit to the
 //                 artifact (or any drift from the store) exits 1.
@@ -60,6 +74,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { readFeedSource, parseFeed } = require('./lib/qualification-feed.js');
 
 const SCRIPT_DIR = __dirname;
 const DEFAULT_REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -377,11 +392,29 @@ function deriveArtifact(opts) {
     entries.push(buildEntry(row, recipeEntry, opts.repoRoot, capabilityRows));
   }
 
+  return renderArtifact(recipe, entries);
+}
+
+// BL-0194 P4a (B1). A feed entry carries extra producer-side keys (`feed`, `board`) that the shipped artifact
+// schema does not allow; the artifact entry is the feed entry projected onto exactly these keys.
+const ARTIFACT_ENTRY_KEYS = [
+  'default_id', 'role', 'status', 'seat', 'seat_hash', 'administration', 'quality',
+  'capability_score', 'evidence_pointers', 'row', 'capability_evidence',
+];
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+const ARTIFACT_NOTICES = {
+    // No wall-clock: a timestamp here would break the byte-identical regeneration contract.
+    disclosure_notice: 'These rows record administrations run in the autopilot maintainer\'s environment, not yours. Every entry carries the full administration environment (engine/runner/CLI versions, transport harness, prompt_config_hash, effort, corpus_version, date) precisely because official environment != user environment. FAILED rows ship alongside QUALIFIED ones: a FAILED administration is routing information, not an embarrassment to hide.',
+    adr_0001_notice: 'DISCLOSURE, NOT ATTESTATION. Nothing here is signed, hash-chained, or witnessed, and no field is tamper-evidence (ADR-0001). Adopting these defaults is an informed choice to reuse someone else\'s evidence; the only verification path is re-derivation — self-qualify in your own environment via the engine-qualify flow, which overrides a default on the same seat identity.',
+    downgrade_notice: 'An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed: `expires` is advisory here too.',
+};
+
+function assembleArtifact(recipe, entries) {
   entries.sort((a, b) => {
     if (a.role !== b.role) return a.role < b.role ? -1 : 1;
     return a.evidence_pointers.official_event_id - b.evidence_pointers.official_event_id;
   });
-
   const roleCounts = {};
   for (const entry of entries) {
     if (!roleCounts[entry.role]) roleCounts[entry.role] = { qualified: 0, failed: 0, other: 0 };
@@ -389,24 +422,86 @@ function deriveArtifact(opts) {
     else if (entry.status === 'failed') roleCounts[entry.role].failed += 1;
     else roleCounts[entry.role].other += 1;
   }
+  return { roleCounts, entries };
+}
 
+// Reads the snapshot through the strict feed reader. Returns the parsed feed plus the three values the recipe records.
+async function loadSnapshot(file) {
+  let source;
+  let parsed;
+  try {
+    source = await readFeedSource(file);
+    parsed = parseFeed(source.body, source.origin, source.bytes);
+  } catch (err) {
+    fail(`snapshot rejected: ${err.message}`);
+  }
+  if (!parsed.is_feed) fail(`snapshot is not a qualification feed (v1 or v2): ${file}`);
+  const generatedAt = parsed.doc.generated_at;
+  if (typeof generatedAt !== 'string' || !ISO_UTC.test(generatedAt) || Number.isNaN(Date.parse(generatedAt))) {
+    fail(`snapshot carries no valid UTC generated_at (got ${JSON.stringify(generatedAt)}): ${file}`);
+  }
+  if (!Array.isArray(parsed.doc.defaults) || parsed.doc.defaults.length === 0) {
+    fail(`snapshot has no defaults[]: ${file}`);
+  }
+  return {
+    parsed,
+    record: { digest: parsed.digest, generated_at: generatedAt, feed_schema: parsed.feed_schema },
+  };
+}
+
+function deriveFromSnapshot(recipe, snapshot) {
+  const seen = new Set();
+  const entries = snapshot.parsed.doc.defaults.map((src, i) => {
+    if (!src || typeof src !== 'object' || Array.isArray(src)) fail(`snapshot defaults[${i}] is not an object`);
+    const entry = {};
+    for (const key of ARTIFACT_ENTRY_KEYS) {
+      if (src[key] === undefined) fail(`snapshot defaults[${i}] lacks '${key}'`);
+      entry[key] = src[key];
+    }
+    if (seen.has(entry.default_id)) fail(`snapshot repeats default_id ${entry.default_id}`);
+    seen.add(entry.default_id);
+    losslessNumber(entry.capability_score, `snapshot defaults[${i}].capability_score`);
+    return entry;
+  });
+  return renderArtifact(recipe, entries);
+}
+
+function renderArtifact(recipe, rawEntries) {
+  const { roleCounts, entries } = assembleArtifact(recipe, rawEntries);
   const artifact = {
     schema_version: ARTIFACT_SCHEMA_VERSION,
     artifact_type: ARTIFACT_TYPE,
     recipe_version: recipe.recipe_version === undefined ? null : recipe.recipe_version,
     generated_by: 'scripts/build-qualification-defaults.js',
-    // No wall-clock: a timestamp here would break the byte-identical
-    // regeneration contract and would be a claim about the generator run, not
-    // about the administration. The administration dates live per-entry in
-    // `administration.date`.
-    disclosure_notice: 'These rows record administrations run in the autopilot maintainer\'s environment, not yours. Every entry carries the full administration environment (engine/runner/CLI versions, transport harness, prompt_config_hash, effort, corpus_version, date) precisely because official environment != user environment. FAILED rows ship alongside QUALIFIED ones: a FAILED administration is routing information, not an embarrassment to hide.',
-    adr_0001_notice: 'DISCLOSURE, NOT ATTESTATION. Nothing here is signed, hash-chained, or witnessed, and no field is tamper-evidence (ADR-0001). Adopting these defaults is an informed choice to reuse someone else\'s evidence; the only verification path is re-derivation — self-qualify in your own environment via the engine-qualify flow, which overrides a default on the same seat identity.',
-    downgrade_notice: 'An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed: `expires` is advisory here too.',
+    ...ARTIFACT_NOTICES,
     role_summary: roleCounts,
     defaults: entries,
   };
-
   return `${JSON.stringify(canonicalize(artifact), null, 2)}\n`;
+}
+
+// Release gate: a recipe that records a snapshot must not carry a stale one.
+function checkSnapshotAge(opts) {
+  const recipe = readJson(opts.recipe, 'recipe');
+  if (recipe.snapshot === undefined || recipe.snapshot === null) {
+    process.stdout.write(`${JSON.stringify({ status: 'no-snapshot' })}\n`);
+    return;
+  }
+  const at = recipe.snapshot.generated_at;
+  if (typeof at !== 'string' || !ISO_UTC.test(at) || Number.isNaN(Date.parse(at))) {
+    fail(`recipe snapshot.generated_at is missing or malformed (${JSON.stringify(at)})`);
+  }
+  const nowMs = opts.now ? Date.parse(opts.now) : Date.now();
+  if (Number.isNaN(nowMs)) failUsage(`--now is not a timestamp: ${opts.now}`);
+  const ageDays = (nowMs - Date.parse(at)) / 86400000;
+  const report = { status: 'ok', generated_at: at, age_days: Math.round(ageDays * 100) / 100, max_days: opts.maxDays };
+  if (ageDays < 0) {
+    fail(`recipe snapshot.generated_at ${at} is in the future (clock skew or a bad snapshot)`);
+  }
+  if (ageDays > opts.maxDays) {
+    fail(`official defaults snapshot is ${report.age_days} days old (generated_at ${at}), over the ${opts.maxDays}-day release limit — re-fetch the feed and rebuild: node scripts/build-qualification-defaults.js build --from-snapshot <feed>`);
+  }
+  process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
 function parseArgs(argv) {
@@ -418,6 +513,10 @@ function parseArgs(argv) {
     out: null,
     artifact: null,
     repoRoot: null,
+    fromSnapshot: null,
+    checkSnapshotAge: false,
+    maxDays: 30,
+    now: null,
   };
 
   const rest = [];
@@ -437,12 +536,23 @@ function parseArgs(argv) {
     if (arg === '--out') { opts.out = argv[++i]; continue; }
     if (arg === '--artifact') { opts.artifact = argv[++i]; continue; }
     if (arg === '--repo-root') { opts.repoRoot = argv[++i]; continue; }
+    if (arg === '--from-snapshot') { opts.fromSnapshot = argv[++i]; continue; }
+    if (arg === '--check-snapshot-age') { opts.checkSnapshotAge = true; continue; }
+    if (arg === '--max-days') { opts.maxDays = Number(argv[++i]); continue; }
+    if (arg === '--now') { opts.now = argv[++i]; continue; }
     if (arg.startsWith('--')) failUsage(`unknown flag '${arg}'`);
     rest.push(arg);
   }
   if (rest.length > 0) failUsage(`unexpected argument '${rest[0]}'`);
 
   opts.mode = opts.mode || 'build';
+  if (opts.fromSnapshot !== null && (typeof opts.fromSnapshot !== 'string' || opts.fromSnapshot.length === 0)) {
+    failUsage('--from-snapshot requires a file path');
+  }
+  if (opts.fromSnapshot !== null && /^[a-z][a-z0-9+.-]*:\/\//i.test(opts.fromSnapshot)) {
+    failUsage('--from-snapshot takes a local file (fetch the feed first), not a URL');
+  }
+  if (!Number.isFinite(opts.maxDays) || opts.maxDays <= 0) failUsage('--max-days must be a positive number');
   opts.repoRoot = path.resolve(expandTilde(opts.repoRoot || DEFAULT_REPO_ROOT));
   opts.storeDir = path.resolve(expandTilde(
     opts.storeDir || process.env.ENGINE_SCORECARD_DIR || path.join('~', '.autopilot', 'engine-scorecard'),
@@ -492,9 +602,49 @@ function validateAgainstSchema(derived, opts) {
   }
 }
 
-function main() {
+function writeRecipeSnapshot(opts, recipe, record) {
+  const next = { ...recipe, snapshot: record };
+  const tmp = `${opts.recipe}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+  fs.renameSync(tmp, opts.recipe);
+}
+
+async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  const derived = deriveArtifact(opts);
+  if (opts.checkSnapshotAge) { checkSnapshotAge(opts); return; }
+
+  let derived;
+  let snapshotRecord = null;
+  let recipeForWrite = null;
+  if (opts.fromSnapshot !== null) {
+    const recipe = readJson(opts.recipe, 'recipe');
+    const snapshot = await loadSnapshot(opts.fromSnapshot);
+    snapshotRecord = snapshot.record;
+    recipeForWrite = recipe;
+    if (opts.mode === 'check') {
+      // Tamper gate: the recorded digest is what the committed artifact was derived from. A snapshot file
+      // that no longer hashes to it is a different input and must not be compared as if it were the same.
+      const rec = recipe.snapshot;
+      if (!rec || typeof rec.digest !== 'string') {
+        fail('--check --from-snapshot: the recipe records no snapshot digest (build with --from-snapshot first)');
+      }
+      if (rec.digest !== snapshotRecord.digest) {
+        fail(`snapshot digest mismatch: recipe records ${rec.digest}, the file hashes to ${snapshotRecord.digest} — the snapshot was altered or is not the one this artifact was built from`);
+      }
+      if (rec.generated_at !== snapshotRecord.generated_at) {
+        fail(`snapshot generated_at mismatch: recipe records ${rec.generated_at}, the file says ${snapshotRecord.generated_at}`);
+      }
+    }
+    derived = deriveFromSnapshot(recipe, snapshot);
+  } else {
+    if (opts.mode === 'check') {
+      const recipe = readJson(opts.recipe, 'recipe');
+      if (recipe.snapshot !== undefined && recipe.snapshot !== null) {
+        fail('the recipe records a feed snapshot, so the artifact was derived from it: pass --from-snapshot <file> to --check');
+      }
+    }
+    derived = deriveArtifact(opts);
+  }
   validateAgainstSchema(derived, opts);
 
   if (opts.mode === 'check') {
@@ -529,6 +679,7 @@ function main() {
   const tmp = `${opts.out}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, derived);
   fs.renameSync(tmp, opts.out);
+  if (snapshotRecord) writeRecipeSnapshot(opts, recipeForWrite, snapshotRecord);
   process.stdout.write(`${JSON.stringify({
     status: 'written',
     artifact: path.relative(opts.repoRoot, opts.out),
@@ -537,6 +688,6 @@ function main() {
   })}\n`);
 }
 
-if (require.main === module) main();
+if (require.main === module) main().catch((err) => fail(err && err.message ? err.message : String(err)));
 
 module.exports = { deriveArtifact, seatHash, canonicalJson, DISCLOSURE_FIELDS };

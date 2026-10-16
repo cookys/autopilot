@@ -26,10 +26,10 @@ Generation 1 verdict is FIX-THEN-SHIP with 8 verified findings.
 7. Anti-rerun. Keep a durable evidence log keyed by
    `(engine_id, seat_config_hash)` and load it before each sitting.
 8. Wire contracts. Use 40-hex ids and validate the full verdict and envelope.
-9. B1_GAP. The spec's own b1 continuation makes §6 FALSE_MET unreachable. The
-   generator adds an instruction gate that the spec lacks. Amending the spec is
-   the spec author's call. The gap stays pinned by
-   `hooks/tests/foreman-eval-b1-gap.test.sh`.
+9. B1_GAP. Resolved under Amendment 1 of the spec (owner 2026-10-17,
+   d-01d906e4): b1 `impl#k≥2` is instruction-gated, so §6 FALSE_MET is
+   reachable. The generator already matched; the spec was amended instead.
+   `hooks/tests/foreman-eval-b1-gap.test.sh` now asserts the amended script.
 
 Items 1, 3, and 6 change `harness_hash`. Re-pin the conformance record in the
 same change, and treat every sitting run before it as non-conformant.

@@ -52,11 +52,34 @@ const sc = scopeFromCwd(process.env.R);
 const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: "root-new", identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
 console.log(r.value.map((d) => d.question).sort().join(","));')"
 assert_eq "Q-NEW?,Q-OLD?,Q-UNBOUND?" "$PANE" "pane data excludes foreign, mismatched and corrupt files"
-node "$OD" close --cwd "$R" --id d-evil1111 | grep -q 'not open' && node "$OD" close --cwd "$R" --id d-mism2222 | grep -q 'not open'
-assert_eq "0" "$?" "close cannot reach a card in an excluded file"
+for xid in d-evil1111 d-mism2222; do
+  if node "$OD" close --cwd "$R" --id "$xid" | grep -q 'not open'; then :; else fail "close reached a card in an excluded file: $xid"; fi
+done
 assert_contains "$(cat "$D/$KEY--evil.json")" "d-evil1111" "foreign file untouched by close"
 assert_contains "$(cat "$D/$KEY--named.json")" "d-mism2222" "mismatched file untouched by close"
 rm -f "$D/$KEY--evil.json" "$D/$KEY--named.json" "$D/$KEY--x.json"
+
+# positive control: the SAME hand-written card shape, in a correctly named and consistent file, IS accepted (so the
+# counter-examples above are hidden because their FILE is excluded, not because the card shape is unfit)
+seed "$KEY--okroot.json" '"okroot"' "$IDENT" "$KEY" d-good3333 "Q-SEEDED-OK?"
+assert_contains "$(node "$OD" show --cwd "$R" --root-run-id root-new)" "Q-SEEDED-OK" "seed-shaped card in a valid scope file shows"
+PANE2="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const { scopeFromCwd } = require(process.env.REPO_ROOT + "/src/status/project-key");
+const { commonDirOf } = require(process.env.REPO_ROOT + "/src/status/scope-key");
+const { readDecision } = require(process.env.REPO_ROOT + "/src/status/decision-input");
+const sc = scopeFromCwd(process.env.R);
+const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: null, identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
+console.log(r.value.map((d) => d.question).sort().join(","));')"
+assert_contains "$PANE2" "Q-SEEDED-OK?" "seed-shaped card in a valid scope file reaches the pane data"
+if node "$OD" close --cwd "$R" --id d-good3333 | grep -q '^closed'; then :; else fail "seed-shaped card could not be closed"; fi
+assert_file_absent "$D/$KEY--okroot.json" "closing its last card removes the file"
+
+# a root with unsafe characters (library callers such as hooks pass raw roots; the CLI flag refuses them): open -> show -> close
+UID_="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e 'const r=require(process.env.REPO_ROOT+"/scripts/open-decision.js").openDecision({cwd:process.env.R,root:"a b/c",session:null,question:"Q-UNSAFE-ROOT?"});console.log(r.status==="ok"?r.id:"ERR "+r.message)')"
+case "$UID_" in d-*) : ;; *) fail "open with an unsafe root failed: $UID_" ;; esac
+assert_contains "$(node "$OD" show --cwd "$R")" "Q-UNSAFE-ROOT" "unsafe-root card shows"
+if node "$OD" close --cwd "$R" --id "$UID_" | grep -q '^closed'; then :; else fail "unsafe-root card could not be closed"; fi
+node "$OD" show --cwd "$R" | grep -q 'Q-UNSAFE-ROOT' && fail "unsafe-root card still listed after close"
 # close --id finds a card of another scope
 node "$OD" close --cwd "$R" --root-run-id root-new --id "$ID_OLD" >/dev/null
 SHOW="$(node "$OD" show --cwd "$R" --root-run-id root-new)"

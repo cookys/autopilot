@@ -17,7 +17,7 @@ const { validateWireUsage } = require('./lib/qualification-usage');
 const BWRAP_PATH = '/usr/bin/bwrap';
 const SCHEMA_VERSION = 1;
 const BROKER_PROTOCOL = 'qualification-case-broker-v1';
-const CLIENT_PROTOCOL = 'qualification-case-client-v1';
+const CLIENT_PROTOCOL = 'qualification-case-client-v2';
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 const MAX_PROVIDER_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_SOCKET_MESSAGE_BYTES = MAX_DIFF_BYTES + 64 * 1024;
@@ -66,7 +66,7 @@ const CLIENT_SOURCE = [
   '  schema_version: 1,',
   '  request_id: process.env.CASE_REQUEST_ID,',
   '  role: process.env.CASE_ROLE,',
-  "  payload: { format: 'unified_diff', content: diff },",
+  "  payload: { format: 'case_content', content: diff },",
   '};',
   "const socket = net.createConnection('/broker/case.sock');",
   "socket.setEncoding('utf8');",
@@ -300,7 +300,7 @@ function validateCaseRequest(value, expected) {
       || value.request_id !== expected.requestId
       || value.role !== expected.role
       || !hasExactKeys(value.payload, ['format', 'content'])
-      || value.payload.format !== 'unified_diff'
+      || value.payload.format !== 'case_content'
       || value.payload.content !== expected.diff) {
     throw new BrokerError(
       'sandbox client request differs from its exact host binding',

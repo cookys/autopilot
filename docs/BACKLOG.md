@@ -483,19 +483,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qualification-cli-transport-runtime-identity-capture.md
 - **Context**: CLI transports return no model id, so administered identity is operator-asserted (pre-run probe recorded per the v2.34.15 governance rule; the HTTP path caught glm-5.2→glm-5.3 exactly via its runtime echo).
 
-### Broker payload format token rename (unified_diff misnomer)
-- **Id**: BL-0053
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 資格測試的中介程式把所有送出的內容都標成「差異檔」格式，實際上很多是 JSON，名稱不符。審查時被指出，因改動需同步調整協定版本而延後。 (draft)
-- **Impact**: 純命名不準確，會讓新接手的人困惑，不影響功能。 (draft)
-- **Trigger**: Next time the broker client protocol version bumps for any reason, or before onboarding a fourth non-diff payload family.
-- **Effort**: S
-- **Source**: VA suite plan v3 §6 (G1-F11 deferral); v2.34.17 pre-merge review.
-- **Pointer**: docs/backlog/broker-payload-format-token-rename-unified-diff-misnomer.md
-- **Context**: `qualification-case-broker.js` hardcodes `payload.format: unified_diff` in its sandbox client; brain round bundles (v2.34.14) and VA spec envelopes (v2.34.17) ship JSON content under that diff-named token (VA plan G1-F11; the reviewer…
-
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Id**: BL-0054
 - **Status**: open
@@ -957,7 +944,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: before think-tank enables a discuss seat in production
 - **Effort**: S
 - **Source**: discuss exam fix `eec239a8`, 2026-10-12
-- **Pointer**: none
+- **Pointer**: docs/backlog/dispatch-discuss-own-axis-rule-needs-design-decision.md
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
 ### Find what rewrites the committed t7-config-rename fixture outside the suite

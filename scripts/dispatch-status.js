@@ -72,6 +72,25 @@ const { spawnSync } = require('child_process');
 
 const DEFAULT_STALL_SECS = 180;
 const FILES_TOUCHED_CAP = 50;
+// Runners whose CLI prints nothing until it finishes (`claude -p`, qoder `-p`, kimi `-p --output-format text`, anthropic-compatible / claude-native review calls): a quiet log is normal for them, so "quiet for stallSecs" proves nothing.
+// A review-role dispatch on any runner but codex also writes its plain log at the end (dispatch-review.sh declares log_format plain
+// for every non-codex runner). opencode / grok / cursor implementers stream events and keep the quiet-log rule.
+const ONE_SHOT_RUNNERS = new Set(['cc-shim', 'claude-native', 'anthropic-compatible', 'qoderclicn', 'kimi']);
+// Wall used when the manifest records no timeout_seconds (dispatch-review manifests carry none): the observed 5-15 minute range.
+const ONE_SHOT_DEFAULT_WALL_SECS = 900;
+function isOneShotRunner(manifest) {
+  if (!manifest) return false;
+  if (ONE_SHOT_RUNNERS.has(manifest.runner)) return true;
+  return manifest.role === 'reviewer' && manifest.log_format === 'plain' && manifest.runner !== 'codex' && manifest.runner !== 'pi';
+}
+// Seconds of log silence after which a live run counts as stalled. Streaming runners: the caller's stallSecs. One-shot runners: the
+// dispatch's own timeout (never lower than stallSecs): alive and inside its timeout is not a stall; past it, it is.
+function stallLimitSecs(manifest, stallSecs) {
+  if (!isOneShotRunner(manifest)) return stallSecs;
+  const t = Number(manifest.timeout_seconds);
+  const wall = Number.isFinite(t) && t > 0 ? t : ONE_SHOT_DEFAULT_WALL_SECS;
+  return Math.max(wall, stallSecs);
+}
 
 function manifestDir(explicit) {
   if (explicit) return explicit;
@@ -579,7 +598,8 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
   if (manifest && manifest.ended_at) { alive = false; phase = 'exited'; }
 
   const lastEventAge = logStat.mtime_age_s;
-  const stall = alive === true && lastEventAge !== null ? lastEventAge > stallSecs : (alive === true ? null : false);
+  const stallLimit = stallLimitSecs(manifest, stallSecs);
+  const stall = alive === true && lastEventAge !== null ? lastEventAge > stallLimit : (alive === true ? null : false);
   const status = {
     schema: 1,
     run_id: manifest ? manifest.run_id || null : null,
@@ -599,6 +619,7 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
     usage_source: parsed.usage_source,
     final_status: manifest ? manifest.final_status || null : null,
     stall,
+    stall_limit_s: stallLimit,
     manifest: manifestPath || null,
   };
   if (manifest && Object.prototype.hasOwnProperty.call(manifest, 'unit_id')) {

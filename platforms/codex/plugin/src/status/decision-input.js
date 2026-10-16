@@ -4,8 +4,8 @@
 // File: <git-common-dir>/autopilot/decisions/<scope_key>.json, schema autopilot.decision/2 (written by
 // scripts/open-decision.js): one file per scope holding EVERY open question in `decisions`. Present = at least one open
 // question; answered / withdrawn = the helper removed that entry (the file goes with the last one).
-// A file only counts for THIS scope when every binding matches: schema, project_key, repo_identity and root_run_id (null for
-// the unbound scope). Inside it an entry counts when it has a string id, a string question and a parseable opened_at that is
+// Every scope file of the project counts (unbound + each root; see readDecision). A file counts only when every binding matches:
+// schema, project_key, repo_identity and root_run_id agreeing with its own file name (null for the unbound file). Inside it an entry counts when it has a string id, a string question and a parseable opened_at that is
 // not from the future (beyond a small slack); the others are ignored.
 // Age never hides a question (expiry warns, never blocks): older than STALE_MS only sets `stale: true`; `age_s` is always given.
 // Only `open-decision.js close --id` removes a question. Anything else is ignored.
@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf } = require('./scope-key');
+const { scopeKeyOf, safeSegment, listScopeFiles } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -61,18 +61,34 @@ function viewOf(e, nowMs, liveBase) {
   };
 }
 
-function readDecision({ commonDir, key, root, identity, nowMs, liveBase }) {
+// Every scope file of the project counts (the unbound one and every root's), not only the watcher scope's own: a session whose root
+// changed mid-way (compaction, /reload-plugins) leaves its cards in several files, and the owner must see all of them. Each file is
+// still bound to itself (schema, project_key, repo_identity, and root_run_id agreeing with its own file name). The same card shown on
+// the pages of several roots is merged by id in the pane. `root` only keeps the signature of the call; it no longer narrows the read.
+function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
   try {
     if (!commonDir || !key) return null;
-    const file = decisionFile(commonDir, key, root);
-    const raw = fs.readFileSync(file, 'utf8');
-    const v = JSON.parse(raw);
-    if (!v || typeof v !== 'object' || v.schema !== 'autopilot.decision/2' || !Array.isArray(v.decisions)) return null;
-    if (v.project_key !== key || v.repo_identity !== identity || (v.root_run_id || null) !== (root || null)) return null;
-    const value = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean)
-      .sort((a, b) => Date.parse(a.opened_at) - Date.parse(b.opened_at) || (a.id < b.id ? -1 : 1));
+    const dir = path.dirname(decisionFile(commonDir, key, null));
+    const value = [];
+    const hashes = [];
+    let first = null;
+    for (const { file, root: nameRoot } of listScopeFiles(dir, key)) {
+      let raw;
+      let v;
+      try { raw = fs.readFileSync(file, 'utf8'); v = JSON.parse(raw); } catch (_error) { continue; }
+      if (!v || typeof v !== 'object' || v.schema !== 'autopilot.decision/2' || !Array.isArray(v.decisions)) continue;
+      if (v.project_key !== key || v.repo_identity !== identity) continue;
+      const fileRoot = v.root_run_id || null;
+      if ((fileRoot === null ? null : safeSegment(fileRoot)) !== nameRoot) continue;
+      const views = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
+      if (views.length === 0) continue;
+      value.push(...views);
+      hashes.push(crypto.createHash('sha256').update(raw).digest('hex'));
+      if (!first) first = file;
+    }
     if (value.length === 0) return null;
-    return { value, sha256: crypto.createHash('sha256').update(raw).digest('hex'), file };
+    value.sort((a, b) => Date.parse(a.opened_at) - Date.parse(b.opened_at) || (a.id < b.id ? -1 : 1));
+    return { value, sha256: hashes.length === 1 ? hashes[0] : crypto.createHash('sha256').update(hashes.join('\n')).digest('hex'), file: first };
   } catch (_error) {
     return null;
   }

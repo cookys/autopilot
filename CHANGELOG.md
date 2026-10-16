@@ -103,6 +103,9 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 
 ### 修正
 
+- Open owner questions no longer disappear when a session's root changes mid-way: `open-decision.js show` / `close --id`, the watcher's decision input and the live pane now cover every scope file of the project (unbound and each root), merged by id.
+- `dispatch-status.js` no longer reports a live `cc-shim`, `claude-native`, `anthropic-compatible`, `qoderclicn`, `kimi` or review-role plain-log run as stalled while its log is quiet: for runners that print nothing until they finish, stall means alive past the dispatch's own `timeout_seconds` (15 minutes when none is recorded); streaming runners keep the `--stall-secs` rule.
+
 - **壓縮交接的四個小缺口**（BL-0193）：SessionStart 的預算警告改用 hook 同一份 `context_budget` 解析（`scripts/lib/config-path.js` 的 `readContextBudget`），`mode=off` 時不再警告；交接的派工段用 `dispatch-status.js --run` 的 lock／pid 判斷，程序已不在的標 GONE、查不到的標 UNKNOWN，不再一律 RUNNING；整份交接加 8 秒總期限（`HANDOFF_DEADLINE_MS`），各段子程序 timeout 取剩餘時間，超過的段落寫 `unavailable: handoff deadline reached`；長度測試把 git 段也塞滿。T1/T2 文字與 skill 要求文字沒有動。Codex 鏡像同步。
 - **分包審查接受在較晚版本才第一次審的包**（BL-0118）：基準版本改用 commit 祖先關係選出（所有包都從它延伸出去的那個），不看包的編號順序。某一包第一次是在較晚的版本審的，只要它自己的檔案從基準版本到那個版本之間都沒變，就接受；分支岔開，或它自己的檔案有變，仍然拒絕。
 - **資格考審查題「取最後一個 JSON」的規則寫進文件**（BL-0161）：維持原規則，前面輸出壞掉但最後是合法結果時照最後結果計分；程式註解、engine-onboarding 說明與測試都已固定這條規則。

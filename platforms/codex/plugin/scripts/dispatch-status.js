@@ -22,7 +22,7 @@
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --log <path> --agy-envelope             # strict {response,usage}
 //   dispatch-status.js --list [--dir <manifest-dir>]
-//   dispatch-status.js --panels [--dir <manifest-dir>]        # plan-review PANEL progress (newest 10)
+//   dispatch-status.js --panels [--dir <manifest-dir>]        # plan-review PANEL progress (newest 10; --limit <n|all>)
 //   dispatch-status.js --panel <file|prefix> [--dir <dir>]    # one panel's seat table
 //   --panels/--panel: renders panel-<key>-gN manifests written by dispatch-plan-review
 //   (v2.34.31): per-seat status/attempt, in-flight elapsed, deadline remaining, plus
@@ -778,7 +778,14 @@ function main(argv) {
     else if (a === '--agy-envelope') { args.agyEnvelope = true; }
     else if (a === '--list') { args.list = true; }
     else if (a === '--panels') { args.panels = true; }
-    else if (a === '--panel') { args.panel = argv[++i]; }
+    else if (a === '--panel') {
+      args.panel = argv[++i];
+      if (!args.panel || args.panel.startsWith('--')) {
+        process.stderr.write('--panel requires a value: a manifest file path or a panel-<key> prefix (list them with --panels)\n');
+        return 2;
+      }
+    }
+    else if (a === '--limit') { args.limit = argv[++i]; }
     else if (a === '--reap') { args.reap = true; }
     else if (a === '--days') { args.days = Number(argv[++i]); }
     else if (a === '--dry-run') { args.dryRun = true; }
@@ -900,10 +907,21 @@ function main(argv) {
     }
     const out = [];
     for (const f of files) {
-      try { out.push(summarize(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')), path.join(dir, f))); } catch (_e) { /* skip */ }
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        if (!m || m.artifact_type !== 'plan_review_panel_manifest') continue;
+        out.push(summarize(m, path.join(dir, f)));
+      } catch (_e) { /* skip */ }
     }
     out.sort((a2v, b2v) => String(b2v.started_at || '').localeCompare(String(a2v.started_at || '')));
-    process.stdout.write(`${JSON.stringify(out.slice(0, 10))}\n`);
+    // The array shape is the stable contract; truncation is reported on stderr so a panel
+    // hidden by the default newest-10 cut is never silent. --limit <n|all> widens it.
+    const limit = args.limit === 'all' ? out.length : (Number.isSafeInteger(Number(args.limit)) && Number(args.limit) >= 1 ? Number(args.limit) : 10);
+    const truncated = out.length > limit;
+    if (truncated) {
+      process.stderr.write(`${JSON.stringify({ total: out.length, shown: limit, truncated: true, hint: 'use --limit <n|all> to list more' })}\n`);
+    }
+    process.stdout.write(`${JSON.stringify(out.slice(0, limit))}\n`);
     return 0;
   }
 
@@ -911,12 +929,14 @@ function main(argv) {
     const dir = manifestDir(args.dir);
     let entries = [];
     try {
-      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json') && !f.startsWith('panel-'));
+      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
     } catch (_e) { /* absent dir → empty list */ }
     const out = [];
     for (const f of entries) {
       try {
         const m = readManifest(path.join(dir, f));
+        // Panel manifests share the dir; tell them apart by type, not by file-name prefix.
+        if (m && m.artifact_type === 'plan_review_panel_manifest') continue;
         out.push({
           run_id: m.run_id || null,
           role: m.role || null,

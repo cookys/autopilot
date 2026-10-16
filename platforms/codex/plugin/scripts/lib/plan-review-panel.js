@@ -57,8 +57,14 @@ function createPanelManifest({
       fs.mkdirSync(runsDir(), { recursive: true });
       body.updated_at = stamp();
       const tmp = `${file}.tmp-${process.pid}`;
-      fs.writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);
-      fs.renameSync(tmp, file);
+      try {
+        fs.writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);
+        fs.renameSync(tmp, file);
+      } catch (writeError) {
+        // Do not leave a half-written tmp file behind in the shared runs dir.
+        try { fs.unlinkSync(tmp); } catch { /* never created */ }
+        throw writeError;
+      }
     } catch { /* best-effort observability */ }
   };
   const seatOf = (id) => body.seats.find((seat) => seat.seat_id === id);

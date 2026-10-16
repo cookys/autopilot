@@ -3903,6 +3903,19 @@
       "summary": "Set to \"0\" to stop the runs watcher from starting the review page server."
     },
     {
+      "name": "AUTOPILOT_REVIEW_MAX_CONCURRENCY",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "unlimited",
+      "readers": [
+        "scripts/lib/review-fanout.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Most review seats that run at once in a review fan-out (qc panel, final panel); the rest queue in order and each seat's timeout starts when it actually starts. Unset, 0 or not a whole number means all seats at once."
+    },
+    {
       "name": "AUTOPILOT_RUN_APPROVAL_MODE",
       "kind": "env",
       "audience": "user",

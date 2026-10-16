@@ -496,19 +496,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dev-flow-card-re-attempt-instrument-repair-first-v2-vacuous-verdict-2026-08-18.md
 - **Context**: The 499-line card draft is digest-frozen at `evals/skill-onoff/packs/dev-flow-card/` and was NON-INFERIOR on the only load-bearing family (F3 branch discipline: FULL 9/9, CARD 9/9, OFF 0/9 — total discrimination, perfectly preserved).
 
-### Panel progress view — reviewer-cut cosmetic residuals (v2.34.31 round-1)
-- **Id**: BL-0045
-- **Status**: open
-- **Since**: 2026-08-21
-- **Origin**: self
-- **Problem**: 審查「面板進度檢視」功能時，審查者挑出幾個小瑕疵：從未派出的席位被標成傳輸耗盡、面板列表只顯示前十個、暫存檔可能殘留。目前行為正確，只是容易誤導。 (draft)
-- **Impact**: 可能讓操作者誤讀某次失敗原因；影響很小，真的出事才需要處理。 (draft)
-- **Trigger**: An operator incident actually caused by one of these: misread an exit-4 run because a never-dispatched seat shows `transport_exhausted`; `--panels` truncation at 10 hides a panel someone was looking for; `.tmp-<pid>` residue accumulates…
-- **Effort**: S
-- **Source**: autopilot:reviewer FIX-THEN-SHIP round-1, 2026-08-21;docs/projects/_archive/2026-08-21-panel-progress-view/
-- **Pointer**: docs/backlog/panel-progress-view-reviewer-cut-cosmetic-residuals-v2-34-31-round-1.md
-- **Context**: 2026-08-21 review 判 CUT/FOLLOW-UP 的殘項(行為今日驗證正確,純回歸保護/污染防護):(1) never-dispatched seat 標籤應為 `not_dispatched`(`dispatch-plan-review.js` settle 分支);(2) `--panels` 輸出加…
-
 ### Arm the ordinary-strike threshold (currently shadow-only) — DATED REVIEW REQUIRED
 - **Id**: BL-0046
 - **Status**: open
@@ -1094,22 +1081,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
-
-### Final review panel fans out all seats at once — no bounded concurrency
-- **Id**: BL-0107
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: peer
-- **Reporter**: cuda chatgpt-tunnel
-- **Report**: 01M40RQEANXNCRZS4B9BC8VB28
-- **Reply**: 2026-10-03 session 76c98aac:2356
-- **Problem**: 最終整體審查會把所有審查席位同時全部啟動，沒有同時執行數量的上限。機器資源有限的主機一次撐不起所有席位。 (draft)
-- **Impact**: 資源不足的主機可能卡住或失敗；需新增可設定的並行上限，預設仍全開。 (draft)
-- **Trigger**: next peer/operator campaign on a host that cannot run every panel seat at once
-- **Effort**: M
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M40RQEANXNCRZS4B9BC8VB28
-- **Pointer**: docs/backlog/final-review-panel-fans-out-all-seats-at-once-no-bounded-concurrency.md
-- **Context**: `scripts/lib/review-fanout.js` main() uses Promise.all over all seats; add a named concurrency config, default all seats.
 
 ### mods P1a known follow-ups (hardening)
 - **Id**: BL-0109

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `hetero-review-loop.js finalize` no longer closes an earlier verified finding because a later generation stopped mentioning it (BL-0032): closure now needs an explicit `resolutions: [{id, rationale}]` entry in that later generation's dispositions file, and `check-phase-review-receipt.js` re-derives the same rule and refuses a resolution that names no open verified finding. New `hetero-review-loop.js refinalize --generation <last>` (BL-0092) re-derives chain stamps, verdict and receipt of a finalized chain from the on-disk evidence (refusing if any findings/dispositions sha256 changed), replacing the "collect one more generation" workaround for stale pre-v2.36.3 `closed_findings` stamps. Receipts that relied on closure by absence no longer verify; re-finalize with resolutions.
+
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
 
 - BL-0093 point 1 (Boil the Lake): ON/OFF campaign ran 26 cells and was UNINFORMATIVE (waste 0 vs 0), so ceo-agent prose is unchanged; evidence under `docs/plans/evidence/2026-10-17-bl0093-guidance-relax/`, and the maximal eval pack was re-synced to the shipped skill text.

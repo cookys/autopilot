@@ -173,6 +173,8 @@ function showHelp() {
 Subcommands:
   collect     Collect reviews across seat panel for a generation
   finalize    Finalize review generation, aggregate verdict, and write receipt
+  refinalize  Re-derive chain stamps, verdict and receipt of an already finalized chain (--generation = last entry);
+              refuses when any finalized generation's findings/dispositions no longer match their recorded sha256
   opt-out     Record opt-out receipt for review loop
 
 Common flags:
@@ -1392,6 +1394,34 @@ async function handleFinalize(flags) {
     dispMap.set(df.id, df);
   }
 
+  // Optional explicit re-verification of EARLIER verified findings (BL-0032): the only way a later
+  // generation closes one; absence from this generation's findings never does.
+  let dispResolutions = [];
+  if (dispData.resolutions !== undefined) {
+    if (!Array.isArray(dispData.resolutions)) {
+      console.error('ERROR: Dispositions "resolutions" must be an array of { id, rationale }');
+      process.exit(1);
+    }
+    const seenRes = new Set();
+    for (let i = 0; i < dispData.resolutions.length; i++) {
+      const r = dispData.resolutions[i];
+      if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.id !== 'string' || r.id.trim().length === 0) {
+        console.error(`ERROR: Dispositions resolutions entry at index ${i} needs a non-empty string id`);
+        process.exit(1);
+      }
+      if (typeof r.rationale !== 'string' || r.rationale.trim().length === 0) {
+        console.error(`ERROR: Resolution ${r.id} missing non-empty rationale string`);
+        process.exit(1);
+      }
+      if (seenRes.has(r.id) || findingsMap.has(r.id)) {
+        console.error(`ERROR: Resolution ${r.id} is duplicated or names a finding of this same generation`);
+        process.exit(1);
+      }
+      seenRes.add(r.id);
+    }
+    dispResolutions = dispData.resolutions;
+  }
+
   // Check matching IDs: one entry per finding id, no extras, none missing
   for (const fid of findingsMap.keys()) {
     if (!dispMap.has(fid)) {
@@ -1433,7 +1463,7 @@ async function handleFinalize(flags) {
     const g = entry.generation;
     if (g === generation) {
       findingsByGeneration.set(g, findingsList);
-      dispositionsByGeneration.set(g, dispFindings);
+      dispositionsByGeneration.set(g, { findings: dispFindings, resolutions: dispResolutions });
     } else if (entry.status === 'finalized' && entry.dispositions_path) {
       const earlierGDir = path.join(reviewPhaseDir, `g${g}`);
       const earlierFindingsPath = path.join(earlierGDir, 'findings.json');
@@ -1443,6 +1473,7 @@ async function handleFinalize(flags) {
       }
       let earlierFindings = [];
       let earlierDisps = [];
+      let edResolutions;
       // v2.36.3: disk evidence is the ONLY closure input (review-chain-derive no longer honours
       // chain-entry stamps), so an unreadable earlier generation must fail closed — defaulting
       // to [] would read as "that generation reported nothing" and close every open finding.
@@ -1456,17 +1487,23 @@ async function handleFinalize(flags) {
       try {
         const edData = JSON.parse(fs.readFileSync(earlierDispPath, 'utf8'));
         earlierDisps = Array.isArray(edData.findings) ? edData.findings : [];
+        edResolutions = edData.resolutions;
       } catch (e) {
         console.error(`ERROR: Cannot read dispositions of finalized generation ${g} at ${earlierDispPath}: ${e.message}`);
         process.exit(1);
       }
       findingsByGeneration.set(g, earlierFindings);
-      dispositionsByGeneration.set(g, earlierDisps);
+      dispositionsByGeneration.set(g, { findings: earlierDisps, resolutions: Array.isArray(edResolutions) ? edResolutions : [] });
     }
   }
 
   // Derive final verdict, open findings, and closed findings using shared routine
   const derived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+  if (derived.unmatched_resolutions.length > 0) {
+    const u = derived.unmatched_resolutions[0];
+    console.error(`ERROR: Resolution '${u.id}' (generation ${u.generation}) names no open verified finding of an earlier generation`);
+    process.exit(1);
+  }
   const verdict = derived.verdict;
   const openFindings = derived.open_findings || derived.openFindings;
 
@@ -1587,6 +1624,106 @@ async function handleFinalize(flags) {
   process.exit(0);
 }
 
+// refinalize (BL-0092): repair path for a chain whose closed_findings stamps were written by an older
+// derive (e.g. pre-v2.36.3 attributing a closure to an aborted generation). Pure re-derivation: every
+// finalized generation's findings.json / dispositions.json must still hash to the sha256 its chain
+// entry recorded, otherwise it refuses and writes nothing. No new claim is accepted — the stamps,
+// verdict and open_findings are recomputed from the same on-disk evidence, the other receipt fields
+// are carried over unchanged.
+async function handleRefinalize(flags) {
+  const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
+  const phase = flags.phase;
+  const generation = parseInt(flags.generation, 10);
+  if (!ledgerDir || !phase || isNaN(generation) || generation < 1) {
+    console.error('ERROR: --ledger <dir>, --phase <id>, and --generation <n> are required for refinalize');
+    process.exit(2);
+  }
+  const reviewPhaseDir = path.join(ledgerDir, `review-${phase}`);
+  const chainPath = path.join(reviewPhaseDir, 'chain.json');
+  const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
+  if (!fs.existsSync(chainPath) || !fs.existsSync(receiptPath)) {
+    console.error(`ERROR: refinalize needs both ${chainPath} and ${receiptPath}`);
+    process.exit(1);
+  }
+  acquireChainLock(chainPath);
+  let chain;
+  let receipt;
+  try {
+    chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+    receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+  } catch (e) {
+    console.error(`ERROR: Failed to parse chain or receipt: ${e.message}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(chain) || chain.length === 0) {
+    console.error('ERROR: Malformed chain.json: expected a non-empty array');
+    process.exit(1);
+  }
+  const last = chain[chain.length - 1];
+  if (!last || last.generation !== generation || last.status !== 'finalized') {
+    console.error(`ERROR: --generation must be the last chain entry and finalized (last is generation ${last && last.generation}, status '${last && last.status}')`);
+    process.exit(1);
+  }
+  const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+  const findingsByGeneration = new Map();
+  const dispositionsByGeneration = new Map();
+  for (const entry of chain) {
+    if (entry.status !== 'finalized') continue;
+    const g = entry.generation;
+    if (!entry.findings_sha256 || !entry.dispositions_sha256 || !entry.dispositions_path) {
+      console.error(`ERROR: Generation ${g} has no recorded findings/dispositions sha256 to verify against; refinalize cannot vouch for it`);
+      process.exit(1);
+    }
+    const fPath = path.join(reviewPhaseDir, `g${g}`, 'findings.json');
+    const dPath = path.isAbsolute(entry.dispositions_path) ? entry.dispositions_path : path.join(ledgerDir, entry.dispositions_path);
+    let fBytes;
+    let dBytes;
+    try {
+      fBytes = fs.readFileSync(fPath);
+      dBytes = fs.readFileSync(dPath);
+    } catch (e) {
+      console.error(`ERROR: Cannot read evidence of generation ${g}: ${e.message}`);
+      process.exit(1);
+    }
+    if (sha(fBytes) !== entry.findings_sha256) {
+      console.error(`ERROR: findings.json of generation ${g} no longer matches its recorded sha256; refusing to refinalize`);
+      process.exit(1);
+    }
+    if (sha(dBytes) !== entry.dispositions_sha256) {
+      console.error(`ERROR: dispositions.json of generation ${g} no longer matches its recorded sha256; refusing to refinalize`);
+      process.exit(1);
+    }
+    let fData;
+    let dData;
+    try {
+      fData = JSON.parse(fBytes.toString('utf8'));
+      dData = JSON.parse(dBytes.toString('utf8'));
+    } catch (e) {
+      console.error(`ERROR: Cannot parse evidence of generation ${g}: ${e.message}`);
+      process.exit(1);
+    }
+    findingsByGeneration.set(g, Array.isArray(fData.findings) ? fData.findings : []);
+    dispositionsByGeneration.set(g, {
+      findings: Array.isArray(dData.findings) ? dData.findings : [],
+      resolutions: Array.isArray(dData.resolutions) ? dData.resolutions : [],
+    });
+  }
+  const derived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+  if (derived.unmatched_resolutions.length > 0) {
+    const u = derived.unmatched_resolutions[0];
+    console.error(`ERROR: Resolution '${u.id}' (generation ${u.generation}) names no open verified finding of an earlier generation`);
+    process.exit(1);
+  }
+  writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
+  receipt.chain = chain;
+  receipt.verdict = derived.verdict;
+  receipt.open_findings = derived.open_findings;
+  receipt.written_at = new Date().toISOString();
+  writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  console.log(JSON.stringify({ phase, generation, verdict: derived.verdict, open_findings_count: derived.open_findings.length, refinalized: true }, null, 2));
+  process.exit(0);
+}
+
 async function handleOptOut(flags) {
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
   const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
@@ -1680,6 +1817,8 @@ async function main() {
     await handleCollect(flags);
   } else if (subcommand === 'finalize') {
     await handleFinalize(flags);
+  } else if (subcommand === 'refinalize') {
+    await handleRefinalize(flags);
   } else if (subcommand === 'opt-out') {
     await handleOptOut(flags);
   } else {

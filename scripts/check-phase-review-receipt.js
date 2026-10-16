@@ -1022,11 +1022,34 @@ function validateModeA(flags, opts = {}) {
       }
 
       findingsByGeneration.set(entry.generation, findingsList);
-      dispositionsByGeneration.set(entry.generation, dispList);
+      let resList = [];
+      if (dispData.resolutions !== undefined) {
+        if (!Array.isArray(dispData.resolutions)) {
+          console.error(`dispositions.json resolutions for generation ${entry.generation} must be an array`);
+          process.exit(1);
+        }
+        for (const r of dispData.resolutions) {
+          if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.id !== 'string' || r.id.trim().length === 0
+              || typeof r.rationale !== 'string' || r.rationale.trim().length === 0) {
+            console.error(`Malformed resolution entry in generation ${entry.generation} dispositions.json (needs string id and non-empty rationale)`);
+            process.exit(1);
+          }
+        }
+        resList = dispData.resolutions;
+      }
+      dispositionsByGeneration.set(entry.generation, { findings: dispList, resolutions: resList });
     }
 
-    // Item 4: Call shared review-chain-derive routine
+    // Item 4: Call shared review-chain-derive routine. It discards chain-entry closed_findings
+    // stamps in place (they are its output, BL-0092), so the on-disk stamps are snapshotted first
+    // for the aborted-attribution scan below.
+    const stampsOnDisk = chainOnDisk.map((e) => (e && Array.isArray(e.closed_findings) ? e.closed_findings.map((cf) => ({ ...cf })) : []));
     const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+    if (derivedState.unmatched_resolutions.length > 0) {
+      const u = derivedState.unmatched_resolutions[0];
+      console.error(`Resolution '${u.id}' in generation ${u.generation} names no open verified finding of an earlier generation`);
+      process.exit(1);
+    }
 
     // v2.36.3 (7840hs): no closure may be attributed to an aborted generation — it produced no
     // findings, so "closed by absence in generation N" is meaningless for an aborted N. Checked
@@ -1041,9 +1064,9 @@ function validateModeA(flags, opts = {}) {
     // top-level receipt field — the 7840hs ledger carries `{id, closed_by_generation: 3}` on its
     // g2 entry with g3 aborted — so the on-disk chain entries are scanned as well.
     const badReceiptClosure = namesAborted(receipt.closed_findings)
-      || chainOnDisk.map((e) => namesAborted(e && e.closed_findings)).find(Boolean);
+      || stampsOnDisk.map((l) => namesAborted(l)).find(Boolean);
     if (badReceiptClosure) {
-      console.error(`Receipt/chain closed_findings attributes '${badReceiptClosure.id}' to generation ${badReceiptClosure.closed_by_generation}, which is aborted — an aborted generation reviewed nothing and can close nothing (stamp written before v2.36.3; collect + finalize one more generation to re-derive)`);
+      console.error(`Receipt/chain closed_findings attributes '${badReceiptClosure.id}' to generation ${badReceiptClosure.closed_by_generation}, which is aborted — an aborted generation reviewed nothing and can close nothing (stamp written before v2.36.3; run hetero-review-loop.js refinalize --generation <last> to re-derive)`);
       process.exit(1);
     }
     const badDerivedClosure = namesAborted(derivedState.closed_findings);

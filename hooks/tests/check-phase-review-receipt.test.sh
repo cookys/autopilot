@@ -1021,7 +1021,7 @@ write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\"
 C15G_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15G_RC=$?
 assert_exit_code "$C15G_RC" "1" "case 15g: receipt closure attributed to the aborted generation exits 1"
 assert_contains "$C15G_OUT" "which is aborted" "case 15g: refusal names the aborted attribution and the remedy"
-assert_contains "$C15G_OUT" "one more generation" "case 15g: refusal states the remedy"
+assert_contains "$C15G_OUT" "refinalize" "case 15g: refusal states the remedy"
 
 # 15g' negative (the loop's real shape): the stamp sits on a CHAIN ENTRY, not on the receipt.
 PAB_G1_ABORTED_STAMPED="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"status\": \"aborted\", \"closed_findings\": [ { \"id\": \"F-stale\", \"closed_by_generation\": 1 } ] }"

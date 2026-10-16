@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
+
 - BL-0194 P2: autopilot can now read the registry's sibling `qualification-metrics.json` (`scripts/qualification-metrics.js fetch|status|order`, vendored v2 schema, Node `record_id`/`entry_id`/`strike_id` parity); it only re-orders seats local evidence already admitted, warns past 7 days, and never admits, lifts or overwrites a local strike.
 
 - A hetero review seat whose answer breaks an output rule (missing NO-FINDING-PROOF field, repeated block, misspelled VERDICT) is now re-asked once on its own with the reason named, instead of voiding the whole round as seat_gap; transport, timeout and exit-code failures are never re-asked, the output rules are unchanged, the retry is recorded as format_retry on the seat artifact, and the review prompt gains two worked answer examples (BL-0197).

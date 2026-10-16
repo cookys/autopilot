@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+'use strict';
+// Extensionless entry so `autopilot <cmd>` works when bin/ is on PATH.
+// autopilot.js runs at load and calls process.exit itself; argv, stdio and exit codes pass through.
+require('./autopilot.js');

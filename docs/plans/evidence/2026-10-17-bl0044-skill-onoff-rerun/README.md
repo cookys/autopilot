@@ -83,7 +83,7 @@ prefix `Use dev-flow:` in every arm, 3 reps, resume-by-cell, `ONOFF_KEEP_CELLS_D
 ## Results
 
 Run 2026-10-16 23:21 to 2026-10-17 00:25 (CST), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
-runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD in total. Rows and scorer output:
+runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD; the stage-graph coverage gate below adds 9.35 USD (36 cells), 44.55 USD overall. Rows and scorer output:
 `results-pa-full-off.jsonl`, `results-pr-red.jsonl`, `results-pc-card.jsonl`, `score-final.json`, `score-redcheck.json`.
 Raw per-cell transcripts (not in git): `/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
 

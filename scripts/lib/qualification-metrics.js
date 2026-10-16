@@ -121,9 +121,23 @@ function checkBenchmark(p, e) {
   const sm = e.sampling;
   const bad = (msg) => out.push(['DERIVED_MISMATCH', `${p}: ${msg}`]);
   // population=latest_per_task (board keeps only the newest attempt per task): n_attempts and
-  // n_timeout are null, and they are NOT the count of all attempts. Attempt-based derivations are
-  // skipped for null counts; the reader never substitutes a number for them.
-  if (b.n_attempts === null || b.n_attempts === undefined) return out;
+  // n_timeout are null, and they are NOT the count of all attempts. Attempt-based derivations
+  // (counts, rate, ci, cost per task) are skipped for null counts; the reader never substitutes a
+  // number for them. The attempt-free lints (speed_basis, low_n, cost coverage) still run, aligned
+  // with llm-playground check_qualification_feed.py, which lints them for both populations.
+  const attemptFree = () => {
+    const [a, z] = s.speed_basis.split('..');
+    if (a !== sm.window_start || z !== e.window_end || !(tsKey(a) <= tsKey(z))) {
+      bad("speed_basis must be 'window_start..window_end' with window_start <= window_end");
+    }
+    if (sm.low_n !== (b.n_trials < 5)) bad('sampling.low_n must equal (n_trials < 5)');
+    if (c.cost_coverage_permille > 1000) bad('cost_coverage_permille > 1000');
+    if (['billed', 'estimated'].includes(c.cost_basis) && c.cost_coverage_permille === 0
+      && ['usd_per_solved_micro', 'usd_per_task_micro', 'cost_total_micro'].some((k) => c[k] !== null)) {
+      bad('cost amounts present with coverage 0 (unknown must be null, never a number)');
+    }
+  };
+  if (b.n_attempts === null || b.n_attempts === undefined) { attemptFree(); return out; }
   if (b.n_attempts < b.n_tasks * b.n_trials) bad('n_attempts < n_tasks*n_trials');
   if (b.n_pass > b.n_attempts || (b.n_timeout !== null && b.n_timeout > b.n_attempts)) bad('n_pass or n_timeout exceeds n_attempts');
   if (b.n_timeout !== null && b.n_pass + b.n_timeout > b.n_attempts) bad('n_pass + n_timeout exceeds n_attempts');
@@ -142,19 +156,10 @@ function checkBenchmark(p, e) {
   if (!s.wall_s_total && s.tasks_per_hour_milli !== null) {
     bad('tasks_per_hour_milli must be null when wall_s_total is null or 0');
   }
-  const [a, z] = s.speed_basis.split('..');
-  if (a !== sm.window_start || z !== e.window_end || !(tsKey(a) <= tsKey(z))) {
-    bad("speed_basis must be 'window_start..window_end' with window_start <= window_end");
-  }
-  if (sm.low_n !== (b.n_trials < 5)) bad('sampling.low_n must equal (n_trials < 5)');
   if (c.cost_total_micro !== null && c.usd_per_task_micro !== roundHalfUp(c.cost_total_micro, b.n_attempts)) {
     bad('usd_per_task_micro must be round-half-up(cost_total_micro / n_attempts)');
   }
-  if (c.cost_coverage_permille > 1000) bad('cost_coverage_permille > 1000');
-  if (['billed', 'estimated'].includes(c.cost_basis) && c.cost_coverage_permille === 0
-    && ['usd_per_solved_micro', 'usd_per_task_micro', 'cost_total_micro'].some((k) => c[k] !== null)) {
-    bad('cost amounts present with coverage 0 (unknown must be null, never a number)');
-  }
+  attemptFree();
   return out;
 }
 

@@ -901,6 +901,19 @@
       "note": "run-ledger.sh adaptive-intervention flag, default off; no operator documentation exists."
     },
     {
+      "name": "AUTOPILOT_RESIDUE_RECENT_HOURS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/repo-residue-sweep.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Hours of recent on-disk activity that keep a clean worktree out of every removal path (default 24); 0 turns it off for fixtures that age nothing."
+    },
+    {
       "name": "AUTOPILOT_AUTHOR_CHROME_MAX_BYTES",
       "kind": "env",
       "audience": "internal",

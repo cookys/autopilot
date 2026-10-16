@@ -245,6 +245,37 @@ function isAncestor(repo, a, b) {
   return null;
 }
 
+// A worktree someone is using right now looks exactly like a merged one while it is new: clean, no commits, HEAD an ancestor of the integration ref
+// (2026-10-16: a fresh lane worktree was deleted under its own session by the panel's 全部清掉). A sub-agent's Bash is a short-lived process, so the cwd check cannot see it.
+// So recent on-disk movement keeps a clean worktree out of every removal path: the directory, its git admin dir (HEAD, index, logs/HEAD) or the creation of its branch
+// (first reflog line) inside the last RECENT_ACTIVITY_HOURS. 24h; AUTOPILOT_RESIDUE_RECENT_HOURS overrides (0 turns it off, for fixtures that age nothing).
+const RECENT_ACTIVITY_HOURS = 24;
+function recentActivityHours() {
+  const v = process.env.AUTOPILOT_RESIDUE_RECENT_HOURS;
+  return v !== undefined && /^\d+(\.\d+)?$/.test(v) ? Number(v) : RECENT_ACTIVITY_HOURS;
+}
+function recentActivityMs(repo, p, branch) {
+  const stamps = [];
+  const mt = (f) => { try { stamps.push(fs.statSync(f).mtimeMs); } catch { /* absent */ } };
+  mt(p);
+  const gd = git(p, ['rev-parse', '--absolute-git-dir']);
+  if (gd.ok) {
+    const dir = gd.out.trim();
+    for (const f of ['HEAD', 'index', 'logs/HEAD']) mt(path.join(dir, f));
+  }
+  if (branch) {
+    const cd = git(p, ['rev-parse', '--git-common-dir']);
+    if (cd.ok) {
+      try {
+        const first = fs.readFileSync(path.resolve(p, cd.out.trim(), 'logs', 'refs', 'heads', ...branch.split('/')), 'utf8').split('\n')[0];
+        const m = /> (\d+) [+-]\d{4}\t/.exec(first);
+        if (m) stamps.push(Number(m[1]) * 1000);
+      } catch { /* no reflog */ }
+    }
+  }
+  return stamps.length ? Math.max(...stamps) : null;
+}
+
 function classifyWorktrees(repo, mainPath, integrationSha) {
   const now = Date.now();
   const rows = [];
@@ -269,6 +300,11 @@ function classifyWorktrees(repo, mainPath, integrationSha) {
     const lines = st.out ? st.out.split('\n').filter((l) => l && !/^\?\? \.autopilot-worktree(\.lock)?$/.test(l)) : [];
     row.dirty_lines = lines.length;
     if (lines.length > 0) { row.class = 'dirty'; row.reason += `${lines.length} uncommitted path(s)`; rows.push(row); continue; }
+    const rh = recentActivityHours();
+    if (rh > 0) {
+      const last = recentActivityMs(repo, p, wt.branch);
+      if (last !== null && now - last < rh * 3600 * 1000) { row.class = 'live'; row.reason = `recent activity (under ${rh}h): in use, not a leftover`; rows.push(row); continue; }
+    }
     row.integrated = wt.head ? isAncestor(repo, wt.head, integrationSha) : null;
     if (row.integrated === null) { row.class = 'unverifiable'; row.reason += 'merge-base could not run'; }
     else if (row.integrated) { row.class = 'clean-integrated'; row.reason += 'HEAD is an ancestor of the integration ref'; }

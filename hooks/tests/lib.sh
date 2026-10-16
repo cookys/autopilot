@@ -702,3 +702,7 @@ seed_dogfood_implementer_pin() {
     --operator lib.sh --store "$store" >/dev/null \
     || { echo "seed_dogfood_implementer_pin: pin-seat failed for $store" >&2; return 1; }
 }
+
+# repo-residue-sweep keeps a worktree with activity in the last 24h out of every removal path; fixtures here are all brand new, so
+# the existing suites turn that guard off and residue-recent-activity.test.sh turns it back on.
+export AUTOPILOT_RESIDUE_RECENT_HOURS=0

@@ -1222,9 +1222,9 @@ export function residueTally(r: { needs_human_count: number; needs_human_bytes: 
 
 // What the cleanup buttons may act on RIGHT NOW: the clearable worktrees and the unused plugin cache copies of the snapshot, minus every target a press already reported on
 // (`done`: decide.clean). One function for the 全部清掉 count and for the press, so the button never promises what the press will not do.
-export function cleanTargets(d: { residue: { needs_human_count: number; needs_human_bytes: number | null; needs_human: readonly NeedsHumanEntry[] } | null; load_source: { stale_cache_dirs: readonly { dir: string; alive: readonly string[] }[] } | null }, done: Readonly<Record<string, unknown>> = {}): { worktrees: NeedsHumanEntry[]; caches: string[] } {
-  const worktrees = d.residue === null ? [] : residueTally(d.residue).clean.filter(e => e.kind === 'worktree' && done[e.target] === undefined)
-  const caches = (d.load_source === null ? [] : d.load_source.stale_cache_dirs).filter(c => c.alive.length === 0 && done[c.dir] === undefined).map(c => c.dir)
+export function cleanTargets(d: { residue: { needs_human_count: number; needs_human_bytes: number | null; needs_human: readonly NeedsHumanEntry[] } | null; load_source: { stale_cache_dirs: readonly { dir: string; alive: readonly string[] }[] } | null }, done: Readonly<Record<string, { ok: boolean }>> = {}): { worktrees: NeedsHumanEntry[]; caches: string[] } {
+  const worktrees = d.residue === null ? [] : residueTally(d.residue).clean.filter(e => e.kind === 'worktree' && done[e.target]?.ok !== true)
+  const caches = (d.load_source === null ? [] : d.load_source.stale_cache_dirs).filter(c => c.alive.length === 0 && done[c.dir]?.ok !== true).map(c => c.dir)
   return { worktrees, caches }
 }
 

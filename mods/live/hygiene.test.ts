@@ -3,7 +3,7 @@
 // (copied in, never read from the live directory). Each check ships with a negative control: a deliberately broken input the same predicate must flag.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, autoResidueCount, readLoadSource, readResidue, residueTally, slotHygiene } from './model'
+import { NO_DETAIL, NO_SECTIONS, autoResidueCount, cleanTargets, readLoadSource, readResidue, residueTally, slotHygiene } from './model'
 import { hygieneTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import type { LiveSnapshot, PaneLine } from './model'
 import * as ui from './ui'
@@ -314,6 +314,25 @@ test('cleanup buttons: one per clearable worktree plus one for all of them, in t
   expect(out.filter(l => l.startsWith('  $ ')).length, 'the entry to judge keeps its command').toBeGreaterThan(0)
   // a surface without buttons keeps the commands
   expect(hyg(snapOf(REAL_RESIDUE, REAL_LOAD))).toEqual(GOLDEN_ZH_76)
+})
+test('cleanup buttons: with no 待決 card at all the buttons are still drawn and no command is printed under a clearable entry (2026-10-16 report); a surface without the decide view prints them', () => {
+  const s = snapOf(REAL_RESIDUE, REAL_LOAD)
+  expect(s.pending.length).toBe(0)
+  const clean = (ls: PaneLine[]): string[] => { const o = texts(ls); return o.slice(o.findIndex(l => l.startsWith('▾ 可以直接清掉')), o.findIndex(l => l.startsWith('▾ 自動清理'))) }
+  const on = clean(withButtons(s))
+  expect(on.filter(l => l === '  [ 清掉 ]').length).toBe(2)
+  expect(on.some(l => l.includes('$ '))).toBe(false)
+  const off = clean(hygieneTabLines(s, ctxOf(ZH)))
+  expect(off.some(l => l.includes('worktree remove')), 'negative control: no decide view means the old command rows').toBe(true)
+})
+test('cleanup buttons: a failed press can be pressed again, and the batch button counts it again', () => {
+  const s = snapOf(REAL_RESIDUE, REAL_LOAD)
+  const paths = residueTally(s.detail.residue!).clean.map(e => e.target)
+  const failed = texts(withButtons(s, Object.fromEntries(paths.map(p => [p, { ok: false, note: 'busy' }]))))
+  expect(failed.filter(l => l === '  [ 清掉 ]').length, 'a retry button under each of the two failures, plus the untouched cache copy').toBe(3)
+  expect(failed[0]).toBe('  [ 全部清掉（3 項） ]')
+  expect(cleanTargets(s.detail, { [paths[0]]: { ok: false, note: 'busy' } }).worktrees.length).toBe(2)
+  expect(cleanTargets(s.detail, { [paths[0]]: { ok: true, note: '' } }).worktrees.length).toBe(1)
 })
 test('cleanup buttons: negative control, a judged class listed as clearable gets a button (the safety assertion above would be red)', () => {
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)

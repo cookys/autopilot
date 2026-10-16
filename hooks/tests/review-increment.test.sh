@@ -61,6 +61,14 @@ const F = {
   pkg: fixture('pkg', { h1: { 'package.json': '{"name":"y"}\n' } }),
   bin: fixture('bin', { h0Extra: { 'assets/b.bin': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(5000, 8)]) }, h1: { 'assets/b.bin': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(5000, 9)]) } }),
   del: fixture('del', { h1: { 'src/feat04.js': null } }),
+  sub: (() => {
+    const fx = fixture('sub', { h1: { 'src/feat03.js': fn('03', '// r1\n') } });
+    // gitlink pointer moves between the reviewed head and the fix (the objects need not exist).
+    const ptr = (sha) => { gitIn(fx.repo, 'update-index', '--add', '--cacheinfo', `160000,${sha},mods/sub`); gitIn(fx.repo, 'commit', '-q', '-m', 'ptr'); return gitIn(fx.repo, 'rev-parse', 'HEAD'); };
+    const H0 = ptr('1'.repeat(40));
+    const H1 = ptr('2'.repeat(40));
+    return { ...fx, H0, H1 };
+  })(),
   verify: fixture('verify', { h1: { 'scripts/check.js': 'process.exit(1);\n' } }),
 };
 const H2 = commit(F.base.repo, { 'src/feat02.js': fn('02', '// r0\n// touched after review\n') }, 'touch carried');
@@ -153,6 +161,21 @@ function checks(m) {
     return r.mode === 'incremental' && r.changed.includes('src/feat04.js') && !paths(r).includes('src/feat04.js')
       && !r.recheck_files.some((f) => f.path === 'src/feat04.js');
   });
+  t('a_submodule_pointer_change', () => {
+    // A user-level diff.ignoreSubmodules=all and GIT_DIFF_OPTS must not hide a gitlink change.
+    const home = fs.mkdtempSync(path.join(tmp, 'home-'));
+    const cfg = path.join(home, 'gitconfig');
+    fs.writeFileSync(cfg, '[diff]\n\tignoreSubmodules = all\n\tinterHunkContext = 5\n');
+    const saved = { HOME: process.env.HOME, GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL, GIT_DIFF_OPTS: process.env.GIT_DIFF_OPTS };
+    Object.assign(process.env, { HOME: home, GIT_CONFIG_GLOBAL: cfg, GIT_DIFF_OPTS: '--unified=0' });
+    try {
+      const r = inc(m, input(F.sub));
+      return r.mode === 'incremental' && r.changed.includes('mods/sub') && paths(r).includes('mods/sub')
+        && r.delta.diff.toString().includes('Subproject commit');
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  });
   t('a17_file_content', () => {
     const r = inc(m, input(F.fwd));
     const f = r.mode === 'incremental' && r.recheck_files.find((x) => x.path === 'src/calleemod.js');
@@ -242,6 +265,8 @@ function assertOnce(src, pat, label) {
 }
 const swap = (from, to) => (src) => { assertOnce(src, from, from); return src.replace(from, to); };
 const CONTROLS = [
+  ['submodule_ignore_unpinned', ['a_submodule_pointer_change'], (src) => src
+    .split("'--ignore-submodules=none',").join('').split("'-c', 'diff.ignoreSubmodules=none',").join('')],
   ['oversize_text_skipped_silently', ['f_scan_oversize_text'], swap('if (e.size > limits.increment_scan_file_bytes) { cannotScan = true; break; }', '')],
   ['oversize_binary_not_exempt', ['f_scan_oversize_binary_exempt'], swap('if (buf.subarray(0, 8000).includes(0)) continue; // binary: no textual references', 'if (e.size > limits.increment_scan_file_bytes) { cannotScan = true; break; }')],
   ['loose_compare', ['f_missing_fields_fail_closed'], swap("const sameStr = (a, b) => typeof a === 'string' && a !== '' && a === b;", 'const sameStr = (a, b) => a === b;')],
@@ -308,9 +333,9 @@ for key in baseline_incremental a1_carry a2_open_finding a4_reverse_ref a4_path_
   f_verification_red f_changed_ratio a5b_delta_packet_size f_shared_surface f_priority_order a7_carried_digest_recheck \
   a10_recompute_matches input_validation reasons_listed \
   f_scan_oversize_text f_scan_oversize_binary_exempt f_missing_fields_fail_closed f_findings_not_array \
-  a_binary_change_detected a_symlink_scanned a_deleted_not_in_recheck \
+  a_binary_change_detected a_submodule_pointer_change a_symlink_scanned a_deleted_not_in_recheck \
   neg_oversize_text_skipped_silently neg_oversize_binary_not_exempt neg_loose_compare neg_findings_not_array_ignored \
-  neg_binary_diff_text_only neg_symlink_not_scanned neg_deleted_kept_in_recheck \
+  neg_binary_diff_text_only neg_submodule_ignore_unpinned neg_symlink_not_scanned neg_deleted_kept_in_recheck \
   neg_carry_off neg_open_finding_rule_off neg_reference_expansion_off neg_forward_refs_off neg_only_recheck_diff \
   neg_seat_split_round_level neg_carry_digest_corrupt neg_carried_digest_recheck_skipped neg_unmappable_dropped_silently \
   neg_opt_in_ignored neg_no_carriable_ignored neg_carry_through_incremental_artifact neg_base_compare_skipped \

@@ -73,14 +73,23 @@ function inputError(message) {
   return error;
 }
 
+// GIT_DIFF_OPTS would change every diff's bytes; drop it from the child environment.
+function gitEnv() {
+  const env = { ...process.env };
+  delete env.GIT_DIFF_OPTS;
+  return env;
+}
+
 function git(repo, args, opts = {}) {
   try {
     return execFileSync(
       'git',
       ['--no-pager', '--literal-pathspecs', '-c', 'core.quotepath=false', '-c', 'diff.algorithm=myers',
         '-c', 'diff.noprefix=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.renames=false',
-        '-c', 'diff.indentHeuristic=true', '-c', 'core.autocrlf=false', '-C', repo, ...args],
-      { maxBuffer: GIT_MAX_BUFFER, stdio: ['pipe', 'pipe', 'pipe'], ...opts },
+        '-c', 'diff.indentHeuristic=true', '-c', 'core.autocrlf=false',
+        '-c', 'diff.ignoreSubmodules=none', '-c', 'diff.interHunkContext=0',
+        '-c', 'diff.suppressBlankEmpty=false', '-c', 'diff.orderFile=/dev/null', '-C', repo, ...args],
+      { maxBuffer: GIT_MAX_BUFFER, stdio: ['pipe', 'pipe', 'pipe'], env: gitEnv(), ...opts },
     );
   } catch (error) {
     throw inputError(`git ${args.slice(0, 2).join(' ')} failed: ${String(error.stderr || error.message).trim().slice(0, 200)}`);
@@ -93,11 +102,11 @@ const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 // overrides below stop a user's git config from changing the bytes that get hashed.
 const DIFF_FLAGS = [
   '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv', '--binary', '--full-index',
-  '--src-prefix=a/', '--dst-prefix=b/', '-U3',
+  '--src-prefix=a/', '--dst-prefix=b/', '-U3', '--ignore-submodules=none',
 ];
 
 function diffPaths(repo, from, to) {
-  const out = git(repo, ['diff', '--no-renames', '--name-only', '-z', from, to]).toString('utf8');
+  const out = git(repo, ['diff', '--no-renames', '--ignore-submodules=none', '--name-only', '-z', from, to]).toString('utf8');
   return out.split('\0').filter(Boolean);
 }
 
@@ -241,7 +250,7 @@ function normalizeFindingPath(p) {
 }
 
 function renameMap(repo, from, to) {
-  const raw = git(repo, ['diff', '-M', '--name-status', '-z', from, to]).toString('utf8').split('\0');
+  const raw = git(repo, ['diff', '-M', '--ignore-submodules=none', '--name-status', '-z', from, to]).toString('utf8').split('\0');
   const map = new Map();
   for (let i = 0; i < raw.length;) {
     const status = raw[i++];

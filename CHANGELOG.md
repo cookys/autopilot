@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Implementer qualification now refuses `--trials` other than 2 (it used to record repeated_trials=N while running 2); adds hardening tests for repo-local git config, replacement refs, add-then-revert canary, dispatch outcomes, output bomb and TTL boundaries (BL-0037).
+
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
 
 - BL-0093 point 1 (Boil the Lake): ON/OFF campaign ran 26 cells and was UNINFORMATIVE (waste 0 vs 0), so ceo-agent prose is unchanged; evidence under `docs/plans/evidence/2026-10-17-bl0093-guidance-relax/`, and the maximal eval pack was re-synced to the shipped skill text.

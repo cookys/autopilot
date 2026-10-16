@@ -338,7 +338,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`docs/plans/2026-08-22-implementer-qualification-suite.md` §6-§8。
 - **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
-- **Context**: v2.34.34 round-1 review 裁 CUT 的殘項(五個 MUST-FIX 已修:partial-corpus fail-open 雙層拒收、preflight prose-justification、dispatcher_called ETIMEDOUT 歸因、HELP、Stage-0 明文 operator-run):(1) **Stage-0 probe…
+- **Context**: 2026-10-16 landed fixtures, TTL and --trials tests; open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling. Detail in the sidecar.
 
 ### agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)
 - **Id**: BL-0038
@@ -1074,7 +1074,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).
+- **Context**: 2026-10-16 re-checked, not started: plan first (reuse key, touched-files re-check, context packet); over half a day.
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

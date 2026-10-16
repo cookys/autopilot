@@ -3285,6 +3285,14 @@ function runImplQualification(options) {
     throw new Error(`oracle preflight failed: ${preflight.problems.join(',')}`);
   }
   const CORPUS = implGrader.CORPUS;
+  // The administration always runs exactly trials_per_administration trials;
+  // an accepted --trials N would be recorded as repeated_trials without N ever
+  // running (VA / brain / consult-discuss already refuse this).
+  if (options.trials !== CORPUS.budget.trials_per_administration) {
+    throw new Error(
+      `implementer qualification requires exactly ${CORPUS.budget.trials_per_administration} trials`,
+    );
+  }
   const started = Date.now();
   const issuedAt = timestamp();
   const runNonce = process.env.AUTOPILOT_QUALIFY_SEED

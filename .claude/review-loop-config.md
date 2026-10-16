@@ -16,7 +16,7 @@
 <!-- 2026-08-05 quota rotation: Claude Code native is unavailable, so this
      managed L5 campaign uses the live-smoked hetero seats instead. Grok-4.5
      remains the implementer; MiniMax-M3 remains the calibrated reviewer;
-     GLM-5.2 is the verification-author and one QC seat; the other QC seats are
+     GLM-5.3 is one QC seat (replaced GLM-5.2 on 2026-10-16); the other QC seats are
      MiniMax-M3 and Codex gpt-5.5. This is an operational roster rotation only;
      restore the normal Claude/agy seats after quota recovery and re-probe them. -->
 - reviewer_engine: MiniMax-M3
@@ -28,8 +28,8 @@
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - on_family_conflict: fallback
-- reviewer_fallback_preference: GLM-5.2
-- reviewer_fallback_preference_low_risk: GLM-5.2
+- reviewer_fallback_preference: GLM-5.3
+- reviewer_fallback_preference_low_risk: GLM-5.3
 - implementer_engine: grok-4.7
 - implementer_effort: low
 - implementer_runner: grok
@@ -72,7 +72,7 @@
      換回 codex 席。這是 operator 決定，不是資格評定。
      2026-10-14 使用者裁定：gpt-5.6 全面退役，換回時用 gpt-6.1-sol @ codex low
      （reviewer 資格 event 288；只考過 low，別寫成 max）。 -->
-- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3, Qwen3.8-Max
+- qc_panel: claude-fable-5-1, GLM-5.3, MiniMax-M3, Qwen3.8-Max
 - qc_panel_runners: claude-native, cc-shim, cc-shim, qoderclicn
 - qc_panel_efforts: high, high, high, high
 - qc_panel_endpoints: @none, glm, minimax, @none

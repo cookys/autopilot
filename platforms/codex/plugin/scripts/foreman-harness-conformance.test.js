@@ -4,8 +4,10 @@
 const assert = require('assert');
 const { spawnSync } = require('child_process');
 const path = require('path');
-const { runHarnessConformance } = require('../evals/foreman-harness-conformance');
-const { runForemanQualification, transportAbortRecord } = require('../evals/foreman-eval-runner');
+const { runHarnessConformance, NON_CRITICAL_CODES } = require('../evals/foreman-harness-conformance');
+const { CRITICAL_CODES } = require('../evals/foreman-eval-grader');
+const runnerModule = require('../evals/foreman-eval-runner');
+const { runForemanQualification, transportAbortRecord } = runnerModule;
 
 let assertions = 0;
 function check(value, message) {
@@ -13,7 +15,29 @@ function check(value, message) {
   assert.ok(value, message);
 }
 
+// Spec section 10 / backlog item 6: every puppet, the restart replay, the write
+// probe and the kill probe go through runner.driveCampaign. Count the calls.
+const realDrive = runnerModule.driveCampaign;
+let driveCalls = 0;
+runnerModule.driveCampaign = (...args) => {
+  driveCalls += 1;
+  return realDrive(...args);
+};
 const record = runHarnessConformance();
+runnerModule.driveCampaign = realDrive;
+const expectedDrives = 14 + CRITICAL_CODES.size + NON_CRITICAL_CODES.length + 2 + 1 + 1;
+check(driveCalls === expectedDrives, `conformance drives ${expectedDrives} campaigns through the runner (got ${driveCalls})`);
+const everyResult = [
+  ...record.golden.results,
+  ...record.critical.results,
+  ...record.noncritical.results,
+];
+check(everyResult.every((entry) => entry.driven_by === 'runner.driveCampaign'), 'every puppet result says it was driven by the runner');
+check(record.h_replay.driven_by === 'runner.driveCampaign', 'the restart replay was driven by the runner');
+check(record.host_path_write.driven_by === 'runner.driveCampaign' && record.host_path_write.zone_write_seen === true, 'the write probe acted through the shell tool and the zone write was seen');
+check(record.kill_residue.driven_by === 'runner.driveCampaign' && record.kill_residue.exit_status === 124, 'the kill probe acted through the shell tool and got exit 124');
+check(record.critical.results.length === CRITICAL_CODES.size, 'one puppet per critical code');
+check(record.asset_hashes.sandbox && record.asset_hashes.sandbox.length === 64, 'the sandbox module is part of the harness hash');
 check(typeof record.harness_hash === 'string' && record.harness_hash.length === 64, 'conformance record is keyed by harness_hash');
 check(record.golden.passed === true, `golden puppets grade correct (${JSON.stringify(record.golden.results.filter((e) => !e.correct))})`);
 check(record.golden.originals === 10 && record.golden.twins === 4, 'ten originals and four twins');

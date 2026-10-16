@@ -97,7 +97,7 @@ const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8')
 // code only: block comments and `// ...` line comments are dropped (a glyph in a comment is documentation, not drawing)
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
-const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle'
+const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged'
 const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|stopped|skipped|unknown'
 
 const L1 = src => [
@@ -257,6 +257,32 @@ test('L7 control: a state id literal and a table access are reported', () => {
 const SUBMIT_USE = [/\bprompt\s*\.\s*submit\b(?!['"`])/g, /\bprompt\s*\[\s*['"`]submit['"`]\s*\]/g, /\{[^}]*\bsubmit\b[^}]*\}\s*=\s*[^;\n]*\bprompt\b/g]
 const submitUses = src => SUBMIT_USE.flatMap(re => [...code(src).matchAll(re)].map(m => ({ at: m.index, text: m[0] })))
 const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]))
+// $.process allowlist. Owner ruling 2026-10-16 (decision d-7a7ee75c, 「合併，改成不用確認」): the 殘留 cleanup buttons may run `$.process.run` (argument vector, no shell, no
+// permission dialog) because the two scripts they run re-check the safety condition themselves at run time (repo-residue-sweep.js reap classifies every worktree again;
+// prune-plugin-cache.js re-checks the path, the live pids and the loaded copy). So the ban on `$.process` stays for everything else: `process.run` is allowed once, in
+// register.ts, and only while CLEAN_SCRIPTS names exactly those two scripts; `process.spawn`, any other file and any second use are offenders.
+const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
+const PROCESS_RUN = /process\s*(?:\.\s*run\b|\[\s*['"`]run['"`]\s*\])/g
+function processRunOffenders(src, isRegister) {
+  const uses = [...src.matchAll(PROCESS_RUN)].length
+  if (uses === 0) return []
+  if (!isRegister) return ['process.run outside register.ts']
+  const out = []
+  if (uses !== 1) out.push('process.run used ' + uses + ' times, one allowed')
+  const m = /export const CLEAN_SCRIPTS = \[([^\]]*)\]/.exec(src)
+  const names = m === null ? null : [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])
+  if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
+  return out
+}
+test('process allowlist controls: another file, a second use, a widened and a narrowed script list are each reported (negative controls)', () => {
+  const ok = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\nconst r = await $.process.run(argv)"
+  assert.deepEqual(processRunOffenders(code(ok), true), [])
+  assert.equal(processRunOffenders(code('await $.process.run(argv)'), false).length, 1)
+  assert.equal(processRunOffenders(code(ok + '\nawait $.process.run(x)'), true).length, 1)
+  assert.equal(processRunOffenders(code(ok.replace('process.run', "process['run']")), true).length, 0)
+  assert.equal(processRunOffenders(code("export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js', 'scripts/other.js']\nawait $.process.run(a)"), true).length, 1)
+  assert.equal(processRunOffenders(code("export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js']\nawait $.process.run(a)"), true).length, 1)
+})
 test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prompt.submit; nothing uses asUser or process spawning', () => {
   const root = path.join(__dirname, '..')
   const files = walk(root).filter(f => /\.(ts|tsx|js|mjs|cjs)$/.test(f) && !/\.(test|testkit)\.(ts|js)$/.test(f) && !f.endsWith('locales.ts'))
@@ -266,7 +292,8 @@ test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prom
     const rel = path.relative(root, f)
     const src = code(fs.readFileSync(f, 'utf8'))
     if (/\basUser\b/.test(src)) offenders.push(rel + ': asUser')
-    if (/process\.(spawn|run)\b/.test(src)) offenders.push(rel + ': process spawn')
+    if (/process\s*\.\s*spawn\b/.test(src)) offenders.push(rel + ': process spawn')
+    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts'))) offenders.push(rel + ': ' + bad)
     const uses = submitUses(src)
     if (rel !== path.join('live', 'register.ts')) { if (uses.length > 0) offenders.push(rel + ': prompt.submit') ; continue }
     assert.equal(uses.length, 1, 'exactly one use in register.ts')

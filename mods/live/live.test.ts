@@ -2238,7 +2238,7 @@ for (const surface of SURFACES) {
 
 // ==================== stage-graph P7: the one-line band (contract ②) and the eight-tab panel ====================
 // RED before the change (the two-line band): every "P7 band" / "P7 panel" case below fails (no slot, no ⓘ, no Legend / Graph / Spend / Hygiene tabs).
-const THEME = ['claude', 'warning', 'error', 'success', 'suggestion', 'inactive', 'subtle']
+const THEME = ['claude', 'warning', 'error', 'success', 'suggestion', 'inactive', 'subtle', 'merged']
 
 // the rich world: a marker with the §2.9 fields, review + qc, decisions with a ladder rung, brain spend 120.4 / 150, load source + residue, a stage walk
 function richWorld(): Tree {
@@ -4869,6 +4869,73 @@ for (const surface of SURFACES) {
     await start($, surface)
     expect(await hyg($, 76)).toEqual(HYGIENE_GOLDEN_76)
   })
+
+  // The cleanup buttons run the one safe entry point (a stub here: nothing is deleted, no real store is touched), only for a worktree the snapshot lists as clearable.
+  const HAND_OLD = '/home/u/proj/.claude/worktrees/hands-old'
+  const cleanWorld = (on: any, $: any, report: string) => {
+    const files = richWorld() // the plugin root is the engine's: any path ending in the sweep script exists as a stub (the real script is never run)
+    const w = world(on, new Proxy(files, { get: (t, k) => (typeof k === 'string' && k.endsWith('/scripts/repo-residue-sweep.js') ? '// stub' : (t as any)[k]) }))
+    const ran: string[] = []
+    on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: report, stderr: '' } } })
+    return { w, ran }
+  }
+  const pressKeys = async ($: any) => {
+    const pane = await paneOn($, surface, 'hygiene')
+    const keys = ((await pane.findAll({ type: 'Button' })) as Drawn[]).map(n => n.props?.key as string)
+    await pane.unmount()
+    return keys
+  }
+  test('P5 mounted cleanup: the entry has a button and no command; pressing it runs reap --yes for that worktree only and the row says cleared (' + surface + ')', async ($, on) => {
+    const { ran } = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [{ path: HAND_OLD, class: 'clean-integrated' }], worktrees_kept: [] } }))
+    await start($, surface)
+    const before = await hyg($, 76)
+    const cleanable = before.slice(before.findIndex(t => t.startsWith('▾ 可以直接清掉')), before.findIndex(t => t.startsWith('▾ 自動清理')))
+    expect(cleanable.some(t => t.startsWith('  $ ')), 'no command under a cleanable entry').toBe(false)
+    expect(cleanable).toContain('  [ 清掉 ]')
+    expect(before.filter(t => t.startsWith('  $ ')).length, 'the entries to judge keep their commands').toBeGreaterThan(0)
+    expect(await pressKeys($)).toContain('clean:' + HAND_OLD)
+    const pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(ran.length).toBe(1)
+    expect(ran[0]).toContain('repo-residue-sweep.js reap --repo ')
+    expect(ran[0]).toMatch(/^node \S+\/scripts\/repo-residue-sweep\.js reap /)
+    expect(ran[0]).toContain(' --yes ')
+    expect(ran[0]).toContain('--worktree ' + HAND_OLD)
+    const after = await hyg($, 76)
+    expect(after).toContain('  已清掉')
+    expect(after).not.toContain('  [ 清掉 ]')
+  })
+  test('P5 mounted cleanup: an unused old cache copy has a button; the press runs prune-plugin-cache.js for that version, and a busy one has none (' + surface + ')', async ($, on) => {
+    const CACHE = '/home/u/.claude/plugins/cache/autopilot/autopilot/2.36.36'
+    const files = richWorld()
+    files[LIVE + '/load-source.json'] = j({ schema: 'autopilot.load-source/1', checked_at: PUBLISHED, plugin_version: '2.37.0', source: 'dev', source_basis: 'dev_link', marketplace: 'directory', behind_upstream: 0, flags: ['stale_cache_dirs'],
+      stale_cache_dirs: [{ dir: CACHE, in_use_pids: [], alive: [] }, { dir: '/home/u/.claude/plugins/cache/autopilot/autopilot/2.36.35', in_use_pids: ['9'], alive: ['9'] }] })
+    world(on, new Proxy(files, { get: (t, k) => (typeof k === 'string' && k.endsWith('/scripts/prune-plugin-cache.js') ? '// stub' : (t as any)[k]) }))
+    const ran: string[] = []
+    on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: JSON.stringify({ ok: true, dir: CACHE, removed: true }), stderr: '' } } })
+    await start($, surface)
+    expect((await pressKeys($)).filter(k => k.includes('/cache/'))).toEqual(['clean:' + CACHE])
+    const pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + CACHE })
+    await pane.unmount()
+    expect(ran.length).toBe(1)
+    expect(ran[0]).toContain('prune-plugin-cache.js --version 2.36.36 --claude-dir /home/u/.claude')
+    expect((await hyg($, 76)).some(t => t.includes('rm -rf'))).toBe(false)
+  })
+  test('P5 mounted cleanup: a worktree the sweep kept says why and then shows the command; a judged entry has no button (negative control) (' + surface + ')', async ($, on) => {
+    const { ran } = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [], worktrees_kept: [{ path: HAND_OLD, class: 'clean-integrated', why: 'worktree remove failed: busy' }] } }))
+    await start($, surface)
+    expect((await pressKeys($)).filter(k => k.startsWith('clean:')), 'only the clearable worktree has a button').toEqual(['clean:' + HAND_OLD])
+    const pane = await paneOn($, surface, 'hygiene')
+    expect(ran).toEqual([])
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(ran.length).toBe(1)
+    const after = await hyg($, 76)
+    expect(after.some(t => t.includes('沒清掉：worktree remove failed: busy'))).toBe(true)
+    expect(after.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove /home/u/proj/.claude/worktrees/'))).toBe(true)
+  })
 }
 
 // ---- the overflow hint (coordinator ruling 2026-10-14): `下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
@@ -5091,8 +5158,7 @@ const HYGIENE_GOLDEN_76: string[] = [
   "▾ 可以直接清掉  1 · 1.0 MB ────────────────────────────────────────────────",
   "◦ hands-old                                                     9d · 1.0 MB",
   "  已合併，可以刪",
-  "  $ git -C /home/u/proj worktree remove /home/u/proj/.claude/worktrees/",
-  "    hands-old",
+  "  [ 清掉 ]",
   "▾ 自動清理 ────────────────────────────────────────────────────────────────",
   "上次        3h00m 前 · 刪了 2 個 worktree、封存 1 條分支",
   "▾ 外掛來源 ────────────────────────────────────────────────────────────────",

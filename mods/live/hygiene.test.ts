@@ -289,3 +289,53 @@ test('order: newest first within a section; entries with no age go last and keep
   const names = hyg(snapOf(resWith(es), REAL_LOAD)).filter(l => l.startsWith('▲ ')).map(l => l.slice(2).trim().split(/\s+/)[0])
   expect(names).toEqual(['new', 'old', 'no-age-a', 'no-age-b'])
 })
+
+// ---- cleanup buttons (design plan §12.9): a surface with buttons draws `[ 清掉 ]` per clearable worktree and one `全部清掉` for the section; no command under a clearable entry ----
+const withButtons = (s: LiveSnapshot, clean: Record<string, { ok: boolean; note: string }> = {}): PaneLine[] =>
+  hygieneTabLines(s, { ...ctxOf(ZH), decide: { picks: {}, notes: {}, sent: {}, clean, inputs: true } })
+const pressIds = (ls: PaneLine[]): string[] => ls.flatMap(l => (l.segs ?? []).flatMap(g => (g.press === undefined ? [] : [g.press])))
+const DIRTY_PATH = 'agent-a16d390b66014e3cf'
+test('cleanup buttons: one per clearable worktree plus one for all of them, in the action colour; the entry to judge has none; no command under a clearable entry', () => {
+  const ls = withButtons(snapOf(REAL_RESIDUE, REAL_LOAD))
+  const out = texts(ls)
+  const from = out.findIndex(l => l.startsWith('▾ 可以直接清掉'))
+  const clean = out.slice(from, out.findIndex(l => l.startsWith('▾ 自動清理')))
+  expect(out[0]).toBe('  [ 全部清掉（3 項） ]') // the tab's first row, always the same place; counts the unused cache copy too, and has no size because a cache copy has none
+  expect(clean.some(l => l.includes('全部清掉'))).toBe(false)
+  expect(clean.filter(l => l === '  [ 清掉 ]').length).toBe(2)
+  expect(clean.some(l => l.startsWith('  $ ') || l.includes('worktree remove'))).toBe(false)
+  const ids = pressIds(ls)
+  expect(ids.length).toBe(4) // all + two worktrees + the unused cache copy
+  expect(ids.some(i => i.endsWith('/2.36.36'))).toBe(true)
+  expect(out.some(l => l.includes('rm -rf')), 'the cache copy has a button, not a command').toBe(false)
+  expect(ids.filter(i => i === 'clean:all').length).toBe(1)
+  expect(ids.some(i => i.includes(DIRTY_PATH))).toBe(false)
+  for (const g of ls.flatMap(l => l.segs ?? []).filter(g => g.press !== undefined)) expect(g.color).toBe(ui.PALETTE.action)
+  expect(out.filter(l => l.startsWith('  $ ')).length, 'the entry to judge keeps its command').toBeGreaterThan(0)
+  // a surface without buttons keeps the commands
+  expect(hyg(snapOf(REAL_RESIDUE, REAL_LOAD))).toEqual(GOLDEN_ZH_76)
+})
+test('cleanup buttons: negative control, a judged class listed as clearable gets a button (the safety assertion above would be red)', () => {
+  const s = snapOf(REAL_RESIDUE, REAL_LOAD)
+  expect(pressIds(withButtons(s)).some(i => i.includes(DIRTY_PATH))).toBe(false)
+  const was = ui.RESIDUE_KINDS.dirty
+  ui.RESIDUE_KINDS.dirty = 'clean'
+  try { expect(pressIds(withButtons(s)).some(i => i.includes(DIRTY_PATH))).toBe(true) } finally { ui.RESIDUE_KINDS.dirty = was }
+})
+test('cleanup buttons: after a press the entry says cleared, or why not and then the command; the batch button leaves with the last button', () => {
+  const s = snapOf(REAL_RESIDUE, REAL_LOAD)
+  const paths = residueTally(s.detail.residue!).clean.map(e => e.target)
+  const one = texts(withButtons(s, { [paths[0]]: { ok: true, note: '' } }))
+  expect(one).toContain('  已清掉')
+  expect(one.filter(l => l === '  [ 清掉 ]').length).toBe(2) // the other worktree and the cache copy
+  expect(one[0]).toBe('  [ 全部清掉（2 項） ]')
+  const noCache = texts(hygieneTabLines(snapOf(resWith([entry({ class: 'clean-integrated', path: '/w/a', bytes: 1048576 }), entry({ class: 'clean-integrated', path: '/w/b', bytes: 2097152 })]), null), { ...ctxOf(ZH), decide: { picks: {}, notes: {}, sent: {}, clean: {}, inputs: true } }))
+  expect(noCache[0]).toBe('  [ 全部清掉（2 項 · 3.0 MB） ]') // worktrees only, all sized: the sum of the two entries (one without a size would leave the count alone)
+  const failed = texts(withButtons(s, { [paths[1]]: { ok: false, note: 'busy' } }))
+  const at = failed.findIndex(l => l.startsWith('  沒清掉：busy'))
+  expect(at).toBeGreaterThan(0)
+  expect(failed[at + 1].startsWith('  $ git -C')).toBe(true)
+  const both = texts(withButtons(s, Object.fromEntries([...paths, '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'].map(p => [p, { ok: true, note: '' }]))))
+  expect(both.filter(l => l === '  已清掉').length).toBe(3)
+  expect(both.some(l => l.includes('全部清掉'))).toBe(false)
+})

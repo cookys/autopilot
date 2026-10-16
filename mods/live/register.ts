@@ -42,7 +42,7 @@ import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, autoResidueCount, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, residueTally, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -571,8 +571,78 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
         return { ...s, picks }
       })
     } else if (id === 'submit') await sendDecide($)
+    else if (id.startsWith('clean:')) await cleanPress($, id)
   } catch (_e) {
     // a press never takes the session down
+  }
+}
+
+// A press on a 殘留 cleanup button (`clean:all` or `clean:<path>`). The button never builds a delete of its own: it runs one of TWO fixed scripts, by argument vector (`$.process.run`,
+// no shell, so no quoting), each of which classifies again at that moment: `repo-residue-sweep.js reap --yes --worktree <path>` (clean + integrated, or directory gone; a live,
+// dirty or unintegrated worktree is never touched) and `prune-plugin-cache.js --version <v>` (a plain version directory, no live pid, not the loaded copy). The arguments come only
+// from the CURRENT clearable lists of the snapshot, so a stale or forged id runs nothing. Owner ruling 2026-10-16 (d-7a7ee75c): no confirmation dialog.
+export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
+type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+let cleaning = false
+export async function cleanPress($: EngineInterface, id: string, run?: CleanRun): Promise<void> {
+  if (cleaning || snapshot === null) return
+  // the only place `$.process` is used: argv is node + a whitelisted script (ui-lint.test.js pins this)
+  const exec = async (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => {
+    if (!CLEAN_SCRIPTS.includes(script)) throw new Error('script not allowed')
+    const argv = ['node', $.plugin.root + '/' + script, ...args]
+    const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
+    return r.stdout
+  }
+  const listed = snapshot.detail.residue === null ? [] : residueTally(snapshot.detail.residue).clean.filter(e => e.kind === 'worktree').map(e => e.target)
+  // an old plugin cache copy no program uses (the 外掛來源 row): its own safe entry point, scripts/prune-plugin-cache.js, which re-checks it
+  const caches = (snapshot.detail.load_source?.stale_cache_dirs ?? []).filter(d => d.alive.length === 0).map(d => d.dir)
+  const asked = id === 'clean:all' ? listed : listed.filter(x => 'clean:' + x === id)
+  const askedCaches = id === 'clean:all' ? caches : caches.filter(x => 'clean:' + x === id)
+  if (asked.length === 0 && askedCaches.length === 0) return
+  cleaning = true
+  try {
+    const script = $.plugin.root + '/' + CLEAN_SCRIPTS[0]
+    const results: Record<string, { ok: boolean; note: string }> = {}
+    for (const dir of askedCaches) {
+      const parts = dir.split('/').filter(x => x !== '')
+      const version = parts[parts.length - 1]
+      const claudeDir = '/' + parts.slice(0, -5).join('/') // <claude-dir>/plugins/cache/autopilot/autopilot/<version>
+      const prune = $.plugin.root + '/' + CLEAN_SCRIPTS[1]
+      if (!(await $.fs.exists(prune).catch(() => false))) { results[dir] = { ok: false, note: 'cleanup script not found' }; continue }
+      try {
+        const out = await exec(CLEAN_SCRIPTS[1], ['--version', version, '--claude-dir', claudeDir])
+        const rep = parseJson(out.split('\n').reverse().find(l => l.startsWith('{')) ?? '')
+        results[dir] = rep.ok && isObject(rep.value) && rep.value.ok === true ? { ok: true, note: '' } : { ok: false, note: rep.ok && isObject(rep.value) && typeof rep.value.reason === 'string' ? rep.value.reason : 'no report from the cleanup script' }
+      } catch (e) {
+        results[dir] = { ok: false, note: e instanceof Error ? e.message.split('\n')[0].slice(0, 120) : 'cleanup failed' } // a refusal exits 1 with its JSON reason on stdout (read above); this is a failure to start
+      }
+    }
+    if (asked.length === 0) { /* caches only */ }
+    else if (!(await $.fs.exists(script).catch(() => false))) for (const x of asked) results[x] = { ok: false, note: 'cleanup script not found' }
+    else {
+      const args = ['reap', '--repo', await $.session.cwd(), '--yes', '--json', ...asked.flatMap(x => ['--worktree', x])]
+      let removed: string[] = []
+      const kept = new Map<string, string>()
+      let failure = ''
+      try {
+        const out = await exec(CLEAN_SCRIPTS[0], args)
+        const line = out.split('\n').reverse().find(l => l.startsWith('{'))
+        const report = line === undefined ? null : parseJson(line)
+        const acts = report !== null && report.ok && isObject(report.value) && isObject(report.value.actions) ? report.value.actions : null
+        if (acts === null) failure = 'no report from the cleanup script'
+        else {
+          if (Array.isArray(acts.worktrees_removed)) removed = acts.worktrees_removed.flatMap(w => (isObject(w) && typeof w.path === 'string' ? [w.path] : []))
+          if (Array.isArray(acts.worktrees_kept)) for (const w of acts.worktrees_kept) if (isObject(w) && typeof w.path === 'string') kept.set(w.path, typeof w.why === 'string' ? w.why : 'kept')
+        }
+      } catch (e) {
+        failure = e instanceof Error ? e.message.split('\n')[0].slice(0, 120) : 'cleanup failed'
+      }
+      for (const x of asked) results[x] = removed.includes(x) ? { ok: true, note: '' } : { ok: false, note: failure !== '' ? failure : kept.get(x) ?? 'already gone' }
+      for (const x of asked) if (results[x].note === 'already gone') results[x] = { ok: true, note: '' } // the sweep did not list it: it was gone before the run
+    }
+    await update($, DECIDE, s => ({ ...s, clean: { ...(s.clean ?? {}), ...results } }))
+  } finally {
+    cleaning = false
   }
 }
 
@@ -615,7 +685,7 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
   const drop = [...ids].filter(gone)
   if (drop.length === 0) return
   const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
-  await update($, DECIDE, s => ({ picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
+  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
 }
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]

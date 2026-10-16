@@ -1106,7 +1106,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
-export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
+export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
@@ -1557,7 +1557,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
 // answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`. These strings are a wire format the model reads back, so they are not
 // in the locale tables and do not change with the language. ----
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
 export type DecideView = DecideState & { inputs: boolean }
 export const DECIDE_REPLY_HEAD = '[待決回覆]'

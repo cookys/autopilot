@@ -1,0 +1,25 @@
+{
+  "identity": "glm-5.3",
+  "engine": "GLM-5.3",
+  "family": "zhipu",
+  "runner": "anthropic-compatible",
+  "runner_version": "node-direct-http-fetch",
+  "harness_version": "engine-qualify-67be7ffb",
+  "effort": "high",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "semantic_fingerprint": "91c7132b86740a00aa3520012332865a49157c57a08ff00c0346df35f1be915e",
+  "containment_fingerprint": "8b46dca183416dba76098551ea81c0db5766df3fb97c93718671cb8d0686343c",
+  "_invented": [],
+  "_semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "glm-5.3",
+    "transport": "anthropic-compatible-http",
+    "http_reasoning_effort": "high",
+    "endpoint": "glm"
+  },
+  "_containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

@@ -1,0 +1,5 @@
+kimi28 alias label: display_name = "K2.8 Preview"
+kimi28-probe rc=0: kimi version 2.1.1 • User wants a single word: PONG.  • PONG  To resume this session: kimi -r session_283a4b8c-08f4-4877-ab25-f45ec76a9706
+2026-10-14T14:09:07+08:00 lane=kimi28 role=reviewer START model=kimi-code/kimi-for-coding model_version=kimi-for-coding:K2.8-Preview version_source=operator-asserted dry=0
+2026-10-14T14:24:29+08:00 lane=kimi28 role=reviewer END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1

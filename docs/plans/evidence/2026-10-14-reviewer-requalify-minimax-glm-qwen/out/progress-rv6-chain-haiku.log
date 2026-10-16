@@ -1,0 +1,7 @@
+2026-10-14T18:52:59+08:00 ITEM claude:claude-haiku-5-5:high START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T18:59:58+08:00 ITEM claude:claude-haiku-5-5:high END rc=0 secs=419 dir=rv6-claude-haiku-high/reviewer
+2026-10-14T18:59:59+08:00 ITEM claude:claude-haiku-5-5:high RECORDED rc=0 event="event_id":282 summary={"corpus_pass":"42/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} qualified high err=
+2026-10-14T18:59:59+08:00 ITEM claude:claude-haiku-5-5:low START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T19:05:49+08:00 ITEM claude:claude-haiku-5-5:low END rc=0 secs=350 dir=rv6-claude-haiku-low/reviewer
+2026-10-14T19:05:50+08:00 ITEM claude:claude-haiku-5-5:low RECORDED rc=0 event="event_id":284 summary={"corpus_pass":"42/42","false_pass_critical":0,"specificity":"1/38","repeated_trials":2} failed low err=
+2026-10-14T19:05:50+08:00 CHAIN haiku DONE

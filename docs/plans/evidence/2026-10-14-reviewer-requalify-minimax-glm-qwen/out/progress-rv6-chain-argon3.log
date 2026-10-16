@@ -1,0 +1,13 @@
+2026-10-14T20:06:44+08:00 ITEM argon:low START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T20:11:32+08:00 ITEM argon:low END rc=0 secs=288 dir=rv6-argon-reviewer-low
+2026-10-14T20:11:32+08:00 ITEM argon:low transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T20:11:32+08:00 ITEM argon:low START sitting=2 generator=reviewer-metamorphic-v6
+2026-10-14T20:12:26+08:00 ITEM argon:low END rc=0 secs=54 dir=rv6-argon-reviewer-low
+2026-10-14T20:12:26+08:00 ITEM argon:low transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T20:12:26+08:00 ITEM argon:low START sitting=3 generator=reviewer-metamorphic-v6
+2026-10-14T20:28:57+08:00 ITEM argon:low END rc=0 secs=991 dir=rv6-argon-reviewer-low
+2026-10-14T20:28:58+08:00 ITEM argon:low RECORDED rc=0 event="event_id":292 summary={"corpus_pass":"42/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} qualified low err=
+2026-10-14T20:28:58+08:00 ITEM argon:high START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T21:22:49+08:00 ITEM argon:high END rc=0 secs=3231 dir=rv6-argon-reviewer-high
+2026-10-14T21:22:49+08:00 ITEM argon:high RECORDED rc=0 event="event_id":298 summary={"corpus_pass":"42/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} qualified high err=
+2026-10-14T21:22:49+08:00 CHAIN argon3 DONE

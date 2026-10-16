@@ -1,0 +1,6 @@
+2026-10-14T14:01:09+08:00 lane=kimi28 role=reviewer START model=kimi-code/kimi-for-coding model_version=kimi-for-coding:K2.8-Preview version_source=operator-asserted dry=1
+2026-10-14T14:01:12+08:00 lane=kimi28 role=reviewer END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1
+2026-10-14T15:54:28+08:00 lane=kimi28 role=reviewer START model=kimi-code/kimi-for-coding model_version=kimi-for-coding:K2.8-Preview version_source=operator-asserted dry=1
+2026-10-14T15:54:30+08:00 lane=kimi28 role=reviewer END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1

@@ -1,0 +1,1 @@
+{"engine":"Qwen3.8-Max","model":"Qwen3.8-Max","runner":"qoderclicn","role":"verification_author","outcome":"transport_fail","reason":"transport failure on values_case_id_04cc1238f0: case broker failed: provider_process_failed — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

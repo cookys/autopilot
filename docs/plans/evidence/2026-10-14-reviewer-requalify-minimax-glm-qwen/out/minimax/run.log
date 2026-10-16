@@ -1,0 +1,4 @@
+2026-10-14T12:40:43+08:00 runtime probe: requested=MiniMax-M3 resolved=MiniMax-M3
+2026-10-14T12:40:43+08:00 lane=minimax START model=MiniMax-M3 model_version=MiniMax-M3 version_source=runtime dry=0
+2026-10-14T12:45:36+08:00 lane=minimax END rc=1 (written by operator: cell.sh was rewritten mid-run, its own tail never executed; rc=1 from failed verdict in stdout.json)
+rc=1

@@ -1,0 +1,3 @@
+2026-10-14T12:43:11+08:00 lane=kimi START model=kimi-code/k3 model_version=kimi-code-k3 version_source=operator-asserted dry=0
+2026-10-14T12:43:16+08:00 lane=kimi END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=1

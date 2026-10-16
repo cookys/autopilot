@@ -1,0 +1,4 @@
+2026-10-14T12:40:43+08:00 runtime probe: requested=glm-5.3 resolved=glm-5.3
+2026-10-14T12:40:43+08:00 lane=glm START model=glm-5.3 model_version=glm-5.3 version_source=runtime dry=0
+2026-10-14T13:07:48+08:00 lane=glm END rc=1 (written by operator: cell.sh rewritten mid-run, tail never executed; rc=1 from failed verdict in stdout.json)
+rc=1

@@ -1,0 +1,19 @@
+2026-10-14T18:52:59+08:00 ITEM argon:low START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T19:01:15+08:00 ITEM argon:low END rc=0 secs=496 dir=rv6-argon-reviewer-low
+2026-10-14T19:01:15+08:00 ITEM argon:low transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:01:15+08:00 ITEM argon:low START sitting=2 generator=reviewer-metamorphic-v6
+2026-10-14T19:05:43+08:00 ITEM argon:low END rc=0 secs=268 dir=rv6-argon-reviewer-low
+2026-10-14T19:05:43+08:00 ITEM argon:low transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:05:43+08:00 ITEM argon:low START sitting=3 generator=reviewer-metamorphic-v6
+2026-10-14T19:08:04+08:00 ITEM argon:low END rc=0 secs=141 dir=rv6-argon-reviewer-low
+2026-10-14T19:08:04+08:00 ITEM argon:low RECORDED rc=1 event= summary={} transport_fail undefined err=ERROR: missing required field(s): engine, runner, family, role, model_version, version_source, corpus_version, harness_version, runner_version, prompt_config_hash, date, quality, capability_score, cos
+2026-10-14T19:08:04+08:00 ITEM argon:high START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T19:08:34+08:00 ITEM argon:high END rc=0 secs=30 dir=rv6-argon-reviewer-high
+2026-10-14T19:08:34+08:00 ITEM argon:high transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:08:34+08:00 ITEM argon:high START sitting=2 generator=reviewer-metamorphic-v6
+2026-10-14T19:08:39+08:00 ITEM argon:high END rc=0 secs=5 dir=rv6-argon-reviewer-high
+2026-10-14T19:08:39+08:00 ITEM argon:high transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:08:39+08:00 ITEM argon:high START sitting=3 generator=reviewer-metamorphic-v6
+2026-10-14T19:08:44+08:00 ITEM argon:high END rc=0 secs=5 dir=rv6-argon-reviewer-high
+2026-10-14T19:08:44+08:00 ITEM argon:high RECORDED rc=1 event= summary={} transport_fail undefined err=ERROR: missing required field(s): engine, runner, family, role, model_version, version_source, corpus_version, harness_version, runner_version, prompt_config_hash, date, quality, capability_score, cos
+2026-10-14T19:08:44+08:00 CHAIN argon DONE

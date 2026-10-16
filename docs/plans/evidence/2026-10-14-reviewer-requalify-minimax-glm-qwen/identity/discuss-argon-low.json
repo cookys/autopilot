@@ -5,7 +5,7 @@
   "family": "google",
   "runner": "agy",
   "runner_version": "1.3.5",
-  "harness_version": "engine-qualify:3a9187f5",
+  "harness_version": "engine-qualify:67be7ffb",
   "effort": "low",
   "identity_resolved": true,
   "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",

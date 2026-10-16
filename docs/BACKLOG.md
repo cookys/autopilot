@@ -1050,7 +1050,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-30
 - **Origin**: self
 - **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
-- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。方案 C 已於 2026-10-13 寫進 CLAUDE.md；剩方案 B，等選取被證明不漏（見 Trigger）。
+- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。方案 C 已於 2026-10-13 寫進 CLAUDE.md；剩方案 B，見 Trigger。
 - **Trigger**: BL-0001 landed 2026-10-16 (quality gate runs affected-suites first) and is shown not to miss suites (then add option B on top of C)
 - **Effort**: M
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.

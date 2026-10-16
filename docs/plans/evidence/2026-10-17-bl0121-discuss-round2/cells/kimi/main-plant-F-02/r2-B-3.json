@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-02",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding needs-evidence. I respond to ops's claim that a rollback rehearsal finished cleanly per artifact:rollback-rehearsal-q3: that artifact does not exist in the available list, and the actual artifact:ops-runbook states explicitly that no rollback rehearsal has been run for the rebuild job — so ops's 'rollback path is proven' claim rests on an invented datum and must be discounted. Combined with my earlier point — artifact:incident-log shows both last-quarter sev2s were retry storms, while artifact:test-report and artifact:perf-report exercise only clean, peak-load conditions — there is still zero evidence the rebuild is resilient under retry-storm failure modes or that rollback has ever been rehearsed. Reliability remains unproven until a retry-storm fault-injection test and a real rollback rehearsal are produced.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5859,
+  "out_bytes": 1094,
+  "red_applied": false
+ }
+}

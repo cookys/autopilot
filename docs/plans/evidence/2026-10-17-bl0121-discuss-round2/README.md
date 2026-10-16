@@ -107,3 +107,28 @@ Coordinator rulings, made after seeing the pilot and before any main-campaign ce
 2. **Sonnet red arm**: no case swapping (to avoid tuning cases after seeing results). Pre-registered: if sonnet's red does not sit at least 3 below B, sonnet is UNINFORMATIVE on whether the rule text matters (the instrument cannot tell), but its other gates (B over A, control harm, validator pass rate, cost) are judged and reported as usual. Overall SHIP requires: kimi passes every gate including red, and sonnet passes every gate except red; a sonnet red failure is stated in the conclusion. If kimi's red is also invalid the whole instrument is invalid: stop, no rerun until it passes.
 
 `prereg.json` is re-hashed in the same commit.
+
+## Results
+
+Run 2026-10-17, one pass, no cell re-run, 0 infra_fail, 156 rail calls (78 per seat). Raw cells under `cells/` (`cells/score.json` is the scorer output). Cost: about 250k tokens by the byte proxy across both seats, a few USD at most (cap 40 USD not approached). Reproduction of the exact cells needs the implementation at commit `32716fef4` (the second-turn prompt and validator); that code is reverted on this branch (see Decision).
+
+| Gate | sonnet | kimi |
+|---|---|---|
+| planted / control cases selected | 8 / 4 | 8 / 4 |
+| A catches (by construction) | 0 | 0 |
+| B catches (cases, majority of 3 reps) | 6 | 8 |
+| G1 B - A >= 3 | 6, pass | 8, pass |
+| control harm cases (<= 1) | 0, pass | 0, pass |
+| validator pass rate (>= 0.90) | 1.00 (36/36), pass | 1.00 (36/36), pass |
+| red catches | 7 | 2 |
+| G4 B - red >= 3 | -1, fails: UNINFORMATIVE (Amendment 3) | 6, pass |
+| G5 cost, B round-two / A proxy <= 1.0 | 1.84, FAIL | 1.80, FAIL |
+| repeat rate (claim_vector equal to round one) | 1.00 | 1.00 |
+| mean position Jaccard vs round one | 0.29 | 0.26 |
+| seat verdict | NOT-SHIP | NOT-SHIP |
+
+**Overall: NOT-SHIP.** The only failing gate for both seats is cost: a second turn costs about 1.8x the first turn (its prompt carries the whole transcript plus the seat's own turn), so B's total is about 2.8x A, above the registered 2x. Effect gates pass: kimi catches all 8 planted errors with the production prompt and 2 with the broken prompt (instrument valid for kimi); sonnet catches 6 of 8 with the production prompt but 7 of 8 with the broken one, so for sonnet the rule text is not shown to matter (a strong reader flags the contradiction either way). No control case was harmed (hold rate 100%: every second turn kept the first-turn claim vector).
+
+## Decision
+
+NOT-SHIP is recorded. The production prompt, `think-tank` Step 3.5 text, the reference text and their tests/mirror are reverted to the `develop` versions in the commit that follows this one; this evidence stays. `bind-gate.js` was not run (only SHIP binds). BL-0121 stays open with the result in its Context.

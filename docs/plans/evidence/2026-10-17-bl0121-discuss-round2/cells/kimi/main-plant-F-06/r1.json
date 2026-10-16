@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-06",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-06-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Green test and perf numbers (412/412 passing, 87% coverage, p99 in budget) show the change itself is healthy, but the service's reliability history is the weak link: two sev2 retry-storm incidents last quarter mean any new code path touching flag evaluation could interact with retry behavior that current tests demonstrably did not catch. Before the reliability axis can support the change, we need evidence the new logic is exercised under retry/failure-injection conditions, not just steady-state load.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3309,
+  "out_bytes": 741,
+  "red_applied": false
+ }
+}

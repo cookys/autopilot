@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "The geocoding proxy is already outside its reliability target: the 30-day error rate is 3.2% against a 1% SLO, with two sev2 incidents. Passing tests (412 passed, 0 failed) and a p99 within budget at peak load show the change works functionally and under load. They do not show that it lowers the error rate or avoids adding to it. Nothing in the artifacts links the change to the causes of the recent incidents. Before the timing question is settled, the debate needs evidence on two points: whether the change touches the failure modes behind the sev2s, and what error-budget headroom remains. The runbook documents deploy and rollback steps, which limits the blast radius but does not address the existing SLO breach.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3208,
+  "out_bytes": 1017,
+  "red_applied": false
+ }
+}

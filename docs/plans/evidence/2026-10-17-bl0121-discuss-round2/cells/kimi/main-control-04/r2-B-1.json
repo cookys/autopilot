@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-04",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Product's claim that reliability is settled because nobody else sees a problem is not supported by the artifacts: artifact:incident-log shows a 2.6% 30-day error rate against a 0.5% SLO plus two sev2 incidents, while artifact:test-report only shows 412 passed / 0 failed / 87% coverage and artifact:perf-report shows p99 within budget. Those green signals do not explain or reduce the active SLO breach, so this axis remains opposed pending evidence that incident drivers are understood and error budget is restored.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5882,
+  "out_bytes": 756,
+  "red_applied": false
+ }
+}

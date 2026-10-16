@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-06",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-06-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "My reliability position is unchanged. The perf report shows peak CPU at 93% against a 70% budget. That conflicts with the 55% figure cited by qa on the risk axis, and the perf report itself is the artifact both of us cite, so that discrepancy needs resolving before the 'risk is contained' reading can be relied on. The incident log shows two sev2 incidents last quarter, both traced to retry storms, and a job near CPU saturation is where retries pile up and cascade. The test report (412 passed, 0 failed, 87% coverage) supports functional correctness but does not show retry or backoff behavior under peak load. The cost sheet and runbook speak to cost and operability, not to retry-storm resilience. Still missing: a peak-load test showing retries stay bounded, CPU back within budget or the overage explicitly accepted, and confirmation that last quarter's retry-storm root causes are fixed or capped.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5356,
+  "out_bytes": 1180,
+  "red_applied": true
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-02",
+ "arm": "red",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Tests and perf look clean, but both of last quarter's sev2 incidents were retry storms, and nothing in artifact:test-report or artifact:perf-report shows the rebuild was exercised under retry-storm conditions or changes retry behavior. Reliability confidence still needs targeted failure-injection or load evidence.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 4878,
+  "out_bytes": 551,
+  "red_applied": true
+ }
+}

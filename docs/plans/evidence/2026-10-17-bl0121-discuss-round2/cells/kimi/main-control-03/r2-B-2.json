@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-03",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier position, and I specifically answer the product role's claim that reliability can be treated as settled because 'nobody else sees a problem': that is an argument from silence, not evidence, and it is directly contradicted by artifact:incident-log, which shows a 3.2% 30-day error rate against a 1% SLO plus two sev2 incidents in the same window. No new reliability evidence has entered the debate since my last turn — qa cited artifact:test-report (412 passed, 0 failed, 87% coverage) and ops cited artifact:ops-runbook, but neither measures live production error budget; a clean test suite says nothing about the observed 3.2% in-production failure rate. I also note a gap: there is no artifact showing any remediation or a post-incident error-rate trend demonstrating the service has returned to SLO, so the baseline instability I flagged is unresolved. Until that error budget recovers or a rollback-attributable root cause is documented, changing the proxy adds regression surface to a system already 3x over its SLO.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5893,
+  "out_bytes": 1258,
+  "red_applied": false
+ }
+}

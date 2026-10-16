@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-05",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-05-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability evidence has a gap. The last quarter had two sev2 incidents, both traced to retry storms, and the fan-out worker is the kind of component where that failure mode recurs. The passing tests (412 passed, 87% coverage) and the p99 result at peak load show correctness and steady-state capacity. They do not show how the worker behaves when downstream dependencies degrade and retries amplify. The runbook documents deploy and rollback steps, but no chaos experiment has been run against the worker. So the retry-storm resilience of this change is unverified. Before this goes out, I would want evidence that the change does not worsen retry amplification. Examples: a fault-injection or load test with a degraded downstream, or a review showing that retry backoff, jitter and caps are unchanged or improved. This is a request for specific evidence, not a judgment on the change itself.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3348,
+  "out_bytes": 1152,
+  "red_applied": false
+ }
+}

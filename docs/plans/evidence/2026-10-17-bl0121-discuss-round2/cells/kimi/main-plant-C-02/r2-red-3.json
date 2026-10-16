@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-02",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier position: on the reliability axis the evidence still points against shipping this week. artifact:perf-report measures peak_memory at 740MB against a 512MB budget — a 44% overage under load — and that resource pressure directly amplifies the retry-storm failure mode behind last quarter's two sev2 incidents (artifact:incident-log). The 412 passing tests and 87% coverage (artifact:test-report) establish functional correctness but do not exercise memory headroom at peak, so the reliability concern remains unresolved until the overage is explained, re-measured, or fixed.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5116,
+  "out_bytes": 834,
+  "red_applied": true
+ }
+}

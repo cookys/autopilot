@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-03",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I am holding my earlier position. I am answering qa's claim on axis:risk that run_time is 45s, comfortably inside the 60s budget. The only perf datum in the artifact list is artifact:perf-report, which records 118s at peak load against the 60s budget. The 45s figure does not appear in that artifact or anywhere else in the list, so qa's conclusion rests on an unsourced number, and the cited artifact contradicts it. If 45s comes from a non-peak run, that is a different condition from the one that drives retry storms. I also note a gap in ops' operability claim. The text of artifact:ops-runbook only says it covers deploy and rollback steps. It says nothing about retry or timeout settings, so it does not show that a 118s run is safe to operate. Rollback does not prevent a retry storm already in progress, and artifact:incident-log shows two sev2 incidents last quarter, both retry storms. I agree with product that cost is within the 5% ceiling, but cost does not bear on this axis. What would settle it: retry and timeout configuration checked against 118s, a peak-load test showing bounded retries, or a documented waiver or revised budget for the 60s target. Until then the reliability concern stays open.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6174,
+  "out_bytes": 1489,
+  "red_applied": false
+ }
+}

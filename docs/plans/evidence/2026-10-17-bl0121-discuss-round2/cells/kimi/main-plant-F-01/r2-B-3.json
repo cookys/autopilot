@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-01",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding needs-evidence. I respond to ops, who claimed the rollback path is proven by 'artifact:failover-drill-2026-09': that artifact does not exist in the artifact list, and the actual runbook evidence (artifact:ops-runbook) states no failover drill has been executed — the last drill is still marked planned. So the claimed clean drill is an unsupported datum, not evidence, and the ops 'proven rollback' claim must be discounted. Nothing new has appeared to address the gap from my earlier turn: artifact:test-report (412 passed, 0 failed, 87% coverage) and artifact:perf-report (p99 in budget at peak load) still do not exercise retry-storm conditions, while artifact:incident-log records two sev2 incidents last quarter traced to exactly that failure mode. Reliability evidence for the specific risk this change touches remains absent, so needs-evidence stands.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6122,
+  "out_bytes": 1127,
+  "red_applied": false
+ }
+}

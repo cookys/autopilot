@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-06",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-06-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On the reliability axis, the evidence points against proceeding this week: peak CPU measured 93% at peak load against a 70% budget leaves almost no headroom, and last quarter's two sev2 incidents were both traced to retry storms — a failure mode that high CPU saturation tends to amplify. The green test report does not address these load conditions, so the reliability picture remains unresolved.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3232,
+  "out_bytes": 639,
+  "red_applied": false
+ }
+}

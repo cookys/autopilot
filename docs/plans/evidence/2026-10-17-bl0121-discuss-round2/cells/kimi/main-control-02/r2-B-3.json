@@ -1,0 +1,34 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-02",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier position and answer product's claim that 'on reliability, nobody else sees a problem, so I would treat it as settled.' That is directly contradicted by artifact:incident-log, which product's turn never addresses: a 1.8% 30-day error rate against a 0.3% SLO with two sev2 incidents means the error budget is already exhausted before this change lands. QA's artifact:test-report (412 passed, 0 failed) and the artifact:perf-report (p99 within budget) validate the change in isolation, not the live service it will deploy into; ops's artifact:ops-runbook covers rollback mechanics but rollback does not restore a burned error budget or resolve attribution ambiguity during an active SLO breach. I also flag an evidence gap: no artifact in the list shows post-incident remediation status, error-budget recovery, or a current-period error rate trending back toward the 0.3% SLO — the transcript's 'reliability is settled' framing rests on the absence of such data, not on its presence. Until the incident log shows recovery or a new artifact demonstrates it, the reliability axis remains opposed to absorbing new change this week.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6077,
+  "out_bytes": 1408,
+  "red_applied": false
+ }
+}

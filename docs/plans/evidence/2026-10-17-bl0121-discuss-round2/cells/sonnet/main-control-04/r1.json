@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability is the weak axis. The incident log shows a 30-day error rate of 2.6% against a 0.5% SLO, roughly 5x over budget, plus two sev2 incidents. Passing tests (412 passed, 0 failed, 87% coverage) and p99 within budget at peak load do not offset an SLO breach on the live system. It is also unclear whether the incidents come from the pricing refresh path or from the surrounding system. I would want that attribution, and a root-cause and remediation status for the two sev2s, before treating reliability as acceptable. The runbook's documented rollback lowers recovery cost but does not address the existing error rate.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3210,
+  "out_bytes": 922,
+  "red_applied": false
+ }
+}

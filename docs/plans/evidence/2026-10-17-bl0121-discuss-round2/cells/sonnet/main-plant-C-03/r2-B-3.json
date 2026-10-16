@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-03",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. I am answering qa's claim on axis:risk that run_time is 45s, comfortably inside the 60s budget, citing artifact:perf-report. That figure does not appear in the artifact list. The text of artifact:perf-report records 118s at peak load against the 60s budget, so qa's 45s is either an unlisted measurement under different conditions or a misread, and it cannot be used to call the risk contained. If the 45s is a non-peak figure, it is not the number that matters for retry behavior. I also looked at ops's claim that operations can run this, which rests on artifact:ops-runbook. As listed, that runbook documents deploy and rollback steps only. Nothing in its text covers retry or timeout settings relative to the 118s run time, so it shows the change can be rolled back, not that a retry storm will be avoided. Rollback after a sev2 is not the same as preventing one, and artifact:incident-log shows two such incidents last quarter. The cost point from product (3% against a 5% ceiling in artifact:cost-sheet) is uncontested but does not touch reliability. My needs-evidence ask stands: retry and timeout configuration checked against 118s, a load test showing bounded retries, or an explicit waiver or revised budget. artifact:test-report (412 passed, 87% coverage) does not offset this, because it contains no load-behavior data.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6174,
+  "out_bytes": 1656,
+  "red_applied": false
+ }
+}

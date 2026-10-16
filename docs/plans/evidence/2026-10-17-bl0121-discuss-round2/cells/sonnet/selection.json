@@ -1,0 +1,44 @@
+{
+ "plants": [
+  "main-plant-C-01",
+  "main-plant-F-02",
+  "main-plant-C-02",
+  "main-plant-C-03",
+  "main-plant-F-04",
+  "main-plant-C-04",
+  "main-plant-C-05",
+  "main-plant-C-06"
+ ],
+ "controls": [
+  "main-control-01",
+  "main-control-02",
+  "main-control-03",
+  "main-control-04"
+ ],
+ "excluded": [
+  {
+   "case_id": "main-plant-F-01",
+   "why": "round1_already_caught_or_surplus"
+  },
+  {
+   "case_id": "main-plant-F-03",
+   "why": "round1_already_caught_or_surplus"
+  },
+  {
+   "case_id": "main-plant-F-05",
+   "why": "round1_already_caught_or_surplus"
+  },
+  {
+   "case_id": "main-plant-F-06",
+   "why": "round1_already_caught_or_surplus"
+  },
+  {
+   "case_id": "main-control-05",
+   "why": "control_round1_not_correct_token"
+  },
+  {
+   "case_id": "main-control-06",
+   "why": "control_round1_not_correct_token"
+  }
+ ]
+}

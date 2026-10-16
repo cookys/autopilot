@@ -1,0 +1,31 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-01",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position with new corroboration: answering the ops role's claim that a failover drill proves the rollback path — the cited artifact:failover-drill-2026-09 does not appear in the artifact list, and the actual artifact:ops-runbook states no failover drill has been executed, with the last drill still marked planned. So the rollback claim rests on a nonexistent artifact and is contradicted by the runbook. Combined with artifact:incident-log's two sev2 retry-storm incidents, reliability evidence for retry-storm behavior remains outstanding.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6122,
+  "out_bytes": 829,
+  "red_applied": false
+ }
+}

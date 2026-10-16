@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-04",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position, now with added force: ops claims the rollback path is proven via artifact:restore-test-2026-08, but that artifact does not exist in the list — the only ops artifact present, artifact:ops-runbook, states a restore has never been tested. So the claimed safety net for a retry-storm regression is unproven, and the incident log's two sev2 retry storms remain unaddressed by the green test report or perf report. Evidence of retry behavior under downstream failure is still required before the reliability question can move.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6018,
+  "out_bytes": 787,
+  "red_applied": false
+ }
+}

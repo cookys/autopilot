@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-06",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-06-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "The test and perf reports are clean (412 passed, 0 failed, p99 within budget at peak), but they don't cover the failure mode that actually hurt us. The incident log shows two sev2s last quarter, both from retry storms, and nothing in the artifacts shows this change was exercised under retry-amplification or backoff conditions. Region evacuation is documented only on paper and has never been drilled, so the recovery path is unverified. Before reliability can be called supportive, I'd want evidence that the change was load-tested with retry-storm scenarios (or that it doesn't touch retry behavior) and that a region-evacuation drill or an equivalent rollback rehearsal has been run.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3309,
+  "out_bytes": 946,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-04",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position. I am answering product's claim that reliability is settled because nobody else sees a problem. No one else is on the reliability axis, so silence is not evidence. Product's own anchor, artifact:cost-sheet, covers only the 3% vs 5% budget and says nothing about error rate. artifact:incident-log is the only artifact that measures live reliability, and it shows a 30-day error rate of 2.6% against a 0.5% SLO plus two sev2 incidents. I also answer qa's claim that risk is contained. artifact:test-report (412 passed, 0 failed) measures pre-release correctness, not the live error budget, so it cannot offset an SLO breach. One point is new since my last turn: the incident log is titled as the log for the pricing refresh itself. That makes it more likely the errors are attributable to this change, but the artifact does not break the 2.6% down by path, so attribution is still unproven. Gaps: the artifact list contains no root-cause or remediation status for the two sev2s, no error-rate split between the refresh path and the rest of the system, and no projected error rate after the change. Ops's artifact:ops-runbook shows rollback is documented, which lowers recovery cost but does not reduce the current error rate. Those three items are what would move me off this stance.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:cost-sheet",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6212,
+  "out_bytes": 1605,
+  "red_applied": false
+ }
+}

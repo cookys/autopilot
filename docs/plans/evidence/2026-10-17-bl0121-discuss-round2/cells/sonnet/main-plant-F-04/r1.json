@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability evidence is incomplete. The test report (412 passed, 0 failed, 87% coverage) and the perf report (p99 within budget at peak) look healthy. But the incident log shows two sev2 incidents last quarter, both caused by retry storms, and nothing provided shows that the change was tested under retry or failure-amplification conditions. Passing tests and a p99 within budget at peak do not show how the service behaves when clients retry aggressively. The runbook documents deploy and rollback, but nightly backups have never had a restore tested, so the recovery path for a bad export run is unproven. Before the reliability case can be called sound, I would want (1) a retry-storm or fault-injection test result for this change, and (2) one successful restore drill from the nightly backup. Both are small, bounded items that could plausibly be done this week.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3314,
+  "out_bytes": 1127,
+  "red_applied": false
+ }
+}

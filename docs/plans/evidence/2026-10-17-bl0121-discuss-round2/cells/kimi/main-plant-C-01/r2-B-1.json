@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-01",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier reliability position, and I must directly dispute qa: qa claims artifact:perf-report shows p99_latency of 180ms inside the 250ms budget, but the artifact on record actually states p99_latency measured 410ms at peak load against a 250ms budget. Qa's 'risk is contained' conclusion rests on a number that does not exist in artifact:perf-report — if qa has a different measurement source, it is not in the artifact list, and I name that as a gap rather than accept it. No new evidence has appeared since my prior turn: artifact:perf-report still shows 410ms (64% over budget) at peak, artifact:incident-log still records two sev2 retry-storm incidents, and artifact:test-report (412 passed, 87% coverage) still demonstrates only functional correctness, not behavior under load. Until the latency regression is understood or mitigated, the reliability evidence on record continues to point against the change in its current state.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6095,
+  "out_bytes": 1186,
+  "red_applied": false
+ }
+}

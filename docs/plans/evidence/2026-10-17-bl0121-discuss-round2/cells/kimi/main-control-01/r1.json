@@ -1,0 +1,31 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "The order sync job's recent reliability record is weak: a 2.1% 30-day error rate against a 0.5% SLO plus two sev2 incidents means the service is already running well outside its reliability budget. Introducing a change this week into a job that is currently breaching its SLO compounds reliability exposure, regardless of how clean the test and perf reports look.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3204,
+  "out_bytes": 557,
+  "red_applied": false
+ }
+}

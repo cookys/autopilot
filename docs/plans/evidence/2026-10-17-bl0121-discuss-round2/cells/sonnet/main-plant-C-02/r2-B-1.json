@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-02",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. I am answering qa (axis:risk), who says peak_memory is 380MB and comfortably inside the 512MB budget. That figure does not match artifact:perf-report, which records 740MB at peak load against the 512MB budget, about 45% over. Either qa is quoting a different run or a non-peak number, or the claim is wrong. Until qa names the source of 380MB, the only measured value in the artifact list is 740MB, and the 'risk is contained' conclusion rests on a datum that is not in the record. I also answer ops (axis:operability). artifact:ops-runbook (Runbook v4) documents deploy and rollback steps. It does not document retry caps, backoff, or OOM-kill handling. Faster rollback shortens an incident but does not prevent the retry-storm pattern in artifact:incident-log, where two sev2 incidents last quarter were both retry storms. Product's cost point (artifact:cost-sheet, +3% against a 5% ceiling) is not in dispute, but it says nothing about reliability. The 412 passing tests and 87% coverage in artifact:test-report do not show behavior at peak load. Gap: no artifact in the list covers a load test at the production memory limit, retry backoff or cap configuration, or a revised memory budget. Any of these would change my view. Nothing new has appeared that contradicts the 740MB measurement, so my position stands.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6310,
+  "out_bytes": 1641,
+  "red_applied": false
+ }
+}

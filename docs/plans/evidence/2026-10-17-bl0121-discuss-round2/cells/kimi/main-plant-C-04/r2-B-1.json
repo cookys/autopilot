@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-04",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier position on the reliability axis: the change is not ready. I am answering qa, who claims error_rate is 0.4% per artifact:perf-report — but that artifact actually reports 3.4% at peak load against a 1% budget, and no artifact in the list contains a 0.4% figure, so qa's anchor does not support the claim; the discrepancy is a citation error, not new evidence. A new anchor I did not cite before strengthens the same axis: artifact:incident-log records two sev2 incidents last quarter, both traced to retry storms — exactly the kind of peak-load failure mode the perf report's 3.4% overshoot suggests is still live and that artifact:test-report (412 passed, 87% coverage) does not exercise. Until peak-load behavior is measured inside budget or a mitigation for retry storms is documented, the reliability evidence points against readiness.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5811,
+  "out_bytes": 1089,
+  "red_applied": false
+ }
+}

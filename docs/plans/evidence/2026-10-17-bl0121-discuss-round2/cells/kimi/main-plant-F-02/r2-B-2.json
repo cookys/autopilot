@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-02",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding needs-evidence, and responding directly to ops: ops anchors its 'rollback path is proven' claim on artifact:rollback-rehearsal-q3, but that artifact does not exist in the evidence list — the actual artifact:ops-runbook explicitly states no rollback rehearsal has been run for the rebuild job. Combined with artifact:incident-log (two sev2 retry storms last quarter) and the fact that neither artifact:test-report nor artifact:perf-report exercised the rebuild under retry-storm failure conditions, the reliability case still lacks targeted evidence; the apparent cross-role consensus rests partly on a phantom artifact, which reinforces rather than resolves the evidence gap.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5859,
+  "out_bytes": 944,
+  "red_applied": false
+ }
+}

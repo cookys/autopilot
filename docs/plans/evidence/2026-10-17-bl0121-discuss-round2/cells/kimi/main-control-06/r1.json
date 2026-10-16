@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-06",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-06-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On the reliability axis, the signal is negative: the service is running a 4% error rate against a 1% SLO with two sev2 incidents in the last 30 days (artifact:incident-log). Even with clean tests and passing perf (artifact:test-report, artifact:perf-report), shipping a change into a service already breaching its error budget adds reliability exposure at a moment when stability should take priority.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3212,
+  "out_bytes": 629,
+  "red_applied": false
+ }
+}

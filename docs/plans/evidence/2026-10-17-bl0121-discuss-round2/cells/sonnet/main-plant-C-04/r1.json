@@ -1,0 +1,31 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On reliability, the evidence points against the change as it stands. The perf report measures a 3.4% error rate at peak load, which is 3.4 times the 1% budget. The incident log shows two sev2 incidents last quarter, both traced to retry storms. Token refresh is the kind of path where failures trigger client retries, so an elevated error rate at peak is the same condition that produced those incidents. The passing functional tests (412 passed, 0 failed) do not measure behavior under load, so they don't offset the perf result. Unless the error rate is shown to be within budget, or the retry and backoff behavior is shown to be safe at that error rate, the reliability axis does not support this change.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3246,
+  "out_bytes": 912,
+  "red_applied": false
+ }
+}

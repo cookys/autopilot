@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-01",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier reliability position, and I must directly answer qa, who claims risk is contained because artifact:perf-report shows p99_latency of 180ms inside a 250ms budget. That figure does not exist in the record: artifact:perf-report actually reports p99_latency measured at 410ms at peak load against the 250ms budget — 64% over. Qa's containment argument is built on a misreading of the very artifact it cites, so it cannot offset the reliability evidence. Nor do product's cost headroom (artifact:cost-sheet) or ops's runbook (artifact:ops-runbook) address behavior under load; a documented rollback does not prevent the retry-storm failure mode that artifact:incident-log shows has already caused two sev2 incidents last quarter. New since my last turn: nothing — no new load test, mitigation, or root-cause analysis for the 410ms regression has appeared in the artifact list. The reliability evidence on record still points against shipping in the current state until the latency regression is understood or mitigated.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6095,
+  "out_bytes": 1275,
+  "red_applied": false
+ }
+}

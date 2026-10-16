@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-02",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position and add one point. The ops role says the rollback path is proven by artifact:rollback-rehearsal-q3, but that id is not in the artifact list, and the ops anchors array is empty. The one artifact that speaks to rehearsal, artifact:ops-runbook, says no rollback rehearsal has been run for the rebuild job. So the claim of zero data loss in a clean rehearsal has no support here. Either the missing artifact should be produced and checked, or the claim should be withdrawn. The qa role's 412 passed, 0 failed in artifact:test-report is real, but it does not show how the job behaves under retry storms. artifact:incident-log ties both sev2 incidents last quarter to retry storms. The perf result in artifact:perf-report covers p99 at peak load, not failure or retry behavior. Reliability evidence is still missing for retry-storm or failure-injection behavior of the rebuild job and for a timed, rehearsed rollback. I am not weighing cost or schedule.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6175,
+  "out_bytes": 1233,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-04",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position. Answering product: it calls reliability settled because nobody else raised a problem, but that is absence of objection, not evidence. artifact:incident-log is the only reliability datum in the record (2.6% 30-day error rate against a 0.5% SLO, about 5x over, plus two sev2 incidents), and product's cost-sheet anchor says nothing about it. Answering qa: artifact:test-report (412 passed, 0 failed, 87% coverage) shows the code behaves as tested, not that the live system meets its SLO; a clean pre-release suite and a breached production SLO can both be true. Answering ops: artifact:ops-runbook v4 covers deploy and rollback steps, which reduces recovery cost but does not lower the error rate or explain the sev2s. Nothing new has appeared since my last turn, so I have no basis to move. Gaps remain: no artifact attributes the incidents to the pricing refresh path versus the surrounding system, none gives root cause or remediation status for the two sev2s, and no artifact shows the error rate trend. Also, artifact:perf-report (p99 within budget at peak load) is a latency measure and does not speak to error rate.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6212,
+  "out_bytes": 1446,
+  "red_applied": false
+ }
+}

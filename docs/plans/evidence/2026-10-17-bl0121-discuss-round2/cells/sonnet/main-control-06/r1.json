@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-06",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-06-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability is the weak point. The 30-day error rate is 4% against a 1% SLO, with two sev2 incidents, so the service is already well outside its reliability budget before this change lands. The passing tests (412 passed, 0 failed) and the perf result (p99 within budget at peak) do not speak to the failure modes behind that error rate. Before this week's timing is treated as safe, we need evidence that the change does not worsen the error rate and ideally addresses the causes of the two sev2s: the incident root causes, whether the change touches those code paths, and an error-rate comparison on a canary or staged rollout. The runbook's documented rollback helps limit blast radius but does not substitute for that evidence.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3212,
+  "out_bytes": 1027,
+  "red_applied": false
+ }
+}

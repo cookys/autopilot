@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-05",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-05-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. I am answering the qa role's claim on axis:risk that cold_start is 600ms and comfortably inside the 800ms budget. The only perf artifact available, artifact:perf-report, says cold_start was measured at 1900ms at peak load against the 800ms budget. A 600ms figure appears nowhere in the artifact list. It may come from a non-peak run, but that is not stated, so it is an evidence gap and I do not accept it. Even if 600ms is real, it does not cancel the peak measurement, because peak is when the warmer matters and when retries are most likely. artifact:incident-log shows two sev2 retry-storm incidents last quarter, so a slow cold start at peak could amplify a known failure mode. I also note the ops role's point that artifact:ops-runbook documents deploy and rollback. Rollback lowers recovery cost, but the runbook as cited says nothing about retry or backoff behavior, so it does not prevent the failure. The product role's cost margin (+3% against a 5% ceiling, artifact:cost-sheet) is not in dispute and does not bear on reliability. artifact:test-report (412 passed, 87% coverage) shows functional correctness only and has no load or retry coverage. To move this axis I would need either the source and conditions of the 600ms figure, with a peak-load run within budget, or a documented waiver for the overage. I would also need evidence of retry and backoff behavior at peak load that rules out a repeat of the retry storms.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6517,
+  "out_bytes": 1759,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-05",
+ "arm": "red",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-05-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "My reliability position is unchanged. The other roles' points on cost, runbook coverage and risk do not address it. The perf report shows cold_start at 1900ms at peak load against an 800ms budget, about 2.4x over. The QA figure of 600ms has no stated load condition, so it does not contradict the peak measurement. The incident log shows two sev2 incidents last quarter, both from retry storms, and slow cold starts at peak can plausibly feed that failure mode. The test report (412 passed, 0 failed, 87% coverage) shows functional correctness but not behavior under peak load or retry pressure. The runbook's rollback lowers recovery cost but does not prevent the failure. Evidence that would move this axis: a peak-load test with cold_start within budget or a documented waiver for the overage, plus retry and backoff results under peak load that rule out a repeat of the retry-storm incidents.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5536,
+  "out_bytes": 1193,
+  "red_applied": true
+ }
+}

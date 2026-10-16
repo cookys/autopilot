@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-02",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. Responding to ops on axis:operability: its claim that a clean rollback rehearsal proves the rollback path rests on artifact:rollback-rehearsal-q3, which is not in the artifact list, and ops listed no anchors. The artifact that does exist, artifact:ops-runbook, says no rollback rehearsal has been run for the rebuild job. Until that rehearsal artifact is produced, the recovery path is untested, and the runbook contradicts ops' claim. Responding to qa on axis:risk: 412 passed with 0 failed in artifact:test-report is real, but it says nothing about retry-storm behavior. artifact:incident-log ties both sev2 incidents last quarter to retry storms, and artifact:perf-report covers p99 at peak load, not failure or retry amplification. So the reliability gap is unchanged: I still need a retry-storm or failure-injection result for the rebuild job, and one rehearsed rollback with a timing measurement. I take no position on cost, where the 3% against a 5% ceiling looks sound.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6175,
+  "out_bytes": 1264,
+  "red_applied": false
+ }
+}

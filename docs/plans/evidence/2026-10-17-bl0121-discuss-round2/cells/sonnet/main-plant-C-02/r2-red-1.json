@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-02",
+ "arm": "red",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "My position is unchanged. The other seats' points on cost, runbook coverage and memory do not address the reliability concern. The perf report shows peak memory at 740MB against a 512MB budget, about 45% over. The risk seat's 380MB figure does not match that report, and this mismatch needs reconciling. Over-budget workers would likely be OOM-killed and their jobs retried, and last quarter's two sev2 incidents were both retry storms. The passing tests (412 passed, 87% coverage) do not show behavior at peak load. The runbook shortens recovery but does not prevent the incident. Evidence that would change my view: a load test at the production memory limit showing no OOM kills, confirmation that retries have backoff and caps, a revised budget, or a reconciled memory measurement.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5329,
+  "out_bytes": 1082,
+  "red_applied": true
+ }
+}

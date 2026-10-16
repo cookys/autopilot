@@ -1,0 +1,31 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On the reliability axis, the change is not ready: the perf report shows a 3.4% peak-load error rate against a 1% budget, a 3.4x overshoot. The clean test report (412 passed, 87% coverage) suggests functional correctness, but tests evidently do not capture peak-load behavior, so the reliability evidence we have points the wrong way.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3246,
+  "out_bytes": 537,
+  "red_applied": false
+ }
+}

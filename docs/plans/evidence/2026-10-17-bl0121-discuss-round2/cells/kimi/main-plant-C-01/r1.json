@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On reliability grounds this change is not in a good place right now: the measured p99 latency of 410ms at peak load is 64% over the 250ms budget (artifact:perf-report), and the service's recent history includes two sev2 incidents caused by retry storms (artifact:incident-log) — exactly the failure mode that excess latency under load tends to aggravate. The green test suite (artifact:test-report) shows functional correctness but does not address behavior under load, so the reliability evidence on record points against shipping in the current state until the latency regression is understood or mitigated.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3215,
+  "out_bytes": 851,
+  "red_applied": false
+ }
+}

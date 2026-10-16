@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-01",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. Nothing new has appeared on reliability, so I am not changing it. I am answering product's claim that nobody else sees a reliability problem, so it can be treated as settled. Other roles not raising it is not evidence. Cost, operability and risk are separate axes, and none of their artifacts measures error behaviour. The only artifact that does is artifact:incident-log, which shows a 30-day error rate of 2.1% against a 0.5% SLO, with two sev2 incidents. That contradicts the idea that reliability is settled. I also answer qa's claim that risk is contained. artifact:test-report (412 passed, 0 failed, 87% coverage) shows functional correctness in a test environment. It does not show whether the failure modes behind the production error rate are exercised, and it says nothing about the sev2 root causes. Ops's artifact:ops-runbook documents rollback steps. It does not show that rollback has been exercised or how quickly it restores service, so it limits blast radius without addressing the underlying error rate. Gap: no artifact in the list gives the sev2 root causes, an attribution of the 2.1% to code paths this change touches, or any before/after error-rate expectation for the change. I will not assume any of these. Evidence needed: sev2 postmortems or root causes, and a breakdown of the 2.1% by failure path against the paths this change modifies.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6399,
+  "out_bytes": 1667,
+  "red_applied": false
+ }
+}

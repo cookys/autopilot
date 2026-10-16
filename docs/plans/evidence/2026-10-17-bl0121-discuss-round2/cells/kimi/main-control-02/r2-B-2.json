@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-02",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier position, and answering product's claim that on reliability 'nobody else sees a problem, so I would treat it as settled': that is factually wrong — the reliability concern was raised in this very transcript and is anchored in artifact:incident-log, which product did not address. The 30-day error rate of 1.8% against a 0.3% SLO plus two sev2 incidents means the service is already outside its error budget. I also answer qa: artifact:test-report (412 passed, 0 failed, 87% coverage) validates the change in isolation, not the health of the system receiving it — green tests do not erase an active SLO breach. No new artifact has appeared since my last turn that would change this: the runbook and perf report speak to operability and isolated performance, not to the live error budget. Shipping now compounds a degraded service and destroys attribution for any new errors.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6077,
+  "out_bytes": 1136,
+  "red_applied": false
+ }
+}

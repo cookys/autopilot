@@ -1,0 +1,36 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-06",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-06-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my reliability position, with one correction to my own earlier wording: 93% peak CPU against a 70% budget is a 23-point overage, not thin headroom. I am answering qa (axis:risk), who says peak_cpu is 55% and comfortably inside the 70% budget. That does not match artifact:perf-report, which records 93% at peak load. Unless a different measurement exists that is not in the artifact list, qa's 55% is unsupported and the risk-contained conclusion rests on it. I am also answering ops (axis:operability), who cites the runbook. artifact:ops-runbook covers deploy and rollback steps. It shows nothing on retry caps, backoff, or storm containment, and a documented rollback does not prevent a retry storm. It only helps after one has started. The two sev2 retry-storm incidents in artifact:incident-log, together with a job running over its CPU budget, remain the unaddressed combination. The 412 passing tests in artifact:test-report show functional correctness, not retry behavior under load. There is a gap on product's cost point too. artifact:cost-sheet shows +3% against a 5% ceiling, but nothing says whether that figure includes the capacity needed to bring CPU back within budget. Still missing from the artifact list: a peak-load test showing retries stay bounded, evidence that the retry-storm root causes are fixed or capped, and either a CPU figure back inside budget or an explicit acceptance of the overage.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:cost-sheet"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6337,
+  "out_bytes": 1746,
+  "red_applied": false
+ }
+}

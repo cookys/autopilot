@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-04",
+ "arm": "red",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Unchanged: green tests (412 passed, 87% coverage per artifact:test-report) and in-budget p99 (artifact:perf-report) are reassuring but silent on retry storms — the failure mode behind both sev2 incidents last quarter (artifact:incident-log). Reliability still needs direct evidence that retry behavior under downstream failure is not regressed before this change can be judged sound on this axis.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5037,
+  "out_bytes": 634,
+  "red_applied": true
+ }
+}

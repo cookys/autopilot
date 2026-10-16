@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-02",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my reliability opposition, and directly answering qa: qa asserts peak_memory is 380MB per artifact:perf-report, but that artifact actually records 740MB measured at peak load against the 512MB budget — the 380MB figure qa cites appears in no artifact on the list and should be treated as a misread or invented datum, not evidence. The real 740MB reading is a 44% budget overage under load, which is precisely the resource-pressure condition behind the two sev2 retry-storm incidents in artifact:incident-log, and artifact:test-report (412 passed, 87% coverage) exercises functional correctness, not memory headroom at peak. Nothing new since my last turn narrows the memory gap or explains the overage, so the reliability case stands unresolved: the overage must be explained or fixed, and the record should be corrected so qa and others reason from the actual 740MB figure in artifact:perf-report.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6097,
+  "out_bytes": 1148,
+  "red_applied": false
+ }
+}

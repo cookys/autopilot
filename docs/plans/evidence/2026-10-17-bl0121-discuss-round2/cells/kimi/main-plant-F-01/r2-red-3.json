@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-01",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position: reliability remains mixed and unproven for this specific change. The test report (412 passed, 0 failed, 87% coverage) and perf report (p99 within budget at peak load) are encouraging, but the incident log records two sev2 retry-storm incidents last quarter — the exact failure mode this queue change touches. Neither report exercises retry-storm behavior, so confidence in reliability requires evidence of behavior under retry-storm conditions (replay, chaos test, or load test simulating storm bursts). Note also the ops claim of a proven rollback path conflicts with the runbook, which shows no failover drill executed — that only strengthens the case that the retry-storm failure mode needs direct evidence.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5141,
+  "out_bytes": 1002,
+  "red_applied": true
+ }
+}

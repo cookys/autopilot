@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Green tests (412 passed, 87% coverage) and in-budget p99 look reassuring, but both sev2 incidents last quarter came from retry storms — a failure mode neither unit tests nor the perf report exercises. Before this change ships, we need evidence the retry-storm failure mode is not regressed (e.g., a chaos/load test of retry behavior under downstream failure), since the current artifacts cannot speak to it.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3314,
+  "out_bytes": 645,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-02",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "The 30-day error rate is 1.8% against a 0.3% SLO, six times over budget, with two sev2 incidents. The gateway is already out of SLO before this change lands. The passing tests (412/0, 87% coverage) and the p99 perf result show the change is functionally sound and fast at peak. Neither says anything about the production error rate, so they don't offset the incident history. What is missing is evidence that the change reduces the error rate or at least doesn't worsen it, plus the root causes of the two sev2s and whether this change touches those paths. The runbook's rollback steps limit the blast radius but don't fix a service that is already burning its error budget. Reliability is the weakest axis here, and the case stays open until that evidence exists.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3198,
+  "out_bytes": 1061,
+  "red_applied": false
+ }
+}

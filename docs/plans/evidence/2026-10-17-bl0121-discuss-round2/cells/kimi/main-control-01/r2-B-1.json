@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-01",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier position, and answering two roles directly. To product: the claim that 'nobody else sees a problem, so treat reliability as settled' is factually wrong — artifact:incident-log was cited in this same round showing a 2.1% 30-day error rate against a 0.5% SLO plus two sev2 incidents; silence from cost/ops/qa axes is not evidence of reliability, since none of their anchors measure it. To qa: artifact:test-report (412 passed, 0 failed) demonstrates the change passes its test suite, but says nothing about the job's live reliability state — a green test report does not retire an active SLO breach, and deploying into a service already running at 4x its error budget stacks change risk on top of unremediated exposure. Nothing new has appeared since my last turn to weaken that record, so opposes stands until the error rate is back within SLO or a reliability remediation plan is produced.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5811,
+  "out_bytes": 1129,
+  "red_applied": false
+ }
+}

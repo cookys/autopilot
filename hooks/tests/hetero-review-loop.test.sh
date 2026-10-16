@@ -828,7 +828,7 @@ node -e '
   const fs = require("fs"); const cp = process.argv[1], rp = process.argv[2];
   const chain = JSON.parse(fs.readFileSync(cp, "utf8")); chain[0].closed_findings = [{ id: "stale", closed_by_generation: 9 }];
   fs.writeFileSync(cp, JSON.stringify(chain, null, 2) + "\n");
-  const r = JSON.parse(fs.readFileSync(rp, "utf8")); r.chain = chain; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
+  const r = JSON.parse(fs.readFileSync(rp, "utf8")); r.chain = chain; r.closed_findings = [{ id: "stale", closed_by_generation: 9 }]; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
 ' "$LEDGER/review-p_fin7/chain.json" "$LEDGER/receipt-p_fin7.json"
 cp "$LEDGER/review-p_fin7/g1/findings.json" "$TEST_TMP/fin7_g1_findings.bak"
 echo ' ' >> "$LEDGER/review-p_fin7/g1/findings.json"
@@ -841,6 +841,7 @@ FIN7R_OUT=$(node "$SCRIPT" refinalize --ledger "$LEDGER" --phase p_fin7 --genera
 assert_exit_code "$FIN7R_RC" "0" "case 7r (refin): refinalize on intact evidence exits 0"
 assert_not_contains "$(cat "$LEDGER/review-p_fin7/chain.json")" '"stale"' "case 7r (refin): stale stamp discarded from chain.json"
 assert_not_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"stale"' "case 7r (refin): stale stamp discarded from receipt chain"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7.json")" '"id": "finding_g1_crit"' "case 7r (refin): top-level receipt closed_findings re-derived (stale value replaced)"
 assert_contains "$(cat "$LEDGER/review-p_fin7/chain.json")" '"closed_by_generation": 2' "case 7r (refin): true closure re-stamped from evidence"
 
 # Case 7a (finalize): a misspelled disposition value makes finalize exit 1

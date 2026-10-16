@@ -1718,6 +1718,8 @@ async function handleRefinalize(flags) {
   receipt.chain = chain;
   receipt.verdict = derived.verdict;
   receipt.open_findings = derived.open_findings;
+  // A top-level closed_findings (older writers) is derived output too; leaving it would keep a stale value the checker compares.
+  if (receipt.closed_findings !== undefined) receipt.closed_findings = derived.closed_findings;
   receipt.written_at = new Date().toISOString();
   writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
   console.log(JSON.stringify({ phase, generation, verdict: derived.verdict, open_findings_count: derived.open_findings.length, refinalized: true }, null, 2));

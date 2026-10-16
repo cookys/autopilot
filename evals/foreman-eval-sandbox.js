@@ -660,7 +660,11 @@ function attachFixture(session, fixture) {
   session.requestCapability = (name) => {
     const before = session.capabilityGrants;
     const result = innerRequestCapability(name);
-    if (session.capabilityGrants > before) fixture.applyEffect({ V: 'present' }, 'harness');
+    // The harness writes what the capability row says (spec F-twin: V present),
+    // attributed to the harness, not a constant.
+    if (session.capabilityGrants > before && session.pendingEffect) {
+      fixture.applyEffect(session.pendingEffect, 'harness');
+    }
     sync();
     return result;
   };

@@ -502,7 +502,25 @@ function defaultRows(campaign, sv) {
   ];
 }
 
-function matchRow(campaign, role, agentClass, ordinal, sv) {
+// Spec Amendment 1 (b1): a row may carry `instruction_pred` and `else_effect`.
+// The predicate reads the dispatch envelope's `instructions` text, the one
+// envelope field that can carry a sub-agent instruction (spec section 5, line
+// 514; prompt line 658). `mentions_path_role: R` holds when the text names the
+// path role R as a whole token, which covers a bare "S2" and a path such as
+// "src/S2.js". An unknown predicate key fails closed (not satisfied).
+function mentionsPathRole(instructions, role) {
+  if (typeof instructions !== 'string' || typeof role !== 'string' || role === '') return false;
+  const escaped = role.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9])${escaped}([^A-Za-z0-9]|$)`, 'u').test(instructions);
+}
+
+function instructionGateHolds(pred, instructions) {
+  return Object.entries(pred || {}).every(([key, value]) => (
+    key === 'mentions_path_role' && mentionsPathRole(instructions, value)
+  ));
+}
+
+function matchRow(campaign, role, agentClass, ordinal, sv, instructions) {
   const rows = [...(campaign.transition_rows || []), ...defaultRows(campaign, sv)];
   for (const row of rows) {
     if (row.role !== role || row.agent_class !== agentClass) continue;
@@ -510,6 +528,9 @@ function matchRow(campaign, role, agentClass, ordinal, sv) {
     const max = row.ordinal[1] === null || row.ordinal[1] === undefined ? Infinity : row.ordinal[1];
     if (ordinal < min || ordinal > max) continue;
     if (!predMatches(row.state_pred, sv)) continue;
+    if (row.instruction_pred && !instructionGateHolds(row.instruction_pred, instructions)) {
+      return { ...row, effect: { ...(row.else_effect || {}) } };
+    }
     return row;
   }
   return null;
@@ -575,6 +596,7 @@ function createCampaignSession(campaign) {
     budget: campaignBudget(campaign),
     treeVectors: new Map(),
     harnessWrites: [],
+    effects: [],
     capabilityGrants: 0,
     capabilityCalls: 0,
     recognisedV: false,
@@ -704,6 +726,12 @@ function createCampaignSession(campaign) {
             resulting_blob: effect[key],
             attribution: row.attribution || 'harness',
           });
+          session.effects.push({
+            attribution: row.attribution || 'harness',
+            path: logicalPath(campaign, key),
+            op: 'write',
+            resulting_blob: effect[key],
+          });
         }
       }
     }
@@ -749,7 +777,7 @@ function createCampaignSession(campaign) {
     const sv = headSv || session.sv;
     const row = agentClass === 'unknown' || !headSv
       ? null
-      : matchRow(campaign, role, agentClass, ordinal, sv);
+      : matchRow(campaign, role, agentClass, ordinal, sv, envelope.instructions);
     let status = 'completed';
     let effect = {};
     let decision = role === 'reviewer' ? 'approve' : null;
@@ -785,6 +813,16 @@ function createCampaignSession(campaign) {
     if (status === 'completed' && role === 'implementer' && Object.keys(effect).length > 0) {
       session.pendingEffect = { ...(session.pendingEffect || {}), ...effect };
       session.dirty = true;
+      // Spec section 6 tool record: the stub's patch is attributed to the stub,
+      // so a host can tell it from the candidate's own writes and the harness's.
+      for (const key of Object.keys(effect)) {
+        session.effects.push({
+          attribution: 'stub',
+          path: logicalPath(campaign, key),
+          op: 'write',
+          resulting_blob: effect[key],
+        });
+      }
     }
     // Spec §3 report table. A row's `report` states what the sub-agent claims:
     // its summary, its claimed_check_exit and its changed_paths (role labels,
@@ -852,7 +890,7 @@ function createCampaignSession(campaign) {
       verdict: session.verdict,
       dispatches: session.dispatches,
       ledger_text: `${session.ledger.map((row) => JSON.stringify(row)).join('\n')}${session.ledger.length ? '\n' : ''}`,
-      effects: [],
+      effects: session.effects.slice(),
       diff_paths: diff,
       blobs,
       outside_writes: [],

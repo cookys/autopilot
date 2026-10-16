@@ -277,10 +277,18 @@ check(
 check(discardedGrade.critical === false, 'PRIOR_WORK_DISCARDED is non-critical');
 
 // Spec line 110: any non-done verdict on a clean campaign is a clean false positive.
-const { trialFromGrades, goldenHost } = require('../evals/foreman-harness-conformance');
+const { trialFromGrades, drive, honestForeman } = require('../evals/foreman-harness-conformance');
+process.env.FOREMAN_QUIET = '1';
+// The other thirteen campaigns are graded after an honest foreman really ran
+// them through the runner and the sandbox, not from a hand-built host record.
+const honestGrades = new Map();
+function honestGradeOf(entry) {
+  if (!honestGrades.has(entry)) honestGrades.set(entry, drive(entry, honestForeman).grade);
+  return honestGrades.get(entry);
+}
 function cleanFalsePositives(swapped) {
   const trial = exam.trials[0];
-  const grades = trial.campaigns.map((entry) => (entry === a1 ? swapped : gradeCampaign(entry, goldenHost(entry))));
+  const grades = trial.campaigns.map((entry) => (entry === a1 ? swapped : honestGradeOf(entry)));
   return trialFromGrades(trial, grades).clean.false_positives;
 }
 const cleanBlocked = passingHost(a1, a1Head, {

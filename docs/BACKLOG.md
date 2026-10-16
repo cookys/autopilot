@@ -34,11 +34,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 一個專案的工作要派到另一個專案的程式庫去做時，目前沒有規則說明該用哪個專案的工作樹、標記檔與交接文件。當初規劃工作樹位置規則時，刻意把這一項延後。 (draft)
 - **Impact**: 跨專案派工時各 session 可能各做各的、交接位置不一致；平常很少遇到。 (draft)
-- **Trigger**: a session in repo A dispatches a rail at repo B
+- **Trigger**: the first real cross-repo dispatch that goes wrong (worktree, marker or handoff location disagrees)
 - **Effort**: M
 - **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
-- **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
+- **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
 ### orchestrator-edit-gate stops gating the main checkout once the marker follows into a worktree
 - **Id**: BL-0005
@@ -142,7 +142,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: 2026-09-20 remote-branch triage (decision branch merged at 47b52eac; deliverable absent)
 - **Pointer**: docs/backlog/host-conformance-tool.md
-- **Context**: needs its own registered plan; the decision doc lists the six report sections.
+- **Context**: Owner 2026-10-17: stays approved, wait for the trigger. Needs its own registered plan; the decision doc lists the six report sections.
 
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
 - **Id**: BL-0015
@@ -334,24 +334,24 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: autopilot 的努力等級詞彙沒有「最低」一級，導致 muse-spark 這類貢獻者席位無法用最便宜的設定來考核。是否擴充詞彙要由董事會或擁有者決定。 (draft)
 - **Impact**: 便宜設定的席位無法被考核；影響範圍很小，屬選擇性改進。 (draft)
-- **Trigger**: a Board request to examine or route a seat at `minimal` (asked 2026-09-03 for opencode-go/muse-spark-1.3-contributor), or a second provider whose cheapest reasoning tier is below `low`.
+- **Trigger**: a second real need for a `minimal` effort tier appears (the muse-spark request of 2026-09-03 counts as the first)
 - **Effort**: L
 - **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
 - **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
-- **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
+- **Context**: Owner 2026-10-17: do not add `minimal` now; wait for a second need. `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
 
-### Contract-first escalation and local-repair gates — P6D incident follow-up
+### Dispatch justification check for acceptance-oracle tasks — P6D incident follow-up
 - **Id**: BL-0035
 - **Status**: open
 - **Since**: 2026-08-21
 - **Origin**: self
-- **Problem**: 為了處理 P6D 事故，已出貨一部分檢查（暫存區清單檢查、無狀態拒絕），但「派工理由檢查」那一段還沒做。需要擁有者批准後續專案，或把條目縮小到未出貨的部分。 (draft)
-- **Impact**: 事故類似的失誤仍可能發生在未涵蓋的那一段；已出貨部分擋住了最主要情況。 (draft)
-- **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy…
+- **Problem**: P6D 事故的後續只剩「派工理由檢查」尚未出貨：已有完整驗收依據的工作，派去重量級流程前要先說明理由。暫存區清單檢查與無狀態拒絕已出貨。
+- **Impact**: 沒有派工理由檢查時，簡單且驗收明確的工作仍可能被送進過重的流程；其餘兩段已擋住。
+- **Trigger**: an owner-approved project opens the dispatch-justification check; it must ship a planted negative case showing unjustified heavy dispatch for an acceptance-oracle task is blocked
 - **Effort**: L
 - **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md) (incl. Fable 5 judgment).
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
-- **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
+- **Context**: Owner 2026-10-17: narrowed to the unshipped dispatch-justification control, keep waiting. Origin: a bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Id**: BL-0037

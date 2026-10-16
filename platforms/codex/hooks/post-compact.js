@@ -7,10 +7,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const REQUIRED_D3_CLAIM_IDS = Object.freeze([
-  'cap-v1-430668690653dfaa807c370070e20db0cae56634bdbeb1af14ffadef7a72c992',
-  'cap-v1-9a47acdde2782ec994dab242cd49e89fd91e07119b192ffc79bfacfe380fe1d3',
-  'cap-v1-e29582334b4a6d781ab7afd726cc5e9e182ac557ef35df3cba9dd193c8215913',
-  'cap-v1-fc256b975399387ae0c903f2700c449dc90ea8949d9c669bab9523c28683931e',
+  'cap-v1-23e898c1ebe2e705d669981a2a10f4a4cc4cb1d5e639e640fdd35bf146d58a69',
+  'cap-v1-a8ccfc734ca9cdc0e7a872cbca1025c1fcbd1dcfbbe13aa4d926996938ecab56',
+  'cap-v1-b4af91cfbc2605dae6018b52b38eadc9d50dc215ba50a5bd9cf7038ef7390010',
+  'cap-v1-e0094d99a8a1ef117c6cb40b363a263db2f4b979cee900a1f16464c111c0868d',
 ]);
 const PAYLOAD_KEYS = Object.freeze([
   'cwd',

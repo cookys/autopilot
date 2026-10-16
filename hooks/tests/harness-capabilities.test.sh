@@ -596,6 +596,41 @@ OUT="$(node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_INPUT" --output "$CLAIMS_
 EXIT=$?
 assert_exit_code "$EXIT" 0 "capability claim generator accepts dual-evidence input"
 
+# BL-0048: claim identity names WHAT is claimed (capability + target tuple + assertion), never WHEN it was
+# observed. A pure observation refresh (timestamps, ttl, probe digests, build) must keep every claim_id.
+CLAIMS_REFRESH_INPUT="$TEST_TMP/platform-capability-probe-input-refreshed.json"
+CLAIMS_REFRESH_RECEIPT="$TEST_TMP/platform-capabilities-refreshed.json"
+CLAIMS_CHANGED_INPUT="$TEST_TMP/platform-capability-probe-input-changed.json"
+CLAIMS_CHANGED_RECEIPT="$TEST_TMP/platform-capabilities-changed.json"
+node - "$CLAIMS_INPUT" "$CLAIMS_REFRESH_INPUT" "$CLAIMS_CHANGED_INPUT" <<'NODE'
+const fs = require('fs');
+const [src, refreshed, changed] = process.argv.slice(2);
+const base = JSON.parse(fs.readFileSync(src, 'utf8'));
+const later = new Date(Date.now() + 60000).toISOString();
+const refresh = JSON.parse(JSON.stringify(base));
+for (const claim of refresh.claims) {
+  claim.live_evidence.observed_at = later;
+  claim.live_evidence.ttl_seconds = 7200;
+  claim.live_evidence.probe_output_sha256 = 'e'.repeat(64);
+  claim.official_contract.retrieved_at = later;
+  claim.official_contract.document_sha256 = 'd'.repeat(64);
+}
+fs.writeFileSync(refreshed, JSON.stringify(refresh));
+const alt = JSON.parse(JSON.stringify(base));
+alt.claims[0].official_contract.assertion = 'a DIFFERENT claim is being made';
+alt.claims[0].live_evidence.result = alt.claims[0].official_contract.assertion;
+fs.writeFileSync(changed, JSON.stringify(alt));
+NODE
+node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_REFRESH_INPUT" --output "$CLAIMS_REFRESH_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" 0 "claim generator accepts a refreshed observation of the same claims"
+node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_CHANGED_INPUT" --output "$CLAIMS_CHANGED_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" 0 "claim generator accepts an input whose assertion changed"
+IDS_ORIG="$(node -e 'const r=require(process.argv[1]);console.log(JSON.stringify(r.claims.map(c=>[c.capability_id,c.claim_id]).sort()))' "$CLAIMS_RECEIPT")"
+IDS_REFRESH="$(node -e 'const r=require(process.argv[1]);console.log(JSON.stringify(r.claims.map(c=>[c.capability_id,c.claim_id]).sort()))' "$CLAIMS_REFRESH_RECEIPT")"
+IDS_CHANGED="$(node -e 'const r=require(process.argv[1]);console.log(JSON.stringify(r.claims.map(c=>[c.capability_id,c.claim_id]).sort()))' "$CLAIMS_CHANGED_RECEIPT")"
+assert_eq "$IDS_ORIG" "$IDS_REFRESH" "claim IDs survive a pure observation refresh (BL-0048)"
+assert_neq "$IDS_ORIG" "$IDS_CHANGED" "claim IDs change when the claimed assertion changes (negative control)"
+
 GENERATE_REPROBE_CASE=0
 for GENERATE_REPROBE_ARGS in \
   "--reprobe-binary $NODE_REALPATH" \

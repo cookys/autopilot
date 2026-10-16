@@ -274,16 +274,24 @@ function warnIfStale(source, nowMs, label) {
   return true;
 }
 
-function claimBodyForId(claim) {
-  const body = JSON.parse(JSON.stringify(claim));
-  delete body.claim_id;
-  delete body.status;
-  delete body.revalidation.validated_at;
-  return body;
+// Identity names WHAT is claimed: the capability, the target tuple it is claimed for, and the
+// asserted contract text. It must never include observation data (timestamps, ttl, probe digests,
+// build path/version, agreement verdict): those are re-checked live by the validator, and folding
+// them in made every refresh change every id hardcoded in shipped consumers (BL-0048).
+function claimIdentity(claim) {
+  const target = claim.target_identity;
+  return {
+    capability_id: claim.capability_id,
+    target: {
+      runner: target.runner, model: target.model, role: target.role,
+      effort: target.effort, endpoint: target.endpoint, family: target.family,
+    },
+    assertion: claim.official_contract.assertion,
+  };
 }
 
 function claimId(claim) {
-  return `cap-v1-${sha256(canonicalJson(claimBodyForId(claim)))}`;
+  return `cap-v1-${sha256(canonicalJson(claimIdentity(claim)))}`;
 }
 
 function validateInputClaim(source, label) {

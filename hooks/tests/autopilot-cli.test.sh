@@ -331,9 +331,9 @@ EXIT=$?
 assert_eq "1" "$EXIT" "strict L5 executable fixture reaches the engine after fresh readiness"
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 executable fixture consumes a fresh host-owned readiness bundle"
-assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
+assert_contains "$OUT" '"policy_digest":"c8275b978ff9dc698c55ba650f6124a4d655772e7f158d44f31ed10aeae4d22a"' \
   "strict L5 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-ab2a255ea5aa993b9912ba235322cdb00a10d23b470c24061a8ce27243bed7dd"' \
+assert_contains "$OUT" '"cap-v1-a54d6bfbf98c01d574b9796d505102ec5138b0c602b507ae0a3162b8d9589228"' \
   "strict L5 executable fixture records canonical claim provenance"
 
 # L6 twin (BACKLOG "L6 managed campaigns can never satisfy reviewer_qualification",
@@ -362,9 +362,9 @@ assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L6 executable fixture consumes a fresh host-owned readiness bundle"
 assert_contains "$OUT" '"strict_level":"l6"' \
   "strict L6 executable fixture receipt carries the actual level, not the l5 literal"
-assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
+assert_contains "$OUT" '"policy_digest":"c8275b978ff9dc698c55ba650f6124a4d655772e7f158d44f31ed10aeae4d22a"' \
   "strict L6 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-ab2a255ea5aa993b9912ba235322cdb00a10d23b470c24061a8ce27243bed7dd"' \
+assert_contains "$OUT" '"cap-v1-a54d6bfbf98c01d574b9796d505102ec5138b0c602b507ae0a3162b8d9589228"' \
   "strict L6 executable fixture records canonical claim provenance"
 
 # L4 twin (v2.36.8, docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.md KR1/KR4):
@@ -401,7 +401,7 @@ assert_not_contains "$OUT" '"rejection_code":"provider_readiness_authority_missi
   "strict L4 executable fixture is never refused for a missing readiness authority"
 assert_not_contains "$OUT" '"unit":"reviewer_qualification"' \
   "strict L4: the bootstrap certified the reviewer, so no waived ledger entry (KR4)"
-assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
+assert_contains "$OUT" '"policy_digest":"c8275b978ff9dc698c55ba650f6124a4d655772e7f158d44f31ed10aeae4d22a"' \
   "strict L4 executable fixture records the frozen policy digest (BL-0198 re-issued claim set)"
 
 # KR2 — advisory path under l4: an uncertified reviewer seat derives with the loud stderr

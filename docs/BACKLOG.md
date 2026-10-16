@@ -444,19 +444,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
-### Capability-claim identity is coupled to its observation timestamp
-- **Id**: BL-0048
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 平台能力的憑證編號是連同觀察時間一起算出來的，每次更新時間，編號就變，而派工腳本裡又寫死了這些編號，所以每次換憑證都得同步改好幾個腳本。 (draft)
-- **Impact**: 每次更新能力憑證都要手動改多處，漏改就出錯；是維護麻煩而非立即故障。 (draft)
-- **Trigger**: When a receipt refresh is next needed, or before adding a fourth consumer to `platform-capability-claims.js`.
-- **Effort**: M
-- **Source**: 2026-08-18 capability-receipt expiry investigation.
-- **Pointer**: docs/backlog/capability-claim-identity-is-coupled-to-its-observation-timestamp.md
-- **Context**: `claim_id = sha256(claim body)` and the body includes `live_evidence.observed_at` + `freshness.expires_at`, while the required IDs are hardcoded constants in `dispatch-hetero.sh:1653-1654`, `dispatch-review.sh:169-170`,…
-
 ### dev-flow F4 ledger rule — re-measure before deciding (F6 leg RESOLVED 2026-08-18)
 - **Id**: BL-0049
 - **Status**: open

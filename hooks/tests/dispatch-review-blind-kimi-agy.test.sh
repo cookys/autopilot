@@ -257,6 +257,17 @@ BASE_COPY="$BASE_DIR/dispatch-review.sh"
 BASE_OK=1; [ -n "$BASE_SHA" ] && git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null || BASE_OK=0
 assert_eq "1" "$BASE_OK" "base script (parent of the commit introducing blind_runner_preflight) is derivable from history and reachable for the non-blind byte-compare (a skip would make the proof vacuous)"
 if [ "$BASE_OK" = 1 ]; then
+  # The base script freezes the D2 claim ids of its own era, which are not the content-derived ids the
+  # current receipt carries (BL-0048). Re-point the base copy at the current ids (and their sorted order) so
+  # it still runs the same D2 validation, and so the recorder sees the same reprobe call on both sides.
+  _head_resp="$(sed -n 's/^D2_AGY_RESPONSE_CLAIM="\(cap-v1-[0-9a-f]*\)"$/\1/p' "$SCRIPT")"
+  _head_usage="$(sed -n 's/^D2_AGY_USAGE_CLAIM="\(cap-v1-[0-9a-f]*\)"$/\1/p' "$SCRIPT")"
+  sed -i -e "s/^D2_AGY_RESPONSE_CLAIM=.*/D2_AGY_RESPONSE_CLAIM=\"$_head_resp\"/" \
+    -e "s/^D2_AGY_USAGE_CLAIM=.*/D2_AGY_USAGE_CLAIM=\"$_head_usage\"/" "$BASE_COPY"
+  if [[ "$_head_usage" < "$_head_resp" ]]; then
+    sed -i -e 's/\$D2_AGY_RESPONSE_CLAIM\\",\\"\$D2_AGY_USAGE_CLAIM/$D2_AGY_USAGE_CLAIM\\",\\"$D2_AGY_RESPONSE_CLAIM/' \
+      -e 's/--claim-id "\$D2_AGY_RESPONSE_CLAIM" --claim-id "\$D2_AGY_USAGE_CLAIM"/--claim-id "$D2_AGY_USAGE_CLAIM" --claim-id "$D2_AGY_RESPONSE_CLAIM"/' "$BASE_COPY"
+  fi
   chmod +x "$BASE_COPY"
   CMP_REC="$TEST_TMP/cmp-rec"
   cat > "$CMP_REC" <<'EOF'

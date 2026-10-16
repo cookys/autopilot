@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Capability-claim ids (`cap-v1-...`) now name what is claimed (capability, target tuple, assertion) instead of hashing the whole claim body, so a pure re-probe no longer changes every id hardcoded in `dispatch-hetero.sh`, `dispatch-review.sh`, `provider-bootstrap.js` and the codex `post-compact.js` (BL-0048). The archived and strict-L5 receipts were re-keyed once, with no dual-read; the dispatch scripts hold the D2 ids sorted because the validator requires that order.
+
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
 
 - BL-0093 point 1 (Boil the Lake): ON/OFF campaign ran 26 cells and was UNINFORMATIVE (waste 0 vs 0), so ceo-agent prose is unchanged; evidence under `docs/plans/evidence/2026-10-17-bl0093-guidance-relax/`, and the maximal eval pack was re-synced to the shipped skill text.

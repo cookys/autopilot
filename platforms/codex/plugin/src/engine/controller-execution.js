@@ -1670,6 +1670,7 @@ function adoptOrphanLeafMechanical({
 }) {
   const {
     isCompleteIdentity,
+    isProcessLiveStrict,
     createOrUpdateWorkOrder,
     readJsonStrict,
     resolveGitCommonDir,
@@ -1826,6 +1827,47 @@ function adoptOrphanLeafMechanical({
       reason: 'controller death could not be proven',
       preserve_evidence: true, duplicate_mutation: 0,
     };
+  }
+  // BL-0082: a dead controller does not mean a dead leaf. The leaf (or the process
+  // supervising it) can still be committing into the worktree being adopted, which
+  // is an ownership race. The persisted runner identity (dispatch heartbeat
+  // `--runner self`) is re-observed here: an absent or partial identity is no proof,
+  // an unknowable process table is no proof, and a live one forbids adoption.
+  {
+    const runner = workOrder.runner;
+    const runnerFields = isObj(runner)
+      ? [runner.pid, runner.process_start_time, runner.pgid, runner.sid] : [];
+    if (runnerFields.length === 0 || runnerFields.every((v) => v == null)) {
+      return {
+        ok: false, status: 'stopped', code: 'ADOPTION_LEAF_IDENTITY_MISSING',
+        reason: 'no persisted leaf/runner process identity: leaf death cannot be proven, so the leaf worktree is not adopted',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    if (!isCompleteIdentity(runner)) {
+      return {
+        ok: false, status: 'stopped', code: 'ADOPTION_LEAF_IDENTITY_INCOMPLETE',
+        reason: 'persisted leaf/runner identity is incomplete (pid/start/pgid/sid all required)',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    let leafLive;
+    try {
+      leafLive = isProcessLiveStrict(runner);
+    } catch (error) {
+      return {
+        ok: false, status: 'stopped', code: 'LEAF_DEATH_UNKNOWN',
+        reason: `leaf/runner liveness could not be observed: ${error.message || String(error)}`,
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
+    if (leafLive !== false) {
+      return {
+        ok: false, status: 'stopped', code: 'LEAF_STILL_LIVE',
+        reason: 'the persisted leaf/runner process is still live; adopting its worktree would race it',
+        preserve_evidence: true, duplicate_mutation: 0,
+      };
+    }
   }
   if (!isObj(leafResult) || leafResult.committed !== true) {
     return {
@@ -2121,6 +2163,97 @@ function adoptOrphanLeafMechanical({
 }
 
 /**
+ * BL-0082: re-derive inventory rows that Git no longer corroborates instead of
+ * trusting the flags a previous generation stored on them.
+ *
+ *  - A worktree row whose path is not a registered worktree cannot be `active`
+ *    (unless it is backed by a terminal receipt): the claim is dropped.
+ *  - A path that still exists on disk but is not registered is unknown residue.
+ *  - When the worktree is gone but its branch ref remains and the branch has moved
+ *    past the tip the controller recorded (or none was recorded), uniqueness is
+ *    re-read from the branch, so an orphan branch carrying commits is still debt.
+ *    A branch still at its recorded tip keeps the controller's own observation.
+ */
+function rederiveStaleRows({
+  byPath, registeredWorktrees, gitCwd, baseSha, execFileSync,
+}) {
+  if (!(registeredWorktrees instanceof Set)) return;
+  for (const row of byPath.values()) {
+    if ((row.kind || 'worktree') !== 'worktree') continue;
+    const rowPath = row.path || row.worktree;
+    if (!isStr(rowPath)) continue;
+    let rowReal = rowPath;
+    try { rowReal = fs.realpathSync(rowPath); } catch (_e) { /* path gone */ }
+    const registered = registeredWorktrees.has(rowPath) || registeredWorktrees.has(rowReal);
+    if (registered) continue;
+    row.worktree_registered = false;
+    if (row.active === true && row.terminal !== true) {
+      row.active = false;
+      row.active_rederived = 'worktree_not_registered';
+    }
+    if (fs.existsSync(rowPath)) {
+      // On disk but unknown to Git: residue we cannot classify -- unless the
+      // controller already closed it with a terminal receipt (finished evidence it
+      // recorded itself), which is the retained-candidate case.
+      if (row.terminal !== true) {
+        row.identity_known = false;
+        row.unregistered_path_exists = true;
+      }
+      continue;
+    }
+    if (!isStr(row.branch)) continue;
+    let tip = null;
+    try {
+      tip = execFileSync(
+        'git',
+        ['-C', gitCwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${row.branch}^{commit}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+    } catch (_e) {
+      row.branch_exists = false;
+      continue;
+    }
+    row.branch_exists = true;
+    // The controller recorded this exact tip with its own outcome (the normal
+    // retained-candidate case): the stored observation still describes the branch.
+    // Only a branch that has MOVED since, or was never recorded with a tip, is
+    // re-read -- that is the leaf that kept committing after the controller died.
+    if (isCanonicalGitObjectId(row.tip) && row.tip === tip) continue;
+    row.tip_before_rederivation = isStr(row.tip) ? row.tip : null;
+    row.tip = tip;
+    const frozenBase = isCanonicalGitObjectId(row.base_sha)
+      ? row.base_sha
+      : (isCanonicalGitObjectId(baseSha) ? baseSha : null);
+    if (!frozenBase) {
+      row.unique = null;
+      row.identity_known = false;
+      row.unique_reason = 'frozen_base_unavailable';
+      continue;
+    }
+    try {
+      const baseCommit = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${frozenBase}^{commit}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      const tipTree = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${tip}^{tree}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      const baseTree = execFileSync(
+        'git', ['-C', gitCwd, 'rev-parse', `${baseCommit}^{tree}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim();
+      row.base_sha = baseCommit;
+      row.unique = tip !== baseCommit && tipTree !== baseTree;
+    } catch (_e) {
+      row.unique = null;
+      row.identity_known = false;
+      row.unique_reason = 'branch_observation_failed';
+    }
+  }
+}
+
+/**
  * Reconstruct current *owned* worktree inventory from Git + controller state.
  * The primary checkout (gitCwd) is never counted as campaign-owned residue.
  * Linked worktrees are owned only when:
@@ -2195,6 +2328,7 @@ function reconstructOwnedInventory({
     };
   }
   let mainAbs = null;
+  let registeredWorktrees = null;
   try {
     mainAbs = fs.realpathSync(path.resolve(gitCwd));
   } catch (_e) {
@@ -2227,6 +2361,11 @@ function reconstructOwnedInventory({
       }
     }
     if (current) linked.push(current);
+    registeredWorktrees = new Set();
+    for (const item of linked) {
+      registeredWorktrees.add(item.path);
+      try { registeredWorktrees.add(fs.realpathSync(item.path)); } catch (_e) { /* path gone */ }
+    }
     for (const item of linked) {
       let abs = item.path;
       try { abs = fs.realpathSync(item.path); } catch (_e) { /* keep */ }
@@ -2287,6 +2426,9 @@ function reconstructOwnedInventory({
       }
       put(item, { live: true });
     }
+    rederiveStaleRows({
+      byPath, registeredWorktrees, gitCwd, baseSha, execFileSync,
+    });
   } catch (error) {
     if (failClosedOnGitError) {
       return {

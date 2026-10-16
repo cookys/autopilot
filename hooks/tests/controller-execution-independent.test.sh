@@ -3067,6 +3067,7 @@ console.log("Starting independent verification tests for Controller Execution...
     base_sha: base,
     worktree: dir,
     owner: deadOwner,
+    runner: deadOwner, // BL-0082: persisted leaf/runner identity, re-observed dead at adoption
     paths: { checkpoint: path.join(dir, 'acp.json') },
     controller: adoptState,
     sealed_scope: { allow_paths: ['orphan.txt'], max_files: 10, max_diff_lines: 1000 },
@@ -3090,6 +3091,7 @@ console.log("Starting independent verification tests for Controller Execution...
     branch = 'orphan-leaf',
     baseSha = base,
     omitSealedScope = false,
+    runner = deadOwner,
   }) => {
     const fields = {
       root_run_id: rootRunId,
@@ -3101,6 +3103,7 @@ console.log("Starting independent verification tests for Controller Execution...
       base_sha: baseSha,
       worktree: dir,
       owner,
+      runner,
       paths: { checkpoint: path.join(dir, `${rootRunId}.json`) },
       controller,
     };
@@ -3236,6 +3239,41 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(liveAdopt.ok, false);
   assert.ok(['CONTROLLER_NOT_PROVEN_DEAD', 'CONTROLLER_DEATH_UNKNOWN'].includes(liveAdopt.code));
+  // BL-0082: a dead controller is not a dead leaf. The persisted runner identity is
+  // re-observed; absent, partial, live and unknowable identities all refuse adoption
+  // (the dead-runner adopt1 above is the positive control).
+  {
+    const adoptWith = (rootRunId, runner, written = writeAdoptionAuthority({ rootRunId, runner })) => ctrl.adoptOrphanLeaf({
+      gitCwd: dir,
+      workOrder: written,
+      leafResult: leaf,
+      branch: 'orphan-leaf',
+      baseSha: base,
+      sealedScope: live.sealed_scope,
+      leafWorktree: dir,
+    });
+    const nullRunner = { pid: null, process_start_time: null, pgid: null, sid: null };
+    assert.strictEqual(adoptWith('adopt-leaf-absent', nullRunner).code, 'ADOPTION_LEAF_IDENTITY_MISSING');
+    assert.strictEqual(
+      adoptWith('adopt-leaf-partial', { ...nullRunner, pid: deadOwner.pid }).code,
+      'ADOPTION_LEAF_IDENTITY_INCOMPLETE',
+    );
+    const liveRunner = woMod.captureProcessParentage(process.pid).owner;
+    assert.strictEqual(adoptWith('adopt-leaf-live', liveRunner).code, 'LEAF_STILL_LIVE');
+    const unknownWo = writeAdoptionAuthority({ rootRunId: 'adopt-leaf-unknown', runner: deadOwner });
+    const realAccess = fs.accessSync;
+    fs.accessSync = function patched(p, ...rest) {
+      if (p === '/proc') { const e = new Error('EACCES: simulated'); e.code = 'EACCES'; throw e; }
+      return realAccess.call(this, p, ...rest);
+    };
+    let unknown;
+    try {
+      unknown = adoptWith('adopt-leaf-unknown', deadOwner, unknownWo);
+    } finally {
+      fs.accessSync = realAccess;
+    }
+    assert.ok(['LEAF_DEATH_UNKNOWN', 'CONTROLLER_DEATH_UNKNOWN'].includes(unknown.code), unknown.code);
+  }
   const legacyUnscoped = writeAdoptionAuthority({
     rootRunId: 'adopt-unscoped',
     omitSealedScope: true,

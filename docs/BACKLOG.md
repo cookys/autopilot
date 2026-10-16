@@ -916,13 +916,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-07-31
 - **Origin**: self
-- **Problem**: 控制器或建立工作樹中途當機後，沒有記住孤兒工作者的程序身分，也找不到未登記的分支與工作樹，無法可靠重建資源清單。 (draft)
-- **Impact**: 當機後可能留下殘留分支或工作樹，要人工清理。 (draft)
+- **Problem**: 建立工作樹的過程中當機（工作樹已建好、還沒寫進控制器紀錄）會留下清單裡永遠看不到的工作樹，因為建立前沒有先寫下意圖。其餘兩項（接管前重新確認工作者程序已結束、依 Git 重新推導清單列）已處理。
+- **Impact**: 這種當機後會留下沒人認領的工作樹，要人工清理；清單與容量上限都看不到它。
 - **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
 - **Effort**: S
 - **Source**: depth-0-adjudication-760b
 - **Pointer**: docs/backlog/orphan-leaf-liveness-and-resource-reconstruction.md
-- **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
+- **Context**: Remaining: write a durable intent row BEFORE `git worktree add` so a worktree created but never registered is discoverable. Leaf-liveness check and Git re-derivation of stale rows shipped.
 
 ### HETO task-return detection can miss completed work
 - **Id**: BL-0084

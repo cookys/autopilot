@@ -3,6 +3,23 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+// Trust boundary of Work Order and terminal/disposition receipts (BL-0083).
+//
+// What the digests give: INTEGRITY and consistency. `sha256Json` over a record or
+// receipt proves the bytes were not altered after they were written and that the
+// receipt names the same root / Work Order / generation / CAS token as the record
+// it travels with. Stale-disposition and recovery paths additionally re-derive the
+// facts they rest on (process liveness, worktree state, Git tips) at write time.
+//
+// What they do NOT give: ATTESTATION. Every builder here is exported and any
+// process that can write the Git common dir can produce a self-consistent receipt,
+// so a digest does not say WHO produced it. The model is a *confused* controller
+// (stale snapshot, wrong fence, mistaken caller), not a malicious one; ADR-0001
+// rules out answering the stronger model with hash chains or witnesses. A receipt
+// from outside this controller (legacy or externally supplied) is therefore never
+// authority by itself: it must pass the closed checks below (exact keys, closed
+// terminal_status enum, bound identity) and be re-derived against live state
+// before it releases anything.
 const WORK_ORDER_SCHEMA = 2;
 const WORK_ORDER_ARTIFACT = 'work_order';
 const RECONCILE_ARTIFACT = 'postcompact_reconcile_receipt';
@@ -687,6 +704,12 @@ function buildWorkOrder(fields = {}, options = {}) { const owner = isObj(fields.
     }
     wo.controller = ctrl;
   }
+  if ((wo.disposition === 'consumed' || wo.disposition === 'stale_dispositioned')
+      && isStr(wo.terminal_status) && !TERMINAL_STATUSES.has(wo.terminal_status)) {
+    const err = new Error(`terminal_status ${wo.terminal_status} is not in the closed terminal status set`);
+    err.code = 'terminal_status_invalid';
+    throw err;
+  }
   if (fields.disposition_receipt != null) {
     if (fields.disposition !== 'stale_dispositioned' && fields.disposition !== 'consumed') {
       const err = new Error('only a stale_dispositioned Work Order may carry a disposition receipt');
@@ -727,11 +750,17 @@ function validateBoundArtifacts(wo, options = {}) { if (!isObj(wo)) return { ok:
         'git', ['-C', options.gitCwd, 'rev-parse', '--verify', `${wo.accepted_commit}^{commit}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },);
     } catch (_e) { return { ok: false, reason_code: 'accepted_commit_drift', reason: `accepted_commit ${wo.accepted_commit} not present in git`, };}}
   return { ok: true };}
+// BL-0083: terminal_status is a CLOSED enum (TERMINAL_STATUSES). A string that is not
+// in it ("succeeded") is not a terminal status under any disposition. The old
+// `attached` disposition was consumed here but never produced anywhere, so it is gone.
 function isTerminalWorkOrder(wo) { if (!wo) return false;
-  if (isStr(wo.disposition)&& ['consumed', 'stale_dispositioned', 'attached'].includes(wo.disposition)&& isStr(wo.terminal_status)) { return true;}
   return isStr(wo.terminal_status) && TERMINAL_STATUSES.has(wo.terminal_status);}
 function isNonterminalWorkOrder(wo) { if (!wo) return false;
   if (workOrderMissingFields(wo).length > 0) return true;
+  // A tombstone naming a status outside the enum is unreadable authority, not a
+  // closed Work Order: keep it blocking rather than letting a typo release the root.
+  if (isStr(wo.terminal_status) && !TERMINAL_STATUSES.has(wo.terminal_status)
+      && isStr(wo.disposition) && ['consumed', 'stale_dispositioned'].includes(wo.disposition)) return true;
   if (isStr(wo.disposition) && ['consumed', 'stale_dispositioned'].includes(wo.disposition)) return false;
   if (isTerminalWorkOrder(wo) && wo.disposition === 'consumed') return false;
   return !isTerminalWorkOrder(wo) || !isStr(wo.disposition);}
@@ -1505,6 +1534,9 @@ function validateTerminalReceipt(receipt, wo, options = {}) {
       reason: `exact artifact_type=${expectedArtifact} required (got ${receipt.artifact_type || 'missing'})`, };}
   if (!isStr(receipt.terminal_status)) {
     return { ok: false, reason_code: 'terminal_receipt_invalid', reason: 'exact terminal_status required (status alias rejected)' };}
+  if (!TERMINAL_STATUSES.has(receipt.terminal_status)) {
+    return { ok: false, reason_code: 'terminal_receipt_invalid',
+      reason: `terminal_status ${receipt.terminal_status} is not in the closed terminal status set` };}
   if (!isStr(receipt.root_run_id) || receipt.root_run_id !== wo.root_run_id) {
     return { ok: false, reason_code: 'terminal_receipt_mismatch', reason: 'receipt root_run_id missing or mismatch' };}
   if (!isStr(receipt.work_order_id) || receipt.work_order_id !== wo.work_order_id) {

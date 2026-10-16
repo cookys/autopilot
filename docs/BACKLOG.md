@@ -924,19 +924,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/orphan-leaf-liveness-and-resource-reconstruction.md
 - **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
 
-### Terminal status and receipt trust boundary
-- **Id**: BL-0083
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 終態狀態沒有嚴格限制只能是規定的幾種值，還有一個沒用到的「attached」處置沒清掉；外部來源的收據也沒有信任邊界說明。 (draft)
-- **Impact**: 目前只有自己的控制器產生收據，風險低，等開放外部來源再處理。 (draft)
-- **Trigger**: Before external/legacy terminal receipts cross a trust boundary or the threat model expands beyond confused controllers.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/terminal-status-and-receipt-trust-boundary.md
-- **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller…
-
 ### HETO task-return detection can miss completed work
 - **Id**: BL-0084
 - **Status**: open

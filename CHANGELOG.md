@@ -233,6 +233,8 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 
 - BL-0081: Mission admission now reads the routing graph file once and inspects that same parse (`inspect` accepts `graphObject`), so a file swapped between the digest read and the per-node validation cannot certify an uninspected graph; the campaign contract validator now holds the schema bounds for `max_owned_worktrees`, `temp_capacity_limit`, `max_prompt_bytes` and `max_finding_recurrence` instead of passing 999999999 through to the admission ceiling.
 
+- BL-0083: `terminal_status` is enforced as a closed enum when a terminal receipt is validated and when a Work Order is classified or written as a tombstone (a status such as `succeeded` no longer reads as terminal and keeps blocking), the never-produced `attached` disposition is gone, and `work-order.js` now states what its digests guarantee (integrity) versus what they do not (attestation) under the confused-controller threat model.
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

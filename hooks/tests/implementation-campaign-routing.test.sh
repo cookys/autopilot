@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/runner-transport-envelope.json" <<'NODE'
 'use strict';

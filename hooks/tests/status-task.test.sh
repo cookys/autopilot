@@ -3,6 +3,8 @@
 # the canonical reducer/builders; WLB evidence uses the canonical inspector's
 # exact return shape.
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 
 OUT_FILE="$TEST_TMP/status-task.out"
 node - "$REPO_ROOT" >"$OUT_FILE" <<'NODE'

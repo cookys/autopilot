@@ -284,6 +284,49 @@ const compressed = admitMissionRouting({ repoRoot: repo, entryLevel: 'l6' });
 assert.equal(compressed.admission.source_authoring_unit_count, 34);
 assert.equal(compressed.admission.deliverable_count, 4);
 
+// BL-0081: the graph file is read once per admission, so the digest sealed by the
+// inspection and the per-node delta validation consume the same parse.
+{
+  const realRead = fs.readFileSync;
+  let graphReads = 0;
+  fs.readFileSync = function patchedRead(file, ...rest) {
+    if (typeof file === 'string' && file.endsWith(path.join('docs', 'graph.json'))) graphReads += 1;
+    return realRead.call(this, file, ...rest);
+  };
+  try {
+    admitMissionRouting({ repoRoot: repo, entryLevel: 'l6' });
+  } finally {
+    fs.readFileSync = realRead;
+  }
+  assert.equal(graphReads, 1, `graph.json must be read once per admission, read ${graphReads} times`);
+}
+// An inspected graph object wins over the path: a file swapped after the read cannot
+// change what was inspected. (Positive control: the unchanged object digests the same.)
+{
+  const routingCfg = JSON.parse(fs.readFileSync(path.join(repo, '.claude', 'mission-routing-config.json'), 'utf8'));
+  const opts = {
+    governance: path.join(repo, '.claude', 'owner-kernel-governance.json'),
+    sources: path.join(repo, routingCfg.sources_path),
+  };
+  const fromPath = inspectMissionGraph({ ...opts, graph: graphPath });
+  const original = fs.readFileSync(graphPath, 'utf8');
+  const parsed = JSON.parse(original);
+  const smaller = { ...parsed, nodes: parsed.nodes.slice(0, 3) };
+  fs.writeFileSync(graphPath, `${JSON.stringify(smaller, null, 2)}\n`);
+  try {
+    const fromObject = inspectMissionGraph({ ...opts, graph: graphPath, graphObject: parsed });
+    assert.equal(fromObject.graph_digest, fromPath.graph_digest, 'object digest equals the original file digest');
+    assert.equal(fromObject.deliverables, 4, 'inspection consumed the object, not the swapped file');
+    assert.throws(
+      () => inspectMissionGraph({ ...opts, graph: graphPath }),
+      (error) => error.code === 'MISSION_GRAPH_PLAN_COVERAGE',
+      'premise: the swapped file is a different (non-covering) graph',
+    );
+  } finally {
+    fs.writeFileSync(graphPath, original);
+  }
+}
+
 const checkerModulePath = require.resolve(path.join(root, 'scripts/mission-execution-graph-check'));
 const routingModulePath = require.resolve(path.join(root, 'scripts/mission-routing-admission'));
 const checkerModule = require(checkerModulePath);
@@ -698,6 +741,22 @@ assert.throws(() => {
 
 // Bound no-op with sealed receipt spends zero attempts.
 const noopBody = {
+  // BL-0077: the test seam carries the same binding keys the production loader checks.
+  artifact_type: 'noop_receipt',
+  dispatcher_called: false,
+  mutation_attempts: 0,
+  gate_attempts: 0,
+  repo_identity: 'git-common-dir:/fixture',
+  mission_lineage_id: 'lineage-fixture',
+  mission_policy_digest: 'c'.repeat(64),
+  mission_graph_digest: 'd'.repeat(64),
+  graph_node_id: 'n1',
+  graph_attempt: 1,
+  mission_claim_id: 'claim-fixture',
+  mission_campaign_id: 'campaign-fixture',
+  icc_campaign_id: 'icc-fixture',
+  campaign_contract_digest: 'e'.repeat(64),
+  strict_contract_digest: 'f'.repeat(64),
   base_sha: 'a'.repeat(40),
   acceptance_digest: 'b'.repeat(64),
   current_bytes: { 'docs/sources/plan-0.md': '# Phase 0-0: coverage only\n' },

@@ -165,7 +165,14 @@ function normalizeRunRecord(run) { if (!isObj(run)) return null;
   const owner = { pid: raw.pid != null ? Number(raw.pid) : null, process_start_time: raw.process_start_time != null ? Number(raw.process_start_time) : null,
     pgid: raw.pgid != null ? Number(raw.pgid) : null, sid: raw.sid != null ? Number(raw.sid) : null,};
   const open = finalStatus === null || finalStatus === '' || finalStatus === 'null';
-  const active = open && workOrder.isProcessLiveStrict(owner); // pid-only never active
+  // BL-0079: liveness that cannot be determined (unreadable process table) keeps
+  // the run active -- never relabelled terminal or stale.
+  let active;
+  try {
+    active = open && workOrder.isProcessLiveStrict(owner); // pid-only never active
+  } catch (_error) {
+    active = open;
+  }
   const incomplete_identity = open && Number.isInteger(owner.pid) && owner.pid > 0 && !workOrder.isCompleteIdentity(owner);
   const er = isObj(run.expected_receipt) ? run.expected_receipt : null;
   return { run_id: runId, root_run_id: rootRunId, stage: run.stage || null, branch: run.branch || null, base: run.base || null,

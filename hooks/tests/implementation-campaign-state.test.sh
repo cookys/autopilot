@@ -4191,11 +4191,13 @@ for (const axis of ctrl.REPAIR_BUDGET_AXES) {
     const unobs = ctrl.checkJointRepairBudget(
       { ...ctrl.emptyBudgetUsage(), fresh_input_tokens: null },
       { fresh_input_tokens: 1 },
+      { projectedDelta: {} },
     );
     assert.strictEqual(unobs.ok, true, 'unobserved tokens must not zero-fill');
     const obs = ctrl.checkJointRepairBudget(
       ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { fresh_input_tokens: 10 }),
       { fresh_input_tokens: 5 },
+      { projectedDelta: {} },
     );
     assert.strictEqual(obs.status, ctrl.AWAITING_CONVERGENCE);
     assert.strictEqual(obs.allow_spend, false);
@@ -4203,7 +4205,7 @@ for (const axis of ctrl.REPAIR_BUDGET_AXES) {
   }
   const usage = ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { [axis]: 100 });
   const limits = ctrl.defaultBudgetLimits({ [axis]: 10 });
-  const check = ctrl.checkJointRepairBudget(usage, limits);
+  const check = ctrl.checkJointRepairBudget(usage, limits, { projectedDelta: {} });
   assert.strictEqual(check.status, ctrl.AWAITING_CONVERGENCE, axis);
   assert.strictEqual(check.allow_spend, false, axis);
   assert.ok(check.exceeded.includes(axis), axis);
@@ -4219,6 +4221,7 @@ const verticalMutationKinds = [];
 let verticalController = null;
 const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit
   implement: ({ kind }) => {
     verticalMutationKinds.push(kind);
     if (kind !== 'initial') repairCalls += 1;
@@ -4717,6 +4720,7 @@ const seat = () => {
 };
 const result = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit
   implement: () => ({ committed: true, commit: 'a'.repeat(40), tree_sha: 'b'.repeat(40) }),
   scopeCheck: () => ({ passed: true }),
   verify: () => ({ passed: true, receipt_digest: 'c'.repeat(64) }),
@@ -4826,6 +4830,7 @@ const over = runCampaignComposition({
   includeControllerMeta: true,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit
   implement: () => {
     implementCalls += 1;
     return { committed: true, commit: 'a'.repeat(40), tree_sha: 'b'.repeat(40) };
@@ -4949,6 +4954,7 @@ const result = runCampaignComposition({
 }, {
   onCampaignEvent: (e) => { events.push(e.event_type); },
   preflight: () => ({ passed: true }),
+  preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit
   implement: () => {
     implementCalls += 1;
     return { committed: true, commit: candidate.commit, tree_sha: candidate.tree_sha };
@@ -5277,6 +5283,7 @@ function run(onCampaignEvent, order) {
     frozenDenominator,
   }, {
     preflight: () => ({ passed: true }),
+    preEffectAdmit: () => ({ ok: true }), // BL-0077: explicit
     implement: () => ({
       status: 'boundary_rejected',
       commit: 'a'.repeat(40),

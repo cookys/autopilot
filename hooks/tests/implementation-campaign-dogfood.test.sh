@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ICC P4: hermetic 057 miniature-repository convergence dogfood.
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \

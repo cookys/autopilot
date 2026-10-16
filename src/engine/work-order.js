@@ -3,6 +3,23 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+// Trust boundary of Work Order and terminal/disposition receipts (BL-0083).
+//
+// What the digests give: INTEGRITY and consistency. `sha256Json` over a record or
+// receipt proves the bytes were not altered after they were written and that the
+// receipt names the same root / Work Order / generation / CAS token as the record
+// it travels with. Stale-disposition and recovery paths additionally re-derive the
+// facts they rest on (process liveness, worktree state, Git tips) at write time.
+//
+// What they do NOT give: ATTESTATION. Every builder here is exported and any
+// process that can write the Git common dir can produce a self-consistent receipt,
+// so a digest does not say WHO produced it. The model is a *confused* controller
+// (stale snapshot, wrong fence, mistaken caller), not a malicious one; ADR-0001
+// rules out answering the stronger model with hash chains or witnesses. A receipt
+// from outside this controller (legacy or externally supplied) is therefore never
+// authority by itself: it must pass the closed checks below (exact keys, closed
+// terminal_status enum, bound identity) and be re-derived against live state
+// before it releases anything.
 const WORK_ORDER_SCHEMA = 2;
 const WORK_ORDER_ARTIFACT = 'work_order';
 const RECONCILE_ARTIFACT = 'postcompact_reconcile_receipt';
@@ -557,6 +574,18 @@ function validateStoredWorkOrderIntegrity(existing) {
       reason: 'stale_dispositioned Work Order requires its closed prior-generation receipt',
     };
   }
+  // BL-0079: a disposition receipt is authority for the stale transition only. A
+  // record that is not a stale tombstone carries none; name that distinctly so an
+  // imported or hand-edited record is not just an anonymous "invalid receipt".
+  if (Object.prototype.hasOwnProperty.call(existing, 'disposition_receipt')
+      && existing.disposition !== 'stale_dispositioned'
+      && existing.disposition !== 'consumed') {
+    return {
+      ok: false,
+      reason_code: 'disposition_receipt_unexpected',
+      reason: 'a Work Order that is not a stale_dispositioned tombstone cannot carry a disposition receipt',
+    };
+  }
   if (Object.prototype.hasOwnProperty.call(existing, 'disposition_receipt')) {
     const validated = validateDispositionReceipt(existing.disposition_receipt, existing);
     if (!validated.ok) return validated;
@@ -675,7 +704,18 @@ function buildWorkOrder(fields = {}, options = {}) { const owner = isObj(fields.
     }
     wo.controller = ctrl;
   }
+  if ((wo.disposition === 'consumed' || wo.disposition === 'stale_dispositioned')
+      && isStr(wo.terminal_status) && !TERMINAL_STATUSES.has(wo.terminal_status)) {
+    const err = new Error(`terminal_status ${wo.terminal_status} is not in the closed terminal status set`);
+    err.code = 'terminal_status_invalid';
+    throw err;
+  }
   if (fields.disposition_receipt != null) {
+    if (fields.disposition !== 'stale_dispositioned' && fields.disposition !== 'consumed') {
+      const err = new Error('only a stale_dispositioned Work Order may carry a disposition receipt');
+      err.code = 'disposition_receipt_unexpected';
+      throw err;
+    }
     wo.disposition_receipt = fields.disposition_receipt;
     const validated = validateDispositionReceipt(wo.disposition_receipt, wo);
     if (!validated.ok) {
@@ -710,11 +750,17 @@ function validateBoundArtifacts(wo, options = {}) { if (!isObj(wo)) return { ok:
         'git', ['-C', options.gitCwd, 'rev-parse', '--verify', `${wo.accepted_commit}^{commit}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },);
     } catch (_e) { return { ok: false, reason_code: 'accepted_commit_drift', reason: `accepted_commit ${wo.accepted_commit} not present in git`, };}}
   return { ok: true };}
+// BL-0083: terminal_status is a CLOSED enum (TERMINAL_STATUSES). A string that is not
+// in it ("succeeded") is not a terminal status under any disposition. The old
+// `attached` disposition was consumed here but never produced anywhere, so it is gone.
 function isTerminalWorkOrder(wo) { if (!wo) return false;
-  if (isStr(wo.disposition)&& ['consumed', 'stale_dispositioned', 'attached'].includes(wo.disposition)&& isStr(wo.terminal_status)) { return true;}
   return isStr(wo.terminal_status) && TERMINAL_STATUSES.has(wo.terminal_status);}
 function isNonterminalWorkOrder(wo) { if (!wo) return false;
   if (workOrderMissingFields(wo).length > 0) return true;
+  // A tombstone naming a status outside the enum is unreadable authority, not a
+  // closed Work Order: keep it blocking rather than letting a typo release the root.
+  if (isStr(wo.terminal_status) && !TERMINAL_STATUSES.has(wo.terminal_status)
+      && isStr(wo.disposition) && ['consumed', 'stale_dispositioned'].includes(wo.disposition)) return true;
   if (isStr(wo.disposition) && ['consumed', 'stale_dispositioned'].includes(wo.disposition)) return false;
   if (isTerminalWorkOrder(wo) && wo.disposition === 'consumed') return false;
   return !isTerminalWorkOrder(wo) || !isStr(wo.disposition);}
@@ -1488,6 +1534,9 @@ function validateTerminalReceipt(receipt, wo, options = {}) {
       reason: `exact artifact_type=${expectedArtifact} required (got ${receipt.artifact_type || 'missing'})`, };}
   if (!isStr(receipt.terminal_status)) {
     return { ok: false, reason_code: 'terminal_receipt_invalid', reason: 'exact terminal_status required (status alias rejected)' };}
+  if (!TERMINAL_STATUSES.has(receipt.terminal_status)) {
+    return { ok: false, reason_code: 'terminal_receipt_invalid',
+      reason: `terminal_status ${receipt.terminal_status} is not in the closed terminal status set` };}
   if (!isStr(receipt.root_run_id) || receipt.root_run_id !== wo.root_run_id) {
     return { ok: false, reason_code: 'terminal_receipt_mismatch', reason: 'receipt root_run_id missing or mismatch' };}
   if (!isStr(receipt.work_order_id) || receipt.work_order_id !== wo.work_order_id) {
@@ -1590,8 +1639,19 @@ function classifyWorkOrder(wo, options = {}) { if (options.parseError) { return 
       reason: `consume terminal status=${validated.terminal_status}`,
       work_order_id: wo.work_order_id, terminal_status: validated.terminal_status,
       terminal_receipt: receipt, success: validated.success === true,};}
-  const ownerLive = isProcessLiveStrict(wo.owner);
-  const runnerLive = wo.runner ? isProcessLiveStrict(wo.runner) : false;
+  // BL-0079: an unreadable process table is "death unknown", which is neither live
+  // nor dead. Classify it as an explicit blocker instead of letting the throw escape
+  // every caller of classifyWorkOrder.
+  let ownerLive;
+  let runnerLive;
+  try {
+    ownerLive = isProcessLiveStrict(wo.owner);
+    runnerLive = wo.runner ? isProcessLiveStrict(wo.runner) : false;
+  } catch (error) {
+    return { classification: 'orphan_blocked', reason_code: 'process_table_unreadable',
+      reason: `owner/runner liveness cannot be determined: ${error.message || String(error)}`,
+      work_order_id: wo.work_order_id,};
+  }
   const lockFile = options.workOrderPath ? lockPathFor(options.workOrderPath) : null;
   const leaseFile = options.workOrderPath ? leasePathFor(options.workOrderPath) : null;
   const lock = lockFile ? readJsonIfPresent(lockFile) : null;
@@ -2452,6 +2512,13 @@ function claimDispatchCas(commonDir, fields, options = {}) { const owner = isObj
   const casFile = rootCasLockPath(commonDir, rootRunId);
   const rootLock = acquireWorkOrderLock(casFile, owner, options.lockTimeoutMs || 5000);
   if (!rootLock.ok) { return { status: 'reject', reason_code: rootLock.reason_code, reason: rootLock.reason, duplicate_dispatch: 0, };}
+  // BL-0078 decision: exclusion here is ROOT-WIDE on purpose. Any nonterminal Work
+  // Order under this root blocks (or attaches/consumes) a new dispatch, whatever its
+  // graph node, because graph nodes under one root share a worktree budget and are
+  // dispatched strictly in sequence today. It fails closed; scoping blockers to the
+  // exact node is the change to make together with enabling parallel independent
+  // nodes, and the root CAS lock above would stay. Pinned by
+  // hooks/tests/boundary-outcome-derivation.test.sh.
   try { const nonterminal = listNonterminalWorkOrders(commonDir, rootRunId);
     if (nonterminal.length > 0) { const receipt = options.reconcileReceipt|| (options.reconcileReceiptPath? readJsonIfPresent(options.reconcileReceiptPath)
           : readJsonIfPresent(reconcileReceiptPath(commonDir, rootRunId)));

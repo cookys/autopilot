@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# BL-0077: composition fixtures make effect admission an explicit adapter.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --require $REPO_ROOT/hooks/tests/lib/explicit-admission-preload.js"
 # Mission harness injects root-run / reconcile receipts that must not poison unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \

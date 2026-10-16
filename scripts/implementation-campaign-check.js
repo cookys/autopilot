@@ -652,6 +652,25 @@ function validateContract(contract, context) {
     CONTRACT_SCHEMA.properties.max_changed_files.maximum,
     errors,
   );
+  // BL-0081: the optional joint-capacity caps are bounded by the schema; the hand
+  // rolled validator must hold the same bounds or a sealed contract can carry
+  // 999999999 into the controller's admission ceiling. Absent stays absent.
+  for (const capacityKey of [
+    'max_owned_worktrees',
+    'temp_capacity_limit',
+    'max_prompt_bytes',
+    'max_finding_recurrence',
+  ]) {
+    if (hasOwn(contract, capacityKey)) {
+      requireInteger(
+        contract[capacityKey],
+        capacityKey,
+        CONTRACT_SCHEMA.properties[capacityKey].minimum,
+        CONTRACT_SCHEMA.properties[capacityKey].maximum,
+        errors,
+      );
+    }
+  }
   requireInteger(
     contract.baseline_churn,
     'baseline_churn',

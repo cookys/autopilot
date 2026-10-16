@@ -63,6 +63,7 @@ const {
   rebuildTranscriptAudit,
   reconstructOwnedInventory,
   buildResourceDebtState,
+  deriveBoundaryOutcomeFlags,
 } = require('./controller-execution');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
@@ -4718,7 +4719,9 @@ class AutopilotEngine {
       // Preserve boundary_rejected as a first-class non-success outcome with
       // candidate reference and exact boundary reason — never collapse to
       // unknown status or fabricated mutation-failure evidence.
-      if (parsed && parsed.status === 'boundary_rejected') {
+      if (parsed && parsed.status === 'boundary_rejected'
+          && deriveBoundaryOutcomeFlags(parsed).clean) {
+        const boundaryFlags = deriveBoundaryOutcomeFlags(parsed);
         return {
           status: 'boundary_rejected',
           phase: 'boundary_rejected',
@@ -4727,8 +4730,8 @@ class AutopilotEngine {
           boundary_code: parsed.boundary_code || 'scope_or_budget_boundary',
           candidate_ref: parsed.commit || parsed.candidate_ref || parsed.tip || null,
           possibly_effectful: Boolean(parsed.commit || parsed.candidate_ref || parsed.tip),
-          mutation_failed: false,
-          unknown_status: false,
+          mutation_failed: boundaryFlags.mutation_failed,
+          unknown_status: boundaryFlags.unknown_status,
           roster,
           resolveResult,
           implementationResult,
@@ -8529,7 +8532,9 @@ class AutopilotEngine {
           repairLineage.terminal_worktree_disposition = repairLineage.worktree === null
             ? 'not_created_failed_dispatch'
             : 'retained_failed_dispatch';
-          if (implementation.status === 'boundary_rejected') {
+          if (implementation.status === 'boundary_rejected'
+              && deriveBoundaryOutcomeFlags(implementation).clean) {
+            const boundaryFlags = deriveBoundaryOutcomeFlags(implementation);
             const boundaryCandidate = implementation.candidate_ref
               || (dispatched && (
                 dispatched.commit || dispatched.candidate_ref || dispatched.tip
@@ -8550,8 +8555,8 @@ class AutopilotEngine {
               candidate_ref: boundaryCandidate,
               possibly_effectful: implementation.possibly_effectful === true
                 || boundaryCandidate !== null,
-              mutation_failed: false,
-              unknown_status: false,
+              mutation_failed: boundaryFlags.mutation_failed,
+              unknown_status: boundaryFlags.unknown_status,
               dispatcher_called: implementation.dispatcher_called === true,
               model_calls: implementation.model_calls,
               repair_lineage: { ...repairLineage },

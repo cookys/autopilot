@@ -10,6 +10,7 @@ const mission = require('../src/engine/mission-convergence');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
 const { inspect: inspectGraph } = require('./mission-execution-graph-check');
 const { admitExecutableMissionDelta } = require('../src/engine/controller-execution');
+const { gitEquivalentPathBytes } = require('../src/engine/sealed-zero-diff-validator');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const FALLBACKS = new Set(['none', 'solo', 'precondition_failed']);
@@ -345,13 +346,10 @@ function readRelevantBytes(repoRoot, paths) {
   // Canonical sha256 of raw file bytes (not UTF-8 text, not base64 guessing).
   const out = {};
   for (const p of paths) {
-    const abs = path.join(repoRoot, p);
-    try {
-      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-        out[p] = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-      }
-    } catch (_e) {
-      // leave missing
+    // BL-0079: the bytes Git stores (a symlink is its target string).
+    const bytes = gitEquivalentPathBytes(repoRoot, p);
+    if (bytes !== null) {
+      out[p] = crypto.createHash('sha256').update(bytes).digest('hex');
     }
   }
   return out;
@@ -532,6 +530,37 @@ function loadControllerEvidenceFromRoot(
  * No ambient env, no global Work Order scan, no caller object as authority
  * (unless allowTestCallerEvidence).
  */
+// BL-0077: the test-only caller-evidence seam must carry the same binding keys
+// the production loader checks with exactEvidenceBinding, plus the zero-effect
+// invariants, or a hand-built object could certify a no-op the real rail
+// would refuse. Values are checked against whatever the caller sealed.
+const TEST_NOOP_BINDING_KEYS = [
+  'repo_identity', 'mission_lineage_id', 'mission_policy_digest',
+  'mission_graph_digest', 'graph_node_id', 'graph_attempt', 'mission_claim_id',
+  'mission_campaign_id', 'icc_campaign_id', 'campaign_contract_digest',
+  'strict_contract_digest',
+];
+function testNoopCarriesProductionBinding(receipt, options = {}) {
+  if (!isObj(receipt)
+      || receipt.artifact_type !== 'noop_receipt'
+      || receipt.dispatcher_called !== false
+      || receipt.mutation_attempts !== 0
+      || receipt.gate_attempts !== 0) {
+    return false;
+  }
+  if (!TEST_NOOP_BINDING_KEYS.every((key) => receipt[key] != null)) return false;
+  const sealed = {
+    graph_node_id: options.graphNodeId,
+    mission_graph_digest: options.missionGraphDigest,
+    mission_lineage_id: options.missionLineageId,
+    mission_policy_digest: options.missionPolicyDigest,
+    icc_campaign_id: options.iccCampaignId,
+  };
+  return Object.entries(sealed).every(([key, value]) => (
+    value == null || receipt[key] === value
+  ));
+}
+
 function loadDurableMissionEvidence(repoRoot, options = {}) {
   let historicalOutputs = null;
   let noOpReceipt = null;
@@ -548,7 +577,8 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     if (isObj(options.noOpReceipt) && isStr(options.noOpReceipt.digest)) {
       const body = { ...options.noOpReceipt };
       delete body.digest;
-      if (options.noOpReceipt.digest === sha256(canonicalJson(body))) {
+      if (options.noOpReceipt.digest === sha256(canonicalJson(body))
+          && testNoopCarriesProductionBinding(options.noOpReceipt, options)) {
         noOpReceipt = options.noOpReceipt;
       }
     }
@@ -994,7 +1024,8 @@ function finalizeMissionEvidence(
         const raw = JSON.parse(fs.readFileSync(path.resolve(options.noopReceiptPath), 'utf8'));
         if (isObj(raw) && isStr(raw.digest)) {
           const body = { ...raw }; delete body.digest;
-          if (raw.digest === sha256(canonicalJson(body))) noOpReceipt = raw;
+          if (raw.digest === sha256(canonicalJson(body))
+              && testNoopCarriesProductionBinding(raw, options)) noOpReceipt = raw;
         }
       } catch (_e) { /* ignore test-path */ }
     }
@@ -1142,9 +1173,14 @@ function admitMissionRouting(options = {}) {
   let deltaAdmission = { noop_adoptions: [] };
   try {
     const artifacts = loadRoutingConfig(repo.root);
+    // BL-0081: the graph file is read ONCE. The digest sealed by inspectGraph and
+    // the per-node delta validation below both consume this single parse, so a file
+    // swapped between two reads cannot certify a graph that was never inspected.
+    const graphJson = readJson(artifacts.graph, 'Mission execution graph');
     graphResult = inspectGraph({
       governance: policy.governance_path,
       graph: artifacts.graph,
+      graphObject: graphJson,
       sources: artifacts.sources,
     });
     requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
@@ -1157,7 +1193,6 @@ function admitMissionRouting(options = {}) {
     // Pre-spend: resolve HEAD once per admission, then validate frozen graph
     // specs against that exact SHA using the already-checked routing graph.
     const admissionBaseSha = resolveAuthoritativeHead(repo.root);
-    const graphJson = readJson(artifacts.graph, 'Mission execution graph');
     validateGraphSpecsAtBase(
       repo.root,
       graphJson,

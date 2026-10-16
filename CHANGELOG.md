@@ -254,6 +254,20 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - 完整測試套件有 4 個檔案失敗，都確認不是這次改動引入的：其中 2 個在 base `6e91be30` 上同樣失敗，另外 2 個是測試執行中途改動本機設定造成的，已記入 BACKLOG。
 - 已用 discuss-v4 重考四格：haiku-high FAIL 29/48；sonnet-high、opus-high、opus-low PASS 45/48，scorecard 事件 218–221，四列都收進官方預設。
 
+- BL-0077: controller helpers now fail closed on missing input: `checkJointRepairBudget` requires an explicit `projectedDelta`, `attachControllerState` rejects an empty replacement, the default effect admission refuses without repository authority, `admitExecutableMissionDelta` rejects traversal paths itself, and the test-only Mission no-op evidence seam must carry the production binding keys.
+
+- BL-0078: `mutation_failed` and `unknown_status` on a boundary_rejected outcome are now derived from the rail evidence instead of written as constants; a boundary stop the rail reports as a failed mutation, an unknown status, or an effect with no candidate to point at is no longer a durable boundary wait. Root-wide dispatch exclusion is recorded as intentional and pinned by a test.
+
+- BL-0079: engine byte digests of worktree paths now hash a symlink as Git stores it (its target string) and give no digest to a path behind a symlinked directory; a Work Order that is not a stale tombstone is rejected if it carries a disposition receipt (`disposition_receipt_unexpected`); an unreadable process table now classifies a Work Order as `orphan_blocked` (`process_table_unreadable`) instead of throwing out of `classifyWorkOrder`.
+
+- BL-0080: every durable campaign stop (awaiting disposition, awaiting convergence including the budget-admission stops, boundary rejected) now carries `repair_generation` and an explicit `candidate` so it validates verbatim as a resume checkpoint; a full-diff barrier authorizes repair only for the candidate it was recorded for and can be minted only from a `full_diff_review` receipt; at the panel station the full-diff gate reuse key now includes the sealed reviewer roster.
+
+- BL-0081: Mission admission now reads the routing graph file once and inspects that same parse (`inspect` accepts `graphObject`), so a file swapped between the digest read and the per-node validation cannot certify an uninspected graph; the campaign contract validator now holds the schema bounds for `max_owned_worktrees`, `temp_capacity_limit`, `max_prompt_bytes` and `max_finding_recurrence` instead of passing 999999999 through to the admission ceiling.
+
+- BL-0083: `terminal_status` is enforced as a closed enum when a terminal receipt is validated and when a Work Order is classified or written as a tombstone (a status such as `succeeded` no longer reads as terminal and keeps blocking), the never-produced `attached` disposition is gone, and `work-order.js` now states what its digests guarantee (integrity) versus what they do not (attestation) under the confused-controller threat model.
+
+- BL-0082: orphan adoption now re-observes the persisted runner identity and refuses an absent, partial, live or unknowable one (a dead controller no longer implies a dead leaf), and `reconstructOwnedInventory` re-reads rows Git no longer corroborates: a stale `active` on an unregistered worktree is dropped, an unregistered path on disk is unknown residue, and a branch that moved past its recorded tip is re-checked for unique commits. Worktrees created but never registered still need a write-ahead intent row (BL-0082 stays open for that).
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

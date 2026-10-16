@@ -1421,18 +1421,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### bash-launch guard: a reassigned launch variable hides the first child
-- **Id**: BL-0192
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 背景派工檢查會看「啟動後有沒有等它結束」。如果同一個變數先接一個派工程序、再改接另一個程序，最後只等第二個，第一個派工其實沒人等，檢查卻會放行。另外寫成物件屬性再等（self.p.wait()）的情況會被誤擋。
-- **Impact**: 低。要刻意把同一個變數接兩次才會漏；誤擋時改寫成區域變數即可。
-- **Trigger**: 有人回報這兩種寫法被漏放或誤擋，或下次動 bash-launch-rules.js 的等待判斷
-- **Effort**: S
-- **Source**: frz2 review 2026-10-15
-- **Pointer**: none
-
 ### Move exam registration to llm-playground; autopilot reads one JSON
 - **Id**: BL-0194
 - **Status**: open

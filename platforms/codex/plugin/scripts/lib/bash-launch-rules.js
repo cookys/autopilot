@@ -166,7 +166,7 @@ const LIST_CALL_RE = /(subprocess\.Popen|child_process\.(?:spawn|execFile)|\b(?:
 // unref'd (`detached` alone is not enough). "This launch" = a `.wait()` / `.communicate()` / `.unref()` chained
 // on the call, or one on the variable the call is assigned to (`p = Popen(...)` … `p.wait()`); a wait or unref on
 // any other variable says nothing about this child. `with Popen(...) as p:` waits on exit.
-const CHILD_ASSIGN_RE = /([\w$]+)\s*=\s*(?:[\w$]+(?:\(\s*['"][\w:./-]*['"]\s*\))?\s*\.\s*)*$/;
+const CHILD_ASSIGN_RE = /([\w$]+(?:\s*\.\s*[\w$]+)*)\s*=(?!=)\s*(?:[\w$]+(?:\(\s*['"][\w:./-]*['"]\s*\))?\s*\.\s*)*$/;
 function callCloseIndex(body, open) { // index just past the `)` matching body[open] === '(' (quote-aware), or -1
   let depth = 0;
   for (let i = open; i < body.length; i++) {
@@ -187,7 +187,14 @@ function childOutlivesCall(call, body, idx) {
   const close = open < 0 ? -1 : callCloseIndex(body, open);
   if (close >= 0 && new RegExp(`^\\s*\\.\\s*(?:${verbs})\\s*\\(`).test(body.slice(close))) return !py; // chained on the call
   const vm = CHILD_ASSIGN_RE.exec(before);
-  const waited = !!vm && new RegExp(`(?<![\\w$.])${vm[1].replace(/\$/g, '\\$')}\\s*\\.\\s*(?:${verbs})\\s*\\(`).test(body);
+  // Only the text after THIS call counts, up to the next re-assignment of the same handle (BL-0192): a later
+  // `p = Popen(B)` replaces the handle, so a `p.wait()` after it belongs to B, not to this launch.
+  const name = vm ? vm[1].replace(/\s+/g, '').replace(/[$.]/g, '\\$&') : '';
+  let after = close >= 0 ? body.slice(close) : '';
+  const re = vm ? name.replace(/\\\./g, '\\s*\\.\\s*') : '';
+  const rebind = vm ? new RegExp(`(?<![\\w$.])${re}\\s*=(?!=)`).exec(after) : null;
+  if (rebind) after = after.slice(0, rebind.index);
+  const waited = !!vm && new RegExp(`(?<![\\w$.])${re}\\s*\\.\\s*(?:${verbs})\\s*\\(`).test(after);
   return py ? !waited : waited;
 }
 const LIST_WORD_RE = /'([^']*)'|"([^"]*)"/g;

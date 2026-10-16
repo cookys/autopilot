@@ -164,12 +164,41 @@ function emitArray(value) {
   }
 }
 
+// Bounded concurrency (BL-0107): at most `limit` jobs run at once; the rest queue in input
+// order and start as slots free. Results keep input order. The per-job timeout clock starts in
+// runJob (at spawn), so queued time never counts against a seat. limit <= 0 or non-integer
+// means unbounded (all seats at once, the historical behaviour).
+function parseLimit(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n >= 1 ? n : 0;
+}
+
+async function runPool(jobs, limit, run) {
+  if (!limit || limit >= jobs.length) return Promise.all(jobs.map((job) => run(job)));
+  const results = new Array(jobs.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const idx = next;
+      next += 1;
+      results[idx] = await run(jobs[idx]);
+    }
+  };
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
 async function main() {
   let jobs = [];
+  let limit = 0;
   try {
     const raw = await readStdin();
     const parsed = JSON.parse(raw);
     jobs = parsed && Array.isArray(parsed.jobs) ? parsed.jobs : [];
+    limit = parseLimit(parsed && parsed.max_concurrency != null
+      ? parsed.max_concurrency
+      : process.env.AUTOPILOT_REVIEW_MAX_CONCURRENCY);
   } catch (error) {
     jobs = [];
     emitArray([{
@@ -185,7 +214,7 @@ async function main() {
     process.exit(0);
     return;
   }
-  const results = await Promise.all(jobs.map((job) => runJob(job)));
+  const results = await runPool(jobs, limit, runJob);
   emitArray(results);
   process.exit(0);
 }

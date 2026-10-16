@@ -149,6 +149,7 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 | Setting | What it does | Default | Environment variable |
 |---|---|---|---|
 | `topology.exclude_seats` (config.json) | Seats (engine/effort@runner, or a bare engine) never offered by the dispatch ladders and review panel; unioned with --exclude-seats. | `[]` | `AUTOPILOT_TOPOLOGY_FILE`: Where the derived dispatch topology is written and read. |
+| `AUTOPILOT_REVIEW_MAX_CONCURRENCY` | Most review seats that run at once in a review fan-out (qc panel, final panel); the rest queue in order and each seat's timeout starts when it actually starts. Unset, 0 or not a whole number means all seats at once. | unlimited |  |
 | `AUTOPILOT_MIN_REVIEWED_SEATS` | Minimum seats that must have reviewed before a review loop or phase receipt passes (same grammar as --min-reviewed-seats). | all seats |  |
 | `AUTOPILOT_QUALIFICATION_OVERRIDE` | A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it. | unset |  |
 | `AUTOPILOT_STRIKE_ENFORCEMENT` | Set to "enforce" to arm strike-based requalification; otherwise strikes are only recorded. | shadow |  |

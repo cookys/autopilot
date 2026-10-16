@@ -2077,7 +2077,11 @@ function main() {
       panel.seatSettle(seat.id, seatReview.exhausted
         ? {
           status: 'failed',
-          transportStatus: seatReview.deadline_exhausted ? 'deadline_exhausted' : 'transport_exhausted',
+          // A seat with no attempt was never dispatched (no eligible target / precondition);
+          // calling it transport_exhausted makes an exit-4 run look like a pipe failure.
+          transportStatus: seatReview.deadline_exhausted
+            ? 'deadline_exhausted'
+            : (seatReview.attempts.length === 0 ? 'not_dispatched' : 'transport_exhausted'),
           unratifiedAvailable: Boolean(seatReview.unratified),
         }
         : { status: 'done', transportStatus: 'success' });

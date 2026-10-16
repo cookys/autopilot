@@ -174,4 +174,66 @@ printf 'null' > "$TEST_TMP/null.manifest.json"
 node "$STATUS" --panel "$TEST_TMP/null.manifest.json" >/dev/null 2>&1
 assert_eq "$?" "3" "scalar JSON panel file → clean exit 3"
 
+# ── 5. BL-0045 residuals (one assertion each) ──
+# (5a) never-dispatched seat is labelled not_dispatched, not transport_exhausted
+ND_MANIFEST="$TEST_TMP/nd-manifest.json"
+node -e '
+const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+m.minimum_distinct_families=1;
+m.seats[1].readiness_status="unavailable"; m.seats[1].required=false; m.seats[1].fallbacks=[];
+require("fs").writeFileSync(process.argv[2],JSON.stringify(m));
+' "$MANIFEST" "$ND_MANIFEST"
+ND_RUNS="$TEST_TMP/nd-runs"; mkdir -p "$ND_RUNS"
+AUTOPILOT_DISPATCH_RUNS_DIR="$ND_RUNS" \
+AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+    --ticket panel-nd --session-id session-nd --generation 1 \
+    --manifest-file "$ND_MANIFEST" --state-dir "$TEST_TMP/state-nd" >/dev/null 2>&1
+ND_PANEL=$(ls "$ND_RUNS" | grep '^panel-' | head -1)
+assert_eq "$(jf "$(cat "$ND_RUNS/$ND_PANEL")" seats.1.transport_status)" "not_dispatched" "never-dispatched seat is not_dispatched (RED when settle labels it transport_exhausted)"
+assert_eq "$(jf "$(cat "$ND_RUNS/$ND_PANEL")" seats.0.transport_status)" "success" "dispatched seat keeps success"
+
+# (5b) --panels reports truncation instead of silently cutting at 10; --limit widens
+TR_RUNS="$TEST_TMP/tr-runs"; mkdir -p "$TR_RUNS"
+for n in $(seq -w 1 12); do
+  node -e '
+  require("fs").writeFileSync(process.argv[1],JSON.stringify({schema_version:1,artifact_type:"plan_review_panel_manifest",ticket:"t"+process.argv[2],logical_plan_id:"l",generation:1,pid:0,started_at:"2026-08-19T00:"+process.argv[2]+":00Z",deadline_at:null,updated_at:"x",ended_at:"x",verdict:"READY",seats:[]}));
+  ' "$TR_RUNS/panel-tr$n-g1-0.manifest.json" "$n"
+done
+TR_OUT=$(node "$STATUS" --panels --dir "$TR_RUNS" 2>"$TEST_TMP/tr.err")
+assert_eq "$(node -e 'console.log(JSON.parse(process.argv[1]).length)' "$TR_OUT")" "10" "--panels default still shows newest 10"
+assert_contains "$(cat "$TEST_TMP/tr.err")" '"truncated":true' "--panels reports truncation with totals on stderr"
+assert_contains "$(cat "$TEST_TMP/tr.err")" '"total":12' "--panels truncation note carries the total"
+assert_eq "$(node "$STATUS" --panels --limit all --dir "$TR_RUNS" 2>/dev/null | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).length)')" "12" "--panels --limit all lists every panel"
+
+# (5c) failed flush leaves no .tmp-<pid> residue
+TMP_RUNS="$TEST_TMP/tmp-runs"; mkdir -p "$TMP_RUNS"
+AUTOPILOT_DISPATCH_RUNS_DIR="$TMP_RUNS" node - "$REPO_ROOT" "$TMP_RUNS" <<'NODE'
+const fs = require('fs');
+const sk = 'ab'.repeat(32);
+// Occupy the target path with a directory so renameSync(tmp, file) fails after the tmp write.
+fs.mkdirSync(`${process.argv[3]}/panel-${sk.slice(0, 8)}-g1-${process.pid}.manifest.json`);
+const { createPanelManifest } = require(`${process.argv[2]}/scripts/lib/plan-review-panel.js`);
+createPanelManifest({ ticket: 't', logicalPlanId: 'l', generation: 1, sessionKey: sk, startedAt: 'x', deadlineAt: 'x', seats: [{ id: 'a' }] });
+NODE
+assert_eq "$(ls -a "$TMP_RUNS" | grep -c '\.tmp-')" "0" "failed flush unlinks its tmp file (RED without the unlink)"
+
+# (5d) --panel with no value: exit 2 and a usage message naming the flag
+node "$STATUS" --panel >/dev/null 2>"$TEST_TMP/pv.err"
+assert_eq "$?" "2" "--panel without a value exits 2"
+assert_contains "$(cat "$TEST_TMP/pv.err")" "--panel requires a value" "--panel without a value explains itself"
+
+# (5e) --list excludes panels by artifact_type, not by file-name prefix
+LT_RUNS="$TEST_TMP/lt-runs"; mkdir -p "$LT_RUNS"
+node -e '
+const fs=require("fs");
+fs.writeFileSync(process.argv[1]+"/panel-lookalike.manifest.json",JSON.stringify({run_id:"panel-lookalike",role:"author"}));
+fs.writeFileSync(process.argv[1]+"/odd-name.manifest.json",JSON.stringify({artifact_type:"plan_review_panel_manifest",ticket:"t",seats:[]}));
+' "$LT_RUNS"
+LT_OUT=$(node "$STATUS" --list --dir "$LT_RUNS")
+assert_contains "$LT_OUT" '"run_id":"panel-lookalike"' "--list keeps a run whose file name merely starts with panel-"
+assert_not_contains "$LT_OUT" "odd-name" "--list drops a panel manifest whatever its file name"
+
 finalize_test

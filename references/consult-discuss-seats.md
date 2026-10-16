@@ -17,9 +17,7 @@ D10 this doc + closeout).
   the closed consult response schema. See `references/hetero-dispatch.md` § The consult seat for
   the full invocation contract.
 - **discuss** (`scripts/dispatch-discuss.js`) — a single stateless round-bundle contribution to a
-  `think-tank` debate: one call per turn (a seat may take a second turn once every role has spoken —
-  the caller sends a new bundle whose transcript relabels the seat's own first turn `role: "this-seat"`;
-  the seat must stay on that axis and answer another role's claim), producing a
+  `think-tank` debate: one call per round-set, producing a
   `{round_id, axis_id, claim_vector, position, risk_tags, anchors}` response. Called
   unconditionally from `skills/think-tank/SKILL.md` Step 3.5 — the wrapper itself is the decision
   point, resolving `discuss_dispatch` and refusing (non-zero exit, no transport spawned) when the

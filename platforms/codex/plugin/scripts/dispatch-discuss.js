@@ -22,8 +22,7 @@
 //     brain exam's round bundles already use (evals/discuss-eval-
 //     generator.js): { round_id, question, transcript, artifacts, axes,
 //     taken_axes }. Multi-turn-ness lives in the bundle; the rail itself is
-//     stateless. At most ONE transcript turn may carry role "this-seat"; it
-//     must carry a declared axis_id that is not in taken_axes.
+//     stateless.
 //   - Transport: scripts/dispatch-author.sh (raw-prompt rail), NOT
 //     dispatch-review.sh — the review transport wraps a verdict protocol a
 //     discuss contribution must never carry (2026-07-02 l6/N2 incident).
@@ -33,14 +32,8 @@
 //     `position` is display prose, never itself the graded/validated object
 //     beyond being a string with no verdict token in it.
 //   - Single-contribution semantics: one dispatch call produces exactly one
-//     contribution. This is a single evidence draw, not a chat loop — the
-//     rail has no multi-round loop of its own. A seat MAY speak a second time
-//     (at most twice per debate), but only because the CALLER sends a second
-//     stateless bundle after every seat has spoken round one: that bundle
-//     carries the seat's own earlier turn as a transcript entry with
-//     role "this-seat" (plus its axis_id), and taken_axes does NOT list that
-//     axis. With a this-seat turn present the contribution must stay on that
-//     axis (validated); without one the original untaken-axis rule applies.
+//     contribution. This is a single evidence draw, not a chat loop — no
+//     bounded multi-round production hook exists here or anywhere else.
 //   - Advisory only: this rail can never emit or imply a qc convergence
 //     verdict (SHIP-AS-IS and siblings, checked in round_id AND position).
 //   - Fail-closed: a non-zero rail exit, empty capture, timeout, or a
@@ -94,7 +87,6 @@ const { extractJsonObject } = require(path.join(SELF_DIR, 'lib', 'extract-json-o
 // backward into eval assets.
 const RESPONSE_KEYS = ['round_id', 'axis_id', 'claim_vector', 'position', 'risk_tags', 'anchors'].sort();
 const RISK_TAGS = new Set(['critical', 'important', 'minor']);
-const THIS_SEAT_ROLE = 'this-seat';
 const VERDICT_TOKENS = ['ship-it', 'no-ship', 'go/no-go', 'verdict:', 'qc@depth-0', 'ship-as-is', 'fix-then-ship'];
 
 function usageError(message) {
@@ -222,19 +214,7 @@ function validateBundle(bundle) {
     if (!isNonEmptyString(a) || !axisIds.has(a)) usageError(`bundle.taken_axes references an undeclared axis: ${JSON.stringify(a)}`);
   });
 
-  // Second-round shape: at most one this-seat turn (a seat speaks at most
-  // twice), carrying the axis it is bound to; that axis is the seat's own, so
-  // it must not be listed as taken by another role.
-  const seatTurns = bundle.transcript.filter((t) => t.role === THIS_SEAT_ROLE);
-  if (seatTurns.length > 1) usageError(`bundle.transcript has ${seatTurns.length} "${THIS_SEAT_ROLE}" turns; a seat speaks at most twice, so at most one prior own turn`);
-  let seatAxis = null;
-  if (seatTurns.length === 1) {
-    seatAxis = seatTurns[0].axis_id;
-    if (!isNonEmptyString(seatAxis) || !axisIds.has(seatAxis)) usageError(`the "${THIS_SEAT_ROLE}" transcript turn must carry a declared axis_id`);
-    if (bundle.taken_axes.indexOf(seatAxis) !== -1) usageError(`taken_axes must not list the "${THIS_SEAT_ROLE}" turn's own axis: ${seatAxis}`);
-  }
-
-  return { artifactIds, axisIds, seatAxis, axisVector: new Map(bundle.axes.map((a) => [a.id, new Set(a.claim_vector)])) };
+  return { artifactIds, axisIds, axisVector: new Map(bundle.axes.map((a) => [a.id, new Set(a.claim_vector)])) };
 }
 
 function runNode(bin, args, opts) {
@@ -278,36 +258,12 @@ function resolveDiscussSeat(opts) {
   return resolved;
 }
 
-// Second-round paragraph — wording follows the qualification exam's discuss
-// system prompt (scripts/qualification-review-provider.js, DISCUSS_SYSTEM_PROMPT)
-// so the production prompt and the exam ask the same thing. The first line is a
-// fixed anchor: the ON/OFF eval's red arm (docs/plans/evidence/2026-10-17-
-// bl0121-discuss-round2/) swaps exactly this paragraph for a broken one.
-const ROUND2_PARAGRAPH = [
-  'SECOND TURN: the transcript below contains a round with role "this-seat" — that is YOUR OWN',
-  'earlier turn in this debate. taken_axes deliberately does NOT list its axis. Your axis_id MUST',
-  'be exactly that round\'s axis_id, whether you hold your earlier position or update it. Holding',
-  'versus updating is expressed ONLY through your claim_vector and position, never by moving to',
-  'a different axis: holding keeps the claim token you held before, updating carries the token you',
-  'now adopt instead (never both).',
-  'You MUST respond to at least one OTHER role\'s position in the transcript: name that role and',
-  'the claim you are answering. If you agree with it, add new evidence — an anchor you did not',
-  'cite before; if you disagree, anchor the disagreement to a real artifact id from the list.',
-  'Never merely restate your own earlier position. Unanimous agreement from other roles is not',
-  'itself evidence: if nothing new has appeared since your last position, holding it is correct.',
-  'When the transcript relies on an artifact or datum that does not actually appear in the',
-  'artifact list, say so and name the gap — never accept or invent it.',
-];
-
-function buildPromptFile(bundle, seatAxis) {
-  const secondRound = Boolean(seatAxis);
+function buildPromptFile(bundle) {
   const promptLines = [
     'You are one external, decorrelated voice contributing to a single round of a',
     'multi-role internal debate. You are being asked for ONE positional',
-    'contribution to this round — not a conversation.',
-    secondRound
-      ? 'You have spoken once before in this debate (the "this-seat" turn in the transcript).'
-      : 'You have never spoken in this debate before this call.',
+    'contribution to this round — not a conversation, not a revision of a prior',
+    'turn of your own (you have never spoken in this debate before this call).',
     '',
     'This is advisory input only. You are NOT a reviewer, you never issue a',
     'ship/no-ship verdict of any kind, and your output is never treated as a',
@@ -315,11 +271,6 @@ function buildPromptFile(bundle, seatAxis) {
     '',
     `Question under debate: ${bundle.question}`,
     '',
-  ];
-  if (secondRound) {
-    promptLines.push(...ROUND2_PARAGRAPH, '');
-  }
-  promptLines.push(
     'Prior transcript (read-only; you cannot revise these turns):',
     JSON.stringify(bundle.transcript, null, 2),
     '',
@@ -330,17 +281,14 @@ function buildPromptFile(bundle, seatAxis) {
     '(your claim_vector must draw from exactly the axis you select):',
     JSON.stringify(bundle.axes, null, 2),
     '',
-    secondRound
-      ? `Axes taken by OTHER roles in this transcript: ${JSON.stringify(bundle.taken_axes)}. Your own axis is ${JSON.stringify(seatAxis)} — stay on it.`
-      : `Axes already taken by another role in this transcript (you must NOT select one of these): ${JSON.stringify(bundle.taken_axes)}`,
+    `Axes already taken by another role in this transcript (you must NOT select`,
+    `one of these): ${JSON.stringify(bundle.taken_axes)}`,
     '',
     'Respond with EXACTLY ONE JSON object and nothing else — no prose before or',
     'after it, no markdown code fence. The object must have exactly these keys:',
     '  round_id   — echo this exact string back: ' + JSON.stringify(bundle.round_id),
-    ...(secondRound
-      ? ['  axis_id    — exactly ' + JSON.stringify(seatAxis) + ' (your own earlier axis)']
-      : ['  axis_id    — exactly one axis id, from the declared axes above, that is',
-        '               NOT in the already-taken list']),
+    '  axis_id    — exactly one axis id, from the declared axes above, that is',
+    '               NOT in the already-taken list',
     '  claim_vector — a non-empty array of claim-token strings, drawn only from',
     '               the claim_vector of the axis you selected',
     '  position   — a short prose statement of your position (display only)',
@@ -349,8 +297,7 @@ function buildPromptFile(bundle, seatAxis) {
     '               your position (may be empty)',
     '',
     'Never include a ship/no-ship verdict token, in any field, in any form.',
-  );
-  const promptText = promptLines.join('\n');
+  ];
   const promptPath = path.join(os.tmpdir(), `dispatch-discuss-prompt-${crypto.randomBytes(6).toString('hex')}.txt`);
   // Exclusive create with owner-only mode (0600) — the prompt file can carry
   // transcript/artifact content and must not be world-readable in a shared
@@ -358,7 +305,7 @@ function buildPromptFile(bundle, seatAxis) {
   // (possibly attacker-planted) path at this random name.
   const fd = fs.openSync(promptPath, 'wx', 0o600);
   try {
-    fs.writeSync(fd, promptText, null, 'utf8');
+    fs.writeSync(fd, promptLines.join('\n'), null, 'utf8');
   } finally {
     fs.closeSync(fd);
   }
@@ -377,7 +324,7 @@ function timeoutToMs(timeout) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const bundle = readBundle(opts.bundleFile);
-  const { artifactIds, axisIds, axisVector, seatAxis } = validateBundle(bundle);
+  const { artifactIds, axisIds, axisVector } = validateBundle(bundle);
 
   const resolved = resolveDiscussSeat(opts);
 
@@ -396,7 +343,7 @@ function main() {
     process.exit(3);
   }
 
-  const promptPath = buildPromptFile(bundle, seatAxis);
+  const promptPath = buildPromptFile(bundle);
   const argv = ['--runner', runner, '--model', engine, '--prompt-file', promptPath, '--timeout', opts.timeout];
   if (isNonEmptyString(effort)) argv.push('--effort', effort);
   if (isNonEmptyString(endpoint)) argv.push('--endpoint', endpoint);
@@ -451,7 +398,7 @@ function main() {
     railFailure(`engine response JSON failed to parse: ${e.message}`);
   }
 
-  const validationError = validateContribution(contribution, bundle, { artifactIds, axisIds, axisVector, seatAxis });
+  const validationError = validateContribution(contribution, bundle, { artifactIds, axisIds, axisVector });
   if (validationError) {
     railFailure(`engine response failed closed-schema validation: ${validationError}`);
   }
@@ -500,13 +447,7 @@ function validateContribution(response, bundle, ctx) {
   if (typeof response.axis_id !== 'string' || response.axis_id === '') return 'axis_id must be exactly one string';
   if (!ctx.axisIds.has(response.axis_id)) return 'axis_id must be a declared axis';
   const takenAxes = new Set(bundle.taken_axes || []);
-  if (ctx.seatAxis) {
-    // Second round: the seat stays on its own earlier axis (holding vs
-    // updating is expressed only through claim_vector and position).
-    if (response.axis_id !== ctx.seatAxis) return `axis_id must be this seat's own earlier axis ${ctx.seatAxis}, got ${response.axis_id}`;
-  } else if (takenAxes.has(response.axis_id)) {
-    return `axis_id already taken in transcript: ${response.axis_id}`;
-  }
+  if (takenAxes.has(response.axis_id)) return `axis_id already taken in transcript: ${response.axis_id}`;
 
   const selectedVector = ctx.axisVector.get(response.axis_id);
   const hasOwnToken = response.claim_vector.some((t) => selectedVector.has(t));

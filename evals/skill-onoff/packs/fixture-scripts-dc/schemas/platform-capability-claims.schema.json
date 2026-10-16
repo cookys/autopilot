@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cookys/autopilot/schemas/platform-capability-claims.schema.json",
+  "title": "Platform capability claims receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_type", "generated_at", "validator_version", "claims", "consumer_manifest", "consumer_manifest_digest", "receipt_digest"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "artifact_type": { "const": "platform-capability-claims" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "validator_version": { "const": "1.0.0" },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/claim" }
+    },
+    "consumer_manifest": { "$ref": "#/$defs/consumerManifest" },
+    "consumer_manifest_digest": { "$ref": "#/$defs/sha256" },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "nullableString": { "type": ["string", "null"], "minLength": 1 },
+    "targetIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runner", "model", "role", "effort", "endpoint", "family", "binary_realpath", "cli_version"],
+      "properties": {
+        "runner": { "type": "string", "minLength": 1 },
+        "model": { "$ref": "#/$defs/nullableString" },
+        "role": { "type": "string", "minLength": 1 },
+        "effort": { "$ref": "#/$defs/nullableString" },
+        "endpoint": { "$ref": "#/$defs/nullableString" },
+        "family": { "type": "string", "minLength": 1 },
+        "binary_realpath": { "type": "string", "pattern": "^/" },
+        "cli_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "officialContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locator", "retrieved_at", "document_sha256", "assertion"],
+      "properties": {
+        "locator": { "type": "string", "minLength": 1 },
+        "retrieved_at": { "$ref": "#/$defs/timestamp" },
+        "document_sha256": { "$ref": "#/$defs/sha256" },
+        "assertion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "transportBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_model", "execution_effort_argument", "normalized_model", "normalized_effort"],
+      "properties": {
+        "execution_model": { "$ref": "#/$defs/nullableString" },
+        "execution_effort_argument": { "$ref": "#/$defs/nullableString" },
+        "normalized_model": { "$ref": "#/$defs/nullableString" },
+        "normalized_effort": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "liveEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cli_version", "probe_command_sha256", "probe_output_sha256", "behavior_class", "observed_at", "ttl_seconds", "result", "transport_binding"],
+      "properties": {
+        "cli_version": { "type": "string", "minLength": 1 },
+        "probe_command_sha256": { "$ref": "#/$defs/sha256" },
+        "probe_output_sha256": { "$ref": "#/$defs/sha256" },
+        "behavior_class": { "type": "string", "minLength": 1 },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "ttl_seconds": { "type": "integer" },
+        "result": { "type": "string", "minLength": 1 },
+        "transport_binding": { "$ref": "#/$defs/transportBinding" }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expires_at"],
+      "properties": { "expires_at": { "$ref": "#/$defs/timestamp" } }
+    },
+    "revalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validator_version", "command_sha256", "validated_at", "result"],
+      "properties": {
+        "validator_version": { "const": "1.0.0" },
+        "command_sha256": { "$ref": "#/$defs/sha256" },
+        "validated_at": { "$ref": "#/$defs/timestamp" },
+        "result": { "type": "string", "minLength": 1 }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "capability_id", "target_identity", "official_contract", "live_evidence", "agreement", "freshness", "revalidation", "status"],
+      "properties": {
+        "claim_id": { "type": "string", "pattern": "^cap-v1-[a-f0-9]{64}$" },
+        "capability_id": { "type": "string", "minLength": 1 },
+        "target_identity": { "$ref": "#/$defs/targetIdentity" },
+        "official_contract": { "$ref": "#/$defs/officialContract" },
+        "live_evidence": { "$ref": "#/$defs/liveEvidence" },
+        "agreement": { "type": "boolean" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "revalidation": { "$ref": "#/$defs/revalidation" },
+        "status": { "enum": ["validated", "blocked"] }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consumer_id", "required_claim_ids"],
+      "properties": {
+        "consumer_id": { "enum": ["D2", "D3", "D4"] },
+        "required_claim_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^cap-v1-[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "consumerManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "consumers", "optional_unconsumed_claim_ids"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "consumers": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/consumer" }
+        },
+        "optional_unconsumed_claim_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^cap-v1-[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

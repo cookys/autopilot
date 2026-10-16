@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-policy.schema.json",
+  "title": "MissionPolicy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enforcement_mode",
+    "max_campaigns",
+    "max_wall_seconds",
+    "max_tool_calls",
+    "max_engine_attempts",
+    "max_external_wait_seconds",
+    "max_canonical_changed_files",
+    "max_output_bytes",
+    "max_deliverables",
+    "max_parallel",
+    "max_batches",
+    "max_graph_depth",
+    "max_gate_attempts",
+    "closure_ratio",
+    "max_stagnant_campaigns"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "enforcement_mode": { "enum": ["shadow", "enforce"] },
+    "max_campaigns": { "$ref": "#/$defs/zero_integer" },
+    "max_wall_seconds": { "$ref": "#/$defs/zero_integer" },
+    "max_tool_calls": { "$ref": "#/$defs/zero_integer" },
+    "max_engine_attempts": { "$ref": "#/$defs/zero_integer" },
+    "max_external_wait_seconds": { "$ref": "#/$defs/zero_integer" },
+    "max_canonical_changed_files": { "$ref": "#/$defs/zero_integer" },
+    "max_output_bytes": { "$ref": "#/$defs/zero_integer" },
+    "max_deliverables": { "$ref": "#/$defs/positive_integer" },
+    "max_parallel": { "$ref": "#/$defs/positive_integer" },
+    "max_batches": { "$ref": "#/$defs/positive_integer" },
+    "max_graph_depth": { "$ref": "#/$defs/positive_integer" },
+    "max_gate_attempts": { "$ref": "#/$defs/positive_integer" },
+    "closure_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "max_stagnant_campaigns": { "$ref": "#/$defs/zero_integer" }
+  },
+  "$defs": {
+    "zero_integer": { "type": "integer", "minimum": 0 },
+    "positive_integer": { "type": "integer", "minimum": 1 }
+  }
+}

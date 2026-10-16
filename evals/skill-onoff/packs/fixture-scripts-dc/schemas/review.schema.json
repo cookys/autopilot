@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/review.schema.json",
+  "title": "review",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "project_key", "plan", "code", "published_at"],
+      "properties": {
+        "schema": { "const": "autopilot.review/1" },
+        "project_key": { "type": "string", "minLength": 1 },
+        "plan": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/plan" }] },
+        "code": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/code" }] },
+        "published_at": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "project_key", "phase", "generation", "base", "head", "seats", "converged", "at"],
+      "properties": {
+        "schema": { "const": "autopilot.review-round/1" },
+        "project_key": { "type": "string", "minLength": 1 },
+        "phase": { "type": ["string", "null"] },
+        "generation": { "type": "integer", "minimum": 1 },
+        "base": { "type": ["string", "null"] },
+        "head": { "type": ["string", "null"] },
+        "seats": { "type": "array", "items": { "$ref": "#/$defs/roundSeat" } },
+        "converged": { "type": "boolean" },
+        "at": { "type": "string", "minLength": 1 }
+      }
+    }
+  ],
+  "$defs": {
+    "planSeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "status"],
+      "properties": { "id": { "type": "string" }, "family": { "type": ["string", "null"] }, "status": { "type": ["string", "null"] } }
+    },
+    "roundSeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "status", "verdict"],
+      "properties": { "id": { "type": ["string", "null"] }, "family": { "type": ["string", "null"] }, "status": { "type": ["string", "null"] }, "verdict": { "type": ["string", "null"] } }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logical_plan_id", "generation", "max_generations", "terminal", "verdict", "seats", "updated_at"],
+      "properties": {
+        "logical_plan_id": { "type": ["string", "null"] },
+        "generation": { "type": "integer", "minimum": 0 },
+        "max_generations": { "type": ["integer", "null"] },
+        "terminal": { "type": "boolean" },
+        "verdict": { "type": ["string", "null"] },
+        "seats": { "type": "array", "items": { "$ref": "#/$defs/planSeat" } },
+        "updated_at": { "type": "string", "minLength": 1 }
+      }
+    },
+    "code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "generation", "base", "head", "seats", "converged", "at"],
+      "properties": {
+        "phase": { "type": ["string", "null"] },
+        "generation": { "type": ["integer", "null"] },
+        "base": { "type": ["string", "null"] },
+        "head": { "type": ["string", "null"] },
+        "seats": { "type": "array", "items": { "$ref": "#/$defs/roundSeat" } },
+        "converged": { "type": "boolean" },
+        "at": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

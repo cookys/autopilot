@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/engine-capability-state.schema.json",
+  "title": "EngineCapabilityState",
+  "description": "Schema for append-only capability events and merged current state.",
+  "type": "object",
+  "required": ["schema_version", "observed_at", "runner", "model", "role", "capability"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version, must be 1."
+    },
+    "event_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic event ID assigned by the store."
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of the observation."
+    },
+    "runner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Runner identifier."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Model identifier."
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Lifecycle role."
+    },
+    "effort": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Exact effort identity. Absence means legacy effort-ambiguous evidence."
+    },
+    "effort_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
+    "endpoint": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_]+$",
+      "description": "Exact endpoint wallet identity. Absence means legacy endpoint-ambiguous evidence."
+    },
+    "endpoint_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
+    "runner_version": {
+      "type": ["string", "null"],
+      "description": "Version of the runner if known."
+    },
+    "capability": {
+      "type": "object",
+      "required": ["quota"],
+      "additionalProperties": false,
+      "properties": {
+        "quota": {
+          "type": "object",
+          "required": ["status", "confidence", "ttl_seconds"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["available", "limited", "exhausted", "unknown"]
+            },
+            "reset_at": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low"]
+            },
+            "evidence": {
+              "type": ["string", "null"]
+            },
+            "ttl_seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only observation time of the quota event selected by the merged current view."
+            },
+            "event_id": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "Output-only event ID of the quota observation selected by the merged current view."
+            },
+            "source_role": {
+              "type": ["string", "null"],
+              "description": "Output-only role provenance for a role-agnostic quota merge."
+            }
+          }
+        },
+        "skill_transport": {
+          "type": "object",
+          "required": ["native", "prompt_pack"],
+          "additionalProperties": false,
+          "properties": {
+            "native": {
+              "type": "string",
+              "enum": ["supported", "unsupported", "unknown"]
+            },
+            "prompt_pack": {
+              "type": "string",
+              "enum": ["supported", "unsupported", "unknown"]
+            },
+            "last_bench_id": {
+              "type": ["string", "null"]
+            },
+            "native_observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `native`. Consumers gating on native freshness MUST use this, not the aggregate observed_at."
+            },
+            "prompt_pack_observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `prompt_pack`."
+            }
+          }
+        },
+        "context_window": {
+          "type": "object",
+          "required": ["total_tokens"],
+          "additionalProperties": false,
+          "description": "Observed context window for this runner+model. Consumed by scripts/check-context-budget.js to size a dispatch before it spends anything. Windows DRIFT — the same model id has been observed with two different windows — so a recorded observation outranks the estimator's built-in default table.",
+          "properties": {
+            "total_tokens": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "Total context window in tokens, as reported by the engine at runtime (codex: event_msg.token_count.info.model_context_window; grok: signals.json .contextWindowTokens). null = unknown, which never clobbers a valid observation."
+            },
+            "evidence": {
+              "type": ["string", "null"]
+            },
+            "observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `total_tokens`."
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,988 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autopilot.dev/schemas/review-loop-contract.schema.json",
+  "title": "resolve-review-loop contract",
+  "description": "Single source of truth for the always-emitted review-loop resolver contract. Every field here is emitted by scripts/resolve-review-loop.sh on a default run AND validated by src/engine/resolve-review-loop.js. src/engine/resolve-review-loop.js DERIVES its REVIEW_LOOP_FIELDS list and its assertOneOf enum tables from this document \u2014 do not hand-maintain a second copy. scripts/check-contract-schema.js gates the shell side against it. Conditional/optional keys (reviewer_qualified, fallback_ladder, verify_first, capability_tier, density_scaled, density_source) are emitted only under specific flags and are NOT part of this always-on contract; they are handled separately in the JS validator. x-field-order fixes the canonical REVIEW_LOOP_FIELDS ordering. x-shell-validated marks the enum fields whose allowed-value set the shell resolver enforces via a case statement; x-shell-var names the shell variable whose case arm enforces it (check-contract-schema.js reconciles the per-field arm).",
+  "type": "object",
+  "x-field-order": [
+    "reviewer_engine",
+    "reviewer_effort",
+    "reviewer_runner",
+    "implementer_engine",
+    "implementer_effort",
+    "implementer_runner",
+    "implementer_ladder",
+    "ladder_start_rung_judgment",
+    "loop_max_rounds",
+    "loop_convergence_verdict",
+    "spec_review",
+    "independent_harness",
+    "qc_panel",
+    "qc_panel_aggregation",
+    "in_rail_review",
+    "review_risk",
+    "required_review_families",
+    "l1_required",
+    "cross_family_required",
+    "cross_family_satisfied",
+    "review_diff_scope",
+    "review_packet_deny_extra",
+    "source",
+    "work_domain",
+    "domain_source",
+    "capability_state_source",
+    "quota_status",
+    "quota_reset_at",
+    "skill_mode_requested",
+    "skill_mode_effective",
+    "capability_warnings",
+    "reviewer_endpoint",
+    "reviewer_family",
+    "implementer_endpoint",
+    "verification_author_present",
+    "verification_author_engine",
+    "verification_author_runner",
+    "verification_author_effort",
+    "verification_author_endpoint",
+    "verification_author_family",
+    "implementer_family",
+    "config_path",
+    "min_panel_size",
+    "on_engine_unavailable",
+    "reviewer_engine_low_risk",
+    "reviewer_effort_low_risk",
+    "on_family_conflict",
+    "reviewer_fallback_preference",
+    "reviewer_fallback_preference_low_risk",
+    "qc_panel_seats",
+    "qc_panel_seats_complete",
+    "provider_readiness_receipt_ttl_seconds",
+    "provider_readiness_fallback_family_constraint",
+    "strict_l5_policy_override",
+    "brain_seat",
+    "plan_review",
+    "plan_review_resolved_from",
+    "plan_review_same_family_as_depth0",
+    "hetero_review",
+    "hetero_review_resolved_from",
+    "plan_reviewer_engine",
+    "plan_reviewer_effort",
+    "plan_reviewer_runner",
+    "plan_reviewer_endpoint",
+    "plan_deep_reviewer_engine",
+    "plan_deep_reviewer_effort",
+    "plan_deep_reviewer_runner",
+    "plan_deep_reviewer_endpoint",
+    "plan_review_max_generations",
+    "plan_review_max_wall_seconds",
+    "plan_review_growth_warn_ratio",
+    "plan_review_growth_stop_ratio",
+    "consult_engine",
+    "consult_effort",
+    "consult_runner",
+    "consult_endpoint",
+    "discuss_engine",
+    "discuss_effort",
+    "discuss_runner",
+    "discuss_endpoint",
+    "consult_dispatch",
+    "consult_resolved_from",
+    "discuss_dispatch",
+    "unknown_escalation",
+    "unknown_budget_u1",
+    "unknown_budget_u2",
+    "unknown_budget_u3",
+    "unknown_resolved_from",
+    "allow_same_runner_dual_seat",
+    "same_runner_dual_seat",
+    "override_admitted_seats",
+    "review_fresh_context"
+  ],
+  "properties": {
+    "reviewer_engine": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REV_EFFORT"
+    },
+    "reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "auto",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REV_RUNNER"
+    },
+    "implementer_engine": {
+      "type": "string",
+      "minLength": 1
+    },
+    "implementer_effort": {
+      "type": "string",
+      "enum": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IMPL_EFFORT"
+    },
+    "implementer_runner": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "pi",
+        "qoderclicn",
+        "cursor",
+        "opencode",
+        "kimi"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IMPL_RUNNER"
+    },
+    "implementer_ladder": {
+      "type": "array",
+      "description": "Optional ordered implementer rungs. Each item is engine/effort@runner. Empty when the field is absent: the three implementer_* fields are the single implicit rung. Availability fallback remains on_engine_unavailable.",
+      "items": {
+        "type": "object",
+        "required": ["engine", "effort", "runner"],
+        "additionalProperties": false,
+        "properties": {
+          "engine": { "type": "string", "minLength": 1 },
+          "effort": {
+            "type": "string",
+            "enum": ["default", "low", "medium", "high", "xhigh", "max"]
+          },
+          "runner": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "codex",
+              "agy",
+              "grok",
+              "cc-shim",
+              "pi",
+              "qoderclicn",
+              "cursor",
+              "opencode"
+            ]
+          }
+        }
+      }
+    },
+    "ladder_start_rung_judgment": {
+      "type": "integer",
+      "enum": [
+        0,
+        1
+      ]
+    },
+    "loop_max_rounds": {
+      "type": "integer"
+    },
+    "loop_convergence_verdict": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_review": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "SPEC_REVIEW"
+    },
+    "independent_harness": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "HARNESS"
+    },
+    "qc_panel": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "qc_panel_aggregation": {
+      "type": "string",
+      "enum": [
+        "union-on-verified-critical",
+        "unanimous-ship"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "QC_AGG"
+    },
+    "in_rail_review": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "single",
+        "panel"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IN_RAIL_REVIEW",
+      "description": "Who runs the implementation loop's full_diff_review station. auto becomes panel when qc_panel_seats_complete is true, else single. panel with an incomplete panel is a resolver refusal."
+    },
+    "review_risk": {
+      "type": "string",
+      "enum": [
+        "low",
+        "high"
+      ]
+    },
+    "required_review_families": {
+      "type": "integer"
+    },
+    "l1_required": {
+      "type": "boolean"
+    },
+    "cross_family_required": {
+      "type": "boolean"
+    },
+    "cross_family_satisfied": {
+      "type": "boolean"
+    },
+    "review_diff_scope": {
+      "type": "string",
+      "enum": [
+        "full",
+        "incremental-mitigated"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DIFF_SCOPE"
+    },
+    "review_packet_deny_extra": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_domain": {
+      "type": "string",
+      "enum": [
+        "rust",
+        "backend-cli",
+        "frontend",
+        "docs",
+        "mixed"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DOMAIN_OVERRIDE"
+    },
+    "domain_source": {
+      "type": "string",
+      "enum": [
+        "none",
+        "explicit",
+        "auto"
+      ]
+    },
+    "capability_state_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quota_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quota_reset_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skill_mode_requested": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill_mode_effective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reviewer_endpoint": {
+      "type": "string"
+    },
+    "reviewer_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "implementer_endpoint": {
+      "type": "string"
+    },
+    "verification_author_present": {
+      "type": "boolean",
+      "enum": [
+        true,
+        false
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "VER_AUTH_PRESENT"
+    },
+    "verification_author_engine": {
+      "type": "string"
+    },
+    "verification_author_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ]
+    },
+    "verification_author_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "verification_author_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "verification_author_family": {
+      "type": "string"
+    },
+    "implementer_family": {
+      "type": "string"
+    },
+    "config_path": {
+      "type": "string"
+    },
+    "min_panel_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "on_engine_unavailable": {
+      "type": "string",
+      "enum": [
+        "ask",
+        "solo-fallback",
+        "wait-reset"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ON_ENGINE_UNAVAILABLE"
+    },
+    "reviewer_engine_low_risk": {
+      "type": "string",
+      "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine."
+    },
+    "reviewer_effort_low_risk": {
+      "type": "string",
+      "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off \u2014 fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string."
+    },
+    "on_family_conflict": {
+      "type": "string",
+      "enum": [
+        "fallback",
+        "block"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ON_FAMILY_CONFLICT",
+      "description": "Engine reviewDiff policy when the (effective) reviewer shares the implementer's model family: fallback = substitute the first cross-family qualified row from fallback_ladder (runner-allowlisted, fail-closed on no candidate); block = hard-block (pre-v2.32.25 behavior). Resolver coerces garbage to block; the engine treats absent/invalid as block. The conditional --check-scorecard key fallback_ladder_implementer_family carries ladder provenance (the implementer family the ladder was computed against) so a stale pre-resolved roster fails closed."
+    },
+    "reviewer_fallback_preference": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "HUMAN-ordered engine ids the engine's family-conflict fallback prefers over raw ladder order; every candidate still passes all fallback guards. Empty = ladder order."
+    },
+    "reviewer_fallback_preference_low_risk": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Preference list applied when computed review_risk=low; empty = use reviewer_fallback_preference."
+    },
+    "qc_panel_seats": {
+      "type": "array",
+      "description": "Exact readiness identity for every QC seat. Empty with qc_panel_seats_complete=false means the legacy model-only panel lacks enough metadata; consumers must fail closed rather than guess.",
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "runner",
+          "model",
+          "effort",
+          "endpoint",
+          "family"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "qc"
+            ]
+          },
+          "runner": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "agy",
+              "grok",
+              "cc-shim",
+              "anthropic-compatible",
+              "claude-native",
+              "qoderclicn",
+              "kimi",
+              "cursor",
+              "opencode"
+            ]
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "default",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "endpoint": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]+$"
+              }
+            ]
+          },
+          "family": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "qc_panel_seats_complete": {
+      "type": "boolean"
+    },
+    "provider_readiness_receipt_ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "provider_readiness_fallback_family_constraint": {
+      "type": "string",
+      "enum": [
+        "any",
+        "different"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "PROVIDER_READINESS_FAMILY_CONSTRAINT"
+    },
+    "plan_review": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "PLAN_REVIEW",
+      "description": "Enable the first-class bounded plan-readiness rail. Independent from the deprecated spec_review implementation-loop switch."
+    },
+    "plan_review_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "config-explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
+    },
+    "plan_review_same_family_as_depth0": {
+      "type": "boolean",
+      "description": "True when the resolved plan-review chair shares the depth-0 (Claude) family — an empty finding list from it is then indistinguishable from a clean review (v2.36.33)."
+    },
+    "hetero_review": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "HETERO_REVIEW",
+      "description": "Enable the per-phase code-review loop switch; its explicit tuple is the existing reviewer_* tuple."
+    },
+    "hetero_review_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
+    },
+    "plan_reviewer_engine": {
+      "type": "string"
+    },
+    "plan_reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "plan_reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ]
+    },
+    "plan_reviewer_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "plan_deep_reviewer_engine": {
+      "type": "string"
+    },
+    "plan_deep_reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "plan_deep_reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ]
+    },
+    "plan_deep_reviewer_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "plan_review_max_generations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "plan_review_max_wall_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7200
+    },
+    "plan_review_growth_warn_ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1.25
+    },
+    "plan_review_growth_stop_ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1.5
+    },
+    "strict_l5_policy_override": {
+      "type": "string",
+      "description": "Non-empty = deliberate, recorded escape from strict /l5 byte-equal policy coverage; the string is the operator's reason and is surfaced on every derivation. Empty = fail-closed (default)."
+    },
+    "brain_seat": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "seat_class",
+        "status",
+        "admission",
+        "strikes_since_pass"
+      ],
+      "description": "Brain-seat standing on the P7-governed paths (plan 2026-08-17-brain-seat-exam-suite P4). null = no seat context configured. Candidate seats without standing are refused; the incumbent annotates loudly (Board 2026-08-16 advisory bootstrap semantics); the per-invocation override admits with an EVIDENCE-FREE warning \u2014 never a silent third path.",
+      "properties": {
+        "seat_class": {
+          "enum": [
+            "incumbent",
+            "candidate"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "admission": {
+          "enum": [
+            "admitted",
+            "advisory",
+            "refused",
+            "override_admitted"
+          ]
+        },
+        "strikes_since_pass": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "consult_engine": {
+      "type": "string",
+      "description": "Engine for a mid-run ad-hoc heterogeneous second opinion (the \"consult\" role). Empty = no configured consult seat; the caller hand-types dispatch-review.sh argv as before. Tuple rule: engine/runner/effort are wholly empty or all three present."
+    },
+    "consult_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "consult_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ],
+      "description": "Runner for the consult seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
+    },
+    "consult_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "discuss_engine": {
+      "type": "string",
+      "description": "Engine for heterogeneous participation in dialectic/ideation skills (think-tank, brainstorm) \u2014 the \"discuss\" role. Empty = no configured discuss seat. NO EXECUTABLE CONSUMER READS THIS YET (see docs/scripts-inventory.md and the run summary): it is a declared seat awaiting a caller, not a live route."
+    },
+    "discuss_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "discuss_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor",
+        "opencode"
+      ],
+      "description": "Runner for the discuss seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
+    },
+    "discuss_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "consult_dispatch": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "CONSULT_DISPATCH",
+      "description": "Whether the consult rail (scripts/dispatch-consult.sh) is live. DEFAULT OFF. off = today's behavior exactly — the consult_* seat tuple stays data a caller may read by hand, no new dispatch. on requires a non-empty consult seat tuple (empty seat + on is a misconfiguration) and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
+    "consult_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "config-explicit",
+        "topology",
+        "native-fallback",
+        "off"
+      ]
+    },
+    "discuss_dispatch": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DISCUSS_DISPATCH",
+      "description": "Whether the discuss rail (scripts/dispatch-discuss.js) is live. DEFAULT OFF. off = today's behavior exactly — discuss_* stays declared but not consumed. on requires a non-empty discuss seat tuple and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
+    "unknown_escalation": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "UNKNOWN_ESCALATION",
+      "description": "Whether the unknown-escalation ladder (scripts/probe-unknown.js) may recommend and receipt climbs. off = probe recommends none with reason knob-off (one knob-off ladder row per work unit) and the resolver emits a capability_warnings line; on = the three unknown_budget_u* fields must be present non-negative integers (else exit 3); auto (default, owner ruling 2026-09-07: a switch, default on) = budgets default to 2/1/1. The knob's own value is never rewritten. Plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md."
+    },
+    "unknown_budget_u1": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U1 (consult seat) per work unit — one dev-flow phase for L/H, the whole task for S/Fix, the whole run for /l4–/l6. Default 2."
+    },
+    "unknown_budget_u2": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U2 (web research: survey / issue-search) per work unit. Default 1."
+    },
+    "unknown_budget_u3": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Climbs allowed to rung U3 (think-tank / debugger PUA) per work unit. Default 1."
+    },
+    "unknown_resolved_from": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "default",
+        "off"
+      ],
+      "description": "How the ladder budgets were resolved: explicit (unknown_escalation on, budgets from config), default (auto, 2/1/1 or config-supplied values), off."
+    },
+    "allow_same_runner_dual_seat": {
+      "type": "string",
+      "enum": [
+        "off",
+        "on"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ALLOW_DUAL_SEAT",
+      "description": "Board ruling 2026-08-27, scope corrected by the depth-0 QC panel. DEFAULT OFF. Governs whether one runner may occupy the implementer seat AND a reviewer-class LOOP seat (reviewer / reviewer_low_risk / verification_author / plan_reviewer / plan_deep_reviewer / consult / discuss) in the same roster. off = the resolver exits 3. on = permitted, with a stderr warning and same_runner_dual_seat: true. It applies to QUALIFIED engines too \u2014 the rationale 'one vendor, one auth, one server-side prompt layer is not decorrelation' has no qualified-engine exemption. The axis is the RUNNER, not the model family: one rail can serve several families (a single cursor rail hosts both GPT and Grok ids), so a family test would miss exactly the case the ruling names. Comparison is over the CONFIGURED runner token, and 'auto' is inert \u2014 it delegates the choice rather than asserting a rail, which is what keeps the shipped template (implementer auto, reviewer codex) valid. An inherited built-in default DOES count: a roster naming only implementer_runner: codex collides with the default reviewer codex, because the resolved loop really does put one rail on both sides. The terminal qc_panel is NOT governed by this key \u2014 it is a multi-seat body with union-on-verified-critical aggregation, so it has its own proportionate rule: only TOTAL overlap (every engine-bearing seat on the implementer runner) is refused, and partial overlap is silent by design."
+    },
+    "same_runner_dual_seat": {
+      "type": "boolean",
+      "description": "FACT, not policy: true when one runner actually occupies both the implementer seat and a reviewer-class LOOP seat, OR when EVERY usable qc_panel seat runs on the implementer runner. Emitted so the run summary can report reduced decorrelation without re-deriving it. For loop seats the condition is only reachable when allow_same_runner_dual_seat is on (off exits 3). For the qc_panel only TOTAL overlap counts \u2014 every seat carrying BOTH an engine and a runner sitting on the implementer own rail, i.e. no runner decorrelation anywhere in the terminal gate \u2014 and that also exits 3 unless deliberately opened. PARTIAL panel overlap is deliberately neither flagged nor warned: the shipped default panel spans three rails on purpose, so one overlapping seat is the recommended configuration, and the pre-existing cross-family control already reports panel/implementer family sharing."
+    },
+    "override_admitted_seats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires \u2014 it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
+    },
+    "review_fresh_context": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REVIEW_FRESH_CONTEXT",
+      "description": "Whether a reviewer must run in a brand-new provider session. on (default) = a review dispatch that would continue an existing session (a resumed session id, or the implementer's own session) is refused at dispatch with a named error; off = legal, but the review receipt is stamped review_fresh_context=off so the waiver stays visible afterwards. Resolver coerces garbage to on (fail-closed). The guarantee of `on` comes from a structural guard, hooks/tests/review-rail-no-session-reuse.test.sh: the review rail has no session-resume entry (it runs each runner against a fake binary and fails if any resume/continue argument appears or a claude --session-id repeats), so there is nothing to refuse at dispatch today. If a resume entry is ever added to a review path, this key MUST refuse it at dispatch."
+    }
+  },
+  "required": [
+    "reviewer_engine",
+    "reviewer_effort",
+    "reviewer_runner",
+    "implementer_engine",
+    "implementer_effort",
+    "implementer_runner",
+    "implementer_ladder",
+    "ladder_start_rung_judgment",
+    "loop_max_rounds",
+    "loop_convergence_verdict",
+    "spec_review",
+    "independent_harness",
+    "qc_panel",
+    "qc_panel_aggregation",
+    "in_rail_review",
+    "review_risk",
+    "required_review_families",
+    "l1_required",
+    "cross_family_required",
+    "cross_family_satisfied",
+    "review_diff_scope",
+    "review_packet_deny_extra",
+    "source",
+    "work_domain",
+    "domain_source",
+    "capability_state_source",
+    "quota_status",
+    "quota_reset_at",
+    "skill_mode_requested",
+    "skill_mode_effective",
+    "capability_warnings",
+    "reviewer_endpoint",
+    "reviewer_family",
+    "implementer_endpoint",
+    "verification_author_present",
+    "verification_author_engine",
+    "verification_author_runner",
+    "verification_author_effort",
+    "verification_author_endpoint",
+    "verification_author_family",
+    "implementer_family",
+    "config_path",
+    "min_panel_size",
+    "on_engine_unavailable",
+    "reviewer_engine_low_risk",
+    "reviewer_effort_low_risk",
+    "on_family_conflict",
+    "reviewer_fallback_preference",
+    "reviewer_fallback_preference_low_risk",
+    "qc_panel_seats",
+    "qc_panel_seats_complete",
+    "provider_readiness_receipt_ttl_seconds",
+    "provider_readiness_fallback_family_constraint",
+    "strict_l5_policy_override",
+    "plan_review",
+    "plan_review_resolved_from",
+    "plan_review_same_family_as_depth0",
+    "hetero_review",
+    "hetero_review_resolved_from",
+    "plan_reviewer_engine",
+    "plan_reviewer_effort",
+    "plan_reviewer_runner",
+    "plan_reviewer_endpoint",
+    "plan_deep_reviewer_engine",
+    "plan_deep_reviewer_effort",
+    "plan_deep_reviewer_runner",
+    "plan_deep_reviewer_endpoint",
+    "plan_review_max_generations",
+    "plan_review_max_wall_seconds",
+    "plan_review_growth_warn_ratio",
+    "plan_review_growth_stop_ratio",
+    "consult_engine",
+    "consult_effort",
+    "consult_runner",
+    "consult_endpoint",
+    "discuss_engine",
+    "discuss_effort",
+    "discuss_runner",
+    "discuss_endpoint",
+    "consult_dispatch",
+    "consult_resolved_from",
+    "discuss_dispatch",
+    "unknown_escalation",
+    "unknown_budget_u1",
+    "unknown_budget_u2",
+    "unknown_budget_u3",
+    "unknown_resolved_from",
+    "allow_same_runner_dual_seat",
+    "same_runner_dual_seat",
+    "override_admitted_seats",
+    "review_fresh_context"
+  ],
+  "additionalProperties": true
+}

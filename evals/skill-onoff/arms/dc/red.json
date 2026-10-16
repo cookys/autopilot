@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "arm": "red",
+  "skills": {
+    "dev-flow": "dev-flow-dc-red",
+    "finish-flow": "finish-flow-dc-full",
+    "ceo-agent": "ceo-agent-dc-full",
+    "team": "team-dc-full",
+    "debug": "debug-dc-full",
+    "think-tank": "think-tank-dc-full",
+    "l4": "l4-dc-full",
+    "l5": "l5-dc-full",
+    "l6": "l6-dc-full",
+    "next": "next-dc-full",
+    "quality-pipeline": "quality-pipeline-dc-full",
+    "distill": "distill-dc-full",
+    "doc-sync": "doc-sync-dc-full",
+    "learn": "learn-dc-full",
+    "project-lifecycle": "project-lifecycle-dc-full",
+    "research-to-ship": "research-to-ship-dc-full"
+  },
+  "files": [
+    "guidance-files-dc"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-dc"
+  ]
+}

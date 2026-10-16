@@ -98,3 +98,12 @@ Pilot v1 (blind round one) ran end to end for both seats and the scorer read eve
 `prereg.json` is re-hashed in the same commit.
 
 Pilot v1 cells and score are kept under `pilot/` (produced with the amendment-1 predicates; amendment 2 only widens control validity, so `pilot/score.json` still lists the sonnet control as excluded).
+
+## Amendment 3 (2026-10-17, after pilot v1 and owner review, BEFORE the full evaluation)
+
+Coordinator rulings, made after seeing the pilot and before any main-campaign cell exists:
+
+1. **Cost gate**: B's TOTAL cost must be at most 2x A's (increase at most 1x of A), not 3x. In the harness gate 5 is now `cost_incremental_ratio <= 1.0`. The pilot proxy ratio of about 1.8 (increase) is recorded as is; it would not pass this gate, and that is not a reason to change the gate.
+2. **Sonnet red arm**: no case swapping (to avoid tuning cases after seeing results). Pre-registered: if sonnet's red does not sit at least 3 below B, sonnet is UNINFORMATIVE on whether the rule text matters (the instrument cannot tell), but its other gates (B over A, control harm, validator pass rate, cost) are judged and reported as usual. Overall SHIP requires: kimi passes every gate including red, and sonnet passes every gate except red; a sonnet red failure is stated in the conclusion. If kimi's red is also invalid the whole instrument is invalid: stop, no rerun until it passes.
+
+`prereg.json` is re-hashed in the same commit.

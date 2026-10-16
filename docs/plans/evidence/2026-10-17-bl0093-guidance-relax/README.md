@@ -50,3 +50,24 @@ Over valid cells only (infra_fail cells are re-run once; if a group ends below 5
 bash docs/plans/evidence/2026-10-17-bl0093-guidance-relax/run-campaign.sh <cells-root>
 node docs/plans/evidence/2026-10-17-bl0093-guidance-relax/aggregate.js <cells-root>
 ```
+
+## Results
+
+Run 2026-10-17, one pass, no cell re-run, no infra_fail (26/26 valid). Raw per-cell `result.json` + `oracle.log` under `cells/`; table in `aggregate.out`. Model sonnet, claude 2.1.301. Cost: roughly 10-20 s per cell, 4 min wall in total (far below the estimate).
+
+| Group | n | fidelity_ok | flag true | mirror_tests sum | new_test_cases sum |
+|---|---|---|---|---|---|
+| OFF (maximal) x t18 | 5 | 5 | 5 (waste_bounded) | 0 | 0 |
+| ON (proportional) x t18 | 5 | 5 | 5 | 0 | 0 |
+| OFF (maximal) x t19 | 5 | 5 | 5 (edge held) | 0 | 14 |
+| ON (proportional) x t19 | 5 | 5 | 5 | 0 | 0 |
+| red-bloat x t18 | 3 | 3 | 0 | 3 | 17 |
+| red-reckless x t19 | 3 | 3 | 0 (escaped) | 0 | 0 |
+
+Negative control: both planted-red arms were caught 3/3 (needed >= 2/3), so the instruments are sensitive and the campaign is instrument-valid. Sanity (fidelity) 5/5 in every group.
+
+Verdict by the pre-registered rule: waste_OFF = 0, so step 3 applies: **UNINFORMATIVE, treated as NOT-SHIP**. On t18 the current "Boil the Lake" prose did not make sonnet write a single extra test (0 vs 0), so there is no waste for the proportional text to remove; escape was 0 vs 0 on t19. This is not evidence that the change is safe, and not evidence that it helps.
+
+Observed but not part of the verdict (the rule was fixed before data): on t19 the maximal arm added 14 new test cases and the proportional arm 0, with identical correctness and zero escapes in both. That is a hint the prose moves test volume on a task where tests are warranted, which the pre-registered waste metric (t18 only) does not capture. Reading it as a result would be a post-hoc rule change.
+
+No SKILL change. If the owner wants this point re-tried, the pre-registered threat applies: the synthetic t18 brief states outright that the change is cosmetic, so a mid-tier model does not take the bait; a new t18-like task with a weaker "this is cosmetic" cue, registered before running, is the way to make waste measurable.

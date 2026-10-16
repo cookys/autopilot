@@ -89,6 +89,77 @@ function normalizeProductReviewFindings(raw) {
   return normalizeStructured(findings);
 }
 
+// BL-0146 D3: incremental-return seat output. A seat that was shown prior open findings answers
+// `{ findings: <finding array or "none">, resolutions: [{finding_id, status, evidence}] }`.
+// The legacy entry point above is deliberately untouched (a bare finding array / prose / `none` stays
+// the only accepted shape there), so a full round and every stored artifact keep today's bytes.
+const RESOLUTION_STATUSES = new Set(['resolved', 'invalid', 'still_present']);
+const RESOLUTION_KEYS = new Set(['finding_id', 'status', 'evidence']);
+const EVIDENCE = /^[^\s:][^\s]*:[0-9]+(?:-[0-9]+)?$/;
+
+function normalizeResolutions(value, priorFindingIds) {
+  if (!Array.isArray(value)) return { error: 'resolutions must be an array' };
+  const known = new Set(priorFindingIds);
+  const seen = new Set();
+  const out = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+        || !Object.keys(entry).every((key) => RESOLUTION_KEYS.has(key))
+        || typeof entry.finding_id !== 'string'
+        || !RESOLUTION_STATUSES.has(entry.status)
+        || (entry.evidence !== undefined && typeof entry.evidence !== 'string')) {
+      return { error: 'resolution entry is malformed' };
+    }
+    if (!known.has(entry.finding_id)) {
+      return { error: `resolution names unknown finding ${entry.finding_id}` };
+    }
+    if (seen.has(entry.finding_id)) {
+      return { error: `duplicate resolution for ${entry.finding_id}` };
+    }
+    seen.add(entry.finding_id);
+    const evidence = typeof entry.evidence === 'string' ? entry.evidence.trim() : '';
+    out.push({
+      finding_id: entry.finding_id,
+      status: entry.status,
+      evidence: EVIDENCE.test(evidence) ? evidence : null,
+      // resolved/invalid without path:line evidence is silence, not a verdict (plan 2.5).
+      addressed: entry.status === 'still_present' || EVIDENCE.test(evidence),
+    });
+  }
+  return { resolutions: out };
+}
+
+function normalizeSeatReview(raw, options = {}) {
+  const priorFindingIds = Array.isArray(options.priorFindingIds) ? options.priorFindingIds : null;
+  const withResolutions = (base, resolutions) => ({ ...base, resolutions });
+  let parsed = null;
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw.trim()); } catch (_error) { parsed = null; }
+  }
+  const objectForm = Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed);
+  if (!objectForm) return withResolutions(normalizeProductReviewFindings(raw), []);
+  if (priorFindingIds === null) {
+    // A full round has no prior findings and never emits resolutions.
+    return withResolutions(result('invalid', [], 'resolutions are only valid on an incremental round'), []);
+  }
+  const keys = Object.keys(parsed);
+  if (!keys.every((key) => key === 'findings' || key === 'resolutions')
+      || !Object.prototype.hasOwnProperty.call(parsed, 'findings')) {
+    return withResolutions(result('invalid', [], 'seat review object must be {findings, resolutions}'), []);
+  }
+  const findings = typeof parsed.findings === 'string'
+    ? normalizeProductReviewFindings(parsed.findings)
+    : normalizeStructured(parsed.findings);
+  if (findings.status !== 'normalized') return withResolutions(findings, []);
+  const resolved = normalizeResolutions(
+    Object.prototype.hasOwnProperty.call(parsed, 'resolutions') ? parsed.resolutions : [],
+    priorFindingIds,
+  );
+  if (resolved.error) return withResolutions(result('invalid', [], resolved.error), []);
+  return withResolutions(findings, resolved.resolutions);
+}
+
 module.exports = {
   normalizeProductReviewFindings,
+  normalizeSeatReview,
 };

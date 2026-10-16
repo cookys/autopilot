@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "bl0194-qualification-registry-2026-10-16",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "2ccbd30e7441fe359daf4df0c0dc1df114217de997995c3550523b50a421db06",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R2 KR1, section 4 step 1, section 5 Offline, P4b whitelist)."
+    },
+    {
+      "fingerprint": "4e6b613c6a2c0ffa4e36060e99261aa8b25718ccc98ae0edba71bf0e1f262cb8",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R1 section 0 thesis, section 6 P1 and P4b, file map)."
+    },
+    {
+      "fingerprint": "70ad0e3b2f68d9b122ea588979b7761df965a77417bacda18790670d50163b5a",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R4 section 3.1 top-level keys, section 3.3 strikes[], P4a v1-re)."
+    },
+    {
+      "fingerprint": "fe0266ad139fb7deb24666dfeb9f325e8661a342b0c6b809904b6de24380e9e9",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R4 section 3.2 entry_id, kind partition)."
+    },
+    {
+      "fingerprint": "770ebf36e494a112799f05a62b3c0e651960968dbc458f604e1649fb6572199d",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R4 section 3.2 benchmark and sampling blocks)."
+    },
+    {
+      "fingerprint": "0df013722ea18323a0dd5427fbd6d1865e5317cb516106510a011151818f823d",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R5 section 6 P1 sibling qualification-metrics.json, P2 reader, )."
+    },
+    {
+      "fingerprint": "df81f0103b2c46a63728b5c43a0d5f13b5aba518b37c6a6bb03db3684310bc98",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R8 section 7 disclosure gate, section 6 P1 'v1 feed unchanged')."
+    },
+    {
+      "fingerprint": "33251f5ee2a8991d8bf50b8b1f8d7167f2a65210170c765a961e7166dbcc6338",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "9fd50648e262f618959b67f056b0f55b825d4cc8477e8ecca6df7af0e6fe3ad5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "297f410d9e2fd299446f61a4a5494c188c6aed3f1f5195713ae91a14c9df5539",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "598404ab9a60f4abef7644cfd773ab8812d640c0d4bb176d525bb9b947224656",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "77287be51dca093a156916a46eef007ee4073e4ee8d33c31191799e1b4b406af",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "d672e1344ce13ec2904a389a5aa3fb7776507aaca77cd2bb8ead75c5723bb4c9",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "dd19a85773f4c0cc96250e517621827e680fee367ae8d507fe6c285a7cdda26e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "9ee35b366e3143ad7259bee1c7f82fa1890b286ad39ca187f8a3275738b7564c",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R1 Plan section 6 P4b whitelist test; KR1; section 2 constraint)."
+    },
+    {
+      "fingerprint": "512bde0a168cbaaa9ce6420a22e2de71dacba88cad8ced8a8c2231401e2ae303",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R5 Plan section 5 third bullet (B1); section 6 phase table and )."
+    },
+    {
+      "fingerprint": "9f122a3253900eb14e1e93e71a5c00c1bc4b77dcb3df2f166c495b3cc9915105",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R8 Plan section 7 disclosure gate; section 3.1 v2-superset rule)."
+    },
+    {
+      "fingerprint": "97ac81ed75d1ac9c61200ebfb0449ed36237640c9fc5aeafce4ea1f6d707074d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "ad09d1c6656a292c5e2ff35acba79e2df470211987b612b53e67b4092c3b111a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "b31fca132cf00821ae6041b88a36cdc16d8fc9cd3203db5e94dcf510774b77c9",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking; folded where one sentence sufficed (outbox rejected event, units and rounding, unit/test lists), otherwise recorded as accepted without further change."
+    },
+    {
+      "fingerprint": "02af818ae1516b916908982667ae013f18e91b2749c2f24e761efb5035e14be5",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R1 Sections 2, 4 and 6, P4b authority switch)."
+    },
+    {
+      "fingerprint": "45de92aa10055c338b4197d5e9e5c5b94323cdf1c676baf8061058c4ebdc13cf",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R3 Section 4 outbox enqueue, strike persistence and compaction)."
+    },
+    {
+      "fingerprint": "edffd184d64a841421fc653759999c9cb9df2033fa7469c13db8de9945e8f067",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R4 Sections 3.1 and 3.3, existing strikes consumers)."
+    },
+    {
+      "fingerprint": "ff92193ec894a0fd7e385bf409d5f67eb7e79297a49303f6a079c5d6de25517e",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R4 Section 3.2 benchmark aggregation and numeric schema)."
+    },
+    {
+      "fingerprint": "ff649962c6553b1a6cb3159bad0573d72c13bd452e9b8be4eb0cbe62cb72adce",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R5 P1, P2 and P4a producer-consumer ordering)."
+    },
+    {
+      "fingerprint": "4b65ceca6e481847f3d737e55d4b532905488958cc3c88166f5fd5f471187cef",
+      "disposition": "accepted_blocker",
+      "rationale": "Terminal depth-0 adjudication: accepted; folded into the frozen plan (duplicates across seats merged into the same fold: R8 Sections 3.1 and 7, published v1 fields and disclosure gate)."
+    }
+  ]
+}

@@ -15,3 +15,7 @@ Seat verdicts: fable CONDITIONAL, GLM CONDITIONAL, Qwen CONDITIONAL, sol STOP. N
 ## Generation 2
 
 `plan.as-reviewed-g1.md` = plan bytes generation 1 reviewed (12623 B). `g1-disp.json` = depth-0 dispositions (13 accepted_blocker, 21 accepted_nonblocking). `run-g2.sh` re-runs generation 2 with the same manifest, rubric and context files. `g2.out.json`: CONDITIONAL at the generation cap (terminal, 14 blocker candidates, 12 non-blocking); fable CONDITIONAL, GLM CONDITIONAL, Qwen READY, sol STOP. Revised plan 12437 B (ratio 0.985).
+
+## Review log (terminal)
+
+Generation 2 hit the cap. Depth-0 adjudicated terminally: `g2-disp.json` (14 accepted_blocker, 12 accepted_nonblocking), folds applied in one bounded pass, plan frozen ("frozen after G2 (depth-0 terminal adjudication)"), no third generation. `plan.as-reviewed-g2.md` = bytes G2 reviewed (12437 B); frozen plan 14911 B (ratio 1.199). Receipt check: `node scripts/check-phase-review-receipt.js --plan-artifact g2.out.json --dispositions g2-disp.json --plan-file plan.as-reviewed-g2.md --rubric-file rubric.md` rc=0.

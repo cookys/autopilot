@@ -342,4 +342,14 @@ d2=$(node "$BASE/run-stage-graph-campaign.js" --results "$TMP/dry2.jsonl" --dry-
 [ ! -s "$TMP/dry.jsonl" ] || fail "dry-run must not write results"
 if node "$BASE/run-stage-graph-campaign.js" --results "$TMP/x.jsonl" --model opus --dry-run >/dev/null 2>&1; then fail "a live-model other than the prereg's must be refused"; fi
 
+echo "=== 4. empty files field keeps fixture_scripts in its own column (BL-0196) ==="
+node - "$ARMS/change.json" "$TMP/nofiles.json" <<'NODE'
+const fs = require('fs'); const [f, o] = process.argv.slice(2);
+const j = JSON.parse(fs.readFileSync(f, 'utf8')); delete j.files; j.fixture_scripts = ['fixture-scripts-sg'];
+fs.writeFileSync(o, JSON.stringify(j));
+NODE
+ONOFF_STUB_BIN="$TMP/stub.sh" cell "$TMP/dump-nofiles" --arm-manifest "$TMP/nofiles.json" >/dev/null || fail "no-files cell"
+[ -f "$TMP/dump-nofiles/repo/scripts/stage-advance.js" ] || fail "BL-0196: with an empty files field the fixture scripts were silently dropped"
+[ ! -e "$TMP/dump-nofiles/plugin/references/extra.md" ] || fail "no-files arm must add no guidance files"
+
 echo "PASS: skill-onoff-arm-builder"

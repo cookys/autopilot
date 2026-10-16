@@ -112,6 +112,20 @@
       ]
     },
     {
+      "id": "hook-harness-matrix",
+      "title": "hook x harness support matrix doc vs wiring + evidence rows",
+      "generator": "node scripts/hook-harness-matrix.js --write",
+      "check": "node scripts/hook-harness-matrix.js --check",
+      "fix": "node scripts/hook-harness-matrix.js --write (evidence rows live in hooks/harness-support-evidence.json)",
+      "tier": "both",
+      "trigger": [
+        "hooks/hooks.json",
+        "platforms/codex/hooks/",
+        "hooks/harness-support-evidence.json",
+        "docs/hook-harness-matrix.md"
+      ]
+    },
+    {
       "id": "check-config-docs",
       "title": "settings registry: AUTOPILOT_* env vars / config.json keys the code reads <-> scripts/lib/config-keys.json <-> docs/settings-reference.md",
       "generator": null,

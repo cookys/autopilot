@@ -75,7 +75,7 @@ if [ -n "$ARM_MANIFEST" ]; then
   if [ -n "$SKILL$PACK_BASE$PACK_CHANGE" ] || [ "${#WITH_PACKS[@]}" -gt 0 ]; then
     echo "ERROR: --arm-manifest cannot combine with --skill/--pack-*/--with-pack" >&2; exit 2
   fi
-  # one tab-separated line: arm, "skill=pack ...", "files pack ...", "fixture pack ..." (a bad shape is exit 2)
+  # one US(0x1f)-separated line (NOT tab: tab is IFS-whitespace, so an empty field collapses and shifts the next one, BL-0196): arm, "skill=pack ...", "files pack ...", "fixture pack ..." (a bad shape is exit 2)
   MAN_LINE=$(node -e '
     const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
     const bare=/^[a-z0-9][a-z0-9._-]*$/, bad=(m)=>{console.error("arm manifest: "+m);process.exit(2)};
@@ -86,9 +86,9 @@ if [ -n "$ARM_MANIFEST" ]; then
     for(const [k,v] of Object.entries(sk)) if(!bare.test(k)||typeof v!=="string"||!bare.test(v)) bad("bad skill entry "+k);
     for(const v of [...fl,...fx]) if(typeof v!=="string"||!bare.test(v)) bad("bad pack name "+v);
     if(!Object.keys(sk).length&&!fl.length) bad("empty arm (no skills, no files)");
-    process.stdout.write([j.arm,Object.entries(sk).map(([k,v])=>k+"="+v).join(" "),fl.join(" "),fx.join(" ")].join("\t"));
+    process.stdout.write([j.arm,Object.entries(sk).map(([k,v])=>k+"="+v).join(" "),fl.join(" "),fx.join(" ")].join("\x1f"));
   ' "$ARM_MANIFEST") || exit 2
-  IFS=$'\t' read -r M_ARM MAN_SKILLS MAN_FILES MAN_FIXTURES <<< "$MAN_LINE"
+  IFS=$'\x1f' read -r M_ARM MAN_SKILLS MAN_FILES MAN_FIXTURES <<< "$MAN_LINE"
   [ -z "$ARM" ] || [ "$ARM" = "$M_ARM" ] || { echo "ERROR: --arm $ARM disagrees with manifest arm $M_ARM" >&2; exit 2; }
   ARM="$M_ARM"
 fi

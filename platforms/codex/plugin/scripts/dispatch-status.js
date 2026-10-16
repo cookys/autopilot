@@ -656,7 +656,7 @@ function usageOnly(logPath, declaredFormat) {
 //   - worktree removed ONLY on DEFINITIVE dead (alive === false, i.e. a lock verdict —
 //     never null/no-signal) AND the dir carries the .autopilot-worktree marker AND its
 //     own lifetime lock is free — the same eligibility contract as
-//     lib/worktree-reap.sh gc_stale_worktrees; unmarked dirs are never deleted;
+//     the marker + dead-lock contract of lib/worktree-reap.sh; unmarked dirs are never deleted;
 //   - unparseable manifests are reported in errors[], never deleted;
 //   - after a worktree removal the owner repo (from the linked worktree's .git file)
 //     gets a best-effort `git worktree prune` so no stale registration lingers.

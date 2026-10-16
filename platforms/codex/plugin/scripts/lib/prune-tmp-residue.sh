@@ -28,7 +28,7 @@
 #
 # Scope guard: this prunes LOGS AND SCRATCH ONLY — never pass a worktree
 # pattern (e.g. hetero-<branch>-XXXXXX). Worktrees have a lock/marker-aware
-# reaper (lib/worktree-reap.sh gc_stale_worktrees, dispatch-status.js --reap);
+# reaper (repo-residue-sweep.js reap --auto, dispatch-status.js --reap);
 # blind mtime pruning them would race a live run.
 #
 

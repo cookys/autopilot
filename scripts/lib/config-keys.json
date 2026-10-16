@@ -2080,30 +2080,6 @@
       "relates": []
     },
     {
-      "name": "AUTOPILOT_ORPHAN_REWRITE_LOCK_FD",
-      "kind": "env",
-      "audience": "internal",
-      "class": "plumbing",
-      "default": null,
-      "readers": [
-        "scripts/dispatch-hetero.sh"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
-      "name": "AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK",
-      "kind": "env",
-      "audience": "internal",
-      "class": "test_seam",
-      "default": null,
-      "readers": [
-        "scripts/dispatch-hetero.sh"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
       "name": "AUTOPILOT_ORPHAN_STATE_DIR",
       "kind": "env",
       "audience": "internal",

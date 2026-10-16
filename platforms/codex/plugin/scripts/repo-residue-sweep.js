@@ -43,8 +43,7 @@
 //   branch's last commit date, else the directory mtime); it never widens it.
 //
 // AUTO MODE (`reap --auto --yes`) — THE CANONICAL AUTOMATIC REAPER (run by the SessionStart
-// hook residue-auto-reap.js; `dispatch-hetero.sh --gc` is only an opt-in, rail-local fast
-// path, default off). It does not combine with --preserve-dir / --older-than-days. It may
+// hook residue-auto-reap.js; the rail-local `dispatch-hetero.sh --gc` was removed at 3.0.0). It does not combine with --preserve-dir / --older-than-days. It may
 // remove ONLY:
 //   1. missing-dir worktrees (`git worktree prune`);
 //   2. marker worktrees (schema-2 marker valid by the same grammar as _wt_read_schema2_marker

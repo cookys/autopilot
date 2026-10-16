@@ -59,10 +59,14 @@ b --check --from-snapshot "$SNAP1" >/dev/null 2>&1; assert_exit_code "$?" "1" "h
 b --check >"$W/o4b" 2>&1; assert_exit_code "$?" "1" "snapshot-recipe --check without --from-snapshot fails"
 
 # 5. NEGATIVE: strict read — duplicate key, BOM, URL, missing generated_at, symlink.
-printf '{"schema":"model-dyno.qualification-feed.v1","schema":"x"}' >"$W/dup.json"
-fresh_recipe; b build --from-snapshot "$W/dup.json" >/dev/null 2>&1; assert_exit_code "$?" "1" "duplicate-key snapshot refused"
+# Each case below is a fully valid, buildable snapshot with exactly ONE defect, and the failure must name it.
+fresh_recipe; b build --from-snapshot "$SNAP1" >/dev/null 2>&1; assert_exit_code "$?" "0" "control: the unmodified snapshot builds"
+node -e 'const fs=require("fs");let t=fs.readFileSync(process.argv[1],"utf8");t=t.replace("\"generated_at\"","\"generated_at\": \"2026-01-01T00:00:00Z\",\n  \"generated_at\"");fs.writeFileSync(process.argv[2],t)' "$SNAP1" "$W/dup.json"
+fresh_recipe; b build --from-snapshot "$W/dup.json" >"$W/odup" 2>&1; assert_exit_code "$?" "1" "duplicate-key snapshot refused"
+assert_contains "$(cat "$W/odup")" "duplicate JSON object key \"generated_at\"" "duplicate-key refusal names the duplicated key, not a missing field"
 printf '\xef\xbb\xbf' >"$W/bom.json"; cat "$SNAP1" >>"$W/bom.json"
-b build --from-snapshot "$W/bom.json" >/dev/null 2>&1; assert_exit_code "$?" "1" "BOM snapshot refused"
+b build --from-snapshot "$W/bom.json" >"$W/obom" 2>&1; assert_exit_code "$?" "1" "BOM snapshot refused"
+assert_contains "$(cat "$W/obom")" "not supported JSON at offset 0" "BOM refusal is the JSON preflight at offset 0"
 node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1]));delete d.generated_at;require("fs").writeFileSync(process.argv[2],JSON.stringify(d))' "$SNAP1" "$W/nogen.json"
 b build --from-snapshot "$W/nogen.json" >/dev/null 2>&1; assert_exit_code "$?" "1" "snapshot without generated_at refused"
 b build --from-snapshot "https://example.invalid/feed.json" >/dev/null 2>&1; assert_exit_code "$?" "2" "URL refused (usage)"

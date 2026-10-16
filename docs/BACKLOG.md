@@ -1105,23 +1105,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### dispatch-hetero: with a tty, set -m makes a worker that reads /dev/tty take SIGTTIN
-- **Id**: BL-0099
-- **Status**: open
-- **Since**: 2026-09-29
-- **Origin**: self
-- **Problem**: 派工監看程式在有終端機（tty）的環境下會開啟工作控制（set -m），這時如果被派出去的程式去讀終端機，會被系統暫停（SIGTTIN），卡住不動。
-- **Impact**: 低。一般派工不讀終端機，headless 也沒有 tty；只有互動式手動跑、而且派出的程式要讀終端機時才會卡住。
-- **Trigger**: a dispatched worker is seen stopped (state T) under an interactive run, or next dispatch-hetero job-control change
-- **Effort**: S
-- **Source**: v2.36.104 landing review rounds 1-4
-- **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md
-
-
-
-
-
-
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
 - **Status**: open

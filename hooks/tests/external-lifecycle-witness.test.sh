@@ -419,6 +419,8 @@ async function exerciseConnectionBoundaries() {
     await stopDaemon.start();
     stopSocket = await connectRaw(stopConfig.socketPath);
     stopSocket.on('error', () => {});
+    // The slow peer must actually be gone, not merely stop() resolved.
+    const peerClosed = new Promise((resolve) => stopSocket.once('close', () => resolve(true)));
     const stopChatter = setInterval(() => {
       if (!stopSocket.destroyed && stopSocket.writable) stopSocket.write('x');
     }, 15);
@@ -432,13 +434,23 @@ async function exerciseConnectionBoundaries() {
       return Promise.all([firstStop, secondStop]);
     }, 500);
     clearInterval(stopChatter);
+    // (the client socket is destroyed only AFTER we observe whether the daemon closed it)
+    // Never an unbounded await: a hung stop must print stop_bounded=false, not
+    // stall the whole suite.
+    const settle = await Promise.race([
+      Promise.allSettled([firstStop, secondStop]),
+      sleep(5_000).then(() => null),
+    ]);
+    const bothFulfilled = Array.isArray(settle) && settle.every((r) => r.status === 'fulfilled');
+    const peerGone = await Promise.race([peerClosed, sleep(1_000).then(() => false)]);
     if (!stopSocket.destroyed) stopSocket.destroy();
-    if (!stopProbe.stopped) await Promise.all([firstStop, secondStop]);
     return {
       absolute_deadline_bounded: deadlineBounded,
-      stop_bounded: stopProbe.bounded,
+      // bounded AND the slow peer was really destroyed (was: the same boolean as below).
+      stop_bounded: stopProbe.bounded && peerGone === true,
       stop_bound_measurement: `${stopProbe.elapsedMs}/${stopProbe.baselineMs}`,
-      concurrent_stop_resolved: stopProbe.stopped,
+      // both concurrent callers settled successfully (shared shutdown), a different fact from boundedness.
+      concurrent_stop_resolved: bothFulfilled,
     };
   } finally {
     if (deadlineSocket && !deadlineSocket.destroyed) deadlineSocket.destroy();

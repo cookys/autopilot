@@ -357,6 +357,7 @@ function run(perCaseModeSource, extra) {
   const result = run("() => 'reference'", { rawDir, testTruncateAfterCases: 3 });
   equal(result.qualified, false, 'a truncated administration is never qualified');
   equal(result.wall_truncated, true, 'wall_truncated observable fact is set');
+  equal(result.truncation_cause, 'count_seam', 'seam truncation names its cause');
   equal(result.started_cases, 3, 'started_cases matches the truncation seam');
   equal(result.row.quality.corpus_pass, '3/60',
     'truncated run reports the FULL pooled denominator (3/60), never a shrunken one (3/3)');
@@ -604,6 +605,6 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
     'planted negative: with closed_label_set stripped from the envelope again, the envelope-only stub flips red (proves test 13 is load-bearing)');
 }
 
-if (assertions !== 63) throw new Error(`engine-qualify-consult: expected exactly 63 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 64) throw new Error(`engine-qualify-consult: expected exactly 64 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

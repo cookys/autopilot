@@ -328,7 +328,8 @@ function toDateMs(value) {
 // comparison must not become time-of-day sensitive. It is deliberately NOT the
 // default clock: see nowArgToMs.
 function startOfUtcDayMsOf(ms) {
-  if (!Number.isFinite(ms)) return ms;
+  // Date#toISOString throws RangeError outside +-8.64e15 even for finite input.
+  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ms;
   const iso = new Date(ms).toISOString().slice(0, 10);
   const floor = Date.parse(`${iso}T00:00:00.000Z`);
   return Number.isFinite(floor) ? floor : ms;
@@ -361,11 +362,9 @@ function startOfUtcDayMsOf(ms) {
 // exactly the baseline instant does not count — `observedMs > baselineMs` is
 // strict; calendar-teeth-negative "tie1") is untouched: this function never
 // participates in that comparison's right-hand side.
-function nowArgToMs(value, required = false) {
+function nowArgToMs(value) {
   const ms = toDateMs(value);
-  if (value === undefined || value === null || value === '') {
-    return required ? failValidation('missing --now value') : Date.now();
-  }
+  if (value === undefined || value === null || value === '') return Date.now();
   if (ms === null) failUsage(`invalid --now date: ${value}`);
   return ms;
 }
@@ -696,7 +695,7 @@ function parseCurrentArgs(args) {
 
   // Default clock = real instant for every command (v2.34.37, was UTC-midnight
   // truncated unless --require-evidence). See nowArgToMs.
-  const nowMs = nowArgToMs(now, false);
+  const nowMs = nowArgToMs(now);
 
   return { role, nowMs, requireEvidence, scope, identity };
 }
@@ -756,7 +755,7 @@ function parseReportArgs(args) {
 
   // Default clock = real instant for every command (v2.34.37, was UTC-midnight
   // truncated unless --require-evidence). See nowArgToMs.
-  const nowMs = nowArgToMs(now, false);
+  const nowMs = nowArgToMs(now);
   return {
     role,
     key,
@@ -827,7 +826,7 @@ function parseLadderArgs(args) {
     implementerFamily,
     // Default clock = real instant for every command (v2.34.37, was UTC-midnight
     // truncated unless --require-evidence). See nowArgToMs.
-    nowMs: nowArgToMs(now, false),
+    nowMs: nowArgToMs(now),
     requireEvidence,
     scope,
     identity,
@@ -3024,6 +3023,7 @@ if (require.main === module) {
 // resolve-scaffold-tier.js's own comment at its require site).
 module.exports = {
   computeSeatProjection,
+  startOfUtcDayMsOf, // exported so the +-8.64e15 range guard can be pinned directly
   // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver
   // pending_revocation is a projection of this result — never a second reader.
   seatIdentityHash,

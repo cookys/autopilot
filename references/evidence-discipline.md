@@ -591,8 +591,10 @@ repository would have caught it otherwise.
 > **When a test needs a special path, the special path belongs in the fixture, never in the program.**
 > Grep the diff for literal fixture names (`p7`, `test`, `fixture`) before integrating a hands cut.
 
-Prevention: the carve-out is removed and case 7 finalizes generation 1 first; `check-redispatch-prompt.sh`
-style linting of hands diffs for fixture literals is a BACKLOG row.
+Prevention: the carve-out is removed and case 7 finalizes generation 1 first; `scripts/scan-fixture-literals.js`
+scans the added lines of a hands range for fixture literals in non-test code (comparisons against `p7`/`test*`/`fixture*`,
+`FIXTURE_*` constants, fake shas and paths) and `dispatch-hetero.sh` prints its hits as a `[hands-advisory]` after the
+content gate. Advisory: a hit is a lead for the reviewer; `fixture-literal-ok` on the line waives a legitimate use.
 
 ## 24. A foreman's "green" is a claim until depth-0 re-runs the command
 

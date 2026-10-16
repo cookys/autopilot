@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test-integrity now reports `early_exit` for an added unconditional top-level `exit`/`return` in a `*.test.sh` suite that still has assertions after it; the new advisory `scripts/scan-fixture-literals.js` flags fixture literals a hands diff wrote into production code (printed by `dispatch-hetero.sh`); `engine-qualify` runs report `truncation_cause` (`wall` or `count_seam`) next to `wall_truncated`, `startOfUtcDayMsOf` no longer throws outside the Date range, and the unused `required` parameter of `nowArgToMs` is gone.
+
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
 - `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.

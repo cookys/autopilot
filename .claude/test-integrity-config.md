@@ -60,20 +60,18 @@ mode: warn
 - '**/*.test.ts'
 
 ## Known gaps in shell skip detection
-# Recorded here because the project README and docs/BACKLOG.md both cite this
-# file as one of the three places the gaps are written down. If you close one,
+# Recorded here because the project README cites this file as one of the places
+# the gaps are written down. If you close one,
 # update all three and flip the matching control in
 # hooks/tests/check-test-integrity.test.sh (they currently assert the CURRENT
 # boundary, so closing a gap turns one red on purpose).
 #
-# 1. An `exit 0` / `return 0` spliced into the middle of a suite is NOT
-#    detected. It deletes no line and carries no skip token, and at line level
-#    it is indistinguishable from the legitimate bail-outs this repo already
-#    writes: of 260 tracked `*.test.sh`, 19 contain a top-level `exit 0` and 41
-#    contain one at some indentation (only 2 have it as the final line, so most
-#    are guard clauses — exactly the shape a gaming early-exit takes). Telling
-#    them apart needs "is there an assertion after this exit?", which is file
-#    position context the L0 layer does not carry.
+# 1. CLOSED (BL-0059): an unconditional top-level `exit`/`return` that is ADDED
+#    in front of later assertions is reported as `early_exit` by a file-level
+#    check (find_early_exits in scripts/lib/test-integrity-l1.py). Guard clauses
+#    (`cond || exit 0`, `if ...; then exit 0; fi`) and a terminating exit are not
+#    flagged. Still invisible: an exit hidden behind a non-trivial condition that
+#    is always true at run time, and one reached through `eval`.
 # 2. Named-uncovered command positions: a `time` / `coproc` prefix, and a
 #    leading redirection (`>f skip`).
 # 3. Named-uncovered data/code cases: a skip reached through `eval "skip"`, and

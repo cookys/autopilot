@@ -3347,6 +3347,10 @@ function runImplQualification(options) {
   // Reported on the returned run (`wall_truncated`) so a caller can ASSERT on
   // the fact instead of inferring it from elapsed time.
   let wallTruncated = false;
+  // Why it truncated: 'wall' (budget clock ran out) or 'count_seam' (the test-only
+  // truncateAfterCases seam). `wall_truncated` is true for BOTH, so a caller that
+  // needs the cause reads `truncation_cause`. null when not truncated.
+  let truncationCause = null;
   let startedCases = 0;
   const trialResults = [];
   try {
@@ -3364,6 +3368,7 @@ function runImplQualification(options) {
           // no-verdict abort. Fail-closed: an unrun capability case cannot pass.
           administrationOutcome = 'completed';
           wallTruncated = true;
+          truncationCause = Date.now() >= budget.wall_deadline ? 'wall' : 'count_seam';
           break;
         }
         startedCases += 1;
@@ -3422,6 +3427,7 @@ function runImplQualification(options) {
       oracle: oracleMeta,
       qualified: false,
       wall_truncated: wallTruncated,
+      truncation_cause: truncationCause,
       started_cases: startedCases,
       evidence: null,
       row: { status: 'no_verdict', administration_outcome: administrationOutcome, evidence: null },
@@ -3649,6 +3655,7 @@ function runImplQualification(options) {
     // truncation fixture asserts on; it used to assert `qualified === false`
     // and hope 8 seconds were not enough to finish the corpus.
     wall_truncated: wallTruncated,
+    truncation_cause: truncationCause,
     started_cases: startedCases,
     evidence,
     row,
@@ -4403,6 +4410,7 @@ function runConsultDiscussQualification(options) {
   const wallDeadline = started + wallSecondsCap * 1000;
 
   let wallTruncated = false;
+  let truncationCause = null; // 'wall' | 'count_seam' | null (see the impl kernel)
   let startedCases = 0;
   // A grader exception is an INSTRUMENT failure, never engine capability
   // (2026-08-30 D7 real-money incident: a bare-`undefined` gates argument to
@@ -4442,6 +4450,7 @@ function runConsultDiscussQualification(options) {
     if (Date.now() >= wallDeadline
         || (truncateAfterCases !== null && startedCases >= truncateAfterCases)) {
       wallTruncated = true;
+      truncationCause = Date.now() >= wallDeadline ? 'wall' : 'count_seam';
       break;
     }
 
@@ -4470,6 +4479,7 @@ function runConsultDiscussQualification(options) {
         if (Date.now() >= wallDeadline
             || (truncateAfterCases !== null && startedCases >= truncateAfterCases)) {
           wallTruncated = true;
+          truncationCause = Date.now() >= wallDeadline ? 'wall' : 'count_seam';
           stopAdministration = true;
           break;
         }
@@ -4654,6 +4664,7 @@ function runConsultDiscussQualification(options) {
       status: 'instrument_error',
       qualified: false,
       wall_truncated: wallTruncated,
+      truncation_cause: truncationCause,
       started_cases: startedCases,
       stop_reason: 'instrument_error',
       tier1_terminated: false,
@@ -4709,6 +4720,7 @@ function runConsultDiscussQualification(options) {
       oracle: oracleMeta,
       qualified: false,
       wall_truncated: wallTruncated,
+      truncation_cause: truncationCause,
       started_cases: startedCases,
       stop_reason: pooledVerdict.stop_reason,
       tier1_terminated: pooledVerdict.tier1_terminated,
@@ -5039,6 +5051,7 @@ function runConsultDiscussQualification(options) {
     oracle: oracleMeta,
     qualified,
     wall_truncated: wallTruncated,
+    truncation_cause: truncationCause,
     started_cases: startedCases,
     stop_reason: pooledVerdict.stop_reason,
     tier1_terminated: pooledVerdict.tier1_terminated,

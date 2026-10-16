@@ -36,6 +36,9 @@ done
 [ -n "${PROMPT_CAPTURE_FILE:-}" ] && printf '%s' "$prompt" > "$PROMPT_CAPTURE_FILE"
 begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+# The proof example text comes from dispatch-review.sh itself, never a copy that could drift.
+pe() { sed -n "s/^PROOF_EXAMPLE_$1=\"\(.*\)\"\$/\1/p" "$DR_SRC"; }
+PE_C="$(pe CHECKED)"; PE_E="$(pe EVIDENCE)"; PE_K="$(pe CONCLUSION)"
 case "${FAKE_MODE:-ok}" in
   missing_evidence)
     printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=the diff and its contract; conclusion=nothing blocking remains\n%s\n' "$begin" "$end" ;;
@@ -46,9 +49,10 @@ case "${FAKE_MODE:-ok}" in
     f="${FAKE_MODE#example_ship_one_}"
     c='my own surfaces'; e='my own observations'; k='my own conclusion'
     case "$f" in
-      checked) c='the changed retry branch and its call sites' ;;
-      evidence) e='the added test fails without the branch and passes with it' ;;
-      conclusion) k='the spec is met and no in-scope failure remains' ;;
+      checked) c="$PE_C" ;;
+      evidence) e="$PE_E" ;;
+      conclusion) k="$PE_K" ;;
+      checked_upper) c="$(printf '  %s  ' "$PE_C" | tr '[:lower:]' '[:upper:]')" ;;
     esac
     printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=%s; evidence=%s; conclusion=%s\n%s\n' "$begin" "$c" "$e" "$k" "$end" ;;
   example_ship|example_fix)
@@ -60,6 +64,7 @@ esac
 EOF
 chmod +x "$TEST_TMP/fake-runner.sh"
 
+export DR_SRC="$DR"
 run_dr() { FAKE_MODE="$1" PROMPT_CAPTURE_FILE="${2:-$TEST_TMP/p.txt}" bash "$DR" --runner codex --model gpt-test --diff-file "$TEST_TMP/diff.txt" --bin "$TEST_TMP/fake-runner.sh" 2>/dev/null; }
 
 OUT=$(run_dr missing_evidence); RC=$?
@@ -79,6 +84,11 @@ OUT=$(run_dr example_ship "$TEST_TMP/p-ex1.txt"); RC=$?
 assert_eq "$RC" "1" "dr: copying the prompt's NO-FINDING-PROOF example verbatim is rejected"
 assert_contains "$OUT" '"format_reject": true' "dr: a copied example is a format reject (re-ask)"
 assert_contains "$OUT" 'do not copy the example' "dr: the reject reason says not to copy the example"
+# the rendered prompt carries the expanded example, not the unexpanded variable names
+assert_not_contains "$(cat "$TEST_TMP/p-ex1.txt")" '${PROOF_EXAMPLE_' "dr: the prompt has no literal \${PROOF_EXAMPLE_ placeholder"
+assert_contains "$(cat "$TEST_TMP/p-ex1.txt")" "NO-FINDING-PROOF: checked=$(sed -n 's/^PROOF_EXAMPLE_CHECKED="\(.*\)"$/\1/p' "$DR");" "dr: the prompt shows the expanded NO-FINDING-PROOF example"
+OUT=$(run_dr example_ship_one_checked_upper); RC=$?
+assert_eq "$RC" "1" "dr: the example checked field with changed case and padding is still rejected"
 for fld in checked evidence conclusion; do
   OUT=$(run_dr "example_ship_one_$fld"); RC=$?
   assert_eq "$RC" "1" "dr: repeating only the example $fld field verbatim is rejected"

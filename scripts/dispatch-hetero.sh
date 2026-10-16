@@ -3099,7 +3099,7 @@ if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
     || {
       exec {WT_BUDGET_LOCK_FD}>&-
       WT_BUDGET_LOCK_FD=""
-      die_precondition "cannot publish worktree creation record"
+      die_precondition "cannot publish worktree creation record: $WORKTREE_INTENT_ERROR"
     }
   WT_PENDING_RECORD="$WORKTREE_INTENT_RECORD"
   _wt_creation_test_checkpoint after-pending

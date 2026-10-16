@@ -13,24 +13,29 @@
 # Requires json_escape (lib/json-emit.sh) to be sourced first.
 
 WORKTREE_INTENT_RECORD=""
+WORKTREE_INTENT_ERROR=""   # why the last write returned 1: invalid arguments vs filesystem
 
 worktree_intent_write() {
   local common="$1" root="$2" run="$3" loop="$4" branch="$5" base="$6" planned="$7"
   local dir="$common/autopilot-worktree-creation" tmp=""
   WORKTREE_INTENT_RECORD=""
-  [[ "$root" =~ ^[A-Za-z0-9._-]+$ && "$run" =~ ^[A-Za-z0-9._-]+$ && "$loop" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  [[ "$base" =~ ^[0-9a-f]{40,64}$ && "$planned" == /* ]] || return 1
-  git check-ref-format --branch "$branch" >/dev/null 2>&1 || return 1
-  if [ -e "$dir" ] || [ -L "$dir" ]; then
-    [ -d "$dir" ] && [ ! -L "$dir" ] && [ -O "$dir" ] || return 1
-  else
-    (umask 077; mkdir "$dir") || return 1
+  WORKTREE_INTENT_ERROR=""
+  [[ "$root" =~ ^[A-Za-z0-9._-]+$ && "$run" =~ ^[A-Za-z0-9._-]+$ && "$loop" =~ ^[A-Za-z0-9._-]+$ ]] \
+    && [[ "$base" =~ ^[0-9a-f]{40,64}$ && "$planned" == /* ]] \
+    && git check-ref-format --branch "$branch" >/dev/null 2>&1 \
+    || { WORKTREE_INTENT_ERROR="invalid arguments (ids, base sha, planned path or branch name rejected)"; return 1; }
+  # Two first-time dispatches can race on the mkdir: the loser re-checks instead of dying on EEXIST.
+  [ -d "$dir" ] || [ -L "$dir" ] || (umask 077; mkdir "$dir" 2>/dev/null) || true
+  if [ ! -d "$dir" ] || [ -L "$dir" ] || [ ! -O "$dir" ]; then
+    WORKTREE_INTENT_ERROR="filesystem: $dir is missing, a symlink, or not owned by this user"
+    return 1
   fi
-  tmp="$(mktemp "$dir/${run}.XXXXXX.tmp")" || return 1
+  tmp="$(mktemp "$dir/${run}.XXXXXX.tmp")" || { WORKTREE_INTENT_ERROR="filesystem: cannot allocate a record in $dir"; return 1; }
   (umask 077; printf '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
     "$(json_escape "$root")" "$(json_escape "$run")" "$(json_escape "$loop")" \
     "$(json_escape "$branch")" "$base" "$(json_escape "$planned")" > "$tmp") \
-    && mv -f -- "$tmp" "${tmp%.tmp}.json" || { rm -f -- "$tmp"; return 1; }
+    && mv -f -- "$tmp" "${tmp%.tmp}.json" \
+    || { rm -f -- "$tmp"; WORKTREE_INTENT_ERROR="filesystem: cannot publish the record in $dir"; return 1; }
   WORKTREE_INTENT_RECORD="${tmp%.tmp}.json"
   return 0
 }

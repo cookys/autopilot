@@ -377,6 +377,24 @@ assert_eq "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv
 INV="$(node -e 'const c=require(process.argv[1]+"/src/engine/controller-execution");const r=c.reconstructOwnedInventory({gitCwd:process.argv[2],controller:{resource_inventory:[]},rootRunId:"root14",baseSha:process.argv[3]});process.stdout.write(String(r.ok)+"|"+r.inventory.filter(x=>x.from_creation_intent).length)' "$REPO_ROOT" "$SBX" "$BASE")"
 assert_eq "$INV" "true|1" "14: the JS inventory sees the unregistered foreman worktree through its intent"
 
+# 14b: the shared writer under a first-time race and with bad input.
+LIBREPO="$TEST_TMP/intent-lib-repo"; git init -q "$LIBREPO"
+iw() { # <repo> <run> -> runs one write in a fresh shell; prints rc|error
+  bash -c '. "$1/scripts/lib/json-emit.sh"; . "$1/scripts/lib/worktree-intent.sh"
+    worktree_intent_write "$2/.git" root1 "$3" "$3" "b-$3" "'"$BASE"'" "/tmp/wt-$3"; printf "%s|%s" "$?" "$WORKTREE_INTENT_ERROR"' _ "$REPO_ROOT" "$1" "$2"
+}
+rm -rf "$LIBREPO/.git/autopilot-worktree-creation"
+iw "$LIBREPO" ra > "$TEST_TMP/iw.a" & iw "$LIBREPO" rb > "$TEST_TMP/iw.b" & iw "$LIBREPO" rc > "$TEST_TMP/iw.c" & wait
+assert_eq "$(cat "$TEST_TMP/iw.a" "$TEST_TMP/iw.b" "$TEST_TMP/iw.c")" "0|0|0|" "14b: three concurrent first-time writers all succeed"
+assert_eq "$(ls "$LIBREPO/.git/autopilot-worktree-creation"/*.json | wc -l | tr -d ' ')" "3" "14b: ...and each left its record"
+assert_eq "$(iw "$LIBREPO" rd)" "0|" "14b: the directory already existing is fine"
+assert_contains "$(iw "$LIBREPO" 'bad id')" "invalid arguments" "14b: a bad id is reported as invalid arguments"
+chmod 500 "$LIBREPO/.git/autopilot-worktree-creation"
+if [ "$(id -u)" != "0" ]; then
+  assert_contains "$(iw "$LIBREPO" re)" "filesystem" "14b: an unwritable directory is reported as a filesystem failure"
+fi
+chmod 700 "$LIBREPO/.git/autopilot-worktree-creation"
+
 # --- cleanup: retained worktrees + branches in the sandbox --------------------------------
 git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print $2}' | grep -v "^$SBX$" | while read -r wt; do
   git -C "$SBX" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"

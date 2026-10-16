@@ -278,7 +278,7 @@ if [ "$RESUME" -eq 0 ]; then
   # Intent record BEFORE the add (BL-0082): a worktree built but never marked stays discoverable.
   worktree_intent_write "$(git rev-parse --path-format=absolute --git-common-dir)" \
     "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$RUN_ID" "$RUN_ID" "$BRANCH" "$BASE_SHA" "$WT" \
-    || die_precondition "cannot publish worktree creation record"
+    || die_precondition "cannot publish worktree creation record: $WORKTREE_INTENT_ERROR"
   if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA" >/dev/null 2>&1; then
     git update-ref -d "refs/heads/$BRANCH" >/dev/null 2>&1 || true
     worktree_intent_clear

@@ -976,14 +976,21 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
   }
   // Async spawn, not spawnSync: a blocked parent cannot forward SIGTERM, and the inner writer (which holds
   // the lock) would outlive a killed launcher (BL-0109). The child is the wrapper `sh`, which execs the writer.
-  const child = spawn('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render }), { cwd, env, stdio: 'inherit' });
-  const forward = (sig) => () => { try { child.kill(sig); } catch (_e) { /* already gone */ } };
+  // Handlers go in BEFORE the spawn so no signal falls in the gap; one that lands first is replayed once the child exists.
+  let child = null;
+  let early = null;
+  const forward = (sig) => () => {
+    if (!child) { early = early || sig; return; }
+    try { child.kill(sig); } catch (_e) { /* already gone */ }
+  };
   const handlers = ['SIGTERM', 'SIGINT', 'SIGHUP'].map((sig) => [sig, forward(sig)]);
   for (const [sig, fn] of handlers) process.on(sig, fn);
   const finish = (code) => {
     for (const [sig, fn] of handlers) process.removeListener(sig, fn);
     process.exit(code);
   };
+  child = spawn('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render }), { cwd, env, stdio: 'inherit' });
+  if (early) { try { child.kill(early); } catch (_e) { /* already gone */ } }
   child.on('error', (error) => {
     stderr.write(`watcher startup failed: ${error.message}\n`);
     finish(1);

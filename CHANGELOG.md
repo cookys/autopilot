@@ -10,6 +10,8 @@
 
 - `hetero-review-loop.js finalize` no longer closes an earlier verified finding because a later generation stopped mentioning it (BL-0032): closure now needs an explicit `resolutions: [{id, rationale}]` entry in that later generation's dispositions file, and `check-phase-review-receipt.js` re-derives the same rule and refuses a resolution that names no open verified finding. New `hetero-review-loop.js refinalize --generation <last>` (BL-0092) re-derives chain stamps, verdict and receipt of a finalized chain from the on-disk evidence (refusing if any findings/dispositions sha256 changed), replacing the "collect one more generation" workaround for stale pre-v2.36.3 `closed_findings` stamps. Receipts that relied on closure by absence no longer verify; the remedy is to collect one more review generation and write the `resolutions` in that generation's dispositions.
 
+- Implementer qualification now refuses `--trials` other than 2 (it used to record repeated_trials=N while running 2); adds hardening tests for repo-local git config, replacement refs, add-then-revert canary, dispatch outcomes, output bomb and TTL boundaries (BL-0037).
+
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
 - `dispatch-review.sh` now marks a "leading chrome contained framing vocabulary" rejection as `format_reject`, so the single-seat format re-ask (BL-0197) covers it instead of leaving the seat absent.
 

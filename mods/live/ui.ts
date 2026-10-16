@@ -1064,7 +1064,7 @@ function cleanRows(u: Ctx, e: ResidueEntry, results: Record<string, CleanResult>
   if (results === undefined) return cmd
   const r = results[e.target]
   if (r === undefined) return e.kind === 'worktree' ? [buttonRow(u, u.t('hygiene.clear'), { press: 'clean:' + e.target, fact: 'residue.groups' })] : cmd
-  return r.ok ? resultRow(u, u.t('hygiene.cleared'), 'residue.groups') : [...resultRow(u, u.t('hygiene.clear_failed', { why: r.note }), 'residue.groups'), ...cmd]
+  return r.ok ? resultRow(u, u.t('hygiene.cleared'), 'residue.groups') : [...resultRow(u, u.t('hygiene.clear_failed', { why: r.note }), 'residue.groups'), ...cmd, ...(e.kind === 'worktree' ? [buttonRow(u, u.t('hygiene.clear'), { press: 'clean:' + e.target, fact: 'residue.groups' })] : [])] // a failed press can be tried again: the reason may be gone
 }
 export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[], o: { judge: boolean; cap?: number; buttons?: Record<string, CleanResult> }): PaneLine[] {
   const cap = o.cap ?? 5

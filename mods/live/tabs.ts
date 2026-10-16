@@ -801,7 +801,7 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       if (ctx.decide === undefined) lines.push(...cmd)
       else if (rs === undefined) lines.push(ui.buttonRow(u, t('hygiene.clear'), { press: 'clean:' + dir.dir, fact: F }))
       else if (rs.ok) lines.push(...ui.resultRow(u, t('hygiene.cleared'), F))
-      else lines.push(...ui.resultRow(u, t('hygiene.clear_failed', { why: rs.note }), F), ...cmd)
+      else lines.push(...ui.resultRow(u, t('hygiene.clear_failed', { why: rs.note }), F), ...cmd, ui.buttonRow(u, t('hygiene.clear'), { press: 'clean:' + dir.dir, fact: F }))
     }
     else lines.push(...ui.detail(u, t('src.stale_busy', { v, pids: dir.alive.join(', ') }), { fact: F }))
   }

@@ -22,18 +22,24 @@ export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR
 export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-mri-XXXXXX)"
 # PID trap (BL-0109): the rails run stub runners under timeout; kill any process still holding an argv
 # under TEST_TMP before the directory goes. /proc scan by exact path (no pkill/pgrep -f self-match).
-kill_stragglers() {
-  # Guard: an empty/odd TEST_TMP would make the pattern match every process. Scan only for a real,
-  # mktemp-shaped directory, and match "<dir>/" so a bare prefix cannot hit unrelated argv.
-  local tt="${1-$TEST_TMP}" d pid c
-  [ -n "$tt" ] && [ -d "$tt" ] || return 0
-  case "$tt" in /tmp/?*|/dev/shm/?*|"${TMPDIR:-/nonexistent}"/?*) : ;; *) return 0 ;; esac
-  [ "${#tt}" -ge 12 ] || return 0
+# _ks_scan <dir> [dry]: no guard. Kills (or, with "dry", only prints) every pid whose argv holds "<dir>/".
+_ks_scan() {
+  local tt="$1" d pid c
   for d in /proc/[0-9]*; do
     pid="${d#/proc/}"; [ "$pid" = "$BASHPID" ] && continue; [ "$pid" = "$$" ] && continue; [ "$pid" = "$PPID" ] && continue
     { c="$(tr '\0' ' ' <"$d/cmdline")"; } 2>/dev/null || continue
-    case "$c" in *"$tt/"*) kill -9 "$pid" 2>/dev/null || true ;; esac
+    case "$c" in *"$tt/"*) if [ "${2:-}" = dry ]; then echo "$pid"; else kill -9 "$pid" 2>/dev/null || true; fi ;; esac
   done
+}
+kill_stragglers() {
+  # Guard: an empty/odd TEST_TMP would make the pattern match every process. Scan only for a real,
+  # mktemp-shaped directory (trailing slash normalised away).
+  local tt="${1-$TEST_TMP}"
+  tt="${tt%/}"
+  [ -n "$tt" ] && [ -d "$tt" ] || return 0
+  case "$tt" in /tmp/?*|/dev/shm/?*|"${TMPDIR:-/nonexistent}"/?*) : ;; *) return 0 ;; esac
+  [ "${#tt}" -ge 12 ] || return 0
+  _ks_scan "$tt"
 }
 trap 'kill_stragglers; rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
@@ -221,12 +227,15 @@ sleep 0.2; kill -0 "$STRAG" 2>/dev/null || fail "straggler did not start"
 kill_stragglers; sleep 0.2
 if kill -0 "$STRAG" 2>/dev/null; then fail "PID trap left the straggler alive"; fi
 wait "$STRAG" 2>/dev/null || true
-# empty / unsafe TEST_TMP: the trap must kill nothing (sentinel sleep stays alive)
-setsid sleep 300 & SENT=$!
-sleep 0.2
-kill_stragglers ""; kill_stragglers "/"; kill_stragglers "/tmp"; kill_stragglers "relative/dir-long-enough"
+# empty / unsafe TEST_TMP: the guard must keep the trap from killing anything. The sentinel's argv holds a
+# path, so the unguarded scan WOULD select it (negative control, dry run) while the guarded call must not.
+bash -c 'exec -a "$1" sleep 300' _ "/tmp/sentinel-probe-xyz/" & SENT=$!
+sleep 0.2; kill -0 "$SENT" 2>/dev/null || fail "sentinel did not start"
+case " $(_ks_scan "" dry | tr '\n' ' ') " in *" $SENT "*) eq "0" "0" "negative control: without the guard the sentinel is selected" ;; *) fail "negative control: unguarded scan does not select the sentinel (test cannot tell the guard apart)" ;; esac
+kill_stragglers ""; kill_stragglers "/"; kill_stragglers "/tmp"; kill_stragglers "/tmp/"; kill_stragglers "relative/dir-long-enough"
 TEST_TMP="" kill_stragglers
 if kill -0 "$SENT" 2>/dev/null; then eq "0" "0" "PID trap: empty/unsafe TEST_TMP kills nothing"; else fail "PID trap killed an unrelated process with empty TEST_TMP"; fi
 kill "$SENT" 2>/dev/null || true
+wait "$SENT" 2>/dev/null || true
 
 finalize_test

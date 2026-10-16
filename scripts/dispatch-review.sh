@@ -1530,12 +1530,14 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   OC_ARGS=(run --dir "$OPENCODE_CWD" --pure -m "$MODEL" --agent locked --variant "$OPENCODE_VARIANT" --format json)
   # Verify the final argv + config right before spawn (same check the exam provider uses):
   # any drift (no --pure, other agent, non-empty --dir, --dir under a git worktree) refuses.
-  OC_BREACH="$(OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON" node "$OC_LIB" assert "${OC_ARGS[@]}" 2>&1)" \
+  # ONE env prefix array is used for BOTH the assert and the spawn, so the verified environment
+  # is exactly the spawned one (an operator-exported OPENCODE_CONFIG is stripped in both).
+  OC_ENV_PREFIX=(env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${OC_HOME_ENV[@]}" OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON")
+  OC_BREACH="$("${OC_ENV_PREFIX[@]}" node "$OC_LIB" assert "${OC_ARGS[@]}" 2>&1)" \
     || die_precondition "opencode containment verification failed: ${OC_BREACH} — refusing to spawn opencode uncontained"
   timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
-      env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${OC_HOME_ENV[@]}" OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON" \
-      "$OPENCODE_BIN" "${OC_ARGS[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+      "${OC_ENV_PREFIX[@]}" "$OPENCODE_BIN" "${OC_ARGS[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
   OPENCODE_RC=$?
   wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$OPENCODE_CWD" "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # clear so the EXIT trap doesn't rm the paths a 2nd time

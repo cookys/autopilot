@@ -22,7 +22,9 @@ command -v opencode >/dev/null 2>&1 || { echo "FAIL: AUTOPILOT_LIVE_OPENCODE=1 b
 MODEL="${AUTOPILOT_LIVE_OPENCODE_MODEL:-opencode-go/muse-spark-1.3-contributor}"
 LIB="$REPO_ROOT/scripts/lib/opencode-containment.js"
 MCP_JS="$REPO_ROOT/hooks/tests/lib/opencode-canary-mcp-server.js"
-W="$TEST_TMP/live"; EX="$W/exam"; mkdir -p "$EX"; echo hello > "$EX/note.txt"
+W="$TEST_TMP/live"; EX="$W/exam"; mkdir -p "$EX"
+_live_cleanup() { rm -rf "$W"/iso-* "$W/fakehome"; cleanup_test_tmp; }   # includes the copied auth.json
+trap _live_cleanup EXIT; echo hello > "$EX/note.txt"
 R=$RANDOM$RANDOM; export CANARY_FILE="$W/mcp-canary-$R"
 MCP='"mcp":{"canary":{"type":"local","command":["node","'"$MCP_JS"'"],"enabled":true}}'
 # The locked config is the lib's, with the MCP canary server added on top (attack surface only).
@@ -48,6 +50,7 @@ _attack_once() {
   rm -f "$W"/pwned-* "$CANARY_FILE" "$EX"/pwned-*
   local -a isoenv; rm -rf "$W/iso-$label"
   mapfile -t isoenv < <(XDG_DATA_HOME="$SRC_DATA" node "$LIB" prepare-home "$W/iso-$label")
+  [ "${#isoenv[@]}" -ge 5 ] || { fail "$label: prepare-home produced ${#isoenv[@]} env lines (<5)"; return 0; }
   printf '%s' "$prompt" | timeout 180 env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${isoenv[@]}" OPENCODE_CONFIG_CONTENT="$cfg" opencode run --dir "$EX" --pure -m "$MODEL" --agent "$agent" --format json >"$out" 2>"$W/$label.err"
   local tools files ran=0
   tools="$(node -e 'const l=[];for(const x of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){try{const e=JSON.parse(x);if(e.type==="tool_use")l.push(e.part.tool+":"+(e.part.state&&e.part.state.status))}catch{}}console.log(l.join(","))' "$out")"

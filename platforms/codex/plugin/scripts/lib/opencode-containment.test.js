@@ -10,6 +10,7 @@
 //   - provider: swap `--agent locked` for `--agent plan`    -> argv test + assertLocked refusal fail
 //   - dispatch-review.sh: drop the env OPENCODE_CONFIG_CONTENT= prefix -> shell argv/env test fails
 //   - provider/dispatch-review: drop the tool-event audit -> the tool_use NDJSON tests fail
+//   - dispatch-review: run assert in the operator's raw env (not the spawn prefix) -> exported-OPENCODE_CONFIG test fails
 //   - dispatch-review: drop the assert call -> the tampered-copy tests (no --pure / other agent / dirty --dir) fail
 const assert = require('assert');
 const fs = require('fs');
@@ -183,6 +184,23 @@ printf '%s\\n' '{"type":"text","part":{"text":"VERDICT: SHIP-AS-IS\\n"}}'
   eq(JSON.parse(fs.readFileSync(`${argvFile}.env`, 'utf8')), oc.CONFIG, 'dispatch-review: canonical env');
   eq(fs.readFileSync(`${argvFile}.ls`, 'utf8'), '', 'dispatch-review: scratch cwd empty');
   eq(argv[argv.indexOf('--dir') + 1], fs.readFileSync(`${argvFile}.cwd`, 'utf8').trim(), 'dispatch-review: --dir is the cwd');
+}
+
+// dispatch-review with OPENCODE_CONFIG / OPENCODE_CONFIG_DIR exported by the operator: the review
+// must still run (assert sees the stripped env) and the spawned opencode must not receive them.
+{
+  const envStub = path.join(tmp, 'sh-env-opencode');
+  const envOut = path.join(tmp, 'sh-env-out');
+  fs.writeFileSync(envStub, `#!/usr/bin/env bash
+printf 'C=%s|D=%s\\n' "\${OPENCODE_CONFIG-UNSET}" "\${OPENCODE_CONFIG_DIR-UNSET}" > "${envOut}"
+cat >/dev/null
+printf '%s\\n' '{"type":"text","part":{"text":"VERDICT: SHIP-AS-IS\\n"}}'
+`, { mode: 0o755 });
+  const d3 = path.join(tmp, 'd3.diff');
+  fs.writeFileSync(d3, 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n');
+  const r = spawnSync('bash', [path.join(__dirname, '..', 'dispatch-review.sh'), '--runner', 'opencode', '--model', 'opencode-go/x', '--diff-file', d3, '--bin', envStub], { encoding: 'utf8', timeout: 60000, env: { ...process.env, TMPDIR: tmp, OPENCODE_CONFIG: '/somewhere/opencode.json', OPENCODE_CONFIG_DIR: '/somewhere/dir' } });
+  ok(!/precondition_failed/.test(r.stdout), `exported OPENCODE_CONFIG does not fail the review (${r.stdout.slice(0, 160)})`);
+  eq(fs.readFileSync(envOut, 'utf8').trim(), 'C=UNSET|D=UNSET', 'spawned opencode env has neither OPENCODE_CONFIG nor OPENCODE_CONFIG_DIR');
 }
 
 // dispatch-review: tool_use event -> no_verdict naming the breach (answer discarded)

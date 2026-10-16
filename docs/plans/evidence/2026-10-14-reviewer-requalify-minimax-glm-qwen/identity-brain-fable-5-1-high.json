@@ -1,0 +1,14 @@
+{
+  "identity": "claude-fable-5-1",
+  "model_alias": "claude-fable-5-1",
+  "model_version": "claude-fable-5-1",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.301-Claude-Code",
+  "harness_version": "engine-qualify:bd8b0ea9",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "d413d63372be8eb8c1378483ab6cc67e62aa124e629f0ffa7122575b61c684e4",
+  "semantic_fingerprint": "af7f06f19b4e1839d81d2e69ad7cb4ca30a91124f4adfcf4924921f80660c7c4",
+  "containment_fingerprint": "2bb6d527c0be600f61f40ffaafeb72b265e6c0a02c260ef2ebbed1da7d4df06f"
+}

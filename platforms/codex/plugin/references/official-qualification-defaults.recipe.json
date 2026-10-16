@@ -37,7 +37,8 @@
     {
       "event_ids": [
         306,
-        309
+        309,
+        311
       ],
       "role": "owner",
       "reason": "Owner brain-seat (owner_brain_seat) rows are not shipped as defaults; failed brain sittings (events 306 kimi-code-k3, 309 kimi-k2.8-preview, 2026-10-16) are excluded like the other models' 2026-10-14 brain failures. Brain sittings ARE scorecard rows (since v2.36: recordable via engine-scorecard record, role owner, told apart from foreman rows by methodology_kind owner_brain_seat and the forced brain-seat scope), and the atomic owner-brain-seat-v1 record in the capability store remains their evidence source (no expiry, 3-strike revocation via engine-capability-state.js brain-status). Add an entry here once a passing brain row is worth shipping as a default."

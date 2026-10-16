@@ -90,3 +90,28 @@ rejected (credential, no verdict, kept as attempt1) and the owner's own copy was
 relay (exam home refreshed and handed on between runs); afterwards the newest credential was written back to the owner's
 `~/.kimi-code` with a backup taken first. No credential, token or kimi-home file is stored in this evidence (secret scan of every
 added or changed file found none; no file is over 5 MB). Follow-up: BL-0199.
+
+## 2026-10-16 Claude Fable 5.1 brain control
+
+Why: owner decision d-ae7892b0. The brain seat exam had been sat 9 times across 7 models with no pass, so Claude was sat as a
+control. Grading had just changed to compare only verdict and severity within a pair (70ded9dc).
+
+Result: claude-fable-5-1, claude-native, high, brain (owner seat): scorecard event 311, failed. Plants 8/8, clean_false_positives 0,
+fairness correctness 0 errors, pair_deltas 1, hard_fails 1; all four subjects false. Directory `out/m-fable-brain-high`, cell
+`cell-fable-brain.sh`, identity `identity-brain-fable-high.json` and `identity/*-fable-5-1-high.json`.
+
+Cause (grader line numbers):
+
+- Trial 2, round 8: the candidate declared done. The prompt states the stream is exactly 12 rounds and says not to end early
+  (`scripts/qualification-review-provider.js:295`, `:386`). The grader records `early_end_before_late_window`
+  (`evals/brain-eval-grader.js:108-118`), which is the 1 hard fail.
+- That sets stopReason to `early_end`. The four subject conditions (`evals/brain-eval-grader.js:310-320`) require `completed`,
+  so all four are false regardless of plants, fairness or false positives.
+- The 1 pair delta is `missing_arm` (`evals/brain-eval-grader.js:356-358`): the second side of that pair was scheduled at round 11,
+  never appeared because of the early end, and so it is not a verdict or severity disagreement.
+
+Versus Kimi K3 (event 306, same exam, same grader family): K3 had plants 10/10 but hard_fails 5 with diligence and fairness false;
+Fable 5.1 has fewer hard fails (1) and clean fairness, but fails on a single early end that voids every subject.
+
+Exam-design points are filed as BL-0200. None of them would turn this result into a pass: declaring done early is a real error.
+The failed row is excluded from the shipped defaults (event 311 added to the owner exclusion in the recipe).

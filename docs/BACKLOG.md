@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0200 -->
+<!-- next-id: BL-0201 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1461,3 +1461,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-16 Kimi 補考發現
 - **Pointer**: docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/README.md
 - **Context**: kimi28-stage-probe.sh already keeps the newest usable credential when rebuilding the exam home; still missing is the copy-in at start and write-back-with-backup at the end as a standard step.
+
+### Brain exam: three debatable design points surfaced by the Claude control sitting
+- **Id**: BL-0200
+- **Status**: open
+- **Since**: 2026-10-16
+- **Origin**: self
+- **Problem**: brain 考卷三點：(a) 提早結束時，沒出現的那對題又算一次不一致，同錯扣兩次；(b) 一次提早結束讓四科全不及格，無關的「不越界」也陪葬；(c) 提示說共 12 輪不要提早結束，又說 findings 全關可 declare_done。
+- **Impact**: 成績看起來比實際差，難分辨模型真正弱在哪。這三點都不會讓 Claude 這次變成通過：提早宣告完成是真的錯。
+- **Trigger**: 要再拿 brain 考試決定席位前，或 owner 要求時
+- **Effort**: M
+- **Source**: Claude Fable 5.1 brain control, event 311, 2026-10-16
+- **Pointer**: docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/README.md
+- **Context**: Grader lines: evals/brain-eval-grader.js:108-118 (early end), :310-320 (subjects need completed), :356-358 (missing_arm); prompt wording at scripts/qualification-review-provider.js:295 and :386.

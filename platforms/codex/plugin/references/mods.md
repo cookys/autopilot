@@ -160,7 +160,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
 
 - One watcher per project is the only writer of the live projection. `session-mode.js set` starts it when the
   marker has a non-null `project_key`; `autopilot status runs --watch --project <key>` is the same code path run
-  in the foreground. Both build the command from one definition, `watchLaunchArgv()` in
+  in the foreground (`autopilot` is the `bin/autopilot` entry; with no `bin/` on PATH use `node <repo>/bin/autopilot.js`). Both build the command from one definition, `watchLaunchArgv()` in
   `src/status/runs-watch.js`; the detached start is `startWatcherDetached()`.
 - **Lock form (ii)**: `sh -c 'exec 9>"$LOCK"; flock -n 9 || exit 75; exec node <bin> status runs --watch ...'`.
   `exit 75` means the lock is held. The node process keeps fd 9, so `writer.pid` is the holder. Probe children

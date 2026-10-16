@@ -177,6 +177,8 @@ HOOK_ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard"
 mkdir -p "$HOOK_ENGINE_CAPABILITY_DIR" "$HOOK_ENGINE_SCORECARD_DIR"
 export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
 export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
+# Hook tests never start the SessionStart price refresh (it would reach the network).
+export AUTOPILOT_PRICES_FETCH=0
 
 # The session-mode gate in dispatch-hetero.sh reads ${HOME}/.autopilot/session-mode when this
 # is unset — i.e. the OPERATOR's markers. A live l5/l6 marker there turned every dispatch test

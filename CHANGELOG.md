@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0024 (read side): the implementer ladder now orders same-effort seats by unit price from a local cache of model-dyno's `model-prices.json` (`scripts/qualification-prices.js` `fetch` / `status` / `price`, exact `(engine, runner, model)` match, unknown or `assumed` last, no cache means the unchanged order); the cache is refreshed by a detached, throttled SessionStart call (`AUTOPILOT_PRICES_FETCH=0` / `prices_fetch: false` turns it off). New suite `hooks/tests/qualification-prices.test.sh`.
+
 - BL-0062: the integration step (`next-touch-validation.js` `executeAuthorizedIntegration`) now retires the other COMPLETE same-graph Mission adoptions automatically the moment a merge is confirmed, re-deriving the same `observed_head`-is-an-ancestor proof as `mission-terminal-reconcile.js rollover` (never chronology, never at COMPLETE); the result carries `adoption_retirement` (`retired` / `nothing_to_retire` / `skipped` with the reason), and `rollover` stays as the rescue tool. New suite `hooks/tests/mission-retire-on-integration.test.sh`.
 
 - BREAKING (BL-0115, no shim): removed `dispatch-hetero.sh --gc` (with `--reap-unmarked` / `--yes`), `gc_stale_worktrees`, the orphan-log retry that only `--gc` ran, and the `stale_reaper_age_days` / `reaper_scope` keys of `worktree-teardown-config.md` (this repo's own override and the template included). The old flags now fail with a message pointing at `node scripts/repo-residue-sweep.js reap --auto --yes` (the SessionStart hook runs it); a teardown config that still carries either key is rejected by `resolve-worktree-teardown.sh` (exit 2) and `dispatch-hetero.sh` (precondition failure). `hooks/tests/dispatch-hetero-gc.test.sh` is replaced by `dispatch-hetero-gc-removed.test.sh`.

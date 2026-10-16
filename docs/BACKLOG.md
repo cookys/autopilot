@@ -183,13 +183,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 階梯排序仍近乎退化；未知成本記成 0 的編碼已修，但各席位都沒有單價，排序缺依據。 (draft)
-- **Impact**: 挑便宜席位仍不準；需 owner 決定是否登記單價。 (draft)
+- **Problem**: 階梯同 effort 的席位已能依單價排序，但單價資料（model-prices.json）尚未發佈。 (draft)
+- **Impact**: 價格資料上線前，挑便宜席位仍不準。 (draft)
 - **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
 - **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
-- **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.
+- **Context**: 讀取端已做（階梯同 effort 依本機價格快取排序，`scripts/qualification-prices.js`），等 llm-playground 發佈 model-prices.json 到 model-dyno；沒有快取時排序不變。
 
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Id**: BL-0025

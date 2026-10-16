@@ -207,6 +207,35 @@ function configAuditBlock(homeDir) {
   }
 }
 
+// Seat unit prices (BL-0024): refresh the local price cache in a DETACHED child, at most once per 24 h
+// (scripts/qualification-prices.js fetch --if-stale-hours 24), so the dispatch path itself never touches the
+// network. Never waits, never prints, never blocks the session: any failure is swallowed (the child's own
+// fetch has a 30 s ceiling). Off with env AUTOPILOT_PRICES_FETCH=0 or ~/.autopilot/config.json {"prices_fetch":false}.
+function pricesFetchDisabled(homeDir) {
+  if (process.env.AUTOPILOT_PRICES_FETCH === '0') return true;
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configPath({ home: homeDir }), 'utf8'));
+    return !!cfg && cfg.prices_fetch === false;
+  } catch {
+    return false;
+  }
+}
+
+function startPricesFetch(homeDir) {
+  try {
+    if (pricesFetchDisabled(homeDir)) return;
+    const script = path.join(__dirname, '..', 'scripts', 'qualification-prices.js');
+    if (!fs.existsSync(script)) return;
+    const child = require('child_process').spawn(
+      process.execPath,
+      [script, 'fetch', '--if-stale-hours', '24', '--quiet'],
+      { detached: true, stdio: 'ignore' },
+    );
+    child.on('error', () => { /* nothing to do */ });
+    child.unref();
+  } catch { /* advisory data only */ }
+}
+
 function updateNoticeCandidate(pluginRoot, homeDir, source, currentVersionTuple) {
   if (!ALLOWED_SOURCES.has(source)) return '';
   if (!pluginRoot) return '';
@@ -558,6 +587,8 @@ function run() {
         disableWarning = `\n\n⚠ intent-capture hook disabled due to repeated failures.\n  Diagnostics: ~/.autopilot/.state-checkpoint.log\n  Re-enable: rm ${disableFlag}`;
       }
     } catch { /* ignore */ }
+
+    startPricesFetch(homeDir);
 
     let updateNotice = '';
     try {

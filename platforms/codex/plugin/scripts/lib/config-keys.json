@@ -953,6 +953,22 @@
       "type": "boolean"
     },
     {
+      "name": "prices_fetch",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": true,
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_PRICES_FETCH"
+      ],
+      "summary": "false stops the SessionStart refresh of the seat price cache (scripts/qualification-prices.js fetch).",
+      "type": "boolean"
+    },
+    {
       "name": "AUTOPILOT_ADAPTIVE_INTERVENTION",
       "kind": "env",
       "audience": "internal",
@@ -4128,6 +4144,34 @@
         "update_check"
       ],
       "summary": "Set to \"0\" to stop the update notice (either this or update_check: false switches it off)."
+    },
+    {
+      "name": "AUTOPILOT_PRICES_FETCH",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "prices_fetch"
+      ],
+      "summary": "Set to \"0\" to stop the SessionStart refresh of the seat price cache (either this or prices_fetch: false switches it off)."
+    },
+    {
+      "name": "AUTOPILOT_PRICES_CACHE_DIR",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "~/.autopilot/qualification-prices",
+      "readers": [
+        "scripts/lib/qualification-prices.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Where the seat price cache lives (never inside a git work tree); tests point it at a temp dir."
     },
     {
       "name": ".claude/backlog-config.md",

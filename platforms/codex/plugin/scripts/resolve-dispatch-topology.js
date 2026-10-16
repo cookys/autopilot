@@ -6,9 +6,14 @@
  * from installed runner binaries and qualified scorecard seats.
  *
  * Ordering:
- * Cheapest-first — there is no reliable price data; effort rank
- * low < medium < high < xhigh < max < default, then ascending latency.sample_wall_time_s,
- * then engine name (string compare) as final tiebreak.
+ * Cheapest-first. Effort rank low < medium < high < xhigh < max < default; within one rank,
+ * ascending unit price (input+output micro-USD per Mtok) from the LOCAL price cache
+ * (scripts/qualification-prices.js, lib/qualification-prices.js): exact (engine, runner, model)
+ * match, unknown / `assumed` / no cache sorts last (never 0). Then explicit effort before legacy,
+ * ascending latency.sample_wall_time_s, then engine name (string compare) as final tiebreak.
+ * The cache is read here, never fetched (no network on the dispatch path); with no cache every
+ * seat is unknown, so the order is identical to the pre-price ordering. Stale prices only warn
+ * (qualification-prices.js status) and are still used.
  *
  * ADR-0001: topology facts are re-derived from installed binaries + scorecard,
  * never trusted from a feed or a prior receipt.
@@ -715,6 +720,34 @@ function seatMatchesExcluded(engine, effort, runner, excludeSet) {
   );
 }
 
+// Local price cache, read once per process; null when absent/invalid (ordering then unchanged).
+let priceIndexMemo;
+function priceIndex() {
+  if (priceIndexMemo === undefined) {
+    try {
+      const cache = require('./lib/qualification-prices.js').readCache();
+      priceIndexMemo = cache ? cache.index : null;
+    } catch {
+      priceIndexMemo = null;
+    }
+  }
+  return priceIndexMemo;
+}
+
+// Seat price for the ladder sort: micro-USD per Mtok, Infinity when unknown. The seat's model id
+// is the scorecard row's `model` when present, else its `engine`.
+function priceValueOf(candidate, engine, origRunner, runner) {
+  const index = priceIndex();
+  if (!index) return Infinity;
+  const prices = require('./lib/qualification-prices.js');
+  const model = typeof candidate.model === 'string' && candidate.model ? candidate.model : engine;
+  for (const r of [origRunner, runner]) {
+    const v = prices.sortValue(index, { engine, runner: r, model });
+    if (v !== Infinity) return v;
+  }
+  return Infinity;
+}
+
 function deriveTopology(repoRoot, options = {}) {
   const roles = options.roles || new Set(VALID_ROLES);
   const excludeSet = options.excludeSet || new Set();
@@ -795,6 +828,7 @@ function deriveTopology(repoRoot, options = {}) {
         latency: rowLatency,
         engine,
         runner,
+        priceValue: priceValueOf(c, engine, origRunner, runner),
       });
     }
 
@@ -807,6 +841,7 @@ function deriveTopology(repoRoot, options = {}) {
       const rankA = normalizeEffort(a.rungObj.family, a.rungObj.effort);
       const rankB = normalizeEffort(b.rungObj.family, b.rungObj.effort);
       if (rankA !== rankB) return rankA - rankB;
+      if (a.priceValue !== b.priceValue) return a.priceValue - b.priceValue; // Infinity (unknown) last
       const legacyA = a.effort ? 0 : 1;
       const legacyB = b.effort ? 0 : 1;
       if (legacyA !== legacyB) return legacyA - legacyB;

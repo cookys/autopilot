@@ -25,7 +25,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: feat/autocompact-detect qc-gate, 2026-10-12; phase 1 merged 2026-10-13
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
-- **Context**: Phase 1 = selector + miss-check (28 cases, 0 missed). Phase 2: hook mods/live tests into the selector's map, eval ON/OFF, then change the gate step; keep the full suite for release preflight. Also unblocks BL-0087 option B.
+- **Context**: Phase 2 step 1 (mods/live `extra_runners`, miss-check 0 missed) done at 933b37e2. Remaining: ON/OFF eval (evals/skill-onoff), then guidance commit (quality-gate-config, test-policy, quality-pipeline SKILL.md:36, scripts-inventory).
 
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002

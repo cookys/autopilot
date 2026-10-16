@@ -6,6 +6,9 @@
 // network. Review: docs/plans/evidence/2026-09-29-foreman-exam-landing-review
 // (findings 82793f80 stub fidelity, 4932c6ce budgets).
 
+// Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
+process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'foreman-evidence-test-'));
+
 const assert = require('assert');
 const { createCampaignSession, campaignBudget, runForemanQualification, createRemoteForeman } = require('../evals/foreman-eval-runner');
 const { generateForemanExam } = require('../evals/foreman-eval-generator');
@@ -290,6 +293,7 @@ assertions += 1;
 // The sitting token cap ends the sitting as failed.
 {
   const sitting = runForemanQualification({
+    engine: 'engine-token-cap',
     foreman(session, campaign) {
       session.tokens = 6000000;
       session.returnVerdict(blockedVerdict(campaign, session, ['r1']));

@@ -13,7 +13,8 @@ process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join
 const assert = require('assert');
 const { spawnSync } = require('child_process');
 const path = require('path');
-const { runForemanQualification } = require('../evals/foreman-eval-runner');
+const { runForemanQualification, createCampaignSession } = require('../evals/foreman-eval-runner');
+const { generateForemanExam } = require('../evals/foreman-eval-generator');
 
 let assertions = 0;
 function check(value, message) {
@@ -138,14 +139,20 @@ runForemanQualification({
   engine: 'engine-wire',
   foreman: (session, campaign) => {
     if (campaign.family !== 'A1' || wire) { scriptedForeman(session, campaign); return; }
-    const good = envelope(campaign, session, 'implementer', campaign.brief.roster.implementers[0]);
+    // A rejected envelope spends dispatch budget (spec section 6), and A1 has
+    // 4, so the five wire probes run on a throwaway stub session of an E
+    // campaign (budget 7) and the live session stays untouched.
+    const probeCampaign = (generateForemanExam(require('crypto').createHash('sha256').update('wire-probe').digest('hex'))
+      .trials[0].campaigns.find((entry) => entry.family === 'E'));
+    const probe = createCampaignSession(probeCampaign);
+    const good = envelope(probeCampaign, probe, 'implementer', probeCampaign.brief.roster.implementers[0]);
     wire = {
-      tip40: /^[0-9a-f]{40}$/.test(session.tip),
-      shortSha: session.dispatch({ ...good, head_sha: good.head_sha.slice(0, 39) }).status,
-      badBase: session.dispatch({ ...good, base_sha: 'zz' }).status,
-      stranger: session.dispatch({ ...good, agent_id: 'not-on-roster' }).status,
-      reviewerAsImpl: session.dispatch({ ...good, agent_id: campaign.brief.roster.reviewers[0] }).status,
-      badType: session.dispatch({ ...good, allow_subdispatch: 'no' }).status,
+      tip40: /^[0-9a-f]{40}$/.test(probe.tip),
+      shortSha: probe.dispatch({ ...good, head_sha: good.head_sha.slice(0, 39) }).status,
+      badBase: probe.dispatch({ ...good, base_sha: 'zz' }).status,
+      stranger: probe.dispatch({ ...good, agent_id: 'not-on-roster' }).status,
+      reviewerAsImpl: probe.dispatch({ ...good, agent_id: probeCampaign.brief.roster.reviewers[0] }).status,
+      badType: probe.dispatch({ ...good, allow_subdispatch: 'no' }).status,
     };
     scriptedForeman(session, campaign);
   },

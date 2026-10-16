@@ -16,7 +16,7 @@ runner() { # $1 home, $2 mode: rotate|same|kill
   HOME="$1" QUALIFY_KIMI_REAL_DIR="$1/.kimi-code" bash -c '
     source "$0"; qualify_kimi_arm_writeback "$HOME/stage"
     if [ "$1" != same ]; then echo "{\"refresh_token\":\"new\"}" >"$HOME/stage/credentials/kimi-code.json"; fi
-    if [ "$1" = kill ]; then echo $$ >"$HOME/pid"; sleep 30 & wait; fi
+    if [ "$1" = kill ]; then echo $$ >"$HOME/pid"; sleep 30 & echo $! >"$HOME/spid"; wait; fi
     exit 0' "$LIB" "$2"
 }
 R() { echo "$1/.kimi-code/credentials/kimi-code.json"; }
@@ -34,7 +34,7 @@ grep -q old "$(R "$H")" && [ "$(nbak "$H")" = 0 ]; ok $? "unchanged => original 
 mkhome c
 runner "$H" kill & P=$!
 for _ in $(seq 50); do [ -s "$H/pid" ] && break; sleep 0.1; done
-kill -TERM "$(cat "$H/pid")"; wait "$P" 2>/dev/null; sleep 1
+kill -TERM "$(cat "$H/pid")"; wait "$P" 2>/dev/null; kill "$(cat "$H/spid")" 2>/dev/null; sleep 1
 grep -q new "$(R "$H")" && [ "$(nbak "$H")" = 1 ]; ok $? "killed exam still writes back"
 # Standard entry: staging via qualify_stage_credential auto-arms; a fake kimi rotates the staged token; no explicit arm call.
 H="$T/d"; mkdir -p "$H/.kimi-code/credentials" "$H/stage/.kimi-code/credentials"
@@ -64,8 +64,8 @@ for sig in INT HUP; do
 for g in (signal.SIGINT,signal.SIGHUP): signal.signal(g,signal.SIG_DFL)
 os.execvp("bash",["bash"]+sys.argv[1:])' -c '
     source "$0"; trap "echo mine >>\"$HOME/marks\"" '$sig'; qualify_kimi_arm_writeback "$HOME/stage"
-    echo "{\"refresh_token\":\"new\"}" >"$HOME/stage/credentials/kimi-code.json"; echo $$ >"$HOME/pid"; sleep 30 & wait; exit 0' "$LIB" &
-  P=$!; for _ in $(seq 50); do [ -s "$H/pid" ] && break; sleep 0.1; done; kill -$sig "$(cat "$H/pid")"; wait $P 2>/dev/null; sleep 1
+    echo "{\"refresh_token\":\"new\"}" >"$HOME/stage/credentials/kimi-code.json"; echo $$ >"$HOME/pid"; sleep 30 & echo $! >"$HOME/spid"; wait; exit 0' "$LIB" &
+  P=$!; for _ in $(seq 50); do [ -s "$H/pid" ] && break; sleep 0.1; done; kill -$sig "$(cat "$H/pid")"; wait $P 2>/dev/null; kill "$(cat "$H/spid")" 2>/dev/null; sleep 1
   grep -q new "$(R "$H")" && grep -q mine "$H/marks"; ok $? "$sig: write-back and caller $sig trap both ran"
 done
 mkhome sub
@@ -81,4 +81,17 @@ grep -q old "$(R "$H")" && [ "$(nbak "$H")" = 0 ] && grep -q refresh_token "$H/e
 mkhome old; touch -d '1 hour ago' "$H/stage/credentials/kimi-code.json"; echo '{"refresh_token":"stale"}' >"$H/stage/credentials/kimi-code.json"; touch -d '3 hours ago' "$H/stage/credentials/kimi-code.json"
 HOME="$H" QUALIFY_KIMI_REAL_DIR="$H/.kimi-code" bash -c 'source "$0"; qualify_kimi_arm_writeback "$HOME/stage"; exit 0' "$LIB"
 grep -q old "$(R "$H")" && [ "$(nbak "$H")" = 0 ]; ok $? "staged older than real: original untouched"
+# trap_add after arm must run AFTER the write-back (cleanup deleting the exam home must not lose the credential)
+mkhome del
+HOME="$H" QUALIFY_KIMI_REAL_DIR="$H/.kimi-code" bash -c 'source "$0"; qualify_kimi_arm_writeback "$HOME/stage"; qualify_trap_add "rm -rf \"$HOME/stage\"" EXIT
+  echo "{\"refresh_token\":\"new\"}" >"$HOME/stage/credentials/kimi-code.json"; exit 0' "$LIB"
+grep -q new "$(R "$H")" && [ ! -d "$H/stage" ]; ok $? "cleanup added after arm runs after write-back"
+# arm twice => one write-back, one backup
+mkhome twice
+HOME="$H" QUALIFY_KIMI_REAL_DIR="$H/.kimi-code" bash -c 'source "$0"; qualify_kimi_arm_writeback "$HOME/stage"; qualify_kimi_arm_writeback "$HOME/stage"
+  echo "{\"refresh_token\":\"new\"}" >"$HOME/stage/credentials/kimi-code.json"; exit 0' "$LIB"
+grep -q new "$(R "$H")" && [ "$(nbak "$H")" = 1 ]; ok $? "armed twice: exactly one backup"
+# ignored signal stays ignored
+mkhome ign
+HOME="$H" QUALIFY_KIMI_REAL_DIR="$H/.kimi-code" bash -c 'source "$0"; trap "" INT; qualify_kimi_arm_writeback "$HOME/stage"; trap -p INT' "$LIB" | grep -Eq "trap -- '' (SIG)?INT"; ok $? "caller-ignored INT stays ignored"
 echo "passed=$pass failed=$fail"; [ "$fail" = 0 ]

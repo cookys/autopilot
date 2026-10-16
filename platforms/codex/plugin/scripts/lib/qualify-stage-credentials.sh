@@ -65,7 +65,7 @@ qualify_stage_identity() {
 # --- Kimi write-back (BL-0199) -------------------------------------------------
 # Kimi rotates its refresh token on every use. The exam must therefore (1) work on a COPY seeded into the staged home
 # (qualify_stage_credential above; the real ~/.kimi-code is never handed to a child) and (2) at exit write the newest
-# credential BACK to the real file, after backing the original up as <file>.bak-<UTC stamp>. Standard step, not optional.
+# credential BACK to the real file, after backing the original up as <file>.bak-<UTC YYYYmmddTHHMMSS>.<pid>.<nanos>. Standard step, not optional.
 # Overrides for tests: QUALIFY_KIMI_REAL_DIR (default $HOME/.kimi-code), QUALIFY_KIMI_LOCK (default <real dir>/.qualify-writeback.lock).
 
 # TRAP RULES (read before touching traps in a recipe): arming CHAINS onto the caller's existing EXIT/INT/TERM/HUP actions
@@ -74,16 +74,22 @@ qualify_stage_identity() {
 # (that would silently drop the write-back): use `qualify_trap_add '<cmd>' EXIT [SIG...]`. Arm in the main shell only:
 # inside $(...), a pipeline or ( ) the trap dies with the subshell, so arm warns loudly on stderr when BASHPID != $$.
 
-# qualify_trap_add <cmd> <SIG>... : append <cmd> to each signal's existing action instead of replacing it.
-qualify_trap_add() {
-  local cmd=${1-} sig old
-  shift
+# qualify_trap_add <cmd> <SIG>... : APPEND <cmd> after each signal's existing action (so it runs AFTER the write-back,
+# which arm put first). An intentionally ignored signal (trap '' SIG) stays ignored.
+qualify_trap_add() { _qualify_trap_join append "$@"; }
+_qualify_trap_join() {
+  local how=${1-} cmd=${2-} sig old
+  shift 2
   for sig in "$@"; do
     old=""
     eval "set -- $(trap -p "$sig")" 2>/dev/null
-    [ "${1-}" = trap ] && old=${3-}
-    if [ -n "$old" ]; then trap -- "$cmd; $old" "$sig"; else trap -- "$cmd" "$sig"; fi
-    set --
+    if [ "${1-}" = trap ]; then
+      old=${3-}
+      [ -z "$old" ] && [ "$sig" != EXIT ] && continue
+    fi
+    if [ -z "$old" ]; then trap -- "$cmd" "$sig"
+    elif [ "$how" = prepend ]; then trap -- "$cmd; $old" "$sig"
+    else trap -- "$old; $cmd" "$sig"; fi
   done
 }
 
@@ -130,13 +136,17 @@ qualify_kimi_arm_writeback() {
   case "${QUALIFY_KIMI_ARMED:-}" in *"<$key>"*) return 0 ;; esac
   QUALIFY_KIMI_ARMED="${QUALIFY_KIMI_ARMED:-}<$key>"
   local q; q="$(printf '_qualify_kimi_finish %q %q' "$staged" "$real")"
-  qualify_trap_add "$q" EXIT
+  _qualify_trap_join prepend "$q" EXIT
   # Signals: write-back first, then the caller's own action if it had one (their semantics kept); with none, exit 128+N.
   local sig n old
   for sig in INT:130 TERM:143 HUP:129; do
     n=${sig#*:}; sig=${sig%:*}; old=""
-    eval "set -- $(trap -p "$sig")" 2>/dev/null; [ "${1-}" = trap ] && old=${3-}
-    if [ -n "$old" ]; then qualify_trap_add "$q" "$sig"; else trap -- "$q; exit $n" "$sig"; fi
+    eval "set -- $(trap -p "$sig")" 2>/dev/null
+    if [ "${1-}" = trap ]; then
+      old=${3-}
+      [ -z "$old" ] && continue   # caller deliberately ignores this signal: keep it ignored
+    fi
+    if [ -n "$old" ]; then _qualify_trap_join prepend "$q" "$sig"; else trap -- "$q; exit $n" "$sig"; fi
   done
 }
 

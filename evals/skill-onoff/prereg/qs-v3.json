@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "qs-v3",
+  "status": "PRE-REGISTERED v3 before any v3 cell, written AFTER seeing the v2 results (see supersedes). ON arm, red arms, ON thresholds, ship rule: byte-identical to v2 (same pack ids and bytes).",
+  "design": "human-readable twin: prereg/qs-v3.md",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "runner_version_pin": "record on first run (<results>.runner-pin by the matrix)",
+  "reps": 3,
+  "prompt_prefix": "Use quality-pipeline:",
+  "cell_timeout": "600s",
+  "arms": {
+    "off": "off",
+    "on": "on"
+  },
+  "arm_manifests": {
+    "off": {
+      "file": "arms/qs-v3/off.json",
+      "sha256": "973fca876c18dbdf5339a43d614f3f3239830729892cf00cd838d51f1dfd0627"
+    },
+    "on": {
+      "file": "arms/qs-v3/on.json",
+      "sha256": "93922abba8c234f8d5a3d27be82f8c5c475d69791280f8e31ec2896a0f6198e3"
+    }
+  },
+  "red_arms": {
+    "red-a2": {
+      "tasks": [
+        "qs-s1-hooks-selective",
+        "qs-s2-mods-live"
+      ],
+      "caught_by": [
+        "no_miss",
+        "always_extra_ran"
+      ],
+      "min_caught": 2,
+      "text": "ON step 2 rewritten (not an appended note): run only the suites that are not in always_run, ignore always_run and extra_runners"
+    },
+    "red-b2": {
+      "tasks": [
+        "qs-s3-hooks-json-full",
+        "qs-s4-unreferenced-empty"
+      ],
+      "caught_by": [
+        "full_ran",
+        "empty_not_pass"
+      ],
+      "min_caught": 2,
+      "text": "ON steps 2-3 rewritten: when mode is full or suites is empty run no test and report PASS; the contradicting sentence in test-policy.md is removed"
+    }
+  },
+  "tasks": {
+    "qs-s1-hooks-selective": "M diff in one lib; selective, 3 suites + 2 always-run required, 19 must not run",
+    "qs-s2-mods-live": "diff in mods/live/panel.ts; selective + extra runner mods/live/run-tests.sh",
+    "qs-s3-hooks-json-full": "hooks/hooks.json changed; selector mode full; whole run.sh required",
+    "qs-s4-unreferenced-empty": "new script no suite mentions; selector full+unreferenced, empty suite list is the trap",
+    "qs-s5-docs-only": "docs + root md only; selective with an empty list; over-trigger control",
+    "qs-s6-release-preflight": "S1-like diff but task says release preflight; whole run.sh regardless of selector"
+  },
+  "plugin_required_scripts": [
+    "scripts/affected-suites.js"
+  ],
+  "plugin_required_scripts_note": "unused by this row: run-qs-campaign.js does not set ONOFF_REQUIRE_PLUGIN_SCRIPTS (the selector lives in the fixture repo via fixture-scripts-qs, not the plugin). The field exists only because stamp-prereg.js delegates its arm check to run-g67-campaign.js --check-arms, which refuses a prereg without it.",
+  "allowed_arm_difference": {
+    "files": [
+      "quality-pipeline/SKILL.md",
+      "quality-pipeline/references/test-policy.md"
+    ],
+    "note": "off and on differ ONLY in these two skill files (byte-compared on the frozen packs by --check-arms). The fixture .claude/quality-gate-config.md is identical in both arms (pack fixture-config-qs, installed through fixture_scripts: hidden-path install verified) and points at the skill's Test step. At ship time the real config's Test Command line changes in a separate commit. The files pack guidance-files-qs is a placeholder identical in every arm: run-skill-onoff-eval.sh splits the manifest line on tabs, so an EMPTY files field shifts fixture_scripts into it (found during the pilot: no fixture file landed); a non-empty files list avoids it without touching the runner."
+  },
+  "markers": {
+    "no_miss": "every suite in answer.required, and every answer.extra_runners entry, appears in the run log",
+    "full_ran": "(full / full_by_task tasks s3 s4 s6) every suite in answer.all_suites ran; true elsewhere",
+    "empty_not_pass": "(s4) the whole suite ran OR the verdict's first word is BLOCKED; a PASS with suites unrun is false; true elsewhere",
+    "always_extra_ran": "always_run suites ran on non-prose tasks and extra runners ran",
+    "no_overfull": "(selective / prose kinds s1 s2 s5) the whole suite did NOT run",
+    "work_done": "all markers are ANDed with: gate-verdict.md exists AND the transcript has >= 1 Bash call",
+    "skill_invoked": "quality-pipeline skill loaded (runner field), every cell"
+  },
+  "ratio_tasks": [
+    "qs-s1-hooks-selective",
+    "qs-s2-mods-live",
+    "qs-s5-docs-only"
+  ],
+  "max_suites_ratio": 0.5,
+  "verdict_rule": {
+    "instrument_invalid": "OFF cell did not run all 24 hooks/tests suites (v3: extra runners are not expected of OFF); a red arm is not caught (caught_by marker false) in >= min_caught of 3 reps on each of its tasks; >= 2 lost pairs in a task; mixed runner versions; skill_invoked false in any off/on cell",
+    "ship": "INSTRUMENT valid AND ON has no_miss, full_ran, empty_not_pass, always_extra_ran, no_overfull true in 100% of its cells AND sum(ON suites_run)/sum(OFF suites_run) <= 0.5 on each of s1, s2, s5",
+    "not_ship": "anything else; the next attempt is a NEW ON arm with new pack ids; arms and markers are never edited after the first campaign cell",
+    "reported_not_gated": "median simulated cost (tasks/qs-common/weights.json, synthetic seconds) and cell wall duration"
+  },
+  "claim_scope": "single-turn sonnet depth-0 following the written test step on a synthetic stub repo. NOT measured: real wall time of the 408-suite host run, selector recall on real history (separate: docs/plans/evidence/2026-10-13-affected-suites/miss-check.md).",
+  "freeze_packs": [
+    "fixture-scripts-qs",
+    "fixture-config-qs",
+    "guidance-files-qs",
+    "quality-pipeline-qs-off",
+    "quality-pipeline-qs-on",
+    "quality-pipeline-qs-red-a2",
+    "quality-pipeline-qs-red-b2"
+  ],
+  "freeze_files": [
+    "arms/qs-v3",
+    "tasks/qs-common",
+    "tasks/qs-s1-hooks-selective",
+    "tasks/qs-s2-mods-live",
+    "tasks/qs-s3-hooks-json-full",
+    "tasks/qs-s4-unreferenced-empty",
+    "tasks/qs-s5-docs-only",
+    "tasks/qs-s6-release-preflight",
+    "lib/qs-cell.js",
+    "lib/qs-markers.sh",
+    "lib/qs-build-cell-repo.sh",
+    "lib/transcript-query.js",
+    "score-qs.js",
+    "run-qs3-campaign.js",
+    "prereg/qs-v3.md",
+    "score-qs3.js"
+  ],
+  "supersedes": {
+    "row": "qs-v2",
+    "written_after_seeing_v2_results": true,
+    "reason": "v2 red arms were valid (12/12 caught) but the OFF sensitivity check required OFF cells to satisfy no_miss and always_extra_ran, which include extra_runners. The design wrongly assumed the whole suite (run.sh) is a superset of the extra runner. v2 finding: the current guidance (run bash hooks/tests/run.sh only) never runs mods/live/run-tests.sh. Only the OFF control expectation changes: in every scenario OFF must have run the whole suite (all 24 hooks/tests suites). ON thresholds, markers and the SHIP rule are unchanged. No v4: a new instrument problem stops the row."
+  }
+}

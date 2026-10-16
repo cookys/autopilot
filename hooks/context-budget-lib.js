@@ -75,6 +75,21 @@ function scaleTiers(cfg, inferredWindow) {
 }
 
 /**
+ * One line when a USER-set T2 can never be reached before Claude Code compacts: the window is below the 200K the
+ * defaults were calibrated for and t2 sits past the compaction point (window - 33k buffer). Null otherwise
+ * (default t2 scales down with the window, so only an explicit one can land there).
+ */
+function unreachableT2Warning(cfg, window) {
+  if (!cfg || !cfg.explicitT2 || !(cfg.t2 > 0)) return null;
+  if (!Number.isFinite(window) || window <= 0 || window >= BASE_WINDOW) return null;
+  const { AUTOCOMPACT_BUFFER_TOKENS } = require('../scripts/lib/compaction-handoff.js');
+  const point = window - AUTOCOMPACT_BUFFER_TOKENS;
+  if (cfg.t2 <= point) return null;
+  const k = (n) => `${Math.round(n / 1000)}k`;
+  return `context_budget t2 ${k(cfg.t2)} is past the compaction point ${k(point)} (window ${k(window)} - ${k(AUTOCOMPACT_BUFFER_TOKENS)} buffer), so T2 never fires before Claude Code compacts (lower t2 or remove it to scale with the window)`;
+}
+
+/**
  * Tiers for a window read EXACTLY from the statusline live file (not inferred). Always tags
  * `inferredWindow` so budgetDecision states the proportion and attributes it to the statusline.
  * Defaults never scale UP; a window smaller than the 200K the defaults were calibrated for
@@ -241,9 +256,11 @@ function budgetDecision(state, cfg) {
           'on a 1M window this is early and no action is needed.',
       };
     }
-    // An auto-compact window at or below T2 is set and compaction is on: Claude Code will reset
-    // this context itself, so stopping for a human /clear only adds an interruption (BL-0124).
-    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0 && cfg.autocompactWindow <= cfg.t2) {
+    // An auto-compact window is set (finite > 0) and compaction is on (the hook passes a number only
+    // then): Claude Code resets this context itself, so stopping for a human /clear only adds an
+    // interruption (BL-0124). The window's position relative to T2 does not matter: T2 is then only a
+    // handoff reminder.
+    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0) {
       return {
         tier: 't2',
         message:
@@ -260,7 +277,9 @@ function budgetDecision(state, cfg) {
         'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
         'then tell the user to /clear or restart the session — context cost compounds ' +
         'quadratically with session length. [USER: after the handoff lands, /clear or ' +
-        'start a fresh session to reset the context.]',
+        'start a fresh session to reset the context.] ' +
+        'To avoid being asked to stop: set `autoCompactWindow` in ~/.claude/settings.json (or run /autocompact) ' +
+        'so Claude Code compacts the session itself; T2 then stays a handoff reminder only.',
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {
@@ -284,6 +303,7 @@ module.exports = {
   inferWindowTokens,
   scaleTiers,
   tiersForKnownWindow,
+  unreachableT2Warning,
   START_WINDOW_BYTES,
   CAP_BYTES,
   DEFAULT_STEP,

@@ -226,5 +226,27 @@ for seat in "${!SEAT_TO_FILES[@]}"; do
 done
 [ "$DRIFT" -eq 0 ] && ok "staging block is byte-identical across every date-copy of each seat"
 
+# ------------------------- (5) e2e: refusal aborts a set -e recipe body
+# A recipe run.sh runs under `set -euo pipefail`; the plan-mode refusal must
+# stop it before any later line executes (BL-0089 item 2).
+E2E_LIB="${QSC_E2E_LIB:-$LIB}"
+printf '{"token":"e2e-live"}\n' >"$REAL"
+rm -f "$STAGED" "$STAGED.source.sha256"
+qualify_stage_credential "$STAGED" "$REAL" execute >/dev/null 2>&1
+printf '{"token":"e2e-rotated"}\n' >"$REAL"
+E2E_SCRIPT="$WORK/e2e-recipe.sh"
+cat >"$E2E_SCRIPT" <<EOS
+set -euo pipefail
+source "$E2E_LIB"
+qualify_stage_credential "$STAGED" "$REAL" plan
+echo REACHED_AFTER_REFUSAL
+EOS
+E2E_OUT="$(bash "$E2E_SCRIPT" 2>&1)"; E2E_RC=$?
+if [ "$E2E_RC" -ne 0 ] && ! grep -q REACHED_AFTER_REFUSAL < <(printf '%s' "$E2E_OUT"); then
+  ok "e2e: plan-mode refusal aborts a set -e recipe body (rc=$E2E_RC)"
+else
+  bad "e2e: recipe body continued past the refusal (rc=$E2E_RC)"
+fi
+
 printf '\nqualify-recipe-credential-staging: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

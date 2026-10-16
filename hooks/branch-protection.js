@@ -5,7 +5,7 @@
  *
  * Ship A C1 fix: anchored whole-ref match (not substring).
  * Default protected: main, master only.
- * Override: env AUTOPILOT_PROTECTED_BRANCHES or settings.json autopilot.protectedBranches.
+ * Override: env AUTOPILOT_PROTECTED_BRANCHES (settings.json `env` block works; there is no `autopilot.protectedBranches` setting).
  */
 
 'use strict';

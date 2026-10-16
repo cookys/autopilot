@@ -1,0 +1,4403 @@
+{
+  "_meta": {
+    "purpose": "Machine-readable inventory of every setting autopilot reads: config.json keys, AUTOPILOT_* environment variables, the Claude Code settings it depends on, and project-level DI files. Checked in both directions by scripts/check-config-docs.js; the human reference for audience=user entries is docs/settings-reference.md.",
+    "fields": {
+      "name": "dotted path for a config key, the variable name for env/cc_setting, .claude/<file> for project_di",
+      "kind": "config_key | env | cc_setting | project_di",
+      "audience": "user | internal",
+      "class": "internal only: test_seam | path_seam | plumbing | experiment_flag | probe_toggle | band_source_switch",
+      "default": "null when there is no default",
+      "readers": "files that read it; each must contain the needle",
+      "needle": "optional literal the reader must contain (default: env name or prefix, last dotted segment, template basename)",
+      "prefix": "env family: any token starting with it is covered",
+      "relates": "settings that depend on or override this one",
+      "group": "user only: section of docs/settings-reference.md",
+      "template": "project_di only",
+      "doc": "where it is explained",
+      "type": "config_key only: boolean | number | string | array | object | enum, joined with | for alternatives; read by scripts/lib/config-audit.js",
+      "allowed": "config_key, type enum: the accepted values",
+      "invalid_effect": "config_key: what an out-of-range value does, quoted in the config-audit finding",
+      "changed_in": "config_key: list of {schema, from, to, note}. schema = the config_schema_version at which a default changed. Append one when you change a documented default; config-audit lists entries whose schema is above the user's config_schema_version (up to the current one). Bump CURRENT_SCHEMA in scripts/lib/config-audit.js when you add a schema number."
+    },
+    "audience_rule": "user = a human sets it to change what autopilot does (a documented knob with an effect they can observe). internal = autopilot sets it for its own child processes, it only redirects a path or injects a fault or clock for tests, or it is a maintainer/diagnostic switch. By name pattern, internal: AUTOPILOT_TEST_*, *_TEST_HOOK, *_FIXTURE, *_CRASH_AT, *_KILL_AFTER*, *_RACE_PATH, *_SEAMS, FAULT_INJECT*, *_NOW(_MS), *_SESSION_ID, *_RUN_ID, and path/binary overrides ending in _DIR/_FILE/_PATH/_BIN/_SH/_SCRIPT/_RESOLVER/_LEDGER/_RECEIPT/_INPUT/_ENV. Everything else is classified by hand and a user entry must appear in docs/settings-reference.md.",
+    "scan_rules": "env: AUTOPILOT_[A-Z0-9_]+ in .js .ts .tsx .mjs .sh .py under bin/ hooks/ scripts/ src/ mods/, excluding tests/ dirs, *.test.*, test-*, run-tests.sh, fixtures/, node_modules/ and the platforms/ and .opencode mirrors. config: property reads with a snake_case key in files that mention config-path / AUTOPILOT_CONFIG_FILE / .autopilot/config.json (best effort; keys without an underscore are only checked in the reverse direction). di: every file in project-config-template/."
+  },
+  "ignore": {
+    "env": {
+      "AUTOPILOT_HARNESS_ATTENTION": "output sentinel printed by src/harness/capabilities.js, not an environment variable",
+      "AUTOPILOT_HARNESS_OK": "output sentinel printed by src/harness/capabilities.js, not an environment variable"
+    },
+    "config": {
+      "artifact_type": "field of a qualification feed document, not an operator config key",
+      "baseline_event_id": "field of a scorecard event, not an operator config key",
+      "event_id": "field of a scorecard/feed event, not an operator config key",
+      "local_is_official_default": "field of a qualification feed row, not an operator config key",
+      "transcript_hash": "field of a qualification feed row, not an operator config key"
+    },
+    "templates": {
+      "hooks.json": "placeholder template: nothing in the repo reads a project-level .claude/hooks.json, so there is no setting to register"
+    }
+  },
+  "entries": [
+    {
+      "name": "autoCompactEnabled",
+      "kind": "cc_setting",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "autoCompactWindow"
+      ],
+      "summary": "Claude Code setting (settings.json, else ~/.claude.json): false turns auto-compact off."
+    },
+    {
+      "name": "autoCompactWindow",
+      "kind": "cc_setting",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.t2",
+        "context_budget.gap"
+      ],
+      "summary": "Claude Code setting (user/project/local/policy settings.json; also modelSettings.<model>.autoCompactWindow): token window after which Claude Code compacts, at window minus a 33k buffer. Set via /autocompact or in settings.json."
+    },
+    {
+      "name": "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+      "kind": "cc_setting",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.t2",
+        "context_budget.gap"
+      ],
+      "summary": "Claude Code environment variable: auto-compact window in tokens (clamped to 100000-1000000). Beats every settings file."
+    },
+    {
+      "name": "DISABLE_AUTO_COMPACT",
+      "kind": "cc_setting",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "autoCompactWindow"
+      ],
+      "summary": "Claude Code environment variable: 1, true, yes or on turns auto-compact off."
+    },
+    {
+      "name": "DISABLE_COMPACT",
+      "kind": "cc_setting",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "autoCompactWindow"
+      ],
+      "summary": "Claude Code environment variable: 1, true, yes or on turns all compaction off."
+    },
+    {
+      "name": "<ENV_NAME>",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "band_source_switch",
+      "needle": "knobIsOff",
+      "default": null,
+      "readers": [
+        "src/status/sources-manifest.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "config.json may carry {\"<ENV_NAME>\": \"off\"} for the knobs of the live band sources; only the band source manifest reads these, the hooks themselves honor the environment variable and their own keys."
+    },
+    {
+      "name": "advisory_bridge.<hook>",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "needle": "advisory_bridge",
+      "default": null,
+      "readers": [
+        "hooks/_shared/advisory-sink.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_ADVISORY_BRIDGE_<HOOK>"
+      ],
+      "summary": "Per-hook override of advisory_bridge.mode; <hook> is cost_tracker, version_drift, context_budget or suggest_compact.",
+      "type": "enum",
+      "allowed": [
+        "sink",
+        "inject"
+      ]
+    },
+    {
+      "name": "advisory_bridge.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "needle": "advisory_bridge",
+      "default": "sink",
+      "readers": [
+        "hooks/_shared/advisory-sink.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_ADVISORY_BRIDGE",
+        "advisory_bridge.<hook>"
+      ],
+      "summary": "Where hook advisories go: \"sink\" shows them as a band toast (default); \"inject\" puts them in the model context as before.",
+      "type": "enum",
+      "allowed": [
+        "sink",
+        "inject"
+      ]
+    },
+    {
+      "name": "context_budget.gap",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": 50000,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_GAP",
+        "context_budget.t2",
+        "autoCompactWindow"
+      ],
+      "summary": "Tokens between the T2 reminder and the point where Claude Code compacts; used by the SessionStart check that T2 can fire before compaction.",
+      "type": "number"
+    },
+    {
+      "name": "context_budget.live_write",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": true,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE"
+      ],
+      "summary": "false stops the hook writing the live context file the status band reads (the reminders keep firing).",
+      "type": "boolean"
+    },
+    {
+      "name": "context_budget.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": "warn",
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_MODE"
+      ],
+      "summary": "\"off\" silences the context-budget reminders and the SessionStart window check; \"warn\" keeps them.",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "warn"
+      ],
+      "invalid_effect": "anything but off or warn is ignored, so the reminders stay on"
+    },
+    {
+      "name": "context_budget.step",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": 50000,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_STEP"
+      ],
+      "summary": "A tier repeats its reminder only after the context grew by this many tokens since it last fired; 0 reminds on every call past the threshold.",
+      "type": "number"
+    },
+    {
+      "name": "context_budget.t1",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "needle": "t1",
+      "default": 100000,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_T1",
+        "context_budget.t2"
+      ],
+      "summary": "Context size (tokens) at which the first reminder fires: plan a checkpoint and avoid loading large files inline.",
+      "type": "number"
+    },
+    {
+      "name": "context_budget.t2",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "needle": "t2",
+      "default": 150000,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_T2",
+        "context_budget.gap",
+        "autoCompactWindow"
+      ],
+      "summary": "Context size (tokens) of the second, stronger reminder: write a handoff. With auto-compact configured it is only a reminder; without it the hook tells you to stop and /clear.",
+      "type": "number"
+    },
+    {
+      "name": "cost_fuse.daily_usd_brain",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "cost",
+      "default": 150,
+      "readers": [
+        "scripts/lib/brain-spend.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_COST_FUSE_DAILY_USD",
+        "cost_fuse.tiers"
+      ],
+      "summary": "Daily USD cap on top-tier (brain) model spend, summed per UTC day from the cost ledger.",
+      "type": "number"
+    },
+    {
+      "name": "cost_fuse.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "cost",
+      "default": "warn",
+      "readers": [
+        "scripts/lib/brain-spend.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_COST_FUSE_MODE",
+        "cost_fuse.daily_usd_brain"
+      ],
+      "summary": "What the daily brain-spend fuse does at the cap: \"warn\" (default), \"block\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "block",
+        "off"
+      ]
+    },
+    {
+      "name": "cost_fuse.tiers",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "cost",
+      "default": [
+        "brain"
+      ],
+      "readers": [
+        "scripts/lib/brain-spend.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "cost_fuse.daily_usd_brain"
+      ],
+      "summary": "Which model tiers count toward the cap.",
+      "type": "array"
+    },
+    {
+      "name": "cost_tracker.cache_read_warn_tokens",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "cost",
+      "default": 50000000,
+      "readers": [
+        "hooks/cost-tracker.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_COST_TRACKER_CACHE_READ_WARN"
+      ],
+      "summary": "Cumulative cache-read tokens in one session at which the tracker prints its first warning (then at each doubling).",
+      "type": "number"
+    },
+    {
+      "name": "cost_tracker.context_clear_pct",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "cost",
+      "default": 50,
+      "readers": [
+        "hooks/cost-tracker.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_COST_TRACKER_CLEAR_PCT"
+      ],
+      "summary": "Window fill (percent) at or above which the cost warning recommends a handoff and /clear.",
+      "type": "number"
+    },
+    {
+      "name": "depth0_delegate_gate.guarded_models",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": [
+        "fable",
+        "opus"
+      ],
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Model families the gate applies to.",
+      "type": "array"
+    },
+    {
+      "name": "depth0_delegate_gate.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "warn",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE"
+      ],
+      "summary": "Reminder when the top-level session fires many read-class calls in a row: \"off\", \"warn\" or \"block\".",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "warn",
+        "block"
+      ]
+    },
+    {
+      "name": "depth0_delegate_gate.pkill_self_match",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_PKILL_MODE"
+      ],
+      "summary": "What to do with a pkill/pgrep -f pattern that would match its own command line: \"deny\", \"warn\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "depth0_delegate_gate.threshold",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 8,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Consecutive read-class calls before the delegate reminder.",
+      "type": "number"
+    },
+    {
+      "name": "depth0_delegate_gate.wait_advice_every",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 5,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY"
+      ],
+      "summary": "Repeat interval of the foreground-wait advice.",
+      "type": "number"
+    },
+    {
+      "name": "dirty_tree_reminder",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DIRTY_TREE_REMINDER"
+      ],
+      "summary": "false switches the dirty-working-tree reminder off; an object sets min_files, min_lines and interval_minutes.",
+      "type": "boolean|object"
+    },
+    {
+      "name": "dirty_tree_reminder.interval_minutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 30,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES"
+      ],
+      "summary": "Minimum minutes between two reminders per repo and session; 0 reminds every turn.",
+      "type": "number"
+    },
+    {
+      "name": "dirty_tree_reminder.min_files",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 3,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DIRTY_TREE_MIN_FILES"
+      ],
+      "summary": "Changed files that trigger the reminder.",
+      "type": "number"
+    },
+    {
+      "name": "dirty_tree_reminder.min_lines",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 150,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_DIRTY_TREE_MIN_LINES"
+      ],
+      "summary": "Changed lines that trigger the reminder.",
+      "type": "number"
+    },
+    {
+      "name": "foreman_guard.advisory_every",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 40,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY"
+      ],
+      "summary": "Repeat interval of the non-denying advisory for other Engine-header subagents.",
+      "type": "number"
+    },
+    {
+      "name": "foreman_guard.bash_cap",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 40,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_BASH_CAP"
+      ],
+      "summary": "Bash calls a foreman may make before it is told to hand off.",
+      "type": "number"
+    },
+    {
+      "name": "foreman_guard.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "block",
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_MODE"
+      ],
+      "summary": "Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): \"block\", \"warn\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "block",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "foreman_guard.reserve_calls",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 8,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS"
+      ],
+      "summary": "Calls held back after the cap for the closing handoff (git status, add, commit, ...).",
+      "type": "number"
+    },
+    {
+      "name": "foreman_guard.role_caps",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS"
+      ],
+      "summary": "Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120).",
+      "type": "object"
+    },
+    {
+      "name": "handoff_inject",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": false,
+      "readers": [
+        "hooks/session-start.js",
+        "hooks/session-handoff.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_HANDOFF_INJECT"
+      ],
+      "summary": "true restores the machine session snapshot after /clear (session-handoff + session-start hooks).",
+      "type": "boolean"
+    },
+    {
+      "name": "hooks.<stem>",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "needle": "hooks",
+      "default": "opt-in hooks off, default-on hooks on",
+      "readers": [
+        "hooks/_shared/opt-in.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_HOOK_<STEM>"
+      ],
+      "summary": "Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap).",
+      "type": "boolean",
+      "changed_in": [
+        {
+          "schema": 1,
+          "from": "off",
+          "to": "on (default-on hooks: context-budget, dispatch-model-guard, cost-tracker, foreman-guard; v2.35.15)",
+          "note": "These hooks used to be opt-in. A hook you never enabled now runs; the exit knob is in the Hook switches section of docs/settings-reference.md."
+        }
+      ]
+    },
+    {
+      "name": "orchestrator_edit_gate.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "warn",
+      "readers": [
+        "hooks/orchestrator-edit-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_ORCH_EDIT_GATE_MODE",
+        "hooks.<stem>"
+      ],
+      "summary": "What the (opt-in) orchestrator-edit-gate does when the top-level session edits files itself: \"warn\", \"block\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "block",
+        "off"
+      ]
+    },
+    {
+      "name": "qualification_feed.url",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/adopt-qualification-defaults.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself.",
+      "type": "string"
+    },
+    {
+      "name": "residue.archive_branch_days",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": 14,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS"
+      ],
+      "summary": "Days before an archive branch is cleaned up.",
+      "type": "number"
+    },
+    {
+      "name": "residue.archive_remind_days",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": 90,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS"
+      ],
+      "summary": "Age in days after which an old archive ref is only listed as needing a human, never deleted.",
+      "type": "number"
+    },
+    {
+      "name": "residue.auto_reap",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": true,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_AUTO_REAP",
+        "hooks.<stem>"
+      ],
+      "summary": "Automatic reaping of finished dispatch worktrees and branches.",
+      "type": "boolean"
+    },
+    {
+      "name": "residue.branch_prefixes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": [],
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /).",
+      "type": "array"
+    },
+    {
+      "name": "residue.lease_hours",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": 72,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_LEASE_HOURS"
+      ],
+      "summary": "Hours a dispatch worktree is kept before it may be reaped.",
+      "type": "number"
+    },
+    {
+      "name": "residue.tmp_prune",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": true,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_TMP_PRUNE"
+      ],
+      "summary": "Daily host-wide prune of autopilot temp roots, riding on the automatic reap.",
+      "type": "boolean"
+    },
+    {
+      "name": "review.port",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "ui",
+      "default": 8787,
+      "readers": [
+        "src/status/review-server.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_REVIEW_SERVER_AUTOSTART"
+      ],
+      "summary": "Port of the local review page server (bound to 127.0.0.1 only). A busy port is reported, never replaced.",
+      "type": "number"
+    },
+    {
+      "name": "run_approval.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "off",
+      "readers": [
+        "hooks/run-approval-gate.js",
+        "scripts/run-approval.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RUN_APPROVAL_MODE"
+      ],
+      "summary": "Human approval gate on dispatches: \"off\" or \"ask-once\". An unattended (claude -p) run must keep it off.",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "ask-once"
+      ]
+    },
+    {
+      "name": "topology.exclude_seats",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": [],
+      "readers": [
+        "scripts/resolve-dispatch-topology.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_TOPOLOGY_FILE"
+      ],
+      "summary": "Seats (engine/effort@runner, or a bare engine) never offered by the dispatch ladders and review panel; unioned with --exclude-seats.",
+      "type": "array"
+    },
+    {
+      "name": "ui.locale",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "ui",
+      "default": "auto",
+      "readers": [
+        "mods/live/i18n.ts"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_LOCALE"
+      ],
+      "summary": "Language of the live band and pane: \"en\", \"zh-TW\" or \"auto\" (follow Claude Code).",
+      "type": "enum",
+      "allowed": [
+        "en",
+        "zh-TW",
+        "auto"
+      ]
+    },
+    {
+      "name": "update_check",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "update",
+      "default": true,
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_UPDATE_CHECK"
+      ],
+      "summary": "false stops the \"Autopilot updated\" notice at session start.",
+      "type": "boolean"
+    },
+    {
+      "name": "AUTOPILOT_ADAPTIVE_INTERVENTION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "experiment_flag",
+      "default": null,
+      "readers": [
+        "scripts/run-ledger.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "run-ledger.sh adaptive-intervention flag, default off; no operator documentation exists."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_CHROME_MAX_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_CHROME_MAX_LINES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_SHELL",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_BLIND_DISCOVERY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "src/runners/review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_BRAIN_SEAT_IDENTITY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/resolve-review-loop.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CAPABILITY_STATE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/context-window.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CHAIN_LOCK_STALE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CHILD_SESSION_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/repo-identity.sh",
+        "scripts/probe-engine-capability.sh",
+        "scripts/session-mode.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_AGY_CRED_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_BWRAP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "scripts/lib/cleanroom-launch.sh",
+        "src/engine/campaign-intake.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_CODEX_AUTH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_EXPECTED_VERSION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "src/runners/review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_KIMI_CRED_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_KIMI_NODE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CLEANROOM_LAUNCHER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "src/engine/campaign-intake.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CODEX_CGROUP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/dispatch-author-codex-transport.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/measure-profile-context.js",
+        "scripts/sync-codex-plugin-skills.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CODEX_PROBE_LOG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-codex-enforcement.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CODEX_PROBE_TARGET",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-codex-enforcement.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_COMPACTION_POINTS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/compaction-handoff.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONSULT_CORPUS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/qualification-applicability-scope.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/hooks/handlers/session-start.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTINUATION_CHECKPOINT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTINUATION_DURABLE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTINUATION_NARRATIVE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTINUATION_STRICT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CONTROLLER_PID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/compaction-rehydrate.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_COST_FUSE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/cost-fuse.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_COSTS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/cost-fuse.js",
+        "scripts/cost-digest.js",
+        "scripts/lib/brain-spend.js",
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_CURSOR_MODEL_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/cursor-model.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_D3_PTY_TRANSPORT_READY_V1",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-codex-postcompact-production.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DEPTH0_GATE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dev-setup.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-eval-batch.sh",
+        "scripts/run-skill-opt.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISCUSS_CORPUS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/qualification-applicability-scope.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_AUTHOR_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-consult.sh",
+        "scripts/dispatch-discuss.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_BRANCH_LEDGER_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/dispatch-branch-ledger.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_DEPTH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/run-grok-implementer-ab.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_MANIFEST",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/plan-review-panel.js",
+        "scripts/lib/repo-identity.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_REVIEW_SCRIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_ROLE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-plan-review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_RUNS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/dispatch-status.js",
+        "scripts/dispatch-tree.js",
+        "scripts/lib/compaction-handoff.js",
+        "scripts/lib/plan-review-panel.js",
+        "scripts/lib/repo-identity.sh",
+        "scripts/lib/workflow-snapshot.js",
+        "scripts/watch-foreman.js",
+        "src/engine/autopilot-engine.js",
+        "src/status/cli.js",
+        "src/status/foreman-activity.js",
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_SIBLING_PATH_PREFIX",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/main-checkout-boundary.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/lib/main-checkout-boundary.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISTILL_PACK_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/distill-consolidate.sh",
+        "scripts/distill-sync-setup.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_DISTILL_STOPWORDS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/distill-consolidate.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_EFFECT_RESERVATION_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_EMPTY_GRACE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/output-quiescence.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ENDPOINTS_LOADED",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/load-endpoints-env.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_FAULT_INJECT_LIFECYCLE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_AB_BASE_SHA",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_AB_CANDIDATE_SHA",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_AB_DISPATCH_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_AB_SCRATCH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_AB_TIMEOUT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_EFFORT_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "probe_toggle",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-effort.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_EFFORT_PROBE_TIMEOUT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "probe_toggle",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-effort.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_GROK_EFFORT_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/grok-effort.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_HARNESS_CAPABILITY_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/harness/capabilities.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_HARNESS_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/harness/capabilities.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_JSON_EMIT_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/json-emit.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_JSON_FIELDS_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/json-fields.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_KIMI_ARGV_LIMIT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LADDER_LEDGER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-unknown.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LEDGER_PATH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LEVEL",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "bin/autopilot.js",
+        "scripts/dispatch-hetero.sh",
+        "scripts/run-grok-implementer-ab.sh",
+        "scripts/scaffold-mission.js",
+        "src/engine/autopilot-engine.js",
+        "src/engine/campaign-intake.js",
+        "src/status/cli.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LIFECYCLE_LOCK_FD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-branches.sh",
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LIVE_GROK_AB",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/run-grok-implementer-ab.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LOAD_SOURCE_TRUST_ENV",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/runs-watch-autostart.js",
+        "src/status/load-source.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LOADED_ACC",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/load-endpoints-env.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LOCAL_LEASE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/engine/local-deployment.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_LOOP_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MANAGED_SETTINGS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/autocompact-window.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MISSION_BLOCK_FIXTURE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-codex-enforcement.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MISSION_LOCK_STALE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/mission/runtime.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MISSION_LOCK_TIMEOUT_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/mission/runtime.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MISSION_PATH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MISSION_ROOT_RUN_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "scripts/run-grok-implementer-ab.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_MODEL_HANDOFF_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/compaction-handoff.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_NO_CANARY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/transcript-reader-lib.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_OPENCODE_ALLOW_VERSION_MISMATCH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/install-opencode.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ORPHAN_REWRITE_LOCK_FD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ORPHAN_STATE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PARENT_RUN_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/run-grok-implementer-ab.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PARENT_SESSION_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-explore.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/repo-identity.sh",
+        "scripts/probe-engine-capability.sh",
+        "scripts/session-mode.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PLAN_REVIEW_*",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "prefix": "AUTOPILOT_PLAN_REVIEW_",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-plan-review.js",
+        "src/status/review-input.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PROBE_CHALLENGE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-skill-frontmatter-portability.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PROFILE_RUNTIME",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/engine/profile-runtime.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PROFILE_TEST_RUNNER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/engine/profile-runtime.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_PROXY_DECISION_LEDGER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_QUALIFY_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-qualify.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_QUALIFY_SEED",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-qualify.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-branches.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REAP_TEST_HOOK_AFTER_CHECK_EVALUATION",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-branches.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-branches.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-branches.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RECONCILE_RECEIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RENDER_TASK_STATUS_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REPO_OVERRIDE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/install-antigravity.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_AUTO_SWEEP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/residue-auto-reap.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RESOLVE_CONFIG_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/resolve-config.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RESOLVE_REVIEW_LOOP_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-discuss.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RESOLVED_LIVE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_CHROME_MAX_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_CHROME_MAX_LINES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_FAIL_AT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_HOLD_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LOOP_RESOLVER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/check-phase-review-receipt.js",
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_PACKET_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "src/runners/review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_PACKET_HASH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/runners/review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_RETAIN_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ROOT_RUN_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/decision-ledger.js",
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/mission-routing-admission.js",
+        "scripts/next-pick.js",
+        "scripts/open-decision.js",
+        "scripts/run-grok-implementer-ab.sh",
+        "scripts/scaffold-mission.js",
+        "scripts/session-mode.js",
+        "src/engine/autopilot-engine.js",
+        "src/status/decisions-sidecar.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RRP_PAYLOAD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/render-review-page.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RUN_APPROVAL_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/run-approval-gate.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_RUNS_WATCH_LOCKED",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SESSION_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "hooks/cost-fuse.js",
+        "hooks/foreman-guard.js",
+        "hooks/run-approval-gate.js",
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-explore.sh",
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/dispatch-branch-ledger.sh",
+        "scripts/lib/repo-identity.sh",
+        "scripts/open-decision.js",
+        "scripts/run-grok-implementer-ab.sh",
+        "scripts/scaffold-mission.js",
+        "scripts/session-mode.js",
+        "scripts/stage-advance.js",
+        "scripts/task-card.js",
+        "src/engine/autopilot-engine.js",
+        "src/engine/profile-runtime.js",
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SESSION_MODE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "hooks/dispatch-model-guard.js",
+        "hooks/live-session-lib.js",
+        "hooks/runs-watch-autostart.js",
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/dispatch-tree.js",
+        "scripts/lib/repo-identity.sh",
+        "scripts/lib/workflow-snapshot.js",
+        "scripts/open-decision.js",
+        "scripts/run-grok-implementer-ab.sh",
+        "scripts/session-mode.js",
+        "scripts/stage-advance.js",
+        "src/status/live-pointer.js",
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/session-mode.js",
+        "scripts/stage-advance.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SETTLE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SKILL_CHALLENGE_*",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "prefix": "AUTOPILOT_SKILL_CHALLENGE_",
+      "default": null,
+      "readers": [
+        "scripts/probe-skill-frontmatter-portability.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SKIP_SLASH_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/preflight-release.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SLASH_PROBE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/preflight-release.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STABLE_POLLS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/output-quiescence.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STAGE_ADVANCE_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/stage-write.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STAGE_ADVANCE_CLASSIFY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/stage-advance.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STAGE_ADVANCE_RESOLVE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/stage-advance.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STATE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/risk-counter.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STEP",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/probe-skill-frontmatter-portability.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_STRIKE_WRITER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_SUGGEST_COMPACT_STDIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/suggest-compact.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TAIL_WINDOW_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/transcript-reader-lib.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TASK_CARD_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/workflow-snapshot.js",
+        "scripts/task-card.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TASK_STATUS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/write-task-status-input.js",
+        "src/status/task-runtime.js",
+        "src/status/task-status-input.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TASK_STATUS_INPUT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/engine/autopilot-engine.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TERMINAL_RECEIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_ALLOW_HETERO_SEAMS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/mission/runtime.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-plan-review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_AUTHORITY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_MODE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_PLAN_REVIEW_CRASH_AT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-plan-review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_REAL_HOME_OVERRIDE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-capability-state.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_RUN_GUARD",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-capability-state.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_TIMEOUT_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/endpoints/cli.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_WORKTREE_CRASH_AT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_WORKTREE_REAP_LOCK_RACE_PATH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_WORKTREE_REAP_MARKER_RACE_PATH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_WORKTREE_REAP_RACE_PATH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/reap-dispatch-worktrees.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_WATCH_NOW_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/watch-foreman.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_WORKTREE_ROOT_RUN_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-foreman.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/lib/worktree-reap.sh",
+        "scripts/run-grok-implementer-ab.sh",
+        "src/engine/autopilot-engine.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_ADVISORY_BRIDGE",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/_shared/advisory-sink.js",
+        "hooks/context-budget.js",
+        "hooks/cost-tracker.js",
+        "hooks/suggest-compact.js",
+        "hooks/version-drift-check.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "advisory_bridge.mode"
+      ],
+      "summary": "inject or sink for all four advisory hooks at once."
+    },
+    {
+      "name": "AUTOPILOT_ADVISORY_BRIDGE_<HOOK>",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "prefix": "AUTOPILOT_ADVISORY_BRIDGE_",
+      "default": null,
+      "readers": [
+        "hooks/_shared/advisory-sink.js",
+        "hooks/context-budget.js",
+        "hooks/cost-tracker.js",
+        "hooks/suggest-compact.js",
+        "hooks/version-drift-check.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "advisory_bridge.<hook>"
+      ],
+      "summary": "inject or sink for one hook; <HOOK> is COST_TRACKER, VERSION_DRIFT, CONTEXT_BUDGET or SUGGEST_COMPACT. Beats the global variable."
+    },
+    {
+      "name": "AUTOPILOT_ADVISORY_RELAY",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": "on",
+      "readers": [
+        "hooks/advisory-relay.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop the UserPromptSubmit hook that drains queued advisories into the next prompt."
+    },
+    {
+      "name": "AUTOPILOT_AGENT_ACTIVITY",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/audit-log.js",
+        "hooks/awaiting-owner.js",
+        "hooks/live-session-lib.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop the subagent activity stamps."
+    },
+    {
+      "name": "AUTOPILOT_ASK_DECISION",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/ask-decision.js",
+        "hooks/audit-log.js",
+        "hooks/awaiting-owner.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop recording AskUserQuestion prompts as decisions."
+    },
+    {
+      "name": "AUTOPILOT_AUTHOR_MAX_TOKENS",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 30000,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "src/readiness/live-probe.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Response cap of an authoring dispatch."
+    },
+    {
+      "name": "AUTOPILOT_AWAITING_OWNER",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/advisory-relay.js",
+        "hooks/audit-log.js",
+        "hooks/awaiting-owner.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop the awaiting-owner attention records the band shows."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_PKILL_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.pkill_self_match"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.pkill_self_match; a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_CAPTURE_PAYLOAD",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "off",
+      "readers": [
+        "hooks/capture-payload.js",
+        "scripts/toggle-payload-capture.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"1\" to write hook payloads to disk for debugging (scripts/toggle-payload-capture.js)."
+    },
+    {
+      "name": "AUTOPILOT_CONFIG_FILE",
+      "kind": "env",
+      "audience": "user",
+      "group": "config",
+      "default": "~/.autopilot/config.json",
+      "readers": [
+        "scripts/check-config-docs.js",
+        "scripts/dispatch-foreman.sh",
+        "scripts/lib/config-path.js",
+        "scripts/resolve-dispatch-topology.js",
+        "src/status/review-server.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Use this file instead of ~/.autopilot/config.json as the operator config."
+    },
+    {
+      "name": "AUTOPILOT_CONSULT_TIMEOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "5m",
+      "readers": [
+        "scripts/dispatch-consult.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Timeout of a consult dispatch."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_GAP",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.gap"
+      ],
+      "summary": "Environment override of context_budget.gap (number >= 0; beats the config)."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/config-path.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.live_write"
+      ],
+      "summary": "off, 0 or false stops the live context file write."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js",
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.mode"
+      ],
+      "summary": "Set to \"off\" to silence context-budget. Any other value is ignored (the config accepts \"off\" and \"warn\")."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_STEP",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js",
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.step"
+      ],
+      "summary": "Environment override of context_budget.step (number >= 0; beats the config)."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_T1",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js",
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.t1"
+      ],
+      "summary": "Environment override of context_budget.t1 (positive number; beats the config)."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_T2",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.t2",
+        "autoCompactWindow"
+      ],
+      "summary": "Environment override of context_budget.t2 (positive number; beats the config)."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_WINDOW_GATE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "block",
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/context-window.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "off, warn or block: what a dispatch does when its prompt would not fit the engine context window."
+    },
+    {
+      "name": "AUTOPILOT_COST_FUSE_DAILY_USD",
+      "kind": "env",
+      "audience": "user",
+      "group": "cost",
+      "default": null,
+      "readers": [
+        "hooks/cost-fuse.js",
+        "scripts/lib/brain-spend.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "cost_fuse.daily_usd_brain"
+      ],
+      "summary": "Environment override of cost_fuse.daily_usd_brain (positive number)."
+    },
+    {
+      "name": "AUTOPILOT_COST_FUSE_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "cost",
+      "default": null,
+      "readers": [
+        "hooks/cost-fuse.js",
+        "mods/live/register.ts",
+        "scripts/lib/brain-spend.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "cost_fuse.mode"
+      ],
+      "summary": "Environment override of cost_fuse.mode (block, warn or off)."
+    },
+    {
+      "name": "AUTOPILOT_COST_TRACKER",
+      "kind": "env",
+      "audience": "user",
+      "group": "cost",
+      "default": "on",
+      "readers": [
+        "hooks/cost-tracker.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"false\" to switch the cost tracker off."
+    },
+    {
+      "name": "AUTOPILOT_COST_TRACKER_CACHE_READ_WARN",
+      "kind": "env",
+      "audience": "user",
+      "group": "cost",
+      "default": null,
+      "readers": [
+        "hooks/cost-tracker.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "cost_tracker.cache_read_warn_tokens"
+      ],
+      "summary": "Environment override of cost_tracker.cache_read_warn_tokens."
+    },
+    {
+      "name": "AUTOPILOT_COST_TRACKER_CLEAR_PCT",
+      "kind": "env",
+      "audience": "user",
+      "group": "cost",
+      "default": null,
+      "readers": [
+        "hooks/cost-tracker.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "cost_tracker.context_clear_pct"
+      ],
+      "summary": "Environment override of cost_tracker.context_clear_pct."
+    },
+    {
+      "name": "AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.mode"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.mode; a garbage value maps to warn."
+    },
+    {
+      "name": "AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.wait_advice_every"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.wait_advice_every."
+    },
+    {
+      "name": "AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "dirty_tree_reminder.interval_minutes"
+      ],
+      "summary": "Environment override of dirty_tree_reminder.interval_minutes."
+    },
+    {
+      "name": "AUTOPILOT_DIRTY_TREE_MIN_FILES",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "dirty_tree_reminder.min_files"
+      ],
+      "summary": "Environment override of dirty_tree_reminder.min_files."
+    },
+    {
+      "name": "AUTOPILOT_DIRTY_TREE_MIN_LINES",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "dirty_tree_reminder.min_lines"
+      ],
+      "summary": "Environment override of dirty_tree_reminder.min_lines."
+    },
+    {
+      "name": "AUTOPILOT_DIRTY_TREE_REMINDER",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/dirty-protected-paths.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "dirty_tree_reminder"
+      ],
+      "summary": "Set to false, 0, off or no to disable the dirty-tree reminder."
+    },
+    {
+      "name": "AUTOPILOT_DISCUSS_TIMEOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "5m",
+      "readers": [
+        "scripts/dispatch-discuss.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Timeout of a discuss dispatch."
+    },
+    {
+      "name": "AUTOPILOT_DISPATCH_MODEL_GUARD_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "remind",
+      "readers": [
+        "hooks/dispatch-model-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to silence the reminder that a subagent dispatch must name a model and an Engine header."
+    },
+    {
+      "name": "AUTOPILOT_ENDPOINT_<NAME>_URL",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "prefix": "AUTOPILOT_ENDPOINT_",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/load-endpoints-env.js",
+        "scripts/load-endpoints-env.sh",
+        "scripts/resolve-dispatch-topology.js",
+        "scripts/resolve-endpoint.sh",
+        "src/endpoints/cli.js",
+        "src/engine/autopilot-engine.js",
+        "src/engine/local-deployment.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_ENDPOINTS_ENV"
+      ],
+      "summary": "Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_<NAME>_URL and AUTOPILOT_ENDPOINT_<NAME>_TOKEN. An HTTP seat appears in the topology only when its URL is set."
+    },
+    {
+      "name": "AUTOPILOT_ENDPOINTS_ENV",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "~/.autopilot/endpoints.env",
+      "readers": [
+        "scripts/lib/load-endpoints-env.js",
+        "scripts/load-endpoints-env.sh",
+        "src/endpoints/cli.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Path of the endpoints env file (mode 600) that load-endpoints-env.sh reads."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "foreman_guard.advisory_every"
+      ],
+      "summary": "Environment override of foreman_guard.advisory_every."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_BASH_CAP",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js",
+        "scripts/dispatch-foreman.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "foreman_guard.bash_cap"
+      ],
+      "summary": "Environment override of foreman_guard.bash_cap."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "foreman_guard.mode"
+      ],
+      "summary": "Environment override of foreman_guard.mode."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "foreman_guard.reserve_calls"
+      ],
+      "summary": "Environment override of foreman_guard.reserve_calls."
+    },
+    {
+      "name": "AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/foreman-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "foreman_guard.role_caps"
+      ],
+      "summary": "Environment override of foreman_guard.role_caps as \"foreman=40,worker=120,reviewer=120\"."
+    },
+    {
+      "name": "AUTOPILOT_HANDOFF_INJECT",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/session-handoff.js",
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "handoff_inject"
+      ],
+      "summary": "Set to \"1\" to enable the session snapshot injection (same as handoff_inject: true; either source enables it)."
+    },
+    {
+      "name": "AUTOPILOT_HANDOFF_MIN_TOOL_CALLS",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 12,
+      "readers": [
+        "hooks/session-handoff.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "handoff_inject"
+      ],
+      "summary": "A session needs at least this many tool calls before a snapshot is written."
+    },
+    {
+      "name": "AUTOPILOT_HANDOFF_MIN_USER_TURNS",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 3,
+      "readers": [
+        "hooks/session-handoff.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "handoff_inject"
+      ],
+      "summary": "A session needs at least this many user turns before a snapshot is written."
+    },
+    {
+      "name": "AUTOPILOT_HANDOFF_TRANSCRIPT_CAP",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 16777216,
+      "readers": [
+        "hooks/session-handoff.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "handoff_inject"
+      ],
+      "summary": "Maximum transcript bytes the snapshot writer reads (16 MiB)."
+    },
+    {
+      "name": "AUTOPILOT_HOOK_<STEM>",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "prefix": "AUTOPILOT_HOOK_",
+      "default": null,
+      "readers": [
+        "hooks/_shared/opt-in.js",
+        "hooks/exec-boundary.js",
+        "hooks/opt-in-multiplexer.js",
+        "hooks/orchestrator-edit-gate.js",
+        "hooks/residue-auto-reap-lib.js",
+        "hooks/residue-auto-reap.js",
+        "scripts/benchmark-hook-multiplexer.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Per-hook switch from the environment; <STEM> is the hook file stem upper-cased with dashes as underscores (AUTOPILOT_HOOK_BRANCH_PROTECTION=1)."
+    },
+    {
+      "name": "AUTOPILOT_HOOK_RESIDUE_AUTO_REAP",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/residue-auto-reap-lib.js",
+        "hooks/residue-auto-reap.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>",
+        "residue.auto_reap"
+      ],
+      "summary": "Set to 0, false, off or no to disable the automatic residue sweep hook."
+    },
+    {
+      "name": "AUTOPILOT_INTENT_CAPTURE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/intent-capture.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"false\" to stop the per-directory intent capture used for cross-session resume hints."
+    },
+    {
+      "name": "AUTOPILOT_LIVE_DIR",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": "auto (tmpfs)",
+      "readers": [
+        "hooks/live-session-lib.js",
+        "hooks/runs-watch-autostart.js",
+        "scripts/lib/live-state-dir.js",
+        "src/status/load-source.js",
+        "src/status/runs-watch.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Overrides the directory for the live status files; an explicit value is an isolation request and is never replaced by a fallback."
+    },
+    {
+      "name": "AUTOPILOT_LOCALE",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "mods/live/i18n.ts",
+        "mods/live/register.ts"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "ui.locale"
+      ],
+      "summary": "en or zh-TW; used when ui.locale is auto or absent."
+    },
+    {
+      "name": "AUTOPILOT_MERGE_TASK_STATUS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/audit-log.js",
+        "hooks/merge-task-status-lib.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop merging task-status input into the band."
+    },
+    {
+      "name": "AUTOPILOT_MIN_REVIEWED_SEATS",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "all seats",
+      "readers": [
+        "scripts/check-phase-review-receipt.js",
+        "scripts/hetero-review-loop.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Minimum seats that must have reviewed before a review loop or phase receipt passes (same grammar as --min-reviewed-seats)."
+    },
+    {
+      "name": "AUTOPILOT_MINIMAX_BASE_URL",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-anthropic-review.js",
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/load-endpoints-env.js",
+        "scripts/load-endpoints-env.sh",
+        "scripts/resolve-endpoint.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Base URL for the provider-native MiniMax endpoint."
+    },
+    {
+      "name": "AUTOPILOT_ORCH_EDIT_GATE_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/orchestrator-edit-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "orchestrator_edit_gate.mode"
+      ],
+      "summary": "Environment override of orchestrator_edit_gate.mode."
+    },
+    {
+      "name": "AUTOPILOT_PRECOMPACT_STDOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": "on",
+      "readers": [
+        "hooks/state-checkpoint.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"0\" to stop the PreCompact hook printing its guidance text for the summarizer."
+    },
+    {
+      "name": "AUTOPILOT_PROTECTED_BRANCHES",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "^(main|master)$",
+      "readers": [
+        "hooks/branch-protection.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Branch-name pattern the opt-in branch-protection hook guards."
+    },
+    {
+      "name": "AUTOPILOT_QUALIFICATION_OVERRIDE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "scripts/resolve-review-loop.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "residue.archive_branch_days"
+      ],
+      "summary": "Positive number; environment override of residue.archive_branch_days."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "residue.archive_remind_days"
+      ],
+      "summary": "Positive number; environment override of residue.archive_remind_days."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_AUTO_REAP",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "hooks/residue-auto-reap-lib.js",
+        "hooks/residue-auto-reap.js",
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "residue.auto_reap"
+      ],
+      "summary": "0 or 1; environment override of residue.auto_reap."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_LEASE_HOURS",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "residue.lease_hours"
+      ],
+      "summary": "Positive number; environment override of residue.lease_hours."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_TMP_PRUNE",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js",
+        "scripts/repo-residue-sweep.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "residue.tmp_prune"
+      ],
+      "summary": "0 or 1; environment override of residue.tmp_prune."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_SERVER_AUTOSTART",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": "on",
+      "readers": [
+        "src/status/runs-watch.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "review.port"
+      ],
+      "summary": "Set to \"0\" to stop the runs watcher from starting the review page server."
+    },
+    {
+      "name": "AUTOPILOT_RUN_APPROVAL_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/run-approval-gate.js",
+        "scripts/run-approval.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "run_approval.mode"
+      ],
+      "summary": "Environment override of run_approval.mode; an unrecognised value means off."
+    },
+    {
+      "name": "AUTOPILOT_RUNS_WATCH_AUTOSTART",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": "on",
+      "readers": [
+        "hooks/advisory-relay.js",
+        "hooks/awaiting-owner.js",
+        "hooks/runs-watch-autostart.js",
+        "scripts/session-mode.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"0\" to stop sessions from starting the live runs watcher."
+    },
+    {
+      "name": "AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "hooks/runs-watch-autostart.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Seconds of idleness before the runs watcher exits (positive integer)."
+    },
+    {
+      "name": "AUTOPILOT_RUNS_WATCH_INTERVAL_S",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "hooks/runs-watch-autostart.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Seconds between runs watcher polls (positive integer)."
+    },
+    {
+      "name": "AUTOPILOT_SESSION_TASKS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/session-tasks.js",
+        "src/status/sources-manifest.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop folding task-tool events into the live band."
+    },
+    {
+      "name": "AUTOPILOT_STRIKE_ENFORCEMENT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "shadow",
+      "readers": [
+        "scripts/engine-scorecard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"enforce\" to arm strike-based requalification; otherwise strikes are only recorded."
+    },
+    {
+      "name": "AUTOPILOT_SUGGEST_COMPACT",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": "on",
+      "readers": [
+        "hooks/suggest-compact.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"false\" to turn off the tool-call-count compaction nudge (suggest-compact hook)."
+    },
+    {
+      "name": "AUTOPILOT_TMP_LOG_RETENTION_DAYS",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": 3,
+      "readers": [
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-explore.sh",
+        "scripts/dispatch-hetero.sh",
+        "scripts/dispatch-review.sh",
+        "scripts/lib/prune-tmp-residue.sh",
+        "scripts/lib/tmp-residue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Days dispatch scripts keep their temp logs; 0 disables the prune."
+    },
+    {
+      "name": "AUTOPILOT_TOPOLOGY_FILE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "~/.autopilot/topology.json",
+      "readers": [
+        "scripts/dispatch-plan-review.js",
+        "scripts/hetero-review-loop.js",
+        "scripts/resolve-dispatch-topology.js",
+        "scripts/resolve-review-loop.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "topology.exclude_seats"
+      ],
+      "summary": "Where the derived dispatch topology is written and read."
+    },
+    {
+      "name": "AUTOPILOT_UPDATE_CHECK",
+      "kind": "env",
+      "audience": "user",
+      "group": "update",
+      "default": "on",
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "update_check"
+      ],
+      "summary": "Set to \"0\" to stop the update notice (either this or update_check: false switches it off)."
+    },
+    {
+      "name": ".claude/backlog-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/backlog-config.md",
+      "default": null,
+      "readers": [
+        "skills/onboard/SKILL.md",
+        "scripts/resolve-project-paths.sh",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Backlog entry schema options and pointer rule."
+    },
+    {
+      "name": ".claude/debug-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/debug-config.md",
+      "default": null,
+      "readers": [
+        "skills/debug/SKILL.md",
+        "skills/dev-flow/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Project-specific debug tools and log paths."
+    },
+    {
+      "name": ".claude/dev-flow-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/dev-flow-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "scripts/resolve-project-paths.sh",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Size rules, quality gates, build commands, special rules."
+    },
+    {
+      "name": ".claude/dispatch-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/dispatch-config.md",
+      "default": null,
+      "readers": [
+        "skills/ceo-agent/SKILL.md",
+        "skills/debug/SKILL.md",
+        "skills/dev-flow/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Which dispatcher, reviewer and methodology autopilot delegates to when other plugins are installed."
+    },
+    {
+      "name": ".claude/dispatch-guard-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/dispatch-guard-config.md",
+      "default": null,
+      "readers": [
+        "hooks/README.md",
+        "hooks/dispatch-model-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Per-project gate on expensive-model dispatch (dispatch-model-guard)."
+    },
+    {
+      "name": ".claude/doa-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/doa-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/references/model-routing.md",
+        "skills/quality-pipeline/references/model-routing.md",
+        "skills/survey/references/model-routing.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Delegated Operations Authority presets for subagent dispatch."
+    },
+    {
+      "name": ".claude/doc-drift-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/doc-drift-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/references/post-feature-doc-sync.md",
+        "skills/doc-sync/SKILL.md",
+        "skills/onboard/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Doc-to-code domains the doc-sync skill audits."
+    },
+    {
+      "name": ".claude/execution-boundary-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/execution-boundary-config.md",
+      "default": null,
+      "readers": [
+        "hooks/README.md",
+        "hooks/exec-boundary.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "sanctioned_roots, protected refs and allow_sql for the opt-in exec-boundary hook."
+    },
+    {
+      "name": ".claude/finish-flow-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/finish-flow-config.md",
+      "default": null,
+      "readers": [
+        "skills/finish-flow/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Closing-sequence overrides (merge target, archive procedure, per-size quality gate)."
+    },
+    {
+      "name": ".claude/knowledge-routing-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/knowledge-routing-config.md",
+      "default": null,
+      "readers": [
+        "scripts/resolve-knowledge-routing.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Where durable knowledge lands (handoff, learn, distill)."
+    },
+    {
+      "name": ".claude/loop.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/loop.md",
+      "default": null,
+      "readers": [
+        "skills/ceo-agent/SKILL.md",
+        "skills/ceo-agent/references/level-front-door.md",
+        "skills/dev-flow/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Default prompt for a bare /loop."
+    },
+    {
+      "name": ".claude/model-routing-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/model-routing-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "skills/dev-flow/references/model-routing.md",
+        "skills/quality-pipeline/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Subagent model and mode per role."
+    },
+    {
+      "name": ".claude/next-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/next-config.md",
+      "default": null,
+      "readers": [
+        "skills/next/SKILL.md",
+        "scripts/resolve-project-paths.sh",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Work source paths for the next skill."
+    },
+    {
+      "name": ".claude/owner-kernel-governance.json",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "needle": "owner-kernel-governance.json",
+      "template": "project-config-template/governance-config.md",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh",
+        "scripts/scaffold-mission.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Project governance: mission-convergence enforcement and budgets, guidance defaults, red lines, rosters (the file name is historical; the file is live)."
+    },
+    {
+      "name": ".claude/profiling-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/profiling-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "skills/profiling/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Profiling tools and metrics collection."
+    },
+    {
+      "name": ".claude/project-lifecycle-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/project-lifecycle-config.md",
+      "default": null,
+      "readers": [
+        "skills/project-lifecycle/SKILL.md",
+        "scripts/resolve-project-paths.sh",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Project paths and bootstrap/archive scripts."
+    },
+    {
+      "name": ".claude/qc-gate-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/qc-gate-config.md",
+      "default": null,
+      "readers": [
+        "skills/finish-flow/SKILL.md",
+        "scripts/install-hooks.sh",
+        "scripts/resolve-qc-gate.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Strength of the QC forcing function at push and finish-flow."
+    },
+    {
+      "name": ".claude/quality-gate-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/quality-gate-config.md",
+      "default": null,
+      "readers": [
+        "skills/onboard/SKILL.md",
+        "skills/quality-pipeline/SKILL.md",
+        "skills/quality-pipeline/references/test-policy.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Test, scan and review commands."
+    },
+    {
+      "name": ".claude/review-loop-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/review-loop-config.md",
+      "default": null,
+      "readers": [
+        "skills/ceo-agent/SKILL.md",
+        "skills/ceo-agent/references/depth0-control-loop.md",
+        "skills/ceo-agent/references/level-front-door.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Engine roster and loop policy of the heterogeneous review pipeline."
+    },
+    {
+      "name": ".claude/skill-routing.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/skill-routing.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "skills/onboard/SKILL.md",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Maps keywords to your project domain skills."
+    },
+    {
+      "name": ".claude/task-class-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/task-class-config.md",
+      "default": null,
+      "readers": [
+        "skills/ceo-agent/references/level-front-door.md",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Autonomous front-door routing and next-pick weighting."
+    },
+    {
+      "name": ".claude/team-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/team-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "skills/team/SKILL.md"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Team role templates for your tech stack."
+    },
+    {
+      "name": ".claude/test-integrity-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/test-integrity-config.md",
+      "default": null,
+      "readers": [
+        "skills/quality-pipeline/references/test-integrity-gate.md",
+        "scripts/check-test-integrity.sh",
+        "scripts/lib/test-integrity-l1.py"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Mode and rules of the test-integrity gate."
+    },
+    {
+      "name": ".claude/test-strategy-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/test-strategy-config.md",
+      "default": null,
+      "readers": [
+        "skills/dev-flow/SKILL.md",
+        "skills/test-strategy/SKILL.md",
+        "scripts/scaffold-config.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Test commands, pyramid ratios, coverage thresholds."
+    },
+    {
+      "name": ".claude/worktree-teardown-config.md",
+      "kind": "project_di",
+      "audience": "user",
+      "group": "project",
+      "template": "project-config-template/worktree-teardown-config.md",
+      "default": null,
+      "readers": [
+        "scripts/resolve-worktree-teardown.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Per-project cleanup seam for hetero worktrees."
+    },
+    {
+      "name": "config_schema_version",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "update",
+      "type": "number",
+      "default": 0,
+      "readers": [
+        "scripts/lib/config-audit.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "update_check"
+      ],
+      "summary": "The config.json format version you last reviewed (current: 1). Missing counts as 0. Autopilot never writes it; set it to the current number after reading the upgrade check, which then stops listing changes up to that number."
+    }
+  ]
+}

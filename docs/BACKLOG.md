@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0196 -->
+<!-- next-id: BL-0197 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -25,7 +25,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: feat/autocompact-detect qc-gate, 2026-10-12; phase 1 merged 2026-10-13
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
-- **Context**: Phase 1 = selector + miss-check (28 cases, 0 missed). Phase 2: hook mods/live tests into the selector's map, eval ON/OFF, then change the gate step; keep the full suite for release preflight. Also unblocks BL-0087 option B.
+- **Context**: Phase 2 step 1 (mods/live `extra_runners`, miss-check 0 missed) done at 933b37e2. Remaining: ON/OFF eval (evals/skill-onoff), then guidance commit (quality-gate-config, test-policy, quality-pipeline SKILL.md:36, scripts-inventory).
 
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002
@@ -179,7 +179,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-05 01M45R4M3V0999MB5HEV8E7R84
 - **Problem**: hangar 的 claude 工作階段反映：預覽與審查伺服器應向 lab-ingress 登記，而不是各自開 0.0.0.0 的臨時埠。目前審查伺服器只綁本機 127.0.0.1，沒有登記機制。 (draft)
 - **Impact**: 其他機器想看預覽時只能自己想辦法；原定版本已不會出貨，需擁有者重訂時程並與 hangar 確認。 (draft)
-- **Trigger**: v2.37.0 shipped AND hangar lab-ingress v2 `lab preview` decided
+- **Trigger**: mods shipped with 3.0.0 AND hangar lab-ingress v2 `lab preview` decided
 - **Effort**: M
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
@@ -1071,19 +1071,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
 
-### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
-- **Id**: BL-0089
-- **Status**: open
-- **Since**: 2026-08-31
-- **Origin**: self
-- **Problem**: v2.35.5 的品管面板留下四個小建議：縮排改動污染 blame、輸出函式混用、說明文字印出腳本原始碼等。都屬於整理性質。 (draft)
-- **Impact**: 純整理，不影響功能；下次改到該檔案時順手處理即可。 (draft)
-- **Trigger**: next touch of the named files.
-- **Effort**: S
-- **Source**: v2.35.5 qc panels + foremen, 2026-08-31.
-- **Pointer**: docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md
-- **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2)…
-
 ### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
 - **Id**: BL-0092
 - **Status**: open
@@ -1199,8 +1186,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-04
 - **Origin**: owner
 - **Problem**: 擁有者要求 mods 介面能顯示「代理替你做的決定」提醒。目前沒有任何地方記錄這類決定，所以介面無從顯示；要先做記錄寫入，再做監看，最後才是顯示。 (draft)
-- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods v2.37.0 發布之後。 (draft)
-- **Trigger**: after mods v2.37.0 ships
+- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods 隨 3.0.0 發布之後。 (draft)
+- **Trigger**: after mods ship with 3.0.0
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
@@ -1421,18 +1408,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### bash-launch guard: a reassigned launch variable hides the first child
-- **Id**: BL-0192
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 背景派工檢查會看「啟動後有沒有等它結束」。如果同一個變數先接一個派工程序、再改接另一個程序，最後只等第二個，第一個派工其實沒人等，檢查卻會放行。另外寫成物件屬性再等（self.p.wait()）的情況會被誤擋。
-- **Impact**: 低。要刻意把同一個變數接兩次才會漏；誤擋時改寫成區域變數即可。
-- **Trigger**: 有人回報這兩種寫法被漏放或誤擋，或下次動 bash-launch-rules.js 的等待判斷
-- **Effort**: S
-- **Source**: frz2 review 2026-10-15
-- **Pointer**: none
-
 ### Move exam registration to llm-playground; autopilot reads one JSON
 - **Id**: BL-0194
 - **Status**: open
@@ -1457,4 +1432,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
 - **Effort**: S
 - **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
+- **Pointer**: none
+
+
+### run-skill-onoff-eval.sh drops fixture_scripts when a manifest has an empty files field
+- **Id**: BL-0196
+- **Status**: open
+- **Since**: 2026-10-16
+- **Origin**: self
+- **Problem**: 評測 runner 讀臂設定時用 tab 切欄，files 欄位是空的就會讓兩個 tab 被合併，fixture_scripts 錯位進 files。結果 fixture 檔完全沒進測試 repo，而且沒有任何錯誤訊息，格子照跑但環境是壞的。
+- **Impact**: 中。沒有 files pack 的新臂設定會悄悄失效；目前靠兩臂各放一個相同的佔位 pack 繞過。
+- **Trigger**: 下次動 run-skill-onoff-eval.sh 或有 pack 沒有 files 時
+- **Effort**: S
+- **Source**: evals/skill-onoff qs row pilot, 2026-10-16
 - **Pointer**: none

@@ -150,3 +150,39 @@ suite. The first version of this command was double-quoted, so the shell turned 
 - Only `run.sh`'s own suites are considered (hooks/*.test.js, scripts/*.test.js, scripts/lib/*.test.js,
   hooks/tests/*.test.sh, scripts/*.test.sh); `scripts/tests/*.test.sh`, `mods/live/*.test.js` and the codex plugin
   copies are not run by `run.sh` and are not selected.
+
+## Round 3 (2026-10-16): wider sample and the mods/live entry (BL-0001 phase 2, step 1)
+
+Change under test: the selector now reports `extra_runners` (`mods/live/run-tests.sh` for any `mods/live/` change, in selective
+and in full mode). Before this, a `mods/live/` diff returned `selective` with 128 `hooks/*.test.js` suites (for `ui.ts`,
+`locales/*.json`, `ui.test.ts`) or 19-21 (`gen-locales.js`, `run-tests.sh`) and never named `mods/live/run-tests.sh`. The
+cause: `mods/live/*.ts` are not code files for the graph, so they are data seeds, and a data file is reached through any
+non-generic directory name in its path; `live` is not in `GENERIC_DIRS`, so every hook script that mentions `/live` became a
+weak referrer. Those hits were accidental, and none of them ran the live mod's own tests.
+
+Tool: `docs/plans/evidence/2026-10-13-affected-suites/miss-check-wide.js` (re-runnable; `AFFECTED_SUITES_BIN` selects the
+selector under test). Sample: the 60 most recent non-merge commits on this branch (develop tip 10922287 and earlier) that touch
+anything outside `docs/` and root `*.md`; 14 of them touch `mods/live/`. Oracles that do not use the selector's text graph:
+
+- convention: for every changed non-test source file F, a suite named after F (`scripts/F.test.js`, `scripts/lib/F.test.js`,
+  `hooks/F.test.js`, `hooks/tests/F.test.sh`, `scripts/F.test.sh`, optional `check-`/`test-` stem tolerance) must be selected,
+  unless the result is `full`;
+- rule: a `mods/live/` commit must list `mods/live/run-tests.sh`; a `hooks/hooks.json` or `.claude-plugin/` commit must be `full`.
+
+This is weaker than rounds 1-2 (it does not bisect and run tests): it checks the selector against naming and the stated rules,
+not against real breakage. Results: 60 commits, 32 `full`, 28 selective, **0 missed**.
+
+Negative control (the pre-fix selector, `git show HEAD:scripts/affected-suites.js`, same 60 commits): 14 missed (every
+`mods/live/` commit). Unit tests: pre-fix selector 16 pass / 2 fail (the two new mods/live cases), fixed selector 18 / 0.
+
+Mutation of the selector (each run over the same 60 commits):
+
+| Mutant | Misses | Caught |
+|--------|--------|--------|
+| `mods/live/` entry removed from `EXTRA_RUNNERS` | 14 | yes |
+| direct file-name lookup (`byExt`) disabled | 3 | yes |
+| `DEFAULT_MAX_WEAK` 2 -> 0 | 0 | no: it only moves 25 selective results to `full` (57 full), the safe direction |
+| `hooks/hooks.json` removed from `FULL_TRIGGERS` | 0 | no: no sampled commit isolates that rule (a `hooks.json` change that no suite reaches still falls to `full` through the `unreferenced` rule) |
+
+2 of the 4 mutants are caught; the two that are not are not under-selection in this sample. The `hooks.json` rule is
+unmutation-tested here and stays covered only by the unit tests.

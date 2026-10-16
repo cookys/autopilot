@@ -10,7 +10,9 @@
 //
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
-//   always_run:[], full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
+//   always_run:[], extra_runners:[], full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
+//   extra_runners = entry points outside run.sh that the diff needs (mods/live/** => mods/live/run-tests.sh);
+//   present in both modes. Text output prints them as extra lines after the suites (or after FULL).
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
 // Exit: 0 ok (selective or full), 2 usage/git error.
 //
@@ -51,6 +53,15 @@ const FULL_TRIGGERS = [
   /^\.githooks\//,
   /^\.claude\/quality-gate-config\.md$/,
 ];
+
+// Entry points that run.sh does NOT run. Any changed path matching `re` adds `runner` to the result's
+// extra_runners (selective AND full: a full run.sh still skips them). [re, runner]
+const EXTRA_RUNNERS = [
+  [/^mods\/live\//, 'mods/live/run-tests.sh'],
+];
+function extraRunners(changed) {
+  return EXTRA_RUNNERS.filter(([re]) => changed.some((p) => re.test(p))).map(([, r]) => r);
+}
 
 // Suites that read repo files by CONTENT or compare whole trees: no reference graph can see what
 // breaks them (a new file anywhere can turn them red), so they run on every selective result.
@@ -297,10 +308,11 @@ function main(argv) {
     const full = r.fullReasons.length > 0;
     const doc = {
       schema: 1, mode: full ? 'full' : 'selective', base: baseRef, head: headRef, changed: changed.slice().sort(),
-      suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, full_reasons: r.fullReasons, unreferenced: r.unreferenced,
+      suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
       chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
     };
-    process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')));
+    const extra = doc.extra_runners.map((x) => x + '\n').join('');
+    process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')) + extra);
     return 0;
   } catch (e) {
     process.stderr.write(`affected-suites: ${e.message}\n`);
@@ -308,5 +320,5 @@ function main(argv) {
   }
 }
 
-module.exports = { select, mentions, buildGraph, isSuite, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { extraRunners, select, mentions, buildGraph, isSuite, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

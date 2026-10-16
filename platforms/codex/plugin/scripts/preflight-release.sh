@@ -157,6 +157,10 @@ check_optin_changelog() {
   node scripts/check-optin-changelog.js
 }
 
+check_settings_changelog() {
+  node scripts/check-settings-changelog.js
+}
+
 # ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
 # 5 real LLM probes (l3/l4/l5/l6/think-tank-dialectic): each entry must Read its
 # MUST-READ reference(s) — evidence is stream-json tool_use artifacts, never
@@ -332,6 +336,13 @@ check_tmp_residue_gate() {
   node scripts/check-tmp-residue-registry.js >&2
 }
 
+# ─── 11. settings registry gate ───
+# Every AUTOPILOT_* env var / config.json key the code reads is registered in scripts/lib/config-keys.json, every
+# registered entry is still read, and every audience=user entry is on docs/settings-reference.md.
+check_config_docs_gate() {
+  node scripts/check-config-docs.js >&2
+}
+
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
   if check_slash_entry_probe; then
     exit 0
@@ -349,10 +360,12 @@ run_check "version mirrors in sync (sync-version.js --check)" check_version_mirr
 run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
+run_check "user-setting changes are named in CHANGELOG Settings changes" check_settings_changelog
 run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
+run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's

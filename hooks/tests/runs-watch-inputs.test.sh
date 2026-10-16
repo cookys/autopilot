@@ -391,7 +391,7 @@ eq 'attention,compare,context,decision,ledger_depth0,ledger_engine,progress,stag
 eq yes "$(dv s_model_has_manifest)" "sources: the model carries the manifest"
 eq yes "$(dv s_compare_text_unwired)" "sources: the page says 來源未接 for the uninstalled compare writer"
 eq 'true/false' "$(dv s_tasks_off)" "sources: env knob off -> installed but not enabled"
-eq 'true/false' "$(dv s_attention_cfg_off)" "sources: config.json knob off -> installed but not enabled"
+eq 'true/true' "$(dv s_attention_cfg_off)" "sources: config.json hooks.awaiting-owner=false is not a switch the hook reads -> still enabled"
 # item 6
 eq null "$(dv ph_none)" "phase: no marker phase and no deliverable -> null"
 eq '{"code":"plan","label":"M·l3 ▸ plan","source":"session"}' "$(dv ph_single)" "phase: marker stage reaches the model with source session"

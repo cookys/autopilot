@@ -1273,6 +1273,15 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     SALVAGE_CAPTURE="$QODER_OUT"
     emit_no_verdict "qoder exited non-zero (rc=$QODER_RC) — fail-closed, partial output not parsed"
   fi
+  # MODEL SUBSTITUTION guard (2026-10-16): qoder prints `Model "X" is not available right
+  # now; using "auto" instead` on stderr and still answers. The verdict then comes from a
+  # model the caller did not request, so it is rejected (fail-closed) with a named reason
+  # instead of being parsed. Stderr is otherwise chrome; only this one notice is acted on.
+  if grep -qE 'is not available right now; using .* instead' "$QODER_ERR" 2>/dev/null; then
+    QODER_SUBST_LINE="$(grep -E 'is not available right now; using .* instead' "$QODER_ERR" | head -n 1 | cut -c1-200)"
+    SALVAGE_CAPTURE="$QODER_OUT"
+    emit_no_verdict "model substituted: requested model unavailable, qoder answered with another model ($QODER_SUBST_LINE) — fail-closed, verdict not accepted"
+  fi
   PARSE_INPUT="$QODER_OUT"
 elif [[ "$RUNNER" = "cursor" ]]; then
   BIN="${BIN:-cursor-agent}"

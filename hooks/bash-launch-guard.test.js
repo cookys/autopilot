@@ -935,3 +935,28 @@ test('message: the watch recipe is bounded by timeout, warns about stale .exit, 
     assert.strictEqual(detectPkillSelfMatch("pgrep -f '(a+)+b'").rule, 'pkill-self-match'); // plain => denied, regex never run
   });
 }
+
+// ---- BL-0192: a re-assigned handle hides the first child; an attribute handle is one handle ----
+const BL192_DENY = [
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); p=subprocess.Popen(['ls']); p.wait()"`, // first child never waited
+  `python3 -c "import subprocess; p=subprocess.Popen('${RV} x', shell=True); p=subprocess.Popen(['ls']); p.communicate()"`,
+  `python3 -c "import subprocess; self.p=subprocess.Popen(['${RV}', 'x']); self.p=subprocess.Popen(['ls']); self.p.wait()"`,
+];
+for (const cmd of BL192_DENY) {
+  test(`rule1 denies (BL-0192 rebind): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /detach-no-wake/);
+  });
+}
+const BL192_ALLOW = [
+  `python3 -c "import subprocess; self.p=subprocess.Popen(['${RV}', 'x']); self.p.wait()"`, // attribute handle waited
+  `python3 -c "import subprocess; self.p=subprocess.Popen('${RV} x', shell=True); self.p.communicate()"`,
+  `python3 -c "import subprocess; p=subprocess.Popen(['${RV}', 'x']); p.wait(); p=subprocess.Popen(['ls'])"`, // waited before the rebind
+];
+for (const cmd of BL192_ALLOW) {
+  test(`rule1 allows (BL-0192 handle): ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false);
+  });
+}

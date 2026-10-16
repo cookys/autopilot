@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Settings changes
+
+Every release lists here what changed in the settings you can set (`scripts/check-settings-changelog.js` enforces it). The full list is now one page: [`docs/settings-reference.md`](docs/settings-reference.md), generated from the machine-readable `scripts/lib/config-keys.json`.
+
+- **Context-budget hook is on by default** (`context_budget.mode` = `warn`). It reminds you to checkpoint at `context_budget.t1` (100000 tokens) and to write a handoff at `context_budget.t2` (150000 tokens). Silence it with `context_budget.mode: "off"` or `AUTOPILOT_CONTEXT_BUDGET_MODE=off`.
+- **Pair it with Claude Code's `autoCompactWindow`.** `context_budget.t2` + `context_budget.gap` (50000) must be at most `autoCompactWindow` - 33000; the SessionStart check warns when it is not.
+- **T2 and auto-compact:** when auto-compact is configured and enabled (`autoCompactEnabled` not false), T2 only reminds you to write a handoff and never tells you to stop and /clear. Without auto-compact, T2 still says stop and /clear.
+- **`context_budget.t1` and `context_budget.t2` accept 0 to turn that tier off** (config and `AUTOPILOT_CONTEXT_BUDGET_T1` / `AUTOPILOT_CONTEXT_BUDGET_T2` alike). An empty env value counts as unset.
+- **`context_budget.mode` is case-insensitive.** An unknown value is ignored and warned about once per session. A session also warns once when `context_budget.t1` is at or above `context_budget.t2`, and once when the window is so small that `context_budget.t2` falls after the compaction point.
+- **The foreman guard's ceiling follows `context_budget`.** `context_budget.mode: "off"` or `context_budget.t2` = 0 switches it off, and it no longer tells a foreman to stop when auto-compact is configured and enabled.
+- **Three settings the docs used to show do nothing:** `autopilot.costTracker`, `autopilot.protectedBranches` and `autopilot.<hookName>` in Claude Code's `settings.json` are not read by any code. Use `AUTOPILOT_COST_TRACKER=false`, `AUTOPILOT_PROTECTED_BRANCHES`, or the hook's own off switch.
+- **`config_schema_version`:** the first session after an upgrade (and `scripts/dev-setup.sh --check`) checks `~/.autopilot/config.json` for unknown keys, wrong types or values, the `context_budget.t1` / `context_budget.t2` relation, the auto-compact setup, and defaults changed since your last check. It only reminds, never blocks. Set `"config_schema_version": 1` once you have read the notes and that batch of default changes stops showing. Turn the reminder off with `update_check: false` or `AUTOPILOT_UPDATE_CHECK=0`.
+
 ### 新增
 
 - **即時面板新增「待決」分頁：在面板上選好答案、一次送出**：「現況」分頁右邊多一個「待決」分頁（有待決時分頁標籤帶 `▲N`）。每個待決問題是一張精簡卡片：第一行「序號. 問題」，下面是背景，選項畫成一排按鈕（助手建議的選項前面有 `★`，選中的選項用 `[x]` 加綠色文字），沒有選項的題目在終端／桌面給一個輸入欄，有選項的題目多一個選填的「補充」欄；手機沒有輸入欄，改成提示「這題請在對話裡回答」。最下面「送出（已選 n/N）」按下去，把有選的題目用一則固定格式的訊息（`[待決回覆]`，每題一行 `id｜問題前 30 字 → 答案｜補充：…`）交給這個 session，不冒充使用者；送出後那幾張卡片顯示「已送出，等處理」並停用，直到 session 用 `open-decision.js close --id` 關掉它們。選取與已送出的記錄放在 `$.state`（型別契約 `mods/live/types/index.d.ts`，由 `.claude-plugin/plugin.json` 的 `types` 指到）。「現況」分頁的「待決議事項」整段展開改成「要你處理」裡的一行摘要（「▲ 待決議事項 N 件　待決 ›」，可點進待決分頁），不再重複列問題全文。卡片最後一行只留「卡住：… · 來源：…」，建議的理由接在選項列下面（`★ 理由`）；「為什麼要你決定」（`not_authorized`）刻意不畫，因為這個分頁本身就代表要 owner 決定。`ask_user_question` 開的題目由提問 session 自己的對話框回答，卡片只提示「請在對話框回答」，不出現按鈕、不計入送出（job model 因此多帶 `origin` 欄）。連按送出只會送一次。例外：`$.prompt.submit` 只此一處（`sendDecide`），計畫的 grep 閘改成允許清單。新增 `★` 符號（`pending-owner`：還沒在 owner 的 ssh + tmux 終端確認寬度）。測試 `mods/live/decide.test.ts` 與 `live.test.ts` 的 DECIDE mounted 系列。

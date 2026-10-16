@@ -337,6 +337,30 @@ check_autocompact_window() {
   status "$level" "claude" "$message"
 }
 
+# Audit of ~/.autopilot/config.json (scripts/lib/config-audit.js): unknown or mistyped keys, bad values,
+# contradictory context_budget settings, defaults that changed since your config_schema_version. Advice only.
+check_config_file() {
+  if ! have_cmd node; then
+    status WARN "config" "node not found; ~/.autopilot/config.json not checked"
+    return 0
+  fi
+  local out rc=0
+  out="$(node "$REPO_DIR/scripts/lib/config-audit.js" --project-dir "$PWD" 2>/dev/null)" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    status OK "config" "$out"
+    return 0
+  fi
+  if [[ $rc -ne 1 || -z "$out" ]]; then
+    status WARN "config" "config audit could not run"
+    return 0
+  fi
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && status WARN "config" "$line"
+  done <<< "$out"
+  status OK "config" "reference for every setting: docs/settings-reference.md"
+}
+
 # Idempotent: skip when already directory-sourced at this repo.
 register_dev_marketplace() {
   if marketplace_is_dev_directory; then
@@ -726,6 +750,7 @@ main() {
     else
       run_check_for "$HARNESS"
     fi
+    check_config_file
 
     echo ""
     echo "Summary: $FAILURES failure(s), $WARNINGS warning(s)"

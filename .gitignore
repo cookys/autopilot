@@ -63,3 +63,4 @@ evals/skill-onoff/results/g67-cells/
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.html
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.ansi
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/pane.png
+evals/skill-onoff/results/qs*.cells/

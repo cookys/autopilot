@@ -56,8 +56,8 @@ function sourceUrlProblem(value) {
   if (url.search !== '' || url.hash !== '') return 'source_url must not carry a query or fragment';
   // Dot-segments, checked after percent-decoding to a fixed point (%2e%2e, %252e%252e, ...).
   // Both slash spellings count, since a decoded %5c is a separator to some consumers.
-  // Taken from the RAW string: new URL().pathname has already collapsed `a/../x` and `%2e%2e`.
-  const rawPath = /^https:\/\/[^/]*(.*)$/i.exec(value);
+  // Taken from the RAW string: new URL().pathname has already collapsed `a/../x` and `%2e%2e`. WHATWG treats a backslash as a separator, so the authority ends at `/` or `\\`.
+  const rawPath = /^https:[/\\]{2}[^/\\]*(.*)$/i.exec(value);
   let text = rawPath ? rawPath[1] : url.pathname;
   for (let round = 0; ; round += 1) {
     if (round > MAX_PERCENT_DECODE_ROUNDS) return 'source_url is percent-encoded too deeply';
@@ -222,6 +222,30 @@ function readCache(cacheDir = defaultCacheDir()) {
   }
 }
 
+const ATTEMPT_FILE = 'last-attempt';
+
+/** Stamp the start of a fetch attempt (best effort; a failure to stamp never blocks the fetch). */
+function recordAttempt(cacheDir = defaultCacheDir()) {
+  try {
+    const root = path.resolve(cacheDir);
+    feed.assertOutsideGit(root, 'qualification prices cache');
+    fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(root, ATTEMPT_FILE), `${new Date().toISOString()}\n`, { mode: 0o600 });
+  } catch { /* advisory */ }
+}
+
+/** Epoch ms of the newest of: last successful fetch, last attempt. null when neither exists. */
+function lastActivityMs(cacheDir = defaultCacheDir()) {
+  const times = [];
+  const manifest = feed.readCurrentManifest(path.resolve(cacheDir));
+  if (manifest && Number.isFinite(Date.parse(manifest.fetched_at))) times.push(Date.parse(manifest.fetched_at));
+  try {
+    const t = Date.parse(fs.readFileSync(path.join(path.resolve(cacheDir), ATTEMPT_FILE), 'utf8').trim());
+    if (Number.isFinite(t)) times.push(t);
+  } catch { /* none */ }
+  return times.length ? Math.max(...times) : null;
+}
+
 const DAY_S = 24 * 3600;
 
 /**
@@ -261,6 +285,8 @@ module.exports = {
   priceMicro,
   sortValue,
   fetchPrices,
+  recordAttempt,
+  lastActivityMs,
   readCache,
   describeFreshness,
 };

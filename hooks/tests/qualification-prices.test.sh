@@ -3,10 +3,12 @@
 # and the implementer ladder's same-effort price ordering.
 . "$(dirname "$0")/lib.sh"
 
+INHERITED_CACHE_DIR="${AUTOPILOT_PRICES_CACHE_DIR:-}"
 PRICES="$REPO_ROOT/scripts/qualification-prices.js"
 TOPO="$REPO_ROOT/scripts/resolve-dispatch-topology.js"
-BASELINE="$REPO_ROOT/scripts/.resolve-dispatch-topology.develop-baseline.tmp.js"
-trap 'rm -f "$BASELINE"' EXIT
+# develop's topology resolver runs from a throwaway tree under TEST_TMP (symlinks to the real repo, plus the develop copy).
+BASETREE="$TEST_TMP/basetree"
+BASELINE="$BASETREE/scripts/resolve-dispatch-topology.js"
 
 FAKE_BIN_DIR="$TEST_TMP/fake-bin"; mkdir -p "$FAKE_BIN_DIR"
 printf '#!/usr/bin/env bash\n[ "${1:-}" = "--version" ] && { printf "1.1.10\\n"; exit 0; }\nexit 0\n' > "$FAKE_BIN_DIR/agy"
@@ -45,6 +47,8 @@ NODE
 
 cur_digest() { node -e "try{process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).digest)}catch{}" "$AUTOPILOT_PRICES_CACHE_DIR/current.json"; }
 
+assert_eq "${INHERITED_CACHE_DIR#"$TEST_TMP"/}" "prices-cache" "lib.sh points the price cache at the sandbox"
+
 # --- accept + cache -------------------------------------------------------------------------
 mkfix "$FIX/good.json" "d => d"
 OUT="$(node "$PRICES" fetch --from "$FIX/good.json" 2>&1)"; EX=$?
@@ -72,6 +76,8 @@ reject "price above 2^53" "d => { d.rows[0].usd_per_mtok_output_micro = 2 ** 53;
 reject "source_url dot-segment" "d => { d.rows[0].source_url = 'https://prices.example.com/a/../x'; }"
 reject "source_url encoded dot-segment" "d => { d.rows[0].source_url = 'https://prices.example.com/a/%2e%2e/x'; }"
 reject "source_url double-encoded dot-segment" "d => { d.rows[0].source_url = 'https://prices.example.com/a/%252e%252e/x'; }"
+reject "source_url backslash-ending authority" "d => { d.rows[0].source_url = 'https://prices.example.com\\\\..\\\\x'; }"
+reject "source_url backslash scheme and dot-segment" "d => { d.rows[0].source_url = 'https:\\\\\\\\prices.example.com\\\\a\\\\..\\\\x'; }"
 reject "source_url userinfo" "d => { d.rows[0].source_url = 'https://u:p@prices.example.com/x'; }"
 reject "source_url query" "d => { d.rows[0].source_url = 'https://prices.example.com/x?a=1'; }"
 reject "source_url fragment" "d => { d.rows[0].source_url = 'https://prices.example.com/x#f'; }"
@@ -79,6 +85,16 @@ reject "bad billing" "d => { d.rows[0].billing = 'free'; }"
 reject "bad basis" "d => { d.rows[0].effective_basis = 'guess'; }"
 reject "duplicate seat" "d => { d.rows.push({ ...d.rows[0] }); }"
 reject "one bad row among good ones" "d => { d.rows[3].usd_per_mtok_input_micro = -5; }"
+# the throttle counts failed attempts too: after a rejected fetch no second attempt within the window
+rm -rf "$AUTOPILOT_PRICES_CACHE_DIR"
+mkfix "$FIX/rej.json" "d => { d.schema = 'nope'; }"
+node "$PRICES" fetch --from "$FIX/rej.json" --if-stale-hours 24 >/dev/null 2>&1
+assert_eq "$?" "1" "first attempt runs and is rejected"
+assert_file_exists "$AUTOPILOT_PRICES_CACHE_DIR/last-attempt" "attempt stamped"
+node "$PRICES" fetch --from "$FIX/good.json" --if-stale-hours 24 >/dev/null 2>&1
+assert_eq "$(cur_digest)" "" "no reconnect within 24 h of a failed attempt"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+GOOD="$(cur_digest)"
 # an unpriced (null) row and an unknown extra field stay acceptable
 mkfix "$FIX/null.json" "d => { d.rows[1].usd_per_mtok_input_micro = null; d.rows[1].extra = 1; }"
 node "$PRICES" fetch --from "$FIX/null.json" >/dev/null 2>&1
@@ -119,6 +135,17 @@ row seat-sub high 30
 row seat-low-exp low 99
 row Alpha medium 1 prov/pricey
 row Zulu medium 99 prov/thrifty
+mkdir -p "$BASETREE/scripts"
+for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do
+  [ -e "$e" ] || continue; b="$(basename "$e")"
+  case "$b" in scripts|.git) continue ;; esac
+  ln -s "$e" "$BASETREE/$b"
+done
+for e in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
+  [ -e "$e" ] || continue; b="$(basename "$e")"
+  [ "$b" = "resolve-dispatch-topology.js" ] && continue
+  ln -s "$e" "$BASETREE/scripts/$b"
+done
 git -C "$REPO_ROOT" show develop:scripts/resolve-dispatch-topology.js > "$BASELINE" 2>/dev/null \
   || git -C "$REPO_ROOT" show HEAD:scripts/resolve-dispatch-topology.js > "$BASELINE"
 

@@ -41,10 +41,13 @@ async function main(argv) {
   const cacheDir = lib.defaultCacheDir();
   if (cmd === 'fetch') {
     if (args['if-stale-hours'] !== undefined) {
+      // Throttle on the newer of the last SUCCESS (fetched_at) and the last ATTEMPT, so a missing
+      // file (404) or a rejected document does not reconnect on every session start.
       const hours = Number(args['if-stale-hours']);
-      const cache = lib.readCache(cacheDir);
-      if (cache && Number.isFinite(hours) && Date.now() - Date.parse(cache.manifest.fetched_at) < hours * 3600 * 1000) return 0;
+      const last = lib.lastActivityMs(cacheDir);
+      if (Number.isFinite(hours) && last !== null && Date.now() - last < hours * 3600 * 1000) return 0;
     }
+    lib.recordAttempt(cacheDir);
     try {
       const r = await lib.fetchPrices(args.from || lib.DEFAULT_PRICES_URL, { cacheDir });
       if (!args.quiet) process.stdout.write(`${JSON.stringify({ ok: true, ...r }, null, 2)}\n`);

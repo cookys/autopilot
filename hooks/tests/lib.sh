@@ -179,6 +179,8 @@ export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
 export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
 # Hook tests never start the SessionStart price refresh (it would reach the network).
 export AUTOPILOT_PRICES_FETCH=0
+# ...and never read the operator's real price cache: it would make ladder order depend on the host.
+export AUTOPILOT_PRICES_CACHE_DIR="$TEST_TMP/prices-cache"
 
 # The session-mode gate in dispatch-hetero.sh reads ${HOME}/.autopilot/session-mode when this
 # is unset — i.e. the OPERATOR's markers. A live l5/l6 marker there turned every dispatch test

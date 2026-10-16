@@ -36,4 +36,19 @@ bs() { node "$S" --base-ref "$(git -C "$REPO_ROOT" rev-list --max-parents=0 HEAD
 assert_eq "1" "$(bs "$D/cl-none.md")" "bootstrap, no subsection => red"
 cl_with "- see x"; assert_eq "1" "$(bs "$D/cl.md")" "bootstrap, no settings-reference link => red"
 cl_with "- see docs/settings-reference.md"; assert_eq "0" "$(bs "$D/cl.md")" "bootstrap, linked => green"
+# fail-closed baseline
+FIRST=$(git -C "$REPO_ROOT" rev-list --max-parents=0 HEAD | head -1)
+node "$S" --base-ref no-such-ref-xyz --keys "$D/cur.json" --changelog "$D/cl.md" --section Unreleased >/dev/null 2>&1; assert_eq "2" "$?" "nonexistent --base-ref => red"
+NT="$TEST_TMP/notag"; mkdir -p "$NT/scripts/lib" "$NT/.claude-plugin"; git -C "$NT" init -q; cp "$S" "$NT/scripts/"; cp "$D/cur.json" "$NT/scripts/lib/config-keys.json"
+node "$NT/scripts/check-settings-changelog.js" --changelog "$D/cl.md" --section Unreleased >/dev/null 2>&1; assert_eq "2" "$?" "repo without tags => red"
+# section heading strictness
+printf '# C\n\n## Unreleased notes\n\n### Settings changes\n\n- see docs/settings-reference.md\n' > "$D/cl-notes.md"
+assert_eq "1" "$(bs "$D/cl-notes.md")" "'Unreleased notes' is not Unreleased => red"
+printf '# C\n\n## v9.9.9 \xe2\x80\x94 desc\n\n### Settings changes\n\n- see docs/settings-reference.md\n\n## v9.9.8\n' > "$D/cl-ver.md"
+node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl-ver.md" --section v9.9.9 >/dev/null 2>&1; assert_eq "0" "$?" "'## vX \xe2\x80\x94 desc' heading accepted"
+# default section: Unreleased if present, else v<plugin version>
+assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl.md" 2>&1 >/dev/null; echo $?)" "default section picks Unreleased"
+VER=$(node -p "require('$REPO_ROOT/.claude-plugin/plugin.json').version")
+printf '# C\n\n## v%s \xe2\x80\x94 d\n\n### Settings changes\n\n- see docs/settings-reference.md\n' "$VER" > "$D/cl-v.md"
+assert_eq "0" "$(node "$S" --base-ref "$FIRST" --keys "$D/cur.json" --changelog "$D/cl-v.md" >/dev/null 2>&1; echo $?)" "default section falls back to v<plugin version>"
 finalize_test

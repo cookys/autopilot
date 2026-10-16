@@ -51,11 +51,17 @@ if (o.baselineKeys) {
   base = userMap(fs.readFileSync(p, 'utf8'), o.baselineKeys); baseLabel = o.baselineKeys;
 } else {
   const git = (args) => execFileSync('git', args, { cwd: REPO, encoding: 'utf8', maxBuffer: 20 << 20, stdio: ['ignore', 'pipe', 'pipe'] });
-  try {
-    const ref = o.baseRef || git(['describe', '--tags', '--abbrev=0']).trim();
-    baseLabel = ref;
-    try { base = userMap(git(['show', `${ref}:${KEYS_REL}`]), `${ref}:${KEYS_REL}`); } catch { base = null; }
-  } catch { base = null; }
+  let ref = o.baseRef;
+  if (!ref) {
+    try { ref = git(['describe', '--tags', '--abbrev=0']).trim(); } catch { ref = null; }
+    if (!ref) die('no release tag found; pass --base-ref <ref>', 2);
+  }
+  baseLabel = ref;
+  try { git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]); } catch { die(`base ref does not exist: ${ref}`, 2); }
+  let hasFile = true;
+  try { git(['cat-file', '-e', `${ref}:${KEYS_REL}`]); } catch { hasFile = false; }
+  // ref exists but has no registry file => first registration (bootstrap)
+  if (hasFile) base = userMap(git(['show', `${ref}:${KEYS_REL}`]), `${ref}:${KEYS_REL}`);
 }
 
 const changelog = fs.readFileSync(path.resolve(REPO, o.changelog), 'utf8').split(/\r?\n/);
@@ -70,7 +76,7 @@ if (!heading) {
 let inFence = false; let inSec = false; let inSub = false; let sub = null;
 for (const l of changelog) {
   if (/^\s*(```|~~~)/.test(l)) { inFence = !inFence; if (inSub) sub += l + '\n'; continue; }
-  if (!inFence && /^## /.test(l)) { inSec = l.startsWith('## ' + heading) && /^(\s|$|—)/.test(l.slice(3 + heading.length)); inSub = false; continue; }
+  if (!inFence && /^## /.test(l)) { inSec = l === '## ' + heading || l.startsWith('## ' + heading + ' — '); inSub = false; continue; }
   if (!inSec) continue;
   if (!inFence && /^### /.test(l)) { inSub = /^### Settings changes\s*$/i.test(l); if (inSub && sub === null) sub = ''; continue; }
   if (inSub) sub += l + '\n';

@@ -530,7 +530,8 @@ export function mergeJobModels(primary: JobModel | null, campaigns: JobModel[]):
   return {
     ...base,
     needs_decision: asking !== undefined,
-    decisions: all.flatMap(m => m.decisions).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
+    // every root's page now carries the project's cards (src/status/decision-input.js): one card shows once
+    decisions: all.flatMap(m => m.decisions).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
     conclusion: asking !== undefined ? asking.conclusion : base.conclusion,
     progress: frozen !== undefined ? frozen.progress : base.progress,
     phase: phased !== undefined ? phased.phase : base.phase,

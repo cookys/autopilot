@@ -17,6 +17,7 @@
  * recommendation, why, blocks, not_authorized (why the owner must decide, depth-0 may not), source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js).
  * `open` appends one entry and never overwrites another; `close --id` removes exactly that entry (idempotent) and removes
  * the file when the last one goes. The watcher reads the file into the job page / live pane (src/status/decision-input.js).
+ * `show` and `close --id` cover EVERY scope file of the project (unbound + each root), since a session's root can change mid-way; `open` writes only the current scope.
  * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
  *
  * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). Everything except
@@ -33,7 +34,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
-const { scopeKeyOf, commonDirOf } = require('../src/status/scope-key');
+const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
 const SCHEMA = 'autopilot.decision/2';
@@ -103,6 +104,18 @@ function scopeFile(cwd, root) {
   return { scope, dir, key: scopeKeyOf(scope.project_key, root || null), file: path.join(dir, `${scopeKeyOf(scope.project_key, root || null)}.json`) };
 }
 
+// Every scope file of this project (unbound + each root) with its valid entries: [{ file, entries }]. `show` and `close --id`
+// look across all of them, so a card opened before the session's root changed is still seen and closable. `open` writes only sf.file.
+function projectScopes(sf) {
+  const out = [];
+  for (const file of listScopeFiles(sf.dir, sf.scope.project_key)) {
+    if (!readScopeFile(file, { schema: SCHEMA, projectKey: sf.scope.project_key, identity: sf.scope.repo_identity })) continue;
+    const entries = readFile(file);
+    if (entries.length) out.push({ file, entries });
+  }
+  return out;
+}
+
 function writeEntries(sf, root, entries) {
   if (entries.length === 0) { fs.unlinkSync(sf.file); return; }
   const body = { schema: SCHEMA, root_run_id: root || null, repo_identity: sf.scope.repo_identity, project_key: sf.scope.project_key, decisions: entries };
@@ -148,14 +161,19 @@ function main(argv) {
   if (!sf) return usage('not inside a git repository');
 
   if (cmd === 'show') {
-    const entries = readFile(sf.file);
+    const entries = projectScopes(sf).flatMap((s) => s.entries)
+      .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
     if (entries.length === 0) { if (!args.json) process.stdout.write('no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries));
     return 0;
   }
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
-    const r = closeDecisionById(sf.file, args.id);
+    let r = { status: 'absent' };
+    for (const { file: f } of projectScopes(sf)) {
+      r = closeDecisionById(f, args.id);
+      if (r.status !== 'absent') break;
+    }
     if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
     process.stdout.write(r.status === 'closed' ? `closed ${args.id}\n` : `not open: ${args.id}\n`);
     return 0;

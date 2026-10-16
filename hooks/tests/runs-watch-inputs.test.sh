@@ -65,7 +65,7 @@ odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 
 eq 'Q one?,Q two?' "$(jf "$SB/show.out" 'v.decisions.map((d)=>d.question).join(",")')" "show --json prints every open entry"
 odo show --root-run-id R1 > "$SB/show.txt"; eq 0 "$?" "show (text) exits 0"
 eq 'yes' "$(grep -q 'Q one?' "$SB/show.txt" && grep -q 'Q two?' "$SB/show.txt" && grep -q 'BG one' "$SB/show.txt" && grep -q 'not_authorized: NA one' "$SB/show.txt" && echo yes || echo no)" "show (text) lists both questions with their context"
-odo show --root-run-id R-none --json > "$SB/show2.out"; eq 1 "$?" "show --json exits 1 when none is open (other root)"
+odo show --root-run-id R-none --json > "$SB/show2.out"; eq 0 "$?" "show --json from another root still lists the project's open questions (every scope file counts)"
 odo close --root-run-id R1 > /dev/null; eq 2 "$?" "close without --id is a usage error (it would be ambiguous)"
 odo close --id "$ID1" --root-run-id R1 > "$SB/close.out"; eq 0 "$?" "close --id removes one entry"
 eq "$ID2" "$(jf "$F1" 'v.decisions.map((d)=>d.id).join(",")')" "closing one entry leaves the other"

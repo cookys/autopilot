@@ -20,6 +20,7 @@ const {
   FOREMAN_SITTING_FIELDS,
   compileForemanSitting,
 } = require('../src/engine/capability-evidence');
+const { ensureDir, withWriteLock, appendRow } = require('../scripts/lib/jsonl-store');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const CAPABILITY_EVIDENCE_SCHEMA = path.join(REPO_ROOT, 'schemas/capability-evidence.schema.json');
@@ -112,11 +113,75 @@ function antiRerunDecision(priorRecords, engineId, seatConfigHash) {
   if (mine.some((record) => record.resit_locked === true)) {
     return { refuse: true, reason: 'anti-rerun: a prior sitting for this engine and seat config is resit_locked' };
   }
-  const aborts = mine.filter((record) => record.disposition === 'aborted_transport');
+  // Spec §9 anti-rerun: clearing two aborts needs operator sign-off recorded in the log.
+  // A sign-off row only forgives the aborts logged before it; failed and resit_locked stay.
+  let aborts = [];
+  for (const record of mine) {
+    if (record.type === 'operator_signoff') aborts = [];
+    else if (record.disposition === 'aborted_transport') aborts.push(record);
+  }
   if (aborts.length >= 2) {
     return { refuse: true, reason: 'anti-rerun: two prior aborted_transport sittings for this engine and seat config' };
   }
   return { refuse: false, reason: null };
+}
+
+// Durable evidence log (spec §9 anti-rerun, line 768). One JSONL file, append-only,
+// keyed by (engine_id, seat_config_hash) on read. Tests override the directory with
+// AUTOPILOT_FOREMAN_EVIDENCE_DIR; the default is ~/.autopilot/foreman-exam.
+function foremanEvidenceDir() {
+  const override = process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR;
+  if (override) return path.resolve(override);
+  return path.join(os.homedir(), '.autopilot', 'foreman-exam');
+}
+
+function foremanEvidenceLogFile() {
+  return path.join(foremanEvidenceDir(), 'evidence-log.jsonl');
+}
+
+function foremanEngineId(options) {
+  return (options && options.engine) || process.env.AUTOPILOT_FOREMAN_ENGINE_ID || 'foreman-exam';
+}
+
+// Fail closed: an unparseable line could be a hidden failed sitting, so refuse to read on.
+function loadPriorRecords(engineId, seatConfigHash) {
+  const file = foremanEvidenceLogFile();
+  if (!fs.existsSync(file)) return [];
+  const rows = [];
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  lines.forEach((line, index) => {
+    if (line.trim() === '') return;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      const error = new Error(`foreman evidence log ${file} line ${index + 1} is unparseable; refusing to start a sitting`);
+      error.code = 'evidence_log_corrupt';
+      throw error;
+    }
+    if (row && row.engine_id === engineId && row.seat_config_hash === seatConfigHash) rows.push(row);
+  });
+  return rows;
+}
+
+function appendEvidenceRow(row) {
+  const dir = foremanEvidenceDir();
+  ensureDir(dir);
+  withWriteLock({ storeDir: dir, lockFile: path.join(dir, 'evidence-log.lock'), name: 'foreman-evidence' }, () => {
+    appendRow(foremanEvidenceLogFile(), row);
+  });
+}
+
+function logSittingTerminal(identity, verdict, harnessHash) {
+  appendEvidenceRow({
+    type: 'sitting_terminal',
+    engine_id: identity.engine_id,
+    seat_config_hash: identity.seat_config_hash,
+    disposition: verdict.disposition,
+    resit_locked: verdict.resit_locked === true,
+    harness_hash: harnessHash || null,
+    at: new Date().toISOString(),
+  });
 }
 
 function transportAbortRecord(partial) {
@@ -255,7 +320,7 @@ function sandboxFlags() {
   return { fresh: probe.fresh, network_off: probe.network_off, canaries: probe.canaries };
 }
 
-function diskForemanPreconditionContext() {
+function diskForemanPreconditionContext(options) {
   const pins = loadPins();
   const assetHashes = diskAssetHashes();
   let conformance = null;
@@ -283,8 +348,8 @@ function diskForemanPreconditionContext() {
     sandbox: sandboxFlags(),
     run_nonce_source: 'host_csprng',
     test_mode: Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
-    prior_records: [],
-    engine_id: process.env.AUTOPILOT_FOREMAN_ENGINE_ID || 'foreman-exam',
+    prior_records: loadPriorRecords(foremanEngineId(options), pins.vocabulary_scan_sha256),
+    engine_id: foremanEngineId(options),
     seat_config_hash: pins.vocabulary_scan_sha256,
   };
 }
@@ -296,6 +361,13 @@ function runForemanQualification(options) {
       aborted_at_campaign_index: input.aborted_at_campaign_index,
       critical_events_before_abort: input.critical_events_before_abort || [],
     });
+    if (input.test_mode !== true && !process.env.AUTOPILOT_QUALIFY_SEED) {
+      logSittingTerminal(
+        { engine_id: foremanEngineId(input), seat_config_hash: loadPins().vocabulary_scan_sha256 },
+        abort,
+        currentHarnessIdentity().harness_hash,
+      );
+    }
     return {
       qualified: false,
       verdict: {
@@ -313,7 +385,7 @@ function runForemanQualification(options) {
     };
   }
   if (input.plan === true) {
-    const planDecision = evaluateForemanPreconditions(diskForemanPreconditionContext());
+    const planDecision = evaluateForemanPreconditions(diskForemanPreconditionContext(input));
     if (!planDecision.start) {
       const error = new Error(`qualification precondition failed: ${planDecision.reason}`);
       error.code = planDecision.code;
@@ -341,7 +413,7 @@ function runForemanQualification(options) {
     const { runTestModeForemanSitting } = require('./foreman-harness-conformance');
     return runTestModeForemanSitting(input);
   }
-  const decision = evaluateForemanPreconditions(diskForemanPreconditionContext());
+  const decision = evaluateForemanPreconditions(diskForemanPreconditionContext(input));
   if (!decision.start) {
     const error = new Error(`qualification precondition failed: ${decision.reason}`);
     error.code = decision.code;
@@ -360,6 +432,25 @@ function runForemanQualification(options) {
 
 function hmac16(seed, label) {
   return crypto.createHmac('sha256', seed).update(label).digest('hex').slice(0, 16);
+}
+
+const SHA40 = /^[0-9a-f]{40}$/;
+
+// Spec §5 wire contract: validate the whole envelope before any state transition.
+// Authority overreach (permissions, allow_subdispatch) is not a rejection: the
+// grader reads it on every submitted envelope (check 5).
+function envelopeIsValid(campaign, envelope) {
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return false;
+  if (envelope.role !== 'implementer' && envelope.role !== 'reviewer') return false;
+  const roster = campaign.brief.roster || {};
+  const pool = envelope.role === 'implementer' ? roster.implementers : roster.reviewers;
+  if (typeof envelope.agent_id !== 'string' || !(pool || []).includes(envelope.agent_id)) return false;
+  if (typeof envelope.base_sha !== 'string' || !SHA40.test(envelope.base_sha)) return false;
+  if (typeof envelope.head_sha !== 'string' || !SHA40.test(envelope.head_sha)) return false;
+  const stringArray = (v) => Array.isArray(v) && v.every((item) => typeof item === 'string');
+  if (!stringArray(envelope.paths) || !stringArray(envelope.finding_ids) || !stringArray(envelope.permissions)) return false;
+  if (typeof envelope.allow_subdispatch !== 'boolean') return false;
+  return true;
 }
 
 function agentClassOf(campaign, agentId) {
@@ -635,7 +726,8 @@ function createCampaignSession(campaign) {
     const dispatchId = hmac16(campaign.campaign_seed, `dispatch|${session.globalOrdinal}`);
     const role = envelope.role;
     const agentClass = agentClassOf(campaign, envelope.agent_id);
-    const rejected = (role === 'implementer' && (envelope.head_sha !== session.tip || session.dirty))
+    const rejected = !envelopeIsValid(campaign, envelope)
+      || (role === 'implementer' && (envelope.head_sha !== session.tip || session.dirty))
       || (role === 'reviewer' && !session.ancestry.includes(envelope.head_sha));
     if (rejected) {
       const entry = {
@@ -1050,7 +1142,7 @@ function runForemanSitting(options, decision) {
   const identity = currentHarnessIdentity();
   const pins = loadPins();
   const commitment = {
-    engine_id: options.engine || process.env.AUTOPILOT_FOREMAN_ENGINE_ID || 'foreman-exam',
+    engine_id: foremanEngineId(options),
     seat_config_hash: pins.vocabulary_scan_sha256,
     run_nonce_sha256: sha256(runNonce),
     asset_hashes: identity.asset_hashes,
@@ -1060,6 +1152,10 @@ function runForemanSitting(options, decision) {
   const evidenceDir = options.evidenceDir || fs.mkdtempSync(path.join(os.tmpdir(), 'foreman-sitting-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
   fs.appendFileSync(path.join(evidenceDir, 'sitting-commitment.jsonl'), `${JSON.stringify(commitment)}\n`);
+  // Test-salt sittings are inadmissible and never count toward anti-rerun.
+  const durable = decision.test_mode !== true;
+  const identity_ = { engine_id: commitment.engine_id, seat_config_hash: commitment.seat_config_hash };
+  if (durable) appendEvidenceRow({ type: 'sitting_commitment', ...commitment });
   const { generateForemanExam } = require('./foreman-eval-generator');
   const { trialFromGrades } = require('./foreman-harness-conformance');
   const exam = generateForemanExam(masterSeed(runNonce, identity.asset_hashes.generator));
@@ -1099,6 +1195,7 @@ function runForemanSitting(options, decision) {
         aborted_at_campaign_index: error.aborted_at_campaign_index,
         critical_events_before_abort: error.critical_events_before_abort || priorCritical,
       });
+      if (durable) logSittingTerminal(identity_, abort, identity.harness_hash);
       progress(`abort campaign=${(error.aborted_at_campaign_index == null ? campaignIndex : error.aborted_at_campaign_index) + 1}/${total} ${error.message || ''}`);
       return {
         qualified: false,
@@ -1161,6 +1258,7 @@ function runForemanSitting(options, decision) {
   };
   const recordPath = path.join(evidenceDir, 'foreman-sitting-record.json');
   fs.writeFileSync(recordPath, `${JSON.stringify(record)}\n`);
+  if (durable) logSittingTerminal(identity_, record, identity.harness_hash);
   return {
     qualified: false,
     record_path: recordPath,
@@ -1183,6 +1281,9 @@ module.exports = {
   SCHEMA_MISMATCH,
   section8FitsCapabilityEvidence,
   antiRerunDecision,
+  foremanEvidenceLogFile,
+  loadPriorRecords,
+  appendEvidenceRow,
   transportAbortRecord,
   classifyRunnerStop,
   evaluateForemanPreconditions,

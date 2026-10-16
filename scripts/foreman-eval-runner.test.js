@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
+// Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
+const fs = require('fs');
+const os = require('os');
+process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+
 const assert = require('assert');
 const {
   section8FitsCapabilityEvidence,
@@ -133,6 +138,27 @@ check(classifyRunnerStop('transport_error') === 'aborted_transport', 'transport 
 check(classifyRunnerStop('budget_overrun') === 'graded', 'a candidate budget overrun stays graded');
 check(classifyRunnerStop('max_tokens_per_sitting') === 'failed', 'the sitting token cap ends as failed');
 
+// Durable log: operator sign-off forgives earlier aborts only; a failed identity stays locked.
+const abortRow = { engine_id: 'engine-a', seat_config_hash: hash, disposition: 'aborted_transport', resit_locked: false };
+check(antiRerunDecision([abortRow, abortRow, { type: 'operator_signoff', engine_id: 'engine-a', seat_config_hash: hash }], 'engine-a', hash).refuse === false,
+  'an operator sign-off after two aborts clears them');
+check(antiRerunDecision([abortRow, { type: 'operator_signoff', engine_id: 'engine-a', seat_config_hash: hash }, abortRow, abortRow], 'engine-a', hash).refuse === true,
+  'aborts after the sign-off count again');
+check(antiRerunDecision([{ ...abortRow, disposition: 'failed' }, { type: 'operator_signoff', engine_id: 'engine-a', seat_config_hash: hash }], 'engine-a', hash).refuse === true,
+  'a sign-off does not clear a failed sitting');
+check(antiRerunDecision([{ ...abortRow, disposition: 'passed' }], 'engine-a', hash).refuse === false,
+  'a passed sitting never blocks a resit');
+
+const { appendEvidenceRow, loadPriorRecords, foremanEvidenceLogFile } = require('../evals/foreman-eval-runner');
+check(foremanEvidenceLogFile().startsWith(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR), 'the evidence log lives under the override dir');
+appendEvidenceRow({ type: 'sitting_terminal', engine_id: 'e1', seat_config_hash: 's1', disposition: 'failed', resit_locked: false });
+appendEvidenceRow({ type: 'sitting_terminal', engine_id: 'e2', seat_config_hash: 's1', disposition: 'passed', resit_locked: false });
+check(loadPriorRecords('e1', 's1').length === 1 && loadPriorRecords('e1', 's2').length === 0, 'records load by (engine_id, seat_config_hash)');
+require('fs').appendFileSync(foremanEvidenceLogFile(), 'not json\n');
+assert.throws(() => loadPriorRecords('e1', 's1'), (error) => error.code === 'evidence_log_corrupt', 'a corrupt log fails closed');
+assertions += 1;
+
+require('fs').rmSync(foremanEvidenceLogFile());
 const disk = diskForemanPreconditionContext();
 const diskDecision = evaluateForemanPreconditions(disk);
 check(diskDecision.start === true, `disk pins and conformance allow a sitting to start (${diskDecision.reason})`);
@@ -154,8 +180,8 @@ check(!JSON.stringify(plan).includes(SCHEMA_MISMATCH), 'schema mismatch is not r
 const bareDispatch = {
   role: 'implementer',
   agent_id: 'implementer_id_6b3a4dbd5eca',
-  base_sha: 'a5b11803962b73ab',
-  head_sha: 'a5b11803962b73ab',
+  base_sha: 'a5b11803962b73ab000000000000000000000000',
+  head_sha: 'a5b11803962b73ab000000000000000000000000',
   paths: ['fence_prefix_d51215af6b7d/'],
   finding_ids: [],
   permissions: ['child_permission_0_d92b10910f70'],

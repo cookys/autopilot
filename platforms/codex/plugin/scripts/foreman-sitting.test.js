@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
+// Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
+const fs = require('fs');
+const os = require('os');
+process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+
 // Phase 4 sitting. No network and no live model: an in-process scripted
 // foreman dispatches, commits, and returns done on A1, and returns blocked
 // on D. Both campaigns are graded. A transport abort is not what this is.
@@ -86,7 +91,7 @@ function scriptedForeman(session, campaign) {
   }));
 }
 
-const sitting = runForemanQualification({ foreman: scriptedForeman });
+const sitting = runForemanQualification({ foreman: scriptedForeman, engine: 'engine-scripted' });
 check(sitting.verdict.graded === true, 'a scripted sitting is graded');
 check(sitting.verdict.pass !== null && sitting.verdict.fail !== null, 'a graded sitting is not a transport abort');
 check(sitting.verdict.evidence && sitting.verdict.evidence.trials.length === 2, 'the sitting record has both trials');
@@ -97,6 +102,58 @@ check(done.length === 2 && done.every((campaign) => campaign.verdict_raw === 'do
 check(done.every((campaign) => campaign.correct === true), `A1 grades correct (${JSON.stringify(done.map((campaign) => campaign.checks))})`);
 check(blocked.length === 2 && blocked.every((campaign) => campaign.verdict_raw === 'blocked'), 'D graded blocked');
 check(blocked.every((campaign) => campaign.checks), 'D produced a grade');
+
+// Spec §9 anti-rerun: the sitting above wrote a commitment and a terminal row to the
+// durable log, and a later sitting for the same identity reloads them.
+const logFile = require('../evals/foreman-eval-runner').foremanEvidenceLogFile();
+check(logFile.startsWith(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR), 'the evidence log honours the temp-dir override');
+const logRows = fs.readFileSync(logFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+check(logRows.some((row) => row.type === 'sitting_commitment'), 'the sitting appended its commitment to the durable log');
+check(logRows.some((row) => row.type === 'sitting_terminal' && row.disposition === sitting.verdict.disposition),
+  'the sitting appended its terminal disposition to the durable log');
+assert.throws(() => runForemanQualification({ foreman: scriptedForeman, engine: 'engine-scripted' }),
+  (error) => error.code === 'anti_rerun', 'a real failed sitting locks its own identity on the next attempt');
+assertions += 1;
+const { appendEvidenceRow, loadPriorRecords } = require('../evals/foreman-eval-runner');
+const seatHash = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../evals/foreman-asset-pins.json'), 'utf8')).vocabulary_scan_sha256;
+check(loadPriorRecords('engine-scripted', seatHash).length >= 2, 'prior records load by (engine_id, seat_config_hash)');
+appendEvidenceRow({ type: 'sitting_terminal', engine_id: 'engine-failed', seat_config_hash: seatHash, disposition: 'failed', resit_locked: false });
+assert.throws(() => runForemanQualification({ foreman: scriptedForeman, engine: 'engine-failed' }),
+  (error) => error.code === 'anti_rerun', 'a failed identity cannot sit again');
+assertions += 1;
+appendEvidenceRow({ type: 'sitting_terminal', engine_id: 'engine-passed', seat_config_hash: seatHash, disposition: 'passed', resit_locked: false });
+const again = runForemanQualification({ foreman: scriptedForeman, engine: 'engine-passed' });
+check(again.verdict.graded === true, 'a passed identity is never blocked (owner rule: a pass stands)');
+const abortOnce = () => runForemanQualification({ foreman: () => { throw new Error('boom'); }, engine: 'engine-aborts' });
+check(abortOnce().verdict.disposition === 'aborted_transport', 'a transport error aborts the sitting');
+check(abortOnce().verdict.disposition === 'aborted_transport', 'the second abort still sits (two allowed)');
+assert.throws(abortOnce, (error) => error.code === 'anti_rerun', 'two logged aborts refuse the third sitting');
+assertions += 1;
+appendEvidenceRow({ type: 'operator_signoff', engine_id: 'engine-aborts', seat_config_hash: seatHash });
+check(abortOnce().verdict.disposition === 'aborted_transport', 'an operator sign-off in the log clears the abort count');
+
+// Spec §5 wire contract: a malformed SHA or an unrostered agent is envelope_rejected.
+let wire = null;
+runForemanQualification({
+  engine: 'engine-wire',
+  foreman: (session, campaign) => {
+    if (campaign.family !== 'A1' || wire) { scriptedForeman(session, campaign); return; }
+    const good = envelope(campaign, session, 'implementer', campaign.brief.roster.implementers[0]);
+    wire = {
+      tip40: /^[0-9a-f]{40}$/.test(session.tip),
+      shortSha: session.dispatch({ ...good, head_sha: good.head_sha.slice(0, 39) }).status,
+      badBase: session.dispatch({ ...good, base_sha: 'zz' }).status,
+      stranger: session.dispatch({ ...good, agent_id: 'not-on-roster' }).status,
+      reviewerAsImpl: session.dispatch({ ...good, agent_id: campaign.brief.roster.reviewers[0] }).status,
+      badType: session.dispatch({ ...good, allow_subdispatch: 'no' }).status,
+    };
+    scriptedForeman(session, campaign);
+  },
+});
+check(wire.tip40, 'generated tree ids are 40-hex');
+check(wire.shortSha === 'envelope_rejected' && wire.badBase === 'envelope_rejected', 'a malformed SHA is envelope_rejected');
+check(wire.stranger === 'envelope_rejected' && wire.reviewerAsImpl === 'envelope_rejected', 'an agent outside the role roster is envelope_rejected');
+check(wire.badType === 'envelope_rejected', 'a wrongly typed envelope field is envelope_rejected');
 
 const plan = spawnSync(process.execPath, ['scripts/engine-qualify.js', 'foreman', '--plan'], {
   cwd: path.resolve(__dirname, '..'),

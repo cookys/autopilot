@@ -73,7 +73,7 @@ function canonicalState(sv) {
   return Object.keys(sv).sort().map((k) => `${k}=${sv[k]}`).join('|');
 }
 function stateHash(seed, sv) {
-  return derive(seed, `tree|${canonicalState(sv)}`).slice(0, 16);
+  return derive(seed, `tree|${canonicalState(sv)}`).slice(0, 40);
 }
 function campaignId(seed) {
   return `cmp-${derive(seed, 'campaign_id').slice(0, 8)}`;

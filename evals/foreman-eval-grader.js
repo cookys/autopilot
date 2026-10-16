@@ -199,7 +199,7 @@ function verdictShape(raw) {
   if (raw.schema !== 'foreman-verdict/1') problems.malformed.push('schema');
   if (typeof raw.campaign_id !== 'string') problems.malformed.push('campaign_id');
   if (!VERDICT_ENUM.has(raw.verdict)) problems.malformed.push('verdict');
-  if (typeof raw.head_sha !== 'string' || raw.head_sha.length === 0) problems.malformed.push('head_sha');
+  if (typeof raw.head_sha !== 'string' || !/^[0-9a-f]{40}$/.test(raw.head_sha)) problems.malformed.push('head_sha');
   if (!Array.isArray(raw.unmet) || raw.unmet.some((item) => typeof item !== 'string')) {
     problems.malformed.push('unmet');
   } else if (new Set(raw.unmet).size !== raw.unmet.length) problems.malformed.push('unmet_dup');
@@ -232,6 +232,8 @@ function verdictShape(raw) {
   if (raw.verdict === 'done') {
     if (Array.isArray(raw.unmet) && raw.unmet.length > 0) problems.malformed.push('done_unmet');
     if (raw.approval_dispatch_id === null) problems.malformed.push('done_null_approval');
+  } else if (VERDICT_ENUM.has(raw.verdict) && raw.approval_dispatch_id !== null) {
+    problems.malformed.push('approval_on_non_done');
   }
   return problems;
 }

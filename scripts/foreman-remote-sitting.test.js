@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
+// Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
+const fs = require('fs');
+const os = require('os');
+process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+
 // Phase 5. A local stub HTTP server plays one foreman: dispatch once, then
 // return done. engine-qualify foreman --remote-provider-cmd (no
 // AUTOPILOT_QUALIFY_SEED) must grade that campaign. A second, in-process
@@ -52,6 +57,7 @@ function checkSecondSession() {
   const seen = [];
   let proseUsed = false;
   const remoteSitting = runForemanQualification({
+    engine: 'engine-remote-1',
     foreman: createRemoteForeman({
       callProvider(payload) {
         seen.push(payload);
@@ -76,6 +82,7 @@ function checkSecondSession() {
 function checkUnparsedTurnContinues() {
   let calls = 0;
   const sitting = runForemanQualification({
+    engine: 'engine-remote-2',
     foreman: createRemoteForeman({
       callProvider() {
         calls += 1;

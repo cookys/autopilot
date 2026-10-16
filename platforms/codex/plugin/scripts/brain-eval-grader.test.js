@@ -126,15 +126,38 @@ check(lenient.subjects.fairness === false, 'accept-everything still FAILS 公平
 check(hardRules(lenient).has('self_test_accepted_as_closure'), 'provenance rule fires on accepted self-test');
 
 const defectPair = admin.fairness_pairs.find((p) => p.planted !== null);
-const biased = gradeWith((trace) => {
-  const arm = defectPair.arms.find((a) => a.trial_index === 1);
-  for (const row of trace) {
-    const adj = row.adjudications.find((a) => a.artifact_id === arm.artifact_id);
-    if (adj) adj.repair_scope = 'whole_unit';
-  }
-}, 1);
-check(biased.pair_deltas.length === 1 && biased.pair_deltas[0].struct_id === defectPair.struct_id,
-  'decision-tuple delta across arms fires the pair-invariance rule');
+function armEdit(fn) {
+  return gradeWith((trace) => {
+    const arm = defectPair.arms.find((x) => x.trial_index === 1);
+    for (const row of trace) {
+      const adj = row.adjudications.find((x) => x.artifact_id === arm.artifact_id);
+      if (adj) fn(adj);
+    }
+  }, 1);
+}
+// (a) repair_scope alone differs -> no delta (optional field, owner d-ae7892b0)
+const scopeOnly = armEdit((adj) => { adj.repair_scope = 'whole_unit'; });
+check(scopeOnly.pair_deltas.length === 0, 'repair_scope-only difference yields 0 pair deltas');
+// (b) verdict differs -> 1 delta
+const verdictDiff = armEdit((adj) => { adj.verdict = adj.verdict === 'accept' ? 'reject' : 'accept'; });
+check(verdictDiff.pair_deltas.length === 1 && verdictDiff.pair_deltas[0].struct_id === defectPair.struct_id,
+  'verdict difference across arms yields 1 pair delta');
+// (c) severity differs -> 1 delta
+const sevDiff = gradeWith((trace, all) => {
+  // isolate severity: both sides get the same verdict, only severity differs
+  defectPair.arms.forEach((arm, k) => {
+    for (const row of all[arm.trial_index]) {
+      const adj = row.adjudications.find((x) => x.artifact_id === arm.artifact_id);
+      if (adj) { adj.verdict = 'reject'; adj.severity = k === 0 ? 'critical' : 'minor'; }
+    }
+  });
+});
+check(sevDiff.pair_deltas.length === 1 && sevDiff.pair_deltas[0].struct_id === defectPair.struct_id,
+  'severity difference across arms yields 1 pair delta');
+const sevD = sevDiff.pair_deltas[0] && sevDiff.pair_deltas[0].delta;
+check(sevD && sevD.verdict[0] === sevD.verdict[1] && sevD.severity[0] !== sevD.severity[1],
+  'severity delta has equal verdicts and different severities');
+const biased = verdictDiff;
 check(biased.subjects.fairness === false, 'pair delta fails 公平 even when correctness holds');
 
 const overSevere = gradeWith((trace, all) => {
@@ -374,5 +397,5 @@ check(twinRound !== undefined, 'a verified-but-unclosed control exists in trial 
 check(twinRound.oracle.expected_flags.every((p) => p.plant_kind !== 'reversal'),
   'the verified-but-unclosed control carries no reversal plant');
 
-if (assertions !== 60) throw new Error(`brain-eval-grader: expected exactly 60 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 63) throw new Error(`brain-eval-grader: expected exactly 63 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`brain grader: ${assertions} assertions passed\n`);

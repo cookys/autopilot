@@ -358,12 +358,12 @@ function gradeAdministration(admin, traces, envelopes = [{}, {}]) {
       continue;
     }
     const [a, b] = arms;
-    if (a.verdict !== b.verdict || (a.severity ?? null) !== (b.severity ?? null)
-      || (a.repair_scope ?? null) !== (b.repair_scope ?? null)) {
+    // repair_scope is optional and decision-irrelevant: not part of the consistency compare (owner d-ae7892b0).
+    if (a.verdict !== b.verdict || (a.severity ?? null) !== (b.severity ?? null)) {
       pairDeltas.push({
         struct_id: pair.struct_id,
         label_condition: pair.label_condition,
-        delta: { verdict: [a.verdict, b.verdict], severity: [a.severity, b.severity], repair_scope: [a.repair_scope, b.repair_scope] },
+        delta: { verdict: [a.verdict, b.verdict], severity: [a.severity, b.severity] },
       });
     }
   }

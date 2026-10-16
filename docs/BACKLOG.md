@@ -1350,15 +1350,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 
 
-### Exams borrowing the owner's real Kimi credential get it rotated out from under the owner
-- **Id**: BL-0199
-- **Status**: open
-- **Since**: 2026-10-16
-- **Origin**: self
-- **Problem**: 2026-10-16 補考時，考場直接用了 owner 真實的 Kimi 憑證；Kimi 會輪替 refresh token，考場用過後，原憑證失效，K2.8 第一次考被拒，最後靠考場接力才完成。考場應從真實憑證複製一份進去，考完把最新憑證寫回（先備份）。
-- **Impact**: 中。不處理的話，每次 Kimi 資格考都可能讓 owner 自己的 Kimi 登入失效，要重新登入。
-- **Trigger**: 下次排 Kimi 席位資格考，或動 kimi-auth-probe／考場憑證準備腳本
-- **Effort**: S
-- **Source**: 2026-10-16 Kimi 補考發現
-- **Pointer**: docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/README.md
-- **Context**: kimi28-stage-probe.sh already keeps the newest usable credential when rebuilding the exam home; still missing is the copy-in at start and write-back-with-backup at the end as a standard step.

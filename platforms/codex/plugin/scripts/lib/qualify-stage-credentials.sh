@@ -32,6 +32,16 @@ qualify_stage_credential() {
     return 0
   fi
 
+  # BL-0199: any recipe staging a Kimi credential gets the exit write-back automatically (new entry points cannot forget).
+  case "$real_file" in
+    */.kimi-code/credentials/kimi-code.json|*/.kimi-code/oauth/kimi-code)
+      case "$staged_file" in
+        */credentials/kimi-code.json|*/oauth/kimi-code) ;;
+        *) echo "qualify: WARNING staged kimi path has unexpected layout: $staged_file" >&2 ;;
+      esac
+      [ "$mode" = "execute" ] && qualify_kimi_arm_writeback "$(dirname -- "$(dirname -- "$staged_file")")" "$(dirname -- "$(dirname -- "$real_file")")" ;;
+  esac
+
   if [ ! -f "$staged_file" ] || [ "$staged_sha" != "$real_sha" ]; then
     cp -- "$real_file" "$staged_file"
     chmod 600 "$staged_file" || true
@@ -50,4 +60,103 @@ qualify_stage_identity() {
   fi
 
   return 0
+}
+
+# --- Kimi write-back (BL-0199) -------------------------------------------------
+# Kimi rotates its refresh token on every use. The exam must therefore (1) work on a COPY seeded into the staged home
+# (qualify_stage_credential above; the real ~/.kimi-code is never handed to a child) and (2) at exit write the newest
+# credential BACK to the real file, after backing the original up as <file>.bak-<UTC YYYYmmddTHHMMSS>.<pid>.<nanos>. Standard step, not optional.
+# Overrides for tests: QUALIFY_KIMI_REAL_DIR (default $HOME/.kimi-code), QUALIFY_KIMI_LOCK (default <real dir>/.qualify-writeback.lock).
+
+# TRAP RULES (read before touching traps in a recipe): arming CHAINS onto the caller's existing EXIT/INT/TERM/HUP actions
+# (write-back first, because losing a rotated credential is the costly failure; the caller's own action runs after it with
+# the original exit status). A caller that sets an EXIT/INT/TERM/HUP trap AFTER arming must NOT use a bare `trap`
+# (that would silently drop the write-back): use `qualify_trap_add '<cmd>' EXIT [SIG...]`. Arm in the main shell only:
+# inside $(...), a pipeline or ( ) the trap dies with the subshell, so arm warns loudly on stderr when BASHPID != $$.
+
+# qualify_trap_add <cmd> <SIG>... : APPEND <cmd> after each signal's existing action (so it runs AFTER the write-back,
+# which arm put first). An intentionally ignored signal (trap '' SIG) stays ignored.
+qualify_trap_add() { _qualify_trap_join append "$@"; }
+_qualify_trap_join() {
+  local how=${1-} cmd=${2-} sig old
+  shift 2
+  for sig in "$@"; do
+    old=""
+    eval "set -- $(trap -p "$sig")" 2>/dev/null
+    if [ "${1-}" = trap ]; then
+      old=${3-}
+      [ -z "$old" ] && [ "$sig" != EXIT ] && continue
+    fi
+    if [ -z "$old" ]; then trap -- "$cmd" "$sig"
+    elif [ "$how" = prepend ]; then trap -- "$cmd; $old" "$sig"
+    else trap -- "$old; $cmd" "$sig"; fi
+  done
+}
+
+# qualify_writeback_credential <staged_file> <real_file>
+# Writes staged over real only when staged is non-empty, differs from real, is newer than real, and (for the credentials
+# json) carries a non-empty refresh_token. Backup first, then temp+rename, all created 0600 (umask 077), under flock so
+# parallel exams cannot overwrite each other. Unchanged / older staged => real untouched, no backup.
+qualify_writeback_credential() {
+  local staged=${1-} real=${2-} lock
+  [ -s "$staged" ] || return 0
+  [ -f "$real" ] || return 0
+  cmp -s -- "$staged" "$real" && return 0
+  [ "$staged" -nt "$real" ] || return 0
+  case "$staged" in
+    */credentials/kimi-code.json)
+      if ! grep -Eq '"refresh_token"[[:space:]]*:[[:space:]]*"[^"]+"' -- "$staged"; then
+        echo "qualify: staged credential has no non-empty refresh_token, NOT written back: $staged" >&2
+        return 0
+      fi ;;
+  esac
+  lock="${QUALIFY_KIMI_LOCK:-$(dirname -- "$real")/.qualify-writeback.lock}"
+  (
+    umask 077
+    flock -w 60 9 || { echo "qualify: writeback lock timeout, real credential left untouched: $real" >&2; exit 1; }
+    # Re-check under the lock: another exam may have written back already.
+    cmp -s -- "$staged" "$real" && exit 0
+    [ "$staged" -nt "$real" ] || exit 0
+    bak="${real}.bak-$(date -u +%Y%m%dT%H%M%S).$$.$(date +%N)"
+    { cat -- "$real" >"$bak" && touch -r "$real" -- "$bak"; } || exit 1
+    tmp="${real}.tmp.$$"
+    { cat -- "$staged" >"$tmp" && touch -r "$staged" -- "$tmp" && chmod 600 "$tmp" && mv -f -- "$tmp" "$real"; } || { rm -f -- "$tmp"; exit 1; }
+    echo "qualify: wrote rotated credential back to $real (backup $bak)" >&2
+  ) 9>>"$lock"
+}
+
+# qualify_kimi_arm_writeback <staged_kimi_dir> [<real_kimi_dir>]
+# Arms the exit write-back (chained, see TRAP RULES). Idempotent per (staged, real) pair. Call in the main shell.
+qualify_kimi_arm_writeback() {
+  local staged=${1-} real=${2:-${QUALIFY_KIMI_REAL_DIR:-$HOME/.kimi-code}} key
+  if [ "${BASHPID:-$$}" != "$$" ]; then
+    echo "qualify: WARNING qualify_kimi_arm_writeback called in a subshell; its trap dies with the subshell and the credential will NOT be written back" >&2
+  fi
+  key="$staged|$real"
+  case "${QUALIFY_KIMI_ARMED:-}" in *"<$key>"*) return 0 ;; esac
+  QUALIFY_KIMI_ARMED="${QUALIFY_KIMI_ARMED:-}<$key>"
+  local q; q="$(printf '_qualify_kimi_finish %q %q' "$staged" "$real")"
+  _qualify_trap_join prepend "$q" EXIT
+  # Signals: write-back first, then the caller's own action if it had one (their semantics kept); with none, exit 128+N.
+  local sig n old
+  for sig in INT:130 TERM:143 HUP:129; do
+    n=${sig#*:}; sig=${sig%:*}; old=""
+    eval "set -- $(trap -p "$sig")" 2>/dev/null
+    if [ "${1-}" = trap ]; then
+      old=${3-}
+      [ -z "$old" ] && continue   # caller deliberately ignores this signal: keep it ignored
+    fi
+    if [ -n "$old" ]; then _qualify_trap_join prepend "$q" "$sig"; else trap -- "$q; exit $n" "$sig"; fi
+  done
+}
+
+# _qualify_kimi_finish <staged_dir> <real_dir> : idempotent, preserves the exit status it was entered with.
+_qualify_kimi_finish() {
+  local rc=$? staged=${1-} real=${2-} f n=0
+  for f in credentials/kimi-code.json oauth/kimi-code; do
+    [ -e "$staged/$f" ] && n=$((n+1))
+    qualify_writeback_credential "$staged/$f" "$real/$f" || true
+  done
+  [ "$n" -gt 0 ] || echo "qualify: WARNING no staged kimi credential under $staged (unexpected layout), nothing written back" >&2
+  return "$rc"
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # kimi28-stage-probe.sh — fresh isolated kimi home for the "K2.8 Preview" lane (model alias kimi-code/kimi-for-coding).
 # Rebuilds the staging dir from scratch every call (config.toml is copied only when absent, so a reused dir would keep a stale
-# model list), proves the CLI's own config labels that alias "2.8", then one tiny prompt. Never touches the real ~/.kimi-code writes.
+# model list), proves the CLI's own config labels that alias "2.8", then one tiny prompt. The real ~/.kimi-code is only read (copy-in); on exit the newest credential is written back after a .bak-<UTC> backup (BL-0199).
 # exit 0 usable, 3 credential/model unusable (uncharged beyond one tiny prompt).
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 source "$REPO/scripts/lib/qualify-stage-credentials.sh"

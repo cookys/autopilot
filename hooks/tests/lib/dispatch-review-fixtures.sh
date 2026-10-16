@@ -580,6 +580,25 @@ echo "$end"
 EOF
 chmod +x "$STUB_QODERCN_MARKER"
 
+# Qoder substituted the requested model ("using auto instead") on STDERR yet
+# printed a complete, valid SHIP block on stdout: the verdict is from a model
+# nobody asked for, so the review must be rejected (2026-10-16 Qwen3.8-Max-Preview).
+STUB_QODERCN_SUBST="$TEST_TMP/qoderclicn-subst"
+cat > "$STUB_QODERCN_SUBST" <<'EOF2'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+echo 'Model "Qwen3.8-Max-Preview" is not available right now; using "auto" instead. Use /model to choose another model.' >&2
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
+echo "$end"
+EOF2
+chmod +x "$STUB_QODERCN_SUBST"
+
 # A WELL-FORMED verdict block on stdout AND the engine process exits non-zero
 # (an engine that answers correctly then crashes on teardown) — no runner
 # previously exercised this combination end-to-end. Pins current production

@@ -207,7 +207,7 @@ function parseStrict(raw, schemaFile, semantic, maxBytes, semanticFn) {
   }
   let doc;
   try {
-    const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     try {
       preflightJsonSource(source, 'document');
     } catch (error) {

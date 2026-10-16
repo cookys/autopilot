@@ -161,6 +161,56 @@
    "file": "depth-257.json",
    "expect": "reject",
    "why": "257 nested arrays around a scalar: the scalar sits at depth 257 (root = 0); the limit is 256"
+  },
+  {
+   "file": "str-lone-high-value.json",
+   "expect": "reject",
+   "why": "lone high surrogate (\\ud800) in a string value"
+  },
+  {
+   "file": "str-lone-low-value.json",
+   "expect": "reject",
+   "why": "lone low surrogate (\\udc00) in a string value"
+  },
+  {
+   "file": "str-lone-high-at-end.json",
+   "expect": "reject",
+   "why": "high surrogate as the last unit of a string"
+  },
+  {
+   "file": "str-lone-surrogate-key.json",
+   "expect": "reject",
+   "why": "lone surrogate in an object key"
+  },
+  {
+   "file": "str-paired-surrogate.json",
+   "expect": "accept",
+   "why": "a valid escaped surrogate pair (U+1F600) in a value and in a key"
+  },
+  {
+   "file": "enc-encoded-surrogate.json",
+   "expect": "reject",
+   "why": "raw bytes ED A0 80 (a surrogate encoded as UTF-8)"
+  },
+  {
+   "file": "enc-truncated-sequence.json",
+   "expect": "reject",
+   "why": "truncated multi-byte sequence"
+  },
+  {
+   "file": "enc-lone-ff.json",
+   "expect": "reject",
+   "why": "lone 0xFF byte"
+  },
+  {
+   "file": "enc-bom.json",
+   "expect": "reject",
+   "why": "leading UTF-8 BOM: both sides refuse"
+  },
+  {
+   "file": "enc-valid-utf8.json",
+   "expect": "accept",
+   "why": "valid raw UTF-8 (e-acute and an astral emoji)"
   }
  ]
 }

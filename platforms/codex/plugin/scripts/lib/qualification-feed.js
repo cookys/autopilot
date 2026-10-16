@@ -30,6 +30,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { preflightJsonSource } = require('../validate-json-schema.js');
 
 // A feed is a disclosure document, not a bulk dataset. 8 MB is far above the real article (the
 // 2026-09-02 sample with 29 defaults / 1 strike / 53 priors is ~1 MB) and far below anything that
@@ -134,6 +135,16 @@ async function readBodyBounded(response, controller) {
  * Read a feed body from `--from`, which is either an https URL or a local path.
  * @returns {Promise<{ body: string, origin: string, kind: 'url'|'path' }>}
  */
+// Strict UTF-8: invalid bytes (an encoded surrogate ED A0 80, a truncated sequence, 0xFF) are refused
+// instead of becoming U+FFFD, and a leading BOM is kept so the JSON preflight refuses it.
+function decodeFeedBytes(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch (err) {
+    throw feedError(`qualification feed is not valid UTF-8 (${err.message})`);
+  }
+}
+
 async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
   if (typeof from !== 'string' || from.length === 0) {
     throw feedError('--from requires an https URL or a file path');
@@ -195,7 +206,7 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
       // change them (a BOM, a lone surrogate), and the digest has to describe what actually
       // arrived, since that is the value recorded in an adopted row's provenance.
       const raw = await readBodyBounded(response, controller);
-      return { body: raw.toString('utf8'), bytes: raw, origin: url.toString(), kind: 'url' };
+      return { body: decodeFeedBytes(raw), bytes: raw, origin: url.toString(), kind: 'url' };
     } finally {
       clearTimeout(timer);
     }
@@ -212,7 +223,7 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
   if (!stat.isFile()) throw feedError(`qualification feed is not a regular file: ${file}`);
   if (stat.size > MAX_FEED_BYTES) throw feedError(`qualification feed exceeds ${MAX_FEED_BYTES} bytes`);
   const bytes = fs.readFileSync(file);
-  return { body: bytes.toString('utf8'), bytes, origin: file, kind: 'path' };
+  return { body: decodeFeedBytes(bytes), bytes, origin: file, kind: 'path' };
 }
 
 /**
@@ -223,6 +234,7 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
 function parseFeed(body, origin, bytes) {
   let doc;
   try {
+    preflightJsonSource(body, 'qualification feed');
     doc = JSON.parse(body);
   } catch (err) {
     throw feedError(`qualification feed is not valid JSON (${err.message})`);

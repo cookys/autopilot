@@ -58,6 +58,20 @@ function valueError(message) {
   throw error;
 }
 
+function stringError(message) {
+  const error = new Error(message);
+  error.code = 'UNSUPPORTED_JSON_STRING';
+  throw error;
+}
+
+// A lone surrogate (unpaired U+D800-U+DFFF) cannot be written as UTF-8, so a
+// string or object key carrying one is rejected on every input path.
+function assertWellFormedString(text, where) {
+  if (!text.isWellFormed()) {
+    stringError(`${where} contains a lone surrogate (unpaired U+D800-U+DFFF), which is not representable in UTF-8`);
+  }
+}
+
 function inputError(message) {
   const error = new Error(message);
   error.code = 'INVALID_JSON_INPUT';
@@ -65,7 +79,11 @@ function inputError(message) {
 }
 
 function assertJsonValue(value, path, active = new Set()) {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'string') {
+    assertWellFormedString(value, path);
+    return;
+  }
+  if (value === null || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     // A finite JS double round-trips losslessly through JSON.stringify/JSON.parse
     // by spec (ECMA-262 Number::toString is the unique shortest decimal that
@@ -138,6 +156,7 @@ function assertJsonValue(value, path, active = new Set()) {
   }
   for (const key of Reflect.ownKeys(value)) {
     if (typeof key !== 'string') valueError(`${path} contains a symbol property`);
+    assertWellFormedString(key, `${path} object key`);
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor || descriptor.enumerable !== true
       || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
@@ -168,11 +187,14 @@ function preflightJsonSource(source, label) {
       const character = source[index];
       if (character === '"') {
         index += 1;
+        let decoded;
         try {
-          return JSON.parse(source.slice(start, index));
+          decoded = JSON.parse(source.slice(start, index));
         } catch (error) {
           fail(`invalid string: ${error.message}`);
         }
+        assertWellFormedString(decoded, `${label} string at offset ${start}`);
+        return decoded;
       }
       if (character === '\\') {
         index += 2;
@@ -655,7 +677,8 @@ function readJson(file, label) {
   let source;
   try {
     const bytes = fs.readFileSync(file);
-    source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+    // ignoreBOM keeps a leading U+FEFF in the text, so the preflight refuses it (as Python's json.loads does).
   } catch (error) {
     const wrapped = new Error(`${label} is not readable JSON: ${error.message}`);
     wrapped.code = 'INVALID_JSON_INPUT';

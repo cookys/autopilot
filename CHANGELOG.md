@@ -4,6 +4,8 @@
 
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
+- `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.
+
 - BL-0194 P2: autopilot can now read the registry's sibling `qualification-metrics.json` (`scripts/qualification-metrics.js fetch|status|order`, vendored v2 schema, Node `record_id`/`entry_id`/`strike_id` parity); it only re-orders seats local evidence already admitted, warns past 7 days, and never admits, lifts or overwrites a local strike.
 
 - A hetero review seat whose answer breaks an output rule (missing NO-FINDING-PROOF field, repeated block, misspelled VERDICT) is now re-asked once on its own with the reason named, instead of voiding the whole round as seat_gap; transport, timeout and exit-code failures are never re-asked, the output rules are unchanged, the retry is recorded as format_retry on the seat artifact, and the review prompt gains two worked answer examples (BL-0197).

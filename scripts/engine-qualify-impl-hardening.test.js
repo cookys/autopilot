@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
-// engine-qualify-impl-hardening.test.js — BL-0037 hardening cases for the
-// implementer qualification suite (pre-merge review round-1 cut list). Each
-// grader-level case ships a negative control: a mutated COPY of the grader (or
-// of engine-qualify.js's argv gate) with the defence removed must turn the case
-// red, otherwise the case proves nothing.
+// engine-qualify-impl-hardening.test.js -- BL-0037 hardening cases for the
+// implementer qualification suite (pre-merge review round-1 cut list).
+// Control kinds, stated per case:
+//   - mutated grader copy (defence removed, case turns red): replacement-ref,
+//     add-then-revert canary
+//   - armed-weapon control (the repo-local config demonstrably executes when
+//     run unguarded): malicious git config
+//   - discriminating pass (same shape with a committed result passes):
+//     dispatch-outcome classification, output bomb (honest module passes)
+//   - source mutation done by hand when the case landed (TTL cap raised,
+//     trials check reverted -> red): --expires-days, --trials; not automated
 
 const assert = require('assert');
 const fs = require('fs');
@@ -184,7 +190,7 @@ function cli(role, extra) {
     '--prompt-config-hash', dg('a'), '--semantic-fingerprint', dg('b'), '--containment-fingerprint', dg('c'),
     '--task-class', 'bounded_implementation', '--domain', 'repository', '--language', 'en', '--tool', 'git_commit',
     '--store', path.join(tempRoot, 'store-cli'), ...extra];
-  return spawnSync(process.execPath, [QUAL, ...args], { encoding: 'utf8', env: { ...process.env, AUTOPILOT_QUALIFY_SEED: 'hardening' } });
+  return spawnSync(process.execPath, [QUAL, ...args], { encoding: 'utf8', env: { ...process.env, HOME: tempRoot, AUTOPILOT_QUALIFY_SEED: 'hardening' } });
 }
 
 test('implementer --expires-days: 30/90 pass the argv gate, 91 is refused; other roles stop at 30', () => {
@@ -202,7 +208,18 @@ test('implementer --expires-days: 30/90 pass the argv gate, 91 is refused; other
   assert.ok(!/cannot exceed/.test(rev30.stderr), 'reviewer 30 is not refused by the cap');
 });
 
-test('implementer --trials must be exactly the administration size', { skip: !hasBwrap }, () => {
+test('implementer --trials: default and an explicit 2 pass the gate, others are refused', () => {
+  const ep = ['--endpoint', 'lanx'];
+  for (const extra of [[], ['--trials', '2']]) {
+    const r = cli('implementer', [...extra, ...ep]);
+    assert.ok(!/exactly 2 trials/.test(r.stderr), `trials ${extra.join(' ') || '(default)'} not refused: ${r.stderr.slice(0, 160)}`);
+    assert.match(r.stderr, /not ready|endpoint/i, 'got past the trials gate to the endpoint stage');
+  }
+  const bad = cli('implementer', ['--trials', '3', ...ep]);
+  assert.match(bad.stderr, /exactly 2 trials/);
+});
+
+test('implementer --trials must be exactly the administration size', () => {
   const { runImplQualification } = require('./engine-qualify');
   const base = {
     role: 'implementer', trials: 3, expiresDays: 90, emitRow: false, store: path.join(tempRoot, 'store-trials'),

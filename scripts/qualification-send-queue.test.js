@@ -295,14 +295,25 @@ const f=path.join(dir,p.record_id+'.json'),body=JSON.stringify(p,null,1)+'\\n';
 if(fs.existsSync(f)&&fs.readFileSync(f,'utf8')===body){console.log(JSON.stringify({status:'noop',record_id:p.record_id}));process.exit(0);}
 fs.writeFileSync(f,body);console.log(JSON.stringify({status:'created',record_id:p.record_id,path:f}));`);
   const ghLog = [];
-  const gh = (args) => { ghLog.push(args); return { status: 0, stdout: args[1] === 'list' ? '[]' : 'https://example.invalid/pr/1\n', stderr: '' }; };
+  const prs = [];            // stateful stub: PRs that were really created
+  const ghState = { failCreates: 0 };
+  const gh = (args) => {
+    ghLog.push(args);
+    if (args[1] === 'list') return { status: 0, stdout: JSON.stringify(prs), stderr: '' };
+    if (ghState.failCreates > 0) { ghState.failCreates -= 1; return { status: 1, stdout: '', stderr: 'HTTP 502' }; }
+    prs.push({ number: prs.length + 1, state: 'OPEN' });
+    return { status: 0, stdout: 'https://example.invalid/pr/1\n', stderr: '' };
+  };
+  let tick = 0;
   const pushes = [];
   const rawGit = (args) => {
     if (args[0] === 'push') pushes.push(args.slice());
-    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args], { cwd: bot, encoding: 'utf8' });
+    tick += 1;   // a different commit time per call: rebuilding the same branch gives a NEW sha, as in real life
+    const stamp = `2026-01-01T00:00:${String(tick % 60).padStart(2, '0')}Z`;
+    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args], { cwd: bot, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_DATE: stamp, GIT_COMMITTER_DATE: stamp } });
     return { status: r.status === null ? 1 : r.status, stdout: r.stdout, stderr: r.stderr };
   };
-  return { root, bare, bot, owner, ingest, gh, ghLog, pushes, rawGit };
+  return { root, bare, bot, owner, ingest, gh, ghLog, ghState, prs, pushes, rawGit };
 }
 function mkTransport(f, srcFile = SRC) {
   const sq = loadSq(srcFile);
@@ -336,7 +347,9 @@ test('git transport: push bot branch + PR is NOT an ack; the merge on master is,
   const merge = mergeBranch(f, botBranch(item.id));
   const a2 = await tr.findAck(item);
   assert.deepEqual(a2, { state: 'acked', commit: merge });
-  assert.equal((await tr.send(item)).status, 'noop', 'ingest on a tree that already has it is a no-op');
+  const pushesBefore = f.pushes.length;
+  assert.equal((await tr.send(item)).status, 'sent', 're-entry on an existing identical bot branch');
+  assert.equal(f.pushes.length, pushesBefore, 'and it pushes nothing');
 });
 
 test('git transport: master holding different bytes under the same name is a conflict, not an ack', async () => {
@@ -410,7 +423,7 @@ test('NEGATIVE CONTROL: acking the bot branch instead of master turns the unmerg
 });
 
 test('NEGATIVE CONTROL: dropping the push guard lets a master push through', async () => {
-  await mustGoRed('no-push-guard', (s) => s.replace("if (args[0] === 'push' && !(", "if (false && !("),
+  await mustGoRed('no-push-guard', (s) => s.replace("if (rest[0] === 'push' && !(", "if (false && !("),
     async (src) => { const sq = loadSq(src); assert.throws(() => sq.assertPushAllowed('origin', ['push', 'origin', 'master']), /refusing push/); });
 });
 
@@ -444,4 +457,154 @@ test('NEGATIVE CONTROL: quarantine removed -> torn tail stays in the log', async
     async (src) => { const sq = loadSq(src); const t = fresh(); const env = { AUTOPILOT_OUTBOX_DIR: t.dir };
       sq.enqueue('record', makeRecord(1), { env }); fs.appendFileSync(path.join(t.dir, 'outbox.jsonl'), '{"event":"enq');
       const r = await sq.flush({ transport: fakeTransport(), env, warn() {} }); assert.equal(r.quarantined, 1); });
+});
+
+// ── re-entry (review fix): the bot branch may already exist on the remote ──
+async function reentryScenario(srcFile) {
+  const f = registryFixture();
+  const tr = mkTransport(f, srcFile);
+  const rec = makeRecord(1);
+  const item = { id: rec.record_id, kind: 'record', payload: rec };
+  assert.equal((await tr.send(item)).status, 'sent');   // pushed; imagine the process died before `sent` was written
+  const r2 = await tr.send(item);                        // resume: send again
+  assert.equal(r2.status, 'sent');
+  return { f, tr, item };
+}
+
+test('re-entry after a crash following the push: no second push, no second PR, then acked after the merge', async () => {
+  const { f, tr, item } = await reentryScenario(SRC);
+  assert.equal(f.pushes.length, 1, 'exactly one push');
+  assert.equal(f.ghLog.filter((a) => a[1] === 'create').length, 1, 'exactly one PR');
+  const merge = mergeBranch(f, botBranch(item.id));
+  assert.deepEqual(await tr.findAck(item), { state: 'acked', commit: merge });
+});
+
+test('re-entry when gh pr create failed the first time: one PR in the end, one push', async () => {
+  const f = registryFixture();
+  const tr = mkTransport(f);
+  f.ghState.failCreates = 1;
+  const rec = makeRecord(2);
+  const item = { id: rec.record_id, kind: 'record', payload: rec };
+  await assert.rejects(tr.send(item), /gh pr create failed/);
+  assert.equal((await tr.send(item)).status, 'sent');
+  assert.equal(f.pushes.length, 1);
+  assert.equal(f.prs.length, 1);
+});
+
+test('re-entry: a merged PR is reused, a closed-only one is not', async () => {
+  const f = registryFixture();
+  const tr = mkTransport(f);
+  const rec = makeRecord(3);
+  const item = { id: rec.record_id, kind: 'record', payload: rec };
+  await tr.send(item);
+  f.prs[0].state = 'MERGED';
+  await tr.send(item);
+  assert.equal(f.prs.length, 1, 'merged PR reused');
+  f.prs[0].state = 'CLOSED';
+  await tr.send(item);
+  assert.equal(f.prs.length, 2, 'a closed-unmerged PR does not count; a new one opens');
+});
+
+test('re-entry: remote bot branch with different content is a conflict, never force-pushed', async () => {
+  const f = registryFixture();
+  const tr = mkTransport(f);
+  const rec = makeRecord(4);
+  const item = { id: rec.record_id, kind: 'record', payload: rec };
+  git(f.owner, 'checkout', '-q', '-b', botBranch(item.id));
+  fs.writeFileSync(path.join(f.owner, 'benchmarks', 'qualification', 'cookys', `${item.id}.json`), '{"other":1}\n');
+  git(f.owner, 'add', '-A'); git(f.owner, 'commit', '-q', '-m', 'someone else'); git(f.owner, 'push', '-q', 'origin', botBranch(item.id));
+  const r = await tr.send(item);
+  assert.equal(r.status, 'rejected'); assert.equal(r.code, 'BOT_BRANCH_CONFLICT');
+  assert.equal(f.pushes.length, 0);
+});
+
+test('NEGATIVE CONTROL: rebuilding the bot branch on every send makes the re-entry scenario red (non-fast-forward)', async () => {
+  await mustGoRed('rebuild-each-time', (s) => s.replace("if (git(['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}/${bot}`]).status === 0) {", 'if (false) {'),
+    async (src) => { await reentryScenario(src); });
+});
+
+test('dirty dedicated clone on a bot branch self-heals; dirty on another branch is refused', async () => {
+  const f = registryFixture();
+  const tr = mkTransport(f);
+  const a = makeRecord(1); const b = makeRecord(2);
+  await tr.send({ id: a.record_id, kind: 'record', payload: a });   // leaves HEAD on a bot branch
+  fs.writeFileSync(path.join(f.bot, 'stray.txt'), 'x');
+  fs.appendFileSync(path.join(f.bot, 'benchmarks', 'qualification', 'cookys', '.keep'), 'dirt');
+  assert.equal((await tr.send({ id: b.record_id, kind: 'record', payload: b })).status, 'sent');
+  assert.ok(!fs.existsSync(path.join(f.bot, 'stray.txt')));
+  git(f.bot, 'checkout', '-q', 'master');
+  fs.writeFileSync(path.join(f.bot, 'mine.txt'), 'x');
+  const c = makeRecord(3);
+  const r = await tr.send({ id: c.record_id, kind: 'record', payload: c });
+  assert.equal(r.status, 'error'); assert.match(r.message, /refusing to touch/);
+  assert.ok(fs.existsSync(path.join(f.bot, 'mine.txt')), 'foreign work is left alone');
+});
+
+test('default branch is never guessed: refs/remotes/origin/HEAD unset -> failure', async () => {
+  const f = registryFixture();
+  git(f.bot, 'config', 'remote.origin.followRemoteHEAD', 'never');   // newer git re-creates origin/HEAD on fetch
+  git(f.bot, 'remote', 'set-head', 'origin', '-d');
+  const sq = loadSq();
+  const tr = sq.gitTransport({ repo: f.bot, git: f.rawGit, gh: f.gh, python: process.execPath, ingestScript: f.ingest });
+  const rec = makeRecord(1);
+  await assert.rejects(tr.findAck({ id: rec.record_id, kind: 'record', payload: rec }), /not guessing the default branch/);
+});
+
+test('backoff skips the send but still polls the ack, so a just-merged PR is acked at once', async () => {
+  const t = fresh();
+  const sq = loadSq();
+  const env = { AUTOPILOT_OUTBOX_DIR: t.dir };
+  sq.enqueue('record', makeRecord(1), { env });
+  const t0 = Date.now();
+  await sq.flush({ transport: { async findAck() { throw new Error('down'); }, async send() { throw new Error('x'); } }, env, nowMs: t0, warn() {} });
+  const tr = { calls: 0, async findAck() { return { state: 'acked', commit: 'm' }; }, async send() { this.calls += 1; return { status: 'sent' }; } };
+  const r = await sq.flush({ transport: tr, env, nowMs: t0 + 1000, warn() {} });
+  assert.equal(r.retired, 1); assert.equal(tr.calls, 0);
+  // and a failing poll during backoff does not pile up failure events
+  sq.enqueue('record', makeRecord(2), { env });
+  await sq.flush({ transport: { async findAck() { throw new Error('down'); }, async send() { throw new Error('x'); } }, env, nowMs: t0, warn() {} });
+  await sq.flush({ transport: { async findAck() { throw new Error('down'); }, async send() { throw new Error('x'); } }, env, nowMs: t0 + 1000, warn() {} });
+  assert.equal(sq.status({ env }).pending[0].failures, 1);
+});
+
+test('NEGATIVE CONTROL: skipping the whole id during backoff delays the ack', async () => {
+  const scenario = async (src) => {
+    const sq = loadSq(src); const t = fresh(); const env = { AUTOPILOT_OUTBOX_DIR: t.dir };
+    sq.enqueue('record', makeRecord(1), { env });
+    const t0 = Date.now();
+    await sq.flush({ transport: { async findAck() { throw new Error('down'); }, async send() { throw new Error('x'); } }, env, nowMs: t0, warn() {} });
+    const r = await sq.flush({ transport: { async findAck() { return { state: 'acked', commit: 'm' }; }, async send() { return { status: 'sent' }; } }, env, nowMs: t0 + 1000, warn() {} });
+    assert.equal(r.retired, 1);
+  };
+  await mustGoRed('skip-in-backoff', (s) => s.replace('if (a.state !== \'acked\' && inBackoff) { out.backoff_skipped += 1; continue; }', 'if (inBackoff) { out.backoff_skipped += 1; continue; }'), scenario);
+});
+
+test('assertPushAllowed sees through leading -c / -C pairs', () => {
+  const sq = loadSq();
+  sq.assertPushAllowed('origin', ['-c', 'user.name=t', 'push', 'origin', 'HEAD:refs/heads/bot/qualification-0123456789ab']);
+  assert.throws(() => sq.assertPushAllowed('origin', ['-c', 'user.name=t', 'push', 'origin', 'master']), /refusing push/);
+  assert.throws(() => sq.assertPushAllowed('origin', ['-C', '/x', '-c', 'a=b', 'push', 'origin', 'HEAD:main']), /refusing push/);
+});
+
+test('orphan payload files and stray temp files are removed by flush; live payloads stay', async () => {
+  const t = fresh();
+  const sq = loadSq();
+  const env = { AUTOPILOT_OUTBOX_DIR: t.dir };
+  const big = makeRecord(3); big.raw = { blob: 'x'.repeat(20000) };
+  big.record_id = q.recordIdV1(big.producer, big.transcript_hash, big.seat, big.seat.corpus_version, big.administered_at);
+  sq.enqueue('record', big, { env });
+  const d = path.join(t.dir, 'outbox.d');
+  fs.writeFileSync(path.join(d, `${'ab'.repeat(32)}.json`), '{}');
+  fs.writeFileSync(path.join(d, `.${'cd'.repeat(32)}.tmp.99`), '{}');
+  const r = await sq.flush({ transport: { async findAck() { return { state: 'pending' }; }, async send() { return { status: 'sent' }; } }, env, warn() {} });
+  assert.equal(r.orphans_removed, 2);
+  assert.deepEqual(fs.readdirSync(d), [`${big.record_id}.json`]);
+});
+
+test('workspace comes from qualification_outbox.workspace (default cookys)', () => {
+  const sq = loadSq();
+  const d = tmp('cfg');
+  fs.writeFileSync(path.join(d, 'c.json'), JSON.stringify({ qualification_outbox: { workspace: 'team-a' } }));
+  assert.equal(sq.readOutboxConfig({ AUTOPILOT_CONFIG_FILE: path.join(d, 'c.json') }).workspace, 'team-a');
+  assert.equal(sq.readOutboxConfig({ AUTOPILOT_CONFIG_FILE: path.join(d, 'none.json') }).workspace, 'cookys');
 });

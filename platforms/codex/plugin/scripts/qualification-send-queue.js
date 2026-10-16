@@ -132,7 +132,15 @@ function withLock(p, fn) {
   return store.withWriteLock({ storeDir: p.dir, lockFile: p.lock, name: 'qualification-outbox' }, fn);
 }
 
+function fsyncDir(dir) {
+  try {
+    const fd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  } catch { /* best effort where a directory cannot be opened */ }
+}
+
 function appendEvent(p, obj) {
+  const created = !fs.existsSync(p.log);
   const line = makeLine({ ts: nowIso(), ...obj });
   if (Buffer.byteLength(line) >= 4096) throw new Error(`outbox line ${Buffer.byteLength(line)} B >= PIPE_BUF`);
   const fd = fs.openSync(p.log, 'a', 0o600);
@@ -140,6 +148,7 @@ function appendEvent(p, obj) {
     fs.writeSync(fd, line);   // exactly one write
     fs.fsyncSync(fd);
   } finally { fs.closeSync(fd); }
+  if (created) fsyncDir(p.dir);   // the new file's directory entry must survive a crash too
 }
 
 function trim(s) { return String(s === undefined ? '' : s).replace(/\s+/g, ' ').slice(0, 300); }
@@ -177,6 +186,7 @@ function enqueue(kind, payload, { env = process.env } = {}) {
       const fd = fs.openSync(tmp, 'wx', 0o600);
       try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
       fs.renameSync(tmp, path.join(p.d, `${id}.json`));
+      fsyncDir(p.d);
       head.payload_ref = `outbox.d/${id}.json`;
     }
     try {   // a torn tail from a crash must not swallow this line
@@ -229,15 +239,14 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
       if (s.acked) { await ackIt(s.acked.commit); out.acked -= 1; continue; }   // resume after a crash between acked and retired
       const payload = payloadOf(p, s);
       if (!payload) { await rej('PAYLOAD_CORRUPT', 'payload missing or sha256 mismatch'); continue; }
-      if (!force && s.failures > 0) {
-        const wait = backoffS(s.failures) * 1000;
-        if (nowMs - Date.parse(s.last_failed_ts) < wait) { out.backoff_skipped += 1; continue; }
-      }
+      // During backoff only the send is skipped; the ack poll still runs so a just-merged PR is acked at once.
+      const inBackoff = !force && s.failures > 0 && nowMs - Date.parse(s.last_failed_ts) < backoffS(s.failures) * 1000;
       const item = { id: s.id, kind: s.kind, payload };
-      const fail = (m) => { appendEvent(p, { event: 'failed', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256, message: trim(m) }); out.failed += 1; };
+      const fail = (m) => { if (inBackoff) { out.backoff_skipped += 1; return; } appendEvent(p, { event: 'failed', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256, message: trim(m) }); out.failed += 1; };
       try {
         let a = await transport.findAck(item);
         if (a.state === 'conflict') { await rej('ACK_CONFLICT', a.message); continue; }
+        if (a.state !== 'acked' && inBackoff) { out.backoff_skipped += 1; continue; }
         if (a.state !== 'acked' && !s.sent) {
           const r = await transport.send(item);
           if (r.status === 'rejected') { await rej(r.code || 'REJECTED', r.message); continue; }
@@ -259,6 +268,16 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
       store.writeSnapshot(p.log, events.filter((e) => !done.has(e.id)));
       for (const id of done) { try { fs.unlinkSync(path.join(p.d, `${id}.json`)); } catch { /* inline payload */ } }
       out.compacted = done.size;
+    }
+    // orphans: a payload file with no enqueued line (crash between rename and append) and stray temp files
+    const live = new Set(readLog(p).events.filter((e) => e.event === 'enqueued').map((e) => e.id));
+    let names = [];
+    try { names = fs.readdirSync(p.d); } catch { /* no outbox.d yet */ }
+    for (const n of names) {
+      const m = /^([0-9a-f]{64})\.json$/.exec(n);
+      if (n.startsWith('.') || (m && !live.has(m[1]))) {
+        try { fs.unlinkSync(path.join(p.d, n)); out.orphans_removed = (out.orphans_removed || 0) + 1; } catch { /* raced away */ }
+      }
     }
   } finally { store.releaseLock(p.lock); }
   return out;
@@ -297,7 +316,10 @@ function run(cmd, args, { cwd, input } = {}) {
 }
 
 function assertPushAllowed(remote, args) {
-  if (args[0] === 'push' && !(args.length === 3 && args[1] === remote && /^HEAD:refs\/heads\/bot\/qualification-[0-9a-f]{12}$/.test(args[2]))) {
+  let i = 0;   // skip git's global options (-c k=v, -C dir) so a prefixed push cannot slip past
+  while (i < args.length && (args[i] === '-c' || args[i] === '-C')) i += 2;
+  const rest = args.slice(i);
+  if (rest[0] === 'push' && !(rest.length === 3 && rest[1] === remote && /^HEAD:refs\/heads\/bot\/qualification-[0-9a-f]{12}$/.test(rest[2]))) {
     throw new Error(`refusing push ${args.join(' ')}: only HEAD to ${BOT_PREFIX}* is allowed`);
   }
 }
@@ -315,7 +337,8 @@ function gitTransport(opts) {
   const defaultBranch = () => {
     if (opts.defaultBranch) return opts.defaultBranch;
     const r = rawGit(['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
-    return r.status === 0 && r.stdout.trim() ? r.stdout.trim().replace(`${remote}/`, '') : 'master';
+    if (r.status !== 0 || !r.stdout.trim()) throw new Error(`refs/remotes/${remote}/HEAD is not set in the registry clone (run: git remote set-head ${remote} -a); not guessing the default branch`);
+    return r.stdout.trim().replace(`${remote}/`, '');
   };
   const qualDir = `benchmarks/qualification/${workspace}`;
 
@@ -335,6 +358,17 @@ function gitTransport(opts) {
       if (item.kind === 'record') return { name: path.basename(j.path), bytes: fs.readFileSync(path.join(root, workspace, path.basename(j.path)), 'utf8') };
       return { strike_id: Object.entries(j).find(([k]) => k === "strike_id")[1] };
     } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
+  }
+
+  function holds(ref, item, ex) {   // does `ref` hold exactly this payload? 'same' | 'different'
+    if (item.kind === 'record') {
+      const f = git(['show', `${ref}:${qualDir}/${ex.name}`]);
+      return f.status === 0 && f.stdout === ex.bytes ? 'same' : 'different';
+    }
+    const f = git(['show', `${ref}:${qualDir}/strike-events.jsonl`]);
+    if (f.status !== 0) return 'different';
+    const row = f.stdout.split('\n').filter(Boolean).map((x) => { try { return JSON.parse(x); } catch { return null; } }).find((r) => r && r.strike_id === ex.strike_id);
+    return row && row.record_id === item.payload.record_id ? 'same' : 'different';
   }
 
   function firstAckCommit(def, file, has) {   // first merge/commit on the default first-parent chain whose tree has it
@@ -374,8 +408,36 @@ function gitTransport(opts) {
     async send(item) {
       const def = defaultBranch();
       const bot = `${BOT_PREFIX}${item.id.slice(0, 12)}`;
-      must(git(['fetch', remote]), 'git fetch');
-      if (must(git(['status', '--porcelain']), 'git status').stdout.trim()) return { status: 'error', message: 'registry clone is dirty; refusing to branch' };
+      must(git(['fetch', '--prune', remote]), 'git fetch');
+      const title = `qualification: ${item.kind} ${item.id.slice(0, 12)}`;
+      const ensurePr = () => {   // reuse an open or merged PR for this branch; open one only when there is none
+        if (!openPr) return;
+        const l = must(gh(['pr', 'list', '--head', bot, '--state', 'all', '--json', 'number,state']), 'gh pr list');
+        let prs = [];
+        try { prs = JSON.parse(l.stdout || '[]'); } catch { /* treat as none */ }
+        if (prs.some((x) => ['open', 'merged'].includes(String(x.state).toLowerCase()))) return;
+        must(gh(['pr', 'create', '--base', def, '--head', bot, '--title', title,
+          '--body', `Qualification-Id: ${item.id}\n\nSent by autopilot qualification-send-queue. CI checks schema, byte cap and leaks; merge is the ack.`]), 'gh pr create');
+      };
+      // Re-entry: the bot branch may already be on the remote (crash after push, or push ok and PR creation failed).
+      // Rebuilding it would give a new sha on the same parent and a rejected plain push, so: identical content -> only
+      // make sure a PR exists; different content -> conflict (never a force push).
+      if (git(['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}/${bot}`]).status === 0) {
+        const ex = expected(item);
+        if (ex.rejected) return { status: 'rejected', code: ex.rejected.code, message: ex.rejected.message };
+        if (holds(`${remote}/${bot}`, item, ex) !== 'same') {
+          return { status: 'rejected', code: 'BOT_BRANCH_CONFLICT', message: `${bot} on ${remote} holds different content for this id` };
+        }
+        ensurePr();
+        return { status: 'sent' };
+      }
+      if (must(git(['status', '--porcelain']), 'git status').stdout.trim()) {
+        // Self-heal only a dirty bot branch (our own interrupted run); anything else is somebody's work tree.
+        const head = must(git(['rev-parse', '--abbrev-ref', 'HEAD']), 'git rev-parse').stdout.trim();
+        if (!head.startsWith(BOT_PREFIX)) return { status: 'error', message: `registry clone is dirty on ${head}, not a ${BOT_PREFIX}* branch; refusing to touch it` };
+        must(git(['reset', '--hard']), 'git reset');
+        must(git(['clean', '-fd']), 'git clean');
+      }
       must(git(['checkout', '-B', bot, `${remote}/${def}`]), 'git checkout');
       let tmp;
       try {
@@ -390,17 +452,9 @@ function gitTransport(opts) {
         if (j.status === 'noop') return { status: 'noop' };   // already on the default branch
         must(git(['add', '-A', '--', 'benchmarks/qualification']), 'git add');
         must(git(['-c', 'user.name=autopilot-outbox', '-c', 'user.email=autopilot-outbox@users.noreply.invalid', 'commit', '-m',
-          `qualification: ${item.kind} ${item.id.slice(0, 12)}\n\nQualification-Id: ${item.id}`]), 'git commit');
+          `${title}\n\nQualification-Id: ${item.id}`]), 'git commit');
         must(git(['push', remote, `HEAD:refs/heads/${bot}`]), 'git push');
-        if (openPr) {
-          const l = must(gh(['pr', 'list', '--head', bot, '--state', 'open', '--json', 'number']), 'gh pr list');
-          let open = [];
-          try { open = JSON.parse(l.stdout || '[]'); } catch { /* treat as none */ }
-          if (!open.length) {
-            must(gh(['pr', 'create', '--base', def, '--head', bot, '--title', `qualification: ${item.kind} ${item.id.slice(0, 12)}`,
-              '--body', `Qualification-Id: ${item.id}\n\nSent by autopilot qualification-send-queue. CI checks schema, byte cap and leaks; merge is the ack.`]), 'gh pr create');
-          }
-        }
+        ensurePr();
         return { status: 'sent' };
       } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
     },
@@ -414,6 +468,7 @@ function readOutboxConfig(env = process.env) {
   return {
     enqueue: o.enqueue === true,
     transport: o.transport === 'git' ? 'git' : 'off',
+    workspace: typeof o.workspace === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(o.workspace) ? o.workspace : 'cookys',
     registry_repo: typeof o.registry_repo === 'string' ? store.expandTilde(o.registry_repo) : null,
   };
 }
@@ -422,7 +477,7 @@ function transportFromConfig(env = process.env) {
   const c = readOutboxConfig(env);
   if (c.transport !== 'git') return null;
   if (!c.registry_repo) throw new Error('qualification_outbox.transport=git needs qualification_outbox.registry_repo');
-  return gitTransport({ repo: c.registry_repo });
+  return gitTransport({ repo: c.registry_repo, workspace: c.workspace });
 }
 
 /** Hook for engine-scorecard `record`: queue a completed administration when qualification_outbox.enqueue is on. */

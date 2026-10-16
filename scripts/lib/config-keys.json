@@ -753,6 +753,21 @@
       "type": "string"
     },
     {
+      "name": "qualification_outbox.workspace",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "workspace",
+      "default": "cookys",
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Registry workspace (benchmarks/qualification/<workspace>) the outbox sends into.",
+      "type": "string"
+    },
+    {
       "name": "residue.archive_branch_days",
       "kind": "config_key",
       "audience": "user",

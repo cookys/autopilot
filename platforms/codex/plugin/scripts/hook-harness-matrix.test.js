@@ -54,6 +54,7 @@ run(d, '--write');
 const pk = fs.readFileSync(path.join(d, 'docs/hook-harness-matrix.md'), 'utf8');
 assert.match(pk, /已打包（未驗證觸發）: PostCompact 2026-10-01/);
 assert.doesNotMatch(pk, /驗證: PostCompact/);
+neg('typoharness', [{ ...good, harness: 'codx' }], /unknown harness/);
 neg('badkind', [{ ...good, kind: 'verified' }], /kind must be/);
 neg('baddate', [{ ...good, verified_at: 'soon' }], /YYYY-MM-DD/);
 neg('noevidence', [{ ...good, evidence: '' }], /empty evidence/);

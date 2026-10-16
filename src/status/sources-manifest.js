@@ -4,38 +4,35 @@
 // and enabled (mods P1W W1i, second half). Derived from the plugin's own files, never hard-coded:
 //   hook sources    installed = hooks/hooks.json names the hook file; enabled = its knob is not off
 //   script sources  installed = the script exists (and, where the writer lives inside another file, that file names it)
-//   enabled         env knob (`off|false|0|no`, case-insensitive) and ~/.autopilot/config.json: either `{"<ENV_NAME>": "off"|false|0}`
-//                   or `{"hooks": {"<stem>": false}}` turn a source off. A source with no knob is enabled when installed.
+//   enabled         judged from the writer's REAL off switch, never a spelling the writer ignores:
+//                     session-tasks / awaiting-owner   env knob only (`off|false|0|no`, case-insensitive; hooks/live-session-lib.js knobOff)
+//                     task-status input                env AUTOPILOT_TASK_STATUS_INPUT exactly `0` (the engine's own test)
+//                     context live write               hooks/context-budget.js: context_budget.mode off, or live_write off, from
+//                                                      config.json or env (scripts/lib/config-path.js readContextBudget)
+//                   A `{"<ENV_NAME>": "off"}` or `{"hooks": {"<stem>": false}}` entry in config.json turns none of these writers off,
+//                   so it must not make the band say 關. A source with no knob is enabled when installed.
 // `installed:false` means no writer exists in this checkout (the renderer then says 來源未接); `installed && enabled`
 // with no data means "wired, currently empty" (the original empty-state text).
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { configPath } = require('../../scripts/lib/config-path');
+const { configPath, readContextBudget } = require('../../scripts/lib/config-path');
 
 const OFF = new Set(['off', 'false', '0', 'no']);
 
 function readText(file) { try { return fs.readFileSync(file, 'utf8'); } catch (_error) { return null; } }
 function exists(file) { try { return fs.statSync(file).isFile(); } catch (_error) { return false; } }
-function readJson(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_error) { return null; } }
 
-function knobIsOff(name, stem, env, config) {
-  if (name && typeof env[name] === 'string' && OFF.has(env[name].trim().toLowerCase())) return true;
-  if (config && typeof config === 'object') {
-    if (name && Object.prototype.hasOwnProperty.call(config, name)) {
-      const v = config[name];
-      if (v === false || v === 0 || (typeof v === 'string' && OFF.has(v.trim().toLowerCase()))) return true;
-    }
-    if (stem && config.hooks && typeof config.hooks === 'object' && config.hooks[stem] === false) return true;
-  }
-  return false;
+// env-only off switch of the live-session hooks (same set as hooks/live-session-lib.js knobOff).
+function knobIsOff(name, env) {
+  return !!(name && env && typeof env[name] === 'string' && OFF.has(env[name].trim().toLowerCase()));
 }
 
 function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, scope }) {
   const hooksText = readText(path.join(pluginRoot, 'hooks', 'hooks.json')) || '';
   // BL-0186: $AUTOPILOT_CONFIG_FILE (in the passed env) names the operator config; else autopilotHome/config.json.
   const configFile = env && env.AUTOPILOT_CONFIG_FILE ? configPath({ env }) : (autopilotHome ? path.join(autopilotHome, 'config.json') : null);
-  const config = configFile ? readJson(configFile) : null;
   const hookInstalled = (file) => hooksText.includes(`/hooks/${file}`) && exists(path.join(pluginRoot, 'hooks', file));
   // A hook module's work can run inside ANOTHER hook process (mods P1W PERF: audit-log.js and advisory-relay.js host
   // awaiting-owner's handlers). The hosts are derived from the code: every hooks/*.js that `require('./<file>')`s it.
@@ -55,7 +52,7 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
 
   const hookSource = (name, file, knob, stem, extra) => {
     const installed = hookRuns(file) && exists(path.join(pluginRoot, 'hooks', file));
-    out[name] = { installed, enabled: installed && !knobIsOff(knob, stem, env, config), how: `hook hooks/${file} (knob ${knob})${extra || ''}` };
+    out[name] = { installed, enabled: installed && !knobIsOff(knob, env), how: `hook hooks/${file} (knob ${knob})${extra || ''}` };
   };
   hookSource('tasks', 'session-tasks.js', 'AUTOPILOT_SESSION_TASKS', 'session-tasks', '');
   hookSource('attention', 'awaiting-owner.js', 'AUTOPILOT_AWAITING_OWNER', 'awaiting-owner', '');
@@ -77,11 +74,16 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   out.compare = { installed: false, enabled: false, how: 'writer is a guidance row' };
 
   const tsInstalled = exists(path.join(pluginRoot, 'src', 'status', 'task-status-input.js')) && exists(path.join(pluginRoot, 'scripts', 'write-task-status-input.js'));
-  out.task_status_input = { installed: tsInstalled, enabled: tsInstalled && !knobIsOff('AUTOPILOT_TASK_STATUS_INPUT', null, env, config), how: 'engine writes the task-status input at managed-campaign terminals (knob AUTOPILOT_TASK_STATUS_INPUT=0)' };
+  out.task_status_input = { installed: tsInstalled, enabled: tsInstalled && !(env && env.AUTOPILOT_TASK_STATUS_INPUT === '0'), how: 'engine writes the task-status input at managed-campaign terminals (knob AUTOPILOT_TASK_STATUS_INPUT=0)' };
 
   const ctxInstalled = hookRuns('context-budget.js') && exists(path.join(pluginRoot, 'hooks', 'context-budget.js'));
-  out.context = { installed: ctxInstalled, enabled: ctxInstalled && !knobIsOff('AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE', null, env, config)
-    && !(config && config.context_budget && config.context_budget.live_write === false), how: 'hook hooks/context-budget.js live write (knob AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE)' };
+  // The hook's own parse (mode off or live_write off, config + env), pointed at the config file this manifest reads.
+  let ctxLiveOff = false;
+  try {
+    const cb = readContextBudget({ env: { ...env, AUTOPILOT_CONFIG_FILE: configFile || os.devNull } });
+    ctxLiveOff = cb.mode === 'off' || cb.liveWrite === false;
+  } catch (_error) { /* unreadable: the hook would use defaults, i.e. on */ }
+  out.context = { installed: ctxInstalled, enabled: ctxInstalled && !ctxLiveOff, how: 'hook hooks/context-budget.js live write (knob AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE, or context_budget.mode off)' };
 
   const progInstalled = exists(path.join(pluginRoot, 'src', 'status', 'work-order-progress.js'));
   out.progress = { installed: progInstalled, enabled: progInstalled, how: 'campaign controller progress receipts under <git-common-dir>/autopilot/work-orders/<root>/ (read by work-order-progress.js)' };

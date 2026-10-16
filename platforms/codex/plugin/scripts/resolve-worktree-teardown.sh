@@ -56,8 +56,8 @@ MAX_LEAVES="$(read_field "$CONFIG" max_leaf_worktrees_per_root "$DEF_MAX_LEAVES"
 
 # --- removed keys: reject loudly (no compat shim) ---
 for _k in stale_reaper_age_days reaper_scope; do
-  if [ -n "$CONFIG" ] && [ -r "$CONFIG" ] && grep -Eq "^[[:space:]]*[-*]?[[:space:]]*\`?${_k}\`?[[:space:]]*:" "$CONFIG"; then
-    echo "error: '${_k}' in ${CONFIG} was removed at 3.0.0 (BL-0115) together with 'dispatch-hetero.sh --gc'; delete the line. The automatic reaper is 'node scripts/repo-residue-sweep.js reap --auto --yes' (run by the SessionStart hook)." >&2
+  if [ -n "$CONFIG" ] && [ -r "$CONFIG" ] && grep -Eiq "^[[:space:]]*[-*]?[[:space:]]*\`?${_k}\`?[[:space:]]*:" "$CONFIG"; then
+    echo "error: '${_k}' in ${CONFIG} was removed at 3.0.0 (BL-0115) together with 'dispatch-hetero.sh --gc'; delete the line. The automatic reaper is 'node scripts/repo-residue-sweep.js reap --auto --yes' (run by the SessionStart hook); for unmarked hetero-* worktrees use 'repo-residue-sweep.js scan', then 'preserve' / 'reap --yes'." >&2
     exit 2
   fi
 done

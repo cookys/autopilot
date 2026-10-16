@@ -39,6 +39,15 @@ for key in stale_reaper_age_days reaper_scope; do
     assert_eq "$rc" 2 "resolver --field also rejects $key"
 done
 
+# 2b. Case-insensitive: read_field matched keys case-insensitively, so must the rejection.
+for line in '- STALE_REAPER_AGE_DAYS: 14' '- Reaper_Scope: marker-only'; do
+    cfg="$TEST_TMP/cfg-case.md"
+    printf -- '%s\n' "$line" > "$cfg"
+    set +e; out="$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$cfg" bash "$RESOLVER" 2>&1)"; rc=$?; set -e
+    assert_eq "$rc" 2 "resolver rejects mixed-case removed key: $line"
+    assert_contains "$out" "scan" "message names the unmarked-worktree manual path"
+done
+
 # 3. dispatch-hetero.sh itself fails as a precondition when the project config carries a removed key.
 mkdir -p "$SCRATCH/.claude"
 printf -- '- stale_reaper_age_days: 14\n' > "$SCRATCH/.claude/worktree-teardown-config.md"

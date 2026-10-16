@@ -1787,7 +1787,7 @@ while [ $# -gt 0 ]; do
     --stage) STAGE="${2:-}"; shift 2 ;;
     --continuation-checkpoint) CONTINUATION_CHECKPOINT="${2:-}"; shift 2 ;;
     --continuation-durable) CONTINUATION_DURABLE="${2:-}"; shift 2 ;;
-    --gc|--reap-unmarked|--yes) die_precondition "$1 was removed at 3.0.0 (BL-0115): dispatch-hetero.sh no longer has a stale-worktree reaper; use 'node scripts/repo-residue-sweep.js reap --auto --yes' (the SessionStart hook runs it automatically)" ;;
+    --gc|--reap-unmarked|--yes) die_precondition "$1 was removed at 3.0.0 (BL-0115): dispatch-hetero.sh no longer has a stale-worktree reaper; use 'node scripts/repo-residue-sweep.js reap --auto --yes' (the SessionStart hook runs it automatically); for unmarked hetero-* worktrees use 'repo-residue-sweep.js scan', then 'preserve' / 'reap --yes'" ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
   esac

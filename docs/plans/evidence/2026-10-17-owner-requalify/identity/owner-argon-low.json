@@ -1,0 +1,33 @@
+{
+  "lane": "argon-low",
+  "kind": "agy",
+  "engine": "gemini-4-argon-low",
+  "model": "gemini-4-argon-low",
+  "model_version": "gemini-4-argon-low",
+  "family": "google",
+  "runner": "agy",
+  "runner_version": "1.4.0",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "low",
+  "provider": "agy-gemini",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "25c977b6450ce7da04c03eda6efc8dbccf38eb241fb6229ad6218f3e2e89028c",
+  "containment_fingerprint": "847304c598627663e4a686396182645800f3441b2db0a18301f9e3a5d29888cd",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "gemini-4-argon-low",
+    "transport": "agy-p-argv-tool-deny",
+    "reasoning_effort": "low",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "agy -p --model --dangerously-skip-permissions --agent autopilot-toolless-reviewer + forced permissions.deny",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

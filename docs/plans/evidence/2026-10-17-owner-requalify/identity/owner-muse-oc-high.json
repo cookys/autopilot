@@ -1,0 +1,33 @@
+{
+  "lane": "muse-oc-high",
+  "kind": "opencode",
+  "engine": "opencode-go/muse-spark-1.3-contributor",
+  "model": "opencode-go/muse-spark-1.3-contributor",
+  "model_version": "opencode-go:muse-spark-1.3-contributor",
+  "family": "meta",
+  "runner": "opencode",
+  "runner_version": "1.19.2",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "high",
+  "provider": "opencode-cli",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "d4d0123ffdb1e214070d2f91841f34b53c7338fd61b24b905552ee6a92a26844",
+  "containment_fingerprint": "77a4ab8a48215f56784e967e23da4463079a7f42dff9d025f74ce5c24ecc053a",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "opencode-go/muse-spark-1.3-contributor",
+    "transport": "opencode-cli-run-locked-agent",
+    "reasoning_effort": "high",
+    "endpoint": "opencode-go"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "opencode run --pure --agent locked --format json empty-dir OPENCODE_CONFIG_CONTENT deny-all",
+    "credential_isolation": "clean-temp-home-auth-json-only"
+  }
+}

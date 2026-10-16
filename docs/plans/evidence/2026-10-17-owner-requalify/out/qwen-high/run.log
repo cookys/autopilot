@@ -1,0 +1,3 @@
+2026-10-17T00:08:27+08:00 lane=qwen-high START kind=qoderclicn model=Qwen3.8-Max mv=Qwen3.8-Max vsrc=operator-asserted dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:14:42+08:00 lane=qwen-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

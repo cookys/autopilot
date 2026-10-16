@@ -1,0 +1,4 @@
+2026-10-17T00:10:09+08:00 runtime probe: requested=glm-5.3 resolved=glm-5.3
+2026-10-17T00:10:09+08:00 lane=glm-high START kind=http model=glm-5.3 mv=glm-5.3 vsrc=runtime dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:12:28+08:00 lane=glm-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

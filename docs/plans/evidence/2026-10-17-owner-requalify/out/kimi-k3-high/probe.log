@@ -1,0 +1,2 @@
+kimi-auth-probe rc=0: kimi version 2.2.0 • Simple request: reply with PONG.  • PONG  To resume this session: kimi -r session_642226a5-d70f-4024-8c97-1918ca548df1
+qualify: wrote rotated credential back to /home/cookys/.kimi-code/credentials/kimi-code.json (backup /home/cookys/.kimi-code/credentials/kimi-code.json.bak-20261016T161016.281730.157718804)

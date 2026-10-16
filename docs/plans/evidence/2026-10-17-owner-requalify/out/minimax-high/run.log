@@ -1,0 +1,4 @@
+2026-10-17T00:12:30+08:00 runtime probe: requested=MiniMax-M3 resolved=MiniMax-M3
+2026-10-17T00:12:30+08:00 lane=minimax-high START kind=http model=MiniMax-M3 mv=MiniMax-M3 vsrc=runtime dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:13:10+08:00 lane=minimax-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

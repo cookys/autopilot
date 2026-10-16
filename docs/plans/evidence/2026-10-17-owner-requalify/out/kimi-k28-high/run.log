@@ -1,0 +1,3 @@
+2026-10-17T00:14:12+08:00 lane=kimi-k28-high START kind=kimi model=kimi-code/kimi-for-coding mv=kimi-for-coding:K2.8-Preview vsrc=operator-asserted dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:17:31+08:00 lane=kimi-k28-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

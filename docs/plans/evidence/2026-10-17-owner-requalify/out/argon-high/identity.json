@@ -1,0 +1,17 @@
+{
+ "lane": "argon-high",
+ "kind": "agy",
+ "engine": "gemini-4-argon-high",
+ "model": "gemini-4-argon-high",
+ "model_version": "gemini-4-argon-high",
+ "family": "google",
+ "runner": "agy",
+ "runner_version": "1.4.0",
+ "harness_version": "engine-qualify-362ee520",
+ "effort": "high",
+ "provider": "agy-gemini",
+ "endpoint": null,
+ "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+ "semantic_fingerprint": "4b324fc87b2ff9675089ea4953c59282bfe49add0907f39fe1248fc044cd6a85",
+ "containment_fingerprint": "847304c598627663e4a686396182645800f3441b2db0a18301f9e3a5d29888cd"
+}

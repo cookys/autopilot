@@ -1,0 +1,3 @@
+2026-10-17T00:17:54+08:00 lane=argon-low START kind=agy model=gemini-4-argon-low mv=gemini-4-argon-low vsrc=operator-asserted dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:21:14+08:00 lane=argon-low END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

@@ -1,0 +1,17 @@
+{
+ "lane": "glm-high",
+ "kind": "http",
+ "engine": "GLM-5.3",
+ "model": "glm-5.3",
+ "model_version": "glm-5.3",
+ "family": "zhipu",
+ "runner": "anthropic-compatible",
+ "runner_version": "node-direct-http-fetch",
+ "harness_version": "engine-qualify-362ee520",
+ "effort": "high",
+ "provider": "glm-anthropic",
+ "endpoint": "glm",
+ "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+ "semantic_fingerprint": "34c1514cd74350e1a8495e92778a992ef9bd6fee41a195baa6cd7b0965d6bc93",
+ "containment_fingerprint": "785750eba5347ffd9a5188e0b91c08bd6fcd552b5fae7a6a69a225aece19953f"
+}

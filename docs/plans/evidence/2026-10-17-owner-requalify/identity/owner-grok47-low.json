@@ -1,0 +1,33 @@
+{
+  "lane": "grok47-low",
+  "kind": "grok",
+  "engine": "grok-4.7",
+  "model": "grok-4.7",
+  "model_version": "grok-4.7",
+  "family": "xai",
+  "runner": "grok",
+  "runner_version": "grok-1.0.52-0920c8169e27-stable",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "low",
+  "provider": "grok-cli",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "76913df83e60ca3810f3d0c348f50496ff96d81ea51d6d12962beed8301dfa14",
+  "containment_fingerprint": "45fc368b0aedd40ceaf18873e105ec1f2f23ccf6cb4f0b99cc3a7fab5857cdf2",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "grok-4.7",
+    "transport": "grok-cli-prompt-file",
+    "reasoning_effort": "low",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "grok --prompt-file --permission-mode dontAsk --no-subagents --deny *",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

@@ -1,0 +1,3 @@
+2026-10-17T00:08:27+08:00 lane=haiku-high START kind=claude model=claude-haiku-5-5 mv=claude-haiku-5-5 vsrc=operator-asserted dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:10:06+08:00 lane=haiku-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

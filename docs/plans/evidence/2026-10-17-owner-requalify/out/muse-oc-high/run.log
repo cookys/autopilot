@@ -1,0 +1,3 @@
+2026-10-17T00:08:27+08:00 lane=muse-oc-high START kind=opencode model=opencode-go/muse-spark-1.3-contributor mv=opencode-go:muse-spark-1.3-contributor vsrc=operator-asserted dry=0 harness=engine-qualify-362ee520
+2026-10-17T00:11:56+08:00 lane=muse-oc-high END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=0

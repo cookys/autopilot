@@ -1,0 +1,33 @@
+{
+  "lane": "sonnet-high",
+  "kind": "claude",
+  "engine": "claude-sonnet-5-5",
+  "model": "claude-sonnet-5-5",
+  "model_version": "claude-sonnet-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.301-Claude-Code",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "high",
+  "provider": "anthropic",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "02aafc7864d3f124627884c3175e2ab40efcfab4b2ca234dcf3fd3afee7336e0",
+  "containment_fingerprint": "5729946f75161777cae8563df0a650589144c34f0cf8c6c5e25149eb28a4ff87",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "claude-sonnet-5-5",
+    "transport": "claude-p-tools-empty",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "claude -p --tools \"\" --setting-sources \"\" --strict-mcp-config",
+    "credential_isolation": "dedicated-exam-config-dir-credentials-only"
+  }
+}

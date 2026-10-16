@@ -1,0 +1,31 @@
+{
+  "lane": "minimax-high",
+  "kind": "http",
+  "engine": "MiniMax-M3",
+  "model": "MiniMax-M3",
+  "model_version": "MiniMax-M3",
+  "family": "minimax",
+  "runner": "anthropic-compatible",
+  "runner_version": "node-direct-http-fetch",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "high",
+  "provider": "minimax-anthropic",
+  "endpoint": "minimax",
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "6ab88d119c186c68ecea8796f3fe0de25a3c746a6579aafae981ba6ebfd142fe",
+  "containment_fingerprint": "785750eba5347ffd9a5188e0b91c08bd6fcd552b5fae7a6a69a225aece19953f",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "MiniMax-M3",
+    "transport": "anthropic-compatible-http",
+    "endpoint": "minimax"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

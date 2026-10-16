@@ -1,0 +1,33 @@
+{
+  "lane": "qwen-high",
+  "kind": "qoderclicn",
+  "engine": "Qwen3.8-Max",
+  "model": "Qwen3.8-Max",
+  "model_version": "Qwen3.8-Max",
+  "family": "alibaba",
+  "runner": "qoderclicn",
+  "runner_version": "1.1.72",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "high",
+  "provider": "qoderclicn-qwen",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "2aebc6e7dabcb6b6db994c4e06d8b8a8e1ac1aebe71bc50d592e8da3a014d8b6",
+  "containment_fingerprint": "11a1f172e58bfd07ce37073f565042c2f251d04bec0163355d48f09d977feeee",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "Qwen3.8-Max",
+    "transport": "qoderclicn-p-tools-empty",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "qoderclicn -p --model --tools \"\" --permission-mode dont_ask (no skip-permissions)",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

@@ -1,0 +1,17 @@
+{
+ "lane": "kimi-k28-high",
+ "kind": "kimi",
+ "engine": "kimi-k2.8-preview",
+ "model": "kimi-code/kimi-for-coding",
+ "model_version": "kimi-for-coding:K2.8-Preview",
+ "family": "moonshot",
+ "runner": "kimi",
+ "runner_version": "2.2.0",
+ "harness_version": "engine-qualify-362ee520",
+ "effort": "high",
+ "provider": "moonshot",
+ "endpoint": null,
+ "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+ "semantic_fingerprint": "b4dcc4350e1d3e527d138cd4359cdf15edf5bcfdb45148131fcaf30d0f1ce4e9",
+ "containment_fingerprint": "4bd2cf6eea1ba0db2f0f687ca1c2e31a3c7471dcdc76e540fc7ca5e5cac2c61d"
+}

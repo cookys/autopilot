@@ -1,0 +1,33 @@
+{
+  "lane": "gpt61-low",
+  "kind": "codex",
+  "engine": "gpt-6.1-sol",
+  "model": "gpt-6.1-sol",
+  "model_version": "gpt-6.1-sol",
+  "family": "openai",
+  "runner": "codex",
+  "runner_version": "codex-cli-0.162.1",
+  "harness_version": "engine-qualify-362ee520",
+  "effort": "low",
+  "provider": "codex-cli",
+  "endpoint": null,
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "semantic_fingerprint": "0a3879804b92501d583ffcff0b847a7458ad57d57c243402b378c093005ad88d",
+  "containment_fingerprint": "b224240063ec316d78680a3650c6d652dc041b72d9bb03b2d041cab5e49e600e",
+  "_invented": [
+    "whole owner identity: transport/posture/credential strings copied from the runner's reviewer recipe, no owner precedent"
+  ],
+  "_semantic_surface": {
+    "kind": "owner-semantic-surface-v1",
+    "model": "gpt-6.1-sol",
+    "transport": "codex-cli-exec-read-only",
+    "reasoning_effort": "low",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "owner-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "codex exec --sandbox read-only --skip-git-repo-check",
+    "credential_isolation": "codex-home-redirect-broker-env-allowlist"
+  }
+}

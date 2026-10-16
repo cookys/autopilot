@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0199 -->
+<!-- next-id: BL-0200 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1364,19 +1364,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
 
-### Kimi seats still owe the 2026-10-14 exams
-- **Id**: BL-0167
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: owner
-- **Problem**: 2026-10-14 那輪資格考 Kimi K3、2.8 額度用完沒考到。Grok 已於 10/15 補考完（合格）；只剩 Kimi，要等額度重置。
-- **Impact**: 中。Kimi 兩個席位在新版審查題（v6）沒有成績，排序時不會被推薦，也無法和其他模型比較。
-- **Trigger**: 2026-10-16（星期五）下午 Kimi 額度重置後
-- **Effort**: S
-- **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」；10/15「kimi 時間到 (星期五下午) 會重置」
-- **Pointer**: none
-- **Context**: Grok 4.7 low passed reviewer v6 on 2026-10-15 (42/42, 0/38 false, event 303). Kimi: reviewer v6 plus every role this round sat; no early stop. Refresh exam-home credentials first.
-
 ### Dispatch-tree 3d live check: kimi child env
 - **Id**: BL-0176
 - **Status**: open
@@ -1461,3 +1448,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: shipdefaults model switch, 2026-10-16
 - **Pointer**: docs/backlog/provider-bootstrap-pinned-to-old-models.md
 - **Context**: Lines ~152-207 hardcode GLM-5.2, grok-4.5, gpt-5.6-sol, MiniMax-M3. Re-register claims via platform-capability-claims.js; re-probe grok-4.7 (src/harness/capabilities/grok.json); add gpt-6.1-sol, grok-4.7 to window lists.
+
+### Exams borrowing the owner's real Kimi credential get it rotated out from under the owner
+- **Id**: BL-0199
+- **Status**: open
+- **Since**: 2026-10-16
+- **Origin**: self
+- **Problem**: 2026-10-16 補考時，考場直接用了 owner 真實的 Kimi 憑證；Kimi 會輪替 refresh token，考場用過後，原憑證失效，K2.8 第一次考被拒，最後靠考場接力才完成。考場應從真實憑證複製一份進去，考完把最新憑證寫回（先備份）。
+- **Impact**: 中。不處理的話，每次 Kimi 資格考都可能讓 owner 自己的 Kimi 登入失效，要重新登入。
+- **Trigger**: 下次排 Kimi 席位資格考，或動 kimi-auth-probe／考場憑證準備腳本
+- **Effort**: S
+- **Source**: 2026-10-16 Kimi 補考發現
+- **Pointer**: docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/README.md
+- **Context**: kimi28-stage-probe.sh already keeps the newest usable credential when rebuilding the exam home; still missing is the copy-in at start and write-back-with-backup at the end as a standard step.

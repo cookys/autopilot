@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Kimi K3 and K2.8 sat the 2026-10-16 retake exams (events 304-310; reviewer v6, discuss and K2.8 consult qualified, both brain seats failed); the shipped qualification defaults now carry them (74 to 81 rows), evidence under docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen, and BL-0199 tracks the exam-credential rotation hazard.
+
 ### Settings changes
 
 Every release lists here what changed in the settings you can set (`scripts/check-settings-changelog.js` enforces it). The full list is now one page: [`docs/settings-reference.md`](docs/settings-reference.md), generated from the machine-readable `scripts/lib/config-keys.json`.

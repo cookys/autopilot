@@ -1878,7 +1878,7 @@ function retireSupersededAdoptions(input) {
       canonicalAdoption: prepared.adoption_key,
     });
     return {
-      status: result.status === 'ROLLED_OVER' ? 'retired' : 'nothing_to_retire',
+      status: result.status === 'ROLLED_OVER' && result.writes > 0 ? 'retired' : 'nothing_to_retire',
       superseded: (result.superseded || []).map((item) => item.adoption_key),
     };
   } catch (error) {

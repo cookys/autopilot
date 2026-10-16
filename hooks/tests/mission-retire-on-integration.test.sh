@@ -106,7 +106,7 @@ function integrate({ divergeDevelop = false } = {}) {
   const args = { integrate_worktree: repo };
   try {
     const result = validation.executeAuthorizedIntegration({ bundle, bundlePath, repoInfo, frozen, args });
-    return { result, merged: git(repo, ['rev-parse', 'HEAD']) === candidate };
+    return { result, merged: git(repo, ['rev-parse', 'HEAD']) === candidate, again: () => validation.executeAuthorizedIntegration({ bundle: JSON.parse(fs.readFileSync(bundlePath, 'utf8')), bundlePath, repoInfo, frozen, args }) };
   } catch (error) { return { error, merged: git(repo, ['rev-parse', 'HEAD']) === candidate }; }
 }
 
@@ -121,6 +121,13 @@ const rec = Object.values(store.rollovers || {})[0];
 check('record names the adopted key and never itself as superseded',
   rec && rec.integrated_adoption_key === INTEGRATED && !rec.superseded.some((s) => s.adoption_key === INTEGRATED)
     && rec.superseded.every((s) => s.disposition === `superseded_by:${INTEGRATED}`), JSON.stringify(rec && rec.superseded));
+const storeBytes = fs.readFileSync(storeFile, 'utf8');
+const again = run.again();
+const afterStore = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+check('rerun (already_integrated) is idempotent: nothing_to_retire, store bytes unchanged, one record',
+  again.status === 'already_integrated' && again.adoption_retirement.status === 'nothing_to_retire'
+    && fs.readFileSync(storeFile, 'utf8') === storeBytes && Object.keys(afterStore.rollovers).length === 1,
+  JSON.stringify(again.adoption_retirement));
 check('record is a content-addressed mission_terminal_rollover with no fabrication',
   rec && rec.artifact_type === 'mission_terminal_rollover' && rec.synthesized_work_orders === 0 && rec.mutated_receipts === 0 && rec.history_rewritten === false);
 
@@ -135,7 +142,7 @@ check('(a) not an ancestor of HEAD -> skipped ROLLOVER_NOT_SHIPPED, nothing writ
 // 2b. no merge at all (develop moved) -> integration refuses, nothing retired
 seed();
 run = integrate({ divergeDevelop: true });
-check('(a) no merge happened -> integration refuses and nothing is retired', run.error && !run.merged && !fs.existsSync(storeFile), run.error && run.error.message);
+check('(a) no merge happened -> integration refuses with DEVELOP_TIP_DRIFT and nothing is retired', run.error && run.error.code === 'DEVELOP_TIP_DRIFT' && !run.merged && !fs.existsSync(storeFile), run.error && run.error.message);
 
 // 3. (c) only one adoption of the graph -> untouched
 seed();

@@ -179,7 +179,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-05 01M45R4M3V0999MB5HEV8E7R84
 - **Problem**: hangar 的 claude 工作階段反映：預覽與審查伺服器應向 lab-ingress 登記，而不是各自開 0.0.0.0 的臨時埠。目前審查伺服器只綁本機 127.0.0.1，沒有登記機制。 (draft)
 - **Impact**: 其他機器想看預覽時只能自己想辦法；原定版本已不會出貨，需擁有者重訂時程並與 hangar 確認。 (draft)
-- **Trigger**: v2.37.0 shipped AND hangar lab-ingress v2 `lab preview` decided
+- **Trigger**: mods shipped with 3.0.0 AND hangar lab-ingress v2 `lab preview` decided
 - **Effort**: M
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
@@ -1071,19 +1071,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
 
-### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
-- **Id**: BL-0089
-- **Status**: open
-- **Since**: 2026-08-31
-- **Origin**: self
-- **Problem**: v2.35.5 的品管面板留下四個小建議：縮排改動污染 blame、輸出函式混用、說明文字印出腳本原始碼等。都屬於整理性質。 (draft)
-- **Impact**: 純整理，不影響功能；下次改到該檔案時順手處理即可。 (draft)
-- **Trigger**: next touch of the named files.
-- **Effort**: S
-- **Source**: v2.35.5 qc panels + foremen, 2026-08-31.
-- **Pointer**: docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md
-- **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2)…
-
 ### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
 - **Id**: BL-0092
 - **Status**: open
@@ -1199,8 +1186,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-04
 - **Origin**: owner
 - **Problem**: 擁有者要求 mods 介面能顯示「代理替你做的決定」提醒。目前沒有任何地方記錄這類決定，所以介面無從顯示；要先做記錄寫入，再做監看，最後才是顯示。 (draft)
-- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods v2.37.0 發布之後。 (draft)
-- **Trigger**: after mods v2.37.0 ships
+- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods 隨 3.0.0 發布之後。 (draft)
+- **Trigger**: after mods ship with 3.0.0
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md

@@ -120,13 +120,13 @@ function rejectUnknownFlags(flags, allowed, label) {
   }
 }
 
-function emit(payload) {
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
 function emitTo(payload, options = {}) {
   const stdout = options.stdout || process.stdout;
   stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function emit(payload) {
+  emitTo(payload);
 }
 
 function cmdPrepare(flags, options = {}) {

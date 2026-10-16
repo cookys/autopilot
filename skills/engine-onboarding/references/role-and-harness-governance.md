@@ -198,10 +198,15 @@ Use these bars before a role becomes eligible for routing.
 
 **Tool attempt in a tools-forbidden exam (d-80d327c9)**: the CLI exam prompt carries the fixed
 sentence `TOOLS ARE FORBIDDEN: ...` (`TOOL_FORBID_NOTICE` in `qualification-review-provider.js`). If the
-seat still emits a tool event (opencode), that case is scored wrong with reason
+seat still emits a tool event, that case is scored wrong with reason
 `tool_attempt_forbidden` and the exam runs on to the last case; it is NOT `transport_fail`. A tool
 event under a prompt without that sentence, and any real connection/launcher/HTTP error, keep the
-`transport_fail` class (abort, no verdict, retake).
+`transport_fail` class (abort, no verdict, retake). Covered runners: opencode (any tool event), kimi (a
+tool-call encoding on the wire other than a non-empty tool list), agy (a transcript tool call). Not
+tagged, because they do not prove the model attempted a tool: kimi's unexpected loop events and
+snapshot/agent-binding problems, agy's fallback/deny-rule/unverified findings (configuration, kept
+`transport_fail`). codex/claude/grok/qoderclicn/cursor have no post-run tool audit, so there is nothing to detect.
+brain and verification_author exams carry the same reason on the raw exchange row.
 
 ### Reviewer
 

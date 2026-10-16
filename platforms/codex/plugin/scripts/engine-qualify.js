@@ -2537,6 +2537,8 @@ function runVaQualification(options) {
         envelope: caseData.envelope,
         transport_ok: execution.ok,
         output,
+        // d-80d327c9: an empty plan from a forbidden tool attempt carries its reason.
+        ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
       if (!execution.ok) {
         // Broker/launcher/host-side failure: transport_fail ABORTS with no
@@ -2877,6 +2879,8 @@ function runBrainQualification(options) {
       );
       rawExchanges.push({
         round_id: round.round_id, input, transport_ok: true, output: stdout,
+        // d-80d327c9: an empty answer from a forbidden tool attempt carries its reason.
+        ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
       // declare_done is a candidate TERMINAL action: the administration stops here,
       // so a premature declaration reaches the grader as a genuinely shorter trace

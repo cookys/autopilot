@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Qualification exams: a tool attempt by a seat whose CLI prompt carried the fixed tools-forbidden notice is now scored as that case wrong (`tool_attempt_forbidden`) and the exam continues, instead of aborting the whole sitting as `transport_fail` (owner ruling d-80d327c9); a tool event without the notice and real connection errors keep `transport_fail`. Muse Spark 1.3 reviewer-v6 attempt 1 re-judged in its evidence README.
+- Qualification exams: a tool attempt by a seat whose CLI prompt carried the fixed tools-forbidden notice is now scored as that case wrong (`tool_attempt_forbidden`) and the exam continues, instead of aborting the whole sitting as `transport_fail` (owner ruling d-80d327c9); a tool event without the notice and real connection errors keep `transport_fail`. Covers opencode, kimi and agy proven tool calls; brain and VA raw rows carry the reason. Muse Spark 1.3 reviewer-v6 attempt 1 stays a transport failure (its prompt had no prohibition).
 
 - BL-0062: the integration step (`next-touch-validation.js` `executeAuthorizedIntegration`) now retires the other COMPLETE same-graph Mission adoptions automatically the moment a merge is confirmed, re-deriving the same `observed_head`-is-an-ancestor proof as `mission-terminal-reconcile.js rollover` (never chronology, never at COMPLETE); the result carries `adoption_retirement` (`retired` / `nothing_to_retire` / `skipped` with the reason), and `rollover` stays as the rescue tool. New suite `hooks/tests/mission-retire-on-integration.test.sh`.
 

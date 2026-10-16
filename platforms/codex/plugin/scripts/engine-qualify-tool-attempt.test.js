@@ -25,7 +25,7 @@ fs.writeFileSync(adapter, `'use strict';
 const fs = require('fs');
 const crypto = require('crypto');
 const request = JSON.parse(fs.readFileSync(0, 'utf8'));
-const hit = crypto.createHash('sha256').update(request.payload.content).digest('hex')[0] === '0';
+const hit = crypto.createHash('sha256').update(request.payload.content).digest('hex')[0] === '0' || request.payload.content.length % 3 === 0;
 if (hit) {
   const failures = {
     forbidden: 'model call failed: tool_forbidden: opencode containment breach: tool event bash:error — answer discarded',
@@ -42,17 +42,17 @@ process.stdout.write(JSON.stringify({
 `);
 
 let assertions = 0;
-function run(scenario) {
-  const raw = path.join(tmp, `raw-${scenario}`);
+function run(scenario, role = 'reviewer') {
+  const raw = path.join(tmp, `raw-${role}-${scenario}`);
   const child = spawnSync(process.execPath, [
-    path.join(__dirname, 'engine-qualify.js'), 'reviewer',
+    path.join(__dirname, 'engine-qualify.js'), role,
     '--engine', 'tool-attempt', '--model', 'tool-attempt-exact', '--model-version', '2026-07-26',
     '--runner', 'cc-shim', '--runner-version', '1.0.0', '--family', 'openai',
     '--harness-version', 'reviewer-harness-v2', '--effort', 'high',
     '--prompt-config-hash', 'a'.repeat(64), '--semantic-fingerprint', 'b'.repeat(64),
     '--containment-fingerprint', 'c'.repeat(64),
     '--task-class', 'code_review', '--domain', 'repository', '--language', 'en', '--tool', 'diff_read',
-    '--trials', '2', '--store', path.join(tmp, `store-${scenario}`), '--raw-dir', raw,
+    '--trials', '2', '--store', path.join(tmp, `store-${role}-${scenario}`), '--raw-dir', raw,
     '--remote-provider-cmd', `${process.execPath} ${adapter}`,
     '--remote-provider', 'fake-provider', '--provider-env', 'QUAL_SCENARIO',
   ], {
@@ -62,16 +62,18 @@ function run(scenario) {
       QUAL_SCENARIO: scenario,
       AUTOPILOT_QUALIFY_NOW: '2026-07-26T00:00:00.000Z',
       AUTOPILOT_QUALIFY_SEED: 'tool-attempt-seed',
-      ENGINE_CAPABILITY_DIR: path.join(tmp, `cap-${scenario}`),
-      ENGINE_SCORECARD_DIR: path.join(tmp, `score-${scenario}`),
+      ENGINE_CAPABILITY_DIR: path.join(tmp, `cap-${role}-${scenario}`),
+      ENGINE_SCORECARD_DIR: path.join(tmp, `score-${role}-${scenario}`),
     },
   });
   let verdict = null;
   try { verdict = JSON.parse(child.stdout.trim().split('\n').pop()); } catch { /* reported below */ }
   let rows = [];
   try {
-    rows = fs.readFileSync(path.join(raw, 'reviewer-exchanges.jsonl'), 'utf8')
-      .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const file = fs.readdirSync(raw).find((name) => /exchanges\.jsonl$/u.test(name) && !/^brain-trial-order/u.test(name));
+    rows = fs.readdirSync(raw).filter((name) => /exchanges\.jsonl$/u.test(name)).flatMap((name) => fs.readFileSync(path.join(raw, name), 'utf8')
+      .split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    void file;
   } catch { /* transport_fail aborts early; may have partial rows */ }
   return { child, verdict, rows };
 }
@@ -94,6 +96,16 @@ check(unforbidden.verdict && unforbidden.verdict.outcome === 'transport_fail',
 const connection = run('connection');
 check(connection.verdict && connection.verdict.outcome === 'transport_fail',
   'connection error -> still transport_fail');
+
+// brain and verification_author: the empty answer carries the reason code, the exam is not aborted.
+for (const role of ['brain', 'verification_author']) {
+  const tagged = run('forbidden', role);
+  check(tagged.verdict && tagged.verdict.outcome !== 'transport_fail', `${role}: forbidden attempt does not abort the exam`);
+  check(tagged.rows.some((r) => r.reason && /^tool_attempt_forbidden:/u.test(r.reason) && r.transport_ok === true),
+    `${role}: the empty answer carries reason tool_attempt_forbidden`);
+  const plain = run('unforbidden', role);
+  check(plain.verdict && plain.verdict.outcome === 'transport_fail', `${role}: no prohibition tag -> transport_fail`);
+}
 
 console.log(`engine-qualify-tool-attempt.test.js: ${assertions} assertions passed`);
 fs.rmSync(tmp, { recursive: true, force: true });

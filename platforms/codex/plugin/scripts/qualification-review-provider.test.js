@@ -143,6 +143,7 @@ if (mode !== 'none') {
   const dir = path.join(process.env.HOME, '.kimi-code', 'sessions', 'wd_x', 'session_0', 'agents', 'main');
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(path.join(process.env.STUB_KIMI_FIX, mode === 'leak' ? 'k1-leak' : 'k2-clean', 'wire.jsonl'), path.join(dir, 'wire.jsonl'));
+  if (mode === 'toolcall') fs.appendFileSync(path.join(dir, 'wire.jsonl'), JSON.stringify({ type: 'usage.record', agentId: 'main', toolCallId: 'call_1' }) + '\\n');
 }
 process.stdout.write(process.env.STUB_OUTPUT || '');
 `, { mode: 0o755 });
@@ -1014,6 +1015,9 @@ function roleOnlyRequest(role, content = 'x') {
     check(/agy containment breach/.test(child.stderr) && pattern.test(child.stderr),
       `agy ${mode}: stderr names the breach (${pattern})`);
     check(!child.stdout.includes('"verdict'), `agy ${mode}: no answer is emitted`);
+    // d-80d327c9: only a proven tool call is tagged; fallback / config / unverified breaches stay plain.
+    equal(/model call failed: tool_forbidden: agy containment breach/.test(child.stderr), mode === 'toolcall',
+      `agy ${mode}: tool_forbidden tag only for a proven tool call`);
   }
 }
 // ── 11c. agy transient-503 retry (transport layer) ─────────────────────────────
@@ -2083,10 +2087,18 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   const leak = runProvider({ env: kimiEnv('leak'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(leak.child.status, 1, 'kimi run whose wire shows tool use is rejected');
   check(/kimi containment breach/.test(leak.child.stderr), 'the rejection names the kimi containment breach');
+  // d-80d327c9: a snapshot that lists tools is a CONFIGURATION leak (not the model's doing) -> plain.
+  check(!/tool_forbidden/.test(leak.child.stderr), 'kimi non-empty tool snapshot is not tagged as a model tool attempt');
+  // A tool call the model emitted (toolCallId on the wire) under the tools-forbidden prompt is tagged.
+  const attempt = runProvider({ env: kimiEnv('toolcall'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(attempt.child.status, 1, 'kimi run whose wire shows a model tool call is rejected');
+  check(/model call failed: tool_forbidden: kimi containment breach: tool-call encoding in kimi wire/.test(attempt.child.stderr),
+    'kimi model tool call under the tools-forbidden prompt is tagged tool_forbidden');
   // Negative control: no wire at all -> fail closed (exit 0 is not proof).
   const none = runProvider({ env: kimiEnv('none'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(none.child.status, 1, 'kimi run that left no wire is rejected (fail closed)');
   check(/containment unverified/.test(none.child.stderr), 'the missing-wire rejection says containment is unverified');
+  check(!/tool_forbidden/.test(none.child.stderr), 'kimi unverified containment is not tagged as a model tool attempt');
   // Stale sessions in the TEMPLATE (a prior default-agent run, as in real staging dirs) must not
   // be audited: only the wire this run produced counts. The template itself stays untouched.
   const staleWire = path.join(kimiTemplate, '.kimi-code', 'sessions', 'wd_old', 'session_old', 'agents', 'main');
@@ -2280,5 +2292,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 503) throw new Error(`qualification-review-provider: expected exactly 503 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 513) throw new Error(`qualification-review-provider: expected exactly 513 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -1102,6 +1102,12 @@ const TOOL_FORBID_NOTICE = 'TOOLS ARE FORBIDDEN: you have no tools in this exam.
 // from provider stderr, which would erase the tag. The driver's reason code is
 // tool_attempt_forbidden.
 const TOOL_ATTEMPT_FORBIDDEN = 'tool_forbidden';
+// Prefix for a containment breach message: the tag only when the breach is a proven tool
+// attempt AND the prompt that was sent carried the notice.
+function toolTag(prompt, isToolAttempt) {
+  return isToolAttempt && typeof prompt === 'string' && prompt.includes(TOOL_FORBID_NOTICE)
+    ? `${TOOL_ATTEMPT_FORBIDDEN}: ` : '';
+}
 const qualificationUsage = require('./lib/qualification-usage');
 
 // BL-0161: a CLI that hits a quota / login wall can still exit 0 and just print the
@@ -1642,7 +1648,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
           logDir: path.join(agyRoot, 'log'), brainDir: path.join(agyRoot, 'brain'),
         });
         if (breach) {
-          error = new Error(`agy containment breach: ${breach} — answer discarded`);
+          error = new Error(`${toolTag(prompt, agyContainment.isToolAttemptBreach(breach))}agy containment breach: ${breach} — answer discarded`);
           value = undefined;
         }
       }
@@ -1651,7 +1657,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       if (!error && kind === 'kimi' && cloneHome) {
         const breach = kimiContainment.auditKimiRun({ seatHome: cloneHome });
         if (breach) {
-          error = new Error(`kimi containment breach: ${breach} — answer discarded`);
+          error = new Error(`${toolTag(prompt, kimiContainment.isToolAttemptBreach(breach))}kimi containment breach: ${breach} — answer discarded`);
           value = undefined;
         }
       }
@@ -1688,9 +1694,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
             // the seat disobeyed an explicit instruction: tagged so the exam driver
             // scores THIS case wrong and keeps going. No such instruction -> the plain
             // containment failure (transport class) as before.
-            const tag = typeof prompt === 'string' && prompt.includes(TOOL_FORBID_NOTICE)
-              ? `${TOOL_ATTEMPT_FORBIDDEN}: ` : '';
-            finish(new Error(`${tag}opencode containment breach: ${breaches.join('; ')} — answer discarded`));
+            finish(new Error(`${toolTag(prompt, true)}opencode containment breach: ${breaches.join('; ')} — answer discarded`));
             return;
           }
           text = opencodeContainment.extractText(text);

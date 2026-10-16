@@ -3151,6 +3151,26 @@
     },
     "guidance-files-qs": {
       "guidance-files-qs/QS-ARM-NOTE.txt": "5540d642f3a226a2417c2d270beaca6bb67c275a856a8c594e94f4ea8617247e"
+    },
+    "quality-pipeline-qs-red-a2": {
+      "quality-pipeline-qs-red-a2/SKILL.md": "83ecf7d59b4514a45cb7c104b88d230d3515393cf97676d7eaf4e624197850a9",
+      "quality-pipeline-qs-red-a2/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-qs-red-a2/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-qs-red-a2/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-qs-red-a2/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-qs-red-a2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-qs-red-a2/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
+      "quality-pipeline-qs-red-a2/references/test-policy.md": "66f76e460572b816cbfd07db4e6450157e2ca60b04d391c36d30f693b717ee9c"
+    },
+    "quality-pipeline-qs-red-b2": {
+      "quality-pipeline-qs-red-b2/SKILL.md": "2b70aa695e0677497340b18a93c64f5a6be5288d5f3e45e2f30137fa492d0784",
+      "quality-pipeline-qs-red-b2/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-qs-red-b2/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-qs-red-b2/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-qs-red-b2/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-qs-red-b2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-qs-red-b2/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
+      "quality-pipeline-qs-red-b2/references/test-policy.md": "66b64203d6e995007ccbd1681cc1330c557fd8382f5ac2703b52720e900ca64b"
     }
   },
   "pack_meta": {
@@ -7977,6 +7997,16 @@
     "guidance-files-qs": {
       "kind": "dir",
       "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/filesqs",
+      "ref": "4032ba11"
+    },
+    "quality-pipeline-qs-red-a2": {
+      "kind": "dir",
+      "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms2/red-a2",
+      "ref": "4032ba11"
+    },
+    "quality-pipeline-qs-red-b2": {
+      "kind": "dir",
+      "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms2/red-b2",
       "ref": "4032ba11"
     }
   }

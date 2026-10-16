@@ -44,10 +44,16 @@ check_rule() {
   local got; got="$(rules_of "$LIBDIR")"
   case " $got " in *" $rule "*) ;; *) fail "rule $rule not reported (got: $got)";; esac
   assert_eq "$(rules_of "$LIBDIR" | tr ' ' '\n' | grep -c "^$rule$")" "1" "$rule: reported exactly once"
-  # negative control
+  # negative control: the mutant must run normally (no ERR) and report every other rule exactly as the real lib does;
+  # only the removed rule may disappear. A crashed or half-working copy does not count as a kill.
   local m; m="$(mutant "$rule")"; TOTAL=$((TOTAL + 1))
-  case " $(rules_of "$m") " in *" $rule "*) echo "NOT KILLED: mutant of $rule still reports it";; *) KILLED=$((KILLED + 1));; esac
-  # clean config under the same window stays silent in this mutant too (mutant did not break unrelated output)
+  local mgot want have
+  mgot="$(rules_of "$m")"
+  want="$(printf '%s\n' $got | grep -vx "$rule" | sort | tr '\n' ' ')"
+  have="$(printf '%s\n' $mgot | grep -vx "MUTED_$rule" | sort | tr '\n' ' ')"
+  if [ "$mgot" = "ERR" ]; then echo "NOT KILLED: mutant of $rule crashed"
+  elif [ "$want" != "$have" ]; then echo "NOT KILLED: mutant of $rule changed other rules (want: $want / got: $have)"
+  else KILLED=$((KILLED + 1)); fi
   : "$extra"
 }
 V1='"config_schema_version":1'
@@ -64,7 +70,7 @@ echo "negative controls: $KILLED/$TOTAL mutants killed (red when the check is re
 
 # detail content
 set_window 250000; cfg "{$V1,\"context_budgt\":{\"t2\":1},\"context_budget\":{\"mdoe\":\"off\"}}"
-OUT="$(node "$LIBDIR/config-audit.js" --config "$TEST_TMP/cfg.json")"; assert_eq "$?" "1" "findings: CLI exit 1" 2>/dev/null || true
+OUT="$(node "$LIBDIR/config-audit.js" --config "$TEST_TMP/cfg.json")"; assert_eq "$?" "1" "findings: CLI exit 1"
 assert_contains "$OUT" "context_budgt" "typo top-level key reported"
 assert_contains "$OUT" "try: context_budget" "typo suggests the closest known key"
 assert_contains "$OUT" "try: context_budget.mode" "nested typo suggests context_budget.mode"

@@ -918,8 +918,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
       });
     }
     // Default: mechanical debt/high-water/transcript when gitCwd is available.
+    // BL-0077: no repository authority means no admission, never a free pass.
     if (!isStr(input.gitCwd) && !isStr(input.repo)) {
-      return { ok: true };
+      return {
+        ok: false,
+        code: 'EFFECT_REPOSITORY_AUTHORITY_REQUIRED',
+        reason: 'effect admission requires gitCwd/repo or an explicit preEffectAdmit adapter',
+      };
     }
     return admitControllerEffects({
       gitCwd: input.gitCwd || input.repo,

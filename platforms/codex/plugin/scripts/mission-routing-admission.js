@@ -532,6 +532,37 @@ function loadControllerEvidenceFromRoot(
  * No ambient env, no global Work Order scan, no caller object as authority
  * (unless allowTestCallerEvidence).
  */
+// BL-0077: the test-only caller-evidence seam must carry the same binding keys
+// the production loader checks with exactEvidenceBinding, plus the zero-effect
+// invariants, or a hand-built object could certify a no-op the real rail
+// would refuse. Values are checked against whatever the caller sealed.
+const TEST_NOOP_BINDING_KEYS = [
+  'repo_identity', 'mission_lineage_id', 'mission_policy_digest',
+  'mission_graph_digest', 'graph_node_id', 'graph_attempt', 'mission_claim_id',
+  'mission_campaign_id', 'icc_campaign_id', 'campaign_contract_digest',
+  'strict_contract_digest',
+];
+function testNoopCarriesProductionBinding(receipt, options = {}) {
+  if (!isObj(receipt)
+      || receipt.artifact_type !== 'noop_receipt'
+      || receipt.dispatcher_called !== false
+      || receipt.mutation_attempts !== 0
+      || receipt.gate_attempts !== 0) {
+    return false;
+  }
+  if (!TEST_NOOP_BINDING_KEYS.every((key) => receipt[key] != null)) return false;
+  const sealed = {
+    graph_node_id: options.graphNodeId,
+    mission_graph_digest: options.missionGraphDigest,
+    mission_lineage_id: options.missionLineageId,
+    mission_policy_digest: options.missionPolicyDigest,
+    icc_campaign_id: options.iccCampaignId,
+  };
+  return Object.entries(sealed).every(([key, value]) => (
+    value == null || receipt[key] === value
+  ));
+}
+
 function loadDurableMissionEvidence(repoRoot, options = {}) {
   let historicalOutputs = null;
   let noOpReceipt = null;
@@ -548,7 +579,8 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     if (isObj(options.noOpReceipt) && isStr(options.noOpReceipt.digest)) {
       const body = { ...options.noOpReceipt };
       delete body.digest;
-      if (options.noOpReceipt.digest === sha256(canonicalJson(body))) {
+      if (options.noOpReceipt.digest === sha256(canonicalJson(body))
+          && testNoopCarriesProductionBinding(options.noOpReceipt, options)) {
         noOpReceipt = options.noOpReceipt;
       }
     }
@@ -994,7 +1026,8 @@ function finalizeMissionEvidence(
         const raw = JSON.parse(fs.readFileSync(path.resolve(options.noopReceiptPath), 'utf8'));
         if (isObj(raw) && isStr(raw.digest)) {
           const body = { ...raw }; delete body.digest;
-          if (raw.digest === sha256(canonicalJson(body))) noOpReceipt = raw;
+          if (raw.digest === sha256(canonicalJson(body))
+              && testNoopCarriesProductionBinding(raw, options)) noOpReceipt = raw;
         }
       } catch (_e) { /* ignore test-path */ }
     }

@@ -911,19 +911,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Controller helper API fail-closed hardening
-- **Id**: BL-0077
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 控制器的幾個輔助函式遇到缺漏輸入（如沒給費用預估、倉庫權限）時會預設放行，而不是拒絕。目前只被內部固定呼叫，尚未外露。 (draft)
-- **Impact**: 只有未來把這些函式開放給外部呼叫時才會出問題；現在影響很小。 (draft)
-- **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/controller-helper-api-fail-closed-hardening.md
-- **Context**: Close the helper-level fail-open edges recorded as CED-N01, CED-N02, CED-N03, CED-N05, and CED-N06: require explicit spend projection, preserve/reject empty controller replacement, require repository authority, reject traversal…
-
 ### Boundary outcome and root dispatch semantics
 - **Id**: BL-0078
 - **Status**: open

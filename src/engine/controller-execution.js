@@ -270,7 +270,23 @@ function checkJointRepairBudget(usage, limits, {
 } = {}) {
   const u = { ...emptyBudgetUsage(), ...(usage || {}) };
   const lim = defaultBudgetLimits(limits || {});
-  const projected = isObj(projectedDelta) ? projectedDelta : {};
+  // BL-0077: a caller that does not state its projected spend is not "spending
+  // nothing" -- an equality-at-cap state would otherwise admit. Say `{}` to
+  // project no spend explicitly.
+  if (!isObj(projectedDelta)) {
+    return {
+      ok: false,
+      status: 'budget_projection_required',
+      code: 'BUDGET_PROJECTION_REQUIRED',
+      exceeded: [],
+      usage: u,
+      limits: lim,
+      allow_spend: false,
+      projected: null,
+      reason: 'joint repair budget check requires an explicit projectedDelta object; pass {} to project no spend',
+    };
+  }
+  const projected = projectedDelta;
   const exceeded = [];
   for (const axis of REPAIR_BUDGET_AXES) {
     if (axis === 'fresh_input_tokens') {
@@ -669,7 +685,17 @@ function controllerStateDigest(state) {
 function attachControllerState(workOrder, controllerState) {
   if (!isObj(workOrder)) fail('INVALID_WORK_ORDER', 'work order required');
   const next = { ...workOrder };
-  next.controller = emptyControllerState(controllerState || workOrder.controller || {});
+  // BL-0077: omitting the state preserves the stored controller; supplying one
+  // replaces it, and an empty or non-object replacement is rejected rather than
+  // silently resetting the whole controller state.
+  if (controllerState === undefined || controllerState === null) {
+    next.controller = emptyControllerState(workOrder.controller || {});
+    return next;
+  }
+  if (!isObj(controllerState) || Object.keys(controllerState).length === 0) {
+    fail('INVALID_CONTROLLER_STATE', 'controller replacement must be a non-empty object; omit it to keep the stored controller');
+  }
+  next.controller = emptyControllerState(controllerState);
   return next;
 }
 
@@ -2906,8 +2932,23 @@ function admitExecutableMissionDelta({
   const outputs = (outputPaths || []).map(String);
   const reasons = [];
 
+  // BL-0077: this helper must not depend on its callers' normalizers. A path
+  // that is absolute, empty, or has a ./.. / empty segment, a backslash or NUL
+  // can satisfy the string-prefix allow check while resolving elsewhere.
+  function unsafeRelPath(p) {
+    if (typeof p !== 'string' || p.length === 0) return true;
+    if (p.includes('\0') || p.includes('\\') || p.startsWith('/')) return true;
+    return p.split('/').some((seg) => seg === '' || seg === '.' || seg === '..');
+  }
+
   function underAllowed(p) {
     return allowed.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+  }
+
+  for (const p of [...required, ...outputs, ...creates, ...(extraDeclaredPaths || []).map(String)]) {
+    if (unsafeRelPath(p)) {
+      reasons.push({ code: 'PATH_TRAVERSAL', path: p });
+    }
   }
 
   for (const p of [...required, ...outputs]) {

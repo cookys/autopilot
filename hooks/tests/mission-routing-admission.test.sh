@@ -698,6 +698,22 @@ assert.throws(() => {
 
 // Bound no-op with sealed receipt spends zero attempts.
 const noopBody = {
+  // BL-0077: the test seam carries the same binding keys the production loader checks.
+  artifact_type: 'noop_receipt',
+  dispatcher_called: false,
+  mutation_attempts: 0,
+  gate_attempts: 0,
+  repo_identity: 'git-common-dir:/fixture',
+  mission_lineage_id: 'lineage-fixture',
+  mission_policy_digest: 'c'.repeat(64),
+  mission_graph_digest: 'd'.repeat(64),
+  graph_node_id: 'n1',
+  graph_attempt: 1,
+  mission_claim_id: 'claim-fixture',
+  mission_campaign_id: 'campaign-fixture',
+  icc_campaign_id: 'icc-fixture',
+  campaign_contract_digest: 'e'.repeat(64),
+  strict_contract_digest: 'f'.repeat(64),
   base_sha: 'a'.repeat(40),
   acceptance_digest: 'b'.repeat(64),
   current_bytes: { 'docs/sources/plan-0.md': '# Phase 0-0: coverage only\n' },

@@ -223,6 +223,8 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - 完整測試套件有 4 個檔案失敗，都確認不是這次改動引入的：其中 2 個在 base `6e91be30` 上同樣失敗，另外 2 個是測試執行中途改動本機設定造成的，已記入 BACKLOG。
 - 已用 discuss-v4 重考四格：haiku-high FAIL 29/48；sonnet-high、opus-high、opus-low PASS 45/48，scorecard 事件 218–221，四列都收進官方預設。
 
+- BL-0077: controller helpers now fail closed on missing input: `checkJointRepairBudget` requires an explicit `projectedDelta`, `attachControllerState` rejects an empty replacement, the default effect admission refuses without repository authority, `admitExecutableMissionDelta` rejects traversal paths itself, and the test-only Mission no-op evidence seam must carry the production binding keys.
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

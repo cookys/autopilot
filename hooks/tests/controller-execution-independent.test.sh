@@ -345,7 +345,7 @@ console.log("Starting independent verification tests for Controller Execution...
 
   // Positive: checkJointRepairBudget is within budget
   const limits = ctrl.defaultBudgetLimits({ model_calls: 5 });
-  const check1 = ctrl.checkJointRepairBudget(usage, limits);
+  const check1 = ctrl.checkJointRepairBudget(usage, limits, { projectedDelta: {} });
   assert.strictEqual(check1.ok, true);
   assert.strictEqual(check1.status, 'within_budget');
   assert.strictEqual(check1.allow_spend, true);
@@ -356,7 +356,7 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(nextUsage.fresh_input_tokens, 100);
 
   // Negative: checkJointRepairBudget denies overage
-  const check2 = ctrl.checkJointRepairBudget(nextUsage, { model_calls: 2 });
+  const check2 = ctrl.checkJointRepairBudget(nextUsage, { model_calls: 2 }, { projectedDelta: {} });
   assert.strictEqual(check2.ok, false);
   assert.strictEqual(check2.status, 'awaiting_convergence_adjudication');
   assert.strictEqual(check2.allow_spend, false);

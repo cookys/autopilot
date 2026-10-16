@@ -39,12 +39,22 @@ function isIncrementalStation(station) {
 function sortedPathDigests(list) {
   if (!Array.isArray(list)) return null;
   const rows = [];
+  const seen = new Set();
   for (const entry of list) {
     if (!entry || typeof entry.path !== 'string' || entry.path.length === 0
         || !SHA256.test(entry.file_digest || '')) return null;
+    // BL-0146 D4: a path listed twice is ambiguous about which digest the carry rests on.
+    if (seen.has(entry.path)) return null; // guard:duplicate_path
+    seen.add(entry.path);
     rows.push({ path: entry.path, file_digest: entry.file_digest });
   }
   return rows.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+// A path in both the re-check set and the carried set would be both re-judged and trusted.
+function setsOverlap(a, b) {
+  const paths = new Set(a.map((e) => e.path));
+  return b.some((e) => paths.has(e.path));
 }
 
 // Plan 2.4 reuse key. Returns null when any component is missing or malformed, so a caller
@@ -61,6 +71,7 @@ function incrementalBinding(canonicalDigest, parts) {
   const recheck = sortedPathDigests(parts.recheck_set);
   const carried = sortedPathDigests(parts.carried_set);
   if (!recheck || !carried) return null;
+  if (setsOverlap(recheck, carried)) return null; // guard:set_overlap
   return canonicalDigest({
     mode: 'incremental',
     base_sha: parts.base_sha,
@@ -84,7 +95,7 @@ function incrementalBlock(ctx) {
   if (!inc || typeof inc !== 'object') return null;
   const carried = sortedPathDigests(inc.carried_set);
   const recheck = sortedPathDigests(inc.recheck_set);
-  if (!carried || !recheck || typeof inc.prior_head !== 'string' || inc.prior_head.length === 0
+  if (!carried || !recheck || setsOverlap(recheck, carried) || typeof inc.prior_head !== 'string' || inc.prior_head.length === 0
       || typeof inc.new_head !== 'string' || inc.new_head.length === 0
       || !SHA256.test(inc.delta_diff_digest || '')) return null;
   return {

@@ -30,10 +30,11 @@ const F = (id) => ({ finding_id: id, claim: 'c', severity: '🟠', source: 'prod
 const ids = ['f1', 'f2'];
 const seatOut = (resolutions, findings = 'none') => JSON.stringify({ findings, resolutions });
 const EV = 'src/a.js:10';
+const PACKET = ['src/a.js', 'src/c.js'];
 
 function normChecks(N) {
   const r = {};
-  const n = (raw, o = { priorFindingIds: ids }) => N.normalizeSeatReview(raw, o);
+  const n = (raw, o = { priorFindingIds: ids, packetPaths: PACKET }) => N.normalizeSeatReview(raw, o);
   const ok = n(seatOut([{ finding_id: 'f1', status: 'resolved', evidence: EV }]));
   r.accepts_resolution = ok.status === 'normalized' && ok.resolutions.length === 1 && ok.resolutions[0].addressed === true;
   r.rejects_unknown_id = n(seatOut([{ finding_id: 'zz', status: 'resolved', evidence: EV }])).status === 'invalid';
@@ -42,6 +43,11 @@ function normChecks(N) {
   const noEv = n(seatOut([{ finding_id: 'f1', status: 'resolved' }, { finding_id: 'f2', status: 'invalid', evidence: 'no evidence here' }]));
   r.resolved_without_evidence_not_addressed = noEv.status === 'normalized' && noEv.resolutions.every((e) => e.addressed === false);
   r.still_present_needs_no_evidence = n(seatOut([{ finding_id: 'f1', status: 'still_present' }])).resolutions[0].addressed === true;
+  // D4 item 6: evidence must name a file the seat was shown; the path list is mandatory.
+  const offPacket = n(seatOut([{ finding_id: 'f1', status: 'resolved', evidence: 'src/zzz.js:3' }]));
+  r.evidence_outside_packet_not_addressed = offPacket.status === 'normalized' && offPacket.resolutions[0].addressed === false;
+  r.evidence_inside_packet_addressed = n(seatOut([{ finding_id: 'f1', status: 'resolved', evidence: 'src/c.js:3' }])).resolutions[0].addressed === true;
+  r.missing_packet_list_rejected = n(seatOut([]), { priorFindingIds: ids }).status === 'invalid';
   r.full_round_rejects_object_form = n(seatOut([]), {}).status === 'invalid';
   r.findings_carried_alongside = n(seatOut([], JSON.stringify([F('n1')]))).findings.length === 1;
   r.array_form_unchanged = n(JSON.stringify([F('n1')])).status === 'normalized' && n('none').status === 'normalized';
@@ -51,9 +57,9 @@ function normChecks(N) {
 function closeChecks(C) {
   const r = {};
   const N = require(eng('product-review-normalizer'));
-  const seat = (res) => N.normalizeSeatReview(seatOut(res), { priorFindingIds: ids });
+  const seat = (res) => N.normalizeSeatReview(seatOut(res), { priorFindingIds: ids, packetPaths: PACKET });
   const yes = (id, s) => ({ finding_id: id, status: s, evidence: EV });
-  const state = (seats, q = 2, id = 'f1') => C.evaluateClosure(ids, seats, q).find((x) => x.finding_id === id);
+  const state = (seats, q = 2, id = 'f1', sealed = Object.keys(seats)) => C.evaluateClosure(ids, seats, q, sealed).find((x) => x.finding_id === id);
   const all = (s) => ({ a: seat([yes('f1', s)]), b: seat([yes('f1', s)]), c: seat([yes('f1', s)]) });
   // A3: silence never closes
   r.one_resolved_others_silent_open = state({ a: seat([yes('f1', 'resolved')]), b: seat([]), c: seat([]) }).state === 'open';
@@ -67,6 +73,13 @@ function closeChecks(C) {
   r.mixed_closes_resolved_lists_invalid = mixed.state === 'closed_resolved' && JSON.stringify(mixed.invalid_seats) === '["c"]';
   r.invalid_without_evidence_does_not_close = state({ a: seat([yes('f1', 'resolved')]), b: seat([yes('f1', 'resolved')]), c: seat([{ finding_id: 'f1', status: 'invalid' }]) }).state === 'open';
   r.still_present_disagreement_open = state({ a: seat([yes('f1', 'resolved')]), b: seat([yes('f1', 'resolved')]), c: seat([{ finding_id: 'f1', status: 'still_present' }]) }).state === 'open';
+  const closing = () => ({ a: seat([yes('f1', 'resolved')]), b: seat([yes('f1', 'resolved')]), c: seat([yes('f1', 'resolved')]) });
+  const raw = (q, sealed) => C.evaluateClosure(ids, closing(), q, sealed).find((x) => x.finding_id === 'f1').state;
+  r.quorum_nan_open = raw(undefined, ['a', 'b', 'c']) === 'open' && raw(0, ['a', 'b', 'c']) === 'open' && raw(1.5, ['a', 'b', 'c']) === 'open' && raw('2', ['a', 'b', 'c']) === 'open';
+  r.positive_integer_quorum_closes = raw(2, ['a', 'b', 'c']) === 'closed_resolved';
+  r.seat_map_missing_sealed_seat_open = raw(2, ['a', 'b', 'c', 'd']) === 'open';
+  r.seat_map_stranger_open = raw(2, ['a', 'b']) === 'open';
+  r.seat_map_not_given_open = raw(2, undefined) === 'open';
   r.below_quorum_open = state({ a: seat([yes('f1', 'resolved')]) }, 2).state === 'open';
   r.other_finding_unaffected = state({ a: seat([yes('f1', 'resolved')]), b: seat([yes('f1', 'resolved')]), c: seat([yes('f1', 'resolved')]) }, 2, 'f2').state === 'open';
   return r;
@@ -88,8 +101,10 @@ out.legacy_normalizer_rejects_object_form = N0.normalizeProductReviewFindings(se
 // Negative controls.
 const NEGN = {
   unknown_id: [(s) => s.replace('if (!known.has(entry.finding_id)) {', 'if (false) {'), 'rejects_unknown_id'],
-  evidence: [(s) => s.replace('addressed: entry.status === \'still_present\' || EVIDENCE.test(evidence),', 'addressed: true,'), 'resolved_without_evidence_not_addressed'],
-  full_round: [(s) => s.replace('if (priorFindingIds === null) {', 'if (false) {'), 'full_round_rejects_object_form'],
+  evidence: [(s) => s.replace('addressed: entry.status === \'still_present\' || validEvidence,', 'addressed: true,'), 'resolved_without_evidence_not_addressed'],
+  full_round: [(s) => s.replace('if (priorFindingIds === null) {', 'if (false) {').replace(/if \(packetPaths === null \|\|[\s\S]*?\n  \}\n/, ''), 'full_round_rejects_object_form'],
+  evidence_in_packet: [(s) => s.replace('&& evidenceInPacket(evidence, packetPaths); // guard:evidence_in_packet', ';'), 'evidence_outside_packet_not_addressed'],
+  packet_list_required: [(s) => s.replace(/if \(packetPaths === null \|\|[\s\S]*?\n  \}\n/, '').replace('evidenceInPacket(evidence, packetPaths); // guard:evidence_in_packet', 'true;'), 'missing_packet_list_rejected'],
   duplicate: [(s) => s.replace('if (seen.has(entry.finding_id)) {', 'if (false) {'), 'rejects_duplicate_id'],
 };
 for (const [name, [mut, check]] of Object.entries(NEGN)) {
@@ -101,6 +116,8 @@ const NEGC = {
   close_on_first: [(s) => s.replace("if (answers.some(([, status]) => status === null)) return open('not_addressed_by_every_seat');", "if (answers.every(([, status]) => status === null)) return open('not_addressed_by_every_seat');"), 'one_resolved_others_silent_open'],
   still_present: [(s) => s.replace("if (answers.some(([, status]) => status === 'still_present')) return open('still_present');", ''), 'still_present_disagreement_open'],
   quorum: [(s) => s.replace('|| reviewing.length < quorum', ''), 'below_quorum_open'],
+  quorum_integer: [(s) => s.replace("if (!Number.isSafeInteger(quorum) || quorum < 1) return refuse('invalid_quorum'); // guard:quorum_integer", ''), 'quorum_nan_open'],
+  seat_map: [(s) => s.replace(/if \(sealed === null \|\| sealed\.size[\s\S]*?\/\/ guard:seat_map\n    return refuse\('seat_map_mismatch'\);\n  \}/, ''), 'seat_map_missing_sealed_seat_open'],
   mixed_list: [(s) => s.replace('invalid_seats: invalidSeats, reason: null };\n  });', 'invalid_seats: [], reason: null };\n  });'), 'mixed_closes_resolved_lists_invalid'],
 };
 for (const [name, [mut, check]] of Object.entries(NEGC)) {

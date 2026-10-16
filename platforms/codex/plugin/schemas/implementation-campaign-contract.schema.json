@@ -130,6 +130,10 @@
         "disposition_preset": {
           "description": "Caller's choice for a parked review, decided ahead of time so a caller with no human present is not left waiting. end terminalizes not-ready at the park with the findings listed; return keeps the park and waits for a descendant head; repair terminalizes not-ready like end and also emits a seeded implement-review contract (base = the reviewed head, task = the findings, paths and verify copied from this contract) for the caller to seal and run, so this review-only campaign still makes no writer call.",
           "enum": ["end", "return", "repair"]
+        },
+        "return_review": {
+          "description": "How a returned head (--campaign-continuation return) is reviewed. full (default, absent means full) re-reviews the whole base..head range. incremental opts in to reviewing the author's fix plus what it can affect, carrying forward the earlier verdict for files the fix did not touch; the receipt then says review_scope incremental. Any failed eligibility test falls back to full and records the reason.",
+          "enum": ["full", "incremental"]
         }
       }
     },

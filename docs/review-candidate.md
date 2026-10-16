@@ -50,6 +50,7 @@ authority on what is legal; an unknown field anywhere is rejected.
 | `adoption.head_sha` | Required. A 40-hex commit id that exists in the repository and differs from `base_sha`. (The sealer also accepts a 64-hex id in a sha256 repository, but intake supports only 40-hex SHA-1 repositories and refuses such a run with `campaign_repo_precondition_failed`.) |
 | `adoption.author_family` | Optional. Names the model family that wrote the range. It can only tighten the panel: that family's seats do not count toward the required family count. Use exactly one of `openai`, `anthropic`, `alibaba`, `google`, `xai`, `minimax`, `zhipu`. The match is literal against each seat's family (derived from its model name), and **a value that matches no seat is accepted silently and excludes nothing**, so check the spelling. |
 | `adoption.disposition_preset` | Optional, `end`, `return` or `repair`. Applies your choice to a parked review (section 6): `end` and `repair` close it at the first park, `return` is applied by a later `--resume`. |
+| `adoption.return_review` | Optional, `full` (default) or `incremental`. How a returned head is reviewed (section 6.1). `full` re-reviews the whole `base..head` range; `incremental` is an opt-in that reviews the fix plus what it can affect. Sealed, so the seal pins the choice. |
 | `max_repair_generations` | Must be exactly `0`. |
 | `mission_runtime`, `strict_dispatch`, `unit_class` | Must be absent. |
 | `branch` | The branch whose tip is the head. At admission the tip must equal `adoption.head_sha`. |
@@ -88,7 +89,7 @@ values; section 3 shows a script that fills them from Git.
 }
 ```
 
-(`final_panel_reserve_seconds`, `adoption.author_family` and `adoption.disposition_preset` are optional.)
+(`final_panel_reserve_seconds`, `adoption.author_family`, `adoption.disposition_preset` and `adoption.return_review` are optional.)
 
 Field notes, each checked by the sealer:
 

@@ -94,11 +94,18 @@ function validateReviewAuthority(authority, reviewPayload) {
 // seat-store incremental binding, so an incremental gate can never collide with a full one.
 function incrementalGateKeyParts(preparedReview) {
   if (!isObj(preparedReview) || preparedReview.review_input_mode !== 'incremental_return') return {};
+  // BL-0146 D4: no shared sentinel. A round that claims incremental_return without a canonical
+  // binding is refused outright (a shared placeholder would let two unbound rounds collide on one
+  // gate entry). The engine falls back to the full path before it ever reports this mode unbound.
+  if (!isCanonicalSha256(preparedReview.incremental_binding)) { // guard:unbound_incremental
+    throw new CampaignCompositionError(
+      'INCREMENTAL_BINDING_MISSING',
+      'incremental_return review requires a canonical incremental_binding',
+    );
+  }
   return {
     review_input_mode: 'incremental_return',
-    incremental_binding: isCanonicalSha256(preparedReview.incremental_binding)
-      ? preparedReview.incremental_binding
-      : 'unbound-incremental',
+    incremental_binding: preparedReview.incremental_binding,
   };
 }
 

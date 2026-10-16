@@ -97,7 +97,14 @@ const RESOLUTION_STATUSES = new Set(['resolved', 'invalid', 'still_present']);
 const RESOLUTION_KEYS = new Set(['finding_id', 'status', 'evidence']);
 const EVIDENCE = /^[^\s:][^\s]*:[0-9]+(?:-[0-9]+)?$/;
 
-function normalizeResolutions(value, priorFindingIds) {
+// BL-0146 D4: evidence `path:line` only counts when `path` is one of the files the seat was given
+// (the packet's file list). A path the seat was never shown cannot be evidence about its code.
+function evidenceInPacket(evidence, packetPaths) {
+  const cut = evidence.lastIndexOf(':');
+  return cut > 0 && packetPaths.has(evidence.slice(0, cut));
+}
+
+function normalizeResolutions(value, priorFindingIds, packetPaths) {
   if (!Array.isArray(value)) return { error: 'resolutions must be an array' };
   const known = new Set(priorFindingIds);
   const seen = new Set();
@@ -118,12 +125,14 @@ function normalizeResolutions(value, priorFindingIds) {
     }
     seen.add(entry.finding_id);
     const evidence = typeof entry.evidence === 'string' ? entry.evidence.trim() : '';
+    const validEvidence = EVIDENCE.test(evidence)
+      && evidenceInPacket(evidence, packetPaths); // guard:evidence_in_packet
     out.push({
       finding_id: entry.finding_id,
       status: entry.status,
-      evidence: EVIDENCE.test(evidence) ? evidence : null,
+      evidence: validEvidence ? evidence : null,
       // resolved/invalid without path:line evidence is silence, not a verdict (plan 2.5).
-      addressed: entry.status === 'still_present' || EVIDENCE.test(evidence),
+      addressed: entry.status === 'still_present' || validEvidence,
     });
   }
   return { resolutions: out };
@@ -141,6 +150,11 @@ function normalizeSeatReview(raw, options = {}) {
   if (priorFindingIds === null) {
     // A full round has no prior findings and never emits resolutions.
     return withResolutions(result('invalid', [], 'resolutions are only valid on an incremental round'), []);
+  }  const packetPaths = options.packetPaths instanceof Set ? options.packetPaths
+    : (Array.isArray(options.packetPaths) ? new Set(options.packetPaths) : null);
+  if (packetPaths === null || [...packetPaths].some((p) => typeof p !== 'string' || p.length === 0)) {
+    // The path list is what evidence is checked against: without it nothing can be accepted.
+    return withResolutions(result('invalid', [], 'packet path list is required to check resolution evidence'), []);
   }
   const keys = Object.keys(parsed);
   if (!keys.every((key) => key === 'findings' || key === 'resolutions')
@@ -154,6 +168,7 @@ function normalizeSeatReview(raw, options = {}) {
   const resolved = normalizeResolutions(
     Object.prototype.hasOwnProperty.call(parsed, 'resolutions') ? parsed.resolutions : [],
     priorFindingIds,
+    packetPaths,
   );
   if (resolved.error) return withResolutions(result('invalid', [], resolved.error), []);
   return withResolutions(findings, resolved.resolutions);

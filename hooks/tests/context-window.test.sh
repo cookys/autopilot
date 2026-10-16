@@ -238,8 +238,9 @@ assert_eq "$(git -C "$REPO_ROOT" branch --list 'test/context-window-selftest' | 
 # host's standing pin the resolve exits 3 and prints nothing), and the "no warnings"
 # cases also depended on ~/.autopilot/topology.json via the plan_review / hetero_review
 # / consult_dispatch `auto` knobs. The fixture keeps what the cases are about: built-in
-# reviewer gpt-5.5 (258400) and implementer gpt-5.3-codex-spark (121600) — both with
-# recorded windows — plus a verification-author whose model id contains spaces (the
+# reviewer gpt-5.5 (258400) and an EXPLICITLY pinned implementer gpt-5.3-codex-spark
+# (121600; shipped defaults moved to gpt-6.1-sol in f3f539d99, so the case must not
+# lean on the default roster) — both with recorded windows — plus a verification-author whose model id contains spaces (the
 # phantom-seat regression); the three auto knobs off and no brain seat, so the only
 # warnings possible are the window gate's own.
 CW_CFG="$TEST_TMP/context-window-roster.md"
@@ -247,6 +248,10 @@ cat > "$CW_CFG" <<'CFG'
 - plan_review: off
 - hetero_review: off
 - consult_dispatch: off
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: codex
+- allow_same_runner_dual_seat: on
 - verification_author_present: true
 - verification_author_engine: Gemini 3.5 Flash (High)
 - verification_author_runner: agy

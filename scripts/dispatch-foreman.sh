@@ -95,6 +95,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$SELF_DIR/lib/json-emit.sh"
 # shellcheck source=lib/dispatch-branch-ledger.sh
 source "$SELF_DIR/lib/dispatch-branch-ledger.sh"
+# shellcheck source=lib/worktree-intent.sh
+source "$SELF_DIR/lib/worktree-intent.sh"
 # shellcheck source=lib/dispatch-detach.sh
 source "$SELF_DIR/lib/dispatch-detach.sh"
 
@@ -273,10 +275,17 @@ if [ "$RESUME" -eq 0 ]; then
   cp -- "$BRIEF_FILE" "$RUN_DIR/brief.md" && cp -- "$PLAN_FILE" "$RUN_DIR/plan.md" || die_precondition "cannot copy brief/plan into $RUN_DIR"
   chmod 0444 "$RUN_DIR/brief.md" "$RUN_DIR/plan.md"
   WT="$(mktemp -u -d "$WT_TEMPLATE")"; WT="$(realpath -m "$WT")"
+  # Intent record BEFORE the add (BL-0082): a worktree built but never marked stays discoverable.
+  worktree_intent_write "$(git rev-parse --path-format=absolute --git-common-dir)" \
+    "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$RUN_ID" "$RUN_ID" "$BRANCH" "$BASE_SHA" "$WT" \
+    || die_precondition "cannot publish worktree creation record"
   if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA" >/dev/null 2>&1; then
     git update-ref -d "refs/heads/$BRANCH" >/dev/null 2>&1 || true
+    worktree_intent_clear
     die_precondition "git worktree add failed for $WT"
   fi
+  # Test seam (hooks/tests/dispatch-foreman.test.sh section 14): die in the add-before-marker window.
+  if [ -n "${FOREMAN_TEST_CRASH_AFTER_ADD:-}" ]; then kill -KILL "$$"; fi
   # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
   dispatch_branch_ledger_append "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" "$BRANCH" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$BASE_SHA"
   # Schema-2 marker + lifetime flock so reap-dispatch-worktrees.sh treats this like any rail's.
@@ -291,6 +300,7 @@ if [ "$RESUME" -eq 0 ]; then
     printf 'created_at=%s\nbranch=%s\nbase_sha=%s\nrun_id=%s\nroot_run_id=%s\nloop_id=%s\nretention=inspect\nschema=2\n' \
       "$(date +%s)" "$BRANCH" "$BASE_SHA" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$RUN_ID"
   } > "$WT/.autopilot-worktree"
+  worktree_intent_clear   # the marker now carries the ownership; the intent has done its job
   printf 'RUN_ID=%q\nBRANCH=%q\nBASE_SHA=%q\nWT=%q\nMODEL=%q\n' "$RUN_ID" "$BRANCH" "$BASE_SHA" "$WT" "$MODEL" > "$RUN_DIR/run.env"
   # The protocol: what the foreman may do, where its inputs/outputs live. Rail-owned text.
   cat > "$RUN_DIR/protocol.md" <<EOF

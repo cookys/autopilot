@@ -397,6 +397,10 @@ if [ "$MODE" = merge-back ]; then
     grep -qxF /.claude/worktrees/ "$integ_excl" 2>/dev/null || printf '%s\n' /.claude/worktrees/ >> "$integ_excl" ;;
   esac
   # detached worktree at base_sha — no integration branch ref to leak/collide.
+  # No creation-intent record (BL-0082) on purpose: this worktree is detached (no branch), carries no
+  # ownership marker, belongs to no worktree-lifecycle root, and is removed in this same function, so the
+  # intent format (root, loop, branch required; reconciled per root) cannot describe it and nothing
+  # inventories it. A crash here leaves a plain detached worktree that `git worktree prune`/`list` shows.
   if ! git -C "$REPO" worktree add --quiet --detach "$INTEG_WT" "$base_sha" >/dev/null 2>&1; then
     err_usage "could not create integration worktree"
   fi

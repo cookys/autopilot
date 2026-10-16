@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Owned-inventory reconstruction now reads the worktree-creation intent records written before `git worktree add`, so a worktree built but never registered by the controller is inventoried (BL-0082); the runs watcher forwards SIGTERM from its foreground launcher to the inner writer, reports an unwritable TMPDIR as such instead of a missing flock, and `repo-identity.sh` escapes all control characters in manifest JSON strings (BL-0109).
+- dispatch-foreman.sh now writes the worktree-creation intent record before its `git worktree add` (shared `lib/worktree-intent.sh`, also used by dispatch-hetero.sh); dispatch-batch.sh is exempt (detached, unmarked, rootless integration worktree removed in-function). Owned-inventory reconstruction now reads the worktree-creation intent records written before `git worktree add`, so a worktree built but never registered by the controller is inventoried (BL-0082); the runs watcher forwards SIGTERM from its foreground launcher to the inner writer, reports an unwritable TMPDIR as such instead of a missing flock, and `repo-identity.sh` escapes all control characters in manifest JSON strings (BL-0109).
 
 - `qualification-review-provider.js` gains an `owner` prompt mode (`QRP_PROMPT_MODE=owner`), so `engine-qualify.sh owner --remote-provider-cmd` has an exam provider for the owner intent/control corpus (BL-0158); `engine-qualify.js` now exports `parseOwnerPanelResult`.
 

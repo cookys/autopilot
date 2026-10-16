@@ -248,6 +248,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/check-escalation-coverage.js`](../scripts/check-escalation-coverage.js) / [`scripts/rubric-freeze.js`](../scripts/rubric-freeze.js) | Loop-convergence-gates 專案配套：escalation 出口覆蓋檢查 / rubric 凍結（防 mid-run 改分規）。 |
 | [`scripts/probe-mutation.js`](../scripts/probe-mutation.js) | Mutation-validated probe 執行器（`adjudicate-findings.js` refute 路徑的機械後盾）。 |
 | [`scripts/resolve-worktree-teardown.sh`](../scripts/resolve-worktree-teardown.sh) | Worktree teardown policy resolver（`scripts/lib/worktree-reap.sh` 消費）。 |
+| [`scripts/lib/worktree-intent.sh`](../scripts/lib/worktree-intent.sh) | 建立工作樹前寫意圖紀錄的共用函式（dispatch-hetero.sh、dispatch-foreman.sh 引用；JS 清單與 shell 對帳都讀它）。 |
 | [`scripts/resolve-dispatch-topology.js`](../scripts/resolve-dispatch-topology.js) | Host dispatch topology resolver: derives `implementer_ladder`, `reviewer_ladder`, `consult_ladder`, `discuss_ladder`, and `plan_review_panel` from installed runners + scorecard seats (`--role implementer/plan_reviewer/reviewer/consult/discuss`, `--exclude-seats`, `--asking-family`); persistent exclusions via `topology.exclude_seats` in the operator config (contract: script header `--help`). |
 | [`scripts/install-opencode.sh`](../scripts/install-opencode.sh) / [`scripts/sync-opencode-plugin.sh`](../scripts/sync-opencode-plugin.sh) | OpenCode 接入：安裝 / plugin payload 同步（`dev-setup.sh` 消費）。 |
 

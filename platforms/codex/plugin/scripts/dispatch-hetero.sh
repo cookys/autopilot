@@ -565,6 +565,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/json-emit.sh"
 # shellcheck source=lib/dispatch-branch-ledger.sh
 . "$SELF_DIR/lib/dispatch-branch-ledger.sh"
+# shellcheck source=lib/worktree-intent.sh
+. "$SELF_DIR/lib/worktree-intent.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$SELF_DIR/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
@@ -3093,24 +3095,13 @@ if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
     die_resource_budget "$WT_BUDGET_COUNT" "$_wt_budget_limit"
   fi
 
-  _wt_pending_tmp="$(mktemp "$_wt_common_dir/autopilot-worktree-creation/${WT_RUN_ID}.XXXXXX.tmp")" \
+  worktree_intent_write "$_wt_common_dir" "$WORKTREE_ROOT_RUN_ID" "$WT_RUN_ID" "$WT_LOOP_ID" "$BRANCH" "$BASE_SHA" "$WT" \
     || {
-      exec {WT_BUDGET_LOCK_FD}>&-
-      WT_BUDGET_LOCK_FD=""
-      die_precondition "cannot allocate worktree creation record"
-    }
-  WT_PENDING_RECORD="${_wt_pending_tmp%.tmp}.json"
-  (umask 077; printf '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
-    "$(json_escape "$WORKTREE_ROOT_RUN_ID")" "$(json_escape "$WT_RUN_ID")" \
-    "$(json_escape "$WT_LOOP_ID")" "$(json_escape "$BRANCH")" \
-    "$BASE_SHA" "$(json_escape "$WT")" > "$_wt_pending_tmp") \
-    && mv -f -- "$_wt_pending_tmp" "$WT_PENDING_RECORD" \
-    || {
-      rm -f -- "$_wt_pending_tmp"
       exec {WT_BUDGET_LOCK_FD}>&-
       WT_BUDGET_LOCK_FD=""
       die_precondition "cannot publish worktree creation record"
     }
+  WT_PENDING_RECORD="$WORKTREE_INTENT_RECORD"
   _wt_creation_test_checkpoint after-pending
 elif [ "$WORKTREE_REUSED" -eq 0 ]; then
   _wt_prepare_common_excludes \

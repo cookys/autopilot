@@ -11,3 +11,7 @@ Plan: `docs/plans/2026-10-16-bl0194-qualification-registry-move.md` (ticket `bl0
 | `g1.stderr.log` | Dispatcher stderr (topology fallbacks added; rc=0). |
 
 Seat verdicts: fable CONDITIONAL, GLM CONDITIONAL, Qwen CONDITIONAL, sol STOP. No dispositions written; depth-0 adjudication is pending.
+
+## Generation 2
+
+`plan.as-reviewed-g1.md` = plan bytes generation 1 reviewed (12623 B). `g1-disp.json` = depth-0 dispositions (13 accepted_blocker, 21 accepted_nonblocking). `run-g2.sh` re-runs generation 2 with the same manifest, rubric and context files. `g2.out.json`: CONDITIONAL at the generation cap (terminal, 14 blocker candidates, 12 non-blocking); fable CONDITIONAL, GLM CONDITIONAL, Qwen READY, sol STOP. Revised plan 12437 B (ratio 0.985).

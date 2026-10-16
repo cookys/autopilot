@@ -134,3 +134,14 @@ Per-task ship rule (ON >= 2/3, OFF <= 1/3) over `g6-l4|l5|l6` (entry `session-mo
 `ONOFF_TIMEOUT_IS_COMPLETE=1` (run-skill-onoff-eval.sh) turns a timeout stop into a complete cell (`stopped_by_timeout`).
 Amendment 1 (2026-10-10): v1 is instrument-defective for G6 (session-mode.js was absent from the plugin); v2 is a new arm (v8 packs, `fixture-scripts-g67-v2`) with a per-cell plugin-script self-check (`ONOFF_REQUIRE_PLUGIN_SCRIPTS`); post-merge freeze steps in `prereg/stage-graph-g67.json` `fixture_scripts_freeze.post_merge_steps`, finished by `stamp-g67-amendment.js`.
 Spend-free proof: `hooks/tests/skill-onoff-g67.test.sh`.
+
+## dc row (dev-flow contract-card rerun, BL-0044 / BL-0049)
+
+The repaired successor of the 2026-08 `full|card|off` instrument. Everything is multi-pack arm manifests (`arms/dc/{full,card,off,red}.json`):
+the arms differ only in `skills/dev-flow/` (live body at `87d3fd29c` / its 483-line contract card `dev-flow-dc-card` / absent / planted-red `dev-flow-dc-red`);
+`fixture-scripts-dc` (the stage-graph scripts plus all `schemas/`) is in every arm, because without it FULL fails for a reason that is not its prose.
+Tasks `tasks/dc-*` (10), helpers `lib/dc-markers.sh` (anchor = first Edit/Write or first `git commit`; headless sonnet edits through Bash), frozen rules `prereg/dc.json`,
+scorer `score-dc.js --prereg prereg/dc.json --results <jsonl> [--arms full,off]` (exit 0 SHIP-GATE-MET or V2-PHASE-PASS, 3 ITERATE-CARD, 4 ABORT-RECORD, 5 INSTRUMENT-INVALID).
+Every cell needs `ONOFF_PROMPT_PREFIX="Use dev-flow:"` (identical in all arms) or the skill is never invoked. Evidence, rules and results:
+`docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/README.md`. Proof: `hooks/tests/skill-onoff-dc-markers.test.sh`, `hooks/tests/skill-onoff-dc-score.test.sh`.
+Family F5 (red before edit), F6 (quality gate on M) and I7 (L gates) are informational: reported, never counted toward V2.

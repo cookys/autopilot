@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/residue.schema.json",
+  "title": "residue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project_key", "at", "reapable_worktrees", "by_class", "source"],
+  "properties": {
+    "schema": { "const": "autopilot.residue/1" },
+    "project_key": { "type": "string", "minLength": 1 },
+    "at": { "type": "string", "format": "date-time" },
+    "reapable_worktrees": { "type": "integer", "minimum": 0 },
+    "by_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "live": { "type": "integer", "minimum": 1 },
+        "missing-dir": { "type": "integer", "minimum": 1 },
+        "dirty": { "type": "integer", "minimum": 1 },
+        "clean-integrated": { "type": "integer", "minimum": 1 },
+        "clean-unintegrated": { "type": "integer", "minimum": 1 },
+        "unverifiable": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "source": { "const": "repo-residue-sweep scan" },
+    "needs_human_count": { "type": "integer", "minimum": 0 },
+    "needs_human_bytes": { "type": ["integer", "null"], "minimum": 0 },
+    "needs_human": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "class", "age_days", "bytes", "reason", "command"],
+        "properties": {
+          "kind": { "enum": ["worktree", "branch", "archive-ref"] },
+          "path": { "type": "string", "minLength": 1 },
+          "branch": { "type": "string", "minLength": 1 },
+          "ref": { "type": "string", "minLength": 1 },
+          "class": { "type": "string", "minLength": 1 },
+          "age_days": { "type": ["number", "null"] },
+          "bytes": { "type": ["integer", "null"], "minimum": 0 },
+          "reason": { "type": ["string", "null"] },
+          "command": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "auto_ran_at": { "type": ["string", "null"] },
+    "auto_removed_count": { "type": "integer", "minimum": 0 },
+    "auto_archived_count": { "type": "integer", "minimum": 0 }
+  }
+}

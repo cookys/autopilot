@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-graph-sources.schema.json",
+  "title": "MissionGraphSources",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plan_path", "rubric_path", "plan_sha256", "rubric_sha256"],
+        "properties": {
+          "plan_path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "rubric_path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "plan_sha256": { "$ref": "#/$defs/sha256" },
+          "rubric_sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/hook-event.schema.json",
+  "title": "HookEvent",
+  "description": "Normalized cross-harness hook event envelope for host-neutral hook handlers and probe telemetry.",
+  "type": "object",
+  "required": ["schema_version", "platform", "event", "ts"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for the normalized hook event envelope."
+    },
+    "platform": {
+      "type": "string",
+      "description": "Harness or platform that produced the original event."
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "session_start",
+        "session_end",
+        "user_prompt_submit",
+        "pre_tool_use",
+        "permission_request",
+        "post_tool_use",
+        "post_tool_use_failure",
+        "pre_compact",
+        "post_compact",
+        "subagent_start",
+        "subagent_stop",
+        "stop",
+        "unknown"
+      ],
+      "description": "Normalized event type."
+    },
+    "host_event": {
+      "type": ["string", "null"],
+      "description": "Original harness event name, for example SessionStart or PostToolUse."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Session identifier from the hook payload or environment."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in ISO-8601."
+    },
+    "cwd": {
+      "type": ["string", "null"],
+      "description": "Working directory when the hook fired. Probe telemetry may redact this to null and expose presence/equality metadata under probe."
+    },
+    "source": {
+      "type": ["string", "null"],
+      "description": "Session-start or compaction source when supplied by the host."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "Model identifier when supplied by the host."
+    },
+    "permission_mode": {
+      "type": ["string", "null"],
+      "description": "Host permission mode when supplied by the payload."
+    },
+    "turn_id": {
+      "type": ["string", "null"],
+      "description": "Turn identifier for turn-scoped hooks when supplied by the host."
+    },
+    "tool": {
+      "type": ["string", "null"],
+      "description": "Tool name for tool-scoped hook events."
+    },
+    "tool_input": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Normalized tool input payload when available. Probe telemetry may redact this to null and expose shape metadata under probe."
+    },
+    "tool_output": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Normalized tool output payload when available. Probe telemetry may redact this to null and expose shape metadata under probe."
+    },
+    "session": {
+      "type": ["object", "null"],
+      "description": "Normalized session metadata, including transcript paths when present. Probe telemetry may redact path values."
+    },
+    "raw": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Original platform payload retained for adapters that need unmapped fields. Probe telemetry should omit raw payloads."
+    },
+    "probe": {
+      "type": ["object", "null"],
+      "description": "Probe-only metadata such as process cwd and environment-key presence. Never store secret values."
+    }
+  }
+}

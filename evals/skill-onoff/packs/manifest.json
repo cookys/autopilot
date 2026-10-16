@@ -3171,6 +3171,244 @@
       "quality-pipeline-qs-red-b2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
       "quality-pipeline-qs-red-b2/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
       "quality-pipeline-qs-red-b2/references/test-policy.md": "66b64203d6e995007ccbd1681cc1330c557fd8382f5ac2703b52720e900ca64b"
+    },
+    "dev-flow-dc-full": {
+      "dev-flow-dc-full/SKILL.md": "13901d4dff9f4998239147a5054e8ba0ffc5c8a6a050194de50c6e7462a9ac8b",
+      "dev-flow-dc-full/references/context-continuation.md": "1f9604780eabae5eda9f7d9679bcdcf51ed21a9187e548792630389e1db2f764",
+      "dev-flow-dc-full/references/hetero-loops.md": "62bf0ffe13db1f3b2bca2c12e540e661d16eb0c6cab22ad8d2890c0da1e50302",
+      "dev-flow-dc-full/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-dc-full/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-dc-full/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-dc-full/references/stage-graph.md": "a9a3adb183161b5377b6d45ba2584818061b1113662fbb6577604fbd878010ba"
+    },
+    "finish-flow-dc-full": {
+      "finish-flow-dc-full/SKILL.md": "4f439ce6a672171b06510266ef384d836b8812923616927d21da39ffb12b2925"
+    },
+    "ceo-agent-dc-full": {
+      "ceo-agent-dc-full/SKILL.md": "31406df5a67fe2de2967f972380a8ad631af3d9868e0210b02e143acc841f1a7",
+      "ceo-agent-dc-full/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-dc-full/references/depth0-control-loop.md": "c6afedebfb9fcc7c3bf89a7c1be8138a2bb15b0facfb6af13423a11227bb706e",
+      "ceo-agent-dc-full/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-dc-full/references/level-front-door.md": "e16f54e3bcea6762301712339f9142d2e49dd4be3e555b44b4a48fc351ff2675",
+      "ceo-agent-dc-full/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-dc-full/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "team-dc-full": {
+      "team-dc-full/SKILL.md": "32fa20a7b43807b3c3aef772d4f8b755955ae101e3a9ae1576c66b65ce894800",
+      "team-dc-full/references/team-tactics.md": "d0ad00463519481a36ec2c75d1ef31a694d6fc8e97844962a7b4974cb50773d9"
+    },
+    "debug-dc-full": {
+      "debug-dc-full/SKILL.md": "6566956c7609c00c5d784e562d1c1bb18502f84f763580853a254137cf7d6402"
+    },
+    "think-tank-dc-full": {
+      "think-tank-dc-full/SKILL.md": "35e7c8642fa1096a73a1f3c715c62feeade96c64fae954bbff329a5aa5678e10",
+      "think-tank-dc-full/references/brief-template.md": "465854522911c3dad1dc63da03141bbdae914ab17aadfdb13744e788039aedfa",
+      "think-tank-dc-full/references/dialectic-brief-template.md": "868354c288c9ae6179c3cf1654370da80365ed85c6cadc680efd47e3018377a8",
+      "think-tank-dc-full/references/dialectic-mode.md": "bb47d4b4469c2f1dc8fcaf9934892ff3fb524fc691cd417d1ab43b20ecb946f1",
+      "think-tank-dc-full/references/dialectic-role-prompts.md": "eb11ad8d6bb778d1e0b2b7404bf93cc4a6ac008f8efacf540946cc7df2d07e7e",
+      "think-tank-dc-full/references/epistemic-diversity-scorecard.md": "79aaf0948f82c8da9d8c33ecc5ce126226b3cc24d300485440a8de22ae67d339",
+      "think-tank-dc-full/references/minority-report.md": "49ea8b7c29bc8df18bb82b58b4a6b377a38e3cafba76133b06439ecd719079a2",
+      "think-tank-dc-full/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "think-tank-dc-full/references/problem-restate-gate.md": "e009bc787aa2ad2c5bd8112fd1de1489e20e2e22c15f1f92fd0eec75ccd5a778",
+      "think-tank-dc-full/references/role-prompts.md": "c7ea4d8446a47f3957b061f72d35df5812e6e6dc420974a13039efdf056f98cb",
+      "think-tank-dc-full/references/silent-pre-check.md": "cb4cb18fcce5b3f210687bcfabfbc976122e920a9d0f822e4e301efca1faba4f"
+    },
+    "l4-dc-full": {
+      "l4-dc-full/SKILL.md": "e53a00d1b5e2ab1b10ba9f4bd1c98dabc1c95d049bafd16134c356745a44eea5"
+    },
+    "l5-dc-full": {
+      "l5-dc-full/SKILL.md": "c36a1488bb6928f96bc90b18353fddb0f026f7e188805119a5b8a13e56a2abfd",
+      "l5-dc-full/references/hetero-impl-loop.md": "77e7349c8644a527f9408d6bef6e2ed1ba44037986133e336399657285a507cd"
+    },
+    "l6-dc-full": {
+      "l6-dc-full/SKILL.md": "ad43076a7a2198f81193384bf6b01fcc276fa6390013c2200b40bc4cf918e8b7",
+      "l6-dc-full/references/full-dispatch-pipeline.md": "f93fb398897084f97046cd3698438b9df3501c19c907f85ef7cdf2a17764a422"
+    },
+    "next-dc-full": {
+      "next-dc-full/SKILL.md": "58b5082dda33e2ad8956b0a8d228b6975297f88f86c64dcea48c264bbccfabf4",
+      "next-dc-full/references/phase0-hygiene.md": "1edb13c4ff46ec691023ee6975da452a87c7743976c1e8fbd25803609212a169"
+    },
+    "quality-pipeline-dc-full": {
+      "quality-pipeline-dc-full/SKILL.md": "709184ac54228b36cecbab442ed7159cff5a98026db281ce90271359448bbcb2",
+      "quality-pipeline-dc-full/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-dc-full/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-dc-full/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-dc-full/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-dc-full/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-dc-full/references/test-integrity-gate.md": "d70278ccab2c211ace5d7fcf768362ed709e9c209946b8118d4013c547d1e504",
+      "quality-pipeline-dc-full/references/test-policy.md": "66f76e460572b816cbfd07db4e6450157e2ca60b04d391c36d30f693b717ee9c"
+    },
+    "distill-dc-full": {
+      "distill-dc-full/SKILL.md": "89c0c7df91be731d8ec8b5c8ad24e103aae7696999187f9e67c32806d70143c5",
+      "distill-dc-full/references/sync-setup.md": "fec6f4e98783d49be9225583020fda164146da96edf1f2c6f509e1128b2e955e"
+    },
+    "doc-sync-dc-full": {
+      "doc-sync-dc-full/SKILL.md": "abdcb2c381f8cb9e68892f4eb65444387136badbcfd6d99cdd438cec929651b1"
+    },
+    "learn-dc-full": {
+      "learn-dc-full/SKILL.md": "303960668942ef0eaa059a2f5685c75c79abbc9c1f22889e59a5605fcfa799f2"
+    },
+    "project-lifecycle-dc-full": {
+      "project-lifecycle-dc-full/SKILL.md": "1da4d0c97773a17e9b0848b29803dd4466a7b8660e9ee5203677c6ee27dfd1f3",
+      "project-lifecycle-dc-full/references/plan-bootstrap.md": "45c5065d0fbb40fa43d0c0a2b09e4cdf0f359483b56fff8c5323a8149a35e9ac",
+      "project-lifecycle-dc-full/references/project-archive.md": "2d17e6cea6a804ec8331aa83486b5ca78810fc9d5e795477598f4f37aa21c133",
+      "project-lifecycle-dc-full/references/project-structure.md": "96a85b3915124819c57a14227cd666214a0c969aab1e8b08b542db2465965bb1",
+      "project-lifecycle-dc-full/references/templates.md": "778a95fa3ca8335d37532c1f94d9b978e33b60f88dea2f84c80e92232b268d24"
+    },
+    "research-to-ship-dc-full": {
+      "research-to-ship-dc-full/SKILL.md": "9b943ed27e91fb14c73dfaf7c18d93abcac27d5c627886ab3c4d5582838b9e68"
+    },
+    "fixture-scripts-dc": {
+      "fixture-scripts-dc/hooks/_shared/secret-patterns.js": "6e346778e58a6e030cbb2fd16299a6fa4b3e1466ec2bdcd3522b7f1b4d90460f",
+      "fixture-scripts-dc/references/stage-graph.json": "fd82a2a667240ea2e4212930870a2b13baeb275afd08e8fa70bee23af729b2b9",
+      "fixture-scripts-dc/schemas/capability-evidence.schema.json": "4153cd7df7881812c3287f081ab919575d9ffa7512d581e09eef0c62c9d15c75",
+      "fixture-scripts-dc/schemas/compare-record.schema.json": "401edf3cd536c0ac506004b684a551729807c9e281635923d151dc94a45a8772",
+      "fixture-scripts-dc/schemas/decision.schema.json": "e10269e3d26164d0627fe5846ff487295f18fd906c10e890151bed9a82f27a89",
+      "fixture-scripts-dc/schemas/decisions-sidecar.schema.json": "b2b11e792c4a748882165e7ac681d9c0b6b6ea03a48495656cf4ad1189277b5a",
+      "fixture-scripts-dc/schemas/dispatch-unit-contract.schema.json": "65d4cfb0e930adf9de4415bdb098b38b2445d3a772cbe29d4acfd12288f38555",
+      "fixture-scripts-dc/schemas/engine-capability-state.schema.json": "f139df180fba1fe67be27e7e34286b53355fdf91fe80cb2f9438d9d78a3cea78",
+      "fixture-scripts-dc/schemas/foreman-activity.schema.json": "b93e2158aeb67380296273b458a45f7e823463a00ebc28033a43ed814ff1193c",
+      "fixture-scripts-dc/schemas/hook-event.schema.json": "a70c98f975a8ebab9373882171a80edaa0c0de72e9b14bb5af23beb0d3e354ac",
+      "fixture-scripts-dc/schemas/implementation-campaign-contract.schema.json": "a54f247bae4753bace7101fc7cc80284b34726b29ac54c66673b4ad6e7763b37",
+      "fixture-scripts-dc/schemas/implementation-campaign-receipt.schema.json": "274684dcb34cbee62aa9bfb1bf928d5b2d31d78a0a5e087055a9c7dee88bf0cb",
+      "fixture-scripts-dc/schemas/lifecycle-residue-receipt.schema.json": "961233d882d0492546e22ec85fb20fd6f07533864572c41668972d19e35e8c23",
+      "fixture-scripts-dc/schemas/local-deployment-observation.schema.json": "172ac31d6492879b89feb291995b63e83ddc8780922aee7c59b568a4a87b828d",
+      "fixture-scripts-dc/schemas/local-engine-roster.schema.json": "861cb912364e103067f5322abf24cc6d93c52dc6b55364da8c0f69f544f4d07f",
+      "fixture-scripts-dc/schemas/merge-execution-receipt.schema.json": "0eeb2053281a9033cf5df154b8bad267704f8748adf2d2e17370a021dd2a291d",
+      "fixture-scripts-dc/schemas/merge-intent.schema.json": "f8fcc6df0a5d2b86473f188a56b6f4af9885e4f35e82218302c6b72cbe7db0ed",
+      "fixture-scripts-dc/schemas/mission-convergence-contract.schema.json": "f79414dc7468fa8e565e2ca5dff91204a1776a91bde02f1d560a4b598580c295",
+      "fixture-scripts-dc/schemas/mission-convergence-receipt.schema.json": "b3c2c254b120f81227c6696234e2cc20588dd5f201a655a2bbefd2df13ed364f",
+      "fixture-scripts-dc/schemas/mission-execution-graph.schema.json": "c61bc08fbf7b9eb47b783a1296fc8c0b2ea1abd6f126fa3e75455efd48afe639",
+      "fixture-scripts-dc/schemas/mission-graph-sources.schema.json": "907e1645c6e2cda95e674f623530099b8c34f3b16f093f33252917abdd33b096",
+      "fixture-scripts-dc/schemas/mission-policy.schema.json": "5c52d5ad4779956f305d3592847a9a33221cb60d1479d7b12ba00803558e1c30",
+      "fixture-scripts-dc/schemas/mission-prepare-receipt.schema.json": "d76741d1deb7f238031a777b44f76554c379b1da5a12dbd5f3e75c5fc549c0b8",
+      "fixture-scripts-dc/schemas/mission-projection.schema.json": "99becb59bd1f92349a97365ec602166641956b588f896c2421796cb883e30683",
+      "fixture-scripts-dc/schemas/mission-runtime-registry.schema.json": "e4e6130848874c46aec4674dd1bd0baee86e3d901e761bb2503e5b3aabd77fd2",
+      "fixture-scripts-dc/schemas/normalized-transcript-event.schema.json": "a3af33caed7fe583b09dd5efa997795a3213aa2eaaebf3d0c3535daf3b9d5c23",
+      "fixture-scripts-dc/schemas/official-qualification-defaults.schema.json": "2fb7b004be62f1865ebe924b6efa4f7437943ae186193f49ffb51432c9aab9f5",
+      "fixture-scripts-dc/schemas/plan-review-manifest.schema.json": "e172fbc90550e7d0ef5c0427c6683a31c4b1b3ca80b607bc5a362e53665ab7b7",
+      "fixture-scripts-dc/schemas/platform-capability-claims.schema.json": "51f24c0ab4aaa6cc50e0774bff5ca09cc903e92552c64ee63a3a3ee41b4f545b",
+      "fixture-scripts-dc/schemas/profile-cutover-snapshot.schema.json": "1bea9fc7a11f17ab708f56e2c92ae6b147ca8c4f68518c6f3c628f87aa14a446",
+      "fixture-scripts-dc/schemas/provider-readiness-receipt.schema.json": "e7658ee3ac6213d0a518d04c9d14eeb7e04bd8e90d420b54f969b1ac0922bd78",
+      "fixture-scripts-dc/schemas/qc-status.schema.json": "e22ef925988697db6eb3a6a8a84dd17f70ca09ca1585341ddb69f385d2c75517",
+      "fixture-scripts-dc/schemas/qualification-feed-v2.schema.json": "cd7519319e5cbf3772a556ea045c7a450a45c21661bb940886436de988477bcf",
+      "fixture-scripts-dc/schemas/qualification-record.schema.json": "5edae59e57f5e6bc81697ec6c356ad0f675bd621881e22ecc41c717ff6a17452",
+      "fixture-scripts-dc/schemas/residue.schema.json": "cedae41413ffae1299307ab64854649bd0e0c24689fa25319f6aad0934342752",
+      "fixture-scripts-dc/schemas/review-loop-contract.schema.json": "23d0d9588850ae6dd92ecb14a1656171f7d992be9f6acdf249352eb9e51d67f9",
+      "fixture-scripts-dc/schemas/review.schema.json": "18e65fcdb5659a26eb7797a29529769c989f298509c868d367fa2e4f3ba85794",
+      "fixture-scripts-dc/schemas/role-execution-grant.schema.json": "0fcfa3f3387a3116e1391423820f324a6cf3250db0fbc6372b33ba897e8e5cff",
+      "fixture-scripts-dc/schemas/runner-result.schema.json": "0b2295c792d1dabe86e17508002ec01fa6728377ebb4030baa77c323b1688180",
+      "fixture-scripts-dc/schemas/runner-transport-envelope.schema.json": "b5876ec726b7054d058f5f31c2b2b07602a33b3c6c0146e7ff9eb20d20eb1375",
+      "fixture-scripts-dc/schemas/runs-live.schema.json": "5a09f2bb60b39a999350e016f68774a57bac080a07e8a23f34c784704a6dc917",
+      "fixture-scripts-dc/schemas/session-marker.schema.json": "47340ae43de8adca5cb0b520d0020e27fd147f9d2ec82442af2b11b312995052",
+      "fixture-scripts-dc/schemas/sources.schema.json": "2fbaeb84b3709ef249febc898ca3fdd01295d1f7217913186f6874b3005126ba",
+      "fixture-scripts-dc/schemas/spend-history.schema.json": "3e85fa0455c9ec7149e7a86a23005dadf375e443063992cdb55251f98a6fd4f9",
+      "fixture-scripts-dc/schemas/stage-graph.schema.json": "40cc34e73f5b45b50a00a21d65e55bfb8676aa0499a53ca4c3e16e912d960441",
+      "fixture-scripts-dc/schemas/stage-walk.schema.json": "3b9ff9ca0a42e62230e432a5c45b7c5e18a70823bf0ef320f421ca7012f7903a",
+      "fixture-scripts-dc/schemas/task-authority-envelope.schema.json": "765c7d1716fbd008bffa3330bea9883a850303194bdd946533c3c6b8284c5e2f",
+      "fixture-scripts-dc/schemas/task-status.schema.json": "ed8aef889328280c74fbc78d9ad5dd04b582e184cf8aad2cd6deaa30571c3c3e",
+      "fixture-scripts-dc/scripts/check-plan-graduation.js": "8172fd4bff75ff275d176d254d4f010d5598f188e0c23d2c0a288dcb7807c4c7",
+      "fixture-scripts-dc/scripts/classify-diff-risk.sh": "d3fb059c4e02d84254bf5de10cd5ffb7e4e6bb799139d2c2fdd4c9d18855fdab",
+      "fixture-scripts-dc/scripts/cost-digest.js": "0648689a7a2b51eceb1af209988fb1f612de22a07b4b9a0bd09edcad76cd0a96",
+      "fixture-scripts-dc/scripts/decision-ledger.js": "e1fc581ceafc84a0ff7974ef135e2a9409cff91e4a6a5a117615c1e680699e37",
+      "fixture-scripts-dc/scripts/implementation-campaign-check.js": "6244f9ff359565404b01948fb84b81d3b01655b6cbb31e97b0d1093c46d82b60",
+      "fixture-scripts-dc/scripts/lib/brain-spend.js": "caefc252ce20ad59a660198f5f5220820b0533a013963121b6c9edbf58084a6e",
+      "fixture-scripts-dc/scripts/lib/config-path.js": "b360f6a98fe1f3f63dc713e1f3c1074ec5264451e27a948914bfd9958b07a5b2",
+      "fixture-scripts-dc/scripts/lib/json-emit.sh": "8898b41473e825bd354370284c39fe2795245321c622be234537b28722626d49",
+      "fixture-scripts-dc/scripts/lib/json-fields.sh": "3c15674d9abf28f91813a2d4afddaa42ec6c37392057e287d72fc2ffa6449138",
+      "fixture-scripts-dc/scripts/lib/jsonl-store.js": "cd22086da91ec46a94feac05513bef26010c04e4ced9bf35b6df4aa99f9d5076",
+      "fixture-scripts-dc/scripts/lib/live-state-dir.js": "5a4913d7d5c39f9d8255993c874cf41e0c5a4bda99b25c92d633139a9c2a706e",
+      "fixture-scripts-dc/scripts/lib/load-source.js": "32b15b40181437756e4374a4e5b0d5864d5d8dfe56e5ceedeb25bc01ba300038",
+      "fixture-scripts-dc/scripts/lib/qualification-asset-seals.js": "7bb72d5af0bdddb31a8daab9713927536ca83e1bb955ecd3b44e42dbba7974d3",
+      "fixture-scripts-dc/scripts/lib/resolve-config.sh": "a55276b1dc365223317d2f51e7cb3fb4f15ae884b1da911e901e265cb99b5d01",
+      "fixture-scripts-dc/scripts/lib/sealed-docs.js": "57a559fb2ed74df0333f07ffdf03eb71348d337c311202cfbee986a97133c267",
+      "fixture-scripts-dc/scripts/lifecycle-residue-receipt.js": "bc61d2c13af327e8ae972773651bcc3736f4eebc1d7faad204a1d1d0fd0f4a7e",
+      "fixture-scripts-dc/scripts/mission-execution-graph-check.js": "e7040d08fb45d7fbdeb3566386d3cd66beedd8f5f2231bb852ee31e4e3c5a841",
+      "fixture-scripts-dc/scripts/mission-routing-admission.js": "3319d92e474a549f8fd9f247fe8fc3e1b082d06bead8f322b1e367c39a5e367a",
+      "fixture-scripts-dc/scripts/mission-terminal-reconcile.js": "24ac8b37006bb8f9a85dbf91d7c0f49c3d4920bafc094c6e3e37f082453a39eb",
+      "fixture-scripts-dc/scripts/probe-unknown.js": "cbe06caaff0d80a8989fea363ab61516901fa29c894389f77f1f72efc403d96b",
+      "fixture-scripts-dc/scripts/qc-evidence-status.js": "e359fe1b1bb5e49da55fad0cf2670c901750db46e455f3c3469c557e1d6ac23d",
+      "fixture-scripts-dc/scripts/render-review-page.js": "b958b028744d1eb6ee02bb4bb5a4029d9b9c8c8ace23ee5547fd1cdcb221e905",
+      "fixture-scripts-dc/scripts/resolve-review-loop.sh": "b491ee63d90fa5ebac0d8b9eed9a5e58a574b575760a4050c28c56bb7bf40e10",
+      "fixture-scripts-dc/scripts/session-mode.js": "9da36d1289006276a89367996e6fbdef1c9e52828fa99d8e6d5f3af1cfc01b11",
+      "fixture-scripts-dc/scripts/stage-advance.js": "54a853921d37f0a83e6f0e4fcc60cb75b98e5af1c43eea8a0c0ea3f888aead15",
+      "fixture-scripts-dc/scripts/stage-graph.js": "23b2e711f3c89dc3d3449170a21c3c7e2409ce13faad788d268b72b416cee89f",
+      "fixture-scripts-dc/scripts/validate-json-schema.js": "4dfaeac32ab846713412adbce56b8c2cb9aa93012da57a71b0e6201b9081d1c9",
+      "fixture-scripts-dc/src/engine/authenticated-control.js": "39a953e8a153648f2b5f0302dc95d8c08a3f3ffba2aaff41e9286b2468691e70",
+      "fixture-scripts-dc/src/engine/campaign-composition.js": "3272dc9d3ef42f0807d1fc19e759eff777b5c78451ada2b7ad69ce64ec119411",
+      "fixture-scripts-dc/src/engine/campaign-dispatch-projection.js": "3386f2937ac12dfe0991d8ec0fe68cfa874d4b81540612bfc0aeba22ae801a75",
+      "fixture-scripts-dc/src/engine/campaign-verification.js": "1f17625abb265a5911520004993501f3fed3ff63ca1913811008d00f54356a32",
+      "fixture-scripts-dc/src/engine/controller-execution.js": "414b3a85e50f41ac28e67e5d903766045bcc0dfe723f201e27efc84c559860ae",
+      "fixture-scripts-dc/src/engine/implementation-campaign.js": "c5d840208acd937c856115871425a90c4aacd20ce92e1a427a7b60180d6d5f1c",
+      "fixture-scripts-dc/src/engine/mission-campaign-identity.js": "618f0cdb2b6ee3238f5b16091c8616f19f82a0c6ac58842480ff332a2f170705",
+      "fixture-scripts-dc/src/engine/mission-convergence.js": "4b1eb3df0e9b9967762e3d6f455fdf92dba0afe933ab978980f319241db40d61",
+      "fixture-scripts-dc/src/engine/mission-execution-graph.js": "4085ddd3fb8e2efae93551314c535ad9a447e092888cfb9cff8cf501134f0cba",
+      "fixture-scripts-dc/src/engine/mission-policy.js": "75da93f0b5a6a870ef7fb16a9263ff23fb1df7d9c39f66924f3cf7d1e119a1be",
+      "fixture-scripts-dc/src/engine/owner-kernel/actions.js": "44e9da4efd602d0417e85a9d9c2cabd76466e716ba309f779207945371431cba",
+      "fixture-scripts-dc/src/engine/owner-kernel/canonical.js": "71cce05cbcf26156e14eaf160cc4d4f5eb45a4a613f884973d4457694f7b0c68",
+      "fixture-scripts-dc/src/engine/owner-kernel/errors.js": "1593c4b74746ce292d4eabb1db3631221b26f028bc4defd6150acde25f8aa80e",
+      "fixture-scripts-dc/src/engine/owner-kernel/policy.js": "1ae2ede9be3bbfbc474f4e86e85eddf56540f708f81566662fa1b29c53210cb2",
+      "fixture-scripts-dc/src/engine/sealed-zero-diff-validator.js": "703a6951ef623d43b843b83ea089a7a56f64d2344b43fa90cc07d247e4e44e66",
+      "fixture-scripts-dc/src/engine/work-order.js": "777f97bdb0ebfbc7bfb9ffb863869bae505ce191891487573a968e77f969c790",
+      "fixture-scripts-dc/src/lib/common.js": "d103d0ee9a6b023aeef191bad04224266ada0baa727fbd9f716d6e8c90f9b23e",
+      "fixture-scripts-dc/src/mission/interface.js": "7716f5f0c67cf1c280a2e2dbaef57dc6fdbf7e1a432bae6db60aa73a1c47349d",
+      "fixture-scripts-dc/src/status/code-fingerprint.js": "bc3bf6e8987780484012085417a890ace340b9da7a4bc12c18d6101680f02bb4",
+      "fixture-scripts-dc/src/status/compare-input.js": "402501f7579143b2764ae9c0e730d884995e26b1aa10003df4cb3fae4c680b68",
+      "fixture-scripts-dc/src/status/decision-input.js": "41c87ffe0416f94260117678d2ba1b753a14ab0a1758adfa84e2912c92d54779",
+      "fixture-scripts-dc/src/status/decisions-sidecar.js": "b1dbe3907d43bfe9d9d647f55bb87976c59a4012ca2e627a18d6e59b0fc775b3",
+      "fixture-scripts-dc/src/status/foreman-activity.js": "2b22fcb70bcb300dd97f89747fc7b37899c8e61eba113285f2b57789c3204965",
+      "fixture-scripts-dc/src/status/live-pointer.js": "63c969cff041091758dcd8c15575a3b08c7e5300098afccf6abfc729b1e39a01",
+      "fixture-scripts-dc/src/status/load-source.js": "ecbca7a8f43398afd20c04a031589b43be7d17ee31c8f8a728ad6bceeff1a3ef",
+      "fixture-scripts-dc/src/status/phase-input.js": "6e7db926ab74130dfd94d3b7f334f71d1137bc9d0cd64b67c6b2018c5b56aa05",
+      "fixture-scripts-dc/src/status/planned-input.js": "76da9a5502bdff8ad6d339889d191e62449d27327d4b3abee34bc67996dafd15",
+      "fixture-scripts-dc/src/status/project-key.js": "ff8eaa48e555244b90eccd77d612533998f07f9f294512796638dffdf913e853",
+      "fixture-scripts-dc/src/status/qc-fact.js": "528671c10a6ad1b727ecf547de21dcb1c8f0a00888af5b9f2191e713efc39b77",
+      "fixture-scripts-dc/src/status/residue.js": "19f4957570c822ee83aa57c093ab4713327efaa368c04d4723289ce2aa96c693",
+      "fixture-scripts-dc/src/status/review-input.js": "1084e781deabc929156ed73bab426939a1587ec4664c40e2c16a9f6fa0620d4c",
+      "fixture-scripts-dc/src/status/review-server.js": "9f6d596a58e04e68c312f0b17db8c2a745267fd563450d51d80646f4d27c6df9",
+      "fixture-scripts-dc/src/status/runs-fields.js": "7a03c0969b094676f686912a75922a9674f55c8cab101f5e015b38fb36ba0832",
+      "fixture-scripts-dc/src/status/runs-watch.js": "d7a60e457a1585389955f1edf4e8fe760ba235ae2f5f189670070b218b7c6473",
+      "fixture-scripts-dc/src/status/scope-key.js": "f8537dde6412414295274af6c3325b3c256c9345f64a314b9d72ebf07a7d876f",
+      "fixture-scripts-dc/src/status/sources-manifest.js": "b04a2bc2531f091a6ffd53d5a6ac8807f64382d9ac40301b1aa1e97710643f61",
+      "fixture-scripts-dc/src/status/spend-history.js": "b6b467e60a7a83b40b0bcadd9f4be7b17350a3bb3c85cda57ea3abd7d0d23b36",
+      "fixture-scripts-dc/src/status/stage-walk.js": "44a1f17bfebdc0dae2c9411a538a9d8638d46d7a92b25a7cfda7478890c5473d",
+      "fixture-scripts-dc/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
+      "fixture-scripts-dc/src/status/task-status.js": "b0ab2dbc27e416e903f337858278f0c636cbd0cf22f7061c90e84ced4f1f93ac",
+      "fixture-scripts-dc/src/status/turn-effective.js": "5140c4ae406a10749c58dbbfabaedac9f8c8ee0cad59d005687906b4ff0ca5aa",
+      "fixture-scripts-dc/src/status/watch-inputs.js": "4a57f5226d485e3b758255d9eb74da8551d226898d0e7e18fbe8f1e68f4269f8",
+      "fixture-scripts-dc/src/status/work-order-progress.js": "bd1518d185843f93cd8962bf971557f6738ed620cc9e65bac85f8686c5d904e5"
+    },
+    "guidance-files-dc": {
+      "guidance-files-dc/project-config-template/dev-flow-config.md": "492929289da674b600d2d35015d5284d8c9ca428ca6c176fd8f6c6c7603e0f17",
+      "guidance-files-dc/project-config-template/finish-flow-config.md": "b863a805ece736e8b62a7f02a4f0d7a4bbd041a201f362d97e099c9703081ed0",
+      "guidance-files-dc/project-config-template/review-loop-config.md": "2646273c985023b3fba5ace8b45a39cd44b06e9e92955736b0b385ac109281c4",
+      "guidance-files-dc/references/backlog-entry.md": "275abdd9ed6df725bc32404694dd44e8946a5fd56d5da0978fb9047eb54e190f",
+      "guidance-files-dc/references/evidence-discipline.md": "caee699c56beddbb01a5ef2696af2b352d31754464bddc4a33330b129fb4dce7",
+      "guidance-files-dc/references/four-layer-design.md": "f46a18557b8d0f42cd4986bb3a1bf5988028a88e01a4b83537643bc2577ee9d2",
+      "guidance-files-dc/references/hetero-dispatch.md": "51850c07485edaa52498fa4e5ec3dcef7aa3318ef587a6bb523ab1cca5c6be3b",
+      "guidance-files-dc/references/multi-agent-portability.md": "578f21521a6eb618ece61c290c9716d2fd278889223094900962587717d07888",
+      "guidance-files-dc/references/plan-template.md": "eed1780a6199460ebb7825e326e520bf4bbf0c21a236efd1fcda3fe8a62f4989",
+      "guidance-files-dc/references/review-page.md": "be80aed61814f45f6160b48bf63e2cb5e44c5e7c20029a885708ba4d7dabc380",
+      "guidance-files-dc/references/skill-contract-card.md": "d722c3033006d5ffefb38de40d6a3733b43934a02edbe0a6fb7a0dc40c232612"
+    },
+    "dev-flow-dc-card": {
+      "dev-flow-dc-card/SKILL.md": "c782894033c61c34b65f13806f7b51392e8d51a19a714db24fc73047b9307ef5",
+      "dev-flow-dc-card/references/card-relocated.md": "4ef8e196c20e1072efae1cc3c3551e6609d90de6345b8b275fa2165f0111f230",
+      "dev-flow-dc-card/references/context-continuation.md": "1f9604780eabae5eda9f7d9679bcdcf51ed21a9187e548792630389e1db2f764",
+      "dev-flow-dc-card/references/hetero-loops.md": "62bf0ffe13db1f3b2bca2c12e540e661d16eb0c6cab22ad8d2890c0da1e50302",
+      "dev-flow-dc-card/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-dc-card/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-dc-card/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-dc-card/references/stage-graph.md": "a9a3adb183161b5377b6d45ba2584818061b1113662fbb6577604fbd878010ba"
+    },
+    "dev-flow-dc-red": {
+      "dev-flow-dc-red/SKILL.md": "6bce1b4307198b03fd3a1514c542208b0582f6c6c8adb0b1d942e6b6f04a5c01",
+      "dev-flow-dc-red/references/context-continuation.md": "1f9604780eabae5eda9f7d9679bcdcf51ed21a9187e548792630389e1db2f764",
+      "dev-flow-dc-red/references/hetero-loops.md": "62bf0ffe13db1f3b2bca2c12e540e661d16eb0c6cab22ad8d2890c0da1e50302",
+      "dev-flow-dc-red/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-dc-red/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-dc-red/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-dc-red/references/stage-graph.md": "a9a3adb183161b5377b6d45ba2584818061b1113662fbb6577604fbd878010ba"
     }
   },
   "pack_meta": {
@@ -8008,6 +8246,106 @@
       "kind": "dir",
       "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms2/red-b2",
       "ref": "4032ba11"
+    },
+    "dev-flow-dc-full": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "finish-flow-dc-full": {
+      "kind": "skill",
+      "source": "finish-flow",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "ceo-agent-dc-full": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "team-dc-full": {
+      "kind": "skill",
+      "source": "team",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "debug-dc-full": {
+      "kind": "skill",
+      "source": "debug",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "think-tank-dc-full": {
+      "kind": "skill",
+      "source": "think-tank",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "l4-dc-full": {
+      "kind": "skill",
+      "source": "l4",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "l5-dc-full": {
+      "kind": "skill",
+      "source": "l5",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "l6-dc-full": {
+      "kind": "skill",
+      "source": "l6",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "next-dc-full": {
+      "kind": "skill",
+      "source": "next",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "quality-pipeline-dc-full": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "distill-dc-full": {
+      "kind": "skill",
+      "source": "distill",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "doc-sync-dc-full": {
+      "kind": "skill",
+      "source": "doc-sync",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "learn-dc-full": {
+      "kind": "skill",
+      "source": "learn",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "project-lifecycle-dc-full": {
+      "kind": "skill",
+      "source": "project-lifecycle",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "research-to-ship-dc-full": {
+      "kind": "skill",
+      "source": "research-to-ship",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "fixture-scripts-dc": {
+      "kind": "scripts",
+      "source": "scripts/session-mode.js,scripts/stage-advance.js,scripts/stage-graph.js,scripts/probe-unknown.js,scripts/classify-diff-risk.sh,scripts/resolve-review-loop.sh,scripts/lib/resolve-config.sh,scripts/lib/json-emit.sh,scripts/lib/json-fields.sh,references/stage-graph.json,scripts/validate-json-schema.js,scripts/decision-ledger.js,hooks/_shared/secret-patterns.js,schemas/capability-evidence.schema.json,schemas/compare-record.schema.json,schemas/decision.schema.json,schemas/decisions-sidecar.schema.json,schemas/dispatch-unit-contract.schema.json,schemas/engine-capability-state.schema.json,schemas/foreman-activity.schema.json,schemas/hook-event.schema.json,schemas/implementation-campaign-contract.schema.json,schemas/implementation-campaign-receipt.schema.json,schemas/lifecycle-residue-receipt.schema.json,schemas/local-deployment-observation.schema.json,schemas/local-engine-roster.schema.json,schemas/merge-execution-receipt.schema.json,schemas/merge-intent.schema.json,schemas/mission-convergence-contract.schema.json,schemas/mission-convergence-receipt.schema.json,schemas/mission-execution-graph.schema.json,schemas/mission-graph-sources.schema.json,schemas/mission-policy.schema.json,schemas/mission-prepare-receipt.schema.json,schemas/mission-projection.schema.json,schemas/mission-runtime-registry.schema.json,schemas/normalized-transcript-event.schema.json,schemas/official-qualification-defaults.schema.json,schemas/plan-review-manifest.schema.json,schemas/platform-capability-claims.schema.json,schemas/profile-cutover-snapshot.schema.json,schemas/provider-readiness-receipt.schema.json,schemas/qc-status.schema.json,schemas/qualification-feed-v2.schema.json,schemas/qualification-record.schema.json,schemas/residue.schema.json,schemas/review-loop-contract.schema.json,schemas/review.schema.json,schemas/role-execution-grant.schema.json,schemas/runner-result.schema.json,schemas/runner-transport-envelope.schema.json,schemas/runs-live.schema.json,schemas/session-marker.schema.json,schemas/sources.schema.json,schemas/spend-history.schema.json,schemas/stage-graph.schema.json,schemas/stage-walk.schema.json,schemas/task-authority-envelope.schema.json,schemas/task-status.schema.json",
+      "ref": "87d3fd29c648b3901a9a9cb3e8b148725d99e023"
+    },
+    "guidance-files-dc": {
+      "kind": "dir",
+      "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/gf",
+      "ref": "87d3fd29c"
+    },
+    "dev-flow-dc-card": {
+      "kind": "dir",
+      "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/dc-card",
+      "ref": "label"
+    },
+    "dev-flow-dc-red": {
+      "kind": "dir",
+      "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/dc-red",
+      "ref": "label"
     }
   }
 }

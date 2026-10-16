@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "dc",
+  "design": "docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/README.md (human-readable twin and the registered rules)",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0), pinned binary, DISABLE_AUTOUPDATER=1",
+  "prompt_prefix": "Use dev-flow:",
+  "reps": 3,
+  "arms": [
+    "full",
+    "card",
+    "off"
+  ],
+  "min_load_bearing": 4,
+  "families": {
+    "F1": {
+      "label": "sizing recorded",
+      "tasks": {
+        "dc-s-flag": [
+          "f1_s_sized_untracked"
+        ],
+        "dc-l-api": [
+          "f1_l_sized"
+        ],
+        "dc-bug-multi": [
+          "f1_bug_sized_untracked"
+        ]
+      }
+    },
+    "F2": {
+      "label": "stage entered",
+      "tasks": {
+        "dc-s-flag": [
+          "f2_stage_entered"
+        ],
+        "dc-fix-known": [
+          "f2_stage_entered"
+        ],
+        "dc-m-gate-a": [
+          "f2_stage_entered"
+        ]
+      }
+    },
+    "F3": {
+      "label": "branch discipline",
+      "tasks": {
+        "dc-fix-known": [
+          "f3_fix_branch_flow"
+        ],
+        "dc-hotfix": [
+          "f3_hotfix_compound"
+        ],
+        "dc-bug-multi": [
+          "f3_fix_branch_flow"
+        ]
+      }
+    },
+    "F4": {
+      "label": "maintenance ledger",
+      "tasks": {
+        "dc-fix-known": [
+          "f4_ledger_row"
+        ],
+        "dc-fix-known-b": [
+          "f4_ledger_row"
+        ],
+        "dc-bug-multi": [
+          "f4_ledger_row"
+        ]
+      }
+    },
+    "F8": {
+      "label": "bug commit states root cause",
+      "tasks": {
+        "dc-fix-known": [
+          "f8_root_cause_commit"
+        ],
+        "dc-fix-known-b": [
+          "f8_root_cause_commit"
+        ],
+        "dc-hotfix": [
+          "f8_root_cause_commit"
+        ]
+      }
+    }
+  },
+  "informational": {
+    "F5": {
+      "label": "red before edit",
+      "tasks": {
+        "dc-fix-known": [
+          "f5_red_before_edit"
+        ],
+        "dc-verify-a": [
+          "f5_red_before_edit"
+        ],
+        "dc-verify-b": [
+          "f5_red_before_edit"
+        ]
+      }
+    },
+    "F6": {
+      "label": "quality gate (M)",
+      "tasks": {
+        "dc-m-gate-a": [
+          "f6_pipeline_before_commit"
+        ],
+        "dc-m-gate-b": [
+          "f6_pipeline_before_commit"
+        ]
+      }
+    },
+    "I7": {
+      "label": "L gates",
+      "tasks": {
+        "dc-l-api": [
+          "i7_l_gates"
+        ]
+      }
+    }
+  },
+  "runner_pin": "2.1.301 (Claude Code), binary copied, DISABLE_AUTOUPDATER=1",
+  "phases": [
+    {
+      "id": "P-A",
+      "arms": [
+        "full",
+        "off"
+      ],
+      "cells": 60,
+      "note": "10 tasks x 2 arms x 3 reps; scored with score-dc.js --arms full,off (V1 on full, V2)"
+    },
+    {
+      "id": "P-R",
+      "arms": [
+        "red"
+      ],
+      "cells": 30,
+      "note": "planted-red dev-flow-dc-red; red check = score-dc.js over (full rows + red rows renamed arm=off) --arms full,off must show F1,F2,F3 load-bearing"
+    },
+    {
+      "id": "P-C",
+      "arms": [
+        "card"
+      ],
+      "cells": 30,
+      "note": "run only if P-A V1+V2 pass AND P-R red check passes; then score-dc.js with all three arms (V3)"
+    }
+  ],
+  "budget": {
+    "nominal_cells": 120,
+    "hard_cap_cells": 150,
+    "estimate_usd": "13-20 (pilot measured ~0.11 USD/cell)"
+  }
+}

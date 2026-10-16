@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `skills/dev-flow/SKILL.md` is now the 483-line contract card (was 534; ladder terms, drift table, anti-patterns table, compatibility notes and the scripts index moved to `references/card-relocated.md`), shipped on the BL-0044 evidence: dc ON/OFF SHIP-GATE-MET and stage-graph coverage 10/12 (`docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/`); the skill-onoff instrument gained the repaired `dc` row (`evals/skill-onoff/score-dc.js`).
+
 - Review packets may now exclude `evals/skill-onoff/packs/**` via the consumer exclude allowlist: those frozen eval arm packs are verbatim pinned copies that can add ~70k lines to a campaign diff, too large for a packet; reviewers read the arm manifests, prereg and scorer instead.
 
 - Backlog: BL-0020 (peer-reported by openclaw, agy flash/low implementer no-go) closed as stale: no shipped default or ladder rung uses agy flash/low any more (implementer default is grok-4.7/low). The original fleet message has expired, so the reply could not be threaded; recorded here instead.

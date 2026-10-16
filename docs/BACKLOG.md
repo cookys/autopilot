@@ -350,19 +350,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
 
-### dev-flow card re-attempt — instrument repair first (V2-vacuous verdict 2026-08-18)
-- **Id**: BL-0044
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 我們為開發流程技能做了精簡版卡片，評測時五類任務只有一類真的能分出好壞，其餘太簡單而無鑑別力，結果不能當證據，卡片也就不能上線。 (draft)
-- **Impact**: 精簡版無法上線，開發流程文件維持冗長；要先編列評測預算並修好題目。 (draft)
-- **Trigger**: A new evidence campaign budget is approved AND the skill-onoff task set is repaired so ≥4 of 5 families are load-bearing (per the frozen V2 rule). Repair directions from the data: harder tasks where sonnet's base rate drops (F1/F5…
-- **Effort**: M
-- **Source**: dev-flow-contract-card P6 adjudication（2026-08-18）.
-- **Pointer**: docs/backlog/dev-flow-card-re-attempt-instrument-repair-first-v2-vacuous-verdict-2026-08-18.md
-- **Context**: The 499-line card draft is digest-frozen at `evals/skill-onoff/packs/dev-flow-card/` and was NON-INFERIOR on the only load-bearing family (F3 branch discipline: FULL 9/9, CARD 9/9, OFF 0/9 — total discrimination, perfectly preserved).
-
 ### Arm the ordinary-strike threshold (currently shadow-only) — DATED REVIEW REQUIRED
 - **Id**: BL-0046
 - **Status**: open
@@ -389,18 +376,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
-### dev-flow F4 ledger rule — re-measure before deciding (F6 leg RESOLVED 2026-08-18)
-- **Id**: BL-0049
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 評測發現開發流程技能的「維護紀錄」那一步在測試中全軍覆沒，但測試用的範例專案根本沒有 docs 資料夾，結果不公平，必須等題目重做後重測才能下結論。 (draft)
-- **Impact**: 結論尚未確定，不影響日常使用；排在評測題目修好之後。 (draft)
-- **Trigger**: The skill-onoff instrument-repair campaign, at the point where its task fixtures are redesigned — F4 must be re-measured there, not decided from the existing data.
-- **Effort**: S
-- **Source**: dev-flow-contract-card primary block（`evidence/…/primary-sonnet-results.jsonl`）;P7 adjudication 2026-08-18.
-- **Pointer**: docs/backlog/dev-flow-f4-ledger-rule-re-measure-before-deciding-f6-leg-resolved-2026-08-18.md
-- **Context**: F4 (Fix step 6 ongoing-maintenance ledger row) measured 0/3 in the FULL arm, but n=3 and the fixture repo carried no `docs/` tree at all, so the model had to originate a directory rather than append a line — a materially different…
 
 ### Outcome-shaped quality-gate enforcer (opt-in) — replaces the rejected invocation check
 - **Id**: BL-0050

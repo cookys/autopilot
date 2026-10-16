@@ -31,7 +31,14 @@ function parse(argv) {
     const take = () => { i += 1; return argv[i]; };
     if (arg === '--from') opts.from = take();
     else if (arg === '--feed-cache-dir') opts.cacheDir = take();
-    else if (arg === '--max-age-s') opts.maxAgeS = Number(take());
+    else if (arg === '--max-age-s') {
+      const raw = take();
+      opts.maxAgeS = raw === undefined || raw.trim() === '' ? NaN : Number(raw);
+      if (!Number.isFinite(opts.maxAgeS) || opts.maxAgeS < 0) {
+        process.stderr.write('qualification-metrics: --max-age-s must be a finite number >= 0\n');
+        process.exit(2);
+      }
+    }
     else if (arg === '--now') opts.now = take();
     else if (arg === '--seats') opts.seats = take();
     else { process.stderr.write(`qualification-metrics: unknown argument ${arg}\n`); process.exit(2); }
@@ -44,7 +51,7 @@ async function main() {
   const opts = parse(process.argv.slice(2));
   const cacheDir = opts.cacheDir || feedLib.defaultCacheDir();
   const now = opts.now || new Date().toISOString();
-  const maxAgeS = opts.maxAgeS || lib.DEFAULT_MAX_AGE_S;
+  const maxAgeS = opts.maxAgeS === undefined ? lib.DEFAULT_MAX_AGE_S : opts.maxAgeS;
   if (opts.command === 'fetch') {
     if (!opts.from) { process.stderr.write('fetch requires --from\n'); process.exit(2); }
     const r = await lib.fetchMetrics(opts.from, { cacheDir, now });
@@ -69,6 +76,7 @@ async function main() {
     const seats = JSON.parse(fs.readFileSync(opts.seats, 'utf8'));
     if (!Array.isArray(seats)) { process.stderr.write('--seats must be a JSON array\n'); process.exit(2); }
     const s = lib.readStatus({ cacheDir, now, maxAgeS });
+    for (const w of s.warnings) process.stderr.write(`qualification-metrics: warning: ${w}\n`);
     process.stdout.write(`${JSON.stringify(lib.orderAdmittedSeats(seats, s.doc), null, 2)}\n`);
     return;
   }

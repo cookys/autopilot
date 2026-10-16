@@ -258,7 +258,7 @@ function describeAges(manifest, nowIso, { maxAgeS = DEFAULT_MAX_AGE_S } = {}) {
   const labels = [];
   for (const [name, a] of [['fetch', fetched], ['producer', producer]]) {
     if (a.label !== 'ok') labels.push(`${name}_age:${a.label}`);
-    if (a.age_s !== null && a.age_s > maxAgeS) {
+    if (a.age_s !== null && (maxAgeS === 0 || a.age_s > maxAgeS)) {
       warnings.push(`${name}_age_s ${a.age_s} exceeds max_age_s ${maxAgeS}: metrics are stale, still used for ordering only`);
     }
     if (a.age_s !== null && a.age_s > EXPIRED_ADVISORY_AGE_S) labels.push(`${name}_age:expired-advisory`);
@@ -360,9 +360,9 @@ async function fetchMetrics(feedFrom, {
   fetchImpl = globalThis.fetch,
   now = new Date().toISOString(),
 } = {}) {
-  const from = siblingMetricsSource(feedFrom);
-  if (!from) return { ok: false, error: 'no feed source to derive the metrics document from' };
   try {
+    const from = siblingMetricsSource(feedFrom);
+    if (!from) return { ok: false, error: 'no feed source to derive the metrics document from' };
     const { bytes, origin } = await feedLib.readFeedSource(from, { fetchImpl });
     const { errors, doc } = validateMetrics(bytes);
     if (errors.length) {
@@ -415,14 +415,25 @@ function dedupeBenchmarkRows(doc) {
   return [...byCell.values()];
 }
 
-// Per seat: the most recent deduped benchmark row that matches it.
-function metricFor(seat, rows) {
+// Newest row by window_end.
+function latestOf(rows) {
   let best = null;
-  for (const e of rows) {
-    if (!seatMatches(seat, e.seat)) continue;
-    if (!best || tsKey(e.window_end) > tsKey(best.window_end)) best = e;
-  }
+  for (const e of rows) if (!best || tsKey(e.window_end) > tsKey(best.window_end)) best = e;
   return best;
+}
+
+/**
+ * The benchmark observation for ONE seat. Dedupe is for aggregating, not for lookup: a board cell
+ * appears once per seat mapped to it, and collapsing those rows would leave every seat but one
+ * without data. So: the seat's own benchmark row first; else the observation of the board cell the
+ * seat is mapped to (any mapped entry of that seat names the cell). Unmapped seats get nothing.
+ */
+function metricFor(seat, doc) {
+  const mapped = doc.seat_metrics.filter((e) => e.join.board_join === 'mapped' && seatMatches(seat, e.seat));
+  const own = latestOf(mapped.filter((e) => e.kind === 'benchmark_observation'));
+  if (own) return own;
+  const cells = new Set(mapped.map((e) => e.join.board_cell));
+  return latestOf(dedupeBenchmarkRows(doc).filter((e) => cells.has(e.join.board_cell)));
 }
 
 /**
@@ -434,9 +445,8 @@ function metricFor(seat, rows) {
 function orderAdmittedSeats(admitted, doc) {
   const input = admitted.slice();
   if (!doc) return input;
-  const rows = dedupeBenchmarkRows(doc);
   const keyed = input.map((seat, index) => {
-    const e = metricFor(seat, rows);
+    const e = metricFor(seat, doc);
     return {
       seat,
       index,
@@ -513,6 +523,7 @@ module.exports = {
   fetchMetrics,
   readStatus,
   dedupeBenchmarkRows,
+  metricFor,
   orderAdmittedSeats,
   admissionView,
   reconcileStrikeDisclosure,

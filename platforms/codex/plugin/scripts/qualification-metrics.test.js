@@ -106,6 +106,33 @@ const A = {
     const doc = { seat_metrics: [base('a1', 'low'), base('a2', 'high'), base('a3', null)], strike_events: [] };
     assert.equal(m.dedupeBenchmarkRows(doc).length, 1);
   },
+  twoRolesOneCellBothGetData(m) {
+    const seat = (role, engine = 'grok') => ({ engine, model: engine, model_version: engine, runner: 'r', role, effort: 'low' });
+    const common = { instrument_id: 'i', window_end: '2026-10-11T08:00:00Z', join: { board_cell: 'grok/low', board_join: 'mapped' } };
+    const bench = (id, role) => ({
+      ...common, entry_id: id, kind: 'benchmark_observation', seat: seat(role),
+      speed: { solved_per_hour_milli: 9000 }, benchmark: { pass_rate_permille: 800 }, cost: { usd_per_solved_micro: 10 },
+    });
+    const doc = {
+      seat_metrics: [
+        bench('a2', 'implementer'), bench('a1', 'reviewer'),
+        { ...common, entry_id: 'q1', kind: 'qualification', seat: seat('consult') },
+        { ...common, entry_id: 'z', kind: 'benchmark_observation', join: { board_cell: 'slow/cell', board_join: 'mapped' }, seat: seat('implementer', 'slow'),
+          speed: { solved_per_hour_milli: 100 }, benchmark: { pass_rate_permille: 800 }, cost: { usd_per_solved_micro: 10 } },
+      ],
+      strike_events: [],
+    };
+    assert.equal(m.dedupeBenchmarkRows(doc).length, 2, 'aggregation counts the cell once');
+    for (const role of ['implementer', 'reviewer', 'consult']) {
+      const e = m.metricFor(seat(role), doc);
+      assert.ok(e, `${role} gets the cell data`);
+      assert.equal(e.speed.solved_per_hour_milli, 9000);
+    }
+    const seats = [seat('implementer', 'slow'), seat('implementer'), seat('reviewer'), seat('consult')];
+    const out = m.orderAdmittedSeats(seats, doc);
+    assert.equal(out.length, 4);
+    assert.equal(out[3].engine, 'slow');
+  },
   unknownIsNotZero(m) {
     const row = (engine, cost) => ({
       entry_id: engine, kind: 'benchmark_observation', instrument_id: 'i', window_end: '2026-10-11T08:00:00Z',
@@ -252,6 +279,7 @@ test('an unreachable or invalid feed never throws, writes nothing, and keeps the
 // ── positive: authority ──
 test('feed lift / omission leave local strikes untouched', () => { A.feedLiftLeavesLocalStrikes(lib); A.feedOmissionLeavesLocalStrikes(lib); });
 test('feed qualified with no local row admits nothing', () => A.feedQualifiedWithoutLocalRowAdmitsNothing(lib));
+test('two roles on one board cell both get the cell data; aggregation counts it once', () => A.twoRolesOneCellBothGetData(lib));
 test('a board cell seen under several seats counts once', () => A.dedupeOncePerBoardCell(lib));
 test('unknown (null) sorts after known and is never 0', () => A.unknownIsNotZero(lib));
 test('latest_per_task rows with null counts sort as unknown, after known', () => A.latestPerTaskNullsAreUnknown(lib));
@@ -280,11 +308,27 @@ test('admission is byte-identical with the metrics cache absent or hostile', asy
   assert.equal(run(hostileHome), run(absentHome));
 });
 
-test('admission code never requires the metrics module', () => {
-  for (const f of ['scripts/engine-scorecard.js', 'scripts/resolve-review-loop.sh', 'scripts/adopt-qualification-defaults.js',
-    'scripts/lib/qualification-feed.js', 'scripts/resolve-dispatch-topology.js', 'scripts/lib/qualification-applicability-scope.js']) {
-    assert.ok(!/qualification-metrics/.test(fs.readFileSync(path.join(REPO, f), 'utf8')), f);
-  }
+test('no other script or hook requires the metrics module (whole-tree scan)', () => {
+  const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js']);
+  const hits = [];
+  const walk = (dir) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (ent.name !== 'node_modules' && ent.name !== 'fixtures') walk(full); continue; }
+      if (!ent.isFile()) continue;
+      const rel = path.relative(REPO, full);
+      if (own.has(rel)) continue;
+      if (/qualification-metrics/.test(fs.readFileSync(full, 'utf8'))) hits.push(rel);
+    }
+  };
+  walk(path.join(REPO, 'scripts'));
+  walk(path.join(REPO, 'hooks'));
+  assert.deepEqual(hits, []);
+});
+
+test('a malformed feed URL returns ok:false instead of throwing', async () => {
+  const r = await lib.fetchMetrics('https://[bad', { cacheDir: tmp('cache'), now: NOW });
+  assert.equal(r.ok, false);
 });
 
 test('CLI: fetch, status and order work end to end and order never drops a seat', async () => {
@@ -298,7 +342,18 @@ test('CLI: fetch, status and order work end to end and order never drops a seat'
   const seats = path.join(tmp('seats'), 'seats.json');
   const list = [{ engine: 'a' }, { engine: 'b' }];
   fs.writeFileSync(seats, JSON.stringify(list));
-  assert.deepEqual(JSON.parse(cli('order', '--seats', seats).stdout), list);
+  const ordered = cli('order', '--seats', seats);
+  assert.deepEqual(JSON.parse(ordered.stdout), list);
+  assert.match(ordered.stderr, /warning:.*stale/, 'order prints cache warnings to stderr');
+  for (const bad of ['-1', 'abc', 'NaN', 'Infinity', '']) {
+    assert.equal(cli('status', '--max-age-s', bad).status, 2, `--max-age-s ${bad}`);
+  }
+  const fresh = feedDirWithMetrics(isoAgo(0));
+  const c2 = tmp('cache');
+  const cli2 = (...args) => spawnSync('node', [path.join(__dirname, 'qualification-metrics.js'), ...args, '--feed-cache-dir', c2, '--now', NOW], { encoding: 'utf8' });
+  cli2('fetch', '--from', fresh.feed);
+  assert.deepEqual(JSON.parse(cli2('status').stdout).warnings, []);
+  assert.ok(JSON.parse(cli2('status', '--max-age-s', '0').stdout).warnings.length >= 1, '0 means always warn');
 });
 
 // ── negative controls: the same assertions on deliberately broken copies must go RED ──
@@ -318,7 +373,7 @@ expectRed('feed qualified claim admits a seat with no local row', [[
 ]], A.feedQualifiedWithoutLocalRowAdmitsNothing);
 
 expectRed('warn branch removed: status assertion', [[
-  'if (a.age_s !== null && a.age_s > maxAgeS) {',
+  'if (a.age_s !== null && (maxAgeS === 0 || a.age_s > maxAgeS)) {',
   'if (false) {',
 ]], async (m) => A.staleWarns(m, await staleCache()));
 
@@ -341,3 +396,8 @@ expectRed('null pass rate treated as 0 (latest_per_task)', [[
   'pass: e ? e.benchmark.pass_rate_permille : null,',
   'pass: e ? (e.benchmark.pass_rate_permille || 0) : null,',
 ]], A.latestPerTaskNullsAreUnknown);
+
+expectRed('old behaviour: lookup through the deduped rows starves the other seats', [[
+  '  const own = latestOf(',
+  '  if (seat) return latestOf(dedupeBenchmarkRows(doc).filter((e) => seatMatches(seat, e.seat)));\n  const own = latestOf(',
+]], A.twoRolesOneCellBothGetData);

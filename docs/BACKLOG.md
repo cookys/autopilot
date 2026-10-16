@@ -1095,20 +1095,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### Owner-role qualification has no exam provider
-- **Id**: BL-0158
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 「工頭」這個角色目前沒辦法考資格：考試程式缺少把工頭題目送給模型作答的那一段，所以不管哪個模型都考不了，只能沿用舊成績或不派這個角色。
-- **Impact**: 中。新模型（MiniMax-M3.1、GLM-5.3、Qwen3.8-Max、Kimi K3）都沒有工頭成績，派工頭時只能靠人工指定。
-- **Trigger**: 想讓非 Claude 模型擔任工頭，或下一輪全角色資格考前
-- **Effort**: M
-- **Source**: 2026-10-14 all-role requalify matrix
-- **Pointer**: none
-- **Context**: qualification-review-provider.js has no owner mode (brain rides role owner but is a different exam); an owner-provider.js was drafted but never committed. engine-qualify --role owner needs a foreman-corpus provider.
-
-
 ### Qualification wall cap and truncation rules after run-to-completion
 - **Id**: BL-0160
 - **Status**: open

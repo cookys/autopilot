@@ -5971,6 +5971,7 @@ module.exports = {
   createSessionRoleCapabilityVerifier,
   foldPooledVerdict,
   ownerRuleViolations,
+  parseOwnerPanelResult,
   qualificationLabelTiers,
   qualificationReasonPrefixTiers,
   runBrainQualification,

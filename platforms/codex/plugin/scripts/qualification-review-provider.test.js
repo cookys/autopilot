@@ -2188,6 +2188,73 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   check(threw, 'a final object that breaks the verdict schema is rejected even when an earlier object was valid');
 }
 
+// ── owner prompt mode (BL-0158): lists the owner exam cases, grades them ──────
+{
+  const { generateOwnerEvaluation, RULES, CORPUS } = require('../evals/owner-eval-generator');
+  const { parseOwnerPanelResult } = require('./engine-qualify');
+  const seed = 'a'.repeat(64);
+  const generated = generateOwnerEvaluation(seed);
+  const cases = [...generated.knownBad, ...generated.clean, generated.mutation];
+  const ownerRequest = (diff) => ({
+    schema_version: 1, request_id: 'req-owner', role: 'owner',
+    payload: { format: 'unified_diff', content: diff },
+  });
+  const ownerEnv = {
+    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude, QRP_PROMPT_MODE: 'owner',
+  };
+  // The host oracle (same shape as engine-qualify's runOwnerPanelCase): known_bad must be
+  // rejected citing the planted rule at a changed line; clean/mutation must be accepted.
+  const graded = (testCase, answer) => {
+    const { child, captured } = runProvider({
+      env: ownerEnv, request: ownerRequest(testCase.diff), stubOutput: answer,
+    });
+    if (child.status !== 0) return { ok: false, child, captured };
+    let panel;
+    try { panel = parseOwnerPanelResult(JSON.parse(child.stdout).output); } catch { panel = { decision: 'reject', violations: [] }; }
+    const wantReject = testCase.kind === 'known_bad';
+    const pass = wantReject
+      ? panel.decision === 'reject' && panel.violations.some((v) => (
+        v.rule_id === testCase.ruleId && v.file === testCase.file && v.line === testCase.changedLine))
+      : panel.decision === 'accept' && panel.violations.length === 0;
+    return { ok: true, pass, captured };
+  };
+  const honest = (testCase) => (testCase.kind === 'known_bad'
+    ? JSON.stringify({ decision: 'reject', violations: [{
+      rule_id: testCase.ruleId, severity: testCase.severity, file: testCase.file, line: testCase.changedLine }] }, null, 2)
+    : JSON.stringify({ decision: 'accept', violations: [] }));
+  const broken = (testCase) => (testCase.kind === 'known_bad'
+    ? JSON.stringify({ decision: 'accept', violations: [] })
+    : JSON.stringify({ decision: 'reject', violations: [{
+      rule_id: RULES[0].id, severity: 'critical', file: testCase.file, line: 1 }] }));
+  equal(cases.length, CORPUS.controls.known_bad_per_trial + CORPUS.controls.clean_per_trial + 1,
+    'owner provider lists the whole owner case set (known-bad + clean + reversal control)');
+  for (const testCase of cases) {
+    const good = graded(testCase, honest(testCase));
+    check(good.ok && good.pass, `owner provider: honest answer passes ${testCase.id} (${testCase.kind})`);
+    const bad = graded(testCase, broken(testCase));
+    check(bad.ok && !bad.pass, `owner negative control: broken answer fails ${testCase.id} (${testCase.kind})`);
+  }
+  const first = graded(cases[0], honest(cases[0]));
+  check(!first.captured.stdin.includes('behavioral-call-v1') && first.captured.stdin.includes('acceptance-discipline'),
+    'owner prompt carries the owner rule table, not the reviewer witness recipes');
+  for (const rule of RULES) {
+    check(first.captured.stdin.includes(`- ${rule.id} (${rule.severity}):`),
+      `owner prompt rule table matches corpus rule ${rule.id}`);
+  }
+  check(first.captured.stdin.includes(cases[0].diff.split('\n')[0]), 'owner case diff travels on stdin');
+  check(!first.captured.stdin.replace(cases[0].diff, '').includes(cases[0].ruleId.replace(/-/g, '_') + '_'),
+    'owner prompt leaks no per-case token');
+  const one = runProvider({ env: ownerEnv, request: ownerRequest(cases[0].diff), stubOutput: honest(cases[0]) });
+  check(!JSON.parse(one.child.stdout).output.includes('\n'), 'owner output is re-serialized to a single line');
+  // Role / payload gates.
+  equal(runProvider({ env: ownerEnv, request: reviewerRequest(), stubOutput: honest(cases[0]) }).child.status, 1,
+    'owner mode refuses a reviewer-role request');
+  equal(runProvider({ env: ownerEnv, request: ownerRequest('not a diff'), stubOutput: honest(cases[0]) }).child.status, 1,
+    'owner mode refuses a payload that is not a unified diff');
+  equal(runProvider({ env: { ...ownerEnv, QRP_PROMPT_MODE: 'reviewer' }, request: ownerRequest(cases[0].diff),
+    stubOutput: honest(cases[0]) }).child.status, 1, 'reviewer mode still refuses an owner-role request');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 459) throw new Error(`qualification-review-provider: expected exactly 459 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 499) throw new Error(`qualification-review-provider: expected exactly 499 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

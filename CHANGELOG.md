@@ -5,6 +5,7 @@
 - `qualification-review-provider.js` gains an `owner` prompt mode (`QRP_PROMPT_MODE=owner`), so `engine-qualify.sh owner --remote-provider-cmd` has an exam provider for the owner intent/control corpus (BL-0158); `engine-qualify.js` now exports `parseOwnerPanelResult`.
 
 - `orchestrator-edit-gate` keeps gating the repo's main checkout after the session marker follows into a linked worktree (BL-0005; release via `--solo`, mode `off`, or `hooks.orchestrator-edit-gate=false`), and `repo-residue-sweep.js close-session --yes` now prints the owner's `git -C <main> pull --ff-only` line when the main checkout is behind its upstream (BL-0006; no finish-flow requirement text changed).
+- `dispatch-review.sh` now marks a "leading chrome contained framing vocabulary" rejection as `format_reject`, so the single-seat format re-ask (BL-0197) covers it instead of leaving the seat absent.
 
 - BL-0093 point 1 (Boil the Lake): ON/OFF campaign ran 26 cells and was UNINFORMATIVE (waste 0 vs 0), so ceo-agent prose is unchanged; evidence under `docs/plans/evidence/2026-10-17-bl0093-guidance-relax/`, and the maximal eval pack was re-synced to the shipped skill text.
 

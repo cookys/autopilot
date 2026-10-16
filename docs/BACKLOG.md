@@ -1022,11 +1022,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: mods/live 介面的「最近對話」區塊，群組只能用滑鼠點開；在 tmux 裡用鍵盤無法移到群組並展開，按 Enter 反而觸發前面的切換分頁按鈕。 (draft)
 - **Impact**: 只用鍵盤或 ssh 的使用者無法展開群組；擁有者若要用鍵盤才需處理。 (draft)
-- **Trigger**: next touch of mods/live pane keyboard focus, or an owner report of needing keyboard expand
+- **Trigger**: Claude Code 支援 pane 內非分頁 Button 的鍵盤焦點或 hotkey 時
 - **Effort**: S
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
 - **Pointer**: docs/backlog/mods-live-recent-groups-keyboard.md
-- **Context**: Re-run 2026-10-16: Tab/Down/Right cycle only the 7 tab Buttons; group Buttons are never reached. Needs an owner call (hotkey or host change), see sidecar.
+- **Context**: 2026-10-17 measured on Claude Code 2.1.301: in-pane Button hotkey draws its prefix but keys go to the input box; focus stays on top tabs only. Host blocks it; reported to Claude Code.
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
 - **Id**: BL-0124

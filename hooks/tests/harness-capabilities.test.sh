@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-10-16T15:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness report exits 0"
 
@@ -23,7 +23,7 @@ console.log(`copilot_reasons_unique=${new Set(copilot.readiness_reasons).size ==
 NODE
 )"
 assert_contains "$PARSED" "total=8" "harness report loads default records"
-assert_contains "$PARSED" "stale=5" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
+assert_contains "$PARSED" "stale=7" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
 assert_contains "$PARSED" "verified=4" "harness report counts verified records"
 assert_contains "$PARSED" "warning=2" "harness report counts warning records"
 assert_contains "$PARSED" "unverified=2" "harness report counts unverified records"
@@ -35,7 +35,7 @@ assert_contains "$PARSED" "codex_level=H2" "harness report preserves harness lev
 assert_contains "$PARSED" "required_level=H3" "harness report defaults readiness to H3"
 assert_contains "$PARSED" "copilot_reasons_unique=true" "harness report emits unique readiness reasons"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-10-16T15:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness warning report exits 0"
 assert_contains "$OUT" "AUTOPILOT_HARNESS_ATTENTION count=8" "warning report includes stale or H3-unready records"

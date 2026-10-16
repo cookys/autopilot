@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "arm": "off",
+  "skills": {
+    "quality-pipeline": "quality-pipeline-qs-off"
+  },
+  "files": [
+    "guidance-files-qs"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-qs",
+    "fixture-config-qs"
+  ]
+}

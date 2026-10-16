@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Runs watcher hardening (BL-0195, BL-0109): a watcher started by hand in an isolated test environment (own HOME or CLAUDE_CONFIG_DIR) now refuses to write the shared live directory; the shared enrich-cursor file merges the newer probe per run instead of last-writer-wins; `startWatcherDetached` reports a missing `nohup`/`sh` instead of "started". Settings changes: `AUTOPILOT_RUNS_WATCH_AUTOSTART` now also accepts `false`, `off`, `no` as disabled, and an unset value counts as disabled inside a `node --test` process tree (empty string or `1` still enables).
+
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
 - `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.

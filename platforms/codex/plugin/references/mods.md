@@ -173,9 +173,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   (`nohup`, own session, stdio to `<autopilot_home>/review/<project_key>/live/watcher.log`). A detached
   `flock -n` that loses is silent, which is why the probe is foreground. Crash recovery rests on one fact: when
   the writer dies (even SIGKILL) the kernel releases the lock and `flock -n` succeeds at once.
-- Fail-open: no `flock(1)` on PATH, an unwritable live dir, or any spawn error produces one stderr line;
+- Heartbeat rows republish `state.lastRuns`, so `elapsed_s` / `probe_age_s` / `observed_at` stay frozen between changes while `counts` stay current: a reader derives elapsed time from `started_at`, never from `elapsed_s`.
+- Fail-open: no `flock(1)` on PATH, an unwritable live dir, no `nohup`/`sh` on PATH (checked before spawning), or any spawn error produces one stderr line;
   `set`'s exit code and marker are unchanged. There is no lockfile fallback (a plain lockfile survives a crash).
-- **Autostart switch**: `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` disables the start. `hooks/tests/lib.sh` exports it
+- **Autostart switch**: `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` (also `false`, `off`, `no`) disables the start, and so does leaving it unset inside a `node --test` process tree (`src/status/autostart-gate.js`; an empty string means "enabled", which is how a test drives the hook for real). `hooks/tests/lib.sh` exports it
   for every suite; any test that runs `session-mode.js set` without sourcing lib.sh sets it itself. Only
   `hooks/tests/session-mode-watcher.test.sh` turns it on.
 - **Hook autostart (W1c)**: `hooks/runs-watch-autostart.js` (SessionStart + UserPromptSubmit) starts the same watcher for

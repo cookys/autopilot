@@ -11,6 +11,8 @@
 #       silent null. Two cases:
 #         - git < 2.31 (from `git --version`): `repo-identity: git rev-parse --path-format
 #           failed (git <ver>; need >= 2.31)` — the version hint.
+#         - a directory outside any repository: `repo-identity: <dir> is not inside a git
+#           repository`.
 #         - any other case: `repo-identity: git rev-parse failed in <dir>: <git's own
 #           stderr, joined to one line>`.
 #       git exits 0 but prints no common dir: `repo-identity: git rev-parse returned no
@@ -28,7 +30,8 @@
 #       cwd's `git rev-parse --show-toplevel`) -> "consuming_repo_root"; neither -> both
 #       null. A directory whose identity cannot be derived -> repo_identity null,
 #       source "git_rev_parse_failed". The value is cached in REPO_IDENTITY_FIELDS for
-#       the life of the run (a rail rewrites its manifest several times). Callers pass
+#       the life of the run (a rail rewrites its manifest several times), keyed on the (root,
+#       consuming) pair: a call with different inputs recomputes. Callers pass
 #       their OWN variables explicitly so an ambient exported REPO_ROOT can never leak in.
 
 repo_identity_of() {
@@ -71,7 +74,10 @@ repo_identity_of() {
   else
     err="${err% }"
     [ -n "$err" ] || err="git rev-parse exited $rc with no stderr"
-    echo "repo-identity: git rev-parse failed in $dir: $err" >&2
+    case "$err" in
+      *"not a git repository"*) echo "repo-identity: $dir is not inside a git repository" >&2 ;;   # a plain non-repo dir is not a git failure
+      *) echo "repo-identity: git rev-parse failed in $dir: $err" >&2 ;;
+    esac
   fi
   return 1
 }
@@ -225,7 +231,13 @@ manifest_child_transcript_json() {
 }
 
 repo_identity_resolve_fields() {
-  [ -n "${REPO_IDENTITY_FIELDS:-}" ] && return 0
+  # Cache keyed on the inputs (BL-0109): the same (root, consuming) pair reuses the stored fields; a
+  # different pair recomputes. A value present with no recorded key (preset by a caller, or carried
+  # into a detached child that does not carry the key) is honoured as before.
+  local key="${1:-}"$'\037'"${2:-}"   # US separator: cannot appear in a path in practice
+  if [ -n "${REPO_IDENTITY_FIELDS:-}" ] && { [ -z "${_REPO_IDENTITY_FIELDS_KEY:-}" ] || [ "$_REPO_IDENTITY_FIELDS_KEY" = "$key" ]; }; then
+    return 0
+  fi
   local root="${1:-}" consuming="${2:-}" dir="" src="" id=""
   if [ -n "$root" ]; then
     dir="$root"; src="repo_root"
@@ -240,5 +252,6 @@ repo_identity_resolve_fields() {
   else
     REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": "git_rev_parse_failed"'
   fi
+  _REPO_IDENTITY_FIELDS_KEY="$key"
   return 0
 }

@@ -585,7 +585,7 @@ scripts/dispatch-tree.js [--session <id>] [--json]  # read-only tree: subagents 
   `_wt_is_live`; survives detach — the child inherits the fd) → cgroup scope → pid. Any positive
   signal ⇒ `alive:true` / `phase:"running"`; finalized manifest (`ended_at`) ⇒ `"exited"`.
 - **Stall**: `alive` AND log mtime age > `--stall-secs` (default 180) ⇒ `stall:true`. Report-only —
-  Stage 1 has NO auto-kill; killing stays the caller's call (`--gc`, `dispatch-batch.sh reap`).
+  Stage 1 has NO auto-kill; killing stays the caller's call (`dispatch-batch.sh reap`).
 - **Telemetry honesty**: events/tool_calls/tokens are parsed from the HARNESS event stream
   (codex-chrome `tokens used` footer — empirically fixtured; generic JSONL key scan), NEVER from
   worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
@@ -656,9 +656,9 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
   scans the runs dir; a LIVE run (flock/pid/scope probe) is never touched regardless of age;
   not-live manifests older than `--days` are deleted; a failure-kept worktree is removed ONLY
   on a DEFINITIVE dead lock verdict + the `.autopilot-worktree` marker + a free worktree lock
-  (the `gc_stale_worktrees` eligibility contract), then the owner repo gets `git worktree
-  prune`. Unmarked dirs and unparseable manifests are never deleted. Complements (not
-  replaces) `dispatch-hetero.sh --gc`, which stays the config-gated worktree-only reaper.
+  (the marker + dead-lock eligibility contract), then the owner repo gets `git worktree
+  prune`. Unmarked dirs and unparseable manifests are never deleted. Worktree residue is reclaimed by
+  `repo-residue-sweep.js reap --auto --yes` (SessionStart hook); `dispatch-hetero.sh --gc` was removed at 3.0.0.
 
 ## Implementer ladder (unit class + red repair)
 

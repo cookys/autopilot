@@ -808,21 +808,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### remove dispatch-hetero.sh --gc and stale_reaper_age_days at 3.0.0 final
-- **Id**: BL-0115
-- **Status**: open
-- **Since**: 2026-10-09
-- **Origin**: self
-- **Problem**: 3.0.0 正式版時，要移除 dispatch-hetero 的舊清理功能（--gc 旗標與 stale_reaper_age_days 設定），因為新的自動清理已取代，且舊功能預設就是關閉。 (draft)
-- **Impact**: 不移除會留下重複又無用的功能與設定，增加維護負擔；屬刻意延到正式版的破壞性移除。 (draft)
-- **Trigger**: the 3.0.0 final cut (checked 2026-10-16: still present, scripts/dispatch-hetero.sh --gc at L1890 and stale_reaper_age_days in resolve-worktree-teardown.sh; remove then, not before)
-- **Effort**: S
-- **Source**: residue auto-reap contract, 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
-- **Context**: `repo-residue-sweep.js reap --auto` is the canonical automatic reaper; the rail-local `--gc` path (default 0, off) is redundant; breaking removal, no shim.
-
-
-
 ### Run stage-graph v11 regression covering the packet guidance text
 - **Id**: BL-0116
 - **Status**: open

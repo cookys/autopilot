@@ -3,7 +3,6 @@
 #
 # RED at base 826236659845aa64603cd614e94a8f4512553336:
 #   FAIL [resolve-config] CHANGE-PINNING: foreign git cwd → worktree-teardown source=template: expected 'template', got 'project-repo'
-#   FAIL [resolve-config] CHANGE-PINNING: foreign git cwd → stale_reaper_age_days equals template: expected '0', got '14'
 #   FAIL [resolve-config] CHANGE-PINNING: foreign git cwd → review-loop source=template: expected 'template', got 'project-repo'
 #   FAIL [resolve-config] CHANGE-PINNING: foreign git cwd → implementer_engine equals template: expected 'gpt-5.3-codex-spark', got 'cursor-grok-4.6-low'
 #   FAIL [resolve-config] CHANGE-PINNING: non-git cwd → source=template: expected 'template', got 'project-repo'
@@ -132,13 +131,13 @@ assert_eq "$(read_field "$CFG" mode "DEF" --whitespace-empty)" "block" "ws-empty
 # --- tier-3 dogfood gate (consumers of resolve_config_ladder) -----------------
 # CHANGE-PINNING (must be RED at base). Foreign git repo, no .claude/.
 # RED at base 826236659845aa64603cd614e94a8f4512553336: recorded after first run.
-TPL_AGE="$(read_field "$REPO_ROOT/project-config-template/worktree-teardown-config.md" stale_reaper_age_days "0" --whitespace-empty)"
+TPL_LEAVES="$(read_field "$REPO_ROOT/project-config-template/worktree-teardown-config.md" max_leaf_worktrees_per_root "" --whitespace-empty)"
 TPL_IMPL="$(read_field "$REPO_ROOT/project-config-template/review-loop-config.md" implementer_engine "")"
 FOREIGN="$TEST_TMP/foreign-git"
 mkdir -p "$FOREIGN"
 git -C "$FOREIGN" init -q
 FOREIGN_SRC="$(cd "$FOREIGN" && bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field source)"
-FOREIGN_AGE="$(cd "$FOREIGN" && bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field stale_reaper_age_days)"
+FOREIGN_LEAVES="$(cd "$FOREIGN" && bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field max_leaf_worktrees_per_root)"
 FOREIGN_LADDER="$(
   cd "$FOREIGN" || exit 1
   REPO_ROOT="$REPO_ROOT"
@@ -148,7 +147,7 @@ FOREIGN_LADDER="$(
 FOREIGN_RL_SRC="$(printf '%s\n' "$FOREIGN_LADDER" | sed -n 's/^SOURCE=//p')"
 FOREIGN_IMPL="$(printf '%s\n' "$FOREIGN_LADDER" | sed -n 's/^IMPL=//p')"
 assert_eq "$FOREIGN_SRC" "template" "CHANGE-PINNING: foreign git cwd → worktree-teardown source=template"
-assert_eq "$FOREIGN_AGE" "$TPL_AGE" "CHANGE-PINNING: foreign git cwd → stale_reaper_age_days equals template"
+assert_eq "$FOREIGN_LEAVES" "$TPL_LEAVES" "CHANGE-PINNING: foreign git cwd → max_leaf_worktrees_per_root equals template"
 assert_eq "$FOREIGN_RL_SRC" "template" "CHANGE-PINNING: foreign git cwd → review-loop source=template"
 assert_eq "$FOREIGN_IMPL" "$TPL_IMPL" "CHANGE-PINNING: foreign git cwd → implementer_engine equals template"
 

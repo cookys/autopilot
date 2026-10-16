@@ -117,10 +117,8 @@
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
 #       [--resume-session <uuid>]               # Grok repair: resume the exact prior session
-#   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper (opt-in via stale_reaper_age_days,
-#                                              default 0 = off; a rail-local fast path. The CANONICAL automatic reaper is
-#                                              `repo-residue-sweep.js reap --auto --yes`, run by the SessionStart hook)
-#       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
+#   (`--gc`, `--reap-unmarked`, `--yes` and the `stale_reaper_age_days` setting were removed at 3.0.0;
+#    the automatic reaper is `scripts/repo-residue-sweep.js reap --auto --yes`, run by the SessionStart hook.)
 #   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
 #   pass a generous `timeout` — the 120s tool default SIGTERMs long runs (exit 143). Persist
 #   once with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
@@ -141,8 +139,6 @@
 #        manifest additionally uses default for an unenforced run.
 #     "skill_mode_effective": "...", "skills_injected": [...],
 #     "orphan_worktree": "...|null" }          # non-null iff remove failed and dir remains
-# --gc OUTPUT: { "reaped":[…], "skipped_live":n, "skipped_fresh":n,
-#     "skipped_unmatched":n, "lock_unsupported":n, "kept_orphan":[…] }
 #
 # OUTCOME states (the no-commit case is split by HOW the worker ended so a legit
 # no-op task is not confused with a stalled/paused one — see
@@ -339,101 +335,6 @@ if ! _init_orphan_state_dir "$ORPHAN_STATE_DIR"; then
 fi
 ORPHAN_LOG="$ORPHAN_STATE_DIR/autopilot-orphan-worktrees.log"
 
-# Retry signal-handler orphan entries once before the normal marker/age GC pass.
-# The log can contain both paths and redirected git stderr, so only exact,
-# registered linked-worktree paths are actionable; everything else is either
-# pruned as noise/stale state or preserved as a recoverable live path.
-rewrite_orphan_log() {
-  [ -e "$ORPHAN_LOG" ] || return 0
-  local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err probe_fd
-  [ -f "$ORPHAN_LOG" ] || { printf 'WARN: orphan log is not a regular file: %s\n' "$ORPHAN_LOG" >&2; return 1; }
-  _wt_open_lock_fd "${ORPHAN_LOG}.lock" || return 1
-  lock_fd="$_WT_SAFE_LOCK_FD"
-  flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
-  mapfile -t orphan_entries < "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
-  tmp="$(mktemp "${ORPHAN_LOG}.tmp.XXXXXX")" || { exec {lock_fd}>&-; return 1; }
-
-  for path in "${orphan_entries[@]}"; do
-    case "$path" in
-      /*) ;;
-      *) continue ;;
-    esac
-    [ -d "$path" ] || continue
-
-    if [ ! -O "$path" ]; then
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    fi
-    if [ ! -f "$path/.git" ]; then
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    fi
-    IFS= read -r gitfile_line < "$path/.git" || gitfile_line=""
-    case "$gitfile_line" in
-      gitdir:\ *) ;;
-      *) printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }; continue ;;
-    esac
-
-    common_raw="$(git -C "$path" rev-parse --git-common-dir 2>/dev/null)" || {
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    }
-    common_dir="$(cd "$path" 2>/dev/null && cd "$common_raw" 2>/dev/null && pwd -P)" || {
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    }
-
-    list="$(mktemp "${ORPHAN_LOG}.worktrees.XXXXXX")" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-    err="$(mktemp "${ORPHAN_LOG}.worktrees-err.XXXXXX")" || { rm -f "$tmp" "$list"; exec {lock_fd}>&-; return 1; }
-    if ! git --git-dir="$common_dir" worktree list --porcelain >"$list" 2>"$err"; then
-      rm -f "$tmp" "$list" "$err"; exec {lock_fd}>&-; return 1
-    fi
-    rm -f "$err"
-    registered=0
-    while IFS= read -r line; do
-      if [ "$line" = "worktree $path" ]; then
-        registered=1
-        break
-      fi
-    done < "$list"
-    rc=$?; rm -f "$list"
-    [ "$rc" -eq 0 ] || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-    if [ "$registered" -ne 1 ]; then
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    fi
-
-    _wt_is_live "$path"
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      # A held lifetime lock is live; an unsupported/unsafe probe is ambiguous.
-      # Both stay actionable in the orphan log and must never be removed.
-      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-      continue
-    fi
-    probe_fd="$_WT_PROBE_FD"
-    if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
-      printf '%s\n' "$path" >> "$tmp" || {
-        exec {probe_fd}>&- || true
-        rm -f "$tmp"; exec {lock_fd}>&-; return 1
-      }
-    fi
-    # Hold the lifetime proof continuously across worktree removal.
-    exec {probe_fd}>&- || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-  done
-
-  if [ -n "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK:-}" ]; then
-    AUTOPILOT_ORPHAN_REWRITE_LOCK_FD="$lock_fd" "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK}" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-  fi
-
-  if [ -s "$tmp" ]; then
-    mv -f "$tmp" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
-  else
-    rm -f "$tmp" || { exec {lock_fd}>&-; return 1; }
-    rm -f "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
-  fi
-  exec {lock_fd}>&-
-}
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE) ---
 # A START-time manifest under $MANIFEST_DIR_PATH names this run's identity (run_id,
 # log path, worktree, lock, predicted containment) so depth-0 / dispatch-status.js can
@@ -455,9 +356,6 @@ OUTCOME_ORPHAN=""     # non-empty path when worktree remove failed and dir remai
 WT_LOCK_FD=""         # dedicated fd holding exclusive lifetime flock on the worktree lock
 WT_BUDGET_LOCK_FD=""  # common-dir creation transaction lock (managed lineage only)
 WT_PENDING_RECORD=""  # crash-recovery record published before git worktree add
-DO_GC=0               # --gc subcommand (stale reaper; no dispatch)
-REAP_UNMARKED=0       # --reap-unmarked recovery flag (requires --yes)
-GC_YES=0              # --yes confirmation for destructive recovery flags
 # --- R1 detach / durable-result plumbing (all OPTIONAL; absent ⇒ byte-identical legacy behavior) ---
 # When --ledger/--run-id/--stage are ALL supplied AND detach is on (DISPATCH_DETACH!=0, the
 # default), the long-running engine worker is run inside a `setsid` session that SURVIVES the
@@ -1889,28 +1787,15 @@ while [ $# -gt 0 ]; do
     --stage) STAGE="${2:-}"; shift 2 ;;
     --continuation-checkpoint) CONTINUATION_CHECKPOINT="${2:-}"; shift 2 ;;
     --continuation-durable) CONTINUATION_DURABLE="${2:-}"; shift 2 ;;
-    --gc) DO_GC=1; shift ;;
-    --reap-unmarked) REAP_UNMARKED=1; shift ;;
-    --yes) GC_YES=1; shift ;;
+    --gc|--reap-unmarked|--yes) die_precondition "$1 was removed at 3.0.0 (BL-0115): dispatch-hetero.sh no longer has a stale-worktree reaper; use 'node scripts/repo-residue-sweep.js reap --auto --yes' (the SessionStart hook runs it automatically); for unmarked hetero-* worktrees use 'repo-residue-sweep.js scan', then 'preserve' / 'reap --yes'" ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
 
-# --- --gc subcommand (standalone stale reaper; no dispatch) ---
-if [ "$DO_GC" -ne 1 ] && { [ "$REAP_UNMARKED" -eq 1 ] || [ "$GC_YES" -eq 1 ]; }; then
-  die_precondition "--reap-unmarked/--yes are --gc flags; pass --gc"
-fi
-if [ "$DO_GC" -eq 1 ]; then
-  if [ "$REAP_UNMARKED" -eq 1 ] && [ "$GC_YES" -ne 1 ]; then
-    echo "error: --reap-unmarked requires --yes (recovery escape hatch)" >&2
-    exit 2
-  fi
-  # Export flags for gc_stale_worktrees (reads REAP_UNMARKED).
-  export REAP_UNMARKED GC_YES
-  rewrite_orphan_log || { echo "error: orphan-log rewrite failed; original preserved" >&2; exit 2; }
-  gc_stale_worktrees
-  exit $?
+# A removed teardown-config key (BL-0115) is a hard precondition failure, not a silent ignore.
+if ! _td_err="$(bash "$SELF_DIR/resolve-worktree-teardown.sh" 2>&1 >/dev/null)"; then
+  die_precondition "worktree-teardown config: ${_td_err}"
 fi
 
 # Run identity for the observability manifest: reuse the ledger --run-id when supplied
@@ -4992,8 +4877,7 @@ dispatch_detached_run() {
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
-      _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours \
-      gc_stale_worktrees 2>/dev/null || true
+      _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours 2>/dev/null || true
   } > "$state_file"
   # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must
   # NOT reap the worktree out from under it — replace the reaping trap with a bare exit.

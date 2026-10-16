@@ -2,12 +2,11 @@
 
 > Copy to `.claude/worktree-teardown-config.md` in the consuming project to override.
 > Resolved by [`scripts/resolve-worktree-teardown.sh`](../scripts/resolve-worktree-teardown.sh),
-> which `scripts/dispatch-hetero.sh` consults on the success-path `reap_worktree` and on
-> standalone `--gc`. Sibling of [`qc-gate-config.md`](qc-gate-config.md): qc-gate governs
+> which `scripts/dispatch-hetero.sh` consults on the success-path `reap_worktree`. Sibling of [`qc-gate-config.md`](qc-gate-config.md): qc-gate governs
 > merge/push review evidence; this config governs *how* throwaway worktrees (and any
 > project-owned external resources keyed to them) are reclaimed.
 
-**Default is all-off**: no project hook, age reaper disabled. The harness still attempts
+**Default is all-off**: no project hook. The harness still attempts
 `git worktree remove --force` on clean success and surfaces failures loudly
 (`orphan_worktree` JSON + stderr WARN). Opt in per project when you leave root-owned
 build artifacts or named Docker volumes inside hetero worktrees.
@@ -15,17 +14,13 @@ build artifacts or named Docker volumes inside hetero worktrees.
 ## Settings (one `key: value` per line; first match wins)
 
 - teardown_hook:
-- stale_reaper_age_days: 0
-- reaper_scope: marker-only
 - max_leaf_worktrees_per_root: 4
 
 ## Field reference
 
 | Key | Values | Meaning |
 |-----|--------|---------|
-| `teardown_hook` | path (empty = none) | Project script invoked as `timeout 120 <hook> <worktree_path>` **before** `git worktree remove --force` on the success path and on `--gc`. Must realpath-resolve **inside the consuming repo root**, be a regular executable file. Outside-repo paths are refused (no override bypass). Hook failure/timeout is **fail-open** (remove still attempted). Not run from the INT/TERM abort trap. |
-| `stale_reaper_age_days` | non-negative integer | Age threshold for `dispatch-hetero.sh --gc`. **`0` = disabled** (default — the reaper logs and exits 0 without enumerating). Age is measured from the marker's `created_at` epoch, not filesystem mtime. Negative age (clock skew) is treated as eligible. |
-| `reaper_scope` | `marker-only` | Only worktrees bearing `$WT/.autopilot-worktree` are eligible for routine `--gc`. Unmarked recovery is a separate CLI escape hatch (`--gc --reap-unmarked --yes`, basename `hetero-*` only, still flock-gated). |
+| `teardown_hook` | path (empty = none) | Project script invoked as `timeout 120 <hook> <worktree_path>` **before** `git worktree remove --force` on the success path. Must realpath-resolve **inside the consuming repo root**, be a regular executable file. Outside-repo paths are refused (no override bypass). Hook failure/timeout is **fail-open** (remove still attempted). Not run from the INT/TERM abort trap. |
 | `max_leaf_worktrees_per_root` | integer `1..32` | Maximum simultaneously retained schema-2 worktrees for one managed root run. Invalid or missing values fail closed to `4`. Direct one-shot dispatches without inherited lineage are not budgeted. |
 
 ## Managed root-run lifecycle
@@ -70,19 +65,22 @@ exact-root sequence is rerun; they are never force-removed past the controller.
 A receipt reports lifecycle residue only. It never authorizes generation
 advance, task completion, merge, or session finish.
 
+## Removed settings (3.0.0)
+
+`stale_reaper_age_days` and `reaper_scope` were removed together with `dispatch-hetero.sh --gc`.
+A config that still carries either line is rejected with an error (exit 2 from the resolver,
+precondition failure from `dispatch-hetero.sh`); delete the line. Stale worktrees are reclaimed
+by `node scripts/repo-residue-sweep.js reap --auto --yes`, which the SessionStart hook runs.
+
 ## Defaults & safe fallback
 
-Unknown / missing / unparseable config → **`teardown_hook: ""`**, **`stale_reaper_age_days: 0`**,
-**`reaper_scope: marker-only`** (seam present, destructive reaper off). Set a positive age
-and/or a repo-local hook when the project provisions external resources or builds as a
+Unknown / missing / unparseable config → **`teardown_hook: ""`**. Set a repo-local hook when the project provisions external resources or builds as a
 different uid inside the worktree.
 
 ## Example (PEACE-style)
 
 ```
 - teardown_hook: .claude/hooks/worktree-teardown.sh
-- stale_reaper_age_days: 3
-- reaper_scope: marker-only
 - max_leaf_worktrees_per_root: 4
 ```
 
@@ -93,9 +91,8 @@ resources (root-owned `target/`, named volumes, …) best-effort, then exit 0. S
 ## Safety rails (harness-enforced; not configurable)
 
 - Per-worktree liveness = `flock -n` on `$WT/.autopilot-worktree.lock` (no pid checks).
-- `--gc` never runs `git branch -D` (only unmanaged one-shot abort may use the
+- Worktree teardown never runs `git branch -D` (only unmanaged one-shot abort may use the
   legacy branch-delete trap).
-- Global `--gc` serialization via `$TMPDIR/.autopilot-gc.lock`.
 - Managed leaf creation is serialized by `$GIT_COMMON_DIR/autopilot-worktree-budget.lock`.
 - Exact root-run disposition uses that same repository lifecycle lock.
 - Exact branch disposition holds the verified lifecycle lock across its

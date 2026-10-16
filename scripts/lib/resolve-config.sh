@@ -14,7 +14,7 @@
 #     Uses caller-scope $PWD and $REPO_ROOT (no extra parameters).
 #     Tier 3 is dogfood-only: it fires only when the git toplevel of $PWD is the
 #     same directory as $REPO_ROOT. An installed plugin ships `.claude/`; a
-#     foreign repo must never inherit the roster or stale_reaper_age_days: 14.
+#     foreign repo must never inherit the roster.
 #
 #   read_field <config_path> <key> <default> [--whitespace-empty]
 #     Case-insensitive `key: value` / `- key: value` extraction; strip trailing

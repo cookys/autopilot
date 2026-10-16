@@ -1,0 +1,1 @@
+Branch `feature` is ready to merge into `develop`. This is an M-size change. Run the quality gate's test step for it from the repository root, then write the verdict to `gate-verdict.md` (first line `PASS`, `FAIL` or `BLOCKED`, then one line naming exactly which test commands you ran).

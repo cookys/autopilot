@@ -222,5 +222,107 @@
       "tasks/g8-l4/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
       "tasks/g8-l4/task.md": "93438c27f9f5bbe09711adbc88095e1465611af3e18af6328b16bc22a2c3ec17"
     }
+  },
+  "qs": {
+    "frozen_at": "2026-10-16",
+    "stamped": true,
+    "note": "sha256 of the qs pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "fixture-scripts-qs": {
+        "kind": "scripts",
+        "source": "scripts/affected-suites.js",
+        "ref": "4032ba11d36dc4334e94a8f0406214419ab79470",
+        "files": 1,
+        "digest_sha256": "0439534098f510fbde5862885596d5421a7c82104d67e83b8149e9f4d5f0cc55"
+      },
+      "fixture-config-qs": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/cfg",
+        "ref": "4032ba11",
+        "files": 1,
+        "digest_sha256": "649c8c75eb5d20376d7a5f405f2f69f4b94a4269c90ebbf62db60c5f756b7f9b"
+      },
+      "quality-pipeline-qs-off": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms/off",
+        "ref": "4032ba11",
+        "files": 8,
+        "digest_sha256": "90e5945729660cebbbba6be1939c9f1a2c2970d5211678a64a6935c6259a6dd6"
+      },
+      "quality-pipeline-qs-on": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms/on",
+        "ref": "4032ba11",
+        "files": 8,
+        "digest_sha256": "6f96222885c45b70ccde1069b39dce68487e98f46434c62c07cd5dc27d96acdd"
+      },
+      "quality-pipeline-qs-red-a": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms/red-a",
+        "ref": "4032ba11",
+        "files": 8,
+        "digest_sha256": "d7a784afd897e308c35b734885d1b678c6961808cfa0e9df13b9022a91403125"
+      },
+      "quality-pipeline-qs-red-b": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/arms/red-b",
+        "ref": "4032ba11",
+        "files": 8,
+        "digest_sha256": "c1e60fe2499143af061f6c1ffd1b178886301d2b21d1605df597c8404d64e1f6"
+      },
+      "guidance-files-qs": {
+        "kind": "dir",
+        "source": "/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/filesqs",
+        "ref": "4032ba11",
+        "files": 1,
+        "digest_sha256": "76d725bcc81babd6235d13f2dced921a36779550e33e47e5ab74b9958322cb79"
+      }
+    },
+    "files": {
+      "arms/qs/off.json": "973fca876c18dbdf5339a43d614f3f3239830729892cf00cd838d51f1dfd0627",
+      "arms/qs/on.json": "93922abba8c234f8d5a3d27be82f8c5c475d69791280f8e31ec2896a0f6198e3",
+      "arms/qs/red-a.json": "794ac0e497cba83371fd5bab76b8ece066a8717df02f352a4761cd3208af1336",
+      "arms/qs/red-b.json": "2b27461e2847569a99de30e18c6eddcd111599800ff24dc78c57cf90763d05e7",
+      "check-qs-answers.js": "4b4c2898f66b3064044073aec35f1ab5ce87140a9e0b2f829f456651395a3ea6",
+      "lib/qs-build-cell-repo.sh": "f1bde07c05ac03363654bce6bd9436fb12000e53b958819a9a94ec064e651a94",
+      "lib/qs-cell.js": "d0daf3aa027e8c215719f5a8faecc0dd8d8861b5b09b9d613ed3abdc5fc2513b",
+      "lib/qs-markers.sh": "956423e1d30958254e1728486b59007c7308e904f81393e5f1e40c5c8ea80a6c",
+      "lib/transcript-query.js": "5efb32c95a0f43c2cab54163c59413d7884111a0f602b8d5ce7e8749f83f2cd9",
+      "prereg/qs.md": "7c9976b9ae84cfd9a8fa724d3dd2e33297b923597cf70e94e4f1a82d21afe344",
+      "run-qs-campaign.js": "d8cc89c5ed973541614682e3f2ccc44e30c06605ca52db38003cf34bc05e642f",
+      "score-qs.js": "68e3eef13bfb6ce6d4f70cf5a46eb2df10d5fcdfe1b46c140364b17aac822ae7",
+      "tasks/qs-common/build-fixture.sh": "5a9fcdc55c83754746d2bcb130f8af70d14c12927c9859e1b9e9bfb01f6281d8",
+      "tasks/qs-common/weights.json": "20f5d5ae3000c4423e53da523118509bd9f946630a0eac945509950f60e131b7",
+      "tasks/qs-s1-hooks-selective/answer.json": "ac541dfebc5b772ac157d6604a61d289075449706f91c62c52c2ca9d92426d7c",
+      "tasks/qs-s1-hooks-selective/init-repo.sh": "11411a09fae84b6412791a8d7db0cebdc672e14004944cad1804ca8f090f5e6b",
+      "tasks/qs-s1-hooks-selective/markers.sh": "008346eda7c916529c2d78b984c0c5255622f78370ba2b99db7b558df912c3ad",
+      "tasks/qs-s1-hooks-selective/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s1-hooks-selective/task.md": "295335e39cd798ef7ff96c59d8d361f85b640ada7882d91eaf10eaf6b2b3a7db",
+      "tasks/qs-s2-mods-live/answer.json": "d0715660d442c277a77df795799a1eb01e7b0455f055cbacef26cda93b7aa032",
+      "tasks/qs-s2-mods-live/init-repo.sh": "2a4c7dd7bbbae691283ee4f0eca0f56af506fa98471ed9d54e55d5fab77803f0",
+      "tasks/qs-s2-mods-live/markers.sh": "eae19571eef3515e8963a18466c4ecbb4e6c2268dd83af263cdae95d2eb3d92c",
+      "tasks/qs-s2-mods-live/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s2-mods-live/task.md": "295335e39cd798ef7ff96c59d8d361f85b640ada7882d91eaf10eaf6b2b3a7db",
+      "tasks/qs-s3-hooks-json-full/answer.json": "f117b33edb3a3069d6ee8b6d163029fd05e687964fe0a3d0e548133f9da2d4d0",
+      "tasks/qs-s3-hooks-json-full/init-repo.sh": "21542266ea273c21bcabd7c74a2c86a5dc0aef25eac1963065e7e543ce9148af",
+      "tasks/qs-s3-hooks-json-full/markers.sh": "833664b37a176083c9baf62b736e173403ad9da98e7314ce2b63ec615a6f3242",
+      "tasks/qs-s3-hooks-json-full/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s3-hooks-json-full/task.md": "295335e39cd798ef7ff96c59d8d361f85b640ada7882d91eaf10eaf6b2b3a7db",
+      "tasks/qs-s4-unreferenced-empty/answer.json": "f117b33edb3a3069d6ee8b6d163029fd05e687964fe0a3d0e548133f9da2d4d0",
+      "tasks/qs-s4-unreferenced-empty/init-repo.sh": "68a2082c2746a5ada763c09600c272eabe36a46e6e782e901029de9a2ec5856a",
+      "tasks/qs-s4-unreferenced-empty/markers.sh": "3353487546eec19a7fe8a665d96b049fd922af24302e43ecebca54263a12a5e0",
+      "tasks/qs-s4-unreferenced-empty/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s4-unreferenced-empty/task.md": "295335e39cd798ef7ff96c59d8d361f85b640ada7882d91eaf10eaf6b2b3a7db",
+      "tasks/qs-s5-docs-only/answer.json": "721deefd9ae1389fb58422139c1075dbaf7bc56aa524cb845e3d90e288436b2d",
+      "tasks/qs-s5-docs-only/init-repo.sh": "e61b8db878f78db015d7a79f80bc908a7c07317ecf5b1b9f0a1447250ac45294",
+      "tasks/qs-s5-docs-only/markers.sh": "90cdec76f62e141cb5bb5690f50bfd113cff4c11b3823e1f1e5d9ce2b25b8ada",
+      "tasks/qs-s5-docs-only/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s5-docs-only/task.md": "295335e39cd798ef7ff96c59d8d361f85b640ada7882d91eaf10eaf6b2b3a7db",
+      "tasks/qs-s6-release-preflight/answer.json": "9108985a6471c82d45b67be2fec4e7bc1762a9d5a5120f7494a266d32982c18a",
+      "tasks/qs-s6-release-preflight/init-repo.sh": "3531c30f7acf66997d1882bf77859ff58e438d22658983f9979169891f1d522c",
+      "tasks/qs-s6-release-preflight/markers.sh": "4431901f83430fb18d6c75e03f86f12585f23591581d1ed95953e0690344aafe",
+      "tasks/qs-s6-release-preflight/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
+      "tasks/qs-s6-release-preflight/task.md": "03a26939ddf3956191bd632ebdea61eba62b503148ecae096c55ce5f6bcbd78a"
+    }
   }
 }

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "arm": "red-b",
+  "skills": {
+    "quality-pipeline": "quality-pipeline-qs-red-b"
+  },
+  "files": [
+    "guidance-files-qs"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-qs",
+    "fixture-config-qs"
+  ]
+}

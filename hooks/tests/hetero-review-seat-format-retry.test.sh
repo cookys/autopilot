@@ -42,6 +42,15 @@ case "${FAKE_MODE:-ok}" in
   ok)
     printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=the diff and its contract; evidence=assignment changed in the captured diff; conclusion=nothing blocking remains\n%s\n' "$begin" "$end" ;;
   empty) : ;;
+  example_ship_one_*)
+    f="${FAKE_MODE#example_ship_one_}"
+    c='my own surfaces'; e='my own observations'; k='my own conclusion'
+    case "$f" in
+      checked) c='the changed retry branch and its call sites' ;;
+      evidence) e='the added test fails without the branch and passes with it' ;;
+      conclusion) k='the spec is met and no in-scope failure remains' ;;
+    esac
+    printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=%s; evidence=%s; conclusion=%s\n%s\n' "$begin" "$c" "$e" "$k" "$end" ;;
   example_ship|example_fix)
     # Copy the prompt's own worked example, swapping the placeholders for the real markers.
     hdr='Nothing to fix:'; [ "$FAKE_MODE" = example_fix ] && hdr='Something to fix:'
@@ -65,10 +74,21 @@ assert_not_contains "$OUT" 'format_reject' "dr: a reviewed result carries no for
 
 # The prompt's own worked examples must satisfy the unchanged battery (an example that teaches a
 # rejected format would defeat its purpose).
+# Anti-copy: the proof example, copied verbatim, is itself a format reject (it triggers the one re-ask).
 OUT=$(run_dr example_ship "$TEST_TMP/p-ex1.txt"); RC=$?
-assert_eq "$RC" "0" "dr: the prompt's NO-FINDING-PROOF example is accepted by the battery"
-assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "dr: the example parses to SHIP-AS-IS"
-assert_contains "$OUT" 'checked=the changed retry branch' "dr: the example's three proof fields survive parsing"
+assert_eq "$RC" "1" "dr: copying the prompt's NO-FINDING-PROOF example verbatim is rejected"
+assert_contains "$OUT" '"format_reject": true' "dr: a copied example is a format reject (re-ask)"
+assert_contains "$OUT" 'do not copy the example' "dr: the reject reason says not to copy the example"
+for fld in checked evidence conclusion; do
+  OUT=$(run_dr "example_ship_one_$fld"); RC=$?
+  assert_eq "$RC" "1" "dr: repeating only the example $fld field verbatim is rejected"
+done
+OUT=$(run_dr ok); RC=$?
+assert_eq "$RC" "0" "dr: a proof with its own wording is still accepted"
+# FORMAT_REJECT inherited from the environment must not mark a non-format failure.
+OUT=$(FORMAT_REJECT=1 run_dr empty); RC=$?
+assert_eq "$RC" "1" "dr: empty answer with inherited FORMAT_REJECT=1 is still a no_verdict"
+assert_not_contains "$OUT" 'format_reject' "dr: an inherited FORMAT_REJECT does not mark a transport-class failure"
 OUT=$(run_dr example_fix "$TEST_TMP/p-ex2.txt"); RC=$?
 assert_eq "$RC" "0" "dr: the prompt's FINDINGS example is accepted by the battery"
 assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "dr: the findings example parses to FIX-THEN-SHIP"
@@ -101,7 +121,7 @@ n=$(( $(cat "$n_file" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$n_file"
 VAR="STUB_MODE_${STUB_SEAT_ID}"
 mode="${!VAR:-ok}"
 good='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-fmt='{"status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "error": "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields", "format_reject": true}'
+fmt='{"status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "error": "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields", "format_reject": true, "usage": {"input_tokens": 7}}'
 tr='{"status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "error": "runner timed out"}'
 case "$mode" in
   ok) echo "$good" ;;
@@ -139,6 +159,8 @@ assert_exit_code "$T2_RC" "1" "retry: two format failures still void the round"
 assert_eq "$(cat "$TEST_TMP/counts-t2/s1")" "2" "retry: at most one re-ask"
 assert_contains "$(cat "$TEST_TMP/ledger/review-t2/chain.json")" '"reason": "seat_gap"' "retry: second failure is a seat_gap as today"
 assert_contains "$(cat "$TEST_TMP/ledger/review-t2/g1/seat-s1.json")" '"outcome": "still_rejected"' "retry: ledger records the second failure"
+assert_contains "$(cat "$TEST_TMP/ledger/review-t2/g1/seat-s1.json")" '"format_reject": true' "retry: format_reject survives the non-zero-exit branch from the dispatch-review JSON into the seat artifact"
+assert_contains "$(cat "$TEST_TMP/ledger/review-t2/g1/seat-s1.json")" '"first_usage": {' "retry: the first attempt's usage is kept on format_retry"
 
 # T3: transport failure -> no re-ask.
 export STUB_MODE_s1=transport

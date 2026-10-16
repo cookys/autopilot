@@ -492,13 +492,14 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     attempts += 1;
     const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
     console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
-    history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null });
+    history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null, usage: result.rawOutput.usage === undefined ? null : result.rawOutput.usage });
     result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason);
     if (result.rawOutput && typeof result.rawOutput === 'object') {
       result.rawOutput.format_retry = {
         attempts,
         first_reason: history[0].reason,
         first_raw_log: history[0].raw_log,
+        first_usage: history[0].usage,
         outcome: result.status === 'reviewed' ? 'reviewed' : 'still_rejected',
       };
     }

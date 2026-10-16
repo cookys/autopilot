@@ -149,6 +149,9 @@
 #   cannot create a userns). Non-blind codex keeps --sandbox read-only.
 
 set -uo pipefail
+# BL-0197: never inherit a format-reject marker from the environment; only this run's own
+# content battery / parser rails may set it.
+FORMAT_REJECT=""
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
@@ -643,6 +646,13 @@ prompt_framing_leakage() {
     END { exit(found ? 0 : 1) }' "$1"
 }
 
+# The worked NO-FINDING-PROOF example shown in the review prompt (BL-0197). A proof that
+# repeats any example field verbatim is a copy, not a review: rejected as a FORMAT error
+# (anti-copy; adds no requirement beyond the three fields already demanded).
+PROOF_EXAMPLE_CHECKED="the changed retry branch and its call sites"
+PROOF_EXAMPLE_EVIDENCE="the added test fails without the branch and passes with it"
+PROOF_EXAMPLE_CONCLUSION="the spec is met and no in-scope failure remains"
+
 validate_review_block() {
   local block_file="$1"
   BATTERY_VERDICT=""; BATTERY_FINDINGS=""; BATTERY_PROOF=""; BATTERY_FAIL_REASON=""
@@ -737,6 +747,15 @@ validate_review_block() {
     proof_checked="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     proof_evidence="$(printf '%s' "${BASH_REMATCH[2]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
     proof_conclusion="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    # The greedy captures keep a trailing field separator, so compare with it stripped.
+    local copy_c copy_e copy_k
+    copy_c="$(printf '%s' "$proof_checked" | sed 's/[[:space:];,.]*$//')"
+    copy_e="$(printf '%s' "$proof_evidence" | sed 's/[[:space:];,.]*$//')"
+    copy_k="$(printf '%s' "$proof_conclusion" | sed 's/[[:space:];,.]*$//')"
+    if [ "$copy_c" = "$PROOF_EXAMPLE_CHECKED" ] || [ "$copy_e" = "$PROOF_EXAMPLE_EVIDENCE" ] \
+      || [ "$copy_k" = "$PROOF_EXAMPLE_CONCLUSION" ]; then
+      BATTERY_FAIL_REASON="NO-FINDING-PROOF copies a field of the prompt example verbatim; do not copy the example, write your own checked, evidence, and conclusion"; return 1
+    fi
     for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do
       proof_normalized="$(printf '%s' "$proof_value" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
       if [ -z "$proof_normalized" ]; then
@@ -1075,7 +1094,7 @@ Nothing to fix:
     (opening marker line)
     VERDICT: SHIP-AS-IS
     FINDINGS: none
-    NO-FINDING-PROOF: checked=the changed retry branch and its call sites; evidence=the added test fails without the branch and passes with it; conclusion=the spec is met and no in-scope failure remains
+    NO-FINDING-PROOF: checked=${PROOF_EXAMPLE_CHECKED}; evidence=${PROOF_EXAMPLE_EVIDENCE}; conclusion=${PROOF_EXAMPLE_CONCLUSION}
     (closing marker line)
 
 Something to fix:

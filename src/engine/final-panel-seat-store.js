@@ -125,7 +125,8 @@ function tupleEqual(a, b) {
 function seatFile({ root, campaignId, inputBinding, station, seatIndex }) {
   if (typeof root !== 'string' || root.length === 0
       || typeof campaignId !== 'string' || campaignId.length === 0
-      || !SHA256.test(inputBinding || '')) return null;
+      || !SHA256.test(inputBinding || '')
+      || !Number.isSafeInteger(seatIndex) || seatIndex < 0) return null; // guard:seat_index
   const safeCampaign = campaignId.replace(/[^A-Za-z0-9._-]/g, '_');
   return path.join(
     root, safeCampaign, `${station}-${inputBinding}`, `seat-${seatIndex + 1}.json`,

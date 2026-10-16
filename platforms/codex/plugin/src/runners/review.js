@@ -316,6 +316,14 @@ function prepareReviewLaunch(args, options = {}) {
           : undefined;
         const packetDir = path.join(blindCwd, 'packet');
         const denyExtra = options.packet.denyExtra === undefined ? [] : options.packet.denyExtra;
+        // A malformed packet option is a named refusal, not a TypeError from deep in the builder.
+        if (Array.isArray(options.packet)
+            || ['repo', 'baseSha', 'candidateSha'].some((k) => typeof options.packet[k] !== 'string'
+              || options.packet[k].length === 0)
+            || (options.packet.incremental !== undefined && options.packet.incremental !== null
+              && (typeof options.packet.incremental !== 'object' || Array.isArray(options.packet.incremental)))) {
+          throw new Error('review packet option malformed: repo, baseSha and candidateSha must be non-empty strings'); // guard:packet_option
+        }
         const once = buildPacketOnce({
           repo: options.packet.repo,
           baseSha: options.packet.baseSha,

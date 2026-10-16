@@ -109,12 +109,15 @@ function decisionChecks(W, S, tag) {
   const R = makeRepo(tag);
   const rangeDiff0 = execFileSync('git', ['-C', R.repo, 'diff', '--no-ext-diff', '--no-textconv', `${R.base}..${R.head0}`]);
   const specDigest = H('spec');
-  const reviewInputDigest0 = H('rid0');
+  const payload0 = { candidate: { commit: R.head0 }, verification: { argv_hash: H('argv') }, scope: 'final' };
+  const rosterObj = { reviewer: 'r', qc_panel_seats: seatsList };
+  const rosterDigest = canonicalDigest(rosterObj);
+  const reviewInputDigest0 = canonicalDigest(payload0);
   const binding0 = canonicalDigest({
     candidate_tree_sha: R.tree0, base_sha: R.base, diff_digest: sha256(rangeDiff0), spec_digest: specDigest, review_input_digest: reviewInputDigest0,
   });
   const finding = JSON.stringify([{ finding_id: 'rc-001', claim: 'src/value.txt:1 planted defect', severity: '🔴', source: 'product-review' }]);
-  const seedRoot = (name, { skipSeat2 = false, mode = 'full', recordDiff = sha256(rangeDiff0), extraFind = null } = {}) => {
+  const seedRoot = (name, { skipSeat2 = false, mode = 'full', recordDiff = sha256(rangeDiff0), extraFind = null, recordRoster = rosterDigest, recordArgv = H('argv'), recordPayload = payload0, recordRosterObj = rosterObj } = {}) => {
     const root2 = fs.mkdtempSync(path.join(tmp, `store-${tag}-${name}-`));
     const seatCtx = (seat, i) => ({
       root: root2, campaignId: 'camp', station: 'panel', treeSha: R.tree0, packetHash: null, inputBinding: binding0, seat, seatIndex: i,
@@ -131,13 +134,13 @@ function decisionChecks(W, S, tag) {
       head: R.head0, mode, tree_sha: R.tree0, base_sha: R.base, diff_digest: recordDiff, spec_digest: specDigest,
       review_input_digest: reviewInputDigest0, binding: recordDiff === sha256(rangeDiff0) ? binding0 : canonicalDigest({
         candidate_tree_sha: R.tree0, base_sha: R.base, diff_digest: recordDiff, spec_digest: specDigest, review_input_digest: reviewInputDigest0,
-      }), roster_digest: H('roster'), verify_argv_hash: H('argv'),
+      }), roster_digest: recordRoster, verify_argv_hash: recordArgv, review_payload: recordPayload, roster: recordRosterObj,
     } });
     return root2;
   };
   const args = (root2, extra = {}) => ({
     repo: R.repo, baseSha: R.base, priorHead: R.head0, newHead: R.head1, newTreeSha: R.tree1,
-    returnReview: 'incremental', stationIsPanel: true, rosterDigest: H('roster'), specDigest, reviewInputDigest: H('rid1'),
+    returnReview: 'incremental', stationIsPanel: true, rosterDigest, specDigest, reviewInputDigest: H('rid1'),
     verificationGreen: true, verifyCmd: 'true', currentArgvHash: H('argv'),
     seats: seatsList, storeRoot: root2, campaignId: 'camp', canonicalDigest,
     priorDerived: { tree_sha: R.tree0, diff_digest: sha256(rangeDiff0) },
@@ -151,6 +154,14 @@ function decisionChecks(W, S, tag) {
   r.unknown_prior_round_full = W.decideReturnIncrement(args(fs.mkdtempSync(path.join(tmp, `empty-${tag}-`)))).reason === 'prior_round_unknown';
   r.prior_incremental_full = W.decideReturnIncrement(args(seedRoot('pi', { mode: 'incremental' }))).reason === 'prior_round_incremental';
   r.record_diff_mismatch_full = W.decideReturnIncrement(args(seedRoot('rd', { recordDiff: H('forged') }))).reason === 'prior_round_unverified';
+  // item 1: the index's roster digest / argv hash are re-derived from the journal, not trusted.
+  r.forged_index_roster_unverified = W.decideReturnIncrement(args(seedRoot('fr', { recordRoster: H('forged') }))).reason === 'prior_round_unverified';
+  r.forged_index_argv_unverified = W.decideReturnIncrement(args(seedRoot('fa', { recordArgv: H('forged') }))).reason === 'prior_round_unverified';
+  r.index_tampered_payload_unverified = W.decideReturnIncrement(args(seedRoot('tp', { recordPayload: { ...payload0, scope: 'other' } }))).reason === 'prior_round_unverified';
+  r.index_without_payload_unverified = W.decideReturnIncrement(args(seedRoot('np2', { recordPayload: null }))).reason === 'prior_round_unverified';
+  r.index_without_roster_unverified = W.decideReturnIncrement(args(seedRoot('nr', { recordRosterObj: null }))).reason === 'prior_round_unverified';
+  r.roster_changed_full = W.decideReturnIncrement(args(seedRoot('rc'), { rosterDigest: H('new-roster') })).reason === 'roster_changed';
+  r.verify_cmd_changed_full = W.decideReturnIncrement(args(seedRoot('vc'), { currentArgvHash: H('new-argv') })).reason === 'verify_cmd_changed';
   r.mixed_round_full = W.decideReturnIncrement(args(seedRoot('mix', { skipSeat2: true }))).reason === 'seat_not_carriable';
   r.unmappable_finding_full = W.decideReturnIncrement(args(seedRoot('um', { extraFind: JSON.stringify([{ finding_id: 'x1', claim: 'no location here', severity: '🔴', source: 'product-review' }]) }))).reason === 'finding_unmapped';
   // item 3: the decision refuses (falls back to full) when D1 returns sets the binding rejects.
@@ -180,6 +191,19 @@ function decisionChecks(W, S, tag) {
     review_digest: canonicalDigest({ verdict: 'SHIP-AS-IS', findings: '[]', scope: 'final', tree_sha: R.tree1 }) };
   S.recordAttempt(reuseCtx, 0); S.recordVerdict(reuseCtx, 1, out);
   r.fresh_ctx_reuses_when_unchanged_before = S.lookupSeat(reuseCtx, canonicalDigest).action === 'reuse';
+  // item 2: each seat has its own incremental artifact; one seat's verdict never answers another's.
+  const root4 = seedRoot('perseat');
+  const base4 = W.incrementalSeatContext(ok, { ...ctxArgs, root: root4, seat: undefined, seatIndex: undefined });
+  let noCell; try { noCell = S.recordVerdict(base4, 1, { reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: H('x') }); } catch (_e) { noCell = 'threw'; }
+  r.context_has_no_seat_cell = base4.seatIndex === undefined && noCell === false;
+  const perSeat = (i) => ({ ...base4, seat: seatsList[i], seatIndex: i });
+  const mk = (v) => ({ reviewed: true, verdict: v, findings: '[]', review_digest: canonicalDigest({ verdict: v, findings: '[]', scope: 'final', tree_sha: R.tree1 }) });
+  S.recordAttempt(perSeat(0), 0); S.recordVerdict(perSeat(0), 1, mk('SHIP-AS-IS'));
+  S.recordAttempt(perSeat(1), 0); S.recordVerdict(perSeat(1), 1, mk('FIX-THEN-SHIP'));
+  const l0 = S.lookupSeat(perSeat(0), canonicalDigest);
+  const l1 = S.lookupSeat(perSeat(1), canonicalDigest);
+  r.per_seat_artifacts_distinct = l0.action === 'reuse' && l1.action === 'reuse'
+    && l0.outcome.verdict === 'SHIP-AS-IS' && l1.outcome.verdict === 'FIX-THEN-SHIP' && l0.file !== l1.file;
   return r;
 }
 
@@ -206,11 +230,22 @@ const NEG_STORE = {
 for (const [name, [mut, check]] of Object.entries(NEG_STORE)) {
   out[`neg_binding_${name}`] = bindingChecks(load('final-panel-seat-store.js', mut, `neg-${name}`))[check] === false;
 }
+const NEG_SEAT = {
+  seat_index_guard: [(m) => m.replace(/\|\| !Number\.isSafeInteger\(seatIndex\) \|\| seatIndex < 0\) return null; \/\/ guard:seat_index/, ') return null;'), 'context_has_no_seat_cell'],
+  seat_cell_collapsed: [(m) => m.replace('`seat-${seatIndex + 1}.json`', '`seat-${station === INCREMENTAL_STATION ? 1 : seatIndex + 1}.json`'), 'per_seat_artifacts_distinct'],
+};
+for (const [name, [mut, check]] of Object.entries(NEG_SEAT)) {
+  const S2 = load('final-panel-seat-store.js', mut, `neg-seat-${name}`);
+  out[`neg_seat_${name}`] = decisionChecks(real.W, S2, `neg-seat-${name}`)[check] === false;
+}
 const NEG_W = {
   null_binding: [(s) => s.replace("if (binding === null) return full('binding_unavailable');", ''), 'duplicate_path_set_full'],
   mixed_round: [(s) => s.replace("if (priorSeats.some((seat) => !seat.carriable)) return full('seat_not_carriable');", ''), 'mixed_round_full'],
   prior_incremental: [(s) => s.replace(/if \(record\.mode !== 'full'\n\s*\|\| incrementalArtifactReviewed\(\{ root: storeRoot, campaignId, head: priorHead \}\)\) \{ \/\/ guard:prior_incremental\n\s*return full\('prior_round_incremental'\);\n\s*\}/, ''), 'prior_incremental_full'],
   record_unverified: [(s) => s.replace('|| record.diff_digest !== priorDerived.diff_digest', ''), 'record_diff_mismatch_full'],
+  index_roster: [(m) => m.replace('|| !isObj(record.roster) || canonicalDigest(record.roster) !== record.roster_digest) { // guard:index_roster', ') {'), 'forged_index_roster_unverified'],
+  index_argv: [(m) => m.replace('|| (record.verify_argv_hash || null) !== payloadArgv // guard:index_argv', ''), 'forged_index_argv_unverified'],
+  index_payload: [(m) => m.replace('|| canonicalDigest(payload) !== record.review_input_digest // guard:index_payload', ''), 'index_tampered_payload_unverified'],
   git_digests: [(s) => s.replace('currentFileDigests: computeFileDigests(repo, baseSha, parts.new_head),', 'currentFileDigests: ctx.currentFileDigests,'), 'seat_context_digests_from_git'],
 };
 for (const [name, [mut, check]] of Object.entries(NEG_W)) {

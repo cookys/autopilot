@@ -5210,7 +5210,8 @@ class AutopilotEngine {
     const incrementalPacketDescriptor = (decision) => {
       const inc = decision.increment;
       return {
-        diff_paths: inc.recheck.filter((e) => e.source === 'diff').map((e) => e.path),
+        // The same list recheck_diff was cut from (review-increment.js), not a re-filter of it.
+        diff_paths: inc.recheck_diff_paths,
         tree_paths: inc.recheck.map((e) => e.path),
         delta_diff: inc.delta.diff,
       };
@@ -6056,8 +6057,7 @@ class AutopilotEngine {
               treeSha: reviewInput.candidate.tree_sha,
               packetHash: sharedPacket && isStr(sharedPacket.packet_hash)
                 ? sharedPacket.packet_hash : null,
-              seat: null,
-              seatIndex: 0,
+              // seat and seatIndex come from the seat loop; a context without them has no file.
             });
           }
           const bindingPrepared = prepareReview({
@@ -6071,7 +6071,21 @@ class AutopilotEngine {
           try {
             if (!bindingPrepared || bindingPrepared.prepared !== true) return null;
             const a = bindingPrepared.authority;
+            // The payload review_input_digest was taken over, kept so a later return can re-derive
+            // it (and the verification argv hash inside it) instead of trusting the index. Only
+            // kept when it really does hash to the digest; the roster likewise for its digest.
+            const indexedPayload = {
+              candidate: reviewInput.candidate,
+              verification: reviewInput.verification || null,
+              repair_generation: reviewInput.repair_generation,
+              scope: 'final',
+              review_input_mode: reviewInput.review_input_mode || null,
+              vertical_failed: reviewInput.vertical_failed === true,
+            };
             indexRound({
+              ...(campaignCanonicalDigest(indexedPayload) === a.review_input_digest
+                ? { review_payload: indexedPayload } : {}),
+              ...(campaignCanonicalDigest(roster) === jointReviewRosterDigest ? { roster } : {}),
               mode: 'full',
               base_sha: a.base_sha,
               diff_digest: a.diff_digest,

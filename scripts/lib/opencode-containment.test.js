@@ -116,7 +116,7 @@ const PROVIDER = path.join(__dirname, '..', 'qualification-review-provider.js');
 function runProvider(extraEnv) {
   const capture = path.join(tmp, `cap-${Math.random().toString(36).slice(2)}.json`);
   const child = spawnSync(process.execPath, [PROVIDER], {
-    input: `${JSON.stringify({ schema_version: 1, request_id: 'r', role: 'reviewer', payload: { format: 'unified_diff', content: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n' } })}\n`,
+    input: `${JSON.stringify({ schema_version: 1, request_id: 'r', role: 'reviewer', payload: { format: 'case_content', content: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n' } })}\n`,
     encoding: 'utf8', timeout: 30000,
     env: {
       PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',

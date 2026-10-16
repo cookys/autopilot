@@ -316,7 +316,7 @@ function reviewerRequest(content = REVIEWER_DIFF) {
     schema_version: 1,
     request_id: 'req-1',
     role: 'reviewer',
-    payload: { format: 'unified_diff', content },
+    payload: { format: 'case_content', content },
   };
 }
 
@@ -325,7 +325,7 @@ function brainRequest(content = BRAIN_BUNDLE) {
     schema_version: 1,
     request_id: 'req-2',
     role: 'owner',
-    payload: { format: 'unified_diff', content },
+    payload: { format: 'case_content', content },
   };
 }
 
@@ -553,7 +553,7 @@ function vaRequest(content = VA_ENVELOPE) {
     schema_version: 1,
     request_id: 'req-3',
     role: 'verification_author',
-    payload: { format: 'unified_diff', content },
+    payload: { format: 'case_content', content },
   };
 }
 {
@@ -700,7 +700,7 @@ function roleOnlyRequest(role, content = 'x') {
     schema_version: 1,
     request_id: 'req-matrix',
     role,
-    payload: { format: 'unified_diff', content },
+    payload: { format: 'case_content', content },
   };
 }
 {
@@ -2197,7 +2197,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   const cases = [...generated.knownBad, ...generated.clean, generated.mutation];
   const ownerRequest = (diff) => ({
     schema_version: 1, request_id: 'req-owner', role: 'owner',
-    payload: { format: 'unified_diff', content: diff },
+    payload: { format: 'case_content', content: diff },
   });
   const ownerEnv = {
     QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude, QRP_PROMPT_MODE: 'owner',

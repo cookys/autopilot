@@ -65,7 +65,7 @@
  * writes to the exam dir.
  *
  * stdin  (from broker): {schema_version:1, request_id, role:<role>,
- *                        payload:{format:"unified_diff", content:<case content>}}
+ *                        payload:{format:"case_content", content:<case content>}}
  * stdout (to broker):   {schema_version:1, provider, model, output:<panel JSON string>}
  *
  * Prompt modes (QRP_PROMPT_MODE):
@@ -1835,9 +1835,9 @@ async function main() {
   };
   const expectedRole = EXPECTED_ROLE_BY_MODE[promptMode];
   if (!request || request.role !== expectedRole
-      || !request.payload || request.payload.format !== 'unified_diff'
+      || !request.payload || request.payload.format !== 'case_content'
       || typeof request.payload.content !== 'string') {
-    fail(`broker request is not a ${expectedRole}-role case for prompt mode ${promptMode}`);
+    fail(`broker request is not a ${expectedRole}-role case for prompt mode ${promptMode} (expected payload.format case_content, client protocol qualification-case-client-v2)`);
   }
   if (promptMode === 'owner'
       && !/^diff --git a\/\S+ b\/\S+\n/u.test(request.payload.content)) {

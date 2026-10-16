@@ -4,6 +4,8 @@
 
 - Backlog: BL-0020 (peer-reported by openclaw, agy flash/low implementer no-go) closed as stale: no shipped default or ladder rung uses agy flash/low any more (implementer default is grok-4.7/low). The original fleet message has expired, so the reply could not be threaded; recorded here instead.
 
+- The qualification case broker client now sends `payload.format: case_content` (was the misnomer `unified_diff`) and `CLIENT_PROTOCOL` is `qualification-case-client-v2`; broker, provider and tests changed together with no dual-read (BL-0053).
+
 - `qualification-review-provider.js` gains an `owner` prompt mode (`QRP_PROMPT_MODE=owner`), so `engine-qualify.sh owner --remote-provider-cmd` has an exam provider for the owner intent/control corpus (BL-0158); `engine-qualify.js` now exports `parseOwnerPanelResult`.
 
 - Scorecard cost blocks for an unknown price now store `null` instead of `0`, and `costSortValue` is exported and gates on `cost.source` plus numeric type so an unpriced seat can never rank as free (BL-0024, encoding half; ordering the implementer ladder by price still needs registered prices).

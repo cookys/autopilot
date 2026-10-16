@@ -226,7 +226,9 @@ function deriveReusableOutcome(artifact, expect, canonicalDigest) {
     review_digest: result.review_digest,
     review_input_mode: incremental ? INCREMENTAL_REVIEW_INPUT_MODE : 'full_diff_generation',
     blind_discovery: true,
-    prior_findings_included: incremental,
+    // The prior-round addendum that would show findings to a seat is off (owner ruling d-3cf4dc4c
+    // pending), so no seat was shown them: false on both paths.
+    prior_findings_included: false,
     full_diff_required: !incremental,
     ...(hasPacket ? { packet_hash: result.packet_hash } : {}),
     reused_from_artifact: true,

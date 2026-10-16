@@ -15,6 +15,15 @@ printf '%s\n' "$model" >> "$RC_LOG"
 if [ -n "${RC_DIFF_DIR:-}" ] && [ -n "$diff" ] && [ -f "$diff" ]; then
   cp "$diff" "$RC_DIFF_DIR/$model.diff"
 fi
+# BL-0146 D4: what the packet around the diff holds (tree listing, delta.diff), kept apart from
+# RC_DIFF_DIR whose every file the driver reads as a seat diff.
+if [ -n "${RC_PACKET_DIR:-}" ] && [ -n "$diff" ] && [ -f "$diff" ]; then
+  pdir="$(dirname "$diff")"
+  mkdir -p "$RC_PACKET_DIR"
+  if [ -d "$pdir/tree" ]; then (cd "$pdir/tree" && find . -type f | sort) > "$RC_PACKET_DIR/$model.tree"; fi
+  if [ -f "$pdir/delta.diff" ]; then cp "$pdir/delta.diff" "$RC_PACKET_DIR/$model.delta"; fi
+  if [ -f "$pdir/spec.md" ]; then cp "$pdir/spec.md" "$RC_PACKET_DIR/$model.spec"; fi
+fi
 if [ "${RC_VERDICT:-ship}" = "fix" ]; then
   printf '{"runner":"cc-shim","model":"%s","status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🔴 [rc-001] src/value.txt:1 planted defect: the value is wrong","no_finding_proof":null,"raw_log":null,"error":null,"usage":null}\n' "$model"
   exit 0

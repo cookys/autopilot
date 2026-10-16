@@ -671,6 +671,13 @@
       "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
     },
     {
+      "pattern": "autopilot-incremental-*",
+      "kind": "scratch",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": null,
+      "reason": "BL-0146 D4 recheck.diff for one incremental seat; removed by the prepared review's dispose, registry backstop prunes after retention"
+    },
+    {
       "pattern": "autopilot-review-blind-*",
       "kind": "scratch",
       "owner": "src/runners/review.js",

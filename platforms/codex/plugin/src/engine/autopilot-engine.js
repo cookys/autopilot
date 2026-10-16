@@ -22,6 +22,8 @@ const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
 const finalPanelSeatStore = require('./final-panel-seat-store');
+const incrementWiring = require('./review-increment-wiring');
+const { evaluateClosure } = require('./review-resolution');
 const reviewCandidateRepairSeed = require('./review-candidate-repair-seed');
 const {
   consumeStrictL5ProviderReadiness,
@@ -109,7 +111,19 @@ function reviewPacketIdentity(value) {
     }
     denyExtra = extra;
   }
-  return { repo: value.repo, baseSha: value.baseSha, candidateSha: value.candidateSha, denyExtra };
+  const identity = {
+    repo: value.repo, baseSha: value.baseSha, candidateSha: value.candidateSha, denyExtra,
+  };
+  if (value.incremental !== undefined && value.incremental !== null) {
+    const inc = value.incremental;
+    if (!isObj(inc) || !Array.isArray(inc.diff_paths) || !Array.isArray(inc.tree_paths)
+        || ![...inc.diff_paths, ...inc.tree_paths].every((p) => typeof p === 'string' && p.length > 0)
+        || !Buffer.isBuffer(inc.delta_diff)) {
+      throw new Error('packet incremental descriptor malformed');
+    }
+    identity.incremental = inc;
+  }
+  return identity;
 }
 const {
   CAMPAIGN_EVENTS,
@@ -5174,6 +5188,87 @@ class AutopilotEngine {
       }
     }
 
+    // BL-0146 D4: set at the returned-head branch when the sealed contract opts in to an
+    // incremental return review; null everywhere else, which leaves every path below unchanged.
+    let returnReviewState = null;
+    const incrementDecisions = new Map();
+    const panelSeatsForRound = () => {
+      const snapshot = campaignControl && campaignControl.qc_panel_snapshot
+        && typeof campaignControl.qc_panel_snapshot === 'object'
+        && !Array.isArray(campaignControl.qc_panel_snapshot)
+        ? campaignControl.qc_panel_snapshot : null;
+      if (snapshot && snapshot.seats_complete === true && Array.isArray(snapshot.seats)) return snapshot.seats;
+      if (roster.qc_panel_seats_complete === true && Array.isArray(roster.qc_panel_seats)) {
+        return roster.qc_panel_seats;
+      }
+      return null;
+    };
+    const seatStoreRootFor = () => {
+      const common = workOrder.resolveGitCommonDir(loopCwd);
+      return common ? path.join(common, 'autopilot', 'final-panel-seats') : null;
+    };
+    const incrementalPacketDescriptor = (decision) => {
+      const inc = decision.increment;
+      return {
+        diff_paths: inc.recheck.filter((e) => e.source === 'diff').map((e) => e.path),
+        tree_paths: inc.recheck.map((e) => e.path),
+        delta_diff: inc.delta.diff,
+      };
+    };
+    // Decided once per returned head, from the composition's prepareReview call (the only call that
+    // carries the gate journal). Every other call reads the memo and never computes.
+    // What Git (and the injectable diff provider) say about the prior reviewed head, re-derived at
+    // use time: its tree and the digest of its base..head diff, as the review authority computes it.
+    const derivePriorRange = (priorHead) => {
+      if (!isStr(priorHead)) return null;
+      const tree = execFileSync('git', ['-C', loopCwd, 'rev-parse', `${priorHead}^{tree}`], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+      const priorDiff = this.diffProvider({
+        base, commit: priorHead, branch, round: 1, currentBase, cwd: loopCwd,
+      });
+      try {
+        return {
+          tree_sha: tree,
+          diff_digest: crypto.createHash('sha256').update(fs.readFileSync(priorDiff)).digest('hex'),
+        };
+      } finally {
+        this.disposeOwnedDiffFile(priorDiff);
+      }
+    };
+    const decideIncrement = ({
+      candidate, verification, reviewPayload, specDigest,
+    }) => {
+      let decision;
+      try {
+        decision = incrementWiring.decideReturnIncrement({
+          repo: loopCwd,
+          baseSha: campaignControl.contract.base_sha,
+          priorHead: returnReviewState.priorHead,
+          newHead: candidate.commit,
+          newTreeSha: candidate.tree_sha,
+          returnReview: returnReviewState.returnReview,
+          stationIsPanel: snapshotStation === 'panel',
+          priorDerived: derivePriorRange(returnReviewState.priorHead),
+          currentArgvHash: verification ? verification.argv_hash : null,
+          rosterDigest: jointReviewRosterDigest,
+          specDigest,
+          reviewInputDigest: campaignCanonicalDigest(reviewPayload),
+          verificationGreen: Boolean(verification) && verification.passed === true,
+          verifyCmd: Boolean(verification) && verification.argv_hash === verificationArgvHash
+            ? verifyCmd : '',
+          seats: panelSeatsForRound(),
+          storeRoot: seatStoreRootFor(),
+          campaignId: campaignControl.campaign_id,
+          canonicalDigest: campaignCanonicalDigest,
+        });
+      } catch (error) {
+        decision = { mode: 'full', reason: 'evaluation_failed' };
+      }
+      incrementDecisions.set(candidate.commit, decision);
+      return decision;
+    };
+
     const prepareReview = ({
       candidate,
       scope,
@@ -5182,7 +5277,8 @@ class AutopilotEngine {
       review_input_mode: reviewInputMode = null,
       vertical_failed: verticalFailed = false,
       verification = null,
-    }) => {
+      seat_packet: seatPacket = 'full',
+    }, extra = null) => {
       if (input.reviewCandidate === true) {
         // RO3: the branch may have moved since admission. Re-derive before any reviewer
         // sees a byte; a moved or rewritten range is a named refusal with 0 review calls.
@@ -5216,19 +5312,59 @@ class AutopilotEngine {
           throw Object.assign(new Error(`${recheckCode}: ${recheckReason}`), { code: recheckCode });
         }
       }
+      const reviewPayload = {
+        candidate,
+        verification,
+        repair_generation: repairGeneration,
+        scope,
+        review_input_mode: reviewInputMode,
+        vertical_failed: verticalFailed === true,
+      };
+      let decision = null;
+      if (returnReviewState && candidate && isStr(candidate.commit)) {
+        if (extra && extra.composition === true) {
+          let specDigestForDecision;
+          try {
+            specDigestForDecision = crypto.createHash('sha256')
+              .update(fs.readFileSync(promptFile)).digest('hex');
+          } catch (_error) {
+            specDigestForDecision = null;
+          }
+          decision = decideIncrement({
+            candidate, verification, reviewPayload, specDigest: specDigestForDecision,
+          });
+        } else {
+          decision = incrementDecisions.get(candidate.commit) || null;
+        }
+      }
+      const incrementalSeat = decision && decision.mode === 'incremental' && seatPacket === 'incremental';
       let diffFile;
+      let ownedIncrementalDir = null;
       try {
-        diffFile = this.diffProvider({
-          base,
-          commit: candidate.commit,
-          branch: candidate.branch,
-          round: repairGeneration + 1,
-          currentBase,
-          cwd: loopCwd,
-        });
+        if (incrementalSeat) {
+          // The seat reads the cumulative diff of the re-check set (the files it must judge in
+          // full); delta.diff rides in the packet. Never the whole-range diff.
+          ownedIncrementalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-incremental-'));
+          diffFile = path.join(ownedIncrementalDir, 'recheck.diff');
+          fs.writeFileSync(diffFile, decision.increment.recheck_diff);
+        } else {
+          diffFile = this.diffProvider({
+            base,
+            commit: candidate.commit,
+            branch: candidate.branch,
+            round: repairGeneration + 1,
+            currentBase,
+            cwd: loopCwd,
+          });
+        }
       } catch (error) {
+        if (ownedIncrementalDir) fs.rmSync(ownedIncrementalDir, { recursive: true, force: true });
         return { prepared: false, reason: error.message || String(error) };
       }
+      const disposeDiff = () => {
+        if (ownedIncrementalDir) fs.rmSync(ownedIncrementalDir, { recursive: true, force: true });
+        else this.disposeOwnedDiffFile(diffFile);
+      };
       const specFile = promptFile;
       let diffDigest;
       let specDigest;
@@ -5238,17 +5374,9 @@ class AutopilotEngine {
         specDigest = crypto.createHash('sha256')
           .update(fs.readFileSync(specFile)).digest('hex');
       } catch (error) {
-        this.disposeOwnedDiffFile(diffFile);
+        disposeDiff();
         return { prepared: false, reason: error.message || String(error) };
       }
-      const reviewPayload = {
-        candidate,
-        verification,
-        repair_generation: repairGeneration,
-        scope,
-        review_input_mode: reviewInputMode,
-        vertical_failed: verticalFailed === true,
-      };
       const preparedReceipt = {
         prepared: true,
         authority: {
@@ -5273,11 +5401,24 @@ class AutopilotEngine {
         prior_findings_included: false,
         full_diff_required: true,
       };
+      if (decision && decision.mode === 'incremental') {
+        // Item 5: the mode and the binding sit at the top level, beside `authority`. The authority
+        // keeps its full_diff_generation review_input_digest, so its bytes are the full path's.
+        preparedReceipt.review_input_mode = 'incremental_return';
+        preparedReceipt.incremental_binding = decision.binding;
+        if (incrementalSeat) preparedReceipt.full_diff_required = false;
+      }
       // Non-enumerable so the receipt's serialised / digested shape is unchanged.
       Object.defineProperty(preparedReceipt, 'dispose', {
-        value: () => this.disposeOwnedDiffFile(diffFile),
+        value: () => disposeDiff(),
         enumerable: false,
       });
+      if (incrementalSeat) {
+        Object.defineProperty(preparedReceipt, 'packet_incremental', {
+          value: incrementalPacketDescriptor(decision),
+          enumerable: false,
+        });
+      }
       return preparedReceipt;
     };
 
@@ -5305,6 +5446,7 @@ class AutopilotEngine {
       providedReviewResult = undefined,
       preparedLaunch = null,
       sharedPacket = null,
+      seat_packet: seatPacket = 'full',
       _track = null,
     }) => {
       const prepared = preparedReview || prepareReview({
@@ -5315,6 +5457,7 @@ class AutopilotEngine {
         review_input_mode: reviewInputMode,
         vertical_failed: verticalFailed,
         reviewRoster,
+        seat_packet: seatPacket,
       });
       if (_track) _track(prepared);
       if (!isObj(prepared)
@@ -5421,6 +5564,7 @@ class AutopilotEngine {
           baseSha: base,
           candidateSha: candidate.commit,
           denyExtra: reviewRoster.review_packet_deny_extra,
+          ...(prepared.packet_incremental ? { incremental: prepared.packet_incremental } : {}),
         },
         diffFile,
         specFile: promptFile,
@@ -5631,10 +5775,10 @@ class AutopilotEngine {
         verdict: reviewed.verdict,
         findings,
         review_digest: reviewDigest,
-        review_input_mode: 'full_diff_generation',
+        review_input_mode: prepared.packet_incremental ? 'incremental_return' : 'full_diff_generation',
         blind_discovery: true,
         prior_findings_included: false,
-        full_diff_required: true,
+        full_diff_required: !prepared.packet_incremental,
         raw: reviewed,
       };
       if (reviewed.packet) {
@@ -5828,6 +5972,12 @@ class AutopilotEngine {
       const budgetSource = wallRemain.exhausted ? 'pocket' : 'wall';
       const seatTimeoutSeconds = panelRemain.seconds;
       const injectedDispatcher = this.reviewDispatcher !== dispatchReviewJson;
+      // BL-0146 D4: the memoised decision for this returned head (panel station only). `full`
+      // decisions carry their reason into the receipt of an opted-in campaign.
+      const incrementDecision = stationKind === 'panel' && returnReviewState
+        && reviewInput && reviewInput.candidate && isStr(reviewInput.candidate.commit)
+        ? (incrementDecisions.get(reviewInput.candidate.commit) || null) : null;
+      const incrementalRound = Boolean(incrementDecision && incrementDecision.mode === 'incremental');
       let sharedPacket = null;
       if (!injectedDispatcher && isStr(loopCwd) && isStr(base)
           && reviewInput && reviewInput.candidate && isStr(reviewInput.candidate.commit)) {
@@ -5838,6 +5988,7 @@ class AutopilotEngine {
           repair_generation: reviewInput.repair_generation,
           review_input_mode: reviewInput.review_input_mode,
           vertical_failed: reviewInput.vertical_failed,
+          seat_packet: incrementalRound ? 'incremental' : 'full',
         });
         try {
           if (identityPrepared && identityPrepared.prepared === true
@@ -5850,6 +6001,8 @@ class AutopilotEngine {
                 diffFile: identityPrepared.diff_file,
                 specFile: promptFile,
                 denyExtra: roster.review_packet_deny_extra,
+                ...(identityPrepared.packet_incremental
+                  ? { incremental: identityPrepared.packet_incremental } : {}),
               });
             } catch (_sharedBuildError) {
               sharedPacket = null;
@@ -5868,6 +6021,45 @@ class AutopilotEngine {
               || !isStr(loopCwd) || !isStr(base)) return null;
           const commonForStore = workOrder.resolveGitCommonDir(loopCwd);
           if (!commonForStore) return null;
+          const seatRoot = path.join(commonForStore, 'autopilot', 'final-panel-seats');
+          const optedIn = stationKind === 'panel'
+            && campaignControl.contract.adoption
+            && campaignControl.contract.adoption.return_review === 'incremental';
+          const indexRound = (fields) => {
+            // Pointer for a later return (see review-increment-wiring.js); opted-in campaigns only.
+            if (!optedIn) return;
+            incrementWiring.writeRoundRecord({
+              root: seatRoot,
+              campaignId: campaignControl.campaign_id,
+              record: {
+                head: reviewInput.candidate.commit,
+                tree_sha: reviewInput.candidate.tree_sha,
+                roster_digest: jointReviewRosterDigest,
+                verify_argv_hash: reviewInput.verification ? reviewInput.verification.argv_hash : null,
+                ...fields,
+              },
+            });
+          };
+          if (incrementalRound) {
+            indexRound({
+              mode: 'incremental',
+              base_sha: campaignControl.contract.base_sha,
+              binding: incrementDecision.binding,
+            });
+            // The incremental station: its own name and binding, and the file digests recomputed
+            // from Git right now (never the decision's, never the caller's).
+            return incrementWiring.incrementalSeatContext(incrementDecision, {
+              repo: loopCwd,
+              baseSha: campaignControl.contract.base_sha,
+              root: path.join(commonForStore, 'autopilot', 'final-panel-seats'),
+              campaignId: campaignControl.campaign_id,
+              treeSha: reviewInput.candidate.tree_sha,
+              packetHash: sharedPacket && isStr(sharedPacket.packet_hash)
+                ? sharedPacket.packet_hash : null,
+              seat: null,
+              seatIndex: 0,
+            });
+          }
           const bindingPrepared = prepareReview({
             candidate: reviewInput.candidate,
             verification: reviewInput.verification,
@@ -5879,8 +6071,22 @@ class AutopilotEngine {
           try {
             if (!bindingPrepared || bindingPrepared.prepared !== true) return null;
             const a = bindingPrepared.authority;
+            indexRound({
+              mode: 'full',
+              base_sha: a.base_sha,
+              diff_digest: a.diff_digest,
+              spec_digest: a.spec_digest,
+              review_input_digest: a.review_input_digest,
+              binding: campaignCanonicalDigest({
+                candidate_tree_sha: a.candidate_tree_sha,
+                base_sha: a.base_sha,
+                diff_digest: a.diff_digest,
+                spec_digest: a.spec_digest,
+                review_input_digest: a.review_input_digest,
+              }),
+            });
             return {
-              root: path.join(commonForStore, 'autopilot', 'final-panel-seats'),
+              root: seatRoot,
               campaignId: campaignControl.campaign_id,
               station: stationKind,
               treeSha: reviewInput.candidate.tree_sha,
@@ -5960,6 +6166,7 @@ class AutopilotEngine {
           budget_consumer: 'panel',
           deferDispatch: !injectedDispatcher,
           sharedPacket,
+          seat_packet: incrementalRound ? 'incremental' : 'full',
         });
         if (outcome && outcome.deferred === true) {
           preparedSeats.push({ seat, index, deferred: outcome });
@@ -6080,6 +6287,25 @@ class AutopilotEngine {
           });
         }
       });
+      if (incrementalRound) {
+        // Silence never closes (plan 2.5): the earlier round's findings stay open unless every
+        // sealed seat explicitly closes them. No seat is shown them yet (the addendum is off,
+        // pending owner ruling d-3cf4dc4c), so no resolutions exist and every one stays open.
+        const carriedRows = incrementWiring.carriedOpenFindings(incrementDecision);
+        const sealedSeatIds = seats.map((_seat, index) => String(index + 1));
+        const seatMap = {};
+        outcomes.forEach(({ outcome }, index) => {
+          seatMap[String(index + 1)] = outcome && outcome.reviewed === true
+            ? { status: 'normalized', resolutions: [] } : null;
+        });
+        const closure = evaluateClosure(
+          carriedRows.map((row) => row.finding_id), seatMap, minPanelSize, sealedSeatIds,
+        );
+        const closedIds = new Set(closure.filter((c) => c.state !== 'open').map((c) => c.finding_id));
+        for (const row of carriedRows) {
+          if (!closedIds.has(row.finding_id)) mergedFindings.push(row);
+        }
+      }
       const packetHashes = [];
       let packetHashPresent = 0;
       for (const { outcome } of reviewedOutcomes) {
@@ -6151,6 +6377,7 @@ class AutopilotEngine {
         ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
         ...(driftTrace.length + seatTrace.length > 0
           ? { trace: [...driftTrace, ...seatTrace] } : {}),
+        ...(incrementDecision ? incrementWiring.disclosureFor(incrementDecision) : {}),
       };
       if (!panelReviewed && stationKind === 'panel') {
         const validation = validateFinalPanelReceipt(receipt, minPanelSize);
@@ -7776,6 +8003,15 @@ class AutopilotEngine {
       // resume, or the new branch tip when the author returned a descendant.
       const adoptedHead = admissionStep.head;
       const returnedHead = Boolean(continuationState && continuationState.continuation === 'return');
+      // BL-0146 D4: the sealed opt-in. The decision itself is made later, per returned head, in
+      // prepareReview (it needs the verification receipt and the gate journal, which exist only
+      // once composition has verified the adopted head).
+      if (returnedHead && sealedAdoption.return_review === 'incremental') {
+        returnReviewState = {
+          priorHead: isStr(continuationState.reviewed_head) ? continuationState.reviewed_head : null,
+          returnReview: 'incremental',
+        };
+      }
       // An interrupted review resumes at the phase the ledger already holds: its adoption event
       // is journaled, so it is not recorded twice. Only a first run and a returned head adopt.
       const adoptionAlreadyJournaled = campaignControl.initial_state.phase
@@ -9241,7 +9477,7 @@ class AutopilotEngine {
       },
       review: (reviewInput) => performReview(reviewInput),
       reviewPanel: (reviewInput) => performReviewPanel(reviewInput),
-      prepareReview: (reviewInput) => prepareReview(reviewInput),
+      prepareReview: (reviewInput, extra) => prepareReview(reviewInput, extra),
       adjudicate: ({ review, repair_generation: repairGeneration, final }) => {
         let dispositionAuthority = null;
         if (typeof this.campaignDispositionProvider === 'function') {

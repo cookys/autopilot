@@ -28,6 +28,8 @@ fs.mkdirSync(diffDir, { recursive: true });
 fs.writeFileSync(logFile, '');
 process.env.RC_LOG = logFile;
 process.env.RC_DIFF_DIR = diffDir;
+const packetDir = path.join(outDir, 'seat-packets');
+process.env.RC_PACKET_DIR = packetDir;
 process.env.RC_VERDICT = ctx.verdict || 'ship';
 process.env.RC_FAIL_MODEL = ctx.failModel || '';
 const {
@@ -85,6 +87,11 @@ const range = {
     fs.writeFileSync(path.join(worktree, 'src', 'a.txt'), 'a\n');
     fs.writeFileSync(path.join(worktree, 'src', 'b.txt'), 'b\n');
   },
+  // BL-0146 D4: five files (the file cap), so a one-file fix is a small share of the range.
+  multi: () => {
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), 'external\n');
+    for (const name of ['a', 'b', 'c', 'd']) fs.writeFileSync(path.join(worktree, 'src', `${name}.txt`), `${name} payload\n`);
+  },
   churn_warn: () => {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${'line\n'.repeat(60)}`);
   },
@@ -96,7 +103,7 @@ const range = {
 };
 const rangeKind = {
   out_of_scope: 'out_of_scope', file_cap: 'file_cap', churn_warn: 'churn_warn',
-  marker_committed: 'marker_committed', two_files: 'two_files',
+  marker_committed: 'marker_committed', two_files: 'two_files', multi: 'multi',
 }[scenario] || 'ok';
 let head = null;
 if (!isImplControl) {
@@ -148,6 +155,7 @@ else if (!isImplControl && scenario !== 'impl_under_candidate') {
   contractBody.adoption = { head_sha: sealedHead, ...(authorFamily ? { author_family: authorFamily } : {}) };
 }
 if (ctx.preset && contractBody.adoption) contractBody.adoption.disposition_preset = ctx.preset;
+if (ctx.returnReview && contractBody.adoption) contractBody.adoption.return_review = ctx.returnReview;
 if (scenario === 'adoption_with_strict_dispatch') contractBody.strict_dispatch = true;
 fs.writeFileSync(promptFile, 'review the externally produced range\n');
 fs.writeFileSync(contractPath, `${JSON.stringify(contractBody, null, 2)}\n`);
@@ -460,6 +468,8 @@ for (const stepSpec of (ctx.steps || [])) {
   process.env.RC_FAIL_MODEL = stepEnv.RC_FAIL_MODEL || '';
   const beforeReviews = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length;
   const beforeVerify = verifyRuns;
+  fs.rmSync(diffDir, { recursive: true, force: true }); fs.mkdirSync(diffDir, { recursive: true });
+  fs.rmSync(packetDir, { recursive: true, force: true });
   if (stepSpec.move === 'forward') {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `external-${stepsOut.length + 2}\n`);
     git(worktree, 'add', '-A');
@@ -517,6 +527,32 @@ for (const stepSpec of (ctx.steps || [])) {
     seed_files: (() => {
       const dir = path.join(commonDir, 'autopilot', 'review-candidate-repair');
       try { return fs.readdirSync(dir).flatMap((d) => fs.readdirSync(path.join(dir, d)).map((f) => `${d}/${f}`)); } catch (_e) { return []; }
+    })(),
+    // BL-0146 D4: what each seat was handed this step (diff bytes, the packet's tree listing, delta.diff)
+    // and what the receipt disclosed.
+    seat_inputs: (() => {
+      const out = {};
+      try {
+        for (const f of fs.readdirSync(diffDir)) {
+          const model = f.replace(/\.diff$/, '');
+          const read = (ext) => { try { return fs.readFileSync(path.join(packetDir, `${model}.${ext}`), 'utf8'); } catch (_e) { return null; } };
+          out[model] = {
+            diff: fs.readFileSync(path.join(diffDir, f), 'utf8'),
+            tree: read('tree'), delta: read('delta'), spec: read('spec'),
+          };
+        }
+      } catch (_e) { /* no seat ran */ }
+      return out;
+    })(),
+    disclosure: (() => {
+      const hit = (o, depth) => {
+        if (!o || typeof o !== 'object' || depth > 6) return null;
+        if (typeof o.review_scope === 'string') return o;
+        for (const v of Object.values(o)) { const r = hit(v, depth + 1); if (r) return r; }
+        return null;
+      };
+      const d = hit(stepResult, 0);
+      return d ? { review_scope: d.review_scope, incremental: d.incremental || null, incremental_fallback_reason: d.incremental_fallback_reason || null } : null;
     })(),
     result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });

@@ -2064,7 +2064,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
     // diff/spec bytes or reviewer tuple invalidate the old gate without a
     // provider/model call.
     const preparedReview = prepareReview
-      ? requireReceipt(prepareReview(reviewPayload), 'prepareReview')
+      ? requireReceipt(
+        prepareReview(reviewPayload, { composition: true }),
+        'prepareReview',
+      )
       : {
         authority: {
           schema_version: 1,
@@ -3387,6 +3390,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
     ...(Object.prototype.hasOwnProperty.call(terminalReview, 'implementer_family')
       ? { implementer_family: terminalReview.implementer_family } : {}),
     ...(terminalReview.author_family_excluded === true ? { author_family_excluded: true } : {}),
+    // BL-0146 D4: only an opted-in return review carries these; the default receipt is unchanged.
+    ...(isStr(terminalReview.review_scope) ? { review_scope: terminalReview.review_scope } : {}),
+    ...(isObj(terminalReview.incremental) ? { incremental: terminalReview.incremental } : {}),
+    ...(isStr(terminalReview.incremental_fallback_reason)
+      ? { incremental_fallback_reason: terminalReview.incremental_fallback_reason } : {}),
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,

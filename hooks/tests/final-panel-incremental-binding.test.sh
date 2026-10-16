@@ -77,7 +77,7 @@ function storeChecks(S0, tag) {
   r.record_ok = S.recordVerdict(ctx, 1, outcome()) === true;
   const hit = S.lookupSeat(ctx, canonicalDigest);
   r.identical_binding_hits = hit.action === 'reuse' && hit.outcome.review_input_mode === 'incremental_return'
-    && hit.outcome.prior_findings_included === true && hit.outcome.full_diff_required === false;
+    && hit.outcome.prior_findings_included === false && hit.outcome.full_diff_required === false;
   // each component change misses (different binding => different file)
   r.component_change_misses = Object.entries(muts).every(([k, v]) => {
     const parts = { ...p0, [k]: v };

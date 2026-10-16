@@ -452,6 +452,7 @@ module.exports = {
   DEFAULT_LIMITS,
   evaluateReturnIncrement,
   computeFileDigests,
+  pathDiff,
   verifyCarriedDigests,
   isSharedSurface,
 };

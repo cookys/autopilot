@@ -226,6 +226,7 @@ function buildPacketOnce(identity = {}) {
       specFile: identity.specFile === undefined ? null : identity.specFile,
       outDir: packetDir,
       denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra],
+      ...(identity.incremental ? { incremental: identity.incremental } : {}),
     });
     const manifest = JSON.parse(fs.readFileSync(built.manifest_path, 'utf8'));
     return {
@@ -322,6 +323,7 @@ function prepareReviewLaunch(args, options = {}) {
           diffFile,
           specFile: specFile === undefined ? null : specFile,
           denyExtra,
+          ...(options.packet.incremental ? { incremental: options.packet.incremental } : {}),
         });
         try {
           autopilotPacket = materializeSharedIntoSeat(once, packetDir);

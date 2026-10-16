@@ -8,7 +8,7 @@ import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
-import { NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
+import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
@@ -772,8 +772,6 @@ const BAD_SOURCE_FLAGS = ['marketplace_not_directory', 'marketplace_not_this_rep
 function sourceStateOf(ls: NonNullable<LiveSnapshot['detail']['load_source']>): Stated {
   return ui.stateOf('loadSource', { source: ls.source, behind: ls.behind_upstream ?? 0, flags: ls.flags.filter(f => BAD_SOURCE_FLAGS.includes(f)).length + (ls.marketplace === 'missing' ? 1 : 0) })
 }
-// the stale cache copies no program uses: the ones the 外掛來源 row offers to clear
-const staleFree = (ls: LiveSnapshot['detail']['load_source']): NonNullable<LiveSnapshot['detail']['load_source']>['stale_cache_dirs'] => (ls === null ? [] : ls.stale_cache_dirs.filter(d => d.alive.length === 0))
 const shq = (x: string): string => (/^[\w@%+=:,./-]+$/.test(x) ? x : "'" + x.replace(/'/g, "'\\''") + "'")
 function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
@@ -823,9 +821,7 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
 // every one of them has one (a cache copy's size is not published, so with one the label is the count alone). Drawn only when two or more can go.
 function cleanAllRow(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   if (ctx.decide === undefined) return []
-  const done = ctx.decide.clean ?? {}
-  const wts = snap.detail.residue === null ? [] : residueTally(snap.detail.residue).clean.filter(e => e.kind === 'worktree' && done[e.target] === undefined)
-  const caches = staleFree(snap.detail.load_source).filter(d => done[d.dir] === undefined)
+  const { worktrees: wts, caches } = cleanTargets(snap.detail, ctx.decide.clean ?? {})
   const n = wts.length + caches.length
   if (n < 2) return []
   const sized = caches.length === 0 && wts.every(e => e.bytes !== null)

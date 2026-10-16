@@ -262,26 +262,37 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // prune-plugin-cache.js re-checks the path, the live pids and the loaded copy). So the ban on `$.process` stays for everything else: `process.run` is allowed once, in
 // register.ts, and only while CLEAN_SCRIPTS names exactly those two scripts; `process.spawn`, any other file and any second use are offenders.
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
-const PROCESS_RUN = /process\s*(?:\.\s*run\b|\[\s*['"`]run['"`]\s*\])/g
+// every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
+// Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
+const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
+const processAccesses = src => PROCESS_ACCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
 function processRunOffenders(src, isRegister) {
-  const uses = [...src.matchAll(PROCESS_RUN)].length
-  if (uses === 0) return []
-  if (!isRegister) return ['process.run outside register.ts']
+  const uses = processAccesses(src)
+  if (uses.length === 0) return []
+  if (!isRegister) return ['$.process outside register.ts']
   const out = []
-  if (uses !== 1) out.push('process.run used ' + uses + ' times, one allowed')
+  if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
+  if (!/\$\.process\.run\(argv,/.test(src)) out.push('the one use is not `$.process.run(argv, ...)`')
   const m = /export const CLEAN_SCRIPTS = \[([^\]]*)\]/.exec(src)
   const names = m === null ? null : [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])
   if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
   return out
 }
-test('process allowlist controls: another file, a second use, a widened and a narrowed script list are each reported (negative controls)', () => {
-  const ok = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\nconst r = await $.process.run(argv)"
+test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
+  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\n"
+  const ok = list + 'const r = await $.process.run(argv, { timeoutMs: 1 })'
   assert.deepEqual(processRunOffenders(code(ok), true), [])
-  assert.equal(processRunOffenders(code('await $.process.run(argv)'), false).length, 1)
+  assert.equal(processRunOffenders(code('await $.process.run(argv, {})'), false).length, 1)
   assert.equal(processRunOffenders(code(ok + '\nawait $.process.run(x)'), true).length, 1)
-  assert.equal(processRunOffenders(code(ok.replace('process.run', "process['run']")), true).length, 0)
-  assert.equal(processRunOffenders(code("export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js', 'scripts/other.js']\nawait $.process.run(a)"), true).length, 1)
-  assert.equal(processRunOffenders(code("export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js']\nawait $.process.run(a)"), true).length, 1)
+  assert.ok(processRunOffenders(code(ok + '\nconst p = $.process; await p.run(x)'), true).length > 0, 'alias')
+  assert.ok(processRunOffenders(code(ok + '\nconst { run } = $.process; await run(x)'), true).length > 0, 'destructured member')
+  assert.ok(processRunOffenders(code(ok + "\nawait $['process'].run(x)"), true).length > 0, 'bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nawait $["process"].run(x)'), true).length > 0, 'double-quoted bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nawait $[`process`].run(x)'), true).length > 0, 'template bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nconst { process: p } = $'), true).length > 0, 'destructured process')
+  assert.ok(processRunOffenders(code(list + "const p = $['process']; p.run(argv, {})"), true).length > 0, 'the only access is not the allowed call')
+  assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
+  assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
 })
 test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prompt.submit; nothing uses asUser or process spawning', () => {
   const root = path.join(__dirname, '..')

@@ -4872,12 +4872,12 @@ for (const surface of SURFACES) {
 
   // The cleanup buttons run the one safe entry point (a stub here: nothing is deleted, no real store is touched), only for a worktree the snapshot lists as clearable.
   const HAND_OLD = '/home/u/proj/.claude/worktrees/hands-old'
-  const cleanWorld = (on: any, $: any, report: string) => {
-    const files = richWorld() // the plugin root is the engine's: any path ending in the sweep script exists as a stub (the real script is never run)
+  const cleanWorld = (on: any, $: any, report: string, more: Record<string, string> = {}) => {
+    const files = { ...richWorld(), ...more } // the plugin root is the engine's: any path ending in the sweep script exists as a stub (the real script is never run)
     const w = world(on, new Proxy(files, { get: (t, k) => (typeof k === 'string' && k.endsWith('/scripts/repo-residue-sweep.js') ? '// stub' : (t as any)[k]) }))
     const ran: string[] = []
     on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: report, stderr: '' } } })
-    return { w, ran }
+    return { w, ran, files }
   }
   const pressKeys = async ($: any) => {
     const pane = await paneOn($, surface, 'hygiene')
@@ -4923,8 +4923,61 @@ for (const surface of SURFACES) {
     expect(ran[0]).toContain('prune-plugin-cache.js --version 2.36.36 --claude-dir /home/u/.claude')
     expect((await hyg($, 76)).some(t => t.includes('rm -rf'))).toBe(false)
   })
+  test('P5 mounted cleanup: a path the report neither removed nor kept is not called cleared while its directory is still there (' + surface + ')', async ($, on) => {
+    const { ran } = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [], worktrees_kept: [] } }), { [HAND_OLD]: 'dir' })
+    await start($, surface)
+    const pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(ran.length).toBe(1)
+    const after = await hyg($, 76)
+    expect(after).not.toContain('  已清掉')
+    expect(after.some(t => t.includes('沒清掉：the cleanup script did not handle this path'))).toBe(true)
+    expect(after.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove'))).toBe(true)
+  })
+  test('P5 mounted cleanup: the sweep runs under the repository the worktree belongs to; a worktree of another repository is not run (' + surface + ')', async ($, on) => {
+    const own = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [{ path: HAND_OLD }], worktrees_kept: [] } }), { '/work/repo/.git/HEAD': 'ref: refs/heads/main\n', [HAND_OLD + '/.git']: 'gitdir: /work/repo/.git/worktrees/hands-old\n' })
+    await start($, surface)
+    const pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(own.ran.length).toBe(1)
+    expect(own.ran[0]).toContain(' reap --repo /work/repo --yes ')
+  })
+  test('P5 mounted cleanup: negative control, a worktree whose checkout belongs to another repository is not run and says so (' + surface + ')', async ($, on) => {
+    const { ran } = cleanWorld(on, $, '{}', { '/work/repo/.git/HEAD': 'ref: refs/heads/main\n', [HAND_OLD + '/.git']: 'gitdir: /other/repo/.git/worktrees/hands-old\n' })
+    await start($, surface)
+    const pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(ran).toEqual([])
+    expect((await hyg($, 76)).some(t => t.includes('沒清掉：this worktree belongs to another repository'))).toBe(true)
+  })
+  test('P5 mounted cleanup: 全部清掉 leaves out what a press already cleared (no second run, no "no such cache copy") (' + surface + ')', async ($, on) => {
+    const C1 = '/home/u/.claude/plugins/cache/autopilot/autopilot/2.36.35'
+    const C2 = '/home/u/.claude/plugins/cache/autopilot/autopilot/2.36.36'
+    const files = richWorld()
+    files[LIVE + '/load-source.json'] = j({ schema: 'autopilot.load-source/1', checked_at: PUBLISHED, plugin_version: '2.37.0', source: 'dev', source_basis: 'dev_link', marketplace: 'directory', behind_upstream: 0, flags: ['stale_cache_dirs'],
+      stale_cache_dirs: [{ dir: C1, in_use_pids: [], alive: [] }, { dir: C2, in_use_pids: [], alive: [] }] })
+    world(on, new Proxy(files, { get: (t, k) => (typeof k === 'string' && /\/scripts\/(repo-residue-sweep|prune-plugin-cache)\.js$/.test(k) ? '// stub' : (t as any)[k]) }))
+    const ran: string[] = []
+    on('process.run', ($$: any, e: any) => { const a = (e.argv as string[]).join(' '); ran.push(a); return { value: { exitCode: 0, stdout: a.includes('prune-plugin-cache') ? JSON.stringify({ ok: true }) : JSON.stringify({ actions: { worktrees_removed: [{ path: HAND_OLD }], worktrees_kept: [] } }), stderr: '' } } })
+    await start($, surface)
+    let pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:' + HAND_OLD })
+    await pane.unmount()
+    expect(ran.length).toBe(1)
+    expect((await hyg($, 76))[0]).toBe('  [ 全部清掉（2 項） ]') // the same count the press will act on
+    pane = await paneOn($, surface, 'hygiene')
+    await pane.press({ key: 'clean:all' })
+    await pane.unmount()
+    expect(ran.length, 'one more run per cache copy, none for the worktree again').toBe(3)
+    expect(ran.filter(a => a.includes('repo-residue-sweep')).length).toBe(1)
+    expect(ran.filter(a => a.includes('--version 2.36.35')).length + ran.filter(a => a.includes('--version 2.36.36')).length).toBe(2)
+    expect((await hyg($, 76)).filter(t => t === '  已清掉').length).toBe(3)
+  })
   test('P5 mounted cleanup: a worktree the sweep kept says why and then shows the command; a judged entry has no button (negative control) (' + surface + ')', async ($, on) => {
-    const { ran } = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [], worktrees_kept: [{ path: HAND_OLD, class: 'clean-integrated', why: 'worktree remove failed: busy' }] } }))
+    const { ran } = cleanWorld(on, $, JSON.stringify({ actions: { worktrees_removed: [], worktrees_kept: [{ path: HAND_OLD, class: 'clean-integrated', why: 'worktree remove failed: busy' }] } }), { [HAND_OLD]: 'dir' })
     await start($, surface)
     expect((await pressKeys($)).filter(k => k.startsWith('clean:')), 'only the clearable worktree has a button').toEqual(['clean:' + HAND_OLD])
     const pane = await paneOn($, surface, 'hygiene')

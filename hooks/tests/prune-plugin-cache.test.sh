@@ -15,7 +15,9 @@ trap 'kill $LIVE_PID 2>/dev/null' EXIT
 run() { node "$P" --claude-dir "$C" "$@"; }
 
 # unused copy: dry-run keeps it, the real run removes it
-OUT="$(run --version 1.0.0 --dry-run)"; assert_exit_code 0 $? "dry-run on an unused copy" 2>/dev/null || true
+OUT="$(run --version 1.0.0 --dry-run)"; RC=$?
+assert_eq "$RC" "0" "dry-run on an unused copy: exit 0"
+assert_contains "$OUT" '"dry_run":true' "dry-run says so"
 assert_file_exists "$BASE/1.0.0" "dry-run deletes nothing"
 run --version 1.0.0 >/dev/null; RC=$?
 assert_eq "$RC" "0" "unused copy: exit 0"
@@ -31,11 +33,14 @@ assert_file_exists "$BASE/2.0.0" "a copy in use by a live pid is kept"
 assert_file_exists "$BASE/dev" "the dev link is kept"
 assert_contains "$(run --version 2.0.0)" "in use by pid $LIVE_PID" "the reason names the pid"
 
-# the loaded copy is refused even with no live pid listed (the loaded-source judgement)
+# the loaded copy is refused with NO live pid and no .in_use at all: the plugin is installed from it (installed_plugins.json names it as installPath)
 rm -rf "$BASE/dev"; kill $LIVE_PID 2>/dev/null; rm -f "$BASE/2.0.0/.in_use/"*
-mkdir -p "$BASE/3.0.0/.in_use"; : > "$BASE/3.0.0/.in_use/$$"
-OUT="$(run --version 3.0.0)"; assert_eq "$?" "1" "a copy the current shell holds is kept"
-assert_file_exists "$BASE/3.0.0" "kept"
+printf '{"version":2,"plugins":{"autopilot@autopilot":[{"scope":"user","installPath":"%s","version":"3.0.0"}]}}\n' "$BASE/3.0.0" > "$C/plugins/installed_plugins.json"
+OUT="$(run --version 3.0.0)"; RC=$?
+assert_eq "$RC" "1" "the installed copy is refused"
+assert_contains "$OUT" "the copy the plugin is installed from" "the reason is the loaded-copy one, not a pid"
+assert_file_exists "$BASE/3.0.0" "the installed copy is kept"
+assert_contains "$(run --version 2.0.0 --dry-run)" '"ok":true' "a different unused copy is still removable (dry-run)"
 
 # a usage error is exit 2
 node "$P" >/dev/null 2>&1; assert_eq "$?" "2" "no --version is a usage error"

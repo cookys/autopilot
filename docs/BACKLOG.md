@@ -1186,7 +1186,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-04
 - **Origin**: owner
 - **Problem**: 擁有者要求 mods 介面能顯示「代理替你做的決定」提醒。目前沒有任何地方記錄這類決定，所以介面無從顯示；要先做記錄寫入，再做監看，最後才是顯示。 (draft)
-- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods v2.37.0 發布之後。 (draft)
+- **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods 隨 3.0.0 發布之後。 (draft)
 - **Trigger**: after mods ship with 3.0.0
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04

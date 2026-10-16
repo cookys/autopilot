@@ -85,7 +85,66 @@ function isLoopbackHostname(hostname) {
     || normalized === '::1' || normalized === '[::1]';
 }
 
-function normalizeBaseUrl(value, credentialEndpoint, label = 'base_url') {
+// Transport rule: a line-for-line port of scripts/resolve-endpoint.sh `is_url_safe` (BL-0034).
+// resolve-endpoint.sh owns the policy; this module must reach the same verdict on the same
+// URL + AUTOPILOT_ENDPOINT_<NAME>_TRANSPORT value. Classes: tls | loopback | plaintext_private.
+// Parity is pinned by scripts/local-deployment-transport-parity.test.js (runs both sides).
+function ipv4OctetsOk(host) {
+  return host.split('.').every((o) => /^(0|[1-9][0-9]{0,2})$/u.test(o) && Number(o) <= 255);
+}
+
+function ipv6LiteralOk(a) {
+  if (!/^[0-9a-f:]+$/u.test(a) || a.includes(':::')) return false;
+  if (a.includes('::')) {
+    if (a.replace('::', '').includes('::')) return false;
+    if (!/^(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?::(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?$/u.test(a)) return false;
+    return a.split(':').filter(Boolean).length <= 7;
+  }
+  return /^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$/u.test(a);
+}
+
+function hostIsPrivateLiteral(rawHost) {
+  const host = rawHost.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) {
+    const addr = host.slice(1, -1);
+    if (!ipv6LiteralOk(addr)) return false;
+    const first = addr.split(':')[0];
+    return /^f[cd][0-9a-f]{2}$/u.test(first) || /^fe[89ab][0-9a-f]$/u.test(first);
+  }
+  if (!/^[0-9]{1,3}(\.[0-9]{1,3}){3}$/u.test(host) || !ipv4OctetsOk(host)) return false;
+  if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return true;
+  if (host.startsWith('172.')) {
+    const second = Number(host.split('.')[1]);
+    return second >= 16 && second <= 31;
+  }
+  return false;
+}
+
+function classifyTransport(url, transport = '') {
+  const bad = (reason) => Object.freeze({ safe: false, class: '', reason });
+  if (typeof url !== 'string' || !url || /[\s\x00-\x1f\x7f"\\]/u.test(url)) return bad('');
+  if (!['', 'tls', 'plaintext-private'].includes(transport)) return bad('transport_value_invalid');
+  if (url.startsWith('https://')) return Object.freeze({ safe: true, class: 'tls', reason: '' });
+  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(\/|$)/u.test(url)) {
+    return Object.freeze({ safe: true, class: 'loopback', reason: '' });
+  }
+  const m = /^http:\/\/(\[[^\]/]+\]|[^/:[]+)(:[0-9]+)?(\/|$)/u.exec(url);
+  if (m) {
+    if (hostIsPrivateLiteral(m[1])) {
+      if (transport === 'plaintext-private') {
+        return Object.freeze({ safe: true, class: 'plaintext_private', reason: '' });
+      }
+      return bad('transport_optin_required');
+    }
+    if (transport === 'plaintext-private') return bad('transport_private_range_required');
+  }
+  return bad('');
+}
+
+// `transport` is the endpoint's AUTOPILOT_ENDPOINT_<NAME>_TRANSPORT value. At roster-load time
+// the env is not read, so a roster endpoint that names a credential_endpoint passes
+// 'plaintext-private' as a deferral; resolveEndpointCredential re-checks with the real value.
+function normalizeBaseUrl(value, credentialEndpoint, label = 'base_url', transport = '') {
   let parsed;
   try {
     parsed = new URL(value);
@@ -96,14 +155,15 @@ function normalizeBaseUrl(value, credentialEndpoint, label = 'base_url') {
       || parsed.username || parsed.password || parsed.search || parsed.hash) {
     fail(`${label} has unsupported URL components`, 'INVALID_LOCAL_ENGINE_CONFIG');
   }
-  const loopback = isLoopbackHostname(parsed.hostname);
-  if (parsed.protocol === 'http:' && !loopback) {
+  const verdict = classifyTransport(value, transport);
+  if (!verdict.safe) {
     fail(
-      `${label} must use authenticated TLS outside loopback`,
+      `${label} fails the endpoint transport policy${verdict.reason ? ` (${verdict.reason})` : ''}`,
       'INSECURE_LOCAL_ENGINE_ENDPOINT',
     );
   }
-  if (!loopback && (!credentialEndpoint || parsed.protocol !== 'https:')) {
+  const loopback = isLoopbackHostname(parsed.hostname);
+  if (!loopback && !credentialEndpoint) {
     fail(
       `${label} requires an endpoint credential reference outside loopback`,
       'INSECURE_LOCAL_ENGINE_ENDPOINT',
@@ -115,6 +175,7 @@ function normalizeBaseUrl(value, credentialEndpoint, label = 'base_url') {
     loopback,
     protocol: parsed.protocol,
     hostname: parsed.hostname,
+    transport_class: verdict.class,
   });
 }
 
@@ -141,7 +202,12 @@ function normalizeRosterEndpoint(raw, index) {
   ], label);
   const credentialEndpoint = value.credential_endpoint === null
     ? null : token(value.credential_endpoint, `${label}.credential_endpoint`);
-  const base = normalizeBaseUrl(value.base_url, credentialEndpoint, `${label}.base_url`);
+  const base = normalizeBaseUrl(
+    value.base_url,
+    credentialEndpoint,
+    `${label}.base_url`,
+    credentialEndpoint ? 'plaintext-private' : '',
+  );
   if (value.protocol !== LOCAL_RUNTIME_PROTOCOL) {
     fail(`${label}.protocol must be ${LOCAL_RUNTIME_PROTOCOL}`, 'INVALID_LOCAL_ENGINE_CONFIG');
   }
@@ -205,9 +271,7 @@ function normalizeRosterEndpoint(raw, index) {
     ),
     configured_concurrency: configuredConcurrency,
     loopback: base.loopback,
-    transport_security: base.loopback
-      ? (base.protocol === 'https:' ? 'loopback_tls' : 'loopback')
-      : 'authenticated_tls',
+    transport_security: base.transport_class,
   });
 }
 
@@ -287,6 +351,7 @@ function resolveEndpointCredential(endpoint, options = {}) {
       protectedUrl,
       endpoint.credential_endpoint,
       urlName,
+      env[`AUTOPILOT_ENDPOINT_${key}_TRANSPORT`] || '',
     );
     if (normalizedProtected.url !== endpoint.base_url) {
       fail(
@@ -842,6 +907,7 @@ module.exports = {
   acquireEndpointLease,
   acquireRuntimeIdentity,
   assertCapacityHeadroom,
+  classifyTransport,
   findRosterEndpoint,
   fingerprintRuntime,
   isLoopbackHostname,

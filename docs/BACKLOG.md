@@ -262,19 +262,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/kimi-reviewer-rail-file-indirection-for-prompts-above-the-argv-wall-needs-a-live.md
 - **Context**: v2.36.14 fails closed pre-spend when the kimi prompt exceeds ~120 KB (Linux MAX_ARG_STRLEN, 308 hit rc=126 on a 145 KB prompt).
 
-### Per-hook × per-harness support matrix with verification dates (hook inventory that is periodically re-checked)
-- **Id**: BL-0026
-- **Status**: open
-- **Since**: 2026-09-07
-- **Origin**: owner
-- **Problem**: 擁有者要求建立「每個 hook 在各個執行環境是否支援」的對照表，並附驗證日期、定期重驗，避免腳本存在卻沒運作的狀況再發生。目前只有檢查 Claude 接線的腳本。 (draft)
-- **Impact**: 不同環境的 hook 是否真的生效沒有紀錄，只能靠人記；不修也不會壞。 (draft)
-- **Trigger**: the next hook that is registered on a second harness (Codex `Stop`/`SessionEnd` for `dirty-protected-paths` is the first, v2.36.11, and its Codex live-fire is unverified), or a `harness-maintenance` run that finds a hook-event claim…
-- **Effort**: S
-- **Source**: owner 2026-09-07 during the dirty-tree hook ship; `references/evidence-discipline.md` (script existing ≠ running).
-- **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
-- **Context**: owner question 2026-09-07 「那些 hook 是不是要統一做個盤點表定期 check 所有 harness 是否支援」.
-
 ### Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)
 - **Id**: BL-0027
 - **Status**: open
@@ -365,19 +352,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
 - **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
 - **Context**: `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
-
-### `src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller
-- **Id**: BL-0034
-- **Status**: open
-- **Since**: 2026-09-03
-- **Origin**: self
-- **Problem**: 本機部署模組自己寫了一套傳輸規則（非本機位址必須用 TLS），與端點解析腳本的規則不一致。目前只有少數呼叫端，計畫在有真實用戶前對齊。 (draft)
-- **Impact**: 將來有人用這個模組時，可能遇到與端點腳本不一致的行為；現在影響很小。 (draft)
-- **Trigger**: `dispatch-local-openai.js` / `probe-local-engine.js` gain a caller on a real rail, or a second transport-policy divergence between the two is reported.
-- **Effort**: S
-- **Source**: v2.35.11 (`docs/plans/2026-09-03-endpoint-transport-optin.md` § Out of scope)
-- **Pointer**: docs/backlog/src-engine-local-deployment-js-carries-its-own-transport-rule-tls-outside-loopba.md
-- **Context**: the named-endpoint resolver now owns the transport policy (loopback + disclosed `plaintext-private` for private-range IP literals).
 
 ### Contract-first escalation and local-repair gates — P6D incident follow-up
 - **Id**: BL-0035
@@ -1334,19 +1308,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
 - **Effort**: S
 - **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
-- **Pointer**: none
-
-
-### run-skill-onoff-eval.sh drops fixture_scripts when a manifest has an empty files field
-- **Id**: BL-0196
-- **Status**: open
-- **Since**: 2026-10-16
-- **Origin**: self
-- **Problem**: 評測 runner 讀臂設定時用 tab 切欄，files 欄位是空的就會讓兩個 tab 被合併，fixture_scripts 錯位進 files。結果 fixture 檔完全沒進測試 repo，而且沒有任何錯誤訊息，格子照跑但環境是壞的。
-- **Impact**: 中。沒有 files pack 的新臂設定會悄悄失效；目前靠兩臂各放一個相同的佔位 pack 繞過。
-- **Trigger**: 下次動 run-skill-onoff-eval.sh 或有 pack 沒有 files 時
-- **Effort**: S
-- **Source**: evals/skill-onoff qs row pilot, 2026-10-16
 - **Pointer**: none
 
 

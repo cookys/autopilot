@@ -9,7 +9,11 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - **Context-budget hook is on by default** (`context_budget.mode` = `warn`). It reminds you to checkpoint at `context_budget.t1` (100000 tokens) and to write a handoff at `context_budget.t2` (150000 tokens). Silence it with `context_budget.mode: "off"` or `AUTOPILOT_CONTEXT_BUDGET_MODE=off`.
 - **Pair it with Claude Code's `autoCompactWindow`.** `context_budget.t2` + `context_budget.gap` (50000) must be at most `autoCompactWindow` - 33000; the SessionStart check warns when it is not.
 - **T2 and auto-compact:** when auto-compact is configured and enabled (`autoCompactEnabled` not false), T2 only reminds you to write a handoff and never tells you to stop and /clear. Without auto-compact, T2 still says stop and /clear.
-- **`config_schema_version`:** configs now carry a schema version; on upgrade, re-check your `~/.autopilot/config.json` against the settings reference.
+- **`context_budget.t1` and `context_budget.t2` accept 0 to turn that tier off** (config and `AUTOPILOT_CONTEXT_BUDGET_T1` / `AUTOPILOT_CONTEXT_BUDGET_T2` alike). An empty env value counts as unset.
+- **`context_budget.mode` is case-insensitive.** An unknown value is ignored and warned about once per session. A session also warns once when `context_budget.t1` is at or above `context_budget.t2`, and once when the window is so small that `context_budget.t2` falls after the compaction point.
+- **The foreman guard's ceiling follows `context_budget`.** `context_budget.mode: "off"` or `context_budget.t2` = 0 switches it off, and it no longer tells a foreman to stop when auto-compact is configured and enabled.
+- **Three settings the docs used to show do nothing:** `autopilot.costTracker`, `autopilot.protectedBranches` and `autopilot.<hookName>` in Claude Code's `settings.json` are not read by any code. Use `AUTOPILOT_COST_TRACKER=false`, `AUTOPILOT_PROTECTED_BRANCHES`, or the hook's own off switch.
+- **`config_schema_version`:** the first session after an upgrade (and `scripts/dev-setup.sh --check`) checks `~/.autopilot/config.json` for unknown keys, wrong types or values, the `context_budget.t1` / `context_budget.t2` relation, the auto-compact setup, and defaults changed since your last check. It only reminds, never blocks. Set `"config_schema_version": 1` once you have read the notes and that batch of default changes stops showing. Turn the reminder off with `update_check: false` or `AUTOPILOT_UPDATE_CHECK=0`.
 
 ### 新增
 

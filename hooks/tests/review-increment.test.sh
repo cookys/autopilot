@@ -20,7 +20,7 @@ function commit(repo, writes, msg) {
     const f = path.join(repo, p);
     if (c === null) { fs.rmSync(f, { force: true }); continue; }
     fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, c);
+    if (c && c.symlink) { fs.rmSync(f, { force: true }); fs.symlinkSync(c.symlink, f); } else fs.writeFileSync(f, c);
   }
   gitIn(repo, 'add', '-A');
   gitIn(repo, 'commit', '-q', '--allow-empty', '-m', msg);
@@ -36,6 +36,8 @@ const BASE_FILES = {
   'src/calleemod.js': 'function calleeFn(x) { return x; }\nmodule.exports = { calleeFn };\n',
   'src/feat01.js': fn('01'), 'src/feat02.js': fn('02'), 'src/feat03.js': fn('03'),
   'src/feat04.js': fn('04'), 'src/feat05.js': fn('05'),
+  'assets/b.bin': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(5000, 7)]),
+  'src/link.js': { symlink: 'alphamod.js' },
   'src/u01.js': '// filler one\n', 'src/u02.js': '// filler two\n',
 };
 const GNEW = Array.from({ length: 12 }, (_, i) => `// line ${i} of the renamed file body\n`).join('');
@@ -57,6 +59,8 @@ const F = {
   renamed: fixture('renamed', { h0Extra: { 'src/gnew.js': GNEW }, h1: { 'src/gnew.js': null, 'src/gmoved.js': GNEW } }),
   deleted: fixture('deleted', { h0Extra: { 'src/gnew.js': GNEW }, h1: { 'src/gnew.js': null } }),
   pkg: fixture('pkg', { h1: { 'package.json': '{"name":"y"}\n' } }),
+  bin: fixture('bin', { h0Extra: { 'assets/b.bin': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(5000, 8)]) }, h1: { 'assets/b.bin': Buffer.concat([Buffer.from([0, 1, 2, 3]), Buffer.alloc(5000, 9)]) } }),
+  del: fixture('del', { h1: { 'src/feat04.js': null } }),
   verify: fixture('verify', { h1: { 'scripts/check.js': 'process.exit(1);\n' } }),
 };
 const H2 = commit(F.base.repo, { 'src/feat02.js': fn('02', '// r0\n// touched after review\n') }, 'touch carried');
@@ -116,6 +120,39 @@ function checks(m) {
   });
   t('a16_reference_cap', () => fullWith(m, input(F.fwd, { limits: { increment_reference_cap: 0 } }), 'reference_cap')
     && inc(m, input(F.fwd, { limits: { increment_reference_cap: 1 } })).mode === 'incremental');
+  // review fixes: oversize text files are never silently skipped; binaries are exempt from the text scan
+  t('f_scan_oversize_text', () => fullWith(m, input(F.resign, { limits: { increment_scan_file_bytes: 40 } }), 'reference_cap')
+    && inc(m, input(F.resign, { limits: { increment_scan_file_bytes: 4000 } })).mode === 'incremental');
+  t('f_scan_oversize_binary_exempt', () => inc(m, input(b, { limits: { increment_scan_file_bytes: 2000 } })).mode === 'incremental'
+    && fullWith(m, input(b, { limits: { increment_scan_file_bytes: 50 } }), 'reference_cap'));
+  t('f_missing_fields_fail_closed', () => {
+    const gone = (k, side) => (side === 'prior' ? input(b, { prior: { [k]: undefined } }) : input(b, { current: { [k]: undefined } }));
+    const bothGone = (k) => { const i = input(b); delete i.prior[k]; delete i.current[k]; return i; };
+    return fullWith(m, bothGone('rosterDigest'), 'roster_changed') && fullWith(m, bothGone('specDigest'), 'spec_changed')
+      && fullWith(m, bothGone('verifyCmd'), 'verify_cmd_changed') && fullWith(m, bothGone('baseSha'), 'base_changed')
+      && fullWith(m, gone('specDigest', 'prior'), 'spec_changed');
+  });
+  t('f_findings_not_array', () => fullWith(m, input(b, { prior: { seats: seats({ findings: undefined }) } }), 'finding_unmapped')
+    && fullWith(m, input(b, { prior: { seats: seats({ findings: 'none' }) } }), 'finding_unmapped'));
+  t('a_binary_change_detected', () => {
+    const r = inc(m, input(F.bin));
+    // Plain `git diff` already prints abbreviated blob ids for a binary, so the old digest did move;
+    // --binary/--full-index pin it to the full content id plus the literal patch (no abbreviation
+    // collision, no dependence on core.abbrev). The check asserts those bytes are what gets hashed.
+    const diff = r.recheck_diff.toString();
+    return r.mode === 'incremental' && r.changed.includes('assets/b.bin') && paths(r).includes('assets/b.bin')
+      && /index [0-9a-f]{40}\.\.[0-9a-f]{40}/.test(diff) && diff.includes('GIT binary patch');
+  });
+  t('a_symlink_scanned', () => {
+    const r = inc(m, input(F.resign));
+    const e = r.mode === 'incremental' && r.recheck.find((x) => x.path === 'src/link.js');
+    return e && e.why.some((w) => w.startsWith('references_changed:src/alphamod.js'));
+  });
+  t('a_deleted_not_in_recheck', () => {
+    const r = inc(m, input(F.del, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/feat04.js' }] }) } }));
+    return r.mode === 'incremental' && r.changed.includes('src/feat04.js') && !paths(r).includes('src/feat04.js')
+      && !r.recheck_files.some((f) => f.path === 'src/feat04.js');
+  });
   t('a17_file_content', () => {
     const r = inc(m, input(F.fwd));
     const f = r.mode === 'incremental' && r.recheck_files.find((x) => x.path === 'src/calleemod.js');
@@ -205,6 +242,13 @@ function assertOnce(src, pat, label) {
 }
 const swap = (from, to) => (src) => { assertOnce(src, from, from); return src.replace(from, to); };
 const CONTROLS = [
+  ['oversize_text_skipped_silently', ['f_scan_oversize_text'], swap('if (e.size > limits.increment_scan_file_bytes) { cannotScan = true; break; }', '')],
+  ['oversize_binary_not_exempt', ['f_scan_oversize_binary_exempt'], swap('if (buf.subarray(0, 8000).includes(0)) continue; // binary: no textual references', 'if (e.size > limits.increment_scan_file_bytes) { cannotScan = true; break; }')],
+  ['loose_compare', ['f_missing_fields_fail_closed'], swap("const sameStr = (a, b) => typeof a === 'string' && a !== '' && a === b;", 'const sameStr = (a, b) => a === b;')],
+  ['findings_not_array_ignored', ['f_findings_not_array'], swap('if (!Array.isArray(seat.findings)) unmapped = true;', '')],
+  ['binary_diff_text_only', ['a_binary_change_detected'], swap("'--binary', '--full-index',", '')],
+  ['symlink_not_scanned', ['a_symlink_scanned'], swap("const scannable = tree.filter((e) => e.type === 'blob');", "const scannable = tree.filter((e) => e.type === 'blob' && e.mode !== '120000');")],
+  ['deleted_kept_in_recheck', ['a_deleted_not_in_recheck'], swap('.filter((p) => treeByPath.has(p)).sort();', '.sort();')],
   ['carry_off', ['a1_carry'], swap('const changed = [...union].filter((p) => digests0.get(p) !== digests1.get(p)).sort();', 'const changed = [...union].sort();')],
   ['open_finding_rule_off', ['a2_open_finding'], swap("for (const f of findings) if (f.path) addWhy(f.path, `open_finding:${f.id}`);", '')],
   ['reference_expansion_off', ['a4_reverse_ref', 'a4_path_ref', 'a16_forward_ref', 'a17_file_content'], swap('if (!cannotScan) {', 'if (false) {')],
@@ -263,6 +307,10 @@ for key in baseline_incremental a1_carry a2_open_finding a4_reverse_ref a4_path_
   f_finding_unmapped a14_rename_followed f_base_changed f_roster_changed f_spec_changed a5a_verify_cmd_changed \
   f_verification_red f_changed_ratio a5b_delta_packet_size f_shared_surface f_priority_order a7_carried_digest_recheck \
   a10_recompute_matches input_validation reasons_listed \
+  f_scan_oversize_text f_scan_oversize_binary_exempt f_missing_fields_fail_closed f_findings_not_array \
+  a_binary_change_detected a_symlink_scanned a_deleted_not_in_recheck \
+  neg_oversize_text_skipped_silently neg_oversize_binary_not_exempt neg_loose_compare neg_findings_not_array_ignored \
+  neg_binary_diff_text_only neg_symlink_not_scanned neg_deleted_kept_in_recheck \
   neg_carry_off neg_open_finding_rule_off neg_reference_expansion_off neg_forward_refs_off neg_only_recheck_diff \
   neg_seat_split_round_level neg_carry_digest_corrupt neg_carried_digest_recheck_skipped neg_unmappable_dropped_silently \
   neg_opt_in_ignored neg_no_carriable_ignored neg_carry_through_incremental_artifact neg_base_compare_skipped \

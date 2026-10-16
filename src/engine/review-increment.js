@@ -63,6 +63,10 @@ const STOP_SYMBOLS = new Set([
   'error', 'path', 'file', 'text', 'line', 'lines', 'options', 'input', 'output', 'state',
 ]);
 
+// A "the question did not change" comparison needs both sides present: undefined === undefined
+// must not read as unchanged.
+const sameStr = (a, b) => typeof a === 'string' && a !== '' && a === b;
+
 function inputError(message) {
   const error = new Error(`review_increment_input_invalid: ${message}`);
   error.code = 'review_increment_input_invalid';
@@ -73,7 +77,9 @@ function git(repo, args, opts = {}) {
   try {
     return execFileSync(
       'git',
-      ['--no-pager', '--literal-pathspecs', '-c', 'core.quotepath=false', '-C', repo, ...args],
+      ['--no-pager', '--literal-pathspecs', '-c', 'core.quotepath=false', '-c', 'diff.algorithm=myers',
+        '-c', 'diff.noprefix=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.renames=false',
+        '-c', 'diff.indentHeuristic=true', '-c', 'core.autocrlf=false', '-C', repo, ...args],
       { maxBuffer: GIT_MAX_BUFFER, stdio: ['pipe', 'pipe', 'pipe'], ...opts },
     );
   } catch (error) {
@@ -82,7 +88,13 @@ function git(repo, args, opts = {}) {
 }
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const DIFF_FLAGS = ['--no-renames', '--no-color', '--no-ext-diff', '--no-textconv'];
+// Pinned diff settings: --binary/--full-index make a binary change hash by content (without them two
+// different binary edits both print "Binary files differ" and hash alike); the prefixes and -c
+// overrides below stop a user's git config from changing the bytes that get hashed.
+const DIFF_FLAGS = [
+  '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv', '--binary', '--full-index',
+  '--src-prefix=a/', '--dst-prefix=b/', '-U3',
+];
 
 function diffPaths(repo, from, to) {
   const out = git(repo, ['diff', '--no-renames', '--name-only', '-z', from, to]).toString('utf8');
@@ -283,6 +295,7 @@ function evaluateReturnIncrement(input) {
   const findings = [];
   let unmapped = false;
   for (const seat of carriableSeats) {
+    if (!Array.isArray(seat.findings)) unmapped = true; // a malformed findings list is never "no findings"
     for (const f of Array.isArray(seat.findings) ? seat.findings : []) {
       const p = normalizeFindingPath(f && f.path);
       let mapped = null;
@@ -297,10 +310,10 @@ function evaluateReturnIncrement(input) {
   if ((unmapped)) return full('finding_unmapped'); // guard:finding_unmapped
 
   // 5. the question did not change
-  if ((prior.baseSha !== baseSha)) return full('base_changed'); // guard:base_changed
-  if ((prior.rosterDigest !== current.rosterDigest)) return full('roster_changed'); // guard:roster_changed
-  if ((prior.specDigest !== current.specDigest)) return full('spec_changed'); // guard:spec_changed
-  if ((prior.verifyCmd !== current.verifyCmd)) return full('verify_cmd_changed'); // guard:verify_cmd_changed
+  if ((!sameStr(prior.baseSha, baseSha))) return full('base_changed'); // guard:base_changed
+  if ((!sameStr(prior.rosterDigest, current.rosterDigest))) return full('roster_changed'); // guard:roster_changed
+  if ((!sameStr(prior.specDigest, current.specDigest))) return full('spec_changed'); // guard:spec_changed
+  if ((!sameStr(prior.verifyCmd, current.verifyCmd))) return full('verify_cmd_changed'); // guard:verify_cmd_changed
   // 6. verification at the new head is green (anything but literal true fails closed)
   if ((current.verificationGreen !== true)) return full('verification_red'); // guard:verification_red
 
@@ -320,7 +333,9 @@ function evaluateReturnIncrement(input) {
   for (const f of findings) if (f.path) addWhy(f.path, `open_finding:${f.id}`);
 
   const tree = listTree(repo, newHead);
-  const scannable = tree.filter((e) => e.type === 'blob' && e.mode !== '120000');
+  const treeByPath = new Map(tree.map((e) => [e.path, e]));
+  // Symlinks are scanned too: the blob is the target string.
+  const scannable = tree.filter((e) => e.type === 'blob');
   const sections = splitSections(deltaDiff.toString('utf8'));
   const removedSymbols = new Map(); // symbol -> changed path it was removed from
   const addedBy = new Map(); // changed path -> { tokens, idents }
@@ -340,14 +355,16 @@ function evaluateReturnIncrement(input) {
   const candidates = scannable.filter((e) => !changedSet.has(e.path));
   const refs = new Set();
   const tooBig = (candidates.length > limits.increment_scan_files);
-  const scanned = candidates.filter((e) => e.size <= limits.increment_scan_file_bytes);
-  const scanTotal = scanned.reduce((n, e) => n + e.size, 0);
-  const cannotScan = tooBig || scanTotal > limits.increment_scan_total_bytes;
+  const scanTotal = candidates.reduce((n, e) => n + e.size, 0);
+  let cannotScan = tooBig || scanTotal > limits.increment_scan_total_bytes;
   if (!cannotScan) {
-    const blobs = readBlobs(repo, scanned);
-    for (const e of scanned) {
+    const blobs = readBlobs(repo, candidates);
+    for (const e of candidates) {
       const buf = blobs.get(e.sha);
-      if (!buf || buf.subarray(0, 8000).includes(0)) continue;
+      if (!buf) { cannotScan = true; break; } // unreadable candidate: cannot decide
+      if (buf.subarray(0, 8000).includes(0)) continue; // binary: no textual references
+      // A text file over the per-file limit is not scanned, and not silently skipped either.
+      if (e.size > limits.increment_scan_file_bytes) { cannotScan = true; break; }
       const text = buf.toString('utf8');
       const toks = pathTokens(text);
       const ids = identifiers(text);
@@ -373,9 +390,9 @@ function evaluateReturnIncrement(input) {
   }
   if ((cannotScan || refs.size > limits.increment_reference_cap)) return full('reference_cap'); // guard:reference_cap
 
-  const recheckPaths = [...why.keys()].sort();
+  // A path deleted at the new head is changed (it drives references) but is not re-check material.
+  const recheckPaths = [...why.keys()].filter((p) => treeByPath.has(p)).sort();
   const inDiff = recheckPaths.filter((p) => digests1.has(p));
-  const treeByPath = new Map(tree.map((e) => [e.path, e]));
   const asFile = recheckPaths.filter((p) => !digests1.has(p) && treeByPath.has(p) && treeByPath.get(p).type === 'blob');
   const recheckDiff = inDiff.length > 0 ? pathDiff(repo, baseSha, newHead, inDiff) : Buffer.alloc(0);
   const fileBlobs = readBlobs(repo, asFile.map((p) => treeByPath.get(p)));

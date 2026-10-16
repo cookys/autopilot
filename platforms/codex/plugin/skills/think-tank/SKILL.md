@@ -123,7 +123,9 @@ Build `<round-bundle.json>` from this round: `{round_id, question, transcript: [
 - **Exit 0**: stdout is one positional contribution (`{round_id, axis_id, claim_vector, position, risk_tags, anchors}`). Add it to the round as a labeled **external role** — advisory only, same trust boundary as `autopilot:survey` input. It never counts as sole basis for consensus, never becomes the CEO recommendation by itself, and never carries a verdict.
 - **Non-zero exit** (switch off, unqualified seat, rail failure): proceed with the debate unchanged — no fallback substitute, no retry.
 
-Exactly one call per round-set — this is a single evidence draw, not a multi-turn negotiation. For narrow one-off inquiries, `scripts/dispatch-consult.sh` is the single-question sibling of the discuss seat family when only one bounded question is needed instead of a full discussion round.
+**Optional second turn.** After every role (including the external seat) has spoken round one, you may call the same command once more with a fresh bundle so the external seat can answer the others. Build it the same way, with two changes: relabel the seat's own first contribution in `transcript` as `role: "this-seat"` (keep its `axis_id`), and leave that axis out of `taken_axes` (list only the other roles' axes). The seat then stays on its own axis, must respond to at least one other role's claim (agreement needs new evidence, disagreement needs an anchor), and may hold or update. At most two turns per seat, and the second call only after all roles have spoken; non-zero exit means proceed with the first-round contribution unchanged. Other callers of this script (U3 panels etc.) stay single-turn.
+
+Otherwise one call per round-set — a single evidence draw, not a negotiation. For narrow one-off inquiries, `scripts/dispatch-consult.sh` is the single-question sibling of the discuss seat family when only one bounded question is needed instead of a full discussion round.
 
 ### Step 4: Cross-Collision Synthesis
 

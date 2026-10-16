@@ -850,7 +850,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: discuss exam fix `eec239a8`, 2026-10-12
 - **Pointer**: docs/backlog/dispatch-discuss-own-axis-rule-needs-design-decision.md
-- **Context**: 2026-10-17 eval NOT-SHIP (cost 1.8x > 1x; effect gates pass). Impl at 32716fef4, reverted. Evidence: docs/plans/evidence/2026-10-17-bl0121-discuss-round2/. Reopen if cost gate is rethought.
+- **Context**: built on lane/discuss2 (second turn plus own-axis rule); merge waits for the full ON/OFF run in docs/plans/evidence/2026-10-17-bl0121-discuss-round2/. On SHIP delete this entry and sidecar.
 
 ### Find what rewrites the committed t7-config-rename fixture outside the suite
 - **Id**: BL-0122

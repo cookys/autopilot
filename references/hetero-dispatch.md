@@ -193,6 +193,14 @@ a same-family rung when the tier already outranks the previous rung so that the 
 different-family rungs are saved for the ties that need them. On a single-family host nothing
 changes. Where a tail has only one family left, the rule is unsatisfiable and the order stands.
 
+Within one effort rank the ladder orders by unit price (input + output micro-USD per Mtok) from the
+local price cache written by `scripts/qualification-prices.js fetch` (exact `(engine, runner, model)`
+match; unknown, `assumed`, or no cache sorts last, never as free), then explicit-before-legacy, latency
+and engine name as before. With no cache the order is identical to the pre-price order. The resolver
+only reads the cache; the SessionStart hook refreshes it (detached, at most every 24 h, off with
+`AUTOPILOT_PRICES_FETCH=0` or `prices_fetch: false`). Stale prices warn in `qualification-prices.js status`
+and are still used. Until model-dyno publishes `model-prices.json` there is no cache and nothing changes.
+
 `scripts/lib/effort-scale.js` is the seam where a measured per-family effort scale would land. It is
 identity for every family today, deliberately: the published evidence says the labels are
 incomparable, which is not the same as knowing the exchange rate between them, and a fabricated

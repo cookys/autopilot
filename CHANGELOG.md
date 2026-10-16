@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0024 (read side): the implementer ladder now orders same-effort seats by unit price from a local cache of model-dyno's `model-prices.json` (`scripts/qualification-prices.js` `fetch` / `status` / `price`, exact `(engine, runner, model)` match, unknown or `assumed` last, no cache means the unchanged order); the cache is refreshed by a detached, throttled SessionStart call (`AUTOPILOT_PRICES_FETCH=0` / `prices_fetch: false` turns it off). New suite `hooks/tests/qualification-prices.test.sh`.
+
 - Qualification exams: a tool attempt by a seat whose CLI prompt carried the fixed tools-forbidden notice is now scored as that case wrong (`tool_attempt_forbidden`) and the exam continues, instead of aborting the whole sitting as `transport_fail` (owner ruling d-80d327c9); a tool event without the notice and real connection errors keep `transport_fail`. Covers opencode, kimi and agy proven tool calls; brain and VA raw rows carry the reason. Muse Spark 1.3 reviewer-v6 attempt 1 stays a transport failure (its prompt had no prohibition).
 
 - BL-0062: the integration step (`next-touch-validation.js` `executeAuthorizedIntegration`) now retires the other COMPLETE same-graph Mission adoptions automatically the moment a merge is confirmed, re-deriving the same `observed_head`-is-an-ancestor proof as `mission-terminal-reconcile.js rollover` (never chronology, never at COMPLETE); the result carries `adoption_retirement` (`retired` / `nothing_to_retire` / `skipped` with the reason), and `rollover` stays as the rescue tool. New suite `hooks/tests/mission-retire-on-integration.test.sh`.

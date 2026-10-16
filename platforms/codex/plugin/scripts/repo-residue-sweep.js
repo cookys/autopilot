@@ -93,7 +93,8 @@
 // file is older than UNKNOWN_SEAT_MIN_AGE_DAYS (14; --older-than-days overrides, 0 allowed).
 // Every scan row carries decision keep|reap and a reason.
 //
-// CLOSE-SESSION (`close-session --session S`; dry run without --yes, which prints the plan and exits 0):
+// CLOSE-SESSION (`close-session --session S`; dry run without --yes, which prints the plan and exits 0;
+// with --yes it also prints one stderr line when the main checkout lags its upstream, silent otherwise):
 // session close-out. Acts ONLY on local branches that the branch ledger
 // <git-common-dir>/autopilot/dispatch-branches.jsonl (rows appended by dispatch-hetero.sh /
 // dispatch-foreman.sh via scripts/lib/dispatch-branch-ledger.sh) attributes to S. A row is S's when its
@@ -1163,7 +1164,13 @@ function main() {
 
   const commonRaw = git(mainPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   const common = commonRaw.ok ? commonRaw.out : path.join(mainPath, '.git');
-  if (o.cmd === 'close-session') return runCloseSession(o, mainPath, integrationSha.out, integrationBranch, common);
+  if (o.cmd === 'close-session') {
+    const rc = runCloseSession(o, mainPath, integrationSha.out, integrationBranch, common);
+    if (o.yes) { // BL-0006: tell the owner when the main checkout lags after the push; silent when current
+      try { const h = require('./resolve-repo-placement').behindHint(mainPath); if (h) process.stderr.write(`${h}\n`); } catch { /* advisory only */ }
+    }
+    return rc;
+  }
   if (o.cmd === 'reap' && o.auto) return runAuto(o, mainPath, integrationSha.out, integrationBranch, common);
 
   const worktrees = classifyWorktrees(mainPath, mainPath, integrationSha.out);

@@ -1321,7 +1321,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
-- **Context**: 2026-10-16: P1, follow-up and P2 merged; P3, P4 remain plus an llm-playground r4/t15 FileNotFoundError to SKIP follow-up. Details in the plan Progress line.
+- **Context**: 2026-10-16: P1, follow-up and P2 merged; P4a autopilot side (B1) done on lane/p4ab1; P3, P4a llm-playground side and P4b remain plus an llm-playground r4/t15 FileNotFoundError to SKIP follow-up. Details in the plan Progress line.
 
 
 ### A runs watcher started directly in a test env still writes to the shared live dir

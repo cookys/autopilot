@@ -25,6 +25,7 @@
     { "stem": "log-error", "class": "invariant_effect" },
     { "stem": "mcp-health", "class": "invariant_effect" },
     { "stem": "orchestrator-edit-gate", "class": "invariant_effect" },
+    { "stem": "owner-question-guard", "class": "invariant_effect" },
     { "stem": "reload-watch", "class": "invariant_effect" },
     { "stem": "residue-auto-reap", "class": "host_only" },
     { "stem": "run-approval-gate", "class": "invariant_effect" },

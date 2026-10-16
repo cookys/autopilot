@@ -524,6 +524,22 @@
       "type": "number"
     },
     {
+      "name": "owner_question_guard",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_OWNER_QUESTION_GUARD"
+      ],
+      "summary": "false switches off the Stop guard that blocks a reply waiting for the owner without a decision card id.",
+      "type": "boolean"
+    },
+    {
       "name": "foreman_guard.advisory_every",
       "kind": "config_key",
       "audience": "user",
@@ -3361,6 +3377,21 @@
         "dirty_tree_reminder"
       ],
       "summary": "Set to false, 0, off or no to disable the dirty-tree reminder."
+    },
+    {
+      "name": "AUTOPILOT_OWNER_QUESTION_GUARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "owner_question_guard"
+      ],
+      "summary": "Set to off, false, 0 or no to disable the owner-question guard."
     },
     {
       "name": "AUTOPILOT_DISCUSS_TIMEOUT",

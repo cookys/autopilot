@@ -82,7 +82,7 @@ prefix `Use dev-flow:` in every arm, 3 reps, resume-by-cell, `ONOFF_KEEP_CELLS_D
 
 ## Results
 
-Run 2026-10-16 23:21 to 2026-10-17 00:25 (CST), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
+Run 2026-10-16 23:21:46 to 23:46:25 (+0800), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
 runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD; the stage-graph coverage gate below adds 9.35 USD (36 cells), 44.55 USD overall. Rows and scorer output:
 `results-pa-full-off.jsonl`, `results-pr-red.jsonl`, `results-pc-card.jsonl`, `score-final.json`, `score-redcheck.json`.
 Raw per-cell transcripts (not in git): the lane scratchpad (not in git), `gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
@@ -121,7 +121,7 @@ The red arm invoked the skill 30/30, so the drop is the body's content, not rout
 
 The card relocates the ladder `--terms` paragraph (the v5 rule that took stage-graph to 10/12) and the anti-patterns table, and the dc tasks
 contain no research or ladder walk. `scripts/check-guidance-eval.js` also requires any guidance change at a cut to match an evaluated stage-graph pack.
-So the dc verdict alone does not license the swap. Rule, from the frozen `prereg/stage-graph.json` (no new thresholds): the 12 stage-graph briefs x 3 reps
+So the dc verdict alone does not license the swap. Rule, from the frozen `prereg/stage-graph.json` (v10) (no new thresholds): the 12 stage-graph briefs x 3 reps
 on arm `evals/skill-onoff/arms/dc-sg/change.json` (= the evaluated v10 `change` arm with `dev-flow` replaced by `dev-flow-dc-card`), same prefix, same pinned binary,
 `change` arm only (the planted-red arm of that row was already shown to separate in v10). Pass = at least 10 of 12 briefs pass (>= 2 of 3 reps each, as in the row's scorer).
 Swap `skills/dev-flow/SKILL.md` only if BOTH the dc verdict is SHIP-GATE-MET AND this gate passes. Below 10/12: record "dc SHIP-GATE-MET, stage-graph coverage NOT-SHIP", no swap,
@@ -138,5 +138,5 @@ Both gates pass, so `skills/dev-flow/SKILL.md` is replaced by the frozen card in
 ### Budget accounting and registration times
 
 - The dc prereg cap of 150 cells covers the 120 formal cells only (60 + 30 + 30). The 36-cell stage-graph coverage gate belongs to the other frozen prereg (`prereg/stage-graph.json`); the two budgets are accounted separately.
-- Second gate registered at commit `1dcebbc7a`, 2026-10-16 23:50:15 +0800; its cells started a few minutes before that commit and finished by 2026-10-17 00:03:21 +0800; the result commit `578e70a41` is 00:04:53. The rule text is the frozen stage-graph threshold, not derived from the outcome. Formal dc cells ran 2026-10-16 23:21 to 2026-10-17 00:25 per the Results section above, before the registration commit's cells, with the prereg frozen in `8c5534e5c`.
+- Times (+0800, from log file times): formal dc cells 2026-10-16 23:21:46 to 23:46:25 (P-A 23:21:46-23:33:00, P-R 23:33:12-23:37:13, P-C 23:37:30-23:46:25); stage-graph coverage cells 23:50:06 to 2026-10-17 00:04:22; registration commit `1dcebbc7a` 23:50:15, nine seconds after the coverage cells started, so that gate's rule was committed after its first cells began and before any result; result commit `578e70a41` 00:04:53. Formal dc prereg frozen in `8c5534e5c` before the first formal cell.
 - OFF rows with `skill_invoked=true` (dc-bug-multi rep 2, dc-m-gate-a rep 1) have all markers false: in both the model called `Skill(dev-flow)` as its first tool call (because of the prefix) and got `Unknown skill: dev-flow`, then worked without it. The harness flag matches on the skill name, not on a successful load; it is not a leak of the skill into the OFF arm. V1 is only evaluated on FULL and CARD.

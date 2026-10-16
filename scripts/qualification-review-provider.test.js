@@ -2255,6 +2255,30 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     stubOutput: honest(cases[0]) }).child.status, 1, 'reviewer mode still refuses an owner-role request');
 }
 
+// ── d-80d327c9: opencode tool attempt, prompt forbids tools -> tagged for case-level scoring ──
+{
+  const stubOpencode = path.join(tempRoot, 'stub-opencode');
+  fs.writeFileSync(stubOpencode, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const stdin = fs.readFileSync(0, 'utf8');
+fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), stdin }));
+process.stdout.write(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'bash', state: { status: 'error' } } }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"pass","findings":[]}' } }) + '\\n');
+`, { mode: 0o755 });
+  const { child, captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'opencode', QRP_CLI_BIN: stubOpencode },
+    request: reviewerRequest(),
+  });
+  equal(child.status, 1, 'opencode tool event still voids the case at the provider');
+  check(captured && captured.stdin.includes('TOOLS ARE FORBIDDEN'),
+    'the CLI prompt carries the fixed tools-forbidden notice above the fence');
+  check(captured.stdin.indexOf('TOOLS ARE FORBIDDEN') < captured.stdin.indexOf('=== CASE INPUT BELOW'),
+    'the notice sits above the case-data fence');
+  check(/model call failed: tool_forbidden: opencode containment breach: tool event bash:error/.test(child.stderr),
+    'a tool attempt under a tools-forbidden prompt is tagged tool_forbidden');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 499) throw new Error(`qualification-review-provider: expected exactly 499 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 503) throw new Error(`qualification-review-provider: expected exactly 503 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

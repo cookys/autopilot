@@ -196,6 +196,13 @@ Use these bars before a role becomes eligible for routing.
   the declaration line + budget; transport/infra failures abort with NO
   verdict. Evidence rides the additive `va_declared_plan` methodology kind.
 
+**Tool attempt in a tools-forbidden exam (d-80d327c9)**: the CLI exam prompt carries the fixed
+sentence `TOOLS ARE FORBIDDEN: ...` (`TOOL_FORBID_NOTICE` in `qualification-review-provider.js`). If the
+seat still emits a tool event (opencode), that case is scored wrong with reason
+`tool_attempt_forbidden` and the exam runs on to the last case; it is NOT `transport_fail`. A tool
+event under a prompt without that sentence, and any real connection/launcher/HTTP error, keep the
+`transport_fail` class (abort, no verdict, retake).
+
 ### Reviewer
 
 - `false_pass_on_critical = 0`.

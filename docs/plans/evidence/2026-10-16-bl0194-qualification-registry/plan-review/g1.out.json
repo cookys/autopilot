@@ -1,0 +1,1183 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "bl0194-g1",
+  "logical_plan_id": "bl0194-qualification-registry-2026-10-16",
+  "session_id": "bl0194-g1",
+  "session_key": "020056e7ee61083f44f8cfece5a7d1aac13ec866b92088a4b172675e2d227c79",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "ea504ada31b0806c03a11db62fda370037765b623fc172c8fa23fbe188cbe808",
+  "manifest_sha256": "c8149a12722fa01ac1acd4645a539f31338134055c6d80465615a235c55c232b",
+  "plan_sha256": "6c1819bae5ffecca174d69939a927110434c5bfdb683c77d07697fb71d2cdd7e",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "efde0dc811d2f42fe560039149bbcc301cf6cd90a6b70cb3daf3575572dfd0c9"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8f0b43e80e5976be32a39e4c3962f4f1f3a0d7d1616d8e600568dccade9942e6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-cJy5Xc",
+          "digest": "8f0b43e80e5976be32a39e4c3962f4f1f3a0d7d1616d8e600568dccade9942e6"
+        },
+        "receipt_digest": "9aeb348bb5809165ef604e171b13842d399f48085c347cc85c94acf94ba0f165"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_deep",
+      "target_id": "glm_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "operation": "plan-review",
+          "request_digest": "dc5af6c0bdeb09ab5267d6b7c29ff87d040b3a53a7a676a6dd5ca1e35dc3b45e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2f0ffa0f24c601fbc94c00c2fce0dc634c160d2d696266e4a7c4147212320681",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-onnRXc",
+          "digest": "2f0ffa0f24c601fbc94c00c2fce0dc634c160d2d696266e4a7c4147212320681"
+        },
+        "receipt_digest": "7997620d6fed67dc7d56d0d632c4f249d89c1b2b5ec59b9529bfa77bd2de0683"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_consult",
+      "target_id": "qwen_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "d1308e99156d7b7660f1b02b97939240493451ad29f689ee70e3c6f2d03343fb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "499f7feb9700bdaf4dfb4ae7b4fdb82259bbacf946929ca9469e82c7c7bbd06d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-iZUnMw",
+          "digest": "499f7feb9700bdaf4dfb4ae7b4fdb82259bbacf946929ca9469e82c7c7bbd06d"
+        },
+        "receipt_digest": "1fb8ade74d3b1361f653e5353821d183976c65c83b955a8b7ba0732acc942b7a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_consult",
+      "target_id": "sol_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "402188869e91832132a4bd3d40ff1f756078ac9e34031282f10f6512e5028c93"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6247a0d0634b0f6b82a7901123852d3aeaadca32b6ce12c74b9ada5b2bdfc55a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-UUUegN/stdout",
+          "digest": "6247a0d0634b0f6b82a7901123852d3aeaadca32b6ce12c74b9ada5b2bdfc55a"
+        },
+        "receipt_digest": "eeac22fb7ee7c2519662f859f887a3cd79622655eb45844256abe1ce96230783"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "fable_chair",
+      "target_id": "fable_chair",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "glm_deep",
+      "target_id": "glm_deep",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "qwen_consult",
+      "target_id": "qwen_consult",
+      "family": "alibaba",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "sol_consult",
+      "target_id": "sol_consult",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §4 schema table 'strikes' row; §4 Write path step 5; §4 Autopilot read side; P1 strike_seq deliverable",
+      "claim": "The plan makes the feed's top-level strikes[] 'authoritative' and says a feed refresh never overwrites a local strike 'not yet acked', which implies a refresh may overwrite acked local strikes and that a feed-side 'lifted_by' can lift a strike. Strike state decides admission, so the feed would be able to deny or un-admit a seat, violating R2 and the plan's own 2.5 constraint.",
+      "evidence": "Plan text: 'top-level is authoritative; per-seat strike count is derived' and 'a feed refresh never overwrites a local strike not yet acked'. Admission is defined as 'locally re-derived identity + local strike state'. Today the reader only reports feed strikes with a re-derived seat_hash and never applies them: describeFeedStrike is called from cmdListFeed only, and cmdAdopt writes defaults and priors, never strikes.",
+      "evidence_reference": "Plan §4 'New feed schema' strikes row; §4 'Write path' step 5; §2.5 bullet 2; scripts/adopt-qualification-defaults.js describeFeedStrike and cmdAdopt; scripts/lib/qualification-feed.js header 'this module never adopts'",
+      "repair": "State that the feed's strikes[] is disclosure only for autopilot: local strikes are authoritative for admission, a refresh never writes any strike (acked or not) into the local store, and 'lifted_by' is informational. If registry-side strikes are wanted locally, route them through the explicit adopt command with the same local-evidence-wins collision rule. Add a P2 negative control: a feed that lifts or adds a strike for an admitted seat leaves local strike state and admission byte-identical.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "01c105b7ff5ac0da645b4606a292e6fc4cb55b8f551535b3b9188851a290f915"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 negative control; §4 Autopilot read side 'Offline' bullet",
+      "claim": "The P2 negative control 'a feed claiming qualified with no local evidence must NOT admit a seat' is ambiguous because the existing adopt path deliberately turns a feed default into an ordinary admitted scorecard row. Without defining whether an adopted row counts as local evidence the control is either untestable or contradicts the shipped adopt contract.",
+      "evidence": "adopt-qualification-defaults.js header: 'An adopted row is a fully ordinary scorecard row: same seat identity, same seat_hash, same strike accrual, same admission path.' Rows are written through engine-scorecard.js record with provenance.kind 'official-default'.",
+      "evidence_reference": "Plan §4 Phases table P2 'Negative control'; scripts/adopt-qualification-defaults.js header comment and cmdAdopt provenance block",
+      "repair": "Reword the control: only rows present in the local scorecard store (self-qualified or explicitly adopted) admit; fetching, caching, listing or refreshing a feed must produce zero writes to scorecard.jsonl, asserted by byte-comparing the store before and after loadFeed and list --from.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "69e8bfef60f6fcdc039fc8b9ecc04782a3ca9cf4a97ffd900eab6699f1ae960d"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 ingest-qualification-record.py; §4 Write path steps 3 and 5; schema fields record_id, record_id_basis, strike_id, strike_seq; import-autopilot-qualification.py backfill",
+      "claim": "Ingest idempotency rests on record_id and strike_id, and CI fails on duplicate strike_seq, but the plan never defines how any of these keys are derived. Autopilot is a standalone plugin with many independent installs, and local event_id is store-local and renumbered on adoption, so a key derived from it collides. The importer (kept for backfill) and the new ingest also need an identical record_id derivation or the P3 dual-write window will create duplicates of the same administration under two ids.",
+      "evidence": "Plan names 'record_id_basis' as a field but gives no basis; strike_seq is 'monotonic per seat' with no assigner; P1 negative control fails CI on 'duplicate strike_seq'. Existing code identifies an administration by producer plus transcript_hash and treats event_id as 'only the local slot'.",
+      "evidence_reference": "Plan §4 'Write path' steps 3 and 5; §4 schema table qualification block and strikes row; §4 Phases P1 negative control; §6 'dual-write window'; scripts/adopt-qualification-defaults.js adoptCapabilityEvidence; scripts/build-qualification-defaults.js buildEntry evidence_store anchor",
+      "repair": "Define record_id as a sha256 over a stated canonical tuple (e.g. producer, transcript_hash, seat identity, corpus_version, administered_at) computed identically by engine-qualify, the importer and ingest, with record_id_basis naming that tuple version. Make strike_seq assigned by the ingest (registry) at commit time, not by the sender; the sender supplies only strike_id. Add a P1 test that the importer and ingest produce the same record_id for the same scorecard row.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "75a002f43d0adba10b2772351c19293677c27afa8f72e0ac8a98714791f5c9cb"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 Write path steps 3 and 4; qualification-send-queue.js; §5 'fault-injection replay'",
+      "claim": "The outbox state machine and its test mechanism are underspecified: pending.jsonl is append-only yet entries become 'acked' and are 'deleted', deletion waits for the record to appear 'in the published feed', and no fault-injection hook is named. A record ingested but filtered out of the feed would stay pending forever and trip the 24 h stuck alarm permanently.",
+      "evidence": "Plan: 'append-only, fsync', 'written back to the outbox as acked', 'deleted only after the ack is observed in the published feed or in the registry repo'. The read side already has an injectable fetchImpl parameter; nothing equivalent is named for the send path.",
+      "evidence_reference": "Plan §4 'Write path' steps 1, 3, 4; §5 'Script-gated'; scripts/lib/qualification-feed.js loadFeed fetchImpl option",
+      "repair": "Specify the outbox as an append-only event log (enqueued, sent, acked, retired) with a compaction step, define the ack as the record's commit on the registry default branch (not feed presence), and name the fault-injection mechanism (injectable transport function plus a failpoint env var) used by the P3 kill-mid-flush and dropped-ack tests.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f5ad801c5d942204ee70c5d5e20336e61f833679b1ce6dfc0ca83bc56ab4bd02"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 'New feed schema' table; P1 sibling file qualification-metrics.json",
+      "claim": "Several field semantics are undefined: usd_per_solved_micro and pass_rate_permille when n_pass or n_attempts is zero; the relationship among n_trials, n_tasks and n_attempts; type, unit and rounding of median_wall_s; the canonical encoding behind entry_id; which blocks are required or forbidden per kind (the table lists qualification, benchmark, speed and cost blocks on one entry while saying kinds never mix); the type of lifted_by; and the schema identifier the P1 sibling metrics file declares.",
+      "evidence": "The table defines permille rounding and null-cost rules but gives no divisor-zero rule, lists three count fields with no relation, and gives median_wall_s no type. parseFeed only accepts documents declaring schema model-dyno.qualification-feed.v<n> or a defaults artifact_type, so an unnamed sibling schema id is unparseable by the current loader.",
+      "evidence_reference": "Plan §4 schema table rows 'benchmark block', 'speed', 'cost', 'sampling', 'strikes', 'entry_id'; §2.6 sibling file; scripts/lib/qualification-feed.js parseFeed isFeedSchema regex",
+      "repair": "Add to the spec: every ratio is null when its denominator is zero; n_trials is defined (or dropped) relative to n_tasks and n_attempts; median_wall_s becomes median_wall_ms integer; entry_id is sha256 over a named canonical JSON of listed fields; a per-kind required/forbidden block matrix with a negative fixture mixing blocks; lifted_by is a string strike_id or null; the sibling file declares schema model-dyno.qualification-metrics.v1.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "25cf87052adaae0657c08f2c473d18a229d8341690b8db70e295a05edf355160"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 'size/schema CI check' in .github/workflows/publish-public-dashboard.yml; §2.5 integer rule; §2.6 dependency decision",
+      "claim": "P1 acceptance ('metrics file validates') depends on a schema validator in llm-playground, but the only validator the plan names is autopilot's Node script, the dependency decision says Python stdlib only, and the stated justification for integers-only ('validate-json-schema.js rejects non-integer JSON numbers') is no longer true. The check is therefore unenforced as written and its negative controls (cost 0, duplicate strike_seq) have no named mechanism to turn red.",
+      "evidence": "Plan §2.5: 'Numbers on the wire are integers (validate-json-schema.js rejects non-integer JSON numbers)'. build-qualification-defaults.js: 'The validator itself now accepts a non-integer numeric literal whenever it round-trips losslessly'. llm-playground files in the map are all Python; no validator file is listed for that repo.",
+      "evidence_reference": "Plan §2.5 bullet 4; §2.6 'Dependency decision'; §3 llm-playground file list; §4 Phases P1 acceptance and negative control; scripts/build-qualification-defaults.js comments above losslessNumber and validateAgainstSchema",
+      "repair": "Decide and name the llm-playground validation mechanism before P1: either vendor validate-json-schema.js and run it with Node in the publish workflow, or add a stdlib Python checker (scripts/eval/check-qualification-feed.py) that enforces integer-only numbers, null-not-zero for unknown cost, unique strike_seq per seat and the 4 MB cap. Correct the §2.5 wording to state the integer rule as a feed-spec rule enforced by that checker, and list the red-then-green fixtures for each negative control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ed8285cb2de5831bcabc8b642e409f52b23a205db86b4558a1a72bc7d3e6a8bd"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 B1 release gate; P4 negative control; §2.5 'no timer auto-adopts'; cost 'sorting treats null as last'; P4 'loop-detection test'",
+      "claim": "Several stated rules lack an enforcing mechanism or a named negative control, and one rule contradicts itself: B1 says the release gate 'warns' when the snapshot is older than 30 days while the P4 negative control says a stale snapshot 'fails' the release gate. No-auto-adopt, null-sorts-last and the importer loop-detection test are stated without saying what fails when they break.",
+      "evidence": "Plan B1 bullet: 'the release gate warns when the snapshot is older than N days'. P4 row: 'stale snapshot (>30 d) fails release gate'. The loop-detection test is named but its detected condition is not. An existing hooks/tests/qualification-feed-adopt.test.sh is referenced in code but not cited by the plan as the home of the no-auto-adopt control.",
+      "evidence_reference": "Plan §4 'Autopilot read side' B1 bullet; §4 Phases P4 negative control; §2.5 bullet 3; §4 schema table cost row; scripts/adopt-qualification-defaults.js comment naming hooks/tests/qualification-feed-adopt.test.sh",
+      "repair": "Pick warn or fail for the snapshot age gate and use it in both places. Name a test per rule: a test that greps the plugin for setInterval/cron paths touching adopt; a sort test with a null-cost seat placed last; a loop test that fails if import-autopilot-qualification.py reads references/official-qualification-defaults.json or any file derived from the feed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "81d8717f5c560d481896ed0524f3cc051167c53275d89fe1cf008bdded08fd81"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 Autopilot read side cache bullet; P2 acceptance and negative control; engine-scorecard.js status",
+      "claim": "Stale behaviour is advisory as required, but the plan does not say where the staleness warning surfaces, what the observable upper bound is when the feed stays unreachable past the TTL, or what negative control proves the warning fires. P2 has no red-before-green control for the TTL path itself.",
+      "evidence": "Plan: 'Past TTL: warn on use, still serve cached'. P2 acceptance: 'cached feed 8 days old warns but serves' but the P2 negative control only covers admission. current.json already records fetched_at today, so the plan's 'gains fetched_at' is not the new work; the missing piece is the age computation and its reporting surface.",
+      "evidence_reference": "Plan §4 'Autopilot read side' first bullet; §4 Phases P2 acceptance and negative control; scripts/lib/qualification-feed.js writeCache manifest fetched_at",
+      "repair": "Specify that feed_age_s and max_age_s are reported in list --json, in engine-scorecard.js status and in the adopt provenance, that a cache older than a hard ceiling (e.g. 90 d) still serves but is labelled 'expired-advisory', and add a P2 test that removes the warning branch and watches the status assertion go red.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "31978ecefddcf615cf78297e96f2c908147aa340cb97bc6ff5c92c73c4d95d51"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 schema qualification block evidence_url; join block identity_map_sha256; §6 'CI grep gate for hostnames/IPs'",
+      "claim": "The feed publishes evidence_url, which is by definition an endpoint, while the plan says endpoint names are never published; identity_map_sha256 is a hash consumers cannot recompute and reads as trust machinery under the plan's own seat_hash reasoning; and the disclosure grep gate names no pattern set or negative fixture.",
+      "evidence": "Plan schema table: 'evidence_url' in the qualification block; host row: 'raw hostnames and runner paths never published'; join row: 'identity_map_sha256'. The plan dropped seat_hash because 'consumers recompute', and the existing loader warns that a hash you did not compute is a claim.",
+      "evidence_reference": "Plan §4 schema table qualification block, join row, host row; §6 risk 'Public bundle leaks infrastructure'; scripts/lib/qualification-feed.js header 'a hash you did not compute is a claim'",
+      "repair": "Allow evidence_url only under a stated public dashboard origin and reject any other scheme or host in the CI gate; rename identity_map_sha256 to informational_identity_map_fingerprint or drop it in favour of identity_map_version; list the grep patterns (RFC1918 and public IPs, .local and .internal hostnames, home-directory and /srv paths, bot branch names) and commit a fixture containing one of each that must fail the gate.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "658ff582448141fdefd5ca2f6b48e84971d0c161a4d17298716c032bd3340da3"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P4 acceptance 'grep proof both repos'; §6 Inversion; import-autopilot-qualification.py 'deprecated'; KR1 wording",
+      "claim": "The proof that no second silent writer remains is stated as a grep with no named target, the importer is deprecated rather than disabled, and 'authoritative' is undefined given that engine-qualify still writes local rows needed for offline admission and adopt still writes exam rows into scorecard.jsonl. As written KR1 cannot be shown true or false.",
+      "evidence": "Plan P4: 'one store of record (grep proof both repos)'; §6: 'a test greps for it'; file map: importer 'kept for backfill only; P4 marks deprecated'. Code: adopt writes rows via engine-scorecard.js record; build-qualification-defaults.js reads scorecard.jsonl as the source of the shipped artifact.",
+      "evidence_reference": "Plan §2 KR1; §4 Phases P4 acceptance; §6 'Inversion'; §3 autopilot and llm-playground file maps; scripts/adopt-qualification-defaults.js recordRow; scripts/build-qualification-defaults.js readStoreRows",
+      "repair": "Define authoritative as 'the store the published feed is built from'. Name the mechanism: a CI test in llm-playground asserting that only ingest-qualification-record.py writes under benchmarks/qualification/ (importer exits non-zero unless --backfill-until <date> is given, with a test for that), plus a reconcile report in autopilot comparing acked outbox ids to registry record ids and failing on any local-only record older than 24 h.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "532645bdd0166cba3fdb7c03a2cf323c4438c61c8059963a7340c563bd1b7608"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§2.5 validator claim; §4 B1 'generated from a pinned feed snapshot'; P4 'built-in defaults regenerate byte-identical from the snapshot'; §3 autopilot file map and sizing",
+      "claim": "Two claims about existing code are inaccurate and one piece of B1 work is undersized: validate-json-schema.js no longer rejects non-integer numbers; current.json already carries fetched_at; and build-qualification-defaults.js derives the artifact from the local scorecard store plus a recipe of event_ids with a byte-compare --check, so regenerating it from a feed snapshot changes the generator, the recipe, the schema and hooks/tests/qualification-defaults.test.sh, none of which are in the file map beyond a generic hooks/tests/* entry.",
+      "evidence": "build-qualification-defaults.js header: 'Same store + same recipe + same bundles in => byte-identical artifact out' and --check 're-derive in memory and byte-compare'. Its seatHash comment says the test suite pins the committed artifact's seat_hash, while the plan drops seat_hash from the feed. writeCache already writes fetched_at into current.json.",
+      "evidence_reference": "Plan §2.5 bullet 4; §4 'Autopilot read side' cache and B1 bullets; §3 autopilot list 'about 10 files'; scripts/build-qualification-defaults.js header, deriveArtifact, main --check; scripts/lib/qualification-feed.js writeCache",
+      "repair": "Correct the two factual claims. Add to the file map references/official-qualification-defaults.recipe.json, schemas/official-qualification-defaults.schema.json and hooks/tests/qualification-defaults.test.sh, and describe B1 as a new --from-snapshot mode that records the snapshot digest and generated_at in the recipe while keeping --check byte-identical; resize P4 accordingly or move B1 into its own phase.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6313446ef26fbb19b1fdcb820bbe7f19c87dd06250ae94b474776677ceac80b0"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 Phases table P4; phase ordering sentence after the table; §8 open questions",
+      "claim": "P4 bundles several independently reversible changes (v2 becomes the published schema, importer deprecation, duplicate store removal, B1 snapshot generation, release gate) into one M-sized breaking step, so a rollback of one forces rollback of all. Dependencies are implied rather than stated: P2 needs the P1 metrics file, P3 needs the P1 ingest and the P1 transport decision, P4 needs P3 acks to drain before the old store is removed.",
+      "evidence": "Plan: 'P4 is the only breaking step' with five deliverables listed in one row; 'Each phase merges independently (P1 and P2 are additive; P3 is dark until the ingest exists)'; transport 'decided in P1'.",
+      "evidence_reference": "Plan §4 Phases table P4 row and the paragraph following the table; §8 Open questions",
+      "repair": "Add an explicit dependency list (P2 after P1 metrics file; P3 after P1 ingest and transport; P4 after a reconcile report shows zero pending outbox entries across the owner's installs) and split P4 into P4a (schema v2 publish, additive for the existing reader since parseFeed accepts any v<n>) and P4b (importer disable and store removal, the single breaking step behind the alpha gate).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "fable_chair",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b6094947e75824b3f4a2bb1d7f7848ba5c55334792470e217d20701b369bb1ab"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "autopilot strike reconciliation between feed strikes[] and the local strike store (engine-scorecard.js and feed consumers)",
+      "claim": "The plan never defines how feed strikes enter local strike state, and its wording implies a feed refresh applies them, which would let the feed silently un-admit a seat.",
+      "evidence": "Write path step 5 says 'a feed refresh never overwrites a local strike not yet acked', which presupposes that refreshes do apply feed strikes to local state; the read side says admission uses 'local identity + local strikes + last adopted snapshot' and the schema section calls top-level strikes[] 'authoritative'. Nowhere is it stated whether a feed-borne strike is applied automatically on fetch or refresh versus only via an explicit adopt command, and no negative control covers a feed strike changing admission.",
+      "evidence_reference": "Plan section 4 Write path step 5; Plan section 4 Autopilot read side Offline bullet; Plan section 4 schema strikes row; Plan section 2.5 'Fetch and adopt stay separate'",
+      "repair": "Decide in the plan that feed strikes affect admission only after an explicit operator adopt command, mirroring the defaults separation: fetch and refresh never mutate strike state and local un-acked strikes always win. Add a P2 negative control: a feed carrying a new strike for an admitted seat, after fetch and refresh, must leave admission byte-identical until the explicit adopt runs, shown red before green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9168686dd0b7b65fbe14abfb31af2a640bbdea14223150139afe92b71ccb34a7"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "v2 feed top-level discriminator and compatibility contract (build-qualification-feed.py output, qualification-feed.js parseFeed, all v1 consumers)",
+      "claim": "The v2 document identity is specified twice with different field names, leaving ambiguous which field existing v1 consumers key on, and an unlucky reading silently breaks every pre-P2 reader.",
+      "evidence": "Section 2.6 says 'schema bumped to model-dyno.qualification-feed.v2' while the section 4 top-level row says 'schema_version 2'. The shipped reader parseFeed admits a document only when doc.schema matches the model-dyno.qualification-feed.v<digits> pattern or artifact_type matches the defaults spellings; it never reads schema_version. If the v2 producer follows the table and emits schema_version while dropping schema, every reader without P2, including shipped copies of adopt-qualification-defaults.js in other installs, rejects the document and the additive-compatibility claim is false.",
+      "evidence_reference": "scripts/lib/qualification-feed.js parseFeed isFeedSchema and isDefaultsArtifact checks; Plan section 2.6 Change-policy decisions; Plan section 4 schema Top-level row",
+      "repair": "Pin the discriminator in the spec: the string field 'schema' with value 'model-dyno.qualification-feed.v2' remains the sole version discriminator and is retained in every emitted document; either remove 'schema_version' or define it as an auxiliary integer no consumer keys on. Add a compatibility test that the current parseFeed accepts a v2 fixture unchanged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0af3d77466d1f5e98551deb933db4458eae3ea3a15e426487b009a88abc27db5"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "integers-on-the-wire rule enforcement (Plan section 2.5 global constraint, v2 schema validation in the publish workflow)",
+      "claim": "The plan grounds its integer rule in a validator behavior the current code no longer has, so the stated enforcement mechanism for 'numbers on the wire are integers' does not exist.",
+      "evidence": "Plan section 2.5 says 'validate-json-schema.js rejects non-integer JSON numbers', but both context scripts document the opposite: build-qualification-defaults.js states 'the validator now accepts a non-integer literal whenever it round-trips losslessly (see validate-json-schema.js parseNumber)' and adopt-qualification-defaults.js carries the same reopened-F3 note. A fractional pass_rate_permille or usd_per_task_micro would pass the invoked validator today.",
+      "evidence_reference": "scripts/build-qualification-defaults.js losslessNumber and validateAgainstSchema comments; scripts/adopt-qualification-defaults.js F3 comment; Plan section 2.5 bullet 4",
+      "repair": "Correct the claim in section 2.5 and enforce integers in the v2 JSON schema itself (type integer for all *_permille, *_milli, *_micro and count fields). Add a P1 negative control: a fixture with a fractional permille value must fail schema validation, shown red before green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "66998e678ce66814bc7b24e53811e9953802da9dee0e0c15917d109fec00239d"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "publish-public-dashboard.yml disclosure gates (infrastructure-leak grep, trust-machinery exclusion)",
+      "claim": "The leak check is named but carries no negative control, and the plan names no mechanism for checking that the feed carries no trust machinery, despite its own constraint that every new check ships red-first.",
+      "evidence": "Section 6 lists 'CI grep gate for hostnames/IPs' and section 2.5 requires 'New or changed checks ship with a negative control shown red before green', yet the P1 negative-control cell covers only cost 0, oversize, and duplicate strike_seq. For ADR-0001 the plan restates 'no signatures, hash chains, witness receipts' but names no check that would fail if such a field appeared, and the seat_metrics and strikes rows define no field allowlist that would structurally exclude one.",
+      "evidence_reference": "Plan section 4 phase table P1 negative-control column; Plan section 6 Risks; Plan section 2.5 constraint 5; ADR-0001 notices in the headers of scripts/adopt-qualification-defaults.js and scripts/build-qualification-defaults.js",
+      "repair": "Extend P1: the publish CI greps the emitted feed for hostname, IP, path, and endpoint patterns and validates it against a closed v2 schema (reject unknown properties) so trust-machinery fields cannot ride along. Negative controls: one fixture containing a hostname and one containing a 'signature' field must each fail the publish, shown red before green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "826197fdd7d971aca16463dd23ab8aa8d11f85cae7549d738708ed8e69dc5e61"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "record kind enumeration (scripts/eval/qualification.py, v2 schema kind field, CI partition check)",
+      "claim": "The kind enumeration is stated with two different values inside the same plan.",
+      "evidence": "Section 3 file map says qualification.py records 'qualification vs benchmark_observation'; the section 4 schema table says kind is 'qualification or benchmark'. An implementer writing the schema and the kind-mixing check from different rows of the plan would produce two vocabularies, and the kind-mixing rule itself has no named negative control in any phase cell.",
+      "evidence_reference": "Plan section 3 llm-playground file list qualification.py entry; Plan section 4 schema kind row",
+      "repair": "Pick one enumeration (for example qualification and benchmark_observation) and use it in the schema table, the partition rule, and the CI check; add the missing kind-mixing negative control: an object carrying both a qualification block and a benchmark block must fail validation. No current change beyond the plan text; follow-up only within P1.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1294bb010ba036b8834c2dd0dd5c9866b3f3d79f53ece7de382e234761f24931"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "B1 snapshot age gate in the autopilot release path",
+      "claim": "The plan states the release gate's reaction to an over-age snapshot inconsistently: warn in one place, fail in another.",
+      "evidence": "The B1 bullet says 'the release gate warns when the snapshot is older than N days (N=30)' while the P4 negative control says 'stale snapshot (>30 d) fails release gate'.",
+      "evidence_reference": "Plan section 4 Autopilot read side B1 bullet; Plan section 4 phase table P4 negative-control cell",
+      "repair": "Pick one behavior and state it once; failing the release gate matches the negative control, and the plan should say explicitly that this build-time gate sits outside the runtime advisory-only rule, which governs feed reachability and staleness at admission time, not release checks. No current change beyond the plan text; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f952745ee1ce8fdd62fa89a81ae445c6dcaba4f2483b22a5b7ae6452f1822de6"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "qualification outbox pending.jsonl crash recovery (scripts/lib/qualification-send-queue.js flush)",
+      "claim": "The no-loss argument assumes the append-only outbox is always well-formed, but recovery from a torn final line after a crash mid-append is undefined.",
+      "evidence": "Write path step 1 specifies 'append-only, fsync' and step 4 says nothing is deleted on failure, but neither the write path nor the P3 fault tests defines what flush does when pending.jsonl ends in a partial JSON line: skip silently, refuse, or quarantine.",
+      "evidence_reference": "Plan section 4 Write path steps 1 and 4; Plan section 4 phase table P3 row",
+      "repair": "Specify in P3: flush validates the final line and quarantines a torn tail with a loud error before sending anything, or each line carries a checksum; add a fault case that truncates the last line mid-write and requires zero loss and zero duplicate sends on the next flush. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ac94a960b365f55a5438b3db6c47cda4e163ed8c1d414c52a31c8d0551a2b442"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P4 single-store proof (grep test across both repos, importer loop-detection test)",
+      "claim": "The mechanism that proves no second silent writer remains is named as a grep over both repos, but its pattern, scope, and red-first negative control are not specified.",
+      "evidence": "P4 acceptance says 'one store of record (grep proof both repos)' and section 6 says 'P4 removes it and a test greps for it', without naming what is grepped for (for example exam-record writes outside the ingest path, or the importer reading the built-in defaults) or a control that plants a second writer and shows the test red.",
+      "evidence_reference": "Plan section 4 phase table P4 acceptance cell; Plan section 6 Inversion paragraph",
+      "repair": "Define the check concretely: forbidden patterns across both repos, such as appending exam records to any store other than the outbox and evidence paths, plus the existing loop-detection test; include a negative control that temporarily re-adds a second writer and shows the grep test fail. No current change; follow-up only within P4.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1fd61f4911bc99d6720e65576db1a641ee60ad70b4452517f51fe151ad2f991e"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "feed size baseline and the 4 MB publish threshold sizing",
+      "claim": "The plan's feed-size baseline conflicts with the size note recorded in the reader's code and the discrepancy is not reconciled.",
+      "evidence": "The plan says 'current v1 feed is 394 KB (29 defaults, 120 priors)'; scripts/lib/qualification-feed.js states 'the 2026-09-02 sample with 29 defaults / 1 strike / 53 priors is ~1 MB'. A feed with more than twice the priors being about a quarter of the size is unexplained, and the two baselines imply different growth paths toward the 4 MB gate and the 8 MB reader cap.",
+      "evidence_reference": "Plan section 4 size estimate paragraph; scripts/lib/qualification-feed.js MAX_FEED_BYTES comment",
+      "repair": "Re-measure the live v1 feed in P1, record the actual bytes and entry counts in the plan, and re-derive the 4 MB publish threshold and the headroom statement from the measured baseline. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_deep",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ff881a1b9768a8a3f1f0e362e31a3c5e78ee55da380bcc7fefa7476ae4e3682f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/eval/import-autopilot-qualification.py in llm-playground; P4 acceptance criteria",
+      "claim": "The plan states the importer is 'kept for backfill only; P4 marks deprecated' but does not specify an enforcement mechanism that prevents execution after P4. Deprecation is advisory, not enforced, yet R6 requires each rule to be enforced by a mechanism that fails when the rule breaks.",
+      "evidence": "Plan section 3 file map: 'import-autopilot-qualification.py (kept for backfill only; P4 marks deprecated)'. P4 negative control only addresses the circular loop ('re-enabling the importer to read defaults is blocked by a loop-detection test'), not the importer running independently to write records into the registry after P4.",
+      "evidence_reference": "Plan section 3 file map entry for import-autopilot-qualification.py; section 4 P4 row negative-control column",
+      "repair": "State explicitly whether the importer is (a) deleted in P4, (b) modified to exit non-zero when invoked post-P4, or (c) gated by a CI check that fails if the file is present. Add a corresponding negative control: 'running the importer after P4 must fail red'.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_consult",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "62457e6ae5d903d05f01d58f0d79fb1db3b07448b09cd10167c50981265fe2b7"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Feed schema v2, speed block, median_wall_s field",
+      "claim": "median_wall_s is described as a per-task median in seconds, but the global constraint states all numbers on the wire are integers. A median wall time in seconds is typically fractional; the field name implies seconds rather than integer milliseconds, leaving the type and rounding ambiguous for consumers.",
+      "evidence": "Plan section 2.5: 'Numbers on the wire are integers (validate-json-schema.js rejects non-integer JSON numbers).' Plan section 4 schema table speed row: 'median_wall_s = per task'. No rounding rule or unit conversion is stated for this field, unlike the permille and milli fields which are self-describing integer units.",
+      "evidence_reference": "Plan section 2.5 global constraints; section 4 schema table speed row",
+      "repair": "Either rename to median_wall_ms and define it as integer milliseconds (consistent with the milli convention), or state an explicit rounding rule such as round-half-up to integer seconds in the schema table row.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_consult",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1c8a773d0ab0a2fba92488bd00550bfef5800557ba023c15f4b4c5660966712a"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 2.5 global constraints; enforcement story for integer-only feed numbers",
+      "claim": "The plan asserts 'validate-json-schema.js rejects non-integer JSON numbers' but the existing code comment in build-qualification-defaults.js states the validator now accepts a non-integer literal whenever it round-trips losslessly. The enforcement claim about existing code is false.",
+      "evidence": "Plan section 2.5: 'Numbers on the wire are integers (validate-json-schema.js rejects non-integer JSON numbers).' Source context scripts/build-qualification-defaults.js comment near losslessNumber: 'The validator now accepts a non-integer literal whenever it round-trips losslessly (parse, canonical re-serialize, exact byte match; see validate-json-schema.js parseNumber).'",
+      "evidence_reference": "Plan section 2.5; scripts/build-qualification-defaults.js comment block above losslessNumber function",
+      "repair": "Correct the plan to state that the integer constraint is enforced by the feed JSON Schema definition (e.g. type integer or multipleOf 1) validated via validate-json-schema.js against a v2-specific schema file, not by a blanket validator preflight rejection of all non-integers.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_consult",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1991825c577af7f5570e7fd2ae27333cfc591b200c22daa8e431d04baac8623b"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Feed schema v2 qualification block evidence_url field; CI publish gate",
+      "claim": "The plan specifies a CI grep gate for hostnames and IPs but does not explicitly state that evidence_url values are covered by that gate. An evidence_url pointing to an internal host or path would leak infrastructure detail.",
+      "evidence": "Plan section 6 risk mitigation: 'CI grep gate for hostnames/IPs.' Plan section 4 schema table qualification block includes evidence_url. No statement that evidence_url is sanitized or included in the grep gate scope.",
+      "evidence_reference": "Plan section 4 schema table qualification block; section 6 risk 'Public bundle leaks infrastructure (GLM)'",
+      "repair": "No current change; follow-up only. In P1, add evidence_url to the CI grep gate scope and state in the plan that evidence_url must be a public URL or null.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_consult",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e50119a9c28f118975b55ca68cac47040a3338a7f832905e410e9071e3b6939"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 4 size-estimate paragraph; headroom calculation",
+      "claim": "The plan states 'current v1 feed is 394 KB (29 defaults, 120 priors)' but the existing code comment in qualification-feed.js describes the 2026-09-02 sample as approximately 1 MB with 29 defaults and 53 priors. The size decreased while the prior count more than doubled, without explanation.",
+      "evidence": "Plan section 4: 'current v1 feed is 394 KB (29 defaults, 120 priors).' Source context scripts/lib/qualification-feed.js comment near MAX_FEED_BYTES: 'the 2026-09-02 sample with 29 defaults / 1 strike / 53 priors is ~1 MB'.",
+      "evidence_reference": "Plan section 4 size-estimate paragraph; scripts/lib/qualification-feed.js comment block above MAX_FEED_BYTES constant",
+      "repair": "No current change; follow-up only. Reconcile the size claim before P1 sizing work: either update the code comment to reflect the current feed, or correct the plan figure if the feed is actually closer to 1 MB. The stated 8x headroom calculation depends on an accurate baseline.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_consult",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0ad4dfb5e12a1b7112e7ff3c7fcad688bf6f45ff02536281ba8040c620c134f"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Admission, feed adoption, and strike reconciliation",
+      "claim": "The plan does not resolve whether remotely adopted qualifications and strikes may change admission, and its stated rules contradict each other.",
+      "evidence": "The global constraint limits admission to locally re-derived identity and local strikes, but the read side includes the last adopted snapshot and the schema calls published strikes authoritative. Existing cmdAdopt copies feed qualification rows and capability evidence into the local admission stores; locally recomputing identity does not independently establish qualification.",
+      "evidence_reference": "Plan sections 2.5 and 4, strikes and Autopilot read side; supplied scripts/adopt-qualification-defaults.js functions cmdAdopt, adoptCapabilityEvidence, and recordRow",
+      "repair": "Define which local evidence establishes admission and make feed qualification and strike fields advisory under R2. Explicitly resolve the existing adoption contract and test that explicit adoption, feed strike additions, lifts, and refreshes cannot change admission without the specified independent local action.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d6abbc34cab9dd3dec8eb240a1fd97d2a2a632e08d0b15cc40901fe317d5829"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Outbox durability, ingest acknowledgments, and strike sequencing",
+      "claim": "The write protocol leaves loss and duplication windows undefined despite claiming protection at every failure step.",
+      "evidence": "The write path starts after an administration finishes, performs separate outbox and evidence writes, and permits deletion after observing an acknowledgment in the registry repo. It does not define recovery for a crash before enqueue, partial append, concurrent flushes, same-ID different-payload submissions, or an acknowledgment to a bot branch that never reaches the authoritative registry. Monotonic per-seat strike_seq also has no allocation authority for offline writers.",
+      "evidence_reference": "Plan section 4, Write path steps 1–5 and P3 acceptance; section 4 strikes schema",
+      "repair": "Specify the durable completion boundary, recovery source, serialized queue transitions, immutable ID and payload-conflict semantics, authoritative acknowledgment condition, and registry-owned strike sequencing before choosing transport. Require fault tests at each durable transition, including process termination, concurrent replay, conflicting duplicates, CI rejection, and unmerged branch acknowledgment.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "308a092ef70007199b8807b8f4c0484729a4d2b913fca40de981083918705a72"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 metrics publication and v2 schema",
+      "claim": "The schema is not yet unambiguous enough to implement the first producer slice.",
+      "evidence": "The table defines most metric fields without explicit JSON types or required/null rules. entry_id omits role-independent kind and instrument_version distinctions beyond an unspecified seat identity, and qualification entries sharing a window can collide. Zero denominators, partial cost coverage, median rounding, pass-rate denominator, and whether low_n changes qualification status are undefined. The kind vocabulary also differs between qualification.py's benchmark_observation and the wire's benchmark without a mapping.",
+      "evidence_reference": "Plan section 3 qualification.py entry; section 4 New feed schema, entry_id, benchmark, speed, cost, and sampling rows",
+      "repair": "Freeze a discriminated wire schema with required fields, types, units, rounding, null and zero-denominator semantics, aggregation keys, stable record-versus-aggregate identity, and an explicit internal-to-wire kind mapping. Add negative fixtures for mixed kinds, collisions, partial cost coverage, and undefined denominators.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9a2b683555e18c7b7b6804b2f1c1f3fa2db92b9daef2d99a0a2850b05a67430e"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 writer retirement and authoritative-store migration",
+      "claim": "A grep proof and importer deprecation do not establish that all remaining record writers have been retired.",
+      "evidence": "P4 merely deprecates the importer and calls scorecard.jsonl a cache, while the supplied adopter actively invokes engine-scorecard.js record and independently appends qualification-evidence.jsonl. The plan retains local evidence but does not define its authority boundary or inventory and disable every mutation entry point. A text grep cannot demonstrate that these executable writers cannot still create authoritative records.",
+      "evidence_reference": "Plan sections 1, 4 P4, and 6; supplied scripts/adopt-qualification-defaults.js functions adoptCapabilityEvidence and recordRow",
+      "repair": "Inventory all record-producing commands and direct append paths in both repos, assign each a post-cutover role, and enforce retirement or queue routing at the mutation boundary. Define reconciliation and migration completeness criteria, with negative tests invoking legacy writers and proving they cannot create a second authoritative exam record.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "70a6b5cec36813615e6a12b76ab2d41d8afc5473dd4a582aefe9d2d85eb6177e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 cross-repo cutover and public compatibility",
+      "claim": "The breaking cutover lacks a complete compatibility and rollback contract.",
+      "evidence": "The plan orders the new producer after the autopilot reader, but does not address already released consumers or name the promised v1 compatibility tests. P4 simultaneously changes publication, snapshot generation, importer behavior, and storage authority across two repos. Owner alpha approval is the only named gate; rollback guidance, a versioning decision, and required CHANGELOG coverage are absent.",
+      "evidence_reference": "Plan sections 2.6 and 4 P4; supplied scripts/lib/qualification-feed.js parseFeed accepts version-shaped schema names but does not validate v2 entry semantics",
+      "repair": "Define supported released consumers and executable compatibility cases, specify the exact cross-repo deployment order and cutover readiness conditions, and record the public versioning decision, migration notes, CHANGELOG updates, and rollback procedure that preserves queued and accepted records.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c633748f7585b9fd8fa82bd58eb107eceb9bd83d9627836d363c5a3b227e2fd1"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Feed age calculation and snapshot age reporting",
+      "claim": "The proposed TTL can report an old producer document as fresh after every fetch.",
+      "evidence": "The cache records fetched_at and max_age_s, but no rule combines retrieval age with generated_at. Repeatedly fetching an unchanged stale feed can therefore reset the described TTL. The read side says snapshot age only warns, while P4 says a snapshot older than 30 days fails the release gate.",
+      "evidence_reference": "Plan section 4 Autopilot read side and P4 negative control; supplied scripts/lib/qualification-feed.js writeCache",
+      "repair": "During P2, define and expose both retrieval age and producer age, handle missing or future timestamps, and test repeated fetching of an old document. Resolve whether snapshot age warns or blocks releases while keeping all admission behavior advisory-only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e2cda7288137215f6a3088ac6e315d3e674e26d70b9851a8f9ea624db9e6bfe"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Public feed projection and publication checks",
+      "claim": "The disclosure checks do not cover the fields that can carry infrastructure details or prohibited trust machinery.",
+      "evidence": "The feed publishes runner, evidence_url, reason, and other strings, while existing defaults contain verbatim row and capability-evidence objects. The only described leak check is a hostname/IP grep, which does not establish exclusion of paths or private endpoints. No executable check or negative control rejects signatures, witness receipts, or hash chains.",
+      "evidence_reference": "Plan sections 2.5, 4 schema, and 6 public bundle risk; supplied scripts/build-qualification-defaults.js buildEntry returns shippedRow and capabilityEvidence",
+      "repair": "Specify an allowlisted public projection for every published collection, including existing defaults and nested evidence. Define allowed public evidence URLs and runner identifiers, forbid raw private payload passthrough, and gate publication with negative fixtures containing paths, private endpoints, hostnames, and prohibited trust fields.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "54a5e3e6b2509ac63b16d4ee08b4edcae9c50d7096a5b15ded2e3e932a7cb40c"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Validator premise and implementation file map",
+      "claim": "The plan's validator claim is contradicted by the supplied code, and its file map omits necessary schema work.",
+      "evidence": "Section 2.5 says validate-json-schema.js rejects non-integer JSON numbers. Both supplied defaults scripts explicitly document that it now accepts losslessly round-tripping fractional numbers. The file map names schema validation but lists no new feed schema or changes to the existing defaults schema required by the snapshot contract.",
+      "evidence_reference": "Plan sections 2.5, 3, and 5; supplied scripts/build-qualification-defaults.js losslessNumber and validateAgainstSchema; scripts/adopt-qualification-defaults.js cmdAdopt capability_score validation",
+      "repair": "Correct the validator premise, retain integer metrics as an explicit wire-design choice if desired, and add the schema files, compatibility fixtures, and snapshot metadata changes to the file map and sizing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_consult",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a3188eb48753a4386ba985ffcf857178354895a3d80411c4196a9a772e749e97"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "69e8bfef60f6fcdc039fc8b9ecc04782a3ca9cf4a97ffd900eab6699f1ae960d",
+      "rubric_id": "R2",
+      "affected_surface": "P2 negative control; §4 Autopilot read side 'Offline' bullet",
+      "claim": "The P2 negative control 'a feed claiming qualified with no local evidence must NOT admit a seat' is ambiguous because the existing adopt path deliberately turns a feed default into an ordinary admitted scorecard row. Without defining whether an adopted row counts as local evidence the control is either untestable or contradicts the shipped adopt contract.",
+      "evidence_reference": "Plan §4 Phases table P2 'Negative control'; scripts/adopt-qualification-defaults.js header comment and cmdAdopt provenance block",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f5ad801c5d942204ee70c5d5e20336e61f833679b1ce6dfc0ca83bc56ab4bd02",
+      "rubric_id": "R3",
+      "affected_surface": "§4 Write path steps 3 and 4; qualification-send-queue.js; §5 'fault-injection replay'",
+      "claim": "The outbox state machine and its test mechanism are underspecified: pending.jsonl is append-only yet entries become 'acked' and are 'deleted', deletion waits for the record to appear 'in the published feed', and no fault-injection hook is named. A record ingested but filtered out of the feed would stay pending forever and trip the 24 h stuck alarm permanently.",
+      "evidence_reference": "Plan §4 'Write path' steps 1, 3, 4; §5 'Script-gated'; scripts/lib/qualification-feed.js loadFeed fetchImpl option",
+      "disposition": null
+    },
+    {
+      "fingerprint": "25cf87052adaae0657c08f2c473d18a229d8341690b8db70e295a05edf355160",
+      "rubric_id": "R4",
+      "affected_surface": "§4 'New feed schema' table; P1 sibling file qualification-metrics.json",
+      "claim": "Several field semantics are undefined: usd_per_solved_micro and pass_rate_permille when n_pass or n_attempts is zero; the relationship among n_trials, n_tasks and n_attempts; type, unit and rounding of median_wall_s; the canonical encoding behind entry_id; which blocks are required or forbidden per kind (the table lists qualification, benchmark, speed and cost blocks on one entry while saying kinds never mix); the type of lifted_by; and the schema identifier the P1 sibling metrics file declares.",
+      "evidence_reference": "Plan §4 schema table rows 'benchmark block', 'speed', 'cost', 'sampling', 'strikes', 'entry_id'; §2.6 sibling file; scripts/lib/qualification-feed.js parseFeed isFeedSchema regex",
+      "disposition": null
+    },
+    {
+      "fingerprint": "81d8717f5c560d481896ed0524f3cc051167c53275d89fe1cf008bdded08fd81",
+      "rubric_id": "R6",
+      "affected_surface": "§4 B1 release gate; P4 negative control; §2.5 'no timer auto-adopts'; cost 'sorting treats null as last'; P4 'loop-detection test'",
+      "claim": "Several stated rules lack an enforcing mechanism or a named negative control, and one rule contradicts itself: B1 says the release gate 'warns' when the snapshot is older than 30 days while the P4 negative control says a stale snapshot 'fails' the release gate. No-auto-adopt, null-sorts-last and the importer loop-detection test are stated without saying what fails when they break.",
+      "evidence_reference": "Plan §4 'Autopilot read side' B1 bullet; §4 Phases P4 negative control; §2.5 bullet 3; §4 schema table cost row; scripts/adopt-qualification-defaults.js comment naming hooks/tests/qualification-feed-adopt.test.sh",
+      "disposition": null
+    },
+    {
+      "fingerprint": "31978ecefddcf615cf78297e96f2c908147aa340cb97bc6ff5c92c73c4d95d51",
+      "rubric_id": "R7",
+      "affected_surface": "§4 Autopilot read side cache bullet; P2 acceptance and negative control; engine-scorecard.js status",
+      "claim": "Stale behaviour is advisory as required, but the plan does not say where the staleness warning surfaces, what the observable upper bound is when the feed stays unreachable past the TTL, or what negative control proves the warning fires. P2 has no red-before-green control for the TTL path itself.",
+      "evidence_reference": "Plan §4 'Autopilot read side' first bullet; §4 Phases P2 acceptance and negative control; scripts/lib/qualification-feed.js writeCache manifest fetched_at",
+      "disposition": null
+    },
+    {
+      "fingerprint": "658ff582448141fdefd5ca2f6b48e84971d0c161a4d17298716c032bd3340da3",
+      "rubric_id": "R8",
+      "affected_surface": "§4 schema qualification block evidence_url; join block identity_map_sha256; §6 'CI grep gate for hostnames/IPs'",
+      "claim": "The feed publishes evidence_url, which is by definition an endpoint, while the plan says endpoint names are never published; identity_map_sha256 is a hash consumers cannot recompute and reads as trust machinery under the plan's own seat_hash reasoning; and the disclosure grep gate names no pattern set or negative fixture.",
+      "evidence_reference": "Plan §4 schema table qualification block, join row, host row; §6 risk 'Public bundle leaks infrastructure'; scripts/lib/qualification-feed.js header 'a hash you did not compute is a claim'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "532645bdd0166cba3fdb7c03a2cf323c4438c61c8059963a7340c563bd1b7608",
+      "rubric_id": "R1",
+      "affected_surface": "P4 acceptance 'grep proof both repos'; §6 Inversion; import-autopilot-qualification.py 'deprecated'; KR1 wording",
+      "claim": "The proof that no second silent writer remains is stated as a grep with no named target, the importer is deprecated rather than disabled, and 'authoritative' is undefined given that engine-qualify still writes local rows needed for offline admission and adopt still writes exam rows into scorecard.jsonl. As written KR1 cannot be shown true or false.",
+      "evidence_reference": "Plan §2 KR1; §4 Phases P4 acceptance; §6 'Inversion'; §3 autopilot and llm-playground file maps; scripts/adopt-qualification-defaults.js recordRow; scripts/build-qualification-defaults.js readStoreRows",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6313446ef26fbb19b1fdcb820bbe7f19c87dd06250ae94b474776677ceac80b0",
+      "rubric_id": "R9",
+      "affected_surface": "§2.5 validator claim; §4 B1 'generated from a pinned feed snapshot'; P4 'built-in defaults regenerate byte-identical from the snapshot'; §3 autopilot file map and sizing",
+      "claim": "Two claims about existing code are inaccurate and one piece of B1 work is undersized: validate-json-schema.js no longer rejects non-integer numbers; current.json already carries fetched_at; and build-qualification-defaults.js derives the artifact from the local scorecard store plus a recipe of event_ids with a byte-compare --check, so regenerating it from a feed snapshot changes the generator, the recipe, the schema and hooks/tests/qualification-defaults.test.sh, none of which are in the file map beyond a generic hooks/tests/* entry.",
+      "evidence_reference": "Plan §2.5 bullet 4; §4 'Autopilot read side' cache and B1 bullets; §3 autopilot list 'about 10 files'; scripts/build-qualification-defaults.js header, deriveArtifact, main --check; scripts/lib/qualification-feed.js writeCache",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b6094947e75824b3f4a2bb1d7f7848ba5c55334792470e217d20701b369bb1ab",
+      "rubric_id": "R5",
+      "affected_surface": "§4 Phases table P4; phase ordering sentence after the table; §8 open questions",
+      "claim": "P4 bundles several independently reversible changes (v2 becomes the published schema, importer deprecation, duplicate store removal, B1 snapshot generation, release gate) into one M-sized breaking step, so a rollback of one forces rollback of all. Dependencies are implied rather than stated: P2 needs the P1 metrics file, P3 needs the P1 ingest and the P1 transport decision, P4 needs P3 acks to drain before the old store is removed.",
+      "evidence_reference": "Plan §4 Phases table P4 row and the paragraph following the table; §8 Open questions",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1294bb010ba036b8834c2dd0dd5c9866b3f3d79f53ece7de382e234761f24931",
+      "rubric_id": "R4",
+      "affected_surface": "record kind enumeration (scripts/eval/qualification.py, v2 schema kind field, CI partition check)",
+      "claim": "The kind enumeration is stated with two different values inside the same plan.",
+      "evidence_reference": "Plan section 3 llm-playground file list qualification.py entry; Plan section 4 schema kind row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f952745ee1ce8fdd62fa89a81ae445c6dcaba4f2483b22a5b7ae6452f1822de6",
+      "rubric_id": "R7",
+      "affected_surface": "B1 snapshot age gate in the autopilot release path",
+      "claim": "The plan states the release gate's reaction to an over-age snapshot inconsistently: warn in one place, fail in another.",
+      "evidence_reference": "Plan section 4 Autopilot read side B1 bullet; Plan section 4 phase table P4 negative-control cell",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ac94a960b365f55a5438b3db6c47cda4e163ed8c1d414c52a31c8d0551a2b442",
+      "rubric_id": "R3",
+      "affected_surface": "qualification outbox pending.jsonl crash recovery (scripts/lib/qualification-send-queue.js flush)",
+      "claim": "The no-loss argument assumes the append-only outbox is always well-formed, but recovery from a torn final line after a crash mid-append is undefined.",
+      "evidence_reference": "Plan section 4 Write path steps 1 and 4; Plan section 4 phase table P3 row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1fd61f4911bc99d6720e65576db1a641ee60ad70b4452517f51fe151ad2f991e",
+      "rubric_id": "R1",
+      "affected_surface": "P4 single-store proof (grep test across both repos, importer loop-detection test)",
+      "claim": "The mechanism that proves no second silent writer remains is named as a grep over both repos, but its pattern, scope, and red-first negative control are not specified.",
+      "evidence_reference": "Plan section 4 phase table P4 acceptance cell; Plan section 6 Inversion paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ff881a1b9768a8a3f1f0e362e31a3c5e78ee55da380bcc7fefa7476ae4e3682f",
+      "rubric_id": "R9",
+      "affected_surface": "feed size baseline and the 4 MB publish threshold sizing",
+      "claim": "The plan's feed-size baseline conflicts with the size note recorded in the reader's code and the discrepancy is not reconciled.",
+      "evidence_reference": "Plan section 4 size estimate paragraph; scripts/lib/qualification-feed.js MAX_FEED_BYTES comment",
+      "disposition": null
+    },
+    {
+      "fingerprint": "62457e6ae5d903d05f01d58f0d79fb1db3b07448b09cd10167c50981265fe2b7",
+      "rubric_id": "R6",
+      "affected_surface": "scripts/eval/import-autopilot-qualification.py in llm-playground; P4 acceptance criteria",
+      "claim": "The plan states the importer is 'kept for backfill only; P4 marks deprecated' but does not specify an enforcement mechanism that prevents execution after P4. Deprecation is advisory, not enforced, yet R6 requires each rule to be enforced by a mechanism that fails when the rule breaks.",
+      "evidence_reference": "Plan section 3 file map entry for import-autopilot-qualification.py; section 4 P4 row negative-control column",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1c8a773d0ab0a2fba92488bd00550bfef5800557ba023c15f4b4c5660966712a",
+      "rubric_id": "R4",
+      "affected_surface": "Feed schema v2, speed block, median_wall_s field",
+      "claim": "median_wall_s is described as a per-task median in seconds, but the global constraint states all numbers on the wire are integers. A median wall time in seconds is typically fractional; the field name implies seconds rather than integer milliseconds, leaving the type and rounding ambiguous for consumers.",
+      "evidence_reference": "Plan section 2.5 global constraints; section 4 schema table speed row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1991825c577af7f5570e7fd2ae27333cfc591b200c22daa8e431d04baac8623b",
+      "rubric_id": "R9",
+      "affected_surface": "Plan section 2.5 global constraints; enforcement story for integer-only feed numbers",
+      "claim": "The plan asserts 'validate-json-schema.js rejects non-integer JSON numbers' but the existing code comment in build-qualification-defaults.js states the validator now accepts a non-integer literal whenever it round-trips losslessly. The enforcement claim about existing code is false.",
+      "evidence_reference": "Plan section 2.5; scripts/build-qualification-defaults.js comment block above losslessNumber function",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0e50119a9c28f118975b55ca68cac47040a3338a7f832905e410e9071e3b6939",
+      "rubric_id": "R8",
+      "affected_surface": "Feed schema v2 qualification block evidence_url field; CI publish gate",
+      "claim": "The plan specifies a CI grep gate for hostnames and IPs but does not explicitly state that evidence_url values are covered by that gate. An evidence_url pointing to an internal host or path would leak infrastructure detail.",
+      "evidence_reference": "Plan section 4 schema table qualification block; section 6 risk 'Public bundle leaks infrastructure (GLM)'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c0ad4dfb5e12a1b7112e7ff3c7fcad688bf6f45ff02536281ba8040c620c134f",
+      "rubric_id": "R9",
+      "affected_surface": "Plan section 4 size-estimate paragraph; headroom calculation",
+      "claim": "The plan states 'current v1 feed is 394 KB (29 defaults, 120 priors)' but the existing code comment in qualification-feed.js describes the 2026-09-02 sample as approximately 1 MB with 29 defaults and 53 priors. The size decreased while the prior count more than doubled, without explanation.",
+      "evidence_reference": "Plan section 4 size-estimate paragraph; scripts/lib/qualification-feed.js comment block above MAX_FEED_BYTES constant",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0e2cda7288137215f6a3088ac6e315d3e674e26d70b9851a8f9ea624db9e6bfe",
+      "rubric_id": "R7",
+      "affected_surface": "Feed age calculation and snapshot age reporting",
+      "claim": "The proposed TTL can report an old producer document as fresh after every fetch.",
+      "evidence_reference": "Plan section 4 Autopilot read side and P4 negative control; supplied scripts/lib/qualification-feed.js writeCache",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a3188eb48753a4386ba985ffcf857178354895a3d80411c4196a9a772e749e97",
+      "rubric_id": "R9",
+      "affected_surface": "Validator premise and implementation file map",
+      "claim": "The plan's validator claim is contradicted by the supplied code, and its file map omits necessary schema work.",
+      "evidence_reference": "Plan sections 2.5, 3, and 5; supplied scripts/build-qualification-defaults.js losslessNumber and validateAgainstSchema; scripts/adopt-qualification-defaults.js cmdAdopt capability_score validation",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-16T10:43:02.028Z"
+}

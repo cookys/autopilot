@@ -59,10 +59,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Built-in defaults (the user's stated good-loop roster; agy is NOT the default
 # implementer because it corrupts the autopilot repo — see config gotchas).
-DEF_REV_ENGINE="gpt-5.5"
+DEF_REV_ENGINE="gpt-6.1-sol"
 DEF_REV_EFFORT="xhigh"
 DEF_REV_RUNNER="codex"
-DEF_IMPL_ENGINE="gpt-5.3-codex-spark"
+DEF_IMPL_ENGINE="gpt-6.1-sol"
 DEF_IMPL_EFFORT="high"
 DEF_IMPL_RUNNER="auto"
 DEF_REV_ENDPOINT=""
@@ -85,12 +85,12 @@ DEF_PLAN_GROWTH_STOP_RATIO="1.50"
 DEF_HARNESS="on"
 # Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
-DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
+DEF_QC_PANEL="gpt-6.1-sol, claude-opus, gemini-flash"
 DEF_QC_PANEL_RUNNERS="codex, claude-native, agy"
 DEF_QC_PANEL_EFFORTS="xhigh, high, high"
 DEF_QC_PANEL_ENDPOINTS="@none, @none, @none"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
-QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-4.5, MiniMax-M3"
+QC_ALL_CALIBRATED="gpt-6.1-sol, claude-opus, gemini-flash, grok-4.7, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 DEF_IN_RAIL_REVIEW="auto"
 DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS="300"
@@ -768,7 +768,7 @@ family_of() {
 # closed if the installed host no longer offers this slug.
 normalize_agy_alias() {
   case "$1" in
-    gemini-flash) printf '%s' 'gemini-3.6-flash-high' ;;
+    gemini-flash) printf '%s' 'gemini-4-argon-high' ;;
     *) printf '%s' "$1" ;;
   esac
 }

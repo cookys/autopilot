@@ -27,8 +27,8 @@
 ## Per-class candidate preference (user-owned; outranks every system ranking)
 
 ```
-- mechanical-impl: [grok-4.5, gpt-5.3-codex-spark]
-- standard-impl:   [grok-4.5]
+- mechanical-impl: [grok-4.7, gpt-6.1-sol]
+- standard-impl:   [grok-4.7]
 - hard-problem:    [depth-0]        # not a dispatch target
 - direction:       [cross-family pair via survey pipeline]
 - review:          [per .claude/review-loop-config.md roster]

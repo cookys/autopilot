@@ -11612,6 +11612,552 @@
     {
       "administration": {
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-09-30",
+        "effort": "low",
+        "engine": "gpt-6.1-sol",
+        "expires": "2026-12-29",
+        "family": "openai",
+        "harness_version": "dispatch-hetero:aef24416",
+        "model": "gpt-6.1-sol",
+        "model_version": "gpt-6.1-sol",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-09-30",
+        "runner": "codex",
+        "runner_version": "codex-cli-0.159.2",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 340,
+        "evidence": {
+          "evidence_hash": "5f716c47b4b8d66e6f4f98597ee6f513e4769c9dad051d0ec49bc7c1d946cf88",
+          "evidence_id": "5f716c47b4b8d66e6f4f98597ee6f513e4769c9dad051d0ec49bc7c1d946cf88",
+          "expires_at": "2026-12-29T18:22:12.243Z",
+          "grant_identity_hash": "5dad4394699b0f54affb5b967357e8852a1b248d9cbf2808ec56c52fcd15599e",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "low",
+            "family": "openai",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "gpt-6.1-sol",
+            "identity_resolved": true,
+            "model_alias": "gpt-6.1-sol",
+            "model_version": "gpt-6.1-sol",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "codex",
+            "runner_version": "codex-cli-0.159.2",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "5dad4394699b0f54affb5b967357e8852a1b248d9cbf2808ec56c52fcd15599e",
+          "issued_at": "2026-09-30T18:22:12.243Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-09-30T18:22:12.243Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "17b560babf5fef6df90c040a3758371625c7fe6ba8a3260ac324897b4b3d635c",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "2b23087ef2ee006bc46d76c90a0c4ecb4cac4ff7ba063930e53af559012503e5",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:22:12.243Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "a3941b62835c1ec48b6dbfcd366d59bce80cf4df2ad2b650dbc82694c2207c16",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:22:12.243Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "2db26131b5d62476677c57e5f124ae1da36a01df90c9ae73325400230d764606"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:gpt-6.1-sol:codex:193",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-01-gpt6-low-sweep/implementer/gpt-6.1-sol-qualify",
+        "evidence_id": "5f716c47b4b8d66e6f4f98597ee6f513e4769c9dad051d0ec49bc7c1d946cf88",
+        "evidence_store": {
+          "event_id": 340,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "2db26131b5d62476677c57e5f124ae1da36a01df90c9ae73325400230d764606"
+        },
+        "official_event_id": 193
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-09-30",
+        "effort": "low",
+        "engine": "gpt-6.1-sol",
+        "evidence": {
+          "evidence_hash": "5f716c47b4b8d66e6f4f98597ee6f513e4769c9dad051d0ec49bc7c1d946cf88",
+          "evidence_id": "5f716c47b4b8d66e6f4f98597ee6f513e4769c9dad051d0ec49bc7c1d946cf88",
+          "expires_at": "2026-12-29T18:22:12.243Z",
+          "grant_identity_hash": "5dad4394699b0f54affb5b967357e8852a1b248d9cbf2808ec56c52fcd15599e",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "low",
+            "family": "openai",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "gpt-6.1-sol",
+            "identity_resolved": true,
+            "model_alias": "gpt-6.1-sol",
+            "model_version": "gpt-6.1-sol",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "codex",
+            "runner_version": "codex-cli-0.159.2",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "5dad4394699b0f54affb5b967357e8852a1b248d9cbf2808ec56c52fcd15599e",
+          "issued_at": "2026-09-30T18:22:12.243Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-09-30T18:22:12.243Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "17b560babf5fef6df90c040a3758371625c7fe6ba8a3260ac324897b4b3d635c",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "2b23087ef2ee006bc46d76c90a0c4ecb4cac4ff7ba063930e53af559012503e5",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:22:12.243Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "a3941b62835c1ec48b6dbfcd366d59bce80cf4df2ad2b650dbc82694c2207c16",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:22:12.243Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 340,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "2db26131b5d62476677c57e5f124ae1da36a01df90c9ae73325400230d764606"
+        },
+        "expires": "2026-12-29",
+        "family": "openai",
+        "harness_version": "dispatch-hetero:aef24416",
+        "latency": {
+          "sample_wall_time_s": 1083
+        },
+        "model": "gpt-6.1-sol",
+        "model_version": "gpt-6.1-sol",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-09-30",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "codex",
+        "runner_version": "codex-cli-0.159.2",
+        "status": "qualified",
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "low",
+        "engine": "gpt-6.1-sol",
+        "role": "implementer",
+        "runner": "codex"
+      },
+      "seat_hash": "88e9af7203aa21edf34fa263b13621b6cfe0f376e81394e57f367aca592349e7",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-09-30",
+        "effort": "low",
+        "engine": "grok-4.7",
+        "expires": "2026-12-29",
+        "family": "xai",
+        "harness_version": "dispatch-hetero:aef24416",
+        "model": "grok-4.7",
+        "model_version": "grok-4.7",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-09-30",
+        "runner": "grok",
+        "runner_version": "grok-1.0.44-5b807183dd79",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 341,
+        "evidence": {
+          "evidence_hash": "adf551c95bd3d43c96c79ef482064bbcc25d408cafb26151075d015eb7bbfca1",
+          "evidence_id": "adf551c95bd3d43c96c79ef482064bbcc25d408cafb26151075d015eb7bbfca1",
+          "expires_at": "2026-12-29T18:38:34.161Z",
+          "grant_identity_hash": "3f0ab0b3407e07ca3495084782a2b8ecea14b0fd52016d8bb899ffbb95b81490",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "low",
+            "family": "xai",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "grok-4.7",
+            "identity_resolved": true,
+            "model_alias": "grok-4.7",
+            "model_version": "grok-4.7",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "grok",
+            "runner_version": "grok-1.0.44-5b807183dd79",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "3f0ab0b3407e07ca3495084782a2b8ecea14b0fd52016d8bb899ffbb95b81490",
+          "issued_at": "2026-09-30T18:38:34.161Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-09-30T18:38:34.161Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "64c72ae55008939aed53274bb8ff340f3cd5beb0f31501f14798bf2323892a8e",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "bd0d704970d43d93639e006e74e80266f2543ddab3f502b642a5822075def2e6",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:38:34.161Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "b1110aab1268710141f29143f9b052c4fa3ffc7a74b397fe4920e77b9d1f561d",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:38:34.161Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "d44352c53b40eb5fd7dda706dcc934f5d901212d3f5eab77c6a359dcd0507b5c"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:grok-4.7:grok:194",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-01-grok-4.7-low-seats/implementer/grok-4.7-qualify",
+        "evidence_id": "adf551c95bd3d43c96c79ef482064bbcc25d408cafb26151075d015eb7bbfca1",
+        "evidence_store": {
+          "event_id": 341,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d44352c53b40eb5fd7dda706dcc934f5d901212d3f5eab77c6a359dcd0507b5c"
+        },
+        "official_event_id": 194
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-09-30",
+        "effort": "low",
+        "engine": "grok-4.7",
+        "evidence": {
+          "evidence_hash": "adf551c95bd3d43c96c79ef482064bbcc25d408cafb26151075d015eb7bbfca1",
+          "evidence_id": "adf551c95bd3d43c96c79ef482064bbcc25d408cafb26151075d015eb7bbfca1",
+          "expires_at": "2026-12-29T18:38:34.161Z",
+          "grant_identity_hash": "3f0ab0b3407e07ca3495084782a2b8ecea14b0fd52016d8bb899ffbb95b81490",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "low",
+            "family": "xai",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "grok-4.7",
+            "identity_resolved": true,
+            "model_alias": "grok-4.7",
+            "model_version": "grok-4.7",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "grok",
+            "runner_version": "grok-1.0.44-5b807183dd79",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "3f0ab0b3407e07ca3495084782a2b8ecea14b0fd52016d8bb899ffbb95b81490",
+          "issued_at": "2026-09-30T18:38:34.161Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-09-30T18:38:34.161Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "64c72ae55008939aed53274bb8ff340f3cd5beb0f31501f14798bf2323892a8e",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "bd0d704970d43d93639e006e74e80266f2543ddab3f502b642a5822075def2e6",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:38:34.161Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "b1110aab1268710141f29143f9b052c4fa3ffc7a74b397fe4920e77b9d1f561d",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-09-30T18:38:34.161Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 341,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d44352c53b40eb5fd7dda706dcc934f5d901212d3f5eab77c6a359dcd0507b5c"
+        },
+        "expires": "2026-12-29",
+        "family": "xai",
+        "harness_version": "dispatch-hetero:aef24416",
+        "latency": {
+          "sample_wall_time_s": 546
+        },
+        "model": "grok-4.7",
+        "model_version": "grok-4.7",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-09-30",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "grok",
+        "runner_version": "grok-1.0.44-5b807183dd79",
+        "status": "qualified",
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "low",
+        "engine": "grok-4.7",
+        "role": "implementer",
+        "runner": "grok"
+      },
+      "seat_hash": "b69ff56a56a112f15451b567efd1da3c639c33ef35805d1c959160f14456d581",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "date": "2026-10-12",
         "effort": "high",
         "engine": "claude-haiku-5-5",
@@ -12978,7 +13524,7 @@
       "administration": {
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "date": "2026-08-16",
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.2",
         "expires": "2026-09-15",
         "family": "zhipu",
@@ -12994,13 +13540,13 @@
       "capability_evidence": {
         "event_id": 1,
         "evidence": {
-          "evidence_hash": "f4b8bd379e8981fb72a59711880c4eb5f8c9dedd92fcd753a167a0684151c6f0",
-          "evidence_id": "f4b8bd379e8981fb72a59711880c4eb5f8c9dedd92fcd753a167a0684151c6f0",
+          "evidence_hash": "7ed7f0084ecf9e254e30843fadc7309ac1374b9ace2f72f0aed85b3bdb99e87b",
+          "evidence_id": "7ed7f0084ecf9e254e30843fadc7309ac1374b9ace2f72f0aed85b3bdb99e87b",
           "expires_at": "2026-09-15T19:57:33.099Z",
-          "grant_identity_hash": "dff66155a91d43726ffb73a2757e28cef9f7cc56706ea20e94472a73307ef4ea",
+          "grant_identity_hash": "fdd8ef005e238ff942616614d388a2abda53a0756108bb63851768c43c40dae7",
           "identity": {
             "containment_fingerprint": "6abfb044dffc2bcd14eb04cffdd9571a2ab1981dbc582fdf92daf80e33260f21",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-a4657912",
             "identity": "glm-5.2",
@@ -13012,7 +13558,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "e78c1937865bc613142c116027d1deeb3dab027f54311e43548dd7a23b96a103"
           },
-          "identity_hash": "dff66155a91d43726ffb73a2757e28cef9f7cc56706ea20e94472a73307ef4ea",
+          "identity_hash": "fdd8ef005e238ff942616614d388a2abda53a0756108bb63851768c43c40dae7",
           "issued_at": "2026-08-16T19:57:33.099Z",
           "methodology": {
             "basis": null,
@@ -13110,17 +13656,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "8fe3bffa4a2dbb15893e2b89aa18ec6ef149fa1a1e78e1fc1fbd3fb67a01b57e"
+        "transcript_hash": "6a68b66b4b5fe5bcf98835a1a1254444eb7f9e0de77523c42dca07f241e1100a"
       },
       "capability_score": 1,
       "default_id": "official:reviewer:GLM-5.2:anthropic-compatible:139",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm-qualify",
-        "evidence_id": "f4b8bd379e8981fb72a59711880c4eb5f8c9dedd92fcd753a167a0684151c6f0",
+        "evidence_id": "7ed7f0084ecf9e254e30843fadc7309ac1374b9ace2f72f0aed85b3bdb99e87b",
         "evidence_store": {
           "event_id": 1,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "8fe3bffa4a2dbb15893e2b89aa18ec6ef149fa1a1e78e1fc1fbd3fb67a01b57e"
+          "transcript_hash": "6a68b66b4b5fe5bcf98835a1a1254444eb7f9e0de77523c42dca07f241e1100a"
         },
         "official_event_id": 139
       },
@@ -13141,16 +13687,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-08-16",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-14",
+          "from": "high",
+          "reason": "effort was never sent to the endpoint (Messages transport); owner decision 2026-10-14",
+          "to": "default"
+        },
         "engine": "GLM-5.2",
         "evidence": {
-          "evidence_hash": "f4b8bd379e8981fb72a59711880c4eb5f8c9dedd92fcd753a167a0684151c6f0",
-          "evidence_id": "f4b8bd379e8981fb72a59711880c4eb5f8c9dedd92fcd753a167a0684151c6f0",
+          "evidence_hash": "7ed7f0084ecf9e254e30843fadc7309ac1374b9ace2f72f0aed85b3bdb99e87b",
+          "evidence_id": "7ed7f0084ecf9e254e30843fadc7309ac1374b9ace2f72f0aed85b3bdb99e87b",
           "expires_at": "2026-09-15T19:57:33.099Z",
-          "grant_identity_hash": "dff66155a91d43726ffb73a2757e28cef9f7cc56706ea20e94472a73307ef4ea",
+          "grant_identity_hash": "fdd8ef005e238ff942616614d388a2abda53a0756108bb63851768c43c40dae7",
           "identity": {
             "containment_fingerprint": "6abfb044dffc2bcd14eb04cffdd9571a2ab1981dbc582fdf92daf80e33260f21",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-a4657912",
             "identity": "glm-5.2",
@@ -13162,7 +13714,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "e78c1937865bc613142c116027d1deeb3dab027f54311e43548dd7a23b96a103"
           },
-          "identity_hash": "dff66155a91d43726ffb73a2757e28cef9f7cc56706ea20e94472a73307ef4ea",
+          "identity_hash": "fdd8ef005e238ff942616614d388a2abda53a0756108bb63851768c43c40dae7",
           "issued_at": "2026-08-16T19:57:33.099Z",
           "methodology": {
             "basis": null,
@@ -13262,7 +13814,7 @@
         "evidence_store": {
           "event_id": 1,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "8fe3bffa4a2dbb15893e2b89aa18ec6ef149fa1a1e78e1fc1fbd3fb67a01b57e"
+          "transcript_hash": "6a68b66b4b5fe5bcf98835a1a1254444eb7f9e0de77523c42dca07f241e1100a"
         },
         "expires": "2026-09-15",
         "family": "zhipu",
@@ -13287,19 +13839,19 @@
         "version_source": "runtime"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.2",
         "role": "reviewer",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "12d9909d2804e501a7e683246ccd192a845c823b1226054b21bab2ea6b126fca",
+      "seat_hash": "aa5a4a302f26aaefea9b9d01e1cdc474f098c76bcd96db411d54ad4c35b92619",
       "status": "failed"
     },
     {
       "administration": {
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "date": "2026-08-17",
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.3",
         "expires": "2026-09-16",
         "family": "zhipu",
@@ -13315,13 +13867,13 @@
       "capability_evidence": {
         "event_id": 2,
         "evidence": {
-          "evidence_hash": "d21f49541f215fa2c5ee369658bc2b6cce486cd53c645723ac3f21ca5399153e",
-          "evidence_id": "d21f49541f215fa2c5ee369658bc2b6cce486cd53c645723ac3f21ca5399153e",
+          "evidence_hash": "67deb04d370de617ae3f2e83becac633bee8cfeac4598d32e7c28e5aaed925a7",
+          "evidence_id": "67deb04d370de617ae3f2e83becac633bee8cfeac4598d32e7c28e5aaed925a7",
           "expires_at": "2026-09-16T10:20:54.285Z",
-          "grant_identity_hash": "7266fd1fc6b8d3f6c3805797026275a44f6daab410af1dc31e7d820c53af70ac",
+          "grant_identity_hash": "ef7a4105d0ebd4f7b9ef9c8b0b2b83d708c8b3b89fac58420beab94d1ddcc841",
           "identity": {
             "containment_fingerprint": "8b46dca183416dba76098551ea81c0db5766df3fb97c93718671cb8d0686343c",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-e9eb3890",
             "identity": "glm-5.3",
@@ -13333,7 +13885,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "b4d2079f937ce18676e1aca7df517b2e6f528e90d1fcc265c2d1cd164b792658"
           },
-          "identity_hash": "7266fd1fc6b8d3f6c3805797026275a44f6daab410af1dc31e7d820c53af70ac",
+          "identity_hash": "ef7a4105d0ebd4f7b9ef9c8b0b2b83d708c8b3b89fac58420beab94d1ddcc841",
           "issued_at": "2026-08-17T10:20:54.285Z",
           "methodology": {
             "basis": null,
@@ -13431,17 +13983,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "fb8a30acd9d478c1d01a73ea6120f99db238337150a5bb5fd73c367915ced5ec"
+        "transcript_hash": "340ce2c305443a375946f90c7e87e8904cd6b75677fe01aa44d0629f5ffec3cc"
       },
       "capability_score": 0.9761904761904762,
       "default_id": "official:reviewer:GLM-5.3:anthropic-compatible:140",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm53-qualify",
-        "evidence_id": "d21f49541f215fa2c5ee369658bc2b6cce486cd53c645723ac3f21ca5399153e",
+        "evidence_id": "67deb04d370de617ae3f2e83becac633bee8cfeac4598d32e7c28e5aaed925a7",
         "evidence_store": {
           "event_id": 2,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "fb8a30acd9d478c1d01a73ea6120f99db238337150a5bb5fd73c367915ced5ec"
+          "transcript_hash": "340ce2c305443a375946f90c7e87e8904cd6b75677fe01aa44d0629f5ffec3cc"
         },
         "official_event_id": 140
       },
@@ -13462,16 +14014,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-08-17",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-14",
+          "from": "high",
+          "reason": "effort was never sent to the endpoint (Messages transport); owner decision 2026-10-14",
+          "to": "default"
+        },
         "engine": "GLM-5.3",
         "evidence": {
-          "evidence_hash": "d21f49541f215fa2c5ee369658bc2b6cce486cd53c645723ac3f21ca5399153e",
-          "evidence_id": "d21f49541f215fa2c5ee369658bc2b6cce486cd53c645723ac3f21ca5399153e",
+          "evidence_hash": "67deb04d370de617ae3f2e83becac633bee8cfeac4598d32e7c28e5aaed925a7",
+          "evidence_id": "67deb04d370de617ae3f2e83becac633bee8cfeac4598d32e7c28e5aaed925a7",
           "expires_at": "2026-09-16T10:20:54.285Z",
-          "grant_identity_hash": "7266fd1fc6b8d3f6c3805797026275a44f6daab410af1dc31e7d820c53af70ac",
+          "grant_identity_hash": "ef7a4105d0ebd4f7b9ef9c8b0b2b83d708c8b3b89fac58420beab94d1ddcc841",
           "identity": {
             "containment_fingerprint": "8b46dca183416dba76098551ea81c0db5766df3fb97c93718671cb8d0686343c",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-e9eb3890",
             "identity": "glm-5.3",
@@ -13483,7 +14041,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "b4d2079f937ce18676e1aca7df517b2e6f528e90d1fcc265c2d1cd164b792658"
           },
-          "identity_hash": "7266fd1fc6b8d3f6c3805797026275a44f6daab410af1dc31e7d820c53af70ac",
+          "identity_hash": "ef7a4105d0ebd4f7b9ef9c8b0b2b83d708c8b3b89fac58420beab94d1ddcc841",
           "issued_at": "2026-08-17T10:20:54.285Z",
           "methodology": {
             "basis": null,
@@ -13583,7 +14141,7 @@
         "evidence_store": {
           "event_id": 2,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "fb8a30acd9d478c1d01a73ea6120f99db238337150a5bb5fd73c367915ced5ec"
+          "transcript_hash": "340ce2c305443a375946f90c7e87e8904cd6b75677fe01aa44d0629f5ffec3cc"
         },
         "expires": "2026-09-16",
         "family": "zhipu",
@@ -13608,12 +14166,12 @@
         "version_source": "runtime"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.3",
         "role": "reviewer",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "302f673325a8aaaee80cc3abb67e6763d86dd4179d6bf95caecfa333ab128310",
+      "seat_hash": "0cecf4e8f1784f56198587424a850904b54ea2fb35d3e5c56844d509a26aaa48",
       "status": "failed"
     },
     {
@@ -15867,7 +16425,7 @@
       "administration": {
         "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
         "date": "2026-08-17",
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.3",
         "expires": "2026-09-16",
         "family": "zhipu",
@@ -15883,13 +16441,13 @@
       "capability_evidence": {
         "event_id": 7,
         "evidence": {
-          "evidence_hash": "c0751003c969b8fb782e8fd5d5f059494cbcc0a75aed61e62d891f10474dcf5d",
-          "evidence_id": "c0751003c969b8fb782e8fd5d5f059494cbcc0a75aed61e62d891f10474dcf5d",
+          "evidence_hash": "0f69c5e5e1fae8b7dcb353e258d8148ddfba7657ca9323fa25963e279a0b3024",
+          "evidence_id": "0f69c5e5e1fae8b7dcb353e258d8148ddfba7657ca9323fa25963e279a0b3024",
           "expires_at": "2026-09-16T20:49:59.310Z",
-          "grant_identity_hash": "d101e64a33dedcb7df454d5f24aaa7aa5dbaf517f27a4c8891cdbf1f89adfdbb",
+          "grant_identity_hash": "b3b194bfef604acc979bd664a7caaa02c78abec7170a893d38e6fe6fc31d276b",
           "identity": {
             "containment_fingerprint": "6e8145249308bdb0af54677e59397031cff83c53e101e582615a1b568af75f94",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-56535d6b",
             "identity": "glm-5.3",
@@ -15901,7 +16459,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "caedf1a26e83202f5eb6c885186b2a5736a696f17954776989712282b68a6782"
           },
-          "identity_hash": "d101e64a33dedcb7df454d5f24aaa7aa5dbaf517f27a4c8891cdbf1f89adfdbb",
+          "identity_hash": "b3b194bfef604acc979bd664a7caaa02c78abec7170a893d38e6fe6fc31d276b",
           "issued_at": "2026-08-17T20:49:59.310Z",
           "methodology": {
             "basis": null,
@@ -15979,17 +16537,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "c4a0d90ae031689a31c4d876dad4dd27ca04ab4f9500bbcddad276bfd0a491ac"
+        "transcript_hash": "511894fb78a40aceef19b83e1d3a036064d6f01f090322f5711506ebce0d10aa"
       },
       "capability_score": 1,
       "default_id": "official:verification_author:GLM-5.3:anthropic-compatible:142",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-18-verification-author-suite/dogfood",
-        "evidence_id": "c0751003c969b8fb782e8fd5d5f059494cbcc0a75aed61e62d891f10474dcf5d",
+        "evidence_id": "0f69c5e5e1fae8b7dcb353e258d8148ddfba7657ca9323fa25963e279a0b3024",
         "evidence_store": {
           "event_id": 7,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "c4a0d90ae031689a31c4d876dad4dd27ca04ab4f9500bbcddad276bfd0a491ac"
+          "transcript_hash": "511894fb78a40aceef19b83e1d3a036064d6f01f090322f5711506ebce0d10aa"
         },
         "official_event_id": 142
       },
@@ -16010,16 +16568,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-08-17",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-14",
+          "from": "high",
+          "reason": "effort was never sent to the endpoint (Messages transport); owner decision 2026-10-14",
+          "to": "default"
+        },
         "engine": "GLM-5.3",
         "evidence": {
-          "evidence_hash": "c0751003c969b8fb782e8fd5d5f059494cbcc0a75aed61e62d891f10474dcf5d",
-          "evidence_id": "c0751003c969b8fb782e8fd5d5f059494cbcc0a75aed61e62d891f10474dcf5d",
+          "evidence_hash": "0f69c5e5e1fae8b7dcb353e258d8148ddfba7657ca9323fa25963e279a0b3024",
+          "evidence_id": "0f69c5e5e1fae8b7dcb353e258d8148ddfba7657ca9323fa25963e279a0b3024",
           "expires_at": "2026-09-16T20:49:59.310Z",
-          "grant_identity_hash": "d101e64a33dedcb7df454d5f24aaa7aa5dbaf517f27a4c8891cdbf1f89adfdbb",
+          "grant_identity_hash": "b3b194bfef604acc979bd664a7caaa02c78abec7170a893d38e6fe6fc31d276b",
           "identity": {
             "containment_fingerprint": "6e8145249308bdb0af54677e59397031cff83c53e101e582615a1b568af75f94",
-            "effort": "high",
+            "effort": "default",
             "family": "zhipu",
             "harness_version": "engine-qualify-56535d6b",
             "identity": "glm-5.3",
@@ -16031,7 +16595,7 @@
             "runner_version": "node-direct-http-fetch",
             "semantic_fingerprint": "caedf1a26e83202f5eb6c885186b2a5736a696f17954776989712282b68a6782"
           },
-          "identity_hash": "d101e64a33dedcb7df454d5f24aaa7aa5dbaf517f27a4c8891cdbf1f89adfdbb",
+          "identity_hash": "b3b194bfef604acc979bd664a7caaa02c78abec7170a893d38e6fe6fc31d276b",
           "issued_at": "2026-08-17T20:49:59.310Z",
           "methodology": {
             "basis": null,
@@ -16111,7 +16675,7 @@
         "evidence_store": {
           "event_id": 7,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "c4a0d90ae031689a31c4d876dad4dd27ca04ab4f9500bbcddad276bfd0a491ac"
+          "transcript_hash": "511894fb78a40aceef19b83e1d3a036064d6f01f090322f5711506ebce0d10aa"
         },
         "expires": "2026-09-16",
         "family": "zhipu",
@@ -16136,12 +16700,12 @@
         "version_source": "runtime"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "GLM-5.3",
         "role": "verification_author",
         "runner": "anthropic-compatible"
       },
-      "seat_hash": "16479128c149973e6b43c9090476e3fb888661e70ef9eb21525294be67fd0ec6",
+      "seat_hash": "07a795f3145db12a28099edf9846146a73dd42a73a17785c9318b519c22b0bba",
       "status": "qualified"
     },
     {
@@ -17849,7 +18413,7 @@
     "implementer": {
       "failed": 4,
       "other": 0,
-      "qualified": 14
+      "qualified": 16
     },
     "reviewer": {
       "failed": 3,

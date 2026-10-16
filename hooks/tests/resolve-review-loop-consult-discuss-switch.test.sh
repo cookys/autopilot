@@ -151,8 +151,12 @@ const problems = [];
 // (2) every key present in the OLD output is present in the NEW output with a
 // byte-identical value (the parity template pins consult_dispatch: off, so the
 // consult seat fields are '' on both sides on every host).
+// qc_panel / qc_panel_seats are exempt: the shipped default panel seat (gpt-6.1-sol) and the
+// gemini-flash alias target (gemini-4-argon-high) intentionally moved after the pre-D6 pin.
+const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats']);
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
+  if (INTENTIONAL_DEFAULT_MOVE.has(key)) continue;
   const newVal = newJson[key];
   if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
     problems.push(`value-drift:${key}`);

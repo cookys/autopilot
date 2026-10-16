@@ -28,14 +28,14 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 
 ## Settings
 
-- reviewer_engine: gpt-5.5
+- reviewer_engine: gpt-6.1-sol
 - reviewer_effort: xhigh
 - reviewer_runner: codex
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
-- implementer_engine: gpt-5.3-codex-spark
+- implementer_engine: gpt-6.1-sol
 - implementer_effort: high
 - implementer_runner: auto
 - implementer_ladder: auto
@@ -56,7 +56,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-5.5, claude-opus, gemini-flash
+- qc_panel: gpt-6.1-sol, claude-opus, gemini-flash
 - qc_panel_runners: codex, claude-native, agy
 - qc_panel_efforts: xhigh, high, high
 - qc_panel_endpoints: @none, @none, @none
@@ -167,7 +167,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 
 | Field | Meaning | Values |
 |-------|---------|--------|
-| `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
+| `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-6.1-sol`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
 | `reviewer_limitation` | exact reviewer-tuple limitation tag. The `MiniMax-M3` + `cc-shim` + `minimax` tuple must use `minimax-false-central-claim-5-of-6`; the resolver warns and rejects that tuple when the tag is absent | the exact limitation tag, or empty |
 | `reviewer_limitation_required` | compatibility metadata only; it cannot enable, disable, or weaken the exact MiniMax tuple guard | `true\|false` |
@@ -179,7 +179,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `reviewer_fallback_preference_low_risk` | preference list applied when computed `review_risk=low` (cheap calibrated leg for cheap rounds); empty = use `reviewer_fallback_preference` | comma list, or empty |
 | `skill_mode` | 是否把 skill pack（選定 SKILL.md 內容）傳輸進 hetero implementer prompt（`references/hetero-dispatch.md` § Skill transport）。2026-07 A/B：reviewer 席 H2 已被推翻——implementer 席才是它的戰場；resolver 輸出 `skill_mode_requested`/`skill_mode_effective` | `off`（預設）/ `prompt-pack` |
 | `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| qoderclicn` (QoderCN/Qwen; read-intent, explicit) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| claude-native` (first-party Claude Code ambient auth) `\| kimi` (Kimi Code CLI; `kimi-code/k3`, read-only scratch cwd; prompt is ONE `-p` argv string — diff+spec above ~120 KB is refused pre-spend, kernel MAX_ARG_STRLEN 128 KiB; seat a prompt-file runner for big diffs) `\| opencode` (OpenCode CLI; `--agent plan` + scratch cwd, best-effort — see Gotchas) `\| auto` |
-| `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
+| `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-6.1-sol`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|qoderclicn\|cc-shim\|pi\|cursor\|opencode` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, `*qwen*`/`*qoder*`→fail-loud requiring explicit `qoderclicn`, else agy; **`qoderclicn`, `cc-shim`, and `pi` must be set EXPLICITLY** (see Gotchas) |
 | `implementer_ladder` | optional ordered rungs `engine/effort@runner`. The literal value `auto` expands to the host topology file written by `scripts/resolve-dispatch-topology.js` (falls back to the single implicit rung + a capability warning when no topology file exists at all, OR when the file exists but its `implementer_ladder` is empty/absent — `claude_fallback_ladder` rungs, which run `claude-native`, are never expanded into `implementer_ladder` since that runner isn't a `dispatch-hetero` runner). Absent/empty = the three `implementer_*` fields are the single rung. Each auto-expanded rung is validated against the same runner enum as the comma-list form; a rung with an invalid runner exits 3 (a stale topology file must not smuggle a bad runner past the resolver). Campaign `unit_class: mechanical` and `judgment` both start at rung 0 by default now; see `ladder_start_rung_judgment`. A red repair round climbs one rung, then caps at the top and uses existing convergence adjudication. `on_engine_unavailable` is unchanged (availability only). Each runner must be a valid `implementer_runner` | comma list, e.g. `gemini-3.7-flash-low/low@agy, grok-4.6/low@grok, sonnet/medium@codex`, or `auto` |
@@ -324,7 +324,7 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   arbitrage / a Gemini-family generator). Caveats: agy stays EDIT-ONLY (run_command 10s cap →
   it can't run build/test mid-turn; the harness commits, the panel verifies), and Docker
   headless auth is still broken (#223/#479) so run agy on an interactively-authed host. `codex`/
-  `gpt-5.3-codex-spark` remains the default for tasks where the agent must run build/test itself.
+  `gpt-6.1-sol` remains the default for tasks where the agent must run build/test itself.
 - **`agy` has a ~131 KB payload ceiling that is NOT the context-window gate.** agy has no
   `--prompt-file`, so the whole prompt goes to it as one argv string, and Linux caps a single argv
   string at `MAX_ARG_STRLEN` = 131072 bytes (32 × PAGE_SIZE) — separate from, and far below, the
@@ -358,7 +358,7 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   To use (generic — substitute YOUR provider's endpoint + model id + key):
   ```
   # in .claude/review-loop-config.md:
-  - implementer_engine: <provider-model-id>     # e.g. MiniMax-M3, glm-5.2
+  - implementer_engine: <provider-model-id>     # e.g. MiniMax-M3.1-Flash-Preview, glm-5.3
   - implementer_runner: cc-shim                  # or reviewer_runner: cc-shim
   # in your shell, before /l5 (cc-shim is EXPLICIT-only and REFUSES to run without both,
   # so it can never silently fall back to your real Claude quota):
@@ -371,8 +371,8 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
 
   | Provider | `ANTHROPIC_BASE_URL` | model id | notes |
   |----------|----------------------|----------|-------|
-  | MiniMax (intl) | `https://api.minimax.io/anthropic` | `MiniMax-M3` | the `.io` host (a `.minimaxi.com` host 401'd for one intl key — use whichever your account is provisioned for); **M3 returns clean text; M2.x leaks a `thinking` block** so prefer M3 |
-  | Zhipu/GLM | `https://api.z.ai/api/anthropic` (or `https://open.bigmodel.cn/api/anthropic`) | `glm-5.2` | clean (no thinking leak); as of 2026-06-30 frequently **529-overloaded** — unproven under a full loop |
+  | MiniMax (intl) | `https://api.minimax.io/anthropic` | `MiniMax-M3` (reviewer) / `MiniMax-M3.1-Flash-Preview` (implementer, consult, discuss; never the bare `MiniMax-M3.1`, the endpoint silently answers it as M3) | the `.io` host (a `.minimaxi.com` host 401'd for one intl key — use whichever your account is provisioned for); **M3 returns clean text; M2.x leaks a `thinking` block** so prefer M3 |
+  | Zhipu/GLM | `https://api.z.ai/api/anthropic` (or `https://open.bigmodel.cn/api/anthropic`) | `glm-5.3` | clean (no thinking leak); as of 2026-06-30 frequently **529-overloaded** — unproven under a full loop |
 
   EDIT-ONLY + wrapper-commit (implementer); prompt via STDIN. **cc-shim as a `reviewer_runner`** is
   read-INTENT best-effort surface reduction (`--setting-sources project` + `--strict-mcp-config` +

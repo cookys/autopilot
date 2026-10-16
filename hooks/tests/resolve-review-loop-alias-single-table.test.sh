@@ -15,7 +15,7 @@ export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json"
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-topology.json"
 
 # --- 1. single alias table --------------------------------------------------------------
-N="$(grep -c 'gemini-3\.6-flash-high' "$RESOLVER")"
+N="$(grep -c 'gemini-4-argon-high' "$RESOLVER")"
 assert_eq "$N" "1" "the resolved gemini-flash id appears once in resolve-review-loop.sh (single alias table)"
 
 run_resolver() { # run_resolver <config-file> -> sets OUT, ERR, RC
@@ -36,13 +36,13 @@ mk_cfg() { # mk_cfg <file> <qc-engine> <consult-engine>
 - consult_effort: high
 EOF
 }
-mk_cfg "$TEST_TMP/a1.md" gemini-flash gemini-3.6-flash-high
+mk_cfg "$TEST_TMP/a1.md" gemini-flash gemini-4-argon-high
 run_resolver "$TEST_TMP/a1.md"
-assert_eq "$RC" "3" "consult gemini-3.6-flash-high vs qc gemini-flash collides (exit 3)"
+assert_eq "$RC" "3" "consult gemini-4-argon-high vs qc gemini-flash collides (exit 3)"
 assert_contains "$ERR" "must not be a qc_panel seat" "collision diagnostic names the rule (alias on qc side)"
-mk_cfg "$TEST_TMP/a2.md" gemini-3.6-flash-high gemini-flash
+mk_cfg "$TEST_TMP/a2.md" gemini-4-argon-high gemini-flash
 run_resolver "$TEST_TMP/a2.md"
-assert_eq "$RC" "3" "consult gemini-flash vs qc gemini-3.6-flash-high collides (exit 3)"
+assert_eq "$RC" "3" "consult gemini-flash vs qc gemini-4-argon-high collides (exit 3)"
 mk_cfg "$TEST_TMP/a3.md" gemini-flash gemini-4.0-flash-high
 run_resolver "$TEST_TMP/a3.md"
 assert_not_contains "$ERR" "must not be a qc_panel seat" "a different consult seat is not refused for collision"

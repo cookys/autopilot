@@ -270,6 +270,16 @@
       "event_id": 239,
       "role": "discuss",
       "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/discuss-high"
+    },
+    {
+      "event_id": 193,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-gpt6-low-sweep/implementer/gpt-6.1-sol-qualify"
+    },
+    {
+      "event_id": 194,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-grok-4.7-low-seats/implementer/grok-4.7-qualify"
     }
   ]
 }

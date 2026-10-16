@@ -51,7 +51,7 @@
      這個檔並自己設 REVIEW_LOOP_CONFIG_OVERRIDE，所以環境變數操縱不了契約檢查（這是對的
      安全姿態），唯一的槓桿就是這個檔。 -->
 - verification_author_present: true
-- verification_author_engine: Qwen3.8-Max-Preview
+- verification_author_engine: Qwen3.8-Max
 - verification_author_runner: qoderclicn
 - verification_author_effort: high
 <!-- 2026-08-14 使用者裁定：qc 的 codex 席 `gpt-5.5 @ xhigh` → `gpt-5.6-sol @ max`。
@@ -72,7 +72,7 @@
      換回 codex 席。這是 operator 決定，不是資格評定。
      2026-10-14 使用者裁定：gpt-5.6 全面退役，換回時用 gpt-6.1-sol @ codex low
      （reviewer 資格 event 288；只考過 low，別寫成 max）。 -->
-- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3, Qwen3.8-Max-Preview
+- qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3, Qwen3.8-Max
 - qc_panel_runners: claude-native, cc-shim, cc-shim, qoderclicn
 - qc_panel_efforts: high, high, high, high
 - qc_panel_endpoints: @none, glm, minimax, @none

@@ -180,6 +180,17 @@ test('assertJsonValue: lone surrogate rejected in value and key, pair accepted',
   assert.doesNotThrow(() => assertJsonValue({ '\u{1F600}': '\u{1F600}' }, '$'));
 });
 
+// --- Invalid UTF-8 and BOM (file level) --------------------------------------
+function assertBytesRejected(name, bytes) {
+  test(`encoding REJECTED: ${name}`, () => {
+    assert.throws(() => preflightRaw(Buffer.from(bytes)), { code: 'INVALID_JSON_INPUT' });
+  });
+}
+assertBytesRejected('encoded surrogate ED A0 80', [0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xed, 0xa0, 0x80, 0x22, 0x7d]);
+assertBytesRejected('truncated sequence', [0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xe2, 0x82, 0x22, 0x7d]);
+assertBytesRejected('lone 0xFF', [0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]);
+assertBytesRejected('leading BOM', [0xef, 0xbb, 0xbf, 0x7b, 0x7d]);
+
 // node:test runs the cases after this file finishes loading, so clean up on
 // process exit; a failed run (non-zero code) keeps the directory for debugging.
 process.on('exit', (code) => {

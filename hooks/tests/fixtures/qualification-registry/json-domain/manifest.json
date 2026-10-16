@@ -186,6 +186,31 @@
    "file": "str-paired-surrogate.json",
    "expect": "accept",
    "why": "a valid escaped surrogate pair (U+1F600) in a value and in a key"
+  },
+  {
+   "file": "enc-encoded-surrogate.json",
+   "expect": "reject",
+   "why": "raw bytes ED A0 80 (a surrogate encoded as UTF-8)"
+  },
+  {
+   "file": "enc-truncated-sequence.json",
+   "expect": "reject",
+   "why": "truncated multi-byte sequence"
+  },
+  {
+   "file": "enc-lone-ff.json",
+   "expect": "reject",
+   "why": "lone 0xFF byte"
+  },
+  {
+   "file": "enc-bom.json",
+   "expect": "reject",
+   "why": "leading UTF-8 BOM: both sides refuse"
+  },
+  {
+   "file": "enc-valid-utf8.json",
+   "expect": "accept",
+   "why": "valid raw UTF-8 (e-acute and an astral emoji)"
   }
  ]
 }

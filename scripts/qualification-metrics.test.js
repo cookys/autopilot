@@ -198,7 +198,7 @@ test('json-domain: Node accepts exactly the accept files and refuses exactly the
   const dir = path.join(FIX, 'json-domain');
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   const schema = JSON.parse(fs.readFileSync(path.join(dir, 'schema.json'), 'utf8'));
-  assert.equal(manifest.cases.length, 37);
+  assert.equal(manifest.cases.length, 42);
   const names = new Set(manifest.cases.map((c) => c.file));
   const onDisk = fs.readdirSync(dir).filter((f) => !['manifest.json', 'schema.json'].includes(f));
   assert.deepEqual(onDisk.sort(), [...names].sort(), 'no orphan or missing json-domain fixture');

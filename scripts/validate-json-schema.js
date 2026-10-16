@@ -677,7 +677,8 @@ function readJson(file, label) {
   let source;
   try {
     const bytes = fs.readFileSync(file);
-    source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+    // ignoreBOM keeps a leading U+FEFF in the text, so the preflight refuses it (as Python's json.loads does).
   } catch (error) {
     const wrapped = new Error(`${label} is not readable JSON: ${error.message}`);
     wrapped.code = 'INVALID_JSON_INPUT';

@@ -84,7 +84,7 @@ A seat has only a diff file and a spec file. So the earlier round is **written i
 
 ```
 == Prior round (machine generated from the stored seat artifacts of round N-1) ==
-Reviewed head: H0   New head: H1   Delta: H0..H1 (file `delta.diff`); changed files in full: `recheck.diff`
+Reviewed head: H0   New head: H1   Delta: H0..H1 (file `delta.diff`); re-check set: cumulative diff in `diff.patch`, complete files in `tree/`
 Open findings from round N-1 (id, severity, path:line, claim, one line). Treat each as an unverified
 claim: decide from the code at H1 whether it is resolved, still present, or invalid.
 Carried paths (reviewed clean at H0, byte-identical at H1): <list, no verdict text>.

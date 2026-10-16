@@ -331,9 +331,9 @@ EXIT=$?
 assert_eq "1" "$EXIT" "strict L5 executable fixture reaches the engine after fresh readiness"
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 executable fixture consumes a fresh host-owned readiness bundle"
-assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
+assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
   "strict L5 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
+assert_contains "$OUT" '"cap-v1-ab2a255ea5aa993b9912ba235322cdb00a10d23b470c24061a8ce27243bed7dd"' \
   "strict L5 executable fixture records canonical claim provenance"
 
 # L6 twin (BACKLOG "L6 managed campaigns can never satisfy reviewer_qualification",
@@ -362,9 +362,9 @@ assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L6 executable fixture consumes a fresh host-owned readiness bundle"
 assert_contains "$OUT" '"strict_level":"l6"' \
   "strict L6 executable fixture receipt carries the actual level, not the l5 literal"
-assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
+assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
   "strict L6 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
+assert_contains "$OUT" '"cap-v1-ab2a255ea5aa993b9912ba235322cdb00a10d23b470c24061a8ce27243bed7dd"' \
   "strict L6 executable fixture records canonical claim provenance"
 
 # L4 twin (v2.36.8, docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.md KR1/KR4):
@@ -401,7 +401,7 @@ assert_not_contains "$OUT" '"rejection_code":"provider_readiness_authority_missi
   "strict L4 executable fixture is never refused for a missing readiness authority"
 assert_not_contains "$OUT" '"unit":"reviewer_qualification"' \
   "strict L4: the bootstrap certified the reviewer, so no waived ledger entry (KR4)"
-assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
+assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
   "strict L4 executable fixture records the frozen policy digest (D4 claim set untouched)"
 
 # KR2 — advisory path under l4: an uncertified reviewer seat derives with the loud stderr
@@ -557,12 +557,12 @@ OUT="$(node "$CLI" dispatch 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing dispatch subcommand exits 2"
 assert_contains "$OUT" "unknown dispatch subcommand" "missing dispatch subcommand explains failure"
 
-# Hermetic: EMPTY_CFG pins the resolver's built-in default reviewer (gpt-5.5) so this asserts
+# Hermetic: EMPTY_CFG pins the resolver's built-in default reviewer (gpt-6.1-sol) so this asserts
 # the delegation plumbing, not the repo's live dogfood roster (Board decision A → MiniMax-M3).
 EMPTY_CFG="$TEST_TMP/empty-review-loop.md"; : > "$EMPTY_CFG"
 OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "engine review-loop preserves resolver exit 0"
-assert_contains "$OUT" '"reviewer_engine": "gpt-5.5"' "engine review-loop emits delegated JSON"
+assert_contains "$OUT" '"reviewer_engine": "gpt-6.1-sol"' "engine review-loop emits delegated JSON"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop preserves scorecard fields"
 
 OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
@@ -573,7 +573,7 @@ mkdir -p "$TEST_TMP/empty-scorecard-negative"
 OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard-negative" REVIEW_LOOP_CONFIG_OVERRIDE="$HERMETIC_REVIEW_LOOP_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "negative control: empty ENGINE_SCORECARD_DIR still resolves the fixture roster"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "negative control: fixture reviewer is independent of the host qualified set"
-assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "negative control: fixture implementer is independent of the host qualified set"
+assert_contains "$OUT" '"implementer_engine": "grok-4.7"' "negative control: fixture implementer is independent of the host qualified set"
 
 OUT="$(node "$CLI" engine 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing engine subcommand exits 2"

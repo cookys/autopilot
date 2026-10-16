@@ -41,6 +41,8 @@ const DEFAULT_RATIO = 0.7;
 // Observed context windows, harvested from real runs on this machine:
 //   codex  — event_msg.token_count.info.model_context_window
 //   grok   — sessions/*/signals.json .contextWindowTokens
+// Deliberately absent (no local observation, no vendor figure used): GLM-5.3, gemini-4-argon,
+// MiniMax-M3.1-Flash-Preview. They resolve UNKNOWN_WINDOW until a run records one (BL-0198).
 // Where a model was observed with MORE than one window, the MINIMUM is recorded:
 // over-stating a window would let oversized input through, which is the failure
 // mode this gate exists to prevent.
@@ -52,8 +54,12 @@ const OBSERVED_WINDOWS = {
   'gpt-5.6-luna': 258400, // n=2
   'gpt-5.6-sol': 258400, // n=200 (353400 also seen n=51 → min wins)
   'gpt-5.6-terra': 258400, // n=5
+  'gpt-6.1-sol': 258400, // n=108 codex sessions (475000 also seen n=5 → min wins; ~/.codex/sessions, 2026-10-16)
   // --- grok ---
   'grok-4.5': 500000, // n=305
+  // grok-4.7: signals.json primaryModelId=grok-4.7 reports 256000 (n=47) and 500000 (n=16) → min wins.
+  // Measured 2026-10-16 on this host (~/.grok/sessions, grok 1.0.x). No vendor claim is used.
+  'grok-4.7': 256000, // n=47 (500000 also seen n=16 → min wins)
   // grok-4.6: signals.json carries contextWindowTokens but NO model id, so this row rests
   // on the same evidence basis as grok-4.5 above — every grok session on this host
   // (n=314, 2026-09-13) reports 500000, and a peer host measured n=299, all 500000. min-wins.

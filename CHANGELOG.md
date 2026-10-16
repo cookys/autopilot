@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The strict /l5 provider-readiness policy now names the models the plugin ships (GLM-5.3, gpt-6.1-sol, grok-4.7, MiniMax-M3 for review seats) with six capability claims re-issued through `platform-capability-claims.js` from fresh authored-transport runs (evidence in `docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/`); a new `strict-l5-policy-shipped-defaults` test fails if the policy drifts from the shipped defaults, `probe-harness-capabilities.sh` emits the same six tuples, `grok.json` is re-probed on grok-4.7, and the context-window table gains measured windows for gpt-6.1-sol and grok-4.7 (BL-0198).
+
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
 - `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.

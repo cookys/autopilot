@@ -4,13 +4,13 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-08-03T22:28:33.000Z",
-  "verified_at": "2026-08-03T22:28:33.000Z",
-  "expires_at": "2026-09-02T22:28:33.000Z",
+  "last_checked_at": "2026-10-16T14:30:00.000Z",
+  "verified_at": "2026-10-16T14:30:00.000Z",
+  "expires_at": "2026-11-15T14:30:00.000Z",
   "evidence": {
     "source": "local-probe",
-    "command": "grok --version plus exact grok-4.5/high single-turn JSON probe; D1 aggregate receipt",
-    "result": "grok 0.2.118; headless JSON returned text plus numeric usage for grok-4.5/high, while SessionEnd host firing remains explicitly blocked and optional"
+    "command": "grok --version plus exact grok-4.7/high single-turn JSON probe (grok --model grok-4.7 --effort high -p ... --output-format json), and four scripts/dispatch-author.sh runs (docs/plans/evidence/2026-10-16-strict-l5-policy-refresh)",
+    "result": "grok 1.0.60; headless JSON returned text plus numeric usage for grok-4.7/high (usage block with input/output/reasoning/total tokens, modelUsage key grok-4.7-build); dispatch-author --runner grok --model grok-4.7 --effort high returned status=authored"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
@@ -30,6 +30,7 @@
     "mutation_dispatch remains unverified at H2 (same bar as codex/agy). Hetero runner paths that shell out to grok are separate from promoting this host to H3.",
     "blocking_gate (pre-push / stop-hook style enforcement on the Grok host) remains unverified.",
     "Working inside this clone also surfaces skills via .agents/skills as project skills; that path does not replace a user-level plugin install for other repos.",
-    "Local installs record source_path; `grok plugin update` reports local as live. If skills look stale after a pull, re-run `grok plugin install <path> --trust` or update and re-check with `grok inspect`."
+    "Local installs record source_path; `grok plugin update` reports local as live. If skills look stale after a pull, re-run `grok plugin install <path> --trust` or update and re-check with `grok inspect`.",
+    "2026-10-16 re-probe (BL-0198) re-ran only the headless_usage and read-only authoring transport on grok 1.0.60 / grok-4.7. skills, agents, plugin_install, hooks, mutation_dispatch and blocking_gate were NOT re-verified in this probe and carry over from the 2026-08 grok 0.2.118 / grok-4.5 probe."
   ]
 }

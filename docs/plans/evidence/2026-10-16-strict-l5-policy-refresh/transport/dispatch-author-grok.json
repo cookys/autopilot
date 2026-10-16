@@ -1,0 +1,1 @@
+{ "runner": "grok", "model": "grok-4.7", "status": "authored", "raw_log": "/tmp/dispatch-author-log-1Xb9jB", "error": null, "selection_source": "explicit_cli", "selection_path": null, "verification_author": null }

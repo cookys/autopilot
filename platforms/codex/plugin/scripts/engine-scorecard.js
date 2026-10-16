@@ -997,6 +997,7 @@ const CODEX_ENGINE_NAMES = new Set([
   'gpt-5.6-luna',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
+  'gpt-6.1-sol',
   'o1',
   'o1-mini',
   'o1-preview',
@@ -1009,6 +1010,7 @@ const CODEX_ENGINE_NAMES = new Set([
 const GROK_ENGINE_NAMES = new Set([
   'grok-4.5',
   'grok-4.5-fast',
+  'grok-4.7',
   'grok-composer-2.5-fast',
 ]);
 const OPENCODE_ENGINE_NAMES = new Set([
@@ -1017,6 +1019,7 @@ const OPENCODE_ENGINE_NAMES = new Set([
   'glm-4.6',
   'glm-4.7',
   'glm-5.2',
+  'glm-5.3',
   'qwen-3.8',
   'minimax-m2.7',
   'minimax-m3',

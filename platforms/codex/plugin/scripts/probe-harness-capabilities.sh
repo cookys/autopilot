@@ -106,7 +106,7 @@ CODEX_HELP_SHA="$(sha256sum "$CODEX_HELP" | cut -d' ' -f1)"
 GROK_HELP_SHA="$(sha256sum "$GROK_HELP" | cut -d' ' -f1)"
 OPENCODE_HELP_SHA="$(sha256sum "$OPENCODE_HELP" | cut -d' ' -f1)"
 CLAUDE_HELP_SHA="$(sha256sum "$CLAUDE_HELP" | cut -d' ' -f1)"
-ROSTER_SHA="$(sha256sum "$REPO/.claude/review-loop-config.md" | cut -d' ' -f1)"
+ROSTER_SHA="$(sha256sum "$REPO/docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json" | cut -d' ' -f1)"
 CLAUDE_HOOKS_SHA="$(sha256sum "$REPO/hooks/hooks.json" | cut -d' ' -f1)"
 
 export REPO AGY_BIN CODEX_BIN GROK_BIN OPENCODE_BIN CLAUDE_BIN
@@ -170,7 +170,7 @@ function claim(capabilityId, consumerId, targetIdentity, locator, documentSha, a
 
 const agyD2 = target('agy', 'Gemini 3.6 Flash (High)', 'telemetry', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION);
 const codexHook = target('codex', null, 'compaction_hook', null, null, 'openai', env.CODEX_BIN, env.CODEX_VERSION);
-const rosterLocator = 'repo:.claude/review-loop-config.md#review-roster';
+const rosterLocator = 'repo:docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json#tuples';
 const claims = [];
 
 for (const [suffix, assertion] of [
@@ -202,43 +202,43 @@ for (const [suffix, assertion, behavior] of [
 }
 
 const providerRows = [
+  // The six strict /l5 canonical tuples (src/readiness/provider-bootstrap.js STRICT_L5_PROVIDER_POLICY,
+  // BL-0198). hooks/tests/strict-l5-policy-shipped-defaults.test.sh keeps their models equal to the shipped defaults.
   {
-    id: 'reviewer-cc-shim-minimax-m3-high-minimax',
-    identity: target('cc-shim', 'MiniMax-M3', 'reviewer', 'high', 'minimax', 'minimax', env.CLAUDE_BIN, env.CLAUDE_VERSION),
+    id: 'verification-author-cc-shim-glm-5-3-high',
+    identity: target('cc-shim', 'GLM-5.3', 'verification_author', 'high', 'glm', 'zhipu', env.CLAUDE_BIN, env.CLAUDE_VERSION),
+    helpSha: env.CLAUDE_HELP_SHA,
+    executionModel: 'GLM-5.3', effortArgument: 'high',
+  },
+  {
+    id: 'qc-cc-shim-glm-5-3-high',
+    identity: target('cc-shim', 'GLM-5.3', 'qc', 'high', 'glm', 'zhipu', env.CLAUDE_BIN, env.CLAUDE_VERSION),
+    helpSha: env.CLAUDE_HELP_SHA,
+    executionModel: 'GLM-5.3', effortArgument: 'high',
+  },
+  {
+    id: 'qc-codex-gpt-6-1-sol-max',
+    identity: target('codex', 'gpt-6.1-sol', 'qc', 'max', null, 'openai', env.CODEX_BIN, env.CODEX_VERSION),
+    helpSha: env.CODEX_HELP_SHA,
+    executionModel: 'gpt-6.1-sol', effortArgument: 'max',
+  },
+  {
+    id: 'implementer-grok-grok-4-7-high',
+    identity: target('grok', 'grok-4.7', 'implementer', 'high', null, 'xai', env.GROK_BIN, env.GROK_VERSION),
+    helpSha: env.GROK_HELP_SHA,
+    executionModel: 'grok-4.7', effortArgument: 'high',
+  },
+  {
+    id: 'qc-cc-shim-minimax-m3-high',
+    identity: target('cc-shim', 'MiniMax-M3', 'qc', 'high', 'minimax', 'minimax', env.CLAUDE_BIN, env.CLAUDE_VERSION),
     helpSha: env.CLAUDE_HELP_SHA,
     executionModel: 'MiniMax-M3', effortArgument: 'high',
   },
   {
-    id: 'implementer-grok-grok-4-5-high',
-    identity: target('grok', 'grok-4.5', 'implementer', 'high', null, 'xai', env.GROK_BIN, env.GROK_VERSION),
-    helpSha: env.GROK_HELP_SHA,
-    executionModel: 'grok-4.5', effortArgument: 'high',
-  },
-  {
-    id: 'verification-author-agy-gemini-3-5-flash-high',
-    identity: target('agy', 'Gemini 3.5 Flash (High)', 'verification_author', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION),
-    helpSha: env.AGY_HELP_SHA,
-    executionModel: 'gemini-3.5-flash-high', effortArgument: null,
-    normalizedModel: 'gemini-3.5-flash-high',
-  },
-  {
-    id: 'qc-codex-gpt-5-5-xhigh',
-    identity: target('codex', 'gpt-5.5', 'qc', 'xhigh', null, 'openai', env.CODEX_BIN, env.CODEX_VERSION),
-    helpSha: env.CODEX_HELP_SHA,
-    executionModel: 'gpt-5.5', effortArgument: 'xhigh',
-  },
-  {
-    id: 'qc-claude-native-opus-high',
-    identity: target('claude-native', 'claude-opus', 'qc', 'high', null, 'anthropic', env.CLAUDE_BIN, env.CLAUDE_VERSION),
+    id: 'reviewer-cc-shim-minimax-m3-high',
+    identity: target('cc-shim', 'MiniMax-M3', 'reviewer', 'high', 'minimax', 'minimax', env.CLAUDE_BIN, env.CLAUDE_VERSION),
     helpSha: env.CLAUDE_HELP_SHA,
-    executionModel: 'opus', effortArgument: 'high',
-  },
-  {
-    id: 'qc-agy-gemini-3-6-flash-high',
-    identity: target('agy', 'Gemini 3.6 Flash (High)', 'qc', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION),
-    helpSha: env.AGY_HELP_SHA,
-    executionModel: 'gemini-3.6-flash-high', effortArgument: null,
-    normalizedModel: 'gemini-3.6-flash-high',
+    executionModel: 'MiniMax-M3', effortArgument: 'high',
   },
 ];
 

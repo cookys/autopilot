@@ -136,12 +136,12 @@ function deepFreeze(value) {
 }
 
 const STRICT_L5_CLAIM_IDS = deepFreeze([
-  'cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61',
-  'cap-v1-bca28cd7d6916ef0b87e555b914d384e93ae18d00d4d4358f03a19e114839fe2',
-  'cap-v1-457d6083dbfb5f225185a21f49dbab55fe82ba91e97d4ab6759d2bfe2677318a',
-  'cap-v1-ca37452a0f5de7391db73db82d1d280179c610635a0b012a1e35eaa75b6a8129',
-  'cap-v1-9854b4497d0a2ddc3735ac0dac15078a5bae5840c741637dc16402362a019f9c',
-  'cap-v1-4afeb9cc7200233255c91510646ac4135e61322b8ee93b64864e85f4a7582ed5',
+  'cap-v1-ab2a255ea5aa993b9912ba235322cdb00a10d23b470c24061a8ce27243bed7dd',
+  'cap-v1-a0985249221f34d78ca50471280ac489920fb6bc53b26f27ba6b021158e8c18c',
+  'cap-v1-cfa5d0895d4346dd4bb6d3e1382ae2960a640aa4e5a51fd440cdd6bb0c0d87c5',
+  'cap-v1-a15924ef1c06d2a21338ef72e82d8efb9bd63f672d028dc11559a19a72d6eecc',
+  'cap-v1-a9f442e94d11192b70913e36eca3838f9a7f0b266f1fa1cd95a7e2149807b27f',
+  'cap-v1-c762bd57f6353988ea6106a7fcae0e167bbe02396ebea793be0bf5571a91878a',
 ]);
 
 const STRICT_L5_PROVIDER_POLICY = deepFreeze([
@@ -149,7 +149,7 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
     claim_id: STRICT_L5_CLAIM_IDS[0],
     tuple: {
       runner: 'cc-shim',
-      model: 'GLM-5.2',
+      model: 'GLM-5.3',
       role: 'verification_author',
       effort: 'high',
       endpoint: 'glm',
@@ -160,7 +160,7 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
     claim_id: STRICT_L5_CLAIM_IDS[1],
     tuple: {
       runner: 'cc-shim',
-      model: 'GLM-5.2',
+      model: 'GLM-5.3',
       role: 'qc',
       effort: 'high',
       endpoint: 'glm',
@@ -171,7 +171,7 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
     claim_id: STRICT_L5_CLAIM_IDS[2],
     tuple: {
       runner: 'codex',
-      model: 'gpt-5.6-sol',
+      model: 'gpt-6.1-sol',
       role: 'qc',
       effort: 'max',
       endpoint: null,
@@ -182,7 +182,7 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
     claim_id: STRICT_L5_CLAIM_IDS[3],
     tuple: {
       runner: 'grok',
-      model: 'grok-4.5',
+      model: 'grok-4.7',
       role: 'implementer',
       effort: 'high',
       endpoint: null,

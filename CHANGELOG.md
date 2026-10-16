@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0146 D1: new standalone `src/engine/review-increment.js` computes per-file digests, the changed / carried / re-check sets and every `full` fallback reason for an incremental return review (opt-in, not yet wired into the engine); `hooks/tests/review-increment.test.sh` carries the negative controls.
+
 - Backlog: BL-0020 (peer-reported by openclaw, agy flash/low implementer no-go) closed as stale: no shipped default or ladder rung uses agy flash/low any more (implementer default is grok-4.7/low). The original fleet message has expired, so the reply could not be threaded; recorded here instead.
 
 - The qualification case broker client now sends `payload.format: case_content` (was the misnomer `unified_diff`) and `CLIENT_PROTOCOL` is `qualification-case-client-v2`; broker, provider and tests changed together with no dual-read (BL-0053).

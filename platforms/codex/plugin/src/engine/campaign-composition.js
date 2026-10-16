@@ -94,11 +94,18 @@ function validateReviewAuthority(authority, reviewPayload) {
 // seat-store incremental binding, so an incremental gate can never collide with a full one.
 function incrementalGateKeyParts(preparedReview) {
   if (!isObj(preparedReview) || preparedReview.review_input_mode !== 'incremental_return') return {};
+  // BL-0146 D4: no shared sentinel. A round that claims incremental_return without a canonical
+  // binding is refused outright (a shared placeholder would let two unbound rounds collide on one
+  // gate entry). The engine falls back to the full path before it ever reports this mode unbound.
+  if (!isCanonicalSha256(preparedReview.incremental_binding)) { // guard:unbound_incremental
+    throw new CampaignCompositionError(
+      'INCREMENTAL_BINDING_MISSING',
+      'incremental_return review requires a canonical incremental_binding',
+    );
+  }
   return {
     review_input_mode: 'incremental_return',
-    incremental_binding: isCanonicalSha256(preparedReview.incremental_binding)
-      ? preparedReview.incremental_binding
-      : 'unbound-incremental',
+    incremental_binding: preparedReview.incremental_binding,
   };
 }
 
@@ -2057,7 +2064,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
     // diff/spec bytes or reviewer tuple invalidate the old gate without a
     // provider/model call.
     const preparedReview = prepareReview
-      ? requireReceipt(prepareReview(reviewPayload), 'prepareReview')
+      ? requireReceipt(
+        prepareReview(reviewPayload, { composition: true }),
+        'prepareReview',
+      )
       : {
         authority: {
           schema_version: 1,
@@ -3380,6 +3390,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
     ...(Object.prototype.hasOwnProperty.call(terminalReview, 'implementer_family')
       ? { implementer_family: terminalReview.implementer_family } : {}),
     ...(terminalReview.author_family_excluded === true ? { author_family_excluded: true } : {}),
+    // BL-0146 D4: only an opted-in return review carries these; the default receipt is unchanged.
+    ...(isStr(terminalReview.review_scope) ? { review_scope: terminalReview.review_scope } : {}),
+    ...(isObj(terminalReview.incremental) ? { incremental: terminalReview.incremental } : {}),
+    ...(isStr(terminalReview.incremental_fallback_reason)
+      ? { incremental_fallback_reason: terminalReview.incremental_fallback_reason } : {}),
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,

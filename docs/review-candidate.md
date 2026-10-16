@@ -50,6 +50,7 @@ authority on what is legal; an unknown field anywhere is rejected.
 | `adoption.head_sha` | Required. A 40-hex commit id that exists in the repository and differs from `base_sha`. (The sealer also accepts a 64-hex id in a sha256 repository, but intake supports only 40-hex SHA-1 repositories and refuses such a run with `campaign_repo_precondition_failed`.) |
 | `adoption.author_family` | Optional. Names the model family that wrote the range. It can only tighten the panel: that family's seats do not count toward the required family count. Use exactly one of `openai`, `anthropic`, `alibaba`, `google`, `xai`, `minimax`, `zhipu`. The match is literal against each seat's family (derived from its model name), and **a value that matches no seat is accepted silently and excludes nothing**, so check the spelling. |
 | `adoption.disposition_preset` | Optional, `end`, `return` or `repair`. Applies your choice to a parked review (section 6): `end` and `repair` close it at the first park, `return` is applied by a later `--resume`. |
+| `adoption.return_review` | Optional, `full` (default) or `incremental`. How a returned head is reviewed (section 6, `return`, "Incremental return review"). `full` re-reviews the whole `base..head` range; `incremental` is an opt-in that reviews the fix plus what it can affect. Sealed, so the seal pins the choice. |
 | `max_repair_generations` | Must be exactly `0`. |
 | `mission_runtime`, `strict_dispatch`, `unit_class` | Must be absent. |
 | `branch` | The branch whose tip is the head. At admission the tip must equal `adoption.head_sha`. |
@@ -88,7 +89,7 @@ values; section 3 shows a script that fills them from Git.
 }
 ```
 
-(`final_panel_reserve_seconds`, `adoption.author_family` and `adoption.disposition_preset` are optional.)
+(`final_panel_reserve_seconds`, `adoption.author_family`, `adoption.disposition_preset` and `adoption.return_review` are optional.)
 
 Field notes, each checked by the sealer:
 
@@ -490,8 +491,48 @@ The new head is re-derived from the branch and re-admitted (scope, file cap, anc
 re-reviews the **cumulative** `base..new_head` diff in the same campaign: seats review the whole
 range again, not just your fix. A reviewer's earlier pass is reused only when its input is byte-identical,
 and a new head changes every input, so expect a full review spend per `return`. There is no stale pass:
-nothing reviewed an older head counts for the new one. A cheaper delta re-review is a tracked follow-up
-(BL-0146). The wall budget (`max_wall_seconds`) is shared by every `return` of the campaign.
+nothing reviewed an older head counts for the new one. A cheaper delta re-review is an opt-in
+(`adoption.return_review: "incremental"`, below). The wall budget (`max_wall_seconds`) is shared by every
+`return` of the campaign.
+
+#### Incremental return review (opt-in)
+
+Set `adoption.return_review` to `"incremental"` in the sealed contract (default `"full"`, and an absent field
+means `full`; the seal pins the choice). A `return` then tries to review the fix and what it can affect
+instead of the whole range. The decision is made again from Git on every `return`; if any test fails the
+round is a normal full round and the receipt says why (`review_scope: "full"`,
+`incremental_fallback_reason`).
+
+What an incremental round does:
+
+- **Carries** the files the fix did not touch (their cumulative diff is byte-identical at the new head) and
+  were not pulled in by the next rule. A carried file is not shown to any seat; its earlier clean pass stands.
+- **Re-checks** the files the fix changed, plus any file that carried an open finding, plus unchanged files
+  that reference a changed file or that a changed file references (bounded textual matching, capped). Each
+  seat receives only these: the cumulative diff of the changed ones as `diff.patch`, the fix itself as
+  `delta.diff`, and the complete content of the re-check files as `tree/`.
+- **Does not close earlier findings by silence.** The earlier round's findings are carried into the new round
+  as still open. No seat is shown them yet (the prior-round addendum is off, pending an owner decision), so
+  no seat can close one: an incremental round that had findings parks again. The practical use today is to
+  see whether the fix introduced new problems cheaply; the round that issues `ready` is the second `return`,
+  which is always a full round.
+- **Never stacks two incremental rounds.** A conclusion is carried only from a full round, so a `return`
+  after an incremental round is full (`prior_round_incremental`).
+
+When it falls back to `full` (reason in the receipt): `opt_in_off`, `station_not_panel`,
+`prior_round_unknown` or `prior_round_unverified` (the earlier round's record is missing or disagrees with
+Git), `prior_round_incremental`, `no_carriable_seat`, `seat_not_carriable` (a seat has no re-derivable
+earlier verdict; a mixed round is not built), `finding_unmapped` (an earlier finding names no path in the
+range), `base_changed`, `roster_changed`, `spec_changed`, `verify_cmd_changed`, `verification_red`,
+`changed_ratio` (over half the range changed), `delta_packet_size`, `reference_cap`,
+`recheck_content_size`, `shared_surface` (the fix touched a manifest, lock file, schema or CI config) and
+`binding_unavailable`.
+
+What `review_scope: "incremental"` does **not** claim: that every file was re-read at the new head. A
+behavioural dependency with no textual reference (a setting read by name, dynamic dispatch) is not found.
+The receipt lists the carried paths with their `file_digest` and the re-check set with the reason each path is
+in it, so a reader can recompute both from the two heads. Keep the default `full` when that residual risk is
+not acceptable.
 
 **Known limitation: a fix that shrinks the range can be refused.** The campaign records the cumulative
 count of changed files, and that count may not decrease. If your fix reverts a whole file to its `base`

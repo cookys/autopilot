@@ -28,6 +28,8 @@ fs.mkdirSync(diffDir, { recursive: true });
 fs.writeFileSync(logFile, '');
 process.env.RC_LOG = logFile;
 process.env.RC_DIFF_DIR = diffDir;
+const packetDir = path.join(outDir, 'seat-packets');
+process.env.RC_PACKET_DIR = packetDir;
 process.env.RC_VERDICT = ctx.verdict || 'ship';
 process.env.RC_FAIL_MODEL = ctx.failModel || '';
 const {
@@ -85,6 +87,11 @@ const range = {
     fs.writeFileSync(path.join(worktree, 'src', 'a.txt'), 'a\n');
     fs.writeFileSync(path.join(worktree, 'src', 'b.txt'), 'b\n');
   },
+  // BL-0146 D4: five files (the file cap), so a one-file fix is a small share of the range.
+  multi: () => {
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), 'external\n');
+    for (const name of ['a', 'b', 'c', 'd']) fs.writeFileSync(path.join(worktree, 'src', `${name}.txt`), `${name} payload\n`);
+  },
   churn_warn: () => {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${'line\n'.repeat(60)}`);
   },
@@ -96,7 +103,7 @@ const range = {
 };
 const rangeKind = {
   out_of_scope: 'out_of_scope', file_cap: 'file_cap', churn_warn: 'churn_warn',
-  marker_committed: 'marker_committed', two_files: 'two_files',
+  marker_committed: 'marker_committed', two_files: 'two_files', multi: 'multi',
 }[scenario] || 'ok';
 let head = null;
 if (!isImplControl) {
@@ -136,7 +143,7 @@ const contractBody = {
   repo_identity: `git-common-dir:${commonDir}`, base_sha: base, branch,
   vertical_acceptance: ['src/value.txt must change'],
   allowed_path_prefixes: ['src/'],
-  max_changed_files: scenario === 'file_cap' ? 1 : 5,
+  max_changed_files: scenario === 'file_cap' ? 1 : (scenario === 'multi' ? 6 : 5),
   baseline_churn: 10, max_growth_ratio: 1.5, max_extra_churn: 5,
   max_repair_generations: isImplControl || scenario === 'impl_under_candidate' ? 2 : 0,
   max_wall_seconds: 600, final_panel_reserve_seconds: 0,
@@ -148,6 +155,7 @@ else if (!isImplControl && scenario !== 'impl_under_candidate') {
   contractBody.adoption = { head_sha: sealedHead, ...(authorFamily ? { author_family: authorFamily } : {}) };
 }
 if (ctx.preset && contractBody.adoption) contractBody.adoption.disposition_preset = ctx.preset;
+if (ctx.returnReview && contractBody.adoption) contractBody.adoption.return_review = ctx.returnReview;
 if (scenario === 'adoption_with_strict_dispatch') contractBody.strict_dispatch = true;
 fs.writeFileSync(promptFile, 'review the externally produced range\n');
 fs.writeFileSync(contractPath, `${JSON.stringify(contractBody, null, 2)}\n`);
@@ -287,6 +295,27 @@ if (ctx.stubAdmission) {
   };
 }
 const forced = { called: false, result: null };
+// BL-0146 D4 item 5: what the composition's prepareReview call received back, so a test can see where the
+// mode and binding sit (top level) and what the review authority holds (full_diff_generation digest only).
+const preparedCaptures = [];
+if (ctx.capturePrepared) {
+  options.campaignComposer = (composeInput, composeAdapters) => runCampaignComposition(composeInput, {
+    ...composeAdapters,
+    prepareReview: (payload, extra) => {
+      const receipt = composeAdapters.prepareReview(payload, extra);
+      preparedCaptures.push({
+        top_mode: receipt.review_input_mode === undefined ? null : receipt.review_input_mode,
+        top_binding: receipt.incremental_binding === undefined ? null : receipt.incremental_binding,
+        authority_keys: receipt.authority ? Object.keys(receipt.authority).sort() : null,
+        authority_mode: receipt.authority && receipt.authority.review_input_mode !== undefined ? receipt.authority.review_input_mode : null,
+        payload_mode: payload.review_input_mode,
+        authority_review_input_digest: receipt.authority ? receipt.authority.review_input_digest : null,
+        payload_digest: require(path.join(root, 'src', 'engine', 'campaign-verification')).canonicalDigest(payload),
+      });
+      return receipt;
+    },
+  });
+}
 if (scenario === 'forced_writer') {
   options.campaignComposer = (composeInput, composeAdapters) => {
     // Plant the RO1 control: reach the implement adapter directly, as a regression would.
@@ -460,10 +489,19 @@ for (const stepSpec of (ctx.steps || [])) {
   process.env.RC_FAIL_MODEL = stepEnv.RC_FAIL_MODEL || '';
   const beforeReviews = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length;
   const beforeVerify = verifyRuns;
+  fs.rmSync(diffDir, { recursive: true, force: true }); fs.mkdirSync(diffDir, { recursive: true });
+  fs.rmSync(packetDir, { recursive: true, force: true });
   if (stepSpec.move === 'forward') {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `external-${stepsOut.length + 2}\n`);
     git(worktree, 'add', '-A');
     git(worktree, 'commit', '-qm', 'author follow-up');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
+  } else if (stepSpec.move === 'forward_shared') {
+    // BL-0146 D4: a fix that also touches a shared-surface file (a manifest), which forces a full round.
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `external-${stepsOut.length + 2}\n`);
+    fs.writeFileSync(path.join(worktree, 'src', 'package.json'), '{}\n');
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-qm', 'author follow-up touching a manifest');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
   } else if (stepSpec.move === 'sideways') {
     git(worktree, 'reset', '-q', '--hard', base);
@@ -518,6 +556,45 @@ for (const stepSpec of (ctx.steps || [])) {
       const dir = path.join(commonDir, 'autopilot', 'review-candidate-repair');
       try { return fs.readdirSync(dir).flatMap((d) => fs.readdirSync(path.join(dir, d)).map((f) => `${d}/${f}`)); } catch (_e) { return []; }
     })(),
+    // BL-0146 D4: what each seat was handed this step (diff bytes, the packet's tree listing, delta.diff)
+    // and what the receipt disclosed.
+    seat_inputs: (() => {
+      const out = {};
+      try {
+        for (const f of fs.readdirSync(diffDir)) {
+          const model = f.replace(/\.diff$/, '');
+          const read = (ext) => { try { return fs.readFileSync(path.join(packetDir, `${model}.${ext}`), 'utf8'); } catch (_e) { return null; } };
+          out[model] = {
+            diff: fs.readFileSync(path.join(diffDir, f), 'utf8'),
+            tree: read('tree'), delta: read('delta'), spec: read('spec'),
+          };
+        }
+      } catch (_e) { /* no seat ran */ }
+      return out;
+    })(),
+    disclosure: (() => {
+      const hit = (o, depth) => {
+        if (!o || typeof o !== 'object' || depth > 6) return null;
+        if (typeof o.review_scope === 'string') return o;
+        for (const v of Object.values(o)) { const r = hit(v, depth + 1); if (r) return r; }
+        return null;
+      };
+      const d = hit(stepResult, 0);
+      return d ? { review_scope: d.review_scope, incremental: d.incremental || null, incremental_fallback_reason: d.incremental_fallback_reason || null } : null;
+    })(),
+    store_files: (() => {
+      const out = [];
+      const walk = (dir, rel) => {
+        let names = [];
+        try { names = fs.readdirSync(dir); } catch (_e) { return; }
+        for (const n of names) {
+          const full = path.join(dir, n);
+          if (fs.statSync(full).isDirectory()) walk(full, `${rel}${n}/`); else out.push(`${rel}${n}`);
+        }
+      };
+      walk(path.join(commonDir, 'autopilot', 'final-panel-seats'), '');
+      return out;
+    })(),
     result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });
 }
@@ -564,6 +641,7 @@ emit({
   seat_diff_perturbed_parity: seatDiffs.length > 0 && independentDiff !== null
     && seatDiffs.every((d) => Buffer.compare(d, Buffer.concat([independentDiff, Buffer.from('x')])) === 0),
   forced_called: forced.called, forced_result: forced.result,
+  prepared_captures: preparedCaptures,
   admission_stub_calls: adopterAdmissionCalls,
   operator_status_clean: mainStatus === '' || /^\?\? /.test(mainStatus) === false,
   result_keys: Object.keys(result), handoff: handoffSummary(result), findings_count: Array.isArray(result.findings) ? result.findings.length : null,

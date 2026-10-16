@@ -427,7 +427,17 @@ function buildReviewPacket({
   specFile,
   outDir,
   denyList,
+  incremental,
 } = {}) {
+  // BL-0146 D4: an incremental (returned-head) packet carries only the re-check set. `incremental`
+  // is { diff_paths, tree_paths, delta_diff }: `diffFile` must equal the pinned cumulative diff of
+  // diff_paths, `tree/` is cut to tree_paths, and `delta.diff` (H0..H1) rides along. Absent, this
+  // function behaves byte-for-byte as before.
+  const inc = incremental === undefined || incremental === null ? null : incremental;
+  if (inc !== null && (!Array.isArray(inc.diff_paths) || !Array.isArray(inc.tree_paths)
+      || !Buffer.isBuffer(inc.delta_diff))) {
+    throw new Error('incremental packet descriptor malformed');
+  }
   const deny = normalizeDenyList(denyList);
   const repoAbs = path.resolve(repo);
   const outAbs = path.resolve(outDir);
@@ -598,17 +608,30 @@ function buildReviewPacket({
       }
     }
 
+    if (inc !== null) {
+      // Keep only the re-check files at the candidate. A path denied above is already gone.
+      const keep = new Set(inc.tree_paths);
+      for (const item of walkLstat(treeDir)) {
+        if (item.st.isDirectory()) continue;
+        if (!keep.has(item.rel)) rmIfExists(item.full);
+      }
+    }
     const inputDiff = fs.readFileSync(diffFile);
-    const canonicalRaw = runGit('git diff', [
-      'diff', '--no-ext-diff', '--no-textconv', `${baseOid}..${candidateOid}`,
-    ], { cwd: repoAbs, env: gitEnv() });
+    const canonicalRaw = inc === null
+      ? runGit('git diff', [
+        'diff', '--no-ext-diff', '--no-textconv', `${baseOid}..${candidateOid}`,
+      ], { cwd: repoAbs, env: gitEnv() })
+      : require('../engine/review-increment').pathDiff(repoAbs, baseOid, candidateOid, inc.diff_paths);
     const canonical = Buffer.isBuffer(canonicalRaw) ? canonicalRaw : Buffer.from(canonicalRaw);
     if (!canonical.equals(inputDiff)) {
       throw new Error('diff not canonical');
     }
 
-    const nameStatusRaw = runGit('git diff --name-status', [
+    const nameStatusRaw = runGit('git diff --name-status', inc === null ? [
       'diff', '--no-ext-diff', '--no-textconv', '--name-status', '-z', baseOid, candidateOid,
+    ] : [
+      '--literal-pathspecs', 'diff', '--no-renames', '--ignore-submodules=none', '--no-ext-diff',
+      '--no-textconv', '--name-status', '-z', baseOid, candidateOid, '--', ...inc.diff_paths,
     ], { cwd: repoAbs, env: gitEnv() });
     const records = parseNameStatus(Buffer.isBuffer(nameStatusRaw) ? nameStatusRaw : Buffer.from(nameStatusRaw));
     const sections = splitDiffSections(inputDiff);
@@ -633,6 +656,8 @@ function buildReviewPacket({
       kept.push(sections[i]);
     }
     fs.writeFileSync(path.join(outAbs, 'diff.patch'), Buffer.concat(kept));
+
+    if (inc !== null) fs.writeFileSync(path.join(outAbs, 'delta.diff'), inc.delta_diff);
 
     const specDest = path.join(outAbs, 'spec.md');
     if (specFile == null) {

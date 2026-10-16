@@ -20,11 +20,24 @@ function seatAnswer(result, findingId) {
  * @param {string[]} priorFindingIds
  * @param {Object<string, object|null>} seats seat id -> normalizeSeatReview result (null = absent)
  *   for EVERY seat of the sealed panel
- * @param {number} quorum sealed panel quorum
+ * @param {number} quorum sealed panel quorum (positive safe integer)
+ * @param {string[]} sealedSeatIds the sealed panel's seat ids; `seats` must have exactly these keys
  * @returns {Array<{finding_id, state, invalid_seats, reason}>}
  */
-function evaluateClosure(priorFindingIds, seats, quorum) {
+function evaluateClosure(priorFindingIds, seats, quorum, sealedSeatIds) {
   const seatIds = Object.keys(seats);
+  // BL-0146 D4: fail closed on a malformed call. A quorum that is not a positive safe integer
+  // would make `reviewing.length < quorum` false for NaN/undefined and close on any reviewer; a
+  // seat map that is not exactly the sealed panel could hide an absent seat or add a stranger.
+  const refuse = (reason) => priorFindingIds.map((findingId) => ({
+    finding_id: findingId, state: OPEN, invalid_seats: [], reason,
+  }));
+  if (!Number.isSafeInteger(quorum) || quorum < 1) return refuse('invalid_quorum'); // guard:quorum_integer
+  const sealed = Array.isArray(sealedSeatIds) ? new Set(sealedSeatIds) : null;
+  if (sealed === null || sealed.size !== sealedSeatIds.length || sealed.size === 0
+      || sealed.size !== seatIds.length || !seatIds.every((id) => sealed.has(id))) { // guard:seat_map
+    return refuse('seat_map_mismatch');
+  }
   const reviewing = seatIds.filter((id) => seats[id] && seats[id].status === 'normalized');
   return priorFindingIds.map((findingId) => {
     const answers = seatIds.map((id) => [id, seatAnswer(seats[id], findingId)]);

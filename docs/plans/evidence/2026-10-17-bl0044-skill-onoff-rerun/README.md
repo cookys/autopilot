@@ -82,4 +82,37 @@ prefix `Use dev-flow:` in every arm, 3 reps, resume-by-cell, `ONOFF_KEEP_CELLS_D
 
 ## Results
 
-(appended after the run)
+Run 2026-10-16 23:21 to 2026-10-17 00:25 (CST), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
+runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD in total. Rows and scorer output:
+`results-pa-full-off.jsonl`, `results-pr-red.jsonl`, `results-pc-card.jsonl`, `score-final.json`, `score-redcheck.json`.
+Raw per-cell transcripts (not in git): `/tmp/claude-1000/-home-cookys-projects-autopilot/a6cb3442-5126-4226-b728-ccd67665cfd4/scratchpad/gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
+
+### P-A + P-C (n = 9 per counted family)
+
+| Family | FULL | CARD | OFF | V2 load-bearing | V3 (CARD >= FULL-2 and CARD-OFF >= ceil((FULL-OFF)/2)) |
+|---|---|---|---|---|---|
+| F1 sizing recorded | 8 | 6 | 0 | yes | pass (6 >= 6, 6 >= 4) boundary |
+| F2 stage entered | 7 | 7 | 0 | yes | pass |
+| F3 branch discipline | 8 | 9 | 0 | yes | pass |
+| F4 maintenance ledger | 6 | 4 | 1 | yes | pass (4 >= 4, 3 >= 3) boundary |
+| F8 bug commit root cause | 9 | 9 | 0 | yes | pass |
+| F5 red before edit (info) | 3 | 3 | 3 | no | |
+| F6 quality gate M (info) | 0 | 0 | 0 | no | |
+| I7 L gates (info) | 0 | 0 | 0 | no | |
+
+V1: dev-flow invoked 30/30 in FULL and 30/30 in CARD. V2: 5/5 counted families load-bearing. **Verdict by the frozen map: SHIP-GATE-MET.**
+
+### P-R red check (instrument can see a regression)
+
+Full rows against red rows (renamed arm=off): F1 8 vs 0, F2 7 vs 0, F3 8 vs 0 are load-bearing, as required; F4 6 vs 0 also. F8 9 vs 9 is not,
+correctly: the planted regressions removed sizing, stage entry and the branch rule only, and the root-cause commit rule was left intact.
+The red arm invoked the skill 30/30, so the drop is the body's content, not routing.
+
+### Reading and limits
+
+- Two boundary passes (F1 6 vs the threshold 6; F4 4 vs 4). A one-count shift would have turned them into ITERATE-CARD. The verdict stands under the frozen rule; the margin is thin and is recorded rather than smoothed.
+- The card's F3 at 9/9 against FULL 8/9 and F4 4 vs 6 are within the noise of n=9 per arm at one model; no card advantage is claimed.
+- Claim scope: single-turn headless `claude -p`, sonnet-5-5, explicit `Use dev-flow:` invocation prefix, small fixtures. Not measured: routing, interactive sessions, L/XL walks (headless L stops at the plan), the quality gate on M (documented-only, 0/6 in both arms), red-first (the live body has no inline rule), opus-class behaviour.
+- BL-0049 answer: with a fixture that already has the ledger tree, F4 is FULL 6/9 vs OFF 1/9 (the 0/3 in 2026-08 was the missing tree, as suspected). No enforcer is warranted on this evidence; the rule stays `documented-only` in `references/four-layer-design.md` S2 and the number is updated there.
+- F6 stays at 0/6 with the dev-flow body loaded: the M-size quality-pipeline invocation is still not followed in headless sonnet. This is an independent finding about the live rule, unchanged by the card.
+

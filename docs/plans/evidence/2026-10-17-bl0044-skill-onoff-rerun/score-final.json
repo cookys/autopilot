@@ -1,0 +1,105 @@
+{
+  "model": "sonnet",
+  "runner_version": "2.1.301 (Claude Code)",
+  "excluded_pairs": [],
+  "families": {
+    "F1": {
+      "n": 9,
+      "full": 8,
+      "card": 6,
+      "off": 0,
+      "label": "sizing recorded",
+      "informational": false,
+      "load_bearing": true
+    },
+    "F2": {
+      "n": 9,
+      "full": 7,
+      "card": 7,
+      "off": 0,
+      "label": "stage entered",
+      "informational": false,
+      "load_bearing": true
+    },
+    "F3": {
+      "n": 9,
+      "full": 8,
+      "card": 9,
+      "off": 0,
+      "label": "branch discipline",
+      "informational": false,
+      "load_bearing": true
+    },
+    "F4": {
+      "n": 9,
+      "full": 6,
+      "card": 4,
+      "off": 1,
+      "label": "maintenance ledger",
+      "informational": false,
+      "load_bearing": true
+    },
+    "F8": {
+      "n": 9,
+      "full": 9,
+      "card": 9,
+      "off": 0,
+      "label": "bug commit states root cause",
+      "informational": false,
+      "load_bearing": true
+    },
+    "F5": {
+      "n": 9,
+      "full": 3,
+      "card": 3,
+      "off": 3,
+      "label": "red before edit",
+      "informational": true,
+      "load_bearing": false
+    },
+    "F6": {
+      "n": 6,
+      "full": 0,
+      "card": 0,
+      "off": 0,
+      "label": "quality gate (M)",
+      "informational": true,
+      "load_bearing": false
+    },
+    "I7": {
+      "n": 3,
+      "full": 0,
+      "card": 0,
+      "off": 0,
+      "label": "L gates",
+      "informational": true,
+      "load_bearing": false
+    }
+  },
+  "v1": {
+    "full": {
+      "invoked": 30,
+      "eff": 30,
+      "pass": true
+    },
+    "card": {
+      "invoked": 30,
+      "eff": 30,
+      "pass": true
+    }
+  },
+  "v2": {
+    "load_bearing": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F8"
+    ],
+    "pass": true
+  },
+  "v3": {
+    "failed_families": []
+  },
+  "verdict": "SHIP-GATE-MET"
+}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `reap-dispatch-branches.sh check --ack` now persists and re-reads acknowledgments for SHA-256 repositories (64-hex tips) as well as SHA-1 (40-hex); other lengths and non-hex are still dropped (BL-0063).
+
 - `dispatch-hetero.sh` now ignores SIGTTIN around job-controlled worker launches, so a worker that reads `/dev/tty` under an interactive run gets EIO instead of being stopped (BL-0099).
 
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.

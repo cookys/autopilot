@@ -730,19 +730,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
 - **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
 
-### Dispatch-branch lifecycle — SHA-256 `check --ack` residual
-- **Id**: BL-0063
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: 清理派工分支的工具在手動確認時，只接受 40 位的 SHA-1 編號，用 SHA-256 的 git 倉庫就無法確認。其餘部分已支援。 (draft)
-- **Impact**: 目前沒有人用 SHA-256 倉庫，幾乎沒有影響。 (draft)
-- **Trigger**: 第一個 SHA-256 object-format repository 要使用 manual `check --ack`／restore acknowledgment。
-- **Effort**: S
-- **Source**: 2026-07-31 code/backlog audit。
-- **Pointer**: docs/backlog/dispatch-branch-lifecycle-sha-256-check-ack-residual.md
-- **Context**: inventory、reap 與 restore tests 已支援 SHA-256；剩餘缺口是 acknowledgment validator 仍只接受 40-hex SHA-1。
-
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Id**: BL-0064
 - **Status**: open

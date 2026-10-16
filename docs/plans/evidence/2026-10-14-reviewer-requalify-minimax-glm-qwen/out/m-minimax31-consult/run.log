@@ -1,0 +1,4 @@
+2026-10-14T16:06:12+08:00 runtime probe: requested=MiniMax-M3.1-Flash-Preview resolved=MiniMax-M3.1-Flash-Preview
+2026-10-14T16:06:12+08:00 lane=minimax31 role=consult START model=MiniMax-M3.1-Flash-Preview model_version=MiniMax-M3.1-Flash-Preview version_source=runtime dry=0
+2026-10-14T16:10:06+08:00 lane=minimax31 role=consult END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

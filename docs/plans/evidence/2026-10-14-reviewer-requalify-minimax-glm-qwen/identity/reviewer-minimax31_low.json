@@ -1,0 +1,25 @@
+{
+  "identity": "MiniMax-M3.1-Flash-Preview",
+  "engine": "MiniMax-M3.1-Flash-Preview",
+  "family": "minimax",
+  "runner": "anthropic-compatible",
+  "runner_version": "node-direct-http-fetch",
+  "harness_version": "engine-qualify-67be7ffb",
+  "effort": "low",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "semantic_fingerprint": "24c8ca2ed00addc27f31d71cc000fb321bb4af2cb113021f725e5adcac96c011",
+  "containment_fingerprint": "8b46dca183416dba76098551ea81c0db5766df3fb97c93718671cb8d0686343c",
+  "_invented": [],
+  "_semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "MiniMax-M3.1-Flash-Preview",
+    "transport": "anthropic-compatible-http",
+    "http_reasoning_effort": "low",
+    "endpoint": "minimax"
+  },
+  "_containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

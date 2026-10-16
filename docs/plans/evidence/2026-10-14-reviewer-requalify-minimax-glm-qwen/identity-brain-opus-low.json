@@ -1,0 +1,14 @@
+{
+  "identity": "claude-opus-5-5",
+  "model_alias": "claude-opus-5-5",
+  "model_version": "claude-opus-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.299-Claude-Code",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "low",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "fe9e90c208f836cb4eda16a85caa4649bb5fea7cc456acba10952154e0e9429f",
+  "containment_fingerprint": "2bb6d527c0be600f61f40ffaafeb72b265e6c0a02c260ef2ebbed1da7d4df06f"
+}

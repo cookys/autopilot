@@ -1,0 +1,10 @@
+2026-10-14T19:08:55+08:00 ITEM argon:high START sitting=1 generator=reviewer-metamorphic-v6
+2026-10-14T19:09:00+08:00 ITEM argon:high END rc=0 secs=5 dir=rv6-argon-reviewer-high
+2026-10-14T19:09:00+08:00 ITEM argon:high transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:09:00+08:00 ITEM argon:high START sitting=2 generator=reviewer-metamorphic-v6
+2026-10-14T19:09:06+08:00 ITEM argon:high END rc=0 secs=6 dir=rv6-argon-reviewer-high
+2026-10-14T19:09:06+08:00 ITEM argon:high transport_fail is not a verdict; renamed, re-sitting
+2026-10-14T19:09:06+08:00 ITEM argon:high START sitting=3 generator=reviewer-metamorphic-v6
+2026-10-14T19:09:11+08:00 ITEM argon:high END rc=0 secs=5 dir=rv6-argon-reviewer-high
+2026-10-14T19:09:11+08:00 ITEM argon:high RECORDED rc=1 event= summary={} transport_fail undefined err=ERROR: missing required field(s): engine, runner, family, role, model_version, version_source, corpus_version, harness_version, runner_version, prompt_config_hash, date, quality, capability_score, cos
+2026-10-14T19:09:11+08:00 CHAIN argon2 DONE

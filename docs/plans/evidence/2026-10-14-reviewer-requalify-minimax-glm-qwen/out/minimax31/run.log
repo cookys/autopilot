@@ -1,0 +1,4 @@
+2026-10-14T13:36:19+08:00 runtime probe: requested=MiniMax-M3.1-Flash-Preview resolved=MiniMax-M3.1-Flash-Preview
+2026-10-14T13:36:19+08:00 lane=minimax31 START model=MiniMax-M3.1-Flash-Preview model_version=MiniMax-M3.1-Flash-Preview version_source=runtime dry=0
+2026-10-14T13:44:38+08:00 lane=minimax31 END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+rc=1

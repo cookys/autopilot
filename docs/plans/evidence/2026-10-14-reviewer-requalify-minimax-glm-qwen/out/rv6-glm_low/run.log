@@ -1,0 +1,4 @@
+2026-10-14T20:31:18+08:00 effort evidence: {"path":"/v1/messages","anthropic_version":"2023-06-01","model":"glm-5.3","max_tokens":32768,"temperature":0,"output_config":{"effort":"low"},"thinking":"<absent>","system_chars":5517,"user_chars":165} exit=0 live_ping status=200 model=glm-5.3 stop=end_turn output_tokens=4 blocks=text 
+2026-10-14T20:31:18+08:00 lane=glm_low START model=glm-5.3 model_version=glm-5.3 version_source=runtime effort=low thinking=none
+2026-10-14T20:35:29+08:00 lane=glm_low END rc=0
+rc=0

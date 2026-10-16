@@ -1,0 +1,28 @@
+{
+  "identity": "Qwen3.8-Max",
+  "engine": "Qwen3.8-Max",
+  "family": "alibaba",
+  "runner": "qoderclicn",
+  "runner_version": "1.1.70",
+  "harness_version": "qrp:f4f6e688",
+  "effort": "high",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "semantic_fingerprint": "d2a61a755c767d02782f7e12fd9c930c23d8fb1a245d1fe48ac13b2cad98c339",
+  "containment_fingerprint": "ceb2ae0a6a775422305fe26409597cf1675a2db864d0e146c208d56be51e0bec",
+  "_invented": [
+    "qoderclicn reviewer transport/posture/credential surface strings (no precedent for this role)"
+  ],
+  "_semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "Qwen3.8-Max",
+    "transport": "qoderclicn-p-tools-empty",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "qoderclicn -p --model --tools \"\" --permission-mode dont_ask (no skip-permissions)",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

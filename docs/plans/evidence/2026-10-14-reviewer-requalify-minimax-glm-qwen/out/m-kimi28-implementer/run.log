@@ -1,0 +1,5 @@
+kimi28 alias label: display_name = "K2.8 Preview"
+kimi28-probe rc=0: kimi version 2.1.1 • Just reply PONG.  • PONG  To resume this session: kimi -r session_ad23443d-fa0e-4e03-acfa-9a547b9f78b1
+2026-10-14T14:29:51+08:00 lane=kimi28 role=implementer START
+2026-10-14T14:37:34+08:00 lane=kimi28 role=implementer END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

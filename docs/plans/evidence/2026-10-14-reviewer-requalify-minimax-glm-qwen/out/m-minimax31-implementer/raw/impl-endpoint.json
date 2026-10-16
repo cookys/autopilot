@@ -1,0 +1,5 @@
+{
+  "name": "minimax",
+  "base_url": "https://api.minimax.io/anthropic",
+  "transport_security": "tls"
+}

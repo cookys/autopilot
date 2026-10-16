@@ -1,0 +1,4 @@
+2026-10-14T21:07:27+08:00 effort evidence: {"path":"/v1/messages","anthropic_version":"2023-06-01","model":"MiniMax-M3","max_tokens":32768,"temperature":0,"output_config":"<absent>","thinking":{"type":"adaptive"},"system_chars":5517,"user_chars":165} exit=0 live_ping status=200 model=MiniMax-M3 stop=end_turn output_tokens=38 blocks=thinking+text 
+2026-10-14T21:07:27+08:00 lane=minimax_think START model=MiniMax-M3 model_version=MiniMax-M3 version_source=runtime effort=default thinking=adaptive
+2026-10-14T21:22:32+08:00 lane=minimax_think END rc=1
+rc=1

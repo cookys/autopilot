@@ -1,0 +1,3 @@
+2026-10-14T12:40:42+08:00 lane=qwen START model=Qwen3.8-Max model_version=Qwen3.8-Max version_source=operator-asserted dry=0
+2026-10-14T13:07:48+08:00 lane=qwen END rc=1 (written by operator: cell.sh rewritten mid-run, tail never executed; rc=1 from failed verdict in stdout.json)
+rc=1

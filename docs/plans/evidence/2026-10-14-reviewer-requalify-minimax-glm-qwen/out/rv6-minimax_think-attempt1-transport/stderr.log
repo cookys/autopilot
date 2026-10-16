@@ -1,0 +1,1 @@
+{"engine":"MiniMax-M3","model":"MiniMax-M3","runner":"anthropic-compatible","role":"reviewer","outcome":"transport_fail","cases_attempted":16,"reason":"transport failure on trial-2 case clean-19 — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

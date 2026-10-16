@@ -1,0 +1,4 @@
+2026-10-14T17:53:39+08:00 runtime probe: status/model/state=200 muse-spark-1.3-contributor completed
+2026-10-14T17:53:39+08:00 lane=muse role=verification_author START model=muse-spark-1.3-contributor model_version=muse-spark-1.3-contributor version_source=runtime dry=0
+2026-10-14T17:57:28+08:00 lane=muse role=verification_author END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

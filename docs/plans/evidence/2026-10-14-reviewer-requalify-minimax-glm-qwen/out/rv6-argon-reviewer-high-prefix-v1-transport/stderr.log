@@ -1,0 +1,1 @@
+{"engine":"gemini-4-argon-high","model":"gemini-4-argon-high","runner":"agy","role":"reviewer","outcome":"transport_fail","cases_attempted":1,"reason":"transport failure on trial-1 case clean-12 — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

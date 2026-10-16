@@ -725,8 +725,18 @@ TRUNC_HITS=$(awk '
   /todayMsUtc\(\)/ { print NR": "$0 }
 ' "$ESC")
 [ -z "$TRUNC_HITS" ] \
-  && ok "instant3: no UTC-midnight-truncated default clock remains anywhere in engine-scorecard.js" \
-  || bad "instant3: a truncated default clock is back: $TRUNC_HITS"
+  && ok "instant3: no call to the removed todayMsUtc() helper remains in engine-scorecard.js (a grep for that name only; the behaviour is instant1/instant2)" \
+  || bad "instant3: the removed todayMsUtc() helper is called again: $TRUNC_HITS"
+
+# startOfUtcDayMsOf must not throw for a finite ms outside the Date range
+# (new Date(ms).toISOString() throws RangeError there): it hands the value back.
+RANGE_OUT=$(node -e "
+const m = require('$ESC');
+const r = [m.startOfUtcDayMsOf(9e15), m.startOfUtcDayMsOf(-9e15), m.startOfUtcDayMsOf(Date.UTC(2026,7,24,10,0,0))];
+console.log(JSON.stringify(r));" 2>&1)
+[ "$RANGE_OUT" = "[9000000000000000,-9000000000000000,1787529600000]" ] \
+  && ok "instant5: startOfUtcDayMsOf returns out-of-Date-range finite input unchanged instead of throwing, and floors a normal instant" \
+  || bad "instant5: startOfUtcDayMsOf range handling wrong: $RANGE_OUT"
 
 # ...and the same must hold for the shipped Codex mirror, which is a byte copy.
 TRUNC_HITS_MIRROR=$(awk '
@@ -734,8 +744,8 @@ TRUNC_HITS_MIRROR=$(awk '
   /todayMsUtc\(\)/ { print NR": "$0 }
 ' "$ROOT/platforms/codex/plugin/scripts/engine-scorecard.js" 2>/dev/null)
 [ -z "$TRUNC_HITS_MIRROR" ] \
-  && ok "instant4: the Codex mirror of engine-scorecard.js carries the same instant clock" \
-  || bad "instant4: truncated default clock present in the Codex mirror: $TRUNC_HITS_MIRROR"
+  && ok "instant4: no call to the removed todayMsUtc() helper in the Codex mirror of engine-scorecard.js (a grep for that name only)" \
+  || bad "instant4: the removed todayMsUtc() helper is called in the Codex mirror: $TRUNC_HITS_MIRROR"
 
 # =============================================================================
 # Landing assertion (evidence-discipline §9): rows landed in the isolated

@@ -273,6 +273,125 @@ def shell_code_view(line):
     return "".join(out)
 
 
+_TRIVIAL_TRUE = re.compile(
+    r"^(?:true|:|\[ 1 (?:-eq|=|==) 1 \]|\[\[ 1 (?:-eq|=|==) 1 \]\])$"
+)
+_TRIVIAL_FALSE = re.compile(r"^(?:false|\[ 1 (?:-eq|=|==) 2 \])$")
+_EXIT_SEG = re.compile(r"^(?:exit|return)(?:\s+0)?$")
+_ASSERT_LIKE = re.compile(
+    r"\bassert\w*|\bPASS\b|\bFAIL\b|\bfinalize_test\b|^\s*(?:pass|fail|ok|not_ok)\s"
+)
+_HEREDOC = re.compile(r"<<-?\s*(?:\\?(\w+)|'(\w+)'|\"(\w+)\")")
+
+
+def find_early_exits(text):
+    """Return 1-based line numbers of top-level UNCONDITIONAL `exit`/`return`
+    statements that still have assertion-like lines after them.
+
+    File-level, not line-level: a line regex cannot tell a spliced `exit 0`
+    from a legitimate guard clause, but position can. An exit is "unconditional"
+    when every enclosing construct is a plain `{ }` group (or a trivially-true
+    `if`), and the statement is not behind `&&`/`||` with a non-trivial left
+    side. A guard clause (`if ...; then exit 0; fi`, `[ -x f ] || exit 0`) is
+    conditional and not reported; a terminating exit with nothing after it is
+    not reported either."""
+    lines = text.split("\n")
+    stack = []  # "group" (transparent) or "other" (conditional / function / loop / case / subshell)
+    heredoc_end = None
+    hits = []
+    for idx, raw in enumerate(lines, start=1):
+        if heredoc_end is not None:
+            if raw.strip() == heredoc_end:
+                heredoc_end = None
+            continue
+        code = shell_code_view(raw).strip()
+        m = _HEREDOC.search(raw)
+        if m:
+            heredoc_end = next(g for g in m.groups() if g)
+        if not code:
+            continue
+        parts = re.split(r"(&&|\|\||;;|;)", code)
+        prev_op = None
+        left = ""
+        for part in parts:
+            if part in ("&&", "||", ";;", ";"):
+                prev_op = part
+                continue
+            seg = part.strip()
+            if not seg:
+                continue
+            conditional = False
+            if prev_op == "&&" and not _TRIVIAL_TRUE.match(left):
+                conditional = True
+            if prev_op == "||" and not _TRIVIAL_FALSE.match(left):
+                conditional = True
+            while True:
+                mm = re.match(r"^(?:then|else|do|!)(?:\s+(.*)|$)", seg)
+                if mm:
+                    seg = (mm.group(1) or "").strip()
+                    continue
+                break
+            if re.match(r"^elif\b", seg):
+                seg = ""
+            if re.match(r"^(?:fi|done|esac)\b", seg):
+                if stack:
+                    stack.pop()
+                seg = re.sub(r"^(?:fi|done|esac)\b\s*", "", seg)
+            if seg == "}":
+                if stack:
+                    stack.pop()
+                seg = ""
+            if not seg:
+                prev_op = None
+                continue
+            if re.match(r"^(?:if|while|until)\b", seg):
+                cond = re.sub(r"^(?:if|while|until)\s+", "", seg).strip()
+                if seg.startswith("if") and _TRIVIAL_TRUE.match(cond):
+                    stack.append("group")
+                else:
+                    stack.append("other")
+                left = cond
+                prev_op = None
+                continue
+            if re.match(r"^(?:for|select|case)\b", seg):
+                stack.append("other")
+                prev_op = None
+                continue
+            if re.match(r"^\(", seg):
+                if seg.count("(") - seg.count(")") > 0:
+                    stack.append("other")
+                prev_op = None
+                continue
+            fm = re.match(r"^(?:function\s+[\w.:-]+\s*(?:\(\s*\))?|[\w.:-]+\s*\(\s*\))\s*\{(.*)$", seg)
+            if fm:
+                # function definition, including the one-line `name() { ...; }` form:
+                # everything up to the matching `}` is inside the function body.
+                stack.append("other")
+                seg = fm.group(1).strip()
+                prev_op = None
+                if not seg:
+                    continue
+            if re.match(r"^\{(?:\s|$)", seg):
+                stack.append("other" if conditional else "group")
+                seg = seg[1:].strip()
+                if not seg:
+                    prev_op = None
+                    continue
+            if _EXIT_SEG.match(seg) and not conditional and all(k == "group" for k in stack):
+                hits.append(idx)
+            left = seg
+            prev_op = None
+    out = []
+    for h in hits:
+        for later in lines[h:]:
+            if later.strip().startswith("#"):
+                continue
+            if _ASSERT_LIKE.search(later):
+                out.append(h)
+                break
+    return out
+
+
 def strip_trailing_comment(line, lang_key):
     if lang_key in ("python", "ruby"):
         line = re.sub(r"(?<=\S)\s*#.*$", "", line)
@@ -1704,16 +1823,9 @@ def main():
         # skips in mission-terminal-rollover.test.sh, so an ADDED match is
         # signal rather than noise.
         #
-        # KNOWN GAP (documented, not silent): an early `exit 0` / `return 0`
-        # inserted mid-suite is the other way to neuter a bash suite, and it
-        # is NOT detected. A line-level regex cannot tell it apart from the
-        # legitimate bail-outs this repo already writes: of the 260 tracked
-        # `*.test.sh`, 19 contain a top-level `exit 0` line and 41 contain one
-        # at some indentation (only 2 have it as their final line, so these are
-        # mostly guard clauses — exactly the shape a gaming early-exit takes).
-        # Separating the two needs file-position context ("is there an
-        # assertion after this exit?") that the L0 layer does not carry.
-        # Tracked in docs/BACKLOG.md.
+        # An early `exit 0` / `return 0` spliced mid-suite is caught by the
+        # file-level find_early_exits() check (kind `early_exit`), not by these
+        # line-level patterns: it needs "is there an assertion after this exit?".
         "shell": {
             "skip": [
                 # `skip` in COMMAND POSITION, in any of its invocation forms.
@@ -1894,6 +2006,41 @@ def main():
                             )
                             break
                     new_current += 1
+
+    # 2b) File-level shell check: an unconditional top-level exit/return spliced
+    # in front of later assertions (BL-0059). Needs the head file, so it cannot
+    # live in the line loop above.
+    for file_path, info in files_diff.items():
+        if get_lang_key(file_path) != "shell":
+            continue
+        if not matches_patterns(file_path, test_path_regexes):
+            continue
+        added = set()
+        for hunk in info.get("hunks", []):
+            cur = hunk["new_start"]
+            for line in hunk["lines"]:
+                if line.startswith("+"):
+                    added.add(cur)
+                    cur += 1
+                elif line.startswith(" "):
+                    cur += 1
+        if not added:
+            continue
+        shown = run_command(["git", "show", f"{head_ref}:{file_path}"], repo_dir, check=False)
+        if shown.returncode != 0:
+            continue
+        src_lines = (shown.stdout or "").split("\n")
+        for ln in find_early_exits(shown.stdout or ""):
+            if ln in added:
+                violations.append(
+                    {
+                        "layer": "L0",
+                        "file": file_path,
+                        "kind": "early_exit",
+                        "line": ln,
+                        "detail": src_lines[ln - 1].strip(),
+                    }
+                )
 
     # 3) Check override verdict from committed tree only.
     waiver_set = set()

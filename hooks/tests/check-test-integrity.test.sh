@@ -768,18 +768,56 @@ assert_exit_code "$__EXIT_CODE" 1 "deleted suite: block mode goes red"
 assert_contains "$__OUTPUT" '"kind": "deleted_line"' "deleted suite: reported"
 assert_contains "$__OUTPUT" 'hooks/tests/example.test.sh' "deleted suite: the file is named"
 
-# 11e. THE DOCUMENTED GAP, pinned so it cannot become a silent one.
-# An early `exit 0` spliced into a bash suite neuters it with no deletions and
-# no skip token, and the L0 layer cannot tell it apart from the legitimate
-# terminating `exit 0` that most suites in this repo end with. If this
-# assertion ever fails, the gap was closed — update the comment in
-# .claude/test-integrity-config.md, the note in scripts/lib/test-integrity-l1.py,
-# and the BACKLOG row, then flip this to assert detection.
+# 11e. an early `exit`/`return` spliced in front of later assertions (BL-0059).
+# File-level check: an UNCONDITIONAL top-level exit with assertion-like lines
+# after it is flagged `early_exit`; guard clauses and a terminating exit are not.
+exit_probe() { # exit_probe <CATCH|CLEAN> <label> <line-to-splice-after-line-1>
+  local want="$1" label="$2" line="$3"
+  shell_cfg block
+  printf '%s\n' "$line" > "$TEST_TMP/splice"
+  sed -i "1r $TEST_TMP/splice" hooks/tests/example.test.sh
+  git add -u; git commit -qm "splice: $label"
+  run_integrity
+  if [ "$want" = CATCH ]; then
+    assert_contains "$__OUTPUT" '"kind": "early_exit"' "early exit: $label caught"
+    assert_exit_code "$__EXIT_CODE" 1 "early exit: $label blocks"
+  else
+    assert_not_contains "$__OUTPUT" '"kind": "early_exit"' "early exit: $label not flagged"
+  fi
+}
+exit_probe CATCH 'plain exit 0'            'exit 0'
+exit_probe CATCH 'bare exit'               'exit'
+exit_probe CATCH 'top-level return 0'      'return 0'
+exit_probe CATCH 'true; exit 0'            'true; exit 0'
+exit_probe CATCH 'trap - EXIT; exit 0'     'trap - EXIT; exit 0'
+exit_probe CATCH 'brace group'             '{ exit 0; }'
+exit_probe CATCH 'true && exit 0'          'true && exit 0'
+exit_probe CATCH 'if true; then exit 0'    'if true; then exit 0; fi'
+exit_probe CATCH 'indented-looking comment tail' 'exit 0  # done'
+exit_probe CLEAN 'guard with ||'           '[ -x /nonexistent/tool ] || exit 0'
+exit_probe CLEAN 'guard if-block'          'if ! command -v nonexistent-tool >/dev/null; then echo bail; exit 0; fi'
+exit_probe CLEAN 'conditional brace group' '[ "$1" = x ] && { echo done; exit 0; }'
+exit_probe CLEAN 'exit inside function'    'bail() { exit 0; }'
+exit_probe CLEAN 'one-line function'       'skip_all() { echo SKIP; exit 0; }'
+exit_probe CLEAN 'one-line function keyword' 'function skip_all { echo SKIP; exit 0; }'
+exit_probe CLEAN 'variable-gated guard (-n "$VAR")' '[ -n "$SKIP" ] && exit 0'
+exit_probe CATCH 'exit after a one-line function' 'f() { :; }; exit 0'
+exit_probe CLEAN 'exit written as data'    'echo "exit 0"'
+
+# a legitimate terminating exit appended after the last assertion
+shell_cfg block
+printf '%s\n' 'exit 0' >> hooks/tests/example.test.sh
+git add -u; git commit -qm "terminating exit"
+run_integrity
+assert_not_contains "$__OUTPUT" '"kind": "early_exit"' "terminating exit with nothing after it is clean"
+
+# an exit that was already there is not re-flagged when an unrelated line changes
 shell_cfg block
 sed -i '1a exit 0' hooks/tests/example.test.sh
-git add -u; git commit -qm "splice an early exit"
-run_integrity
-assert_contains "$__OUTPUT" '"test_paths_matched": 1' "early exit: the suite is still seen"
-assert_exit_code "$__EXIT_CODE" 0 "KNOWN GAP: a spliced early exit is not detected (see config comments)"
+git add -u; git commit -qm "pre-existing exit"
+printf '%s\n' '# note' >> hooks/tests/example.test.sh
+git add -u; git commit -qm "unrelated edit"
+run_integrity "" "HEAD~1..HEAD"
+assert_not_contains "$__OUTPUT" '"kind": "early_exit"' "untouched pre-existing exit is not re-flagged"
 
 finalize_test

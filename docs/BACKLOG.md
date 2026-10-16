@@ -314,19 +314,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/release-time-payload-branch-b.md
 - **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user…
 
-### Lint hands diffs for fixture literals leaking into production code
-- **Id**: BL-0031
-- **Status**: open
-- **Since**: 2026-09-05
-- **Origin**: self
-- **Problem**: 審查中發現，實作者有時會把測試用的假資料寫進正式程式碼。目前只有文件提醒，沒有工具能自動掃描改動中的這類字面值。 (draft)
-- **Impact**: 假資料混進正式程式碼可能漏過審查；靠人眼檢查，風險中等。 (draft)
-- **Trigger**: next hands cut on a script with a test that names phases/ids (`p7`, `fixture`, `test`)
-- **Effort**: S
-- **Source**: core review g2, v2.36.0
-- **Pointer**: docs/backlog/lint-hands-diffs-for-fixture-literals-leaking-into-production-code.md
-- **Context**: `references/evidence-discipline.md` §23 — three reviewers caught a `phase === 'p7'` carve-out the suite could not
-
 ### `finalize` closes an earlier verified finding by absence in a later generation
 - **Id**: BL-0032
 - **Status**: open
@@ -391,19 +378,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 - **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
-
-### v2.34.37 first-pass review 的 cut list —— 六個「不是錯,但名字比保證大」的小項
-- **Id**: BL-0039
-- **Status**: open
-- **Since**: 2026-08-23
-- **Origin**: self
-- **Problem**: 某次發版前的初審，列出六個「不是錯，但名字比實際保證還大」的小項，例如變數或欄位命名過度承諾。這些至今仍在。 (draft)
-- **Impact**: 只會讓閱讀者誤會行為，不影響功能；改名即可。 (draft)
-- **Trigger**: 下一次動這六處任一 —— `hooks/tests/external-lifecycle-witness.test.sh` 的 `stop_bounded` 斷言、`hooks/tests/calendar-teeth-negative.test.sh` 的 `instant3`/`instant4`、`scripts/engine-qualify.js` 的 `wall_truncated`…
-- **Effort**: S
-- **Source**: 2026-08-23 v2.34.37 first-pass pre-merge review(autopilot:reviewer);run `fix-bundle-l4`。
-- **Pointer**: docs/backlog/v2-34-37-first-pass-review-cut-list.md
-- **Context**: v2.34.37 first-pass review(autopilot:reviewer,opus)判 Low risk、無 🔴 無 🟠,兩枚 MUST-FIX 皆為文件用語已當場修掉。剩下六項刻意不在該刀處理,逐條記下以免被吞:(1) `measureBoundedStop` 的死…
 
 ### `engine-qualify-impl.test.js` 單次無法重現的紅(1/24 solo,訊息未捕獲)
 - **Id**: BL-0040
@@ -625,19 +599,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 - **Pointer**: docs/backlog/mission-authority-store-cross-harness-enforcement-hardening.md
 - **Context**: 本次只實作 current-host 可驗證的 Git-common-dir durable registry、CAS 與 fail-closed adapter。防惡意本機程序需要獨立 UID、root-owned/remote daemon 或具 authenticity 的 authority service；精確 provider…
-
-### Test-integrity L0 cannot see an early `exit 0` spliced into a shell suite
-- **Id**: BL-0059
-- **Status**: open
-- **Since**: 2026-08-23
-- **Origin**: self
-- **Problem**: 測試完整性檢查看不出有人在 shell 測試檔裡偷塞一行提早結束，讓測試什麼都沒跑就顯示通過。這是已知漏洞。 (draft)
-- **Impact**: 測試可能靜悄悄地全綠但沒驗到東西；要升級成強制擋之前得先補上。 (draft)
-- **Trigger**: 下一次有人想把這個閘升到 `block`,或再抓到一個 bash 套件「綠得太安靜」時。
-- **Effort**: M
-- **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
-- **Pointer**: docs/backlog/test-integrity-l0-cannot-see-an-early-exit-0-spliced-into-a-shell-suite.md
-- **Context**: v2.34.38 讓 `*.test.sh` 進入閘的視野,但三條 gaming vector 裡只有兩條半是機械可見的。
 
 ### `check-test-integrity.sh` warn → block needs an accuracy record first
 - **Id**: BL-0060

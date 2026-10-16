@@ -381,6 +381,7 @@ process.env.AUTOPILOT_QUALIFY_SEED = 'trunc-seed';
 const truncRun = runImplQualification({ ...baseOptions(truncStore), dispatchBin: path.join(tempRoot, 'disp.sh'), testTruncateAfterCases: 6 });
 delete process.env.AUTOPILOT_QUALIFY_SEED;
 equal(truncRun.wall_truncated, true, 'truncated administration reports wall_truncated');
+equal(truncRun.truncation_cause, 'count_seam', 'seam truncation names its cause (not \'wall\')');
 equal(truncRun.started_cases, 6, 'truncation fires after exactly the seam\'s case count');
 equal(truncRun.qualified, false, 'truncated administration is NOT qualified');
 equal(truncRun.row.status, 'failed', 'a truncated administration with started cases is a failed row');
@@ -409,6 +410,7 @@ equal(trunc0Run.evidence, null, 'zero-started truncation writes NO evidence');
 // A run that is NOT truncated must report so — otherwise `wall_truncated` could
 // be hard-wired true and both assertions above would still pass.
 equal(honest.wall_truncated, false, 'an untruncated administration reports wall_truncated=false');
+equal(honest.truncation_cause, null, 'an untruncated administration has no truncation_cause');
 equal(honest.started_cases, 24, 'an untruncated administration starts the full corpus');
 
 // e2e: reservation override 0 → insufficient_budget → NO evidence row, NO scorecard row.

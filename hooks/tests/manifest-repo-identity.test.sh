@@ -23,11 +23,16 @@ export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-mri-XXXXXX)"
 # PID trap (BL-0109): the rails run stub runners under timeout; kill any process still holding an argv
 # under TEST_TMP before the directory goes. /proc scan by exact path (no pkill/pgrep -f self-match).
 kill_stragglers() {
-  local d pid self="$BASHPID" c
+  # Guard: an empty/odd TEST_TMP would make the pattern match every process. Scan only for a real,
+  # mktemp-shaped directory, and match "<dir>/" so a bare prefix cannot hit unrelated argv.
+  local tt="${1-$TEST_TMP}" d pid c
+  [ -n "$tt" ] && [ -d "$tt" ] || return 0
+  case "$tt" in /tmp/?*|/dev/shm/?*|"${TMPDIR:-/nonexistent}"/?*) : ;; *) return 0 ;; esac
+  [ "${#tt}" -ge 12 ] || return 0
   for d in /proc/[0-9]*; do
-    pid="${d#/proc/}"; [ "$pid" = "$self" ] && continue; [ "$pid" = "$$" ] && continue
+    pid="${d#/proc/}"; [ "$pid" = "$BASHPID" ] && continue; [ "$pid" = "$$" ] && continue; [ "$pid" = "$PPID" ] && continue
     { c="$(tr '\0' ' ' <"$d/cmdline")"; } 2>/dev/null || continue
-    case "$c" in *"$TEST_TMP"*) kill -9 "$pid" 2>/dev/null || true ;; esac
+    case "$c" in *"$tt/"*) kill -9 "$pid" 2>/dev/null || true ;; esac
   done
 }
 trap 'kill_stragglers; rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
@@ -211,10 +216,17 @@ CACHE_OUT="$(bash -c '
 eq "" "$CACHE_OUT" "resolver cache: same inputs hit, different inputs recompute"
 
 # --- PID trap kills a straggler holding an argv under TEST_TMP (BL-0109) ---
-bash -c 'sleep 300; :' "$TEST_TMP/straggler" & STRAG=$!
+bash -c 'exec -a "$1" sleep 300' _ "$TEST_TMP/straggler" & STRAG=$!
 sleep 0.2; kill -0 "$STRAG" 2>/dev/null || fail "straggler did not start"
 kill_stragglers; sleep 0.2
 if kill -0 "$STRAG" 2>/dev/null; then fail "PID trap left the straggler alive"; fi
 wait "$STRAG" 2>/dev/null || true
+# empty / unsafe TEST_TMP: the trap must kill nothing (sentinel sleep stays alive)
+setsid sleep 300 & SENT=$!
+sleep 0.2
+kill_stragglers ""; kill_stragglers "/"; kill_stragglers "/tmp"; kill_stragglers "relative/dir-long-enough"
+TEST_TMP="" kill_stragglers
+if kill -0 "$SENT" 2>/dev/null; then eq "0" "0" "PID trap: empty/unsafe TEST_TMP kills nothing"; else fail "PID trap killed an unrelated process with empty TEST_TMP"; fi
+kill "$SENT" 2>/dev/null || true
 
 finalize_test

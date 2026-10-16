@@ -234,7 +234,7 @@ repo_identity_resolve_fields() {
   # Cache keyed on the inputs (BL-0109): the same (root, consuming) pair reuses the stored fields; a
   # different pair recomputes. A value present with no recorded key (preset by a caller, or carried
   # into a detached child that does not carry the key) is honoured as before.
-  local key="${1:-}|${2:-}"
+  local key="${1:-}"$'\037'"${2:-}"   # US separator: cannot appear in a path in practice
   if [ -n "${REPO_IDENTITY_FIELDS:-}" ] && { [ -z "${_REPO_IDENTITY_FIELDS_KEY:-}" ] || [ "$_REPO_IDENTITY_FIELDS_KEY" = "$key" ]; }; then
     return 0
   fi

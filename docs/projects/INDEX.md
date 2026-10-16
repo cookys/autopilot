@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-17 | [BL-0146: a returned review-only campaign reviews the fix, not the whole range again](../plans/2026-10-17-review-only-campaign-fix-increment.md) | active | — | [plan](../plans/2026-10-17-review-only-campaign-fix-increment.md) |
 | 2026-10-16 | [BL-0194: qualification registry moves to llm-playground, autopilot keeps a cache and a send queue](../plans/2026-10-16-bl0194-qualification-registry-move.md) | active | — | [plan](../plans/2026-10-16-bl0194-qualification-registry-move.md) |
 | 2026-10-13 | [dispatch tree: follow every piece of work from the session, without guessing a parent](../plans/2026-10-13-dispatch-tree.md) | active | — | [plan](../plans/2026-10-13-dispatch-tree.md) |
 | 2026-10-13 | [live pane design system: one IA, one visual vocabulary, enforced in code](../plans/2026-10-13-live-pane-design-system.md) | active | — | [plan](../plans/2026-10-13-live-pane-design-system.md) |

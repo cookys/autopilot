@@ -976,8 +976,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 外部呼叫方回報帶回重審的費用過高，或同一個 campaign 經常帶回兩次以上
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
-- **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: 2026-10-16 re-checked, not started: plan first (reuse key, touched-files re-check, context packet); over half a day.
+- **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
+- **Context**: Plan written 2026-10-17 (reuse key, touched-files re-check, context packet; ~5-6 days build + 1.5 days evidence, 5 deliverables, 3 owner decisions in section 8); no code yet.
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

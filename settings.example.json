@@ -1,12 +1,12 @@
 {
-  "//": "Autopilot plugin settings — copy the autopilot.* block into your Claude Code settings.json if you want to override defaults.",
+  "//": "Autopilot plugin settings. Hook behaviour knobs are plain environment variables; Claude Code's settings.json `env` block is the way to set them for every session. (There is no `autopilot.*` settings.json namespace: nothing reads one.)",
 
-  "autopilot": {
-    "//costTracker": "Set to false to disable token cost tracking (privacy opt-out) — cost-tracker is default-on since v2.35.15 (opt-out here or AUTOPILOT_COST_TRACKER=false).",
-    "costTracker": true,
+  "env": {
+    "//AUTOPILOT_COST_TRACKER": "Set to \"false\" to disable token cost tracking (privacy opt-out); cost-tracker is default-on since v2.35.15, so \"true\" or removing the line keeps it on.",
+    "AUTOPILOT_COST_TRACKER": "true",
 
-    "//protectedBranches": "Regex alternation of branch names to protect (anchored with ^...$) — used by the branch-protection opt-in hook.",
-    "protectedBranches": "main|master"
+    "//AUTOPILOT_PROTECTED_BRANCHES": "Regex alternation of branch names the branch-protection opt-in hook protects (anchored ^...$); unset means main|master.",
+    "AUTOPILOT_PROTECTED_BRANCHES": "main|master"
   },
 
   "//opt-in-hooks": "As of v2.26.2 opt-in hooks are NOT enabled by copying entries here. They are wired in the plugin's own hooks.json (the ONLY place ${CLAUDE_PLUGIN_ROOT} expands and where the path auto-tracks plugin updates) and stay default-OFF until you enable them. Enable via ~/.autopilot/config.json — NOT this file.",

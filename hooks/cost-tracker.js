@@ -2,8 +2,8 @@
 /**
  * cost-tracker — Stop (default-on since v2.35.15; opt-in before)
  * Logs per-session token usage + estimated cost to ~/.claude/metrics/costs.jsonl.
- * Opt-out: set AUTOPILOT_COST_TRACKER=false (or autopilot.costTracker=false in
- * settings.json, injected as that env var).
+ * Opt-out: set the env var AUTOPILOT_COST_TRACKER=false (settings.json `env` block works; there is no
+ * `autopilot.costTracker` setting).
  *
  * The Stop hook fires once per assistant turn, but the 2.1.186 Stop payload has
  * NO usage field — so usage is summed from the transcript (`transcript_path` in
@@ -63,7 +63,7 @@ try {
   catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
   const input = JSON.parse(raw);
 
-  // Opt-out (settings.json injects autopilot.costTracker as this env var).
+  // Opt-out: the env var itself (settings.json `env` block or the shell).
   if (process.env.AUTOPILOT_COST_TRACKER === 'false') process.exit(0);
 
   const session = input.session_id || process.env.CLAUDE_CODE_SESSION_ID ||

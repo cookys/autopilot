@@ -270,9 +270,9 @@ A per-hook env override also works: `AUTOPILOT_HOOK_<STEM>=1` (stem upper-cased,
 | Concern | Where | Example |
 |---------|-------|---------|
 | **Enable** a hook (does it run at all) | `~/.autopilot/config.json` `hooks.<stem>` (this is the v2.26.2 gate) | `{"hooks":{"branch-protection":true}}` |
-| **Configure** an enabled hook's behaviour | Claude `settings.json` `autopilot.*` (Claude Code injects these as `AUTOPILOT_*` env vars into the hook) — or set the env var directly | `autopilot.protectedBranches`, `autopilot.costTracker` |
+| **Configure** an enabled hook's behaviour | The hook's `AUTOPILOT_*` environment variable, from the shell or Claude `settings.json`'s `env` block (there is no `autopilot.*` settings namespace) | `AUTOPILOT_PROTECTED_BRANCHES`, `AUTOPILOT_COST_TRACKER=false` |
 
-So a hook like `branch-protection` is **enabled** in `~/.autopilot/config.json` and its protected-branch regex is **configured** via `autopilot.protectedBranches` in `settings.json` (the `autopilot.*` block is still shown in `settings.example.json`). Enabling without configuring is fine — each configurable hook has a safe default (e.g. `^(main|master)$`).
+So a hook like `branch-protection` is **enabled** in `~/.autopilot/config.json` and its protected-branch regex is **configured** via the `AUTOPILOT_PROTECTED_BRANCHES` environment variable (e.g. in `settings.json`'s `env` block; `settings.example.json` shows it). Enabling without configuring is fine — each configurable hook has a safe default (e.g. `^(main|master)$`).
 
 ---
 

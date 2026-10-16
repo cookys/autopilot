@@ -249,7 +249,7 @@ Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-i
 
 Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upper-cased, `-`→`_`). The opt-in set is the SSOT list in [`opt-in-manifest.json`](opt-in-manifest.json). (Do **not** copy hook commands into your `settings.json` — `${CLAUDE_PLUGIN_ROOT}` does not expand there, which is why this route replaced the old `settings.example.json` copy-paste.)
 
-**Enabling is separate from configuring.** `~/.autopilot/config.json` only decides whether a hook *runs*. A hook's *behaviour* (e.g. `branch-protection`'s `autopilot.protectedBranches`, `cost-tracker`'s `autopilot.costTracker`) is still set in Claude `settings.json` under `autopilot.*` (Claude Code injects those as `AUTOPILOT_*` env vars) — the `autopilot.*` block remains in `settings.example.json`. Each configurable hook has a safe default, so enabling without configuring is fine.
+**Enabling is separate from configuring.** `~/.autopilot/config.json` only decides whether a hook *runs*. A hook's *behaviour* (e.g. `branch-protection`'s `AUTOPILOT_PROTECTED_BRANCHES`, `cost-tracker`'s `AUTOPILOT_COST_TRACKER=false`) is set through that hook's `AUTOPILOT_*` environment variable, from the shell or Claude `settings.json`'s `env` block (there is no `autopilot.*` settings namespace; `settings.example.json` shows the `env` form). Each configurable hook has a safe default, so enabling without configuring is fine.
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
@@ -303,8 +303,8 @@ When enabled, `commit-secret-scan` (opt-in) and the active `audit-log` share thi
 ## Override
 
 - **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
-- **Custom protected branches** (when `branch-protection` is enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
-- **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
+- **Custom protected branches** (when `branch-protection` is enabled): set the `AUTOPILOT_PROTECTED_BRANCHES` env var (shell or settings.json `env` block)
+- **Disable cost tracking** (when `cost-tracker` is re-enabled): set the env var `AUTOPILOT_COST_TRACKER=false`
 
 ## Source
 

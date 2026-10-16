@@ -24,11 +24,30 @@ test('baseline: a verified Major finding stays open when the chain ends on its g
   assert.deepStrictEqual(r.open_findings.map((f) => f.id), ['F1']);
 });
 
-test('baseline: a later finalized generation that no longer reports the finding closes it (closure by absence)', () => {
+const res = (...ids) => ({ findings: [], resolutions: ids.map((id) => ({ id, rationale: 're-verified fixed' })) });
+
+test('BL-0032: a later generation that merely stops reporting a verified finding does NOT close it', () => {
   const chain = [{ generation: 1, status: 'finalized' }, { generation: 2, status: 'finalized' }];
-  const r = deriveReceiptState(chain, new Map([[1, [F1]], [2, []]]), new Map([[1, [verified('F1')]], [2, []]]));
-  assert.strictEqual(r.verdict, 'SHIP-AS-IS');
+  const r = deriveReceiptState(chain, new Map([[1, [C1]], [2, []]]), new Map([[1, [verified('C1')]], [2, []]]));
+  assert.strictEqual(r.verdict, 'FIX-THEN-SHIP', 'absence is not evidence: the Critical stays open');
+  assert.deepStrictEqual(r.closed_findings, []);
+  assert.strictEqual(chain[0].closed_findings, undefined);
+});
+
+test('BL-0032: an explicit resolution in a later generation closes the finding', () => {
+  const chain = [{ generation: 1, status: 'finalized' }, { generation: 2, status: 'finalized' }];
+  const r = deriveReceiptState(chain, new Map([[1, [F1]], [2, []]]), new Map([[1, [verified('F1')]], [2, res('F1')]]));
+  assert.deepStrictEqual(r.open_findings, []);
   assert.deepStrictEqual(r.closed_findings.map((f) => [f.id, f.closed_by_generation]), [['F1', 2]]);
+  assert.deepStrictEqual(chain[0].closed_findings, [{ id: 'F1', closed_by_generation: 2 }]);
+  assert.deepStrictEqual(r.unmatched_resolutions, []);
+});
+
+test('BL-0032: a resolution naming no open verified finding is reported as unmatched and closes nothing', () => {
+  const chain = [{ generation: 1, status: 'finalized' }, { generation: 2, status: 'finalized' }];
+  const r = deriveReceiptState(chain, new Map([[1, [F1]], [2, []]]), new Map([[1, [{ id: 'F1', disposition: 'refuted' }]], [2, res('F1', 'GHOST')]]));
+  assert.deepStrictEqual(r.unmatched_resolutions.map((u) => u.id).sort(), ['F1', 'GHOST']);
+  assert.deepStrictEqual(r.closed_findings, []);
 });
 
 test('v2.36.3: an ABORTED generation closes nothing — the open finding survives it (was: closed by absence)', () => {
@@ -56,7 +75,7 @@ test('v2.36.3: finalized / aborted / finalized — the closure is attributed to 
     { generation: 2, status: 'aborted', reason: 'parse_failed' },
     { generation: 3, status: 'finalized' },
   ];
-  const r = deriveReceiptState(chain, new Map([[1, [F1]], [3, []]]), new Map([[1, [verified('F1')]], [3, []]]));
+  const r = deriveReceiptState(chain, new Map([[1, [F1]], [3, []]]), new Map([[1, [verified('F1')]], [3, res('F1')]]));
   assert.strictEqual(r.verdict, 'SHIP-AS-IS');
   assert.deepStrictEqual(r.closed_findings.map((f) => [f.id, f.closed_by_generation]), [['F1', 3]]);
   assert.deepStrictEqual(chain[0].closed_findings, [{ id: 'F1', closed_by_generation: 3 }]);
@@ -74,4 +93,5 @@ test('v2.36.3: a stale/forged closed_findings stamp on a chain entry is ignored 
   const r = deriveReceiptState(chain, new Map([[1, [F1]]]), new Map([[1, [verified('F1')]]]));
   assert.deepStrictEqual(r.open_findings.map((f) => f.id), ['F1'], 'the stamp must not close F1');
   assert.deepStrictEqual(r.closed_findings, []);
+  assert.strictEqual(chain[0].closed_findings, undefined, 'BL-0092: the stale stamp is discarded, not carried forward');
 });

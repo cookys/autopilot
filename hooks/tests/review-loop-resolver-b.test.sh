@@ -369,7 +369,7 @@ assert_r40_review_chain_derive() {
     ]);
     const dispositions = new Map([
       [1, [{ id: "F1", disposition: "verified" }]],
-      [2, []],
+      [2, { findings: [], resolutions: [{ id: "F1", rationale: "re-verified fixed" }] }],
     ]);
     derive.deriveReceiptState(chain, findings, dispositions);
     const stamps = g1.closed_findings;

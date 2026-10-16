@@ -26,7 +26,12 @@
  *     closedFindings: alias for closed_findings
  *   }
  *
- * Mutation: mutates input chain entry objects in place to populate closed_findings;
+ * Closure: only an explicit `resolutions` entry ({ id, rationale }) in a later generation's
+ * dispositions closes an earlier verified finding; absence never does (BL-0032). Pass the
+ * dispositions value as { findings, resolutions } to carry them.
+ *
+ * Mutation: mutates input chain entry objects in place to (re)populate closed_findings
+ * (existing stamps are discarded first, BL-0092);
  * callers (hetero-review-loop finalize) rely on those stamps reaching chain.json.
  * No fs, process, or network I/O.
  */
@@ -36,6 +41,13 @@ function toList(val) {
   if (Array.isArray(val)) return val;
   if (Array.isArray(val.findings)) return val.findings;
   return [];
+}
+
+// Explicit re-verification entries ({ id, rationale }) a generation's dispositions may carry
+// next to `findings`. They are the ONLY way an earlier verified finding is closed (BL-0032).
+function resolutionsOf(val) {
+  if (!val || Array.isArray(val) || !Array.isArray(val.resolutions)) return [];
+  return val.resolutions.filter((r) => r && typeof r.id === 'string');
 }
 
 function getFromGenMap(mapOrObj, gen) {
@@ -60,6 +72,14 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
   // Map of closed findings: id -> { id, closed_by_generation, ... }
   const activeVerified = new Map();
   const closedMap = new Map();
+  const unmatchedResolutions = [];
+
+  // Chain-entry closed_findings stamps are OUTPUT of this routine (BL-0092): drop whatever a
+  // previous derive (including a pre-v2.36.3 one) left, so a re-derivation rewrites them from
+  // evidence alone instead of inheriting a stale attribution.
+  for (const entry of chain) {
+    if (entry && entry.closed_findings !== undefined) delete entry.closed_findings;
+  }
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i];
@@ -76,32 +96,35 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
     const currentFindingIds = new Set(genFindings.map((f) => f && f.id).filter(Boolean));
 
-    // 1. Cross-generation closure by absence:
-    // Earlier verified findings that do not appear in this generation's findings are closed by this generation
-    for (const [id, finding] of activeVerified.entries()) {
-      if (!currentFindingIds.has(id)) {
-        activeVerified.delete(id);
-        const closedEntry = {
-          id,
-          closed_by_generation: gen,
-          severity: finding.severity,
-          seat: finding.seat,
-        };
-        closedMap.set(id, closedEntry);
-
-        // Update chain entry's closed_findings for the generation that originated this finding
-        for (const prevEntry of chain) {
-          if (prevEntry.status === 'aborted') continue; // an aborted record stays minimal (v2.36.3 review 🔵)
-          if (prevEntry.generation < gen) {
-            if (!Array.isArray(prevEntry.closed_findings)) {
-              prevEntry.closed_findings = [];
-            }
-            if (!prevEntry.closed_findings.some((cf) => cf && cf.id === id)) {
-              prevEntry.closed_findings.push({
-                id,
-                closed_by_generation: gen,
-              });
-            }
+    // 1. Cross-generation closure is EXPLICIT (BL-0032): an earlier verified finding is closed only
+    // by a `resolutions` entry in this generation's dispositions (a re-verification claim with a
+    // rationale). Absence from this generation's findings is not evidence — a reviewer that did not
+    // re-raise a finding may simply not have looked — so the finding stays open. A resolution
+    // naming no open verified finding is recorded as unmatched; callers refuse it.
+    const rawDisp = dispositionsByGeneration instanceof Map
+      ? (dispositionsByGeneration.get(gen) !== undefined ? dispositionsByGeneration.get(gen) : dispositionsByGeneration.get(String(gen)))
+      : dispositionsByGeneration && (dispositionsByGeneration[gen] !== undefined ? dispositionsByGeneration[gen] : dispositionsByGeneration[String(gen)]);
+    for (const r of resolutionsOf(rawDisp)) {
+      const id = r.id;
+      const finding = activeVerified.get(id);
+      if (!finding || currentFindingIds.has(id)) {
+        unmatchedResolutions.push({ id, generation: gen });
+        continue;
+      }
+      activeVerified.delete(id);
+      closedMap.set(id, {
+        id,
+        closed_by_generation: gen,
+        severity: finding.severity,
+        seat: finding.seat,
+      });
+      // Stamp the generation that originated the finding
+      for (const prevEntry of chain) {
+        if (prevEntry.status === 'aborted') continue; // an aborted record stays minimal (v2.36.3 review)
+        if (prevEntry.generation < gen) {
+          if (!Array.isArray(prevEntry.closed_findings)) prevEntry.closed_findings = [];
+          if (!prevEntry.closed_findings.some((cf) => cf && cf.id === id)) {
+            prevEntry.closed_findings.push({ id, closed_by_generation: gen });
           }
         }
       }
@@ -169,6 +192,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
     verdict,
     open_findings: openFindings,
     closed_findings: closedList,
+    unmatched_resolutions: unmatchedResolutions,
     openFindings,
     closedFindings: closedList,
   };

@@ -1021,7 +1021,7 @@ write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\"
 C15G_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15G_RC=$?
 assert_exit_code "$C15G_RC" "1" "case 15g: receipt closure attributed to the aborted generation exits 1"
 assert_contains "$C15G_OUT" "which is aborted" "case 15g: refusal names the aborted attribution and the remedy"
-assert_contains "$C15G_OUT" "one more generation" "case 15g: refusal states the remedy"
+assert_contains "$C15G_OUT" "refinalize" "case 15g: refusal states the remedy"
 
 # 15g' negative (the loop's real shape): the stamp sits on a CHAIN ENTRY, not on the receipt.
 PAB_G1_ABORTED_STAMPED="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"status\": \"aborted\", \"closed_findings\": [ { \"id\": \"F-stale\", \"closed_by_generation\": 1 } ] }"
@@ -1029,6 +1029,32 @@ write_pab "[ $PAB_G1_ABORTED_STAMPED, $PAB_G2_FINAL ]"
 C15G2_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15G2_RC=$?
 assert_exit_code "$C15G2_RC" "1" "case 15g': chain-entry stamp attributed to the aborted generation exits 1"
 assert_contains "$C15G2_OUT" "which is aborted" "case 15g': refusal is the named one, not a generic mismatch"
+write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
+
+# 15r (BL-0092 repair, real git repo): the field shape — a receipt whose TOP-LEVEL closed_findings
+# carries a stamp attributed to the aborted generation. The checker refuses it; refinalize
+# re-derives from the on-disk evidence; the checker then accepts. Negative control: a refinalize
+# that does not rewrite receipt.closed_findings leaves the checker refusing.
+PAB_G2_FINAL_R=$(node -e 'const e=JSON.parse(process.argv[1]); e.dispositions_path="review-pab/g2/dispositions.json"; process.stdout.write(JSON.stringify(e))' "$PAB_G2_FINAL")
+write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL_R ]"
+write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": [ $PAB_G1_ABORTED, $PAB_G2_FINAL_R ], \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"closed_findings\": [ { \"id\": \"F-stale\", \"closed_by_generation\": 1 } ], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"
+cp "$LEDGER/receipt-pab.json" "$TEST_TMP/receipt-pab.stale.json"
+cp "$LEDGER/review-pab/chain.json" "$TEST_TMP/chain-pab.stale.json"
+C15R1_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15R1_RC=$?
+assert_exit_code "$C15R1_RC" "1" "case 15r: stale top-level closed_findings (aborted-generation stamp) is refused before repair"
+# negative control: refinalize minus the closed_findings rewrite -> checker still refuses
+sed 's/^  if (receipt.closed_findings !== undefined) receipt.closed_findings = derived.closed_findings;$//' "$REPO_ROOT/scripts/hetero-review-loop.js" > "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js"
+node "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js" refinalize --ledger "$LEDGER" --phase pab --generation 2 >/dev/null 2>&1
+rm -f "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js"
+C15R2_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15R2_RC=$?
+assert_exit_code "$C15R2_RC" "1" "case 15r (negative control): refinalize without rewriting receipt.closed_findings still fails the checker"
+# restore the stale pair, run the real refinalize
+cp "$TEST_TMP/receipt-pab.stale.json" "$LEDGER/receipt-pab.json"
+cp "$TEST_TMP/chain-pab.stale.json" "$LEDGER/review-pab/chain.json"
+node "$REPO_ROOT/scripts/hetero-review-loop.js" refinalize --ledger "$LEDGER" --phase pab --generation 2 >/dev/null 2>&1; C15R3_RC=$?
+assert_exit_code "$C15R3_RC" "0" "case 15r: refinalize on intact evidence exits 0"
+C15R4_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15R4_RC=$?
+assert_exit_code "$C15R4_RC" "0" "case 15r: the checker accepts the receipt after refinalize"
 write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
 
 # 15f (chain of three, mirrors the field case gen3 aborted between finalized gens): g1 finalized

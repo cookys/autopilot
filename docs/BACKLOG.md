@@ -288,19 +288,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/release-time-payload-branch-b.md
 - **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user…
 
-### `finalize` closes an earlier verified finding by absence in a later generation
-- **Id**: BL-0032
-- **Status**: open
-- **Since**: 2026-09-04
-- **Origin**: self
-- **Problem**: 審查流程的收尾步驟，會因為後面某一輪沒再提到某個已驗證的問題，就把它當成已解決。這等於用「沒人提」代替「有人確認修好」。 (draft)
-- **Impact**: 真正未修的問題可能被悄悄關掉；需要先決定要不要改成必須明確重驗。 (draft)
-- **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
-- **Effort**: S
-- **Source**: same ledger dir as above
-- **Pointer**: docs/backlog/finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation.md
-- **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
-
 ### autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting
 - **Id**: BL-0033
 - **Status**: open
@@ -836,22 +823,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
 - **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
-
-### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
-- **Id**: BL-0092
-- **Status**: open
-- **Since**: 2026-09-05
-- **Origin**: peer
-- **Reporter**: 7840hs（llm-playground）
-- **Report**: 2026-09-05 peer
-- **Reply**: 2026-09-05 session e1e51201:1034
-- **Problem**: 7840hs 的 llm-playground 專案回報：舊版本寫入的審查鏈資料帶有過期標記，之後收據被拒絕，除了重開新一代別無修復方法。 (draft)
-- **Impact**: 遇到者只能重新做一輪審查；目前僅一次回報。 (draft)
-- **Trigger**: a second field report of a receipt refused with "attributes … to generation N, which is aborted", or a request to re-finalize without re-collecting.
-- **Effort**: S
-- **Source**: 7840hs / llm-playground plan 066 ledger, 2026-09-05
-- **Pointer**: docs/backlog/stale-closed-findings-stamps-on-chain-entries-written-by-pre-v2-36-3-finalize-ha.md
-- **Context**: v2.36.3 made `review-chain-derive` evidence-only (chain-entry `closed_findings` stamps are output, ignored as input) and the checker refuses a receipt whose `closed_findings` names an aborted generation.
 
 ### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
 - **Id**: BL-0093

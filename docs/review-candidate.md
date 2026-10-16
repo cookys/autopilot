@@ -226,7 +226,7 @@ from inside `$REPO`.)
 
    ```bash
    node scripts/engine-capability-state.js pin-seat --role qc_panel --engine gpt-6.1-sol --runner codex \
-     --effort xhigh --endpoint @none --reason "operator-chosen review seat" --operator <your name>
+     --effort low --endpoint @none --reason "operator-chosen review seat" --operator <your name>
    ```
 
    Repeat per seat, with the exact engine, runner, effort and endpoint of the seat. This writes the

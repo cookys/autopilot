@@ -151,12 +151,21 @@ const problems = [];
 // (2) every key present in the OLD output is present in the NEW output with a
 // byte-identical value (the parity template pins consult_dispatch: off, so the
 // consult seat fields are '' on both sides on every host).
-// qc_panel / qc_panel_seats are exempt: the shipped default panel seat (gpt-6.1-sol) and the
-// gemini-flash alias target (gemini-4-argon-high) intentionally moved after the pre-D6 pin.
+// qc_panel / qc_panel_seats moved on purpose after the pre-D6 pin (gpt-6.1-sol at low, the
+// gemini-flash alias -> gemini-4-argon-high): they are not compared with the old output but
+// asserted against the exact new values below (same values resolve-review-loop-b pins).
 const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats']);
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
-  if (INTENTIONAL_DEFAULT_MOVE.has(key)) continue;
+  if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
+    const want = key === 'qc_panel'
+      ? ['gpt-6.1-sol', 'claude-opus', 'gemini-4-argon-high']
+      : [{role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'low',endpoint:null,family:'openai'},
+         {role:'qc',runner:'claude-native',model:'claude-opus',effort:'high',endpoint:null,family:'anthropic'},
+         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
+    if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
+    continue;
+  }
   const newVal = newJson[key];
   if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
     problems.push(`value-drift:${key}`);

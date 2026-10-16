@@ -1405,7 +1405,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: JSON 欄位與產出方式經 hetero 討論（dispatch-discuss）定案後開工
 - **Effort**: M
 - **Source**: owner, 2026-10-15
-- **Pointer**: none
+- **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
 - **Context**: owner 2026-10-15: review or discussion goes through the hetero engine, not fleet peers. Exams run inside the llm-playground project (a project, not a machine); scheduling around its GPU jobs is that project's concern.
 
 

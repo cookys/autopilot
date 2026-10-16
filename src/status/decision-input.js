@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, safeSegment, listScopeFiles } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -72,14 +72,10 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
     const value = [];
     const hashes = [];
     let first = null;
-    for (const { file, root: nameRoot } of listScopeFiles(dir, key)) {
-      let raw;
-      let v;
-      try { raw = fs.readFileSync(file, 'utf8'); v = JSON.parse(raw); } catch (_error) { continue; }
-      if (!v || typeof v !== 'object' || v.schema !== 'autopilot.decision/2' || !Array.isArray(v.decisions)) continue;
-      if (v.project_key !== key || v.repo_identity !== identity) continue;
-      const fileRoot = v.root_run_id || null;
-      if ((fileRoot === null ? null : safeSegment(fileRoot)) !== nameRoot) continue;
+    for (const file of listScopeFiles(dir, key)) {
+      const sf = readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity });
+      if (!sf) continue;
+      const { value: v, raw } = sf;
       const views = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
       if (views.length === 0) continue;
       value.push(...views);

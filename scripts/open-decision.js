@@ -34,7 +34,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
-const { scopeKeyOf, commonDirOf, listScopeFiles } = require('../src/status/scope-key');
+const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
 const SCHEMA = 'autopilot.decision/2';
@@ -108,11 +108,8 @@ function scopeFile(cwd, root) {
 // look across all of them, so a card opened before the session's root changed is still seen and closable. `open` writes only sf.file.
 function projectScopes(sf) {
   const out = [];
-  for (const { file } of listScopeFiles(sf.dir, sf.scope.project_key)) {
-    try {
-      const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (!v || v.schema !== SCHEMA || v.project_key !== sf.scope.project_key || v.repo_identity !== sf.scope.repo_identity) continue;
-    } catch (_error) { continue; }
+  for (const file of listScopeFiles(sf.dir, sf.scope.project_key)) {
+    if (!readScopeFile(file, { schema: SCHEMA, projectKey: sf.scope.project_key, identity: sf.scope.repo_identity })) continue;
     const entries = readFile(file);
     if (entries.length) out.push({ file, entries });
   }
@@ -173,7 +170,7 @@ function main(argv) {
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
     let r = { status: 'absent' };
-    for (const f of [sf.file, ...projectScopes(sf).map((s) => s.file).filter((f) => f !== sf.file)]) {
+    for (const { file: f } of projectScopes(sf)) {
       r = closeDecisionById(f, args.id);
       if (r.status !== 'absent') break;
     }

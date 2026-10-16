@@ -32,8 +32,31 @@ for (const root of ["root-new", null]) {
 assert_contains "$OUT" "root-new:Q-NEW?,Q-OLD?,Q-UNBOUND?" "readDecision (root-new scope) sees all three"
 assert_contains "$OUT" "null:Q-NEW?,Q-OLD?,Q-UNBOUND?" "readDecision (unbound scope) sees all three"
 
-# a foreign project's file (key sharing the prefix) and a mis-bound file stay out
-echo '{ nope' > "$D/zzz.json"
+# files that must NOT count: (a) another project's / repo's content under this project's name, (b) a file name whose root disagrees
+# with the root inside, (c) corrupt JSON. Each carries a card (or none) that must stay invisible and unclosable.
+KEY="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e 'console.log(require(process.env.REPO_ROOT+"/src/status/project-key").scopeFromCwd(process.env.R).project_key)')"
+IDENT="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e 'console.log(require(process.env.REPO_ROOT+"/src/status/project-key").scopeFromCwd(process.env.R).repo_identity)')"
+card() { printf '{"id":"%s","question":"%s","opened_at":"%s"}' "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; }
+seed() { printf '{"schema":"autopilot.decision/2","root_run_id":%s,"repo_identity":"%s","project_key":"%s","decisions":[%s]}\n' "$2" "$3" "$4" "$(card "$5" "$6")" > "$D/$1"; }
+seed "$KEY--evil.json" '"evil"' "git-common-dir:/elsewhere" "other-project" d-evil1111 "Q-FOREIGN?"
+seed "$KEY--named.json" '"other"' "$IDENT" "$KEY" d-mism2222 "Q-MISMATCH?"
+printf '{ nope' > "$D/$KEY--x.json"
+SHOW="$(node "$OD" show --cwd "$R" --root-run-id root-new)"
+for q in Q-FOREIGN Q-MISMATCH; do assert_not_contains "$SHOW" "$q" "show hides $q"; done
+assert_eq "0" "$(node "$OD" show --cwd "$R" --root-run-id root-new >/dev/null 2>&1; echo $?)" "show survives a corrupt scope file"
+PANE="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const { scopeFromCwd } = require(process.env.REPO_ROOT + "/src/status/project-key");
+const { commonDirOf } = require(process.env.REPO_ROOT + "/src/status/scope-key");
+const { readDecision } = require(process.env.REPO_ROOT + "/src/status/decision-input");
+const sc = scopeFromCwd(process.env.R);
+const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: "root-new", identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
+console.log(r.value.map((d) => d.question).sort().join(","));')"
+assert_eq "Q-NEW?,Q-OLD?,Q-UNBOUND?" "$PANE" "pane data excludes foreign, mismatched and corrupt files"
+node "$OD" close --cwd "$R" --id d-evil1111 | grep -q 'not open' && node "$OD" close --cwd "$R" --id d-mism2222 | grep -q 'not open'
+assert_eq "0" "$?" "close cannot reach a card in an excluded file"
+assert_contains "$(cat "$D/$KEY--evil.json")" "d-evil1111" "foreign file untouched by close"
+assert_contains "$(cat "$D/$KEY--named.json")" "d-mism2222" "mismatched file untouched by close"
+rm -f "$D/$KEY--evil.json" "$D/$KEY--named.json" "$D/$KEY--x.json"
 # close --id finds a card of another scope
 node "$OD" close --cwd "$R" --root-run-id root-new --id "$ID_OLD" >/dev/null
 SHOW="$(node "$OD" show --cwd "$R" --root-run-id root-new)"

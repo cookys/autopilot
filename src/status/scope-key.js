@@ -18,22 +18,41 @@ function commonDirOf(identity) {
   return m ? m[1] : null;
 }
 
-// Every scope file of one project in a decisions dir: the unbound `<key>.json` and each `<key>--<root>.json`.
-// Returns [{ file, root }] (root = the safeSegment text of the name, null for unbound). A root that swaps mid-session
-// (compaction, /reload-plugins) leaves cards in several files; readers take them all. A foreign project whose key starts
-// with `<key>--` also matches by name: callers must still check project_key / repo_identity inside the file.
+// Every scope file of one project in a decisions dir: the unbound `<scopeKeyOf(key)>.json` and each `<scopeKeyOf(key)>--<safeSegment>.json`.
+// Names are matched in their encoded form (scopeKeyOf / safeSegment), never by a raw root. Returns [file]. A foreign project whose key
+// shares the prefix also matches by name: callers must pass each file through readScopeFile.
 function listScopeFiles(dir, projectKey) {
   const fs = require('fs');
+  const path = require('path');
   let names = [];
   try { names = fs.readdirSync(dir); } catch (_error) { return []; }
+  const unbound = scopeKeyOf(projectKey, null);
   const out = [];
   for (const n of names.sort()) {
     if (!n.endsWith('.json')) continue;
     const base = n.slice(0, -5);
-    if (base === projectKey) out.push({ file: require('path').join(dir, n), root: null });
-    else if (base.startsWith(`${projectKey}--`) && base.length > projectKey.length + 2) out.push({ file: require('path').join(dir, n), root: base.slice(projectKey.length + 2) });
+    if (base === unbound) { out.push(path.join(dir, n)); continue; }
+    const rest = base.startsWith(`${unbound}--`) ? base.slice(unbound.length + 2) : '';
+    if (rest && safeSegment(rest) === rest) out.push(path.join(dir, n));
   }
   return out;
 }
 
-module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles };
+// One scope file, bound to itself: parsed JSON with `raw`, or null when it is unreadable, not schema `schema`, not this project_key /
+// repo_identity, or its root_run_id does not give back its own file name (scopeKeyOf(key, root) === name). Shared by every reader.
+function readScopeFile(file, { schema, projectKey, identity }) {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const raw = fs.readFileSync(file, 'utf8');
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || v.schema !== schema || !Array.isArray(v.decisions)) return null;
+    if (v.project_key !== projectKey || v.repo_identity !== identity) return null;
+    if (scopeKeyOf(projectKey, v.root_run_id || null) !== path.basename(file, '.json')) return null;
+    return { value: v, raw };
+  } catch (_error) {
+    return null;
+  }
+}
+
+module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile };

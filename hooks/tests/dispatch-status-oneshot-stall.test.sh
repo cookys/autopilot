@@ -28,6 +28,7 @@ mf cur cursor reviewer plain null;      assert_contains "$(st cur)" '"stall":fal
 mf cod codex implementer codex-chrome 540; assert_contains "$(st cod)" '"stall":true' "streaming codex 6 min quiet: still stalled"
 mf cur2 cursor implementer jsonl 540;   assert_contains "$(st cur2)" '"stall":true' "streaming cursor implementer 6 min quiet: still stalled"
 mf codr codex reviewer codex-chrome null; assert_contains "$(st codr)" '"stall":true' "codex reviewer streams: still stalled"
+mf pir pi reviewer plain null;           assert_contains "$(st pir)" '"stall":true' "pi reviewer (plain log, but streams): still stalled"
 age 600   # past the 9m timeout
 mf shim cc-shim implementer plain 540;  assert_contains "$(st shim)" '"stall":true' "cc-shim past its own timeout: stalled"
 assert_contains "$(st shim)" '"stall_limit_s":540' "limit reported"

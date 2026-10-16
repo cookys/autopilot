@@ -144,6 +144,42 @@ test('assertJsonValue ACCEPTED: 0 (positive zero) is not confused with -0', () =
   assert.ok(!Object.is(0, -0), 'sanity: positive zero is not -0');
 });
 
+// --- Lone surrogates (strings and object keys) -------------------------------
+// Raw bytes are written so the escape text reaches the preflight verbatim.
+function preflightRaw(text) {
+  const file = path.join(tempRoot, `raw-${Math.random().toString(36).slice(2)}.json`);
+  fs.writeFileSync(file, text);
+  return readJson(file, 'fixture');
+}
+
+function assertStringRejected(name, text) {
+  test(`lone surrogate REJECTED: ${name}`, () => {
+    assert.throws(() => preflightRaw(text), (error) => {
+      assert.equal(error.code, 'UNSUPPORTED_JSON_STRING');
+      return true;
+    });
+  });
+}
+
+assertStringRejected('lone high in a value', '{"x": "a\\ud800b"}');
+assertStringRejected('lone low in a value', '{"x": "a\\udc00b"}');
+assertStringRejected('high at end of string', '{"x": "ab\\ud800"}');
+assertStringRejected('lone high in an object key', '{"a\\ud800": 1}');
+assertStringRejected('lone low in an object key', '{"\\udc00": 1}');
+assertStringRejected('reversed pair (low then high)', '{"x": "\\udc00\\ud800"}');
+assertStringRejected('lone surrogate nested in an array', '{"x": ["ok", "\\ud800"]}');
+
+test('lone surrogate ACCEPTED: a valid escaped pair (U+1F600) in value and key', () => {
+  const doc = preflightRaw('{"x": "\\ud83d\\ude00", "\\ud83d\\ude00": 1}');
+  assert.equal(doc.x, '\u{1F600}');
+});
+
+test('assertJsonValue: lone surrogate rejected in value and key, pair accepted', () => {
+  assert.throws(() => assertJsonValue('\ud800', '$'), { code: 'UNSUPPORTED_JSON_STRING' });
+  assert.throws(() => assertJsonValue({ '\udc00': 1 }, '$'), { code: 'UNSUPPORTED_JSON_STRING' });
+  assert.doesNotThrow(() => assertJsonValue({ '\u{1F600}': '\u{1F600}' }, '$'));
+});
+
 // node:test runs the cases after this file finishes loading, so clean up on
 // process exit; a failed run (non-zero code) keeps the directory for debugging.
 process.on('exit', (code) => {

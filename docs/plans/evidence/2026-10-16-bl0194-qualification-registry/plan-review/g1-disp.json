@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "bl0194-qualification-registry-2026-10-16",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "01c105b7ff5ac0da645b4606a292e6fc4cb55b8f551535b3b9188851a290f915",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded into section 2 (feed never admits/lifts) and 3.3 (strikes disclosure only, refresh never writes local strikes, P2 negative control)."
+    },
+    {
+      "fingerprint": "69e8bfef60f6fcdc039fc8b9ecc04782a3ca9cf4a97ffd900eab6699f1ae960d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 2: an adopted row is not local evidence."
+    },
+    {
+      "fingerprint": "75a002f43d0adba10b2772351c19293677c27afa8f72e0ac8a98714791f5c9cb",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: section 3.4 defines record_id/strike_id as sha256 of canonical JSON over listed fields; registry assigns strike_seq; importer parity test in P1."
+    },
+    {
+      "fingerprint": "f5ad801c5d942204ee70c5d5e20336e61f833679b1ce6dfc0ca83bc56ab4bd02",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 4: event-log outbox, ack on default-branch commit, failpoints."
+    },
+    {
+      "fingerprint": "25cf87052adaae0657c08f2c473d18a229d8341690b8db70e295a05edf355160",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 3.2 (zero denominators, median_wall_ms, per-kind matrix, lifted_by type)."
+    },
+    {
+      "fingerprint": "ed8285cb2de5831bcabc8b642e409f52b23a205db86b4558a1a72bc7d3e6a8bd",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: section 3 names a stdlib Python validator in llm-playground (check_qualification_feed.py + its test file) and one shared JSON Schema as single spec with a parity test."
+    },
+    {
+      "fingerprint": "81d8717f5c560d481896ed0524f3cc051167c53275d89fe1cf008bdded08fd81",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: warn/fail unified to FAIL for release gate; tests named in section 6."
+    },
+    {
+      "fingerprint": "31978ecefddcf615cf78297e96f2c908147aa340cb97bc6ff5c92c73c4d95d51",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 5: ages reported in list/status/adopt, 90 d expired-advisory, P2 control."
+    },
+    {
+      "fingerprint": "658ff582448141fdefd5ca2f6b48e84971d0c161a4d17298716c032bd3340da3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: evidence_url -> relative evidence_ref, map hash dropped, section 7 gate."
+    },
+    {
+      "fingerprint": "532645bdd0166cba3fdb7c03a2cf323c4438c61c8059963a7340c563bd1b7608",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in P4b whitelist test."
+    },
+    {
+      "fingerprint": "6313446ef26fbb19b1fdcb820bbe7f19c87dd06250ae94b474776677ceac80b0",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: validator claim corrected, current.json fetched_at acknowledged, B1 as --from-snapshot with recipe/schema/test named."
+    },
+    {
+      "fingerprint": "b6094947e75824b3f4a2bb1d7f7848ba5c55334792470e217d20701b369bb1ab",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P4 split into P4a/P4b and dependency list."
+    },
+    {
+      "fingerprint": "9168686dd0b7b65fbe14abfb31af2a640bbdea14223150139afe92b71ccb34a7",
+      "disposition": "accepted_blocker",
+      "rationale": "Duplicate of the strikes-authority blocker (fable R2); merged into sections 2 and 3.3."
+    },
+    {
+      "fingerprint": "0af3d77466d1f5e98551deb933db4458eae3ea3a15e426487b009a88abc27db5",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: section 3.1 keeps only the v1 discriminator `schema`; schema_version dropped; v1-reader compatibility test in P2/P4a."
+    },
+    {
+      "fingerprint": "66998e678ce66814bc7b24e53811e9953802da9dee0e0c15917d109fec00239d",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: read validate-json-schema.js (accepts lossless non-integer literals); section 2 now enforces integers through type integer in the schema, P1 control for fractional permille."
+    },
+    {
+      "fingerprint": "826197fdd7d971aca16463dd23ab8aa8d11f85cae7549d738708ed8e69dc5e61",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: section 7 lists patterns and per-pattern red fixtures, plus forbidden trust-machinery keys."
+    },
+    {
+      "fingerprint": "1294bb010ba036b8834c2dd0dd5c9866b3f3d79f53ece7de382e234761f24931",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: kind enumeration is qualification | benchmark_observation."
+    },
+    {
+      "fingerprint": "f952745ee1ce8fdd62fa89a81ae445c6dcaba4f2483b22a5b7ae6452f1822de6",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: release gate FAILs; stated outside runtime advisory rule."
+    },
+    {
+      "fingerprint": "ac94a960b365f55a5438b3db6c47cda4e163ed8c1d414c52a31c8d0551a2b442",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 4 step 2 (quarantine .corrupt) and P3 control."
+    },
+    {
+      "fingerprint": "1fd61f4911bc99d6720e65576db1a641ee60ad70b4452517f51fe151ad2f991e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in P4b whitelist test."
+    },
+    {
+      "fingerprint": "ff881a1b9768a8a3f1f0e362e31a3c5e78ee55da380bcc7fefa7476ae4e3682f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: cached feed measured 339 KB; live re-measured in P1."
+    },
+    {
+      "fingerprint": "62457e6ae5d903d05f01d58f0d79fb1db3b07448b09cd10167c50981265fe2b7",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: importer exits non-zero after P4b flip."
+    },
+    {
+      "fingerprint": "1c8a773d0ab0a2fba92488bd00550bfef5800557ba023c15f4b4c5660966712a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: median_wall_ms integer."
+    },
+    {
+      "fingerprint": "1991825c577af7f5570e7fd2ae27333cfc591b200c22daa8e431d04baac8623b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 2."
+    },
+    {
+      "fingerprint": "0e50119a9c28f118975b55ca68cac47040a3338a7f832905e410e9071e3b6939",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 7 and evidence_ref."
+    },
+    {
+      "fingerprint": "c0ad4dfb5e12a1b7112e7ff3c7fcad688bf6f45ff02536281ba8040c620c134f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: measured 339 KB cached; cap set from live re-measure."
+    },
+    {
+      "fingerprint": "8d6abbc34cab9dd3dec8eb240a1fd97d2a2a632e08d0b15cc40901fe317d5829",
+      "disposition": "accepted_blocker",
+      "rationale": "Duplicate of the strikes-authority blocker; merged into sections 2 and 3.3, including that an adopted row is not local evidence."
+    },
+    {
+      "fingerprint": "308a092ef70007199b8807b8f4c0484729a4d2b913fca40de981083918705a72",
+      "disposition": "accepted_blocker",
+      "rationale": "Merged with the outbox/key blocker (fable R3); section 4 defines durable boundary, ack on default branch, torn-line quarantine, failpoints; section 3.4 conflict semantics."
+    },
+    {
+      "fingerprint": "9a2b683555e18c7b7b6804b2f1c1f3fa2db92b9daef2d99a0a2850b05a67430e",
+      "disposition": "accepted_blocker",
+      "rationale": "Merged with the schema blocker; section 3.2 gives per-kind required blocks, null/zero-denominator rules, units; example fixture is a P1 first deliverable."
+    },
+    {
+      "fingerprint": "70a6b5cec36813615e6a12b76ab2d41d8afc5473dd4a582aefe9d2d85eb6177e",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: P4b static test enumerating every scorecard.jsonl writer with whitelist; importer exits non-zero after flip."
+    },
+    {
+      "fingerprint": "c633748f7585b9fd8fa82bd58eb107eceb9bd83d9627836d363c5a3b227e2fd1",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: P4b config key legacy/registry, reconcile gate, rollback by key, CHANGELOG and migration note; P4 split into P4a/P4b."
+    },
+    {
+      "fingerprint": "0e2cda7288137215f6a3088ac6e315d3e674e26d70b9851a8f9ea624db9e6bfe",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded in section 5: fetch_age and producer_age both reported."
+    },
+    {
+      "fingerprint": "54a5e3e6b2509ac63b16d4ee08b4edcae9c50d7096a5b15ded2e3e932a7cb40c",
+      "disposition": "accepted_blocker",
+      "rationale": "Merged with the disclosure blocker; section 7 patterns and fixtures, evidence_url replaced by relative evidence_ref, map hash dropped."
+    },
+    {
+      "fingerprint": "a3188eb48753a4386ba985ffcf857178354895a3d80411c4196a9a772e749e97",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: file map in sections 3 and 5 names schema, recipe, tests."
+    }
+  ]
+}

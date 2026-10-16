@@ -1774,6 +1774,23 @@ function executePanelCaseTransport(panelConfig, diff) {
       receiptHash: broker.receiptHash,
     };
   }
+  if (broker.value.status !== 'ok' && broker.value.error.code === 'provider_process_failed'
+      && typeof broker.value.error.message === 'string') {
+    // d-80d327c9: the provider tags a tool attempt `tool_forbidden:` (TOOL_ATTEMPT_FORBIDDEN) only when the
+    // prompt it sent carried the fixed tools-forbidden notice (qualification-review-
+    // provider.js TOOL_FORBID_NOTICE). That is the seat disobeying an explicit
+    // instruction: transport is fine, THIS case is wrong, the exam keeps going.
+    const match = /model call failed: tool_forbidden: ([^]*)$/u.exec(broker.value.error.message);
+    if (match) {
+      return {
+        ok: true,
+        error: null,
+        stdout: '',
+        toolAttemptForbidden: `tool_attempt_forbidden: ${match[1].slice(0, 200)}`,
+        receiptHash: broker.receiptHash,
+      };
+    }
+  }
   if (broker.value.status !== 'ok' || result.status !== 0) {
     return {
       ok: false,
@@ -1798,6 +1815,7 @@ function runPanelCase(panelConfig, testCase, rawSink = null) {
   let parseError = null;
   try {
     if (!result.ok) throw new Error(result.error);
+    if (result.toolAttemptForbidden) throw new Error(result.toolAttemptForbidden);
     panel = parsePanelResult(result.stdout);
   } catch (error) {
     parseError = error.message;
@@ -1879,6 +1897,7 @@ function runOwnerPanelCase(panelConfig, testCase, rawSink = null) {
   let parseError = null;
   try {
     if (!result.ok) throw new Error(result.error);
+    if (result.toolAttemptForbidden) throw new Error(result.toolAttemptForbidden);
     panel = parseOwnerPanelResult(result.stdout);
   } catch (error) {
     parseError = error.message;
@@ -2518,6 +2537,8 @@ function runVaQualification(options) {
         envelope: caseData.envelope,
         transport_ok: execution.ok,
         output,
+        // d-80d327c9: an empty plan from a forbidden tool attempt carries its reason.
+        ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
       if (!execution.ok) {
         // Broker/launcher/host-side failure: transport_fail ABORTS with no
@@ -2858,6 +2879,8 @@ function runBrainQualification(options) {
       );
       rawExchanges.push({
         round_id: round.round_id, input, transport_ok: true, output: stdout,
+        // d-80d327c9: an empty answer from a forbidden tool attempt carries its reason.
+        ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
       // declare_done is a candidate TERMINAL action: the administration stops here,
       // so a premature declaration reaches the grader as a genuinely shorter trace

@@ -595,6 +595,25 @@ for (const stepSpec of (ctx.steps || [])) {
       walk(path.join(commonDir, 'autopilot', 'final-panel-seats'), '');
       return out;
     })(),
+    // BL-0146 D5: the round index the engine wrote (campaign dir name, file name, parsed record), so a test
+    // can read it back through the wiring module and compare it with what the receipt disclosed.
+    store_root: path.join(commonDir, 'autopilot', 'final-panel-seats'),
+    round_records: (() => {
+      const out = [];
+      const base = path.join(commonDir, 'autopilot', 'final-panel-seats');
+      let campaigns = [];
+      try { campaigns = fs.readdirSync(base); } catch (_e) { return out; }
+      for (const campaign of campaigns) {
+        let names = [];
+        try { names = fs.readdirSync(path.join(base, campaign)); } catch (_e) { continue; }
+        for (const name of names.filter((n) => /^round-[0-9a-f]+\.json$/.test(n))) {
+          try {
+            out.push({ campaign, name, record: JSON.parse(fs.readFileSync(path.join(base, campaign, name), 'utf8')) });
+          } catch (_e) { /* unreadable: reported by absence */ }
+        }
+      }
+      return out;
+    })(),
     result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });
 }

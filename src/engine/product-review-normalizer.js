@@ -174,7 +174,27 @@ function normalizeSeatReview(raw, options = {}) {
   return withResolutions(findings, resolved.resolutions);
 }
 
+// BL-0146 D3: a stored seat artifact's resolutions are re-derived, not trusted: each entry goes back
+// through the same checks a fresh answer gets (known id, status, evidence path:line inside the packet).
+// Anything that does not reproduce exactly is dropped to silence (an empty list), which can only keep a
+// finding open, never close one.
+function revalidateResolutions(stored, priorFindingIds, packetPaths) {
+  if (!Array.isArray(stored) || stored.length === 0) return [];
+  if (!Array.isArray(priorFindingIds)) return [];
+  const paths = packetPaths instanceof Set ? packetPaths : new Set(Array.isArray(packetPaths) ? packetPaths : []);
+  if (paths.size === 0) return [];
+  const raw = stored.map((entry) => ({
+    finding_id: entry && entry.finding_id,
+    status: entry && entry.status,
+    ...(entry && typeof entry.evidence === 'string' ? { evidence: entry.evidence } : {}),
+  }));
+  const redone = normalizeResolutions(raw, priorFindingIds, paths);
+  if (redone.error) return [];
+  return JSON.stringify(redone.resolutions) === JSON.stringify(stored) ? redone.resolutions : [];
+}
+
 module.exports = {
+  revalidateResolutions,
   normalizeProductReviewFindings,
   normalizeSeatReview,
 };

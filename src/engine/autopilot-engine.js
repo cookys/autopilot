@@ -140,7 +140,7 @@ const {
   missionCampaignIdFor,
   missionSubjectDigest,
 } = require('./mission-campaign-identity');
-const { normalizeProductReviewFindings } = require('./product-review-normalizer');
+const { normalizeProductReviewFindings, normalizeSeatReview } = require('./product-review-normalizer');
 const {
   worktreeInstanceId: repairWorktreeInstanceId,
 } = require('./repair-lineage-cleanup');
@@ -5366,7 +5366,23 @@ class AutopilotEngine {
         if (ownedIncrementalDir) fs.rmSync(ownedIncrementalDir, { recursive: true, force: true });
         else this.disposeOwnedDiffFile(diffFile);
       };
-      const specFile = promptFile;
+      // An incremental seat's spec is the campaign spec plus the prior-round addendum (owner ruling
+      // d-3cf4dc4c); every other seat, and every full round, reads the spec file untouched.
+      let specFile = promptFile;
+      let addendumIncluded = false;
+      if (incrementalSeat && isStr(decision.addendum) && decision.addendum.length > 0) {
+        try {
+          const composed = path.join(ownedIncrementalDir, 'spec.md');
+          fs.writeFileSync(composed, Buffer.concat([
+            fs.readFileSync(promptFile), Buffer.from(decision.addendum, 'utf8'),
+          ]));
+          specFile = composed;
+          addendumIncluded = fs.readFileSync(composed, 'utf8').endsWith(decision.addendum);
+        } catch (error) {
+          disposeDiff();
+          return { prepared: false, reason: error.message || String(error) };
+        }
+      }
       let diffDigest;
       let specDigest;
       try {
@@ -5399,7 +5415,8 @@ class AutopilotEngine {
         diff_file: path.resolve(diffFile),
         spec_file: path.resolve(specFile),
         blind_discovery: true,
-        prior_findings_included: false,
+        // True only when the spec bytes this seat reads really end with the addendum.
+        prior_findings_included: addendumIncluded,
         full_diff_required: true,
       };
       if (decision && decision.mode === 'incremental') {
@@ -5415,8 +5432,19 @@ class AutopilotEngine {
         enumerable: false,
       });
       if (incrementalSeat) {
+        const descriptor = incrementalPacketDescriptor(decision);
         Object.defineProperty(preparedReceipt, 'packet_incremental', {
-          value: incrementalPacketDescriptor(decision),
+          value: descriptor,
+          enumerable: false,
+        });
+        // What the seat may answer: the prior ids it was shown and the files it was given. Kept off
+        // the serialised receipt, like the packet descriptor.
+        Object.defineProperty(preparedReceipt, 'resolution_context', {
+          value: {
+            priorFindingIds: addendumIncluded
+              ? incrementWiring.carriedOpenFindings(decision).map((row) => row.finding_id) : null,
+            packetPaths: [...new Set([...descriptor.diff_paths, ...descriptor.tree_paths])],
+          },
           enumerable: false,
         });
       }
@@ -5568,7 +5596,7 @@ class AutopilotEngine {
           ...(prepared.packet_incremental ? { incremental: prepared.packet_incremental } : {}),
         },
         diffFile,
-        specFile: promptFile,
+        specFile: prepared.spec_file,
         roster: reviewRoster,
         timeoutSeconds: reviewTimeoutSeconds,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
@@ -5699,11 +5727,18 @@ class AutopilotEngine {
             },
         };
       }
+      let seatResolutions = [];
       let findings = reviewed.review && typeof reviewed.review.findings === 'string'
         ? reviewed.review.findings
         : '';
       if (findings.trim().length > 0) {
-        const normalized = normalizeProductReviewFindings(findings);
+        // An incremental seat that was shown the prior findings answers {findings, resolutions}; any
+        // other seat (and every full round) goes through the legacy normalizer, which has no
+        // resolutions and rejects the object form.
+        const resolutionContext = prepared.resolution_context;
+        const normalized = resolutionContext && resolutionContext.priorFindingIds
+          ? normalizeSeatReview(findings, resolutionContext)
+          : normalizeProductReviewFindings(findings);
         if (normalized.status !== 'normalized') {
           return {
             reviewed: false,
@@ -5713,6 +5748,7 @@ class AutopilotEngine {
           };
         }
         findings = normalized.canonical;
+        if (Array.isArray(normalized.resolutions)) seatResolutions = normalized.resolutions;
         priorReviewFindingIds = new Set(
           normalized.findings.map((finding) => finding.finding_id),
         );
@@ -5778,8 +5814,9 @@ class AutopilotEngine {
         review_digest: reviewDigest,
         review_input_mode: prepared.packet_incremental ? 'incremental_return' : 'full_diff_generation',
         blind_discovery: true,
-        prior_findings_included: false,
+        prior_findings_included: prepared.prior_findings_included === true,
         full_diff_required: !prepared.packet_incremental,
+        ...(prepared.packet_incremental ? { resolutions: seatResolutions } : {}),
         raw: reviewed,
       };
       if (reviewed.packet) {
@@ -6000,7 +6037,7 @@ class AutopilotEngine {
                 baseSha: base,
                 candidateSha: reviewInput.candidate.commit,
                 diffFile: identityPrepared.diff_file,
-                specFile: promptFile,
+                specFile: identityPrepared.spec_file,
                 denyExtra: roster.review_packet_deny_extra,
                 ...(identityPrepared.packet_incremental
                   ? { incremental: identityPrepared.packet_incremental } : {}),
@@ -6303,14 +6340,16 @@ class AutopilotEngine {
       });
       if (incrementalRound) {
         // Silence never closes (plan 2.5): the earlier round's findings stay open unless every
-        // sealed seat explicitly closes them. No seat is shown them yet (the addendum is off,
-        // pending owner ruling d-3cf4dc4c), so no resolutions exist and every one stays open.
+        // sealed seat explicitly closes them. Each seat was shown them in the spec addendum (owner
+        // ruling d-3cf4dc4c) and answers with resolutions[]; a seat that is absent, silent or has no
+        // resolution for an id keeps it open, and an open one parks the round again.
         const carriedRows = incrementWiring.carriedOpenFindings(incrementDecision);
         const sealedSeatIds = seats.map((_seat, index) => String(index + 1));
         const seatMap = {};
         outcomes.forEach(({ outcome }, index) => {
           seatMap[String(index + 1)] = outcome && outcome.reviewed === true
-            ? { status: 'normalized', resolutions: [] } : null;
+            ? { status: 'normalized', resolutions: Array.isArray(outcome.resolutions) ? outcome.resolutions : [] }
+            : null;
         });
         const closure = evaluateClosure(
           carriedRows.map((row) => row.finding_id), seatMap, minPanelSize, sealedSeatIds,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Owned-inventory reconstruction now reads the worktree-creation intent records written before `git worktree add`, so a worktree built but never registered by the controller is inventoried (BL-0082); the runs watcher forwards SIGTERM from its foreground launcher to the inner writer, reports an unwritable TMPDIR as such instead of a missing flock, and `repo-identity.sh` escapes all control characters in manifest JSON strings (BL-0109).
+
 - `qualification-review-provider.js` gains an `owner` prompt mode (`QRP_PROMPT_MODE=owner`), so `engine-qualify.sh owner --remote-provider-cmd` has an exam provider for the owner intent/control corpus (BL-0158); `engine-qualify.js` now exports `parseOwnerPanelResult`.
 
 - Scorecard cost blocks for an unknown price now store `null` instead of `0`, and `costSortValue` is exported and gates on `cost.source` plus numeric type so an unpriced seat can never rank as free (BL-0024, encoding half; ordering the implementer ladder by price still needs registered prices).

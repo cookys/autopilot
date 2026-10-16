@@ -164,6 +164,55 @@ run('an unregistered path that exists is unknown residue', () => {
   assert.strictEqual(outcome(row).disposition, 'retained_unknown');
 });
 
+// --- BL-0082: creation-intent records (written before `git worktree add`) ---------------
+const intentDir = path.join(repo, '.git', 'autopilot-worktree-creation');
+fs.mkdirSync(intentDir, { recursive: true });
+const writeIntent = (name, rec) => fs.writeFileSync(path.join(intentDir, name), typeof rec === 'string' ? rec : JSON.stringify(rec));
+const intent = (root, p, branch) => ({
+  schema: 1, root_run_id: root, run_id: 'r1', loop_id: 'l1', branch, base_sha: base, planned_path: p,
+});
+const reconstructRoot = (root) => ctrl.reconstructOwnedInventory({
+  gitCwd: repo, controller: { resource_inventory: [] }, rootRunId: root, baseSha: base,
+});
+
+run('a built-but-unregistered worktree is discoverable through its creation intent', () => {
+  const built = path.join(tmp, 'built-never-registered');
+  git('worktree', 'add', '-q', '-b', 'intent-branch', built, base);
+  writeIntent('built.json', intent('root-A', built, 'intent-branch'));
+  const inv = reconstructRoot('root-A');
+  assert.strictEqual(inv.ok, true);
+  const row = byId(inv, built);
+  assert.ok(row, 'the worktree appears in the inventory although the controller never registered it');
+  assert.strictEqual(row.from_creation_intent, true);
+  assert.strictEqual(row.branch, 'intent-branch');
+});
+
+run('another root\'s intent is not ours (control)', () => {
+  const inv = reconstructRoot('root-B');
+  assert.strictEqual(inv.ok, true);
+  assert.strictEqual(inv.inventory.length, 0);
+});
+
+run('an intent from a crash before the add leaves nothing to inventory', () => {
+  const never = path.join(tmp, 'never-created');
+  writeIntent('never.json', intent('root-C', never, 'never-branch'));
+  const inv = reconstructRoot('root-C');
+  assert.strictEqual(inv.ok, true);
+  assert.strictEqual(byId(inv, never), undefined);
+});
+
+run('a malformed intent record fails closed', () => {
+  writeIntent('bad.json', '{not json');
+  const inv = reconstructRoot('root-A');
+  assert.strictEqual(inv.ok, false);
+  assert.strictEqual(inv.source, 'git_error');
+  assert.match(inv.reason, /intent unreadable/);
+  fs.rmSync(path.join(intentDir, 'bad.json'));
+  writeIntent('bad.json', { root_run_id: 'root-A' });
+  assert.strictEqual(reconstructRoot('root-A').ok, false, 'an incomplete record also fails closed');
+  fs.rmSync(path.join(intentDir, 'bad.json'));
+});
+
 assert.deepStrictEqual(failed, [], `red sections: ${failed.join(', ')}`);
 console.log('inventory re-derivation assertions passed');
 NODE

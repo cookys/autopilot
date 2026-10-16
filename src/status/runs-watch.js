@@ -778,22 +778,33 @@ const WRAPPER = 'exec 9>"$1" || exit 1; flock -n 9 || exit 75; shift; export '
   + `${LOCKED_ENV}=1; exec "$@"`;
 
 // Probe by actually taking a lock: a flock(1) that answers --version but cannot lock is unusable.
-function flockAvailable(env) {
+// -> { ok, reason }. reason separates a missing/unusable flock(1) from a probe-lock directory that cannot be
+// written (an unwritable TMPDIR), which is not a flock problem and must not be reported as one (BL-0109).
+const FLOCK_MISSING_REASON = 'flock(1) (util-linux) is required on PATH; no lockfile fallback';
+function flockProbe(env) {
   let dir = null;
   try {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
     const probe = path.join(dir, 'probe.lock');
-    fs.writeFileSync(probe, '');
+    try {
+      fs.writeFileSync(probe, '');
+    } catch (error) {
+      return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
+    }
     const r = spawnSync('flock', ['-n', probe, 'true'], { encoding: 'utf8', timeout: 5000, env });
-    return !r.error && r.status === 0;
-  } catch (_error) {
-    return false;
+    return !r.error && r.status === 0 ? { ok: true, reason: null } : { ok: false, reason: FLOCK_MISSING_REASON };
+  } catch (error) {
+    return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
   } finally {
     if (dir) {
       try { fs.unlinkSync(path.join(dir, 'probe.lock')); } catch (_cleanup) { /* best effort */ }
       try { fs.rmdirSync(dir); } catch (_cleanup) { /* best effort */ }
     }
   }
+}
+
+function flockAvailable(env) {
+  return flockProbe(env).ok;
 }
 
 function holderFromEnvelope(env, key) {
@@ -878,8 +889,9 @@ function runWatchCli(opts) {
     return 0;
   }
 
-  if (!flockAvailable(env)) {
-    stderr.write('flock_unavailable: flock(1) (util-linux) is required on PATH; no lockfile fallback\n');
+  const flock = flockProbe(env);
+  if (!flock.ok) {
+    stderr.write(`flock_unavailable: ${flock.reason}\n`);
     return 2;
   }
 
@@ -962,18 +974,30 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
     stderr.write(`watcher startup failed: live dir not writable: ${error.message}\n`);
     return 1;
   }
-  const r = spawnSync('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render }), { cwd, env, stdio: 'inherit' });
-  if (r.error) {
-    stderr.write(`watcher startup failed: ${r.error.message}\n`);
-    return 1;
-  }
-  if (r.status === LOCK_BUSY_RC) {
-    const holder = holderFromEnvelope(env, key);
-    stdout.write(`writer_busy: project ${key} already has a watcher (pid ${holder === null ? 'unknown' : holder})\n`);
-    return 0;
-  }
-  if (r.signal) return 1;
-  return r.status === null ? 1 : r.status;
+  // Async spawn, not spawnSync: a blocked parent cannot forward SIGTERM, and the inner writer (which holds
+  // the lock) would outlive a killed launcher (BL-0109). The child is the wrapper `sh`, which execs the writer.
+  const child = spawn('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render }), { cwd, env, stdio: 'inherit' });
+  const forward = (sig) => () => { try { child.kill(sig); } catch (_e) { /* already gone */ } };
+  const handlers = ['SIGTERM', 'SIGINT', 'SIGHUP'].map((sig) => [sig, forward(sig)]);
+  for (const [sig, fn] of handlers) process.on(sig, fn);
+  const finish = (code) => {
+    for (const [sig, fn] of handlers) process.removeListener(sig, fn);
+    process.exit(code);
+  };
+  child.on('error', (error) => {
+    stderr.write(`watcher startup failed: ${error.message}\n`);
+    finish(1);
+  });
+  child.on('exit', (status, signal) => {
+    if (status === LOCK_BUSY_RC) {
+      const holder = holderFromEnvelope(env, key);
+      stdout.write(`writer_busy: project ${key} already has a watcher (pid ${holder === null ? 'unknown' : holder})\n`);
+      finish(0);
+      return;
+    }
+    finish(signal || status === null ? 1 : status);
+  });
+  return null; // the process stays alive until the child exits
 }
 
 function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, env, stderr }) {
@@ -1035,5 +1059,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

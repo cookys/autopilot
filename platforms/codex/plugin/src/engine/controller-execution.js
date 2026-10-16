@@ -2254,6 +2254,46 @@ function rederiveStaleRows({
 }
 
 /**
+ * BL-0082: read the worktree-creation intent records dispatch-hetero.sh publishes
+ * under `<git-common-dir>/autopilot-worktree-creation/` BEFORE `git worktree add`.
+ * A crash between the add and the controller's registration leaves only this record,
+ * so the controller inventory must be able to see it. Pure re-derivation: the record
+ * is a claim about a path/branch; Git decides whether anything exists there.
+ * Fail-closed: an unreadable directory or an unparseable/incomplete record throws
+ * (a record we cannot attribute to a root may belong to this one).
+ */
+function readWorktreeCreationIntents({ gitCwd, execFileSync }) {
+  const common = execFileSync('git', ['-C', gitCwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+  const dir = path.join(common, 'autopilot-worktree-creation');
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return [];
+    throw error;
+  }
+  const records = [];
+  for (const name of names.sort()) {
+    if (!name.endsWith('.json')) continue;
+    const file = path.join(dir, name);
+    let rec;
+    try {
+      rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (error) {
+      throw new Error(`worktree creation intent unreadable: ${file}: ${error.message}`);
+    }
+    if (!isObj(rec) || !isStr(rec.root_run_id) || !isStr(rec.planned_path)
+        || !path.isAbsolute(rec.planned_path) || !isStr(rec.branch)) {
+      throw new Error(`worktree creation intent malformed: ${file}`);
+    }
+    records.push({ file, ...rec });
+  }
+  return records;
+}
+
+/**
  * Reconstruct current *owned* worktree inventory from Git + controller state.
  * The primary checkout (gitCwd) is never counted as campaign-owned residue.
  * Linked worktrees are owned only when:
@@ -2339,6 +2379,26 @@ function reconstructOwnedInventory({
     const porcelain = execFileSync('git', ['-C', gitCwd, 'worktree', 'list', '--porcelain'], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     });
+    // Creation intents of THIS root become owned rows, so a worktree that exists
+    // but was never registered by the controller is inventoried (and then judged by
+    // the Git observations below like any other row).
+    const intentPaths = new Set();
+    if (isStr(rootRunId)) {
+      for (const rec of readWorktreeCreationIntents({ gitCwd, execFileSync })) {
+        if (rec.root_run_id !== rootRunId) continue;
+        intentPaths.add(rec.planned_path);
+        put({
+          resource_id: rec.planned_path,
+          kind: 'worktree',
+          path: rec.planned_path,
+          worktree: rec.planned_path,
+          branch: rec.branch,
+          base_sha: isCanonicalGitObjectId(rec.base_sha) ? rec.base_sha : null,
+          identity_known: true,
+          from_creation_intent: true,
+        }, { live: false });
+      }
+    }
     let current = null;
     const linked = [];
     for (const line of porcelain.split('\n')) {
@@ -2429,6 +2489,15 @@ function reconstructOwnedInventory({
     rederiveStaleRows({
       byPath, registeredWorktrees, gitCwd, baseSha, execFileSync,
     });
+    // An intent whose crash came before the add left nothing: no worktree, no
+    // path, no branch. It is not a resource; keep only what Git corroborates.
+    for (const [key, row] of [...byPath.entries()]) {
+      if (row.from_creation_intent !== true || !intentPaths.has(row.path)) continue;
+      if (row.worktree_registered === false && !fs.existsSync(row.path)
+          && row.branch_exists !== true) {
+        byPath.delete(key);
+      }
+    }
   } catch (error) {
     if (failClosedOnGitError) {
       return {

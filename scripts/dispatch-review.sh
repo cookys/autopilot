@@ -1068,6 +1068,23 @@ Bounded convergence contract:
 - An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
 - When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
 - SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
+
+Two complete, correct answers, shown only to illustrate the rules above (they add no requirement; replace every detail with your own review, and write the real opening and closing marker lines where the placeholders stand). Answer with exactly ONE block, never repeated:
+
+Nothing to fix:
+    (opening marker line)
+    VERDICT: SHIP-AS-IS
+    FINDINGS: none
+    NO-FINDING-PROOF: checked=the changed retry branch and its call sites; evidence=the added test fails without the branch and passes with it; conclusion=the spec is met and no in-scope failure remains
+    (closing marker line)
+
+Something to fix:
+    (opening marker line)
+    VERDICT: FIX-THEN-SHIP
+    FINDINGS:
+    🟠 [retry-unbounded] MUST-FIX the retry loop has no cap, so a persistent failure spins forever; cap it at one retry
+    🔵 [rename-helper] CUT/FOLLOW-UP renaming the helper is optional polish, excluded from this version
+    (closing marker line)
 EOF
   # BL-0197: the caller's single format re-ask names what the previous answer got wrong.
   # One line, fixed vocabulary from validate_review_block; the output rules above are unchanged.

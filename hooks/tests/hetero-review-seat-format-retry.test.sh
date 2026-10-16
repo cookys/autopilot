@@ -42,6 +42,11 @@ case "${FAKE_MODE:-ok}" in
   ok)
     printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=the diff and its contract; evidence=assignment changed in the captured diff; conclusion=nothing blocking remains\n%s\n' "$begin" "$end" ;;
   empty) : ;;
+  example_ship|example_fix)
+    # Copy the prompt's own worked example, swapping the placeholders for the real markers.
+    hdr='Nothing to fix:'; [ "$FAKE_MODE" = example_fix ] && hdr='Something to fix:'
+    printf '%s\n' "$prompt" | awk -v h="$hdr" '$0==h{c=1;next} c&&/^$/{exit} c{sub(/^    /,"");print}' \
+      | sed "s|^(opening marker line)\$|$begin|; s|^(closing marker line)\$|$end|" ;;
 esac
 EOF
 chmod +x "$TEST_TMP/fake-runner.sh"
@@ -57,6 +62,17 @@ assert_not_contains "$OUT" 'format_reject' "dr: an empty answer is not a format 
 OUT=$(run_dr ok); RC=$?
 assert_eq "$RC" "0" "dr: well-formed answer is reviewed"
 assert_not_contains "$OUT" 'format_reject' "dr: a reviewed result carries no format_reject"
+
+# The prompt's own worked examples must satisfy the unchanged battery (an example that teaches a
+# rejected format would defeat its purpose).
+OUT=$(run_dr example_ship "$TEST_TMP/p-ex1.txt"); RC=$?
+assert_eq "$RC" "0" "dr: the prompt's NO-FINDING-PROOF example is accepted by the battery"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "dr: the example parses to SHIP-AS-IS"
+assert_contains "$OUT" 'checked=the changed retry branch' "dr: the example's three proof fields survive parsing"
+OUT=$(run_dr example_fix "$TEST_TMP/p-ex2.txt"); RC=$?
+assert_eq "$RC" "0" "dr: the prompt's FINDINGS example is accepted by the battery"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "dr: the findings example parses to FIX-THEN-SHIP"
+assert_contains "$OUT" 'retry-unbounded' "dr: the findings example keeps its finding lines"
 
 AUTOPILOT_REVIEW_RETRY_NOTE="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" run_dr ok "$TEST_TMP/p-note.txt" > /dev/null
 assert_contains "$(cat "$TEST_TMP/p-note.txt")" "Retry notice: your previous answer to this same review was discarded because: NO-FINDING-PROOF must contain" "dr: retry note appears in the prompt"

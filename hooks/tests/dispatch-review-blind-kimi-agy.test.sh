@@ -287,7 +287,11 @@ EOF
     # sides; the head-side presence of the parent id is pinned by the assertion below, and that the rest
     # (argv, cwd shape, every other env var) stays byte-identical is what this compare is for.
     NORM='s/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g; /^AUTOPILOT_(PARENT|CHILD)_SESSION_ID=/d'
-    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec")" \
+    # BL-0197 added two worked answer examples to the prompt (illustration only; no rule changed). The base
+    # script predates them, so drop exactly that paragraph from both sides; the rest of the prompt, the argv
+    # shape and the env stay byte-compared.
+    DROP_EXAMPLES='s/\n\nTwo complete, correct answers.*?\(closing marker line\)\n.*?\(closing marker line\)//s'
+    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec" | perl -0pe "$DROP_EXAMPLES")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec" | perl -0pe "$DROP_EXAMPLES")" \
       "non-blind $CR argv/cwd-shape/env are byte-identical to base ${BASE_SHA:0:8}"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR head run carries the 3b rule-3 parent id (so the normalisation above drops something real)"
     assert_not_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR base run has no parent id (the difference is the intended 3b change, not noise)"

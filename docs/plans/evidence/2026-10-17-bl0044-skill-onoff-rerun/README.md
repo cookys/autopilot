@@ -85,7 +85,7 @@ prefix `Use dev-flow:` in every arm, 3 reps, resume-by-cell, `ONOFF_KEEP_CELLS_D
 Run 2026-10-16 23:21:46 to 23:46:25 (+0800), 120 gating cells (P-A 60, P-R 30, P-C 30), 0 infra failures, 0 excluded pairs,
 runner 2.1.301 throughout, cost 17.54 USD (gating) + 17.66 USD (160 pilot cells) = 35.20 USD; the stage-graph coverage gate below adds 9.35 USD (36 cells), 44.55 USD overall. Rows and scorer output:
 `results-pa-full-off.jsonl`, `results-pr-red.jsonl`, `results-pc-card.jsonl`, `score-final.json`, `score-redcheck.json`.
-Raw per-cell transcripts (not in git): the lane scratchpad (not in git), `gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
+Raw per-cell transcripts: the lane scratchpad (not in git), `gate/cells-*/<task>/<arm>/<rep>/transcript.jsonl`.
 
 ### P-A + P-C (n = 9 per counted family)
 
@@ -121,7 +121,7 @@ The red arm invoked the skill 30/30, so the drop is the body's content, not rout
 
 The card relocates the ladder `--terms` paragraph (the v5 rule that took stage-graph to 10/12) and the anti-patterns table, and the dc tasks
 contain no research or ladder walk. `scripts/check-guidance-eval.js` also requires any guidance change at a cut to match an evaluated stage-graph pack.
-So the dc verdict alone does not license the swap. Rule, from the frozen `prereg/stage-graph.json` (v10) (no new thresholds): the 12 stage-graph briefs x 3 reps
+So the dc verdict alone does not license the swap. Rule, from the frozen `prereg/stage-graph.json` (v10; no new thresholds): the 12 stage-graph briefs x 3 reps
 on arm `evals/skill-onoff/arms/dc-sg/change.json` (= the evaluated v10 `change` arm with `dev-flow` replaced by `dev-flow-dc-card`), same prefix, same pinned binary,
 `change` arm only (the planted-red arm of that row was already shown to separate in v10). Pass = at least 10 of 12 briefs pass (>= 2 of 3 reps each, as in the row's scorer).
 Swap `skills/dev-flow/SKILL.md` only if BOTH the dc verdict is SHIP-GATE-MET AND this gate passes. Below 10/12: record "dc SHIP-GATE-MET, stage-graph coverage NOT-SHIP", no swap,

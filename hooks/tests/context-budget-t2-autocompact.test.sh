@@ -67,13 +67,20 @@ for path in fresh stale; do
   unset DISABLE_AUTO_COMPACT
 
   rm -f "$CFG/settings.json"
-  expect "$path, window unset" stop "$(run_case $path)"
+  out="$(run_case $path)"
+  expect "$path, window unset" stop "$out"
+  case "$out" in *'autoCompactWindow'*'/autocompact'*) ok "$path: STOP carries autoCompactWindow hint" ;; *) bad "$path: hint missing: $out" ;; esac
 
   echo '{"autoCompactWindow": 5000}' > "$CFG/settings.json"
   expect "$path, invalid window (5000)" stop "$(run_case $path)"
 
-  echo '{"autoCompactWindow": 400000}' > "$CFG/settings.json"
-  expect "$path, window 400k above T2" stop "$(run_case $path)"
+  echo '{"autoCompactWindow": 533000}' > "$CFG/settings.json"
+  expect "$path, window 533k above T2 (t2 300k, ctx 310k)" nostop "$(run_case $path)"
+  export DISABLE_AUTO_COMPACT=1
+  expect "$path, window 533k + DISABLE_AUTO_COMPACT" stop "$(run_case $path)"
+  unset DISABLE_AUTO_COMPACT
+  echo '{"autoCompactWindow": 533000, "autoCompactEnabled": false}' > "$CFG/settings.json"
+  expect "$path, window 533k + autoCompactEnabled false" stop "$(run_case $path)"
   rm -f "$CFG/settings.json"
 done
 

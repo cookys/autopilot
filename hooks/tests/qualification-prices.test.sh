@@ -33,6 +33,9 @@ const d = {
     row('seat-cheap', 100000, 400000),
     row('seat-sub', 1000000, 2000000, { billing: 'subscription' }),
     row('seat-assumed', 1, 1, { effective_basis: 'assumed' }),
+    // engine != model, as in a real scorecard row (engine 'kimi-k2.8-preview', model 'kimi-code/kimi-for-coding').
+    row('prov/pricey', 9000000, 9000000, { engine: 'Alpha' }),
+    row('prov/thrifty', 1000, 1000, { engine: 'Zulu' }),
   ],
 };
 eval(`(${process.argv[3]})`)(d);
@@ -49,7 +52,7 @@ assert_eq "$EX" "0" "good document accepted"
 GOOD="$(cur_digest)"
 assert_neq "" "$GOOD" "cache written"
 ST="$(node "$PRICES" status)"
-assert_contains "$ST" '"n_rows": 4' "status counts rows"
+assert_contains "$ST" '"n_rows": 6' "status counts rows"
 assert_contains "$ST" '"n_subscription_rows": 1' "status marks subscription rows"
 assert_contains "$ST" '"n_assumed_rows": 1' "status marks assumed rows"
 
@@ -93,14 +96,15 @@ assert_contains "$(node "$PRICES" price --model seat-ex --runner agy)" '"price_m
 assert_contains "$(node "$PRICES" price --model seat-exp --runner codex)" '"price_micro_per_mtok": null' "runner must match exactly"
 
 # --- ladder ----------------------------------------------------------------------------------
-row() { # engine effort latency
-  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$1" "$2" "$3" <<'NODE'
-const [file, engine, effort, lat] = process.argv.slice(2);
+row() { # engine effort latency [model]
+  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$1" "$2" "$3" "${4:-}" <<'NODE'
+const [file, engine, effort, lat, model] = process.argv.slice(2);
 const r = { engine, runner: 'agy', family: 'test-family', role: 'implementer', model_version: '1.0', version_source: 'runtime',
   corpus_version: '1.0', harness_version: '1.0', runner_version: '1.1.10',
   prompt_config_hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', date: '2026-08-01',
   quality: 0.95, capability_score: 0.95, status: 'qualified', admission_status: 'qualified',
   latency: { sample_wall_time_s: Number(lat) }, event_id: 1, baseline_event_id: 1, qualified_at: '2026-08-01T00:00:00.000Z', effort };
+if (model) r.model = model;
 require('fs').appendFileSync(file, JSON.stringify(r) + '\n');
 NODE
 }
@@ -113,6 +117,8 @@ row seat-unknown high 5
 row seat-assumed high 6
 row seat-sub high 30
 row seat-low-exp low 99
+row Alpha medium 1 prov/pricey
+row Zulu medium 99 prov/thrifty
 git -C "$REPO_ROOT" show develop:scripts/resolve-dispatch-topology.js > "$BASELINE" 2>/dev/null \
   || git -C "$REPO_ROOT" show HEAD:scripts/resolve-dispatch-topology.js > "$BASELINE"
 
@@ -120,7 +126,7 @@ git -C "$REPO_ROOT" show develop:scripts/resolve-dispatch-topology.js > "$BASELI
 rm -rf "$AUTOPILOT_PRICES_CACHE_DIR"
 NOCACHE="$(ladder "$TOPO")"
 assert_eq "$NOCACHE" "$(ladder "$BASELINE")" "no cache: ladder identical to develop ordering"
-assert_eq "$NOCACHE" "seat-low-exp/low@agy,seat-assumed/high@agy,seat-cheap/high@agy,seat-exp/high@agy,seat-sub/high@agy,seat-unknown/high@agy" "no cache: effort, then engine name"
+assert_eq "$NOCACHE" "seat-low-exp/low@agy,Alpha/medium@agy,Zulu/medium@agy,seat-assumed/high@agy,seat-cheap/high@agy,seat-exp/high@agy,seat-sub/high@agy,seat-unknown/high@agy" "no cache: effort, then engine name"
 
 # corrupt cache behaves as no cache
 mkdir -p "$AUTOPILOT_PRICES_CACHE_DIR"; echo '{garbage' > "$AUTOPILOT_PRICES_CACHE_DIR/current.json"
@@ -130,7 +136,13 @@ rm -rf "$AUTOPILOT_PRICES_CACHE_DIR"
 # with prices: same effort -> cheap first; sub uses its retail price; unknown and assumed last
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 PRICED="$(ladder "$TOPO")"
-assert_eq "$PRICED" "seat-low-exp/low@agy,seat-cheap/high@agy,seat-sub/high@agy,seat-exp/high@agy,seat-assumed/high@agy,seat-unknown/high@agy" "priced: effort, then price asc, unknown last"
+assert_eq "$PRICED" "seat-low-exp/low@agy,Zulu/medium@agy,Alpha/medium@agy,seat-cheap/high@agy,seat-sub/high@agy,seat-exp/high@agy,seat-assumed/high@agy,seat-unknown/high@agy" "priced: effort, then price asc, unknown last"
+assert_contains "$PRICED" "Zulu/medium@agy,Alpha/medium@agy" "price is matched on the scorecard row's model id (engine name order would put Alpha first)"
+# Seats whose price is unknown keep the pre-price tie-break (latency, then engine name) among themselves.
+UNK="seat-unknown/high@agy,seat-assumed/high@agy"
+BASE_L="$(ladder "$BASELINE")"
+sub_order() { node -e "const l=process.argv[1].split(',');process.stdout.write(process.argv[2].split(',').sort((a,b)=>l.indexOf(a)-l.indexOf(b)).join(','))" "$1" "$UNK"; }
+assert_eq "$(sub_order "$PRICED")" "$(sub_order "$BASE_L")" "unknown-priced seats keep the pre-price tie-break order"
 assert_neq "$(ladder "$BASELINE")" "$PRICED" "priced ordering differs from develop (prices are used)"
 
 # stale prices: warned, still used

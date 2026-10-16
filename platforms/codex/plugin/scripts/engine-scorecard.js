@@ -132,6 +132,7 @@ const SUPERSESSION_STATE_VALUES = new Set(['superseded']);
 
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
+  node scripts/engine-scorecard.js status   (registry outbox: pending, rejected, older than 24h)\n\
   node scripts/engine-scorecard.js record --supersede-provisional --supersedes-event-id <N> --reason <string> [--file <path>]\n\
   node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--role-default-scope] [--identity-file <path>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
@@ -2258,7 +2259,27 @@ function cmdRecord(args) {
     return row;
   });
 
+  enqueueForRegistry(writtenRow);
   process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+}
+
+// BL-0194 P3: the local scorecard write above stays (legacy path until P4b); when qualification_outbox.enqueue is on
+// (config, default off) a COMPLETED administration is also queued for the registry, exactly one outbox entry per
+// record_id. A refusal never undoes the local row: it is reported on stderr.
+function enqueueForRegistry(row) {
+  try {
+    const result = require('./qualification-send-queue.js').enqueueScorecardRow(row);
+    if (result.status === 'legacy_shape') {
+      process.stderr.write('qualification outbox: row has no transcript_hash/producer/observed_at (legacy shape); not queued\n');
+    }
+  } catch (error) {
+    process.stderr.write(`qualification outbox: not queued: ${error.message}\n`);
+  }
+}
+
+function cmdStatus() {
+  const sendQueue = require('./qualification-send-queue.js');
+  process.stdout.write(`${sendQueue.statusLines(sendQueue.status()).join('\n')}\n`);
 }
 
 function parseSeatStatusArgs(args) {
@@ -3011,6 +3032,7 @@ function main() {
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else if (command === 'seat-status') cmdSeatStatus(commandArgs);
   else if (command === 'relabel-effort') cmdRelabelEffort(commandArgs);
+  else if (command === 'status') cmdStatus();
   else failUsage(`unknown subcommand '${command}'`);
 }
 

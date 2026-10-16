@@ -703,6 +703,71 @@
       "type": "string"
     },
     {
+      "name": "qualification_outbox.enqueue",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "enqueue",
+      "default": false,
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "When true, a completed engine-scorecard record is also queued in the registry outbox (~/.autopilot/qualification-outbox). The local scorecard write is unchanged; nothing is sent until flush runs with a transport.",
+      "type": "boolean"
+    },
+    {
+      "name": "qualification_outbox.transport",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "transport",
+      "default": "off",
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "How qualification-send-queue.js flush sends: off (nothing is sent) or git (bot branch + pull request in the registry clone; the owner merges, the merge is the ack).",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "git"
+      ],
+      "invalid_effect": "any other value is treated as off"
+    },
+    {
+      "name": "qualification_outbox.registry_repo",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "registry_repo",
+      "default": null,
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Path of the dedicated bot clone of the registry repo (llm-playground) used by the git transport. Required when transport is git.",
+      "type": "string"
+    },
+    {
+      "name": "qualification_outbox.workspace",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "workspace",
+      "default": "cookys",
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Registry workspace (benchmarks/qualification/<workspace>) the outbox sends into.",
+      "type": "string"
+    },
+    {
       "name": "residue.archive_branch_days",
       "kind": "config_key",
       "audience": "user",
@@ -4466,6 +4531,30 @@
         "update_check"
       ],
       "summary": "The config.json format version you last reviewed (current: 1). Missing counts as 0. Autopilot never writes it; set it to the current number after reading the upgrade check, which then stops listing changes up to that number."
+    },
+    {
+      "name": "AUTOPILOT_OUTBOX_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_OUTBOX_FAILPOINT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/qualification-send-queue.js"
+      ],
+      "doc": null,
+      "relates": []
     }
   ]
 }

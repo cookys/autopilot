@@ -442,7 +442,9 @@ test('admission is byte-identical with the metrics cache absent or hostile', asy
 });
 
 test('no other script or hook requires the metrics module (whole-tree scan)', () => {
-  const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js']);
+  const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js',
+    // P3 write side: uses only recordIdV1 / strikeId / validateRecord, never admission or ordering.
+    'scripts/qualification-send-queue.js', 'scripts/qualification-send-queue.test.js', 'scripts/lib/qualification-record-v2.js']);
   const hits = [];
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

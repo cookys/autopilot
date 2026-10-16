@@ -20,6 +20,8 @@
 
 - Kimi qualification exams now write the rotated credential back to `~/.kimi-code` on exit (backup `kimi-code.json.bak-<UTC>` first, atomic 0600, flock-serialised) via `qualify_kimi_arm_writeback` in `scripts/lib/qualify-stage-credentials.sh`, so an exam no longer leaves the owner logged out (BL-0199).
 
+- BL-0194 P3: autopilot can now queue completed exam records and strikes in a crash-safe outbox (`scripts/qualification-send-queue.js enqueue|flush|status`, `engine-scorecard.js status`); `qualification_outbox.enqueue` (default off) also queues each `engine-scorecard.js record`, and the git transport (default off) sends over a bot branch and pull request, acking only when the bytes are on the registry default branch.
+
 - Added an extensionless `bin/autopilot` entry so `autopilot status …` works when `bin/` is on PATH (it loads `bin/autopilot.js`, same argv, output and exit codes); without `bin/` on PATH use `node <repo>/bin/autopilot.js`.
 
 - `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.

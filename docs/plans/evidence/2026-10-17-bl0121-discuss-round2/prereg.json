@@ -1,0 +1,49 @@
+{
+  "schema": "autopilot.bl0121-prereg/1",
+  "preregistered": "2026-10-17",
+  "guidance": {
+    "base_ref": "develop",
+    "files": [
+      "skills/think-tank/SKILL.md",
+      "references/consult-discuss-seats.md"
+    ]
+  },
+  "seats": {
+    "sonnet": {
+      "engine": "claude-sonnet-5-5",
+      "runner": "claude-native",
+      "effort": "high"
+    },
+    "kimi": {
+      "engine": "kimi-code/k3",
+      "runner": "kimi",
+      "effort": "high"
+    }
+  },
+  "cases": {
+    "main_planted": 12,
+    "main_controls": 6,
+    "select_planted": 8,
+    "select_controls": 4,
+    "reps": 3,
+    "min_planted": 6,
+    "min_controls": 3
+  },
+  "gates": {
+    "b_minus_a_min": 3,
+    "control_harm_max": 1,
+    "validator_pass_min": 0.9,
+    "b_minus_red_min": 3,
+    "cost_incremental_ratio_max": 2,
+    "caught_majority_reps": 2,
+    "harm_any_rep": true
+  },
+  "budget_usd": 40,
+  "sha256": {
+    "corpus.js": "7fb8f2a278c0cf67fea8061e151bb042afbd15ae084fec562f154db55c663eb0",
+    "predicates.js": "6048ad98d6f7690feb82065785a7f9a76555808be0bb3c29011321dad6ad3733",
+    "harness.js": "d2b13fb7141d05183661653f79545c1e2f6884a254164e940f77bbe79defcc0a",
+    "author-wrap.js": "a242da6e854c851d856a46a00fec90137cc0c815569c88cd2166a0bc047abe42",
+    "scripts/dispatch-discuss.js": "6cc965a38dffc1503f8304c68534b35ad88f214d3cf54ee5d5b646b945cfa79b"
+  }
+}

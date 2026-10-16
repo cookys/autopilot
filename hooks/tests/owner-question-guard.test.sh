@@ -28,6 +28,12 @@ expect_block en "en question without card"
 mk zh_wait '分支還在，請你決定要不要刪。'
 expect_block zh_wait "zh wait phrase"
 
+mk please '請決定要不要刪。'
+expect_block please "please-decide without 你"
+mk look '請看 hooks/README.md 第三段，結果如下。'
+expect_pass look "請看 is not a wait"
+mk cardup '可以刪嗎？見 D-4290499D。'
+expect_pass cardup "uppercase card id"
 mk card '可以強制刪嗎？見待決 d-4290499d。'
 expect_pass card "question with card id"
 

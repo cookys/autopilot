@@ -21,13 +21,13 @@
 const fs = require('fs');
 const { configPath } = require('../scripts/lib/config-path.js');
 
-const CARD_ID = /\bd-[0-9a-f]{8}\b/;
+const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
 
 // Phrases that mean "I am waiting for the owner to answer or decide". One list on purpose:
 // add a pattern here, never a new if. Matched per sentence (see sentences()).
 const OWNER_WAIT_PATTERNS = [
   // explicit waiting phrases (zh)
-  /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
+  /請(決定|確認|選|回覆)/, /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
   // explicit waiting phrases (en)
   /\bshall I\b/i, /\bshould I\b/i, /\bdo you want\b/i, /\bwant me to\b/i, /\bwould you like\b/i,
   /\blet me know (if|whether|which)\b/i, /\bwaiting for (your|you)\b/i,

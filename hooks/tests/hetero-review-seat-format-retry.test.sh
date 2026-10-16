@@ -45,6 +45,9 @@ case "${FAKE_MODE:-ok}" in
   ok)
     printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=the diff and its contract; evidence=assignment changed in the captured diff; conclusion=nothing blocking remains\n%s\n' "$begin" "$end" ;;
   empty) : ;;
+  chrome_vocab)
+    # Leading chrome carrying framing vocabulary (a truncated frame) before a complete valid block.
+    printf '<<AUTOPILOT-REVIEW-oops\n%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=the diff and its contract; evidence=assignment changed in the captured diff; conclusion=nothing blocking remains\n%s\n' "$begin" "$end" ;;
   example_ship_one_*)
     f="${FAKE_MODE#example_ship_one_}"
     c='my own surfaces'; e='my own observations'; k='my own conclusion'
@@ -73,6 +76,10 @@ assert_contains "$OUT" '"format_reject": true' "dr: a missing proof field is mar
 OUT=$(run_dr empty); RC=$?
 assert_eq "$RC" "1" "dr: empty answer is a no_verdict"
 assert_not_contains "$OUT" 'format_reject' "dr: an empty answer is not a format reject (no retry)"
+OUT=$(run_dr chrome_vocab); RC=$?
+assert_eq "$RC" "1" "dr: leading chrome with framing vocabulary is a no_verdict"
+assert_contains "$OUT" 'framing vocabulary' "dr: chrome-vocabulary reject names the vocabulary rule"
+assert_contains "$OUT" '"format_reject": true' "dr: a framing-vocabulary rejection is marked format_reject (re-ask)"
 OUT=$(run_dr ok); RC=$?
 assert_eq "$RC" "0" "dr: well-formed answer is reviewed"
 assert_not_contains "$OUT" 'format_reject' "dr: a reviewed result carries no format_reject"

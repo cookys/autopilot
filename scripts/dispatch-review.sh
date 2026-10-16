@@ -1942,7 +1942,7 @@ if [ "$PARSE_RC" -ne 0 ]; then
     3) FORMAT_REJECT=1; emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
     5) emit_no_verdict "frame began but derived END marker was never found" ;;
     6) FORMAT_REJECT=1; emit_no_verdict "trailing non-blank content after the derived END marker" ;;
-    7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
+    7) FORMAT_REJECT=1; emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
     8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
     9) emit_no_verdict "leading chrome echoed prompt/diff structure — the skipped prefix is held to the same leak rule as the block" ;;
     *) emit_no_verdict "response did not start with the expected wrapped block" ;;

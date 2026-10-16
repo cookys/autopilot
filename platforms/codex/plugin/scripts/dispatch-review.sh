@@ -854,6 +854,7 @@ CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
 OPENCODE_CLEAN="" # extracted final-assistant-text scratch file; reaped on EXIT if interrupted
@@ -885,6 +886,7 @@ cleanup() {
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
+  [ -n "$OPENCODE_HOME_ROOT" ] && rm -rf "$OPENCODE_HOME_ROOT"
   [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
   [ -n "$OPENCODE_ERR" ] && rm -f "$OPENCODE_ERR"
   [ -n "$OPENCODE_CLEAN" ] && rm -f "$OPENCODE_CLEAN"
@@ -1517,16 +1519,36 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # primary agent "locked" that is also deny-all, run with --agent locked in an EMPTY --dir
   # (no project opencode.json / agent md to read). --agent plan was NOT enough: it only
   # denies `edit`. Prompt via STDIN (no ARG_MAX wall). --format json for parseable events.
-  OPENCODE_CONFIG_JSON="$(node "$_REVIEW_SELF_DIR/lib/opencode-containment.js" config)" || die_precondition "could not derive the opencode deny-all config (lib/opencode-containment.js)"
+  OC_LIB="$_REVIEW_SELF_DIR/lib/opencode-containment.js"
+  OPENCODE_CONFIG_JSON="$(node "$OC_LIB" config)" || die_precondition "could not derive the opencode deny-all config (lib/opencode-containment.js)"
   [[ -n "$OPENCODE_CONFIG_JSON" ]] || die_precondition "empty opencode deny-all config — refusing to spawn opencode uncontained"
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec env OPENCODE_CONFIG_CONTENT="$6" "$2" run --dir "$1" --pure -m "$3" --agent locked --variant "$4" --format json < "$5"' \
-      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" "$OPENCODE_CONFIG_JSON" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+  # Clean HOME/XDG tree holding only auth.json: ~/.config/opencode agents/MCP/plugins are never
+  # loaded. OPENCODE_CONFIG / OPENCODE_CONFIG_DIR are removed below with env -u.
+  OPENCODE_HOME_ROOT="$(mktemp -d -t dispatch-review-opencodehome-XXXXXX)"
+  mapfile -t OC_HOME_ENV < <(node "$OC_LIB" prepare-home "$OPENCODE_HOME_ROOT")
+  [[ "${#OC_HOME_ENV[@]}" -ge 5 ]] || die_precondition "could not prepare the opencode clean HOME (lib/opencode-containment.js prepare-home)"
+  OC_ARGS=(run --dir "$OPENCODE_CWD" --pure -m "$MODEL" --agent locked --variant "$OPENCODE_VARIANT" --format json)
+  # Verify the final argv + config right before spawn (same check the exam provider uses):
+  # any drift (no --pure, other agent, non-empty --dir, --dir under a git worktree) refuses.
+  OC_BREACH="$(OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON" node "$OC_LIB" assert "${OC_ARGS[@]}" 2>&1)" \
+    || die_precondition "opencode containment verification failed: ${OC_BREACH} — refusing to spawn opencode uncontained"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+      _ "$OPENCODE_CWD" "$PROMPT_FILE" \
+      env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${OC_HOME_ENV[@]}" OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON" \
+      "$OPENCODE_BIN" "${OC_ARGS[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
   OPENCODE_RC=$?
   wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
-  rm -rf "$OPENCODE_CWD"; OPENCODE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  rm -rf "$OPENCODE_CWD" "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # clear so the EXIT trap doesn't rm the paths a 2nd time
   cat "$OPENCODE_OUT" > "$RAW_LOG"
   printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  # Containment audit BEFORE normalising: a clean exit proves nothing, so ANY tool event in the
+  # NDJSON voids the seat (never salvage an answer from a run that touched a tool).
+  if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" 2>&1)"; then
+    printf '\n[dispatch-review: opencode containment breach: %s]\n' "$OC_AUDIT" >> "$RAW_LOG"
+    SALVAGE_CAPTURE=/dev/null
+    emit_no_verdict "opencode containment breach: ${OC_AUDIT} — answer discarded"
+  fi
   # --format json is newline-delimited JSON events, not the plain VERDICT text every other
   # rail's parser expects — extract the LAST {"type":"text",...} event's .part.text (the
   # final assistant message; probe-verified one complete event per turn, no incremental

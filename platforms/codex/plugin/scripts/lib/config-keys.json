@@ -1832,13 +1832,25 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_LIVE_OPENCODE_MODEL",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/tests/opencode-deny-all-live.test.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_LIVE_OPENCODE",
       "kind": "env",
       "audience": "internal",
       "class": "test_seam",
       "default": null,
       "readers": [
-        "scripts/lib/opencode-containment.js"
+        "hooks/tests/opencode-deny-all-live.test.sh"
       ],
       "doc": null,
       "relates": []

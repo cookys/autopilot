@@ -1130,6 +1130,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let promptFile = null;
   let kimiAgentDir = null;
   let opencodeDir = null;
+  let opencodeRoot = null;
   // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
@@ -1351,7 +1352,11 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     // edit that drops any layer fails closed instead of spawning uncontained.
     // VERSION-DRIFT CAVEAT: re-run hooks/tests/opencode-deny-all-live.test.sh
     // (AUTOPILOT_LIVE_OPENCODE=1) on any opencode upgrade.
-    opencodeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-opencode-empty-'));
+    // <root>/work is the EMPTY --dir; <root>/home is a clean HOME/XDG tree with only
+    // auth.json (so ~/.config/opencode agents/MCP/plugins are never loaded).
+    opencodeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-opencode-empty-'));
+    opencodeDir = path.join(opencodeRoot, 'work');
+    fs.mkdirSync(opencodeDir);
     args = opencodeContainment.lockedArgs({ model, variant: effort === 'max' ? 'xhigh' : effort, dir: opencodeDir });
   } else if (kind === 'codex') {
     sidecar = path.join(
@@ -1518,10 +1523,16 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     }
     : process.env;
   if (kind === 'opencode') {
-    childEnv = opencodeContainment.lockedEnv(childEnv);
+    // credentials come from the cloned QRP_CLI_HOME when set, else the ambient HOME
+    const authHome = cloneHome || process.env.HOME || os.homedir();
+    const isolated = opencodeContainment.prepareHome(
+      opencodeRoot,
+      cloneHome ? path.join(cloneHome, '.local', 'share') : (process.env.XDG_DATA_HOME || path.join(authHome, '.local', 'share')),
+    );
+    childEnv = opencodeContainment.lockedEnv({ ...childEnv, ...isolated });
     const breach = opencodeContainment.assertLocked({ args, env: childEnv });
     if (breach) {
-      fs.rmSync(opencodeDir, { recursive: true, force: true });
+      fs.rmSync(opencodeRoot, { recursive: true, force: true });
       throw new Error(`opencode containment verification failed: ${breach} — refusing to spawn opencode uncontained`);
     }
   }
@@ -1549,7 +1560,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
       if (kimiAgentDir) fs.rmSync(kimiAgentDir, { recursive: true, force: true });
-      if (opencodeDir) fs.rmSync(opencodeDir, { recursive: true, force: true });
+      if (opencodeRoot) fs.rmSync(opencodeRoot, { recursive: true, force: true });
       // A clean exit proves nothing about containment (the fallback-to-default
       // agent also exits 0) — audit agy's own log and transcript BEFORE the clone,
       // the only copy of them, is removed.
@@ -1596,7 +1607,16 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       } else {
         text = Buffer.concat(stdout).toString('utf8');
         // opencode --format json is NDJSON; the answer is the last text event.
-        if (kind === 'opencode') text = opencodeContainment.extractText(text);
+        if (kind === 'opencode') {
+          // a clean exit proves nothing: any tool event voids the case (transport/containment
+          // failure, never a clean answer)
+          const breaches = opencodeContainment.auditEvents(text);
+          if (breaches.length) {
+            finish(new Error(`opencode containment breach: ${breaches.join('; ')} — answer discarded`));
+            return;
+          }
+          text = opencodeContainment.extractText(text);
+        }
       }
       if (!text.trim()) {
         // Zero-exit + empty stdout is exactly the agy headless soft-deny shape

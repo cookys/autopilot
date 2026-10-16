@@ -8,7 +8,7 @@ import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
-import { NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
+import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
@@ -742,10 +742,13 @@ function residueAttention(u: UiCtx, ctx: PaneCtx, residue: LiveSnapshot['detail'
   return hygSection(u, ctx, 'attention', title, body, { right: ui.cat(ui.plainCount(tl.judgeCount, 'residue.groups'), ...sizeTail(tl.judgeBytes)), fact: 'residue.groups' })
 }
 function residueCleanable(u: UiCtx, ctx: PaneCtx, residue: LiveSnapshot['detail']['residue']): PaneLine[] {
+  const t = ctx.t
   if (residue === null) return []
   const tl = residueTally(residue)
   if (tl.cleanCount === 0) return [] // nothing to clear: the section is not drawn at all
-  const body = U.residueRows(u, 'residue.cleanable', residueEntries(tl.clean), { judge: false })
+  const results = ctx.decide === undefined ? undefined : ctx.decide.clean ?? {}
+  const entries = residueEntries(tl.clean)
+  const body = U.residueRows(u, 'residue.cleanable', entries, { judge: false, ...(results === undefined ? {} : { buttons: results }) })
   return hygSection(u, ctx, 'cleanable', ctx.t('hygiene.cleanable'), body, { right: ui.cat(ui.plainCount(tl.cleanCount, 'residue.groups'), ...sizeTail(tl.cleanBytes)), fact: 'residue.groups' })
 }
 function residueAuto(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
@@ -791,7 +794,15 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const fixIt = (): PaneLine[] => { if (setup === null || setupShown) return []; setupShown = true; return ui.command(u, setup) }
   for (const dir of ls.stale_cache_dirs) {
     const v = dir.dir.split('/').filter(x => x !== '').pop() ?? dir.dir
-    if (dir.alive.length === 0) lines.push(...ui.detail(u, t('src.stale_free', { v }), { fact: F }), ...ui.command(u, 'rm -rf ' + shq(dir.dir + '/')))
+    if (dir.alive.length === 0) {
+      lines.push(...ui.detail(u, t('src.stale_free', { v }), { fact: F }))
+      const rs = ctx.decide === undefined ? undefined : (ctx.decide.clean ?? {})[dir.dir]
+      const cmd = ui.command(u, 'rm -rf ' + shq(dir.dir + '/'))
+      if (ctx.decide === undefined) lines.push(...cmd)
+      else if (rs === undefined) lines.push(ui.buttonRow(u, t('hygiene.clear'), { press: 'clean:' + dir.dir, fact: F }))
+      else if (rs.ok) lines.push(...ui.resultRow(u, t('hygiene.cleared'), F))
+      else lines.push(...ui.resultRow(u, t('hygiene.clear_failed', { why: rs.note }), F), ...cmd)
+    }
     else lines.push(...ui.detail(u, t('src.stale_busy', { v, pids: dir.alive.join(', ') }), { fact: F }))
   }
   let marketShown = false
@@ -806,9 +817,20 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   if (behind > 0) lines.push(...ui.detail(u, t('src.behind', { n: behind }), { fact: F }))
   return hygSection(u, ctx, 'source', title, lines, {})
 }
+// The one batch button, the tab's first row (before 要你處理): it names what it will really clear, the clearable worktrees plus the unused cache copies, and their size only when
+// every one of them has one (a cache copy's size is not published, so with one the label is the count alone). Drawn only when two or more can go.
+function cleanAllRow(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  if (ctx.decide === undefined) return []
+  const { worktrees: wts, caches } = cleanTargets(snap.detail, ctx.decide.clean ?? {})
+  const n = wts.length + caches.length
+  if (n < 2) return []
+  const sized = caches.length === 0 && wts.every(e => e.bytes !== null)
+  const size = sized && wts.length > 0 ? ' · ' + U.size(wts.reduce((a, e) => a + (e.bytes ?? 0), 0)) : ''
+  return [U.buttonRow(u, ctx.t('hygiene.clear_all', { n, size }), { press: 'clean:all', fact: 'residue.groups' })]
+}
 function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u = uiCtxOf(ctx)
-  return U.sections('hygiene', { attention: residueAttention(u, ctx, snap.detail.residue), cleanable: residueCleanable(u, ctx, snap.detail.residue), auto: residueAuto(u, ctx, snap), source: residueSource(u, ctx, snap) })
+  return [...cleanAllRow(u, ctx, snap), ...U.sections('hygiene', { attention: residueAttention(u, ctx, snap.detail.residue), cleanable: residueCleanable(u, ctx, snap.detail.residue), auto: residueAuto(u, ctx, snap), source: residueSource(u, ctx, snap) })]
 }
 
 // ================= ? (the legend: generated from STATES, the structure glyphs and the meter levels, §5.6) =================
@@ -825,4 +847,3 @@ export const reviewTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, col
 export const spendTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(spendTabLinesRaw(snap, ctx), ctx.cols)
 
 export const hygieneTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(hygieneTabLinesRaw(snap, ctx), ctx.cols)
-

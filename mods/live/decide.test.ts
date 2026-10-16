@@ -113,7 +113,7 @@ test('DECIDE choose: the picked option is `[x]` in bold default text (no backgro
   expect(row.text.trimEnd()).toBe('  選項      [ ] ★ OK  [x] 完整顯示')
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
-  for (const s of picked) { expect(s.color).toBeUndefined(); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
+  for (const s of picked) { expect(s.color).toBe(ui.PALETTE.action); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
   const desc = ls.find(l => l.text.includes('全列出來')) as PaneLine
   expect(desc.text, 'the picked option shows its description, dim, at column 12').toBe('            全列出來')
   expect(desc.segs?.every(s => s.dim === true || s.text.trim() === '')).toBe(true)

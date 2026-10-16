@@ -62,9 +62,9 @@ export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '�
 //   attention  (warning)    = the owner must look or act        here      (claude)     = you are here
 //   broken     (error)      = failed, stalled or over the cap   done      (success)    = finished
 //   running    (suggestion) = running now                       idle      (inactive)   = nothing to do
-//   structure  (subtle)     = rules, fold marks, separators
-export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure'
-export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle' }
+//   structure  (subtle)     = rules, fold marks, separators     action    (merged)     = you can press this (a pressable `[ ... ]` button or option, never a state)
+export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure' | 'action'
+export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle', action: 'merged' }
 // the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a decision card's question, a picked decision option and the send button. Nothing else is bold.
 export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'question title', 'picked option', 'send button'] as const
 // which whitelist entry a bold segment belongs to, or null (a violation); invariant I4 reads this so the test never keeps its own copy of the list
@@ -399,7 +399,7 @@ function frag(segs: Seg[], fact?: FactId): Frag {
 export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== null && FRAGS.has(v)
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
-export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'title' | 'pick' | 'send'
+export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'title' | 'pick' | 'send' | 'act'
 type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
@@ -586,10 +586,10 @@ export function cardRow(u: Ctx, key: string, value: string, o: { fact: FactId; s
 export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
   const room = u.cols - 1 - KEY_W
   const piece = (c: Choice): Seg[] => {
-    const press = c.press === undefined ? {} : { press: c.press }
+    const press = c.press === undefined ? {} : { press: c.press, color: PALETTE.action }
     const pick = c.picked ? { bold: true, role: 'pick' as const } : c.press === undefined ? { dim: true } : {}
     const head = c.picked ? '[x] ' : '[ ] '
-    const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { role: 'glyph', ...press }), sg(' ', { role: 'prose', ...press })] : []
+    const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { role: 'glyph', ...(c.press === undefined ? {} : { press: c.press }) }), sg(' ', { role: 'prose', ...(c.press === undefined ? {} : { press: c.press }) })] : []
     const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
     return [sg(head, { role: 'prose', ...pick, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...pick, ...press })]
   }
@@ -611,13 +611,19 @@ export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: {
 // the answers go; a note that does not fit beside the button takes the line below, at column 2.
 export function actionRow(u: Ctx, label: string, o: { press?: string; note?: string; fact: FactId }): PaneLine[] {
   const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
-  const button = o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'send', bold: true, press: o.press })
+  const button = o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'send', bold: true, color: PALETTE.action, press: o.press })
   const note = o.note === undefined || o.note === '' ? undefined : o.note
   if (note !== undefined && 2 + displayWidth(text) + 2 + displayWidth(note) <= u.cols - 1) return [lineOf('choice', [sg('  '), button, sg('  '), dim(note, { role: 'prose' })], { fact: o.fact })]
   const out = [lineOf('choice', [sg('  '), button], { fact: o.fact })]
   if (note !== undefined) out.push(...wrapPlain(note, u.cols - 1 - 2, u.cols - 1 - 2).map(piece => lineOf('detail', [sg('  '), dim(piece, { role: 'prose' })], { fact: o.fact })))
   return out
 }
+// a pressable `[ label ]` button at column 2 in the action colour (the one pressable look, design plan §12.9); `done` replaces it with the dim result of the press (a plain
+// line, nothing to press). Used by the 殘留 tab: one per entry, always the entry's last row, and one for the whole section, always the section's first row.
+export function buttonRow(u: Ctx, label: string, o: { press: string; fact: FactId }): PaneLine {
+  return lineOf('choice', [sg('  '), sg(cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2)), { role: 'act', color: PALETTE.action, press: o.press })], { fact: o.fact })
+}
+export const resultRow = (u: Ctx, text: string, fact: FactId): PaneLine[] => detail(u, text, { fact })
 // a labelled text field: the key at column 2, the Input at column 12 (drawn by pane.tsx; a surface without Input never gets this line: the card says to answer in the conversation)
 export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: string; value: string; fact: FactId }): PaneLine {
   return lineOf('field', cardLead(label), { fact: o.fact, field: { key: o.key, placeholder: o.placeholder, value: o.value } })
@@ -996,6 +1002,7 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
     legendRow(u, badges, t('legend.badges'), 'legend.structure'),
     legendRow(u, ex(dim(S.behind, { role: 'glyph' })), t('legend.behind'), 'legend.structure'),
     legendRow(u, ex(sg(S.recommend, { role: 'glyph' })), t('legend.recommend'), 'legend.structure'),
+    legendRow(u, ex(sg('[ ]', { role: 'act', color: PALETTE.action })), t('legend.action'), 'legend.structure'),
   ]
   return {
     states: part('states', t('legend.sec_states'), states),
@@ -1006,6 +1013,8 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
 
 // ---- 殘留 (§12.7) ----
 export type ResidueEntry = { kind: string; target: string; cls: string; ageMs: number | null; bytes: number | null; reason: string | null; command: string | null }
+// what a press on a cleanable entry reported (kept by the host under the entry's target): ok = cleared, otherwise `note` says why not
+export type CleanResult = { ok: boolean; note: string }
 // which residue classes need the owner's judgement ('judge'), which can simply be cleared ('clean'), and which are in use ('live', never listed). Every count on every
 // surface (the tab's chip, 現況's row and summary, the tab name, the band's ⚑N) is derived from this one table; a class it does not name is 'judge'.
 export type ResidueKind = 'judge' | 'clean' | 'live'
@@ -1048,7 +1057,16 @@ function residueNameRow(u: Ctx, e: ResidueEntry, state: Stated | null): PaneLine
 // `cap` entries and a `more` row for the rest. No grouping, no per-row fold: what the owner has to read is on the screen.
 // newest first; an entry with no age goes last, and two with no age keep their order (Infinity - Infinity is NaN, which a comparator must never return)
 const ageOrder = (a: number | null, b: number | null): number => (a === null ? (b === null ? 0 : 1) : b === null ? -1 : a - b)
-export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[], o: { judge: boolean; cap?: number }): PaneLine[] {
+// the last rows of one cleanable entry. On a surface with buttons (`results` given): a `[ 清掉 ]` button, or after the press the dim result (ok), or the failure note and then the
+// command so the owner can run it by hand. A surface without buttons keeps printing the command. A judged entry never gets a button.
+function cleanRows(u: Ctx, e: ResidueEntry, results: Record<string, CleanResult> | undefined): PaneLine[] {
+  const cmd = e.command === null ? [] : command(u, e.command)
+  if (results === undefined) return cmd
+  const r = results[e.target]
+  if (r === undefined) return e.kind === 'worktree' ? [buttonRow(u, u.t('hygiene.clear'), { press: 'clean:' + e.target, fact: 'residue.groups' })] : cmd
+  return r.ok ? resultRow(u, u.t('hygiene.cleared'), 'residue.groups') : [...resultRow(u, u.t('hygiene.clear_failed', { why: r.note }), 'residue.groups'), ...cmd]
+}
+export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[], o: { judge: boolean; cap?: number; buttons?: Record<string, CleanResult> }): PaneLine[] {
   const cap = o.cap ?? 5
   const rows = entries.map(e => ({ e, state: o.judge ? stateOf('residueGroup', e.cls) : null }))
   rows.sort((a, b) => (a.state === null || b.state === null ? 0 : SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id)) || ageOrder(a.e.ageMs, b.e.ageMs))
@@ -1057,7 +1075,7 @@ export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[]
   const out = shown.flatMap(({ e, state }) => [
     residueNameRow(u, e, state),
     ...residueWhy(u.t, e).flatMap(w => detail(u, w, { fact: 'residue.groups' })),
-    ...(e.command === null ? [] : command(u, e.command)),
+    ...cleanRows(u, e, o.buttons),
   ])
   if (rows.length > cap) out.push(more(u, rows.length - cap, u.t('residue.noun'), 'more:' + id, expanded))
   return out

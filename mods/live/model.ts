@@ -1106,7 +1106,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
-export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
+export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
@@ -1217,6 +1217,14 @@ export function residueTally(r: { needs_human_count: number; needs_human_bytes: 
     judge, clean, unlisted, judgeCount: judge.length + unlisted, cleanCount: clean.length, cleanBytes,
     judgeBytes: r.needs_human_bytes === null ? null : Math.max(0, r.needs_human_bytes - (cleanBytes ?? 0)),
   }
+}
+
+// What the cleanup buttons may act on RIGHT NOW: the clearable worktrees and the unused plugin cache copies of the snapshot, minus every target a press already reported on
+// (`done`: decide.clean). One function for the 全部清掉 count and for the press, so the button never promises what the press will not do.
+export function cleanTargets(d: { residue: { needs_human_count: number; needs_human_bytes: number | null; needs_human: readonly NeedsHumanEntry[] } | null; load_source: { stale_cache_dirs: readonly { dir: string; alive: readonly string[] }[] } | null }, done: Readonly<Record<string, unknown>> = {}): { worktrees: NeedsHumanEntry[]; caches: string[] } {
+  const worktrees = d.residue === null ? [] : residueTally(d.residue).clean.filter(e => e.kind === 'worktree' && done[e.target] === undefined)
+  const caches = (d.load_source === null ? [] : d.load_source.stale_cache_dirs).filter(c => c.alive.length === 0 && done[c.dir] === undefined).map(c => c.dir)
+  return { worktrees, caches }
 }
 
 // `reap --auto`'s own result file (<git-common-dir>/autopilot-residue-auto.json): what the owner has to judge (residueTally.judgeCount), else 0.
@@ -1557,7 +1565,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
 // answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`. These strings are a wire format the model reads back, so they are not
 // in the locale tables and do not change with the language. ----
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
 export type DecideView = DecideState & { inputs: boolean }
 export const DECIDE_REPLY_HEAD = '[待決回覆]'

@@ -97,7 +97,7 @@ const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8')
 // code only: block comments and `// ...` line comments are dropped (a glyph in a comment is documentation, not drawing)
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
-const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle'
+const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged'
 const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|stopped|skipped|unknown'
 
 const L1 = src => [
@@ -257,6 +257,66 @@ test('L7 control: a state id literal and a table access are reported', () => {
 const SUBMIT_USE = [/\bprompt\s*\.\s*submit\b(?!['"`])/g, /\bprompt\s*\[\s*['"`]submit['"`]\s*\]/g, /\{[^}]*\bsubmit\b[^}]*\}\s*=\s*[^;\n]*\bprompt\b/g]
 const submitUses = src => SUBMIT_USE.flatMap(re => [...code(src).matchAll(re)].map(m => ({ at: m.index, text: m[0] })))
 const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]))
+// $.process allowlist. Owner ruling 2026-10-16 (decision d-7a7ee75c, 「合併，改成不用確認」): the 殘留 cleanup buttons may run `$.process.run` (argument vector, no shell, no
+// permission dialog) because the two scripts they run re-check the safety condition themselves at run time (repo-residue-sweep.js reap classifies every worktree again;
+// prune-plugin-cache.js re-checks the path, the live pids and the loaded copy). So the ban on `$.process` stays for everything else: `process.run` is allowed once, in
+// register.ts, and only while CLEAN_SCRIPTS names exactly those two scripts; `process.spawn`, any other file and any second use are offenders.
+const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
+// every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
+// Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
+const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
+const processAccesses = src => PROCESS_ACCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
+function processRunOffenders(src, isRegister) {
+  const uses = processAccesses(src)
+  if (uses.length === 0) return []
+  if (!isRegister) return ['$.process outside register.ts']
+  const out = []
+  if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
+  if (!/\$\.process\.run\(argv,/.test(src)) out.push('the one use is not `$.process.run(argv, ...)`')
+  const m = /export const CLEAN_SCRIPTS = \[([^\]]*)\]/.exec(src)
+  const names = m === null ? null : [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])
+  if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
+  return out
+}
+// THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
+// `$.process.run(argv, ...)` in register.ts. No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
+// reach for it past a word count. The other nets above only give a better message. Anything legitimate that needs the word (copy, a type name) goes to a locale string.
+const PROCESS_WORD_BASELINE = 1
+const processWords = src => [...code(src).matchAll(/\bprocess\b/g)].map(m => m[0])
+test('process allowlist, word count: `process` as a whole word occurs exactly ' + PROCESS_WORD_BASELINE + ' time(s) in the non-test sources of mods/, in register.ts', () => {
+  const root = path.join(__dirname, '..')
+  const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.(ts|tsx)$/.test(f) && !f.includes('node_modules'))
+  assert.ok(files.some(f => f.endsWith('register.ts')) && files.some(f => f.endsWith('locales.ts')), 'the scan sees register.ts and the generated locales.ts')
+  const found = files.flatMap(f => processWords(fs.readFileSync(f, 'utf8')).map(() => path.relative(root, f)))
+  assert.deepEqual(found, ['live/register.ts'])
+  assert.equal(found.length, PROCESS_WORD_BASELINE)
+})
+test('process allowlist, word count, controls: an alias, a helper argument, a nested destructuring, a string key and a bracket key each add a count (negative controls)', () => {
+  const one = 'const r = await $.process.run(argv, {})'
+  assert.equal(processWords(code(one)).length, 1)
+  assert.equal(processWords(code(one + '\nconst p = $.process; p.run(x)')).length, 2, 'alias')
+  assert.equal(processWords(code(one + '\nhelper(eng.process)')).length, 2, 'helper argument')
+  assert.equal(processWords(code(one + '\nconst { exec: { process } } = $')).length, 2, 'nested destructuring')
+  assert.equal(processWords(code(one + "\nReflect.get($, 'process')")).length, 2, 'string key')
+  assert.equal(processWords(code(one + "\nconst q = $['process']")).length, 2, 'bracket key')
+  assert.equal(processWords(code('const processing = 1; // a process')).length, 0, 'a longer identifier and a comment are not counted')
+})
+test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
+  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\n"
+  const ok = list + 'const r = await $.process.run(argv, { timeoutMs: 1 })'
+  assert.deepEqual(processRunOffenders(code(ok), true), [])
+  assert.equal(processRunOffenders(code('await $.process.run(argv, {})'), false).length, 1)
+  assert.equal(processRunOffenders(code(ok + '\nawait $.process.run(x)'), true).length, 1)
+  assert.ok(processRunOffenders(code(ok + '\nconst p = $.process; await p.run(x)'), true).length > 0, 'alias')
+  assert.ok(processRunOffenders(code(ok + '\nconst { run } = $.process; await run(x)'), true).length > 0, 'destructured member')
+  assert.ok(processRunOffenders(code(ok + "\nawait $['process'].run(x)"), true).length > 0, 'bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nawait $["process"].run(x)'), true).length > 0, 'double-quoted bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nawait $[`process`].run(x)'), true).length > 0, 'template bracket access')
+  assert.ok(processRunOffenders(code(ok + '\nconst { process: p } = $'), true).length > 0, 'destructured process')
+  assert.ok(processRunOffenders(code(list + "const p = $['process']; p.run(argv, {})"), true).length > 0, 'the only access is not the allowed call')
+  assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
+  assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
+})
 test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prompt.submit; nothing uses asUser or process spawning', () => {
   const root = path.join(__dirname, '..')
   const files = walk(root).filter(f => /\.(ts|tsx|js|mjs|cjs)$/.test(f) && !/\.(test|testkit)\.(ts|js)$/.test(f) && !f.endsWith('locales.ts'))
@@ -266,7 +326,8 @@ test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prom
     const rel = path.relative(root, f)
     const src = code(fs.readFileSync(f, 'utf8'))
     if (/\basUser\b/.test(src)) offenders.push(rel + ': asUser')
-    if (/process\.(spawn|run)\b/.test(src)) offenders.push(rel + ': process spawn')
+    if (/process\s*\.\s*spawn\b/.test(src)) offenders.push(rel + ': process spawn')
+    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts'))) offenders.push(rel + ': ' + bad)
     const uses = submitUses(src)
     if (rel !== path.join('live', 'register.ts')) { if (uses.length > 0) offenders.push(rel + ': prompt.submit') ; continue }
     assert.equal(uses.length, 1, 'exactly one use in register.ts')

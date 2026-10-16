@@ -14,6 +14,7 @@
 //   repo-residue-sweep.js preserve --repo <dir> --out <dir> [--worktree <path>]... [--json]
 //   repo-residue-sweep.js reap     --repo <dir> --yes [--preserve-dir <dir>] [--older-than-days N]
 //                                  [--integration-ref <ref>] [--json]
+//   repo-residue-sweep.js reap     --repo <dir> --yes --worktree <path>...   (only those worktrees; no branch or seat phase)
 //   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--integration-ref <ref>] [--tmpdir <dir>] [--json]
 //   repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]
 //
@@ -182,6 +183,7 @@ function parseArgs(argv) {
     if (!out.session || !/^[A-Za-z0-9._-]+$/.test(out.session)) usage('close-session requires --session <sid> ([A-Za-z0-9._-]+)');
     if (out.auto || out.sizes || out.preserveDir !== null || out.olderThanDays !== null || out.out || out.worktrees.length) usage('close-session takes only --session --yes --repo --integration-ref --json');
   }
+  if (out.worktrees.length && cmd !== 'preserve' && !(cmd === 'reap' && !out.auto)) usage('--worktree belongs to preserve and to reap without --auto');
   if (cmd === 'preserve' && !out.out) usage('preserve requires --out <dir>');
   if (cmd === 'reap' && !out.yes) usage('reap requires --yes');
   if (out.auto && cmd !== 'reap') usage('--auto belongs to reap');
@@ -1156,7 +1158,10 @@ function main() {
   // reap
   const tooYoung = (ageDays) => o.olderThanDays !== null && (ageDays === null || ageDays < o.olderThanDays);
   const actions = { worktrees_removed: [], worktrees_kept: [], branches_deleted: [], branches_kept: [], final_panel_seats_removed: [], final_panel_seats_kept: [], anchors: null };
+  // `reap --worktree <path>` (repeatable) narrows the run to those worktrees and skips the branch and seat phases; it never widens the candidate set
+  const onlyWt = o.worktrees.map((p) => path.resolve(p));
   for (const w of worktrees) {
+    if (onlyWt.length > 0 && !onlyWt.includes(w.path)) continue;
     if (w.class === 'live' || w.class === 'unverifiable' || w.class === 'clean-unintegrated') { actions.worktrees_kept.push({ path: w.path, class: w.class, why: w.reason }); continue; }
     if (tooYoung(w.age_days)) { actions.worktrees_kept.push({ path: w.path, class: w.class, why: `younger than ${o.olderThanDays} days` }); continue; }
     if (w.class === 'dirty') {
@@ -1172,8 +1177,8 @@ function main() {
   }
   // branches: only integrated + not checked out (re-read checkouts after the removals above)
   const stillCheckedOut = new Set(listWorktrees(mainPath).map((x) => x.branch).filter(Boolean));
-  const candidates = branches.filter((b) => b.class === 'integrated' && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
-  for (const b of branches) if (!candidates.includes(b) && b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
+  const candidates = onlyWt.length > 0 ? [] : branches.filter((b) => b.class === 'integrated' && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
+  if (onlyWt.length === 0) for (const b of branches) if (!candidates.includes(b) && b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
   if (candidates.length > 0) {
     const pin = path.join(__dirname, 'pin-evidence-anchors.js');
     const args = [pin, 'apply', '--repo-root', mainPath, '--json'];
@@ -1190,7 +1195,7 @@ function main() {
     }
   }
   // final-panel seat subtrees: terminal always; unknown only with no live/unmeasurable lock
-  for (const r of seats.rows) {
+  for (const r of onlyWt.length > 0 ? [] : seats.rows) {
     const keep = (why) => actions.final_panel_seats_kept.push({ campaign_id: r.campaign_id, class: r.class, why });
     if (r.decision !== 'reap') { keep(r.decision_reason); continue; }
     const res = seatStore.reapCampaignSeats({ root: seats.root, campaignId: r.campaign_id });

@@ -278,6 +278,27 @@ function processRunOffenders(src, isRegister) {
   if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
   return out
 }
+// Receiver-agnostic count (a second, wider net): whatever the receiver is called (`eng.process.run`, `const e = $; e.process`, a destructured parameter `{ process }: EngineInterface`,
+// `Reflect.get($, 'process')`), every reach for a `process` member in a mods/live source file (tests and comments excluded) is counted, and the total must be the ONE allowed use.
+const ANY_PROCESS = [/\bprocess\s*(?:\?\.|\.|\[)/g, /\{[^{}]*\bprocess\b[^{}]*\}\s*(?::\s*[\w.<>]+\s*)?(?:=|\))/g, /\bReflect\s*\.\s*get\s*\([^)]*['"`]process['"`]/g, /\[\s*['"`]process['"`]\s*\]/g]
+const anyProcessReaches = src => ANY_PROCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
+test('process allowlist, any receiver: in every non-test mods/live source the reaches for a `process` member total exactly the one allowed use', () => {
+  const root = path.join(__dirname, '..')
+  const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && !f.endsWith('locales.ts') && !f.endsWith('.d.ts'))
+  const found = files.flatMap(f => anyProcessReaches(code(fs.readFileSync(f, 'utf8'))).map(x => path.relative(root, f) + ': ' + x))
+  assert.equal(found.length, 1, found.join('\n'))
+  assert.match(found[0], /^live\/register\.ts: process\./)
+})
+test('process allowlist, any receiver, controls: another receiver name, an alias of $, a destructured parameter, Reflect.get and a bracket access are each counted (negative controls)', () => {
+  const one = 'const r = await $.process.run(argv, {})'
+  assert.equal(anyProcessReaches(code(one)).length, 1)
+  assert.equal(anyProcessReaches(code(one + '\nawait eng.process.run(x)')).length, 2, 'other receiver')
+  assert.equal(anyProcessReaches(code(one + '\nconst e = $; await e.process.run(x)')).length, 2, 'alias of $')
+  assert.equal(anyProcessReaches(code(one + '\nfunction f({ process }: EngineInterface) { return process.run(x) }')).length >= 3, true, 'destructured parameter')
+  assert.equal(anyProcessReaches(code(one + "\nReflect.get($, 'process')")).length, 2, 'Reflect.get')
+  assert.equal(anyProcessReaches(code(one + "\nawait e['process'].run(x)")).length, 2, 'bracket access on another receiver')
+  assert.equal(anyProcessReaches(code('const { process } = $')).length, 1, 'destructuring')
+})
 test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
   const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\n"
   const ok = list + 'const r = await $.process.run(argv, { timeoutMs: 1 })'

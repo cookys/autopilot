@@ -42,6 +42,17 @@ assert_contains "$OUT" "the copy the plugin is installed from" "the reason is th
 assert_file_exists "$BASE/3.0.0" "the installed copy is kept"
 assert_contains "$(run --version 2.0.0 --dry-run)" '"ok":true' "a different unused copy is still removable (dry-run)"
 
+# fail closed: installed_plugins.json present but broken or of an unknown shape -> nothing is deleted; absent (ENOENT) was the unused-copy case above
+printf '{ not json' > "$C/plugins/installed_plugins.json"
+OUT="$(run --version 2.0.0)"; assert_eq "$?" "1" "a broken installed_plugins.json refuses"
+assert_contains "$OUT" "does not parse" "the reason says why"
+assert_file_exists "$BASE/2.0.0" "nothing deleted when the installed list cannot be read"
+printf '{"plugins":[1]}' > "$C/plugins/installed_plugins.json"
+OUT="$(run --version 2.0.0)"; assert_eq "$?" "1" "an unknown shape refuses"
+assert_contains "$OUT" "unknown shape" "the reason says why (shape)"
+rm -f "$C/plugins/installed_plugins.json"
+assert_contains "$(run --version 2.0.0 --dry-run)" '"ok":true' "no installed_plugins.json at all: as before"
+
 # a usage error is exit 2
 node "$P" >/dev/null 2>&1; assert_eq "$?" "2" "no --version is a usage error"
 

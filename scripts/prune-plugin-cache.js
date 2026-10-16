@@ -45,10 +45,18 @@ function decide(o) {
   if (found.alive.length > 0) return { ok: false, reason: `in use by pid ${found.alive.join(', ')}`, dir };
   // the copy Claude Code installed the plugin from (installed_plugins.json, the same file `claude plugin` keeps): that one is the loaded version even when no pid is listed yet
   let installed = [];
-  try {
-    const j = JSON.parse(fs.readFileSync(path.join(o.claudeDir, 'plugins', 'installed_plugins.json'), 'utf8'));
-    installed = Object.entries(j && j.plugins ? j.plugins : {}).filter(([k]) => k === 'autopilot@autopilot').flatMap(([, v]) => (Array.isArray(v) ? v : [])).map((e) => (e && typeof e.installPath === 'string' ? path.resolve(e.installPath) : ''));
-  } catch (_e) { /* no such file: nothing installed from the cache */ }
+  let raw = null;
+  try { raw = fs.readFileSync(path.join(o.claudeDir, 'plugins', 'installed_plugins.json'), 'utf8'); } catch (e) {
+    if (!e || e.code !== 'ENOENT') return { ok: false, reason: `cannot read installed_plugins.json (${e && e.code ? e.code : 'error'}): refusing to delete`, dir };
+  }
+  if (raw !== null) { // present: it must parse and have the known shape, else we cannot tell which copy is installed and keep everything
+    let j = null;
+    try { j = JSON.parse(raw); } catch (_e) { return { ok: false, reason: 'installed_plugins.json does not parse: refusing to delete', dir }; }
+    if (!j || typeof j !== 'object' || !j.plugins || typeof j.plugins !== 'object' || Array.isArray(j.plugins)) return { ok: false, reason: 'installed_plugins.json has an unknown shape: refusing to delete', dir };
+    const mine = j.plugins['autopilot@autopilot'];
+    if (mine !== undefined && !Array.isArray(mine)) return { ok: false, reason: 'installed_plugins.json has an unknown shape: refusing to delete', dir };
+    installed = (mine || []).map((e) => (e && typeof e.installPath === 'string' ? path.resolve(e.installPath) : ''));
+  }
   if (installed.includes(path.resolve(dir))) return { ok: false, reason: 'this is the copy the plugin is installed from', dir };
   const src = detectLoadSource({ claudeDir: o.claudeDir, repoDir: o.repoDir, behindUpstream: null });
   if (src.source === `cache:${o.version}`) return { ok: false, reason: 'this is the copy currently loaded', dir };

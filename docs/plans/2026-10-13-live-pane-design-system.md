@@ -934,6 +934,7 @@ An audit of the three tabs found facts that were drawn from two places, words an
 6. **Progress without a total.** `progress.unfrozen` reads `已完成 {n} 項` (no `*`; §3.5 says never `N*`), on the status line too. 現況's `進度` row adds a dim ` · 沒有固定總數` when the total is not frozen, so the missing denominator is said in words; a frozen total is the percent and nothing after it.
 
 Enforcement: `review.test.ts` (F6, the busy-world golden, which now shows the 27-day plan review as one line), `ui.test.ts` (`idTail`), `live.test.ts` (the 現況 progress row, the shared pointer, no idle foreman line).
+
 ### 12.9 Buttons: safe actions are buttons, and a button looks like one (owner rulings 2026-10-16)
 
 Owner: 「這邊應該不用顯示指令？直接給清理按鈕？整個 panel 邏輯應該都是這樣？」 and 「選項其實應該放固定位置？可以點擊或按的應該要有辦法標示？」

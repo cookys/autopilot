@@ -143,7 +143,7 @@ const contractBody = {
   repo_identity: `git-common-dir:${commonDir}`, base_sha: base, branch,
   vertical_acceptance: ['src/value.txt must change'],
   allowed_path_prefixes: ['src/'],
-  max_changed_files: scenario === 'file_cap' ? 1 : 5,
+  max_changed_files: scenario === 'file_cap' ? 1 : (scenario === 'multi' ? 6 : 5),
   baseline_churn: 10, max_growth_ratio: 1.5, max_extra_churn: 5,
   max_repair_generations: isImplControl || scenario === 'impl_under_candidate' ? 2 : 0,
   max_wall_seconds: 600, final_panel_reserve_seconds: 0,
@@ -475,6 +475,13 @@ for (const stepSpec of (ctx.steps || [])) {
     git(worktree, 'add', '-A');
     git(worktree, 'commit', '-qm', 'author follow-up');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
+  } else if (stepSpec.move === 'forward_shared') {
+    // BL-0146 D4: a fix that also touches a shared-surface file (a manifest), which forces a full round.
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `external-${stepsOut.length + 2}\n`);
+    fs.writeFileSync(path.join(worktree, 'src', 'package.json'), '{}\n');
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-qm', 'author follow-up touching a manifest');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
   } else if (stepSpec.move === 'sideways') {
     git(worktree, 'reset', '-q', '--hard', base);
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `sideways-${stepsOut.length}\n`);
@@ -553,6 +560,19 @@ for (const stepSpec of (ctx.steps || [])) {
       };
       const d = hit(stepResult, 0);
       return d ? { review_scope: d.review_scope, incremental: d.incremental || null, incremental_fallback_reason: d.incremental_fallback_reason || null } : null;
+    })(),
+    store_files: (() => {
+      const out = [];
+      const walk = (dir, rel) => {
+        let names = [];
+        try { names = fs.readdirSync(dir); } catch (_e) { return; }
+        for (const n of names) {
+          const full = path.join(dir, n);
+          if (fs.statSync(full).isDirectory()) walk(full, `${rel}${n}/`); else out.push(`${rel}${n}`);
+        }
+      };
+      walk(path.join(commonDir, 'autopilot', 'final-panel-seats'), '');
+      return out;
     })(),
     result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });

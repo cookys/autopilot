@@ -939,7 +939,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
-- **Context**: Plan 2026-10-17. D1, D2 and D3 closure landed, unwired. Addendum generator pending owner ruling d-3cf4dc4c (off-by-default seam). D4-D5 open.
+- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). Addendum off pending ruling d-3cf4dc4c, so an incremental round parks again; mixed-seat rounds (A12) go full. D5 evidence open.
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

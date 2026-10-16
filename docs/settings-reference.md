@@ -101,6 +101,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `run_approval.mode` (config.json) | Human approval gate on dispatches: "off" or "ask-once". An unattended (claude -p) run must keep it off. | off | `AUTOPILOT_RUN_APPROVAL_MODE` |
 | `orchestrator_edit_gate.mode` (config.json) | What the (opt-in) orchestrator-edit-gate does when the top-level session edits files itself: "warn", "block" or "off". | warn | `AUTOPILOT_ORCH_EDIT_GATE_MODE` |
 | `dirty_tree_reminder` (config.json) | false switches the dirty-working-tree reminder off; an object sets min_files, min_lines and interval_minutes. | on | `AUTOPILOT_DIRTY_TREE_REMINDER`: Set to false, 0, off or no to disable the dirty-tree reminder. |
+| `owner_question_guard` (config.json) | false switches off the Stop guard that blocks a reply waiting for the owner without a decision card id. | on | `AUTOPILOT_OWNER_QUESTION_GUARD`: Set to off, false, 0 or no to disable the owner-question guard. |
 | `dirty_tree_reminder.min_files` (config.json) | Changed files that trigger the reminder. | `3` | `AUTOPILOT_DIRTY_TREE_MIN_FILES` |
 | `dirty_tree_reminder.min_lines` (config.json) | Changed lines that trigger the reminder. | `150` | `AUTOPILOT_DIRTY_TREE_MIN_LINES` |
 | `dirty_tree_reminder.interval_minutes` (config.json) | Minimum minutes between two reminders per repo and session; 0 reminds every turn. | `30` | `AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES` |

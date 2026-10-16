@@ -39,6 +39,8 @@ MUT="$TEST_TMP/mut/hooks"; mkdir -p "$MUT/../scripts"; cp -r "$HOOKS_DIR/." "$MU
 sed -i 's/return notice + configAuditBlock(homeDir);/return notice;/' "$MUT/session-start.js"
 grep -q 'return notice;' "$MUT/session-start.js" || fail "mutant: wiring line not found"
 MOUT="$(run_hook_at "$MUT")"
+# the mutant must have run normally: update notice (fixed section) still there, and only the config block is gone
+assert_contains "$MOUT" "[Autopilot updated: v3.0.0" "negative control: mutant ran normally (update notice present)"
 assert_not_contains "$MOUT" "[Autopilot config check:" "negative control: hook without the wiring shows no block (the present-case would be red)"
 echo "negative control: wiring removed -> block absent (present-case red), wiring present -> green"
 

@@ -39,7 +39,7 @@ assert_eq "$(rules_of "$LIBDIR")" "" "clean config: stays silent on a second run
 # case table: rule | window | config
 KILLED=0; TOTAL=0
 check_rule() {
-  local rule="$1" win="$2" json="$3" extra="${4:-}"
+  local rule="$1" win="$2" json="$3"
   set_window "$win"; cfg "$json"
   local got; got="$(rules_of "$LIBDIR")"
   case " $got " in *" $rule "*) ;; *) fail "rule $rule not reported (got: $got)";; esac
@@ -54,7 +54,6 @@ check_rule() {
   if [ "$mgot" = "ERR" ]; then echo "NOT KILLED: mutant of $rule crashed"
   elif [ "$want" != "$have" ]; then echo "NOT KILLED: mutant of $rule changed other rules (want: $want / got: $have)"
   else KILLED=$((KILLED + 1)); fi
-  : "$extra"
 }
 V1='"config_schema_version":1'
 check_rule unknown_key 250000 "{$V1,\"context_budgt\":{\"t2\":1}}"

@@ -494,19 +494,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/engine-and-cli-have-no-session-mode-fallback-for-bounded-non-mission-campaigns.md
 - **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` +…
 
-### Mission runtime retires superseded adoptions at closeout, not after the fact
-- **Id**: BL-0062
-- **Status**: open
-- **Since**: 2026-08-08
-- **Origin**: self
-- **Problem**: Mission 失敗重試後會留下多個已完成的採用紀錄，現在是事後用腳本清理，根本原因（結束時沒有自動退役舊的）沒處理。 (draft)
-- **Impact**: 每次重試都要人工清理，不清會造成殘留與混淆。 (draft)
-- **Trigger**: 下一次 Mission 重試鏈再留下多個 COMPLETE adoption，或要動 `src/mission/runtime.js` 的收尾路徑時。
-- **Effort**: M
-- **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
-- **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
-- **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
-
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Id**: BL-0064
 - **Status**: open

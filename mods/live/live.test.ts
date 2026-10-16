@@ -36,7 +36,7 @@
 //   24 pass / 38 fail (19 cases x terminal + desktop), e.g.
 //   (fail) verdict 要你決定: the loudest word, wins over a stalled run, reason is the decision question
 //   (fail) verdict precedence: needs_decision > stalled > waiting acceptance > running
-//   (fail) progress: frozen shows the percent and the done/total; unfrozen shows "n done*", dim, never a percent
+//   (fail) progress: frozen shows the percent and the done/total; unfrozen shows "n done" plus the dim 沒有固定總數, never a percent or a star
 //   (fail) project: short name from scope.repo_identity, hex8 of the project key for any odd shape
 //   (fail) pane: when a decision is awaited it is the first section, built from the model decision; the Link stays
 // GREEN: 62 pass / 0 fail. C3 mutation controls (applied to the loaded copy, each turned the suite red, then reverted):
@@ -258,7 +258,9 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
     const row = hm[1] + ' ' + hm[2] + ' · ' + (hm[3] ?? hm[4] ?? '—')
     const texts = kids.map(k => textOf(k))
     const progressNode = kids.find(k => /^(進度|progress)\s/.test(textOf(k))) as Node
-    const progress = textOf(progressNode).replace(/^(進度|progress)\s+/, '')
+    const progressRaw = textOf(progressNode).replace(/^(進度|progress)\s+/, '')
+    const noTotal = / · (沒有固定總數|no fixed total)$/.test(progressRaw) // the dim tail 現況 adds when the total is not frozen (§3.5); the cases below keep asserting the figure itself
+    const progress = progressRaw.replace(/ · (沒有固定總數|no fixed total)$/, '')
     const phaseLine = texts.find(t => /^(目前|phase)\s/.test(t))
     const phase = phaseLine === undefined ? '—' : phaseLine.replace(/^(目前|phase)\s+/, '')
     const cut = row.lastIndexOf(' · ')
@@ -270,11 +272,11 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
     const kvReason = texts.find(x => /^(原因|reason)\s/.test(x))
     const reason = kvReason !== undefined ? kvReason.replace(/^(原因|reason)\s+/, '').trimEnd()
       : first !== undefined && !first.startsWith('—') ? first.replace(/^\S+ /, '').replace(/\s+[▸▾]$/, '').trimEnd() : undefined
-    return { line1: summary, row, line2: reason, last: walkTexts(progressNode).pop() as Node, tree }
+    return { line1: summary, row, noTotal, progressRaw, line2: reason, last: walkTexts(progressNode).pop() as Node, tree }
   }
   const line = await bandLine($, surface, columns)
   const cells = walkTexts(line.tree)
-  return { line1: textOf(cells[0]).replace(/ │ $/, ''), line2: undefined, last: cells[0], tree }
+  return { line1: textOf(cells[0]).replace(/ │ $/, ''), line2: undefined, noTotal: false, progressRaw: '', last: cells[0], tree }
 }
 
 // the real band (AbovePrompt): its drawn tree, the full line (Texts + the ⓘ label) and the ⓘ Button node
@@ -620,7 +622,8 @@ for (const surface of SURFACES) {
     expect(r2).toContain('⊘ 疑似卡住')
     expect(r3).toContain('✓ 完成') // the exited run (rc 0) is in the finished table, drawn as a state word, never as `rc 0`
     expect(rows.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
-    expect(rows.some(t => t.startsWith('審查 ›') && t.includes('1 道審查關卡'))).toBe(true) // 派工 carries a count and a pointer to 審查, no gate verdict (design plan §2.6 rule 3)
+    expect(rows.some(t => t.startsWith('審查 ›'))).toBe(true) // 派工 carries a pointer to 審查, the same row 現況 draws, no gate verdict (design plan §2.6 rule 3)
+    expect(rows.some(t => t.includes('審查關卡') || t.includes('審查回執'))).toBe(false) // the job page's receipt count is not a second review story
     expect(rows.some(t => t.includes('PASS'))).toBe(false)
     const link = await pane.find({ type: 'Link' })
     expect(link?.props.href).toBe('http://localhost:9123/' + KEY + '/2026-10-04/' + ROOT + '/current/')
@@ -738,8 +741,8 @@ for (const surface of SURFACES) {
     expect(folded.some(t => t.startsWith('▾ Plan review'))).toBe(true) // the other sections are untouched
     await pressRow($, surface, 'review', t => t.startsWith('▸ Code review'))
     expect((await paneParts($, surface, 'review')).texts).toEqual(first)
-    // the same plan review, 27 days old (F2): its section starts folded, and a press opens it
-    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ plan: { ...(reviewFact().plan as object), updated_at: '2026-09-07T10:00:00.000Z' } }))
+    // the same plan review, 2 days old (F2; inside F6, so still a section): its section starts folded, and a press opens it
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ plan: { ...(reviewFact().plan as object), updated_at: '2026-10-02T10:00:00.000Z' } }))
     await w.clock.advance(5000)
     const stale = (await paneParts($, surface, 'review')).texts
     expect(stale.some(t => t.startsWith('▸ Plan review'))).toBe(true)
@@ -782,15 +785,14 @@ for (const surface of SURFACES) {
       "席位        ",
       "            △ 待修  s0 · minimax                                          ▾",
       "              └ FIX-THEN-SHIP · reviewed",
-      "▾ 推送前 QC ───────────────────────────────────────────────────────────────",
-      "— 沒有 QC 狀態",
-      "▾ 代你決定  2 件 · 1 件不可逆 ─────────────────────────────────────────────",
+      "▾ 推送前檢查 ──────────────────────────────────────────────────────────────",
+      "— 沒有推送前檢查的狀態",
+      "▾ 我替你決定的事  2 件 · 1 件不可逆 ───────────────────────────────────────",
       "◦ d-2  刪掉舊分支                                                         ▸",
       "◦ d-1  可逆 · engine                                                      ▾",
       "  └ 先拆 plan 再實作",
       "  $ decision-ledger.js veto --ledger /work/repo/.git/autopilot/ledger/",
       "    decisions.jsonl --id d-1",
-      "升級階梯    — 沒有紀錄",
       "▾ 計畫審查  △ 待修 ────────────────────────────────────────────────────────",
       "計畫        plan-x · △ 待修",
       "輪次        ▰▰  R2／上限 2",
@@ -1032,7 +1034,7 @@ for (const surface of SURFACES) {
     expect(verdictsIn(await bandText($, surface))).toEqual(['完成待驗收'])
   })
 
-  test('progress: frozen shows the percent and the done/total; unfrozen shows "n done*", dim, never a percent (' + surface + ')', async ($, on) => {
+  test('progress: frozen shows the percent and the done/total; unfrozen shows "n done" plus the dim 沒有固定總數, never a percent or a star (' + surface + ')', async ($, on) => {
     const files = base()
     put(files, null, { progress: { frozen: true, percent: 62.5, done: 5, total: 8 } })
     const w = world(on, files)
@@ -1040,25 +1042,30 @@ for (const surface of SURFACES) {
     let p = await bandParts($, surface)
     expect(p.line1.endsWith('· 62.5%（5/8）')).toBe(true)
     expect(p.last?.props?.dimColor).not.toBe(true)
+    expect(p.noTotal).toBe(false) // a frozen total is a percent with no 「沒有固定總數」 tail
+    expect(p.progressRaw).toBe('62.5%（5/8）')
     put(w.files, null, { progress: { frozen: false, percent: null, done: 3, total: null } })
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3 項')).toBe(true)
     expect(p.line1).not.toContain('%')
     expect(p.last?.props?.dimColor).toBe(true)
+    expect(p.progressRaw).toBe('已完成 3 項 · 沒有固定總數') // §3.5: never `N*`; the missing total is said in words, dim
+    expect(p.noTotal).toBe(true)
     // a percent that arrives next to an unfrozen flag is not shown either
     put(w.files, null, { progress: { frozen: false, percent: 37.5, done: 3, total: 8 } })
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3 項')).toBe(true)
     expect(p.line1).not.toContain('%')
     expect(p.last?.props?.dimColor).toBe(true)
+    expect(p.noTotal).toBe(true)
     // a frozen flag without a usable percent / total is not trusted: the percent is not invented
     put(w.files, null, { progress: { frozen: true, percent: null, done: 3, total: null } })
     await w.clock.advance(5000)
     p = await bandParts($, surface)
     expect(p.line1).not.toContain('%')
-    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3 項')).toBe(true)
   })
 
   test('progress: no job model, no progress, or no count is an em dash, never 0 and never a percent (' + surface + ')', async ($, on) => {
@@ -1485,7 +1492,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('● 進行中 repo · — · 30m · 已完成 1*') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
+    expect(p.line1).toBe('● 進行中 repo · — · 30m · 已完成 1 項') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface, 'now')
@@ -1497,7 +1504,7 @@ for (const surface of SURFACES) {
     files[P_TASKS()] = j(allDone())
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 30m · 已完成 2*')
+    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 30m · 已完成 2 項')
     expect(p.line2).toBe('任務 2/2 都完成，等你驗收')
     // a live run beats "tasks all done"
     files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
@@ -1529,7 +1536,7 @@ for (const surface of SURFACES) {
     files[LIVE + '/context/' + SID_FILE + '.json'] = j(context(55))
     const w = world(on, files, NOW_FRESH, SID_RAW)
     await start($, surface)
-    expect((await bandParts($, surface)).line1.endsWith('已完成 1*')).toBe(true)
+    expect((await bandParts($, surface)).line1.endsWith('已完成 1 項')).toBe(true)
     expect(await paneHeader($, surface)).toContain('ctx 55%') // the context file name is sanitised too
     files[P_TASKS(SID_FILE)] = j({ ...tasksFile({}, SID_RAW), schema: 'other/1' })
     // wrong schema: the file is absent, so no manifest means no task section at all
@@ -1625,7 +1632,7 @@ for (const surface of SURFACES) {
     files[P_DEC] = j(decisionsSidecar())
     const w = world(on, files)
     await start($, surface)
-    const chip = async () => (await paneParts($, surface, 'review')).texts.find(x => x.startsWith('▾ 代你決定'))
+    const chip = async () => (await paneParts($, surface, 'review')).texts.find(x => x.startsWith('▾ 我替你決定的事'))
     expect(await chip()).toContain('2 件 · 1 件不可逆')
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑') // 現況 never repeats the count
     files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [] }))
@@ -1638,10 +1645,10 @@ for (const surface of SURFACES) {
 
   test('W3a decisions sidecar: 僅自動裁決 is worded from the actual writers_wired list; no depth-0 writer = label (pure: the band reason keeps the tail; no tab draws it) (' + surface + ')', () => {
     const view = (writers: string[]) => ({ rows: [], count: 2, irreversible: 1, undocumented: 0, writers, ladder: null, identity: null, root: null }) as never
-    expect(proxySegments(view(['engine']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）', '僅 engine 自動裁決'])
-    expect(proxySegments(view([]), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）', '決策寫入端未接'])
-    expect(proxySegments(view(['next-pick']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）']) // a depth-0 writer is wired: no label
-    expect(proxySegments(view(['engine', 'next-pick']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）'])
+    expect(proxySegments(view(['engine']), makeT('zh-TW'))).toEqual(['替你決定 2 件（1 件不可逆）', '僅 engine 自動裁決'])
+    expect(proxySegments(view([]), makeT('zh-TW'))).toEqual(['替你決定 2 件（1 件不可逆）', '決策寫入端未接'])
+    expect(proxySegments(view(['next-pick']), makeT('zh-TW'))).toEqual(['替你決定 2 件（1 件不可逆）']) // a depth-0 writer is wired: no label
+    expect(proxySegments(view(['engine', 'next-pick']), makeT('zh-TW'))).toEqual(['替你決定 2 件（1 件不可逆）'])
   })
 
   test('W3a decisions sidecar: undocumented dispatches are counted on the Review tab, on their own or after the decisions (' + surface + ')', async ($, on) => {
@@ -1649,12 +1656,12 @@ for (const surface of SURFACES) {
     files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [], undocumented_dispatches: 3 }))
     const w = world(on, files)
     await start($, surface)
-    expect((await paneParts($, surface, 'review')).texts.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
+    expect((await paneParts($, surface, 'review')).texts.some(x => x.startsWith('沒寫理由') && x.includes('3 次派工'))).toBe(true)
     files[P_DEC] = j(decisionsSidecar({ undocumented_dispatches: 3 }))
     await w.clock.advance(5000)
     const t = (await paneParts($, surface, 'review')).texts
-    expect(t.some(x => x.startsWith('▾ 代你決定') && x.includes('2 件 · 1 件不可逆'))).toBe(true)
-    expect(t.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
+    expect(t.some(x => x.startsWith('▾ 我替你決定的事') && x.includes('2 件 · 1 件不可逆'))).toBe(true)
+    expect(t.some(x => x.startsWith('沒寫理由') && x.includes('3 次派工'))).toBe(true)
   })
 
   test('W3a decisions pane: one row per decision with the real veto command; no id means no veto (' + surface + ')', async ($, on) => {
@@ -1664,7 +1671,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const t0 = (await paneParts($, surface, 'review')).texts // TUI v2: the proxy-decision rows live in the Review tab
-    expect(t0.some(x => x.startsWith('▾ 代你決定') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
+    expect(t0.some(x => x.startsWith('▾ 我替你決定的事') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
     expect(t0.some(x => x.includes('d-1') && x.includes('先拆 plan 再實作'))).toBe(true)
     expect(t0.some(x => x.includes('d-2') && x.includes('刪掉舊分支'))).toBe(true)
     expect(t0.some(x => x.includes('veto'))).toBe(false) // closed rows carry no command (I18: the default render is the summary)
@@ -1692,7 +1699,7 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF, ledger_depth0: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect((await paneParts($, surface, 'review')).texts).toContain('— 代你決定：來源未接')
+    expect((await paneParts($, surface, 'review')).texts).toContain('— 替你決定的事：來源未接')
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF })) // one writer installed: wired, currently empty
     await w.clock.advance(5000)
@@ -1714,10 +1721,12 @@ for (const surface of SURFACES) {
     expect(nodes.find(n => textOf(n) === '◌')?.props?.color).not.toBe(nodes.find(n => textOf(n) === '●')?.props?.color)
   })
 
-  test('W3a foreman: an absent sidecar reads 工頭狀態：來源未接 (' + surface + ')', async ($, on) => {
+  test('W3a foreman: an absent sidecar is idle and draws nothing; never 工頭狀態：來源未接 (the watcher deletes the file when no agent and no stage are live) (' + surface + ')', async ($, on) => {
     world(on, base())
     await start($, surface)
-    expect((await paneParts($, surface)).texts).toContain('  工頭狀態：來源未接')
+    const texts = (await paneParts($, surface, 'dispatch')).texts
+    expect(texts.some(x => x.includes('工頭'))).toBe(false)
+    expect(texts.some(x => x.includes('來源未接'))).toBe(false)
   })
 
   test('FOREMAN: an un-ended stamped agent quiet < 180 s is 進行中 (工頭在跑), >= 180 s is 疑似卡住 (工頭 N 分沒有動作); ended, over-TTL or unstamped rows are ignored (' + surface + ')', async ($, on) => {
@@ -1828,10 +1837,10 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
     const both = async () => [...(await paneParts($, surface, 'dispatch')).texts, ...(await paneParts($, surface, 'review')).texts]
     let t = await both()
-    expect(t.some(x => x.startsWith('代你決定'))).toBe(false)
-    expect(t).toContain('  工頭狀態：來源未接') // the foreign foreman rows are not shown
+    expect(t.some(x => x.startsWith('◦ '))).toBe(false) // no decision rows from the foreign sidecar
+    expect(t.some(x => x.includes('工頭'))).toBe(false) // the foreign foreman rows are not shown: an absent sidecar is idle
     expect(t.some(x => x.includes('修 parser'))).toBe(false)
-    expect(t.some(x => x.includes('來源未接') && x !== '  工頭狀態：來源未接')).toBe(false) // the foreign manifest is not obeyed
+    expect(t.some(x => x.includes('來源未接'))).toBe(false) // the foreign manifest is not obeyed
     files[P_DEC] = j(decisionsSidecar({}, { root_run_id: 'other-root' }))
     files[P_FOREMAN] = j(foremanSidecar({}, { root_run_id: 'other-root' }))
     await w.clock.advance(5000)
@@ -2041,8 +2050,8 @@ for (const surface of SURFACES) {
     await start($, surface)
     const review = (await paneParts($, surface, 'review')).texts // P4: the sums sit on the owner tab, not on 現況
     expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
-    expect(review.some(x => x.startsWith('▾ 代你決定') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
-    expect(review.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
+    expect(review.some(x => x.startsWith('▾ 我替你決定的事') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
+    expect(review.some(x => x.startsWith('沒寫理由') && x.includes('3 次派工'))).toBe(true)
   })
 
   test('SCOPE: progress and phase come from the NEWEST campaign root that has them (' + surface + ')', async ($, on) => {
@@ -2838,11 +2847,11 @@ for (const surface of SURFACES) {
     expect(has(review.texts, '程式碼審查', '△ 待修')).toBe(true)
     expect(has(review.texts, '輪次', 'R3', '11111111..aaaaaaaa', 'p7')).toBe(true)
     expect(has(review.texts, '△ 待修', 's0', 'minimax')).toBe(true)
-    expect(has(review.texts, '推送前 QC', '✓ 完成')).toBe(true)
+    expect(has(review.texts, '推送前檢查', '✓ 完成')).toBe(true)
     expect(has(review.texts, '範圍', '2 個受保護檔案', '11111111..aaaaaaaa')).toBe(true)
-    expect(has(review.texts, '代你決定', '3 件 · 1 件不可逆')).toBe(true)
-    expect(has(review.texts, '未記錄', '1 件派工沒有決策紀錄')).toBe(true)
-    expect(has(review.texts, '升級階梯', '▰▰▰▱▱▱', 'U2', 'U0 ─ U5', '5m 前')).toBe(true)
+    expect(has(review.texts, '我替你決定的事', '3 件 · 1 件不可逆')).toBe(true)
+    expect(has(review.texts, '沒寫理由', '1 次派工')).toBe(true)
+    expect(has(review.texts, '卡關升級', '▰▰▰▱▱▱', 'U2', 'U0 ─ U5', '5m 前')).toBe(true)
     expect(has(review.texts, '計畫審查', '△ 待修')).toBe(true)
     expectThemeOnly(review.tree as Drawn, true)
 
@@ -2878,7 +2887,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.replace(/^— /, '').startsWith('no data'))
     expect((await paneParts($, surface, 'now')).texts).toContain('— this session has no stage or unit recorded') // one Position line (P4)
-    expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no QC status published', '— no decisions sidecar published'])
+    expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no pre-push check status published', '— no decisions sidecar published'])
     expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['— no data · no worktree residue published', '— no data · no automatic cleanup record published', '— no data · no load source published']) // one empty line per section, in SECTION_ORDER
     for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
@@ -3613,7 +3622,8 @@ test('dispatch tab: ownership (I17, M31, M38): no spend or usage fact, no seat v
       const owner = ui.FACT_OWNER[l.fact]
       if (owner !== 'dispatch') { expect(l.goto, l.text + ' is a projection and must carry goto').toBe('review'); expect(l.kind).toBe('kv') }
     }
-    const projections = lines.filter(l => l.fact === 'review.gates')
+    const projections = lines.filter(l => l.fact === 'review.round') // the same pointer row 現況 draws, never the job page's receipt count (review.gates)
+    expect(lines.some(l => l.fact === 'review.gates')).toBe(false)
     expect(projections.length, 'the only line for that fact on the tab').toBe(1)
     expect(projections[0].goto).toBe('review')
     expect(projections[0].text.includes(t('tab.review'))).toBe(true)

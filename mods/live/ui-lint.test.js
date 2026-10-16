@@ -85,8 +85,8 @@ test('glyph-check.js lists exactly the NEW_GLYPHS, in order', () => {
   assert.notDeepEqual(['⊘', '△'], [...ui.NEW_GLYPHS]) // control: a shortened list would not compare equal
 })
 
-test('FRESH_MS pins the five freshness thresholds (section 2.5)', () => {
-  assert.deepEqual({ ...ui.FRESH_MS }, { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 })
+test('FRESH_MS pins the six freshness thresholds (section 2.5)', () => {
+  assert.deepEqual({ ...ui.FRESH_MS }, { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, abandonedPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 })
 })
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------

@@ -44,10 +44,18 @@ echo "你要不要?"
 done.'
 expect_pass code "question mark only in code"
 
-mk relay 'fleet 問我：這個 branch 要不要合？我已轉給 owner 的卡片處理。'
-# Documented behaviour: a relayed question that contains 你/要不要 + ？ is a known false positive.
-run_hook owner-question-guard.js "$(payload relay)"
-echo "# relayed-question case (known false positive) stdout: ${__RUN_STDOUT:-<pass>}"
+mk relay_q 'fleet 問我：『這個 branch 要不要合？』我已轉給 owner 的卡片處理。'
+expect_pass relay_q "quoted relay (corner quotes)"
+mk relay_dq 'fleet asked me "should you merge this branch?" and I forwarded it.'
+expect_pass relay_dq "quoted relay (double quotes)"
+mk relay_bq 'fleet 的訊息如下：
+> 這個 branch 要不要合？
+已轉發。'
+expect_pass relay_bq "markdown quote line relay"
+mk relay_after '他說「先不用」，那你要不要我繼續？'
+expect_block relay_after "question outside quotes still blocks"
+mk relay_raw 'fleet 問我：這個 branch 要不要合？我已轉給 owner。'
+expect_block relay_raw "unquoted relay still blocks (known false positive, documented)"
 
 # only the LAST assistant text counts: older question, final report clean
 node -e '

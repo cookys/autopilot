@@ -53,8 +53,13 @@ function loadCfg() {
 }
 
 // Drop fenced blocks and inline code: a question mark inside code is not a question to the owner.
+// Also drop quoted text (「」 『』 “” "") and Markdown quote lines (> ...): a relayed question is not ours to the owner.
+const QUOTED = [/「[^」\n]*」/g, /『[^』\n]*』/g, /“[^”\n]*”/g, /"[^"\n]*"/g];
 function stripCode(text) {
-  return text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  t = t.split('\n').filter((l) => !/^\s*>/.test(l)).join('\n');
+  for (const re of QUOTED) t = t.replace(re, ' ');
+  return t;
 }
 
 function sentences(text) {

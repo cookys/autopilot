@@ -3,6 +3,21 @@
  "about": "Every fixture is a complete document. Both validators (Python here, autopilot Node later) run this list: `valid` must be accepted; `invalid` must be rejected with reject_code as the FIRST reported code and no accepted-by-accident. doc=metrics validates against schemas/qualification-feed-v2.schema.json, doc=record against schemas/qualification-record.schema.json. SCHEMA-coded rejections are expressible in JSON Schema alone; the other codes are semantic and must be reimplemented in Node. max_bytes, when present, overrides the byte cap for that case. reject_hint (SCHEMA cases) is a substring the Python validator's message must contain so a case cannot pass for the wrong reason; Node need only reject.",
  "cases": [
   {
+   "file": "seat-metrics-latest-per-task.valid.json",
+   "doc": "metrics",
+   "expect": "valid",
+   "reject_code": null,
+   "why": "production shape: one retained row per task, n_attempts and n_timeout null"
+  },
+  {
+   "file": "latest-per-task-with-attempts.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "SCHEMA",
+   "reject_hint": "n_attempts",
+   "why": "population latest_per_task claiming an n_attempts (all-attempt numbers under the wrong label)"
+  },
+  {
    "file": "seat-metrics-benchmark.valid.json",
    "doc": "metrics",
    "expect": "valid",

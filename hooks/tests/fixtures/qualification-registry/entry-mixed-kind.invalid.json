@@ -19,6 +19,7 @@
    "instrument_version": "34t-559c010f",
    "window_end": "2026-10-11T08:00:00Z",
    "benchmark": {
+    "population": "all_attempts",
     "n_tasks": 34,
     "n_trials": 5,
     "n_attempts": 172,

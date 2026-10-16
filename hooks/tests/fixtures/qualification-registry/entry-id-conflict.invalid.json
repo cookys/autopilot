@@ -19,6 +19,7 @@
    "instrument_version": "34t-559c010f",
    "window_end": "2026-10-11T08:00:00Z",
    "benchmark": {
+    "population": "all_attempts",
     "n_tasks": 34,
     "n_trials": 5,
     "n_attempts": 172,
@@ -73,6 +74,7 @@
    "instrument_version": "34t-559c010f",
    "window_end": "2026-10-11T08:00:00Z",
    "benchmark": {
+    "population": "all_attempts",
     "n_tasks": 34,
     "n_trials": 5,
     "n_attempts": 172,
@@ -81,8 +83,8 @@
     "pass_rate_permille": 866,
     "ci_method": "wilson",
     "ci_level_permille": 950,
-    "ci_low_permille": 814,
-    "ci_high_permille": 914
+    "ci_low_permille": 807,
+    "ci_high_permille": 909
    },
    "speed": {
     "solved_per_hour_milli": 18625,
@@ -93,7 +95,7 @@
     "speed_basis": "2026-10-10T00:00:00Z..2026-10-11T08:00:00Z"
    },
    "cost": {
-    "usd_per_solved_micro": 30000,
+    "usd_per_solved_micro": 30201,
     "usd_per_task_micro": 26163,
     "cost_total_micro": 4500000,
     "cost_coverage_permille": 1000,

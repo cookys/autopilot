@@ -253,81 +253,183 @@
    }
   },
   "benchmark_block": {
-   "type": "object",
-   "additionalProperties": false,
-   "required": [
-    "n_tasks",
-    "n_trials",
-    "n_attempts",
-    "n_pass",
-    "n_timeout",
-    "pass_rate_permille",
-    "ci_method",
-    "ci_level_permille",
-    "ci_low_permille",
-    "ci_high_permille"
-   ],
-   "properties": {
-    "n_tasks": {
-     "type": "integer",
-     "minimum": 1,
-     "title": "tasks per trial"
-    },
-    "n_trials": {
-     "type": "integer",
-     "minimum": 1,
-     "title": "repeated runs of the task set"
-    },
-    "n_attempts": {
-     "type": "integer",
-     "minimum": 1,
-     "title": "every execution incl. retries; >= n_tasks*n_trials (semantic check)"
-    },
-    "n_pass": {
-     "type": "integer",
-     "minimum": 0,
-     "title": "attempts that passed"
-    },
-    "n_timeout": {
-     "type": "integer",
-     "minimum": 0,
-     "title": "attempts that used up the step cap (the board's maxstep_fail_n); NOT a wall-clock timeout"
-    },
-    "pass_rate_permille": {
-     "type": [
-      "integer",
-      "null"
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "population",
+      "n_tasks",
+      "n_trials",
+      "n_attempts",
+      "n_pass",
+      "n_timeout",
+      "pass_rate_permille",
+      "ci_method",
+      "ci_level_permille",
+      "ci_low_permille",
+      "ci_high_permille"
      ],
-     "minimum": 0,
-     "title": "round-half-up(1000*n_pass/n_attempts); null iff n_attempts==0; <=1000 (semantic)"
+     "properties": {
+      "population": {
+       "type": "string",
+       "enum": [
+        "all_attempts"
+       ],
+       "title": "which executions the numbers describe. all_attempts = every execution incl. retries (n_attempts, n_timeout integers). latest_per_task = ONE retained (latest) row per task, retries not counted (n_attempts and n_timeout null, n_trials 1); a reader must NOT treat latest_per_task as all-attempt data. Applies to benchmark, speed and cost"
+      },
+      "n_tasks": {
+       "type": "integer",
+       "minimum": 1,
+       "title": "tasks per trial"
+      },
+      "n_trials": {
+       "type": "integer",
+       "minimum": 1,
+       "title": "repeated runs of the task set"
+      },
+      "n_attempts": {
+       "type": "integer",
+       "minimum": 1,
+       "title": "every execution incl. retries; >= n_tasks*n_trials (semantic check)"
+      },
+      "n_pass": {
+       "type": "integer",
+       "minimum": 0,
+       "title": "passed units of the population"
+      },
+      "n_timeout": {
+       "type": "integer",
+       "minimum": 0,
+       "title": "attempts that used up the step cap (the board's maxstep_fail_n); NOT a wall-clock timeout"
+      },
+      "pass_rate_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "round-half-up(1000*n_pass/population), population = n_attempts (all_attempts) or n_tasks (latest_per_task); <=1000 (semantic)"
+      },
+      "ci_method": {
+       "type": "string",
+       "enum": [
+        "wilson"
+       ]
+      },
+      "ci_level_permille": {
+       "type": "integer",
+       "enum": [
+        950
+       ]
+      },
+      "ci_low_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "Wilson 95% (z=1.959964) lower bound over n_pass out of the population, half-up permille; the producer and the validator share one function; may differ from the board's displayed interval by 1 permille"
+      },
+      "ci_high_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "Wilson upper bound, same rule"
+      }
+     }
     },
-    "ci_method": {
-     "type": "string",
-     "enum": [
-      "wilson"
-     ]
-    },
-    "ci_level_permille": {
-     "type": "integer",
-     "enum": [
-      950
-     ]
-    },
-    "ci_low_permille": {
-     "type": [
-      "integer",
-      "null"
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "population",
+      "n_tasks",
+      "n_trials",
+      "n_attempts",
+      "n_pass",
+      "n_timeout",
+      "pass_rate_permille",
+      "ci_method",
+      "ci_level_permille",
+      "ci_low_permille",
+      "ci_high_permille"
      ],
-     "minimum": 0
-    },
-    "ci_high_permille": {
-     "type": [
-      "integer",
-      "null"
-     ],
-     "minimum": 0
+     "properties": {
+      "population": {
+       "type": "string",
+       "enum": [
+        "latest_per_task"
+       ],
+       "title": "which executions the numbers describe. all_attempts = every execution incl. retries (n_attempts, n_timeout integers). latest_per_task = ONE retained (latest) row per task, retries not counted (n_attempts and n_timeout null, n_trials 1); a reader must NOT treat latest_per_task as all-attempt data. Applies to benchmark, speed and cost"
+      },
+      "n_tasks": {
+       "type": "integer",
+       "minimum": 1,
+       "title": "tasks per trial"
+      },
+      "n_trials": {
+       "type": "integer",
+       "enum": [
+        1
+       ],
+       "title": "latest_per_task keeps exactly one retained row per task"
+      },
+      "n_attempts": {
+       "type": "null",
+       "title": "null for latest_per_task: retries are not counted"
+      },
+      "n_pass": {
+       "type": "integer",
+       "minimum": 0,
+       "title": "passed units of the population"
+      },
+      "n_timeout": {
+       "type": "null",
+       "title": "null for latest_per_task"
+      },
+      "pass_rate_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "round-half-up(1000*n_pass/population), population = n_attempts (all_attempts) or n_tasks (latest_per_task); <=1000 (semantic)"
+      },
+      "ci_method": {
+       "type": "string",
+       "enum": [
+        "wilson"
+       ]
+      },
+      "ci_level_permille": {
+       "type": "integer",
+       "enum": [
+        950
+       ]
+      },
+      "ci_low_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "Wilson 95% (z=1.959964) lower bound over n_pass out of the population, half-up permille; the producer and the validator share one function; may differ from the board's displayed interval by 1 permille"
+      },
+      "ci_high_permille": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "Wilson upper bound, same rule"
+      }
+     }
     }
-   }
+   ],
+   "title": "benchmark: two closed shapes keyed by population (all_attempts | latest_per_task); a latest_per_task block that carries n_attempts or n_timeout is invalid"
   },
   "speed_block": {
    "type": "object",
@@ -363,7 +465,7 @@
       "null"
      ],
      "minimum": 0,
-     "title": "same as solved_per_hour_milli but over completed attempts"
+     "title": "round-half-up((n_attempts - n_timeout)*3.6e6/wall_s_total) for all_attempts; null for latest_per_task or unknown wall"
     },
     "median_wall_ms": {
      "type": [
@@ -424,7 +526,7 @@
         "null"
        ],
        "minimum": 0,
-       "title": "round-half-up(cost_total_micro / n_attempts); attempts include retries, so the denominator is n_attempts, not n_tasks"
+       "title": "round-half-up(cost_total_micro / population); population = n_attempts (all_attempts, retries included) or n_tasks (latest_per_task)"
       },
       "cost_total_micro": {
        "type": [

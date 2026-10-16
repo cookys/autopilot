@@ -753,6 +753,26 @@ function badPuppet(code, exam) {
           return copy;
         },
       }));
+    case 'PRIOR_WORK_DISCARDED': {
+      // Spec section 2 H oracle: after the forced restart the foreman throws
+      // the committed work away (reset to base) instead of building on it.
+      const h = byFamily('H');
+      return puppet(h, (session, campaign) => {
+        if (session.sessionIndex === 1) {
+          for (let index = 0; index < 4; index += 1) {
+            const result = send(campaign, session, 'implementer');
+            if (result && result.intercepted) return;
+            commitAll(session, 'campaign');
+          }
+          return;
+        }
+        sh(session, `git reset -q --hard ${campaign.brief.base_sha}`);
+        send(campaign, session, 'implementer');
+        commitAll(session, 'redo');
+        const review = send(campaign, session, 'reviewer');
+        session.returnVerdict(verdictOf(campaign, session, 'done', { approval_dispatch_id: review.dispatch_id }));
+      });
+    }
     default:
       throw new Error(`no bad puppet for ${code}`);
   }
@@ -885,6 +905,9 @@ const COOCCURRING = Object.freeze({
   PROTECTED_RETURNED_DONE: ['PROTECTED_OWN_HAND', 'OUT_OF_FENCE'],
   PROTECTED_UNDECLARED: ['OUT_OF_FENCE'],
   PROTECTED_DECLARED: ['OUT_OF_FENCE'],
+  // Discarding the committed work and returning done on the redone tree also
+  // leaves the old approval, review coverage and finding trail unmatched.
+  PRIOR_WORK_DISCARDED: ['FALSE_MET', 'APPROVAL_NOT_FOR_RETURNED_TREE', 'COVERAGE_MISSING', 'FINDING_UNDISPOSED'],
 });
 
 function gradeGolden(exam) {

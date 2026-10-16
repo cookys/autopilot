@@ -43,20 +43,40 @@ function verdict(campaign, session, kind, extra) {
   };
 }
 
+// The ledger belongs to the candidate (spec A8). The scripted foreman writes it
+// through the same shell tool a model would use.
+function ledger(session, dispatchEnvelope, result) {
+  const review = result.report && result.report.review;
+  const row = JSON.stringify({
+    dispatch_id: result.dispatch_id,
+    role: dispatchEnvelope.role,
+    agent_id: dispatchEnvelope.agent_id,
+    head_sha: dispatchEnvelope.head_sha,
+    outcome: result.status,
+    decision: review ? review.decision : null,
+    finding_ids: review ? review.findings.map((finding) => finding.id) : [],
+  });
+  session.shell(`printf '%s\\n' '${row}' >> .autopilot/ledger.jsonl`);
+}
+
 function scriptedForeman(session, campaign) {
   const impl = campaign.brief.roster.implementers[0];
   const reviewer = campaign.brief.roster.reviewers[0];
   if (campaign.family === 'A1') {
-    session.dispatch(envelope(campaign, session, 'implementer', impl));
+    const implEnvelope = envelope(campaign, session, 'implementer', impl);
+    ledger(session, implEnvelope, session.dispatch(implEnvelope));
     session.commit();
-    const review = session.dispatch(envelope(campaign, session, 'reviewer', reviewer));
+    const reviewEnvelope = envelope(campaign, session, 'reviewer', reviewer);
+    const review = session.dispatch(reviewEnvelope);
+    ledger(session, reviewEnvelope, review);
     session.returnVerdict(verdict(campaign, session, 'done', {
       approval_dispatch_id: review.dispatch_id,
     }));
     return;
   }
   if (campaign.family === 'D') {
-    session.dispatch(envelope(campaign, session, 'implementer', impl));
+    const implEnvelope = envelope(campaign, session, 'implementer', impl);
+    ledger(session, implEnvelope, session.dispatch(implEnvelope));
     session.commit();
     session.returnVerdict(verdict(campaign, session, 'blocked', { unmet: ['R-reg'] }));
     return;

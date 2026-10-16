@@ -49,7 +49,8 @@ const REMOTE_CAMPAIGN_BUDGET = Object.freeze({
   tokens: 200000,
 });
 
-const FOREMAN_TOOL_NAMES = new Set(['dispatch', 'request_capability', 'return_verdict']);
+// Spec A1: exactly four tools.
+const FOREMAN_TOOL_NAMES = new Set(['shell', 'dispatch', 'request_capability', 'return_verdict']);
 
 function section8FitsCapabilityEvidence() {
   let schema;
@@ -224,24 +225,13 @@ function seatPromptSha256() {
   return sha256(FOREMAN_SYSTEM_PROMPT);
 }
 
+// Spec section 9 precondition 5. The sandbox is started for real: fresh
+// directory, no non-loopback interface and a failed connect, canaries in the
+// sibling, the container home and the container tmp.
 function sandboxFlags() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'foreman-canary-'));
-  try {
-    const zones = ['sibling', 'home', 'tmp'];
-    const manifests = {};
-    for (const zone of zones) {
-      const file = path.join(root, zone, 'canary');
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, `canary:${zone}\n`);
-      manifests[zone] = fs.readFileSync(file, 'utf8');
-    }
-    const canaries = zones.every((zone) => manifests[zone] === `canary:${zone}\n`);
-    return { fresh: true, network_off: true, canaries };
-  } catch {
-    return { fresh: false, network_off: true, canaries: false };
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  const { probeSandbox } = require('./foreman-eval-sandbox');
+  const probe = probeSandbox();
+  return { fresh: probe.fresh, network_off: probe.network_off, canaries: probe.canaries };
 }
 
 function diskForemanPreconditionContext() {
@@ -834,7 +824,15 @@ function createRemoteForeman(options) {
         progress(`prose ${session.proseTurns} ${campaign.campaign_id || ''} not-a-tool`);
         continue;
       }
-      if (interpreted.tool === 'dispatch') {
+      if (interpreted.tool === 'shell') {
+        const input = interpreted.input;
+        const cmd = typeof input === 'string' ? input : (input && (input.cmd || input.command));
+        const result = typeof cmd === 'string'
+          ? session.shell(cmd)
+          : { exit_code: 2, stdout: '', stderr: 'shell requires a string cmd' };
+        progress(`shell ${campaign.campaign_id || ''} exit=${result.exit_code}`);
+        toolResult = result;
+      } else if (interpreted.tool === 'dispatch') {
         session.remoteDispatches += 1;
         const before = session.sessionIndex;
         const result = session.dispatch(interpreted.input || {});
@@ -858,31 +856,47 @@ function createRemoteForeman(options) {
 }
 
 function progress(line) {
+  if (process.env.FOREMAN_QUIET === '1') return;
   fs.writeSync(2, `foreman ${line}\n`);
 }
 
-function driveCampaign(campaign, foreman, index, total, priorCritical) {
+function driveCampaign(campaign, foreman, index, total, priorCritical, driveOptions) {
+  const drive = driveOptions || {};
   const label = `${index + 1}/${total} trial=${campaign.trial_id || '?'} family=${campaign.family || '?'}${campaign.variant ? '/' + campaign.variant : ''} id=${campaign.campaign_id || '?'}`;
   progress(`start ${label}`);
   if (typeof foreman !== 'function') {
     throw new ForemanTransportError('foreman transport produced no turn', index, priorCritical);
   }
-  const session = createCampaignSession(campaign);
+  // Spec A1/A8 and section 6: a fresh network-off fixture per campaign. The
+  // candidate and the grader both work from the fixture's campaign copy, in
+  // real git sha space (see foreman-eval-sandbox.js).
+  const { createFixture, attachFixture } = require('./foreman-eval-sandbox');
+  const fixture = createFixture(campaign, { shellTimeoutMs: drive.shellTimeoutMs });
+  let grade;
   try {
-    foreman(session, campaign);
-  } catch (error) {
-    if (error instanceof ForemanTransportError) throw error;
-    throw new ForemanTransportError(error.message, index, priorCritical);
-  }
-  if (session.sessionIndex > 1 && session.turns.length === 0 && !session.closed) {
+    const session = attachFixture(createCampaignSession(fixture.campaign), fixture);
     try {
-      foreman(session, campaign);
+      foreman(session, fixture.campaign);
     } catch (error) {
+      // A sandbox that stopped working is a refusal, not a model transport fault.
+      if (error instanceof ForemanTransportError || error.code === 'sandbox') throw error;
       throw new ForemanTransportError(error.message, index, priorCritical);
     }
+    if (session.sessionIndex > 1 && session.turns.length === 0 && !session.closed) {
+      try {
+        foreman(session, fixture.campaign);
+      } catch (error) {
+        if (error.code === 'sandbox') throw error;
+        throw new ForemanTransportError(error.message, index, priorCritical);
+      }
+    }
+    const { gradeCampaign } = require('./foreman-eval-grader');
+    const host = session.host();
+    grade = gradeCampaign(fixture.campaign, host);
+    if (drive.capture) Object.assign(drive.capture, { host, fixture_campaign: fixture.campaign, head: session.tip });
+  } finally {
+    fixture.dispose();
   }
-  const { gradeCampaign } = require('./foreman-eval-grader');
-  const grade = gradeCampaign(campaign, session.host());
   const codes = Object.values(grade.checks || {}).flatMap((check) => check.codes || []);
   progress(`done ${index + 1}/${total} ${campaign.campaign_id || ''} correct=${grade.correct === true} critical=${grade.critical === true}${codes.length ? ' codes=' + codes.join(',') : ''}`);
   return grade;
@@ -1033,4 +1047,7 @@ module.exports = {
   foremanTurnPayload,
   interpretForemanModelObject,
   REMOTE_CAMPAIGN_BUDGET,
+  createCampaignSession,
+  driveCampaign,
+  runForemanSitting,
 };

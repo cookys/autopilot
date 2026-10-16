@@ -646,6 +646,7 @@ prompt_framing_leakage() {
 validate_review_block() {
   local block_file="$1"
   BATTERY_VERDICT=""; BATTERY_FINDINGS=""; BATTERY_PROOF=""; BATTERY_FAIL_REASON=""
+  BATTERY_FORMAT_REJECT=""
   local block_bytes
   block_bytes="$(wc -c < "$block_file")"
   if [ "$block_bytes" -gt 16384 ]; then
@@ -654,6 +655,10 @@ validate_review_block() {
   if prompt_framing_leakage "$block_file"; then
     BATTERY_FAIL_REASON="response wrapped block contained prompt-text leakage"; return 1
   fi
+  # From here on a failure is a FORMAT reject: the seat answered but broke a stated
+  # output rule (BL-0197). The size cap and the leakage scan above are anti-gaming
+  # guards, not format rejects, and are never retried.
+  BATTERY_FORMAT_REJECT=1
   local total_count fix_count ship_count
   total_count="$(awk 'BEGIN { c = 0 } /^VERDICT:/ { c += 1 } END { print c + 0 }' "$block_file")"
   fix_count="$(awk 'BEGIN { c = 0 } /^VERDICT: FIX-THEN-SHIP$/{ c += 1 } END { print c + 0 }' "$block_file")"
@@ -790,11 +795,16 @@ salvage_unratified_verdict() {
 # Each caller sets SALVAGE_CAPTURE to its runner-specific parse target first;
 # unset falls back to PARSE_INPUT, and pre-marker calls salvage nothing.
 emit_no_verdict() {
-  local reason="$1"
+  local reason="$1" format_reject_json=""
+  # BL-0197: FORMAT_REJECT=1 (set only by the content battery and the duplicate /
+  # trailing-block parser rails) tells the caller the seat answered but broke an output
+  # rule, so a single-seat re-ask is meaningful. Transport, timeout and rc failures never
+  # set it. The field is absent otherwise, keeping the no_verdict shape unchanged.
+  [ "${FORMAT_REJECT:-}" = "1" ] && format_reject_json=', "format_reject": true'
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT"
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json"
   exit 1
 }
 
@@ -1059,6 +1069,12 @@ Bounded convergence contract:
 - When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
 - SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
 EOF
+  # BL-0197: the caller's single format re-ask names what the previous answer got wrong.
+  # One line, fixed vocabulary from validate_review_block; the output rules above are unchanged.
+  if [ -n "${AUTOPILOT_REVIEW_RETRY_NOTE:-}" ]; then
+    printf '\nRetry notice: your previous answer to this same review was discarded because: %s. Answer again following the output rules above exactly.\n' \
+      "$(printf '%s' "$AUTOPILOT_REVIEW_RETRY_NOTE" | tr -d '\n\r' | cut -c1-300)"
+  fi
   if [[ -n "$PACK_FILE" ]]; then
     cat <<'EOF'
 
@@ -1884,9 +1900,9 @@ rm -f "$FRAME_CLOSE_FILE"
 if [ "$PARSE_RC" -ne 0 ]; then
   case "$PARSE_RC" in
     2) emit_no_verdict "no derived BEGIN frame found in response" ;;
-    3) emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
+    3) FORMAT_REJECT=1; emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
     5) emit_no_verdict "frame began but derived END marker was never found" ;;
-    6) emit_no_verdict "trailing non-blank content after the derived END marker" ;;
+    6) FORMAT_REJECT=1; emit_no_verdict "trailing non-blank content after the derived END marker" ;;
     7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
     8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
     9) emit_no_verdict "leading chrome echoed prompt/diff structure — the skipped prefix is held to the same leak rule as the block" ;;
@@ -1899,6 +1915,7 @@ fi
 # — defined next to emit_no_verdict, shared VERBATIM with salvage. Only the locator
 # above (vocabulary-guarded chrome skip to the derived BEGIN) is main-rail-specific.
 if ! validate_review_block "$BLOCK_FILE"; then
+  FORMAT_REJECT="${BATTERY_FORMAT_REJECT:-}"
   emit_no_verdict "$BATTERY_FAIL_REASON"
 fi
 VERDICT="$BATTERY_VERDICT"

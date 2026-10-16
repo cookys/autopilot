@@ -475,7 +475,39 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
   return res.stdout;
 }
 
-function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
+// BL-0197: one seat answered but broke an output rule (dispatch-review marks that
+// `format_reject`; transport / timeout / rc failures never carry it). Re-ask THAT seat once, same
+// diff and same spec, with a one-line notice of what was wrong. The rules are unchanged; a second
+// failure is recorded exactly as before. Every other seat is untouched. The attempt is recorded
+// on the seat artifact as `format_retry` and on stderr.
+const FORMAT_RETRY_LIMIT = 1;
+async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
+  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '');
+  const isFormatReject = (r) => r.status === 'no_verdict'
+    && r.rawOutput && r.rawOutput.format_reject === true
+    && typeof r.rawOutput.error === 'string' && r.rawOutput.error.length > 0;
+  let attempts = 0;
+  const history = [];
+  while (attempts < FORMAT_RETRY_LIMIT && isFormatReject(result)) {
+    attempts += 1;
+    const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
+    console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
+    history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null });
+    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason);
+    if (result.rawOutput && typeof result.rawOutput === 'object') {
+      result.rawOutput.format_retry = {
+        attempts,
+        first_reason: history[0].reason,
+        first_raw_log: history[0].raw_log,
+        outcome: result.status === 'reviewed' ? 'reviewed' : 'still_rejected',
+      };
+    }
+    console.error(`INFO: seat ${seat.id} format retry ${attempts}/${FORMAT_RETRY_LIMIT} outcome: ${result.status === 'reviewed' ? 'reviewed' : 'still rejected'}`);
+  }
+  return result;
+}
+
+function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote) {
   return new Promise((resolve) => {
     let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
     if (!dispatchScript) {
@@ -499,6 +531,11 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
     }
 
     const childEnv = { ...process.env };
+    if (retryNote) {
+      childEnv.AUTOPILOT_REVIEW_RETRY_NOTE = retryNote;
+    } else {
+      delete childEnv.AUTOPILOT_REVIEW_RETRY_NOTE;
+    }
     if (process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT) {
       childEnv.STUB_SEAT_ID = seat.id;
     }
@@ -546,6 +583,8 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
             status: 'no_verdict',
             verdict: 'no_verdict',
             error: errorMsg,
+            // The runner's own reason (the exit-code message above hides it); the format retry quotes it.
+            ...(parsed && typeof parsed === 'object' && typeof parsed.error === 'string' ? { reject_reason: parsed.error } : {}),
           },
         });
         return;

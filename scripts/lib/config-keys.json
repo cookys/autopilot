@@ -2381,6 +2381,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_REVIEW_RETRY_NOTE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_REVIEW_RETAIN_MS",
       "kind": "env",
       "audience": "internal",

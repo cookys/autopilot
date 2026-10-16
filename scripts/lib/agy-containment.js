@@ -222,7 +222,14 @@ function auditAgyRun({ logDir, brainDir, cleanroom = false, agentsDir = null, ag
   return null;
 }
 
-module.exports = { AGENT_NAME, AGENT_MD, DENY_RULES, writeToollessAgent, auditAgyRun, findToolEncoding };
+// True only for a breach that proves the MODEL called or encoded a tool (the exam driver may then
+// score the case wrong, d-80d327c9); fallback / unverified / config breaches are not that.
+function isToolAttemptBreach(breach) {
+  return typeof breach === 'string'
+    && (breach.startsWith('the model called tool(s)') || (breach.startsWith('tool-call encoding in agy transcript') && !/: non-empty /.test(breach)));
+}
+
+module.exports = { AGENT_NAME, AGENT_MD, DENY_RULES, writeToollessAgent, auditAgyRun, findToolEncoding, isToolAttemptBreach };
 
 if (require.main === module) {
   const [cmd, a, b] = process.argv.slice(2);

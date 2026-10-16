@@ -91,7 +91,7 @@ relay (exam home refreshed and handed on between runs); afterwards the newest cr
 `~/.kimi-code` with a backup taken first. No credential, token or kimi-home file is stored in this evidence (secret scan of every
 added or changed file found none; no file is over 5 MB).
 
-Standard step since BL-0199: every Kimi exam copies the real credential into the exam home (the real directory is never handed to a child), and on exit (success, failure or kill) `qualify_kimi_arm_writeback` in `scripts/lib/qualify-stage-credentials.sh` backs the original up as `kimi-code.json.bak-<UTC stamp>` and atomically writes the newer exam-home credential back (0600, flock-serialised). Unchanged credential: nothing is touched. Suite: `hooks/tests/qualify-kimi-credential-writeback.test.sh`.
+Standard step since BL-0199: every Kimi exam copies the real credential into the exam home (the real directory is never handed to a child), and on exit (success, failure or kill) `qualify_kimi_arm_writeback` in `scripts/lib/qualify-stage-credentials.sh` backs the original up as `kimi-code.json.bak-<UTC stamp>` and atomically writes the newer exam-home credential back (0600, flock-serialised, chained onto the recipe's own traps; a recipe adding a trap later must use `qualify_trap_add`). Unchanged credential: nothing is touched. Suite: `hooks/tests/qualify-kimi-credential-writeback.test.sh`.
 
 ## 2026-10-16 Claude Fable 5.1 brain control
 

@@ -6,7 +6,7 @@ This page lists the settings meant for you to change. The machine-readable inven
 
 ## Where settings live and which one wins
 
-**The config file.** Operator settings live in `~/.autopilot/config.json`. Set `AUTOPILOT_CONFIG_FILE` to use another file. The file is machine-local and never version-controlled, and it has no schema or version field. It is not validated: a missing or malformed file silently means "all defaults" (the one exception is `topology.exclude_seats`, whose reader exits with an error on unparseable JSON or a wrong shape). A typo in a key name is also silent, so check a new setting actually took effect.
+**The config file.** Operator settings live in `~/.autopilot/config.json`. Set `AUTOPILOT_CONFIG_FILE` to use another file. The file is machine-local and never version-controlled, and its only version field is `config_schema_version` (see "Update notice"). It is not validated by the readers: a missing or malformed file silently means "all defaults" (the one exception is `topology.exclude_seats`, whose reader exits with an error on unparseable JSON or a wrong shape). A typo in a key name is also silent, so check a new setting actually took effect, or run `bash scripts/dev-setup.sh --check`, which lists unknown keys with the closest known name.
 
 ```json
 {
@@ -118,6 +118,18 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | Setting | What it does | Default | Environment variable |
 |---|---|---|---|
 | `update_check` (config.json) | false stops the "Autopilot updated" notice at session start. | `true` | `AUTOPILOT_UPDATE_CHECK`: Set to "0" to stop the update notice (either this or update_check: false switches it off). |
+| `config_schema_version` (config.json) | The config.json format version you last reviewed. Missing counts as 0; the current version is 1. Autopilot never writes it. | `0` (missing) | none |
+
+### Config check on upgrade
+
+On the SessionStart that announces a new Autopilot version, and whenever you run `bash scripts/dev-setup.sh --check` (or `node scripts/lib/config-audit.js`), autopilot reads your `config.json` and reports, as advice only (nothing is blocked or edited):
+
+- keys it does not know, with the closest known key (a typo is otherwise silent);
+- values of the wrong type or outside the allowed values (for example `context_budget.mode`: only `"off"` turns the reminders off, any other value is ignored);
+- contradictions: `context_budget.t1` at or above `t2`; `t2 + gap` above `autoCompactWindow - 33,000`; no `autoCompactWindow` set while compaction is on;
+- defaults that changed since your `config_schema_version`. After reading them, set `"config_schema_version": 1` in the file to stop seeing the listing.
+
+At SessionStart the report is at most 5 lines and is switched off together with the update notice (`update_check: false` or `AUTOPILOT_UPDATE_CHECK=0`).
 
 ## Residue cleanup
 

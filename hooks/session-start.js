@@ -189,6 +189,24 @@ function buildUpdateNotice(lastSeenTuple, currentTuple, changelogText) {
   return `${header}\n${body.join('\n')}${extra}\n${optinLine}\n${instruction}`;
 }
 
+// On the SessionStart that announces a new plugin version, check the operator config once (scripts/lib/config-audit.js)
+// and append at most CONFIG_AUDIT_MAX_LINES lines. Advisory only: any failure yields '' and the notice is unchanged.
+// Switched off by the same update_check / AUTOPILOT_UPDATE_CHECK knob as the notice itself.
+const CONFIG_AUDIT_MAX_LINES = 5;
+function configAuditBlock(homeDir) {
+  try {
+    const lib = require('../scripts/lib/config-audit.js');
+    const lines = lib.formatLines(lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR }));
+    if (!lines.length) return '';
+    const clip = (l) => (l.length > 200 ? `${l.slice(0, 197)}...` : l);
+    const shown = lines.slice(0, CONFIG_AUDIT_MAX_LINES - 2).map((l) => `- ${clip(l)}`);
+    const more = lines.length > shown.length ? ` (+${lines.length - shown.length} more)` : '';
+    return `\n[Autopilot config check: ${lines.length} finding(s)${more}]\n${shown.join('\n')}\nDetails: bash scripts/dev-setup.sh --check; settings: docs/settings-reference.md`;
+  } catch {
+    return '';
+  }
+}
+
 function updateNoticeCandidate(pluginRoot, homeDir, source, currentVersionTuple) {
   if (!ALLOWED_SOURCES.has(source)) return '';
   if (!pluginRoot) return '';
@@ -252,7 +270,7 @@ function updateNoticeCandidate(pluginRoot, homeDir, source, currentVersionTuple)
     }
 
     if (!shouldNotice) return '';
-    return notice;
+    return notice + configAuditBlock(homeDir);
   } catch {
     return '';
   } finally {

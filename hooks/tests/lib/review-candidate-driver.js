@@ -295,6 +295,27 @@ if (ctx.stubAdmission) {
   };
 }
 const forced = { called: false, result: null };
+// BL-0146 D4 item 5: what the composition's prepareReview call received back, so a test can see where the
+// mode and binding sit (top level) and what the review authority holds (full_diff_generation digest only).
+const preparedCaptures = [];
+if (ctx.capturePrepared) {
+  options.campaignComposer = (composeInput, composeAdapters) => runCampaignComposition(composeInput, {
+    ...composeAdapters,
+    prepareReview: (payload, extra) => {
+      const receipt = composeAdapters.prepareReview(payload, extra);
+      preparedCaptures.push({
+        top_mode: receipt.review_input_mode === undefined ? null : receipt.review_input_mode,
+        top_binding: receipt.incremental_binding === undefined ? null : receipt.incremental_binding,
+        authority_keys: receipt.authority ? Object.keys(receipt.authority).sort() : null,
+        authority_mode: receipt.authority && receipt.authority.review_input_mode !== undefined ? receipt.authority.review_input_mode : null,
+        payload_mode: payload.review_input_mode,
+        authority_review_input_digest: receipt.authority ? receipt.authority.review_input_digest : null,
+        payload_digest: require(path.join(root, 'src', 'engine', 'campaign-verification')).canonicalDigest(payload),
+      });
+      return receipt;
+    },
+  });
+}
 if (scenario === 'forced_writer') {
   options.campaignComposer = (composeInput, composeAdapters) => {
     // Plant the RO1 control: reach the implement adapter directly, as a regression would.
@@ -620,6 +641,7 @@ emit({
   seat_diff_perturbed_parity: seatDiffs.length > 0 && independentDiff !== null
     && seatDiffs.every((d) => Buffer.compare(d, Buffer.concat([independentDiff, Buffer.from('x')])) === 0),
   forced_called: forced.called, forced_result: forced.result,
+  prepared_captures: preparedCaptures,
   admission_stub_calls: adopterAdmissionCalls,
   operator_status_clean: mainStatus === '' || /^\?\? /.test(mainStatus) === false,
   result_keys: Object.keys(result), handoff: handoffSummary(result), findings_count: Array.isArray(result.findings) ? result.findings.length : null,

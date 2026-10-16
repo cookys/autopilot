@@ -77,6 +77,19 @@ eq "true" "$(jf d_inc 'j.steps[0].store_files.some((f) => f.includes("final-pane
 eq "true" "$(jf d_inc 'j.steps[0].store_files.some((f) => f.includes("round-"))')" "incremental: the round index is written for an opted-in campaign"
 eq "true" "$(jf d_inc 'j.steps[0].disclosure.incremental.carried.every((e) => /^[0-9a-f]{64}$/.test(e.file_digest))')" "incremental: every carried path discloses its file_digest"
 
+# item 5: the mode and the binding sit at the top level of the prepared review; the authority keeps the
+# full_diff_generation digest of its own payload and carries neither field.
+run_sc d_cap ",$FIX"',"returnReview":"incremental","capturePrepared":true,"steps":['"$RET"']'
+CAPLAST='j.prepared_captures[j.prepared_captures.length - 1]'
+eq "incremental_return" "$(jf d_cap "$CAPLAST.top_mode")" "item 5: prepared review carries review_input_mode at the top level"
+eq "true" "$(jf d_cap "/^[0-9a-f]{64}\$/.test($CAPLAST.top_binding)")" "item 5: prepared review carries a canonical incremental_binding at the top level"
+eq "null" "$(jf d_cap "$CAPLAST.authority_mode")" "item 5: the authority does not carry the mode"
+eq "full_diff_generation" "$(jf d_cap "$CAPLAST.payload_mode")" "item 5: the composition payload stays full_diff_generation"
+eq "true" "$(jf d_cap "$CAPLAST.authority_review_input_digest === $CAPLAST.payload_digest")" "item 5: authority.review_input_digest binds that full_diff_generation payload"
+eq "false" "$(jf d_cap "$CAPLAST.authority_keys.includes('incremental_binding')")" "item 5: the authority has no incremental_binding"
+run_sc d_cap_full ",$FIX"',"capturePrepared":true,"steps":['"$RET"']'
+eq "null" "$(jf d_cap_full "$CAPLAST.top_mode")" "item 5 default: no top-level mode on a full round"
+
 # ---- two consecutive returns: incremental, then full (A13) --------------------------------------------------------
 RET2='{"continuation":"return","move":"forward",'"$SHIP_ENV"'}'
 run_sc d_two ",$FIX"',"returnReview":"incremental","steps":['"$RET"','"$RET2"']'
@@ -122,6 +135,14 @@ eq "true" "$(jf m1 'j.steps[0].seat_inputs["claude-opus-4-6"] === undefined || j
 restore "$ENG"
 run_in "$MC" m1r ",$FIX"',"returnReview":"incremental","steps":['"$RET"']' multi
 eq "./src/value.txt" "$(jf m1r 'j.steps[0].seat_inputs["claude-opus-4-6"].tree.trim()')" "MUTATION restored: the seats see the re-check file only (green)"
+
+# M5 the mode and binding placed inside the authority instead of at the top level (item 5)
+mut "$ENG" "preparedReceipt.review_input_mode = 'incremental_return';
+        preparedReceipt.incremental_binding = decision.binding;" "preparedReceipt.authority.review_input_mode = 'incremental_return';
+        preparedReceipt.authority.incremental_binding = decision.binding;"
+run_in "$MC" m5 ",$FIX"',"returnReview":"incremental","capturePrepared":true,"steps":['"$RET"']' multi
+eq "true" "$(jf m5 "j.prepared_captures.length === 0 || $CAPLAST.top_mode !== \"incremental_return\" || $CAPLAST.authority_mode !== null")" "MUTATION mode placed in the authority: the top-level check fails (red)"
+restore "$ENG"
 
 # M2 the opt-in ignored: a sealed incremental return runs the full path
 mut "$ENG" "if (returnedHead && sealedAdoption.return_review === 'incremental') {" "if (false) {"

@@ -38,8 +38,10 @@
  * marks) lives in ~/.autopilot/context-budget/<sid>.json — host-stable, NOT
  * TMPDIR (docker-exec visibility); corrupt state ⇒ reset-and-continue.
  *
- * Enable: ~/.autopilot/config.json {"hooks":{"context-budget":true}} or
- * AUTOPILOT_HOOK_CONTEXT_BUDGET=1.
+ * Default-on (since v2.35.15, no enabling step). Opt out: context_budget.mode=off in ~/.autopilot/config.json or
+ * AUTOPILOT_CONTEXT_BUDGET_MODE=off (case-insensitive; any other value is warned about and ignored).
+ * Config problems (unknown mode, t1 >= t2, a user-set t2 past the compaction point of a <200K window) are
+ * written once per session to stderr; they never change a threshold and never make the hook fail.
  * Fail-open: any error ⇒ exit 0. Separate state/script from
  * orchestrator-edit-gate (single-crash isolation, panel finding).
  *
@@ -61,13 +63,22 @@ const fs = require('fs');
 const { readContextBudget } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
-  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW,
+  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
 const autocompact = require('../scripts/lib/autocompact-window.js');
 
 const PARSE_EVERY_BELOW_T1 = 5;
+
+// One stderr line per distinct config problem per session (the state file remembers which were said).
+function warnOnce(st, text) {
+  if (!text) return;
+  if (!st.warned || typeof st.warned !== 'object') st.warned = {};
+  if (st.warned[text]) return;
+  st.warned[text] = true;
+  process.stderr.write(`context-budget config: ${text}\n`);
+}
 
 // Writer/reader parity (plan §2.5): session_id from the hook payload first, env second,
 // cwd last — the SAME sanitiser used by every live-file consumer.
@@ -224,6 +235,7 @@ function emitT1(sid, message) {
     const stateFile = path.join(stDir, `${sid}.json`);
     const st = loadState(stateFile);
     st.calls += 1;
+    for (const w of cfg.warnings || []) warnOnce(st, w);
 
     const liveRaw = readLive(live.base, sid, { kind: 'main' });
     // A file this hook wrote itself (W2f) is a derived echo of the transcript, not a status-line
@@ -260,6 +272,7 @@ function emitT1(sid, message) {
       // row predates the live file's own written_at; otherwise the transcript row
       // is at least as fresh, so it is trusted directly).
       const liveCfg = tiersForKnownWindow(cfg, liveWindow);
+      warnOnce(st, unreachableT2Warning(cfg, liveWindow));
       // v2.36.22: a session's context window never changes, so remember it. The live
       // file is written by the statusline, which stops ticking while the session waits
       // on a long background task — exactly when a long session is sitting above the
@@ -318,6 +331,7 @@ function emitT1(sid, message) {
       }
       const rememberedWindow = Number.isFinite(st.knownWindow) && st.knownWindow > 0
         ? st.knownWindow : null;
+      if (rememberedWindow !== null) warnOnce(st, unreachableT2Warning(cfg, rememberedWindow));
       const effCfg = rememberedWindow !== null
         ? tiersForKnownWindow(cfg, rememberedWindow)
         : scaleTiers(cfg, inferWindowTokens(st.observedMax));

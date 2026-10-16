@@ -51,7 +51,7 @@
 'use strict';
 const fs = require('fs');
 const os = require('os');
-const { configPath } = require('../scripts/lib/config-path.js');
+const { configPath, readContextBudget } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const { readMarker } = require('../scripts/session-mode.js');
 const { tiersForKnownWindow } = require('./context-budget-lib.js');
@@ -326,27 +326,23 @@ function resolveRole(payload) {
   }
 }
 
-// Same knob context-budget.js reads (context_budget.{t1,t2} / AUTOPILOT_CONTEXT_BUDGET_T1/T2)
-// — the context-ceiling rule below is the SAME T2 tier concept applied to a subagent's own
-// row instead of depth-0's transcript. Deliberately duplicated (not required) rather than
-// imported from hooks/context-budget.js: single-crash isolation between the two hooks
-// (header note, both files).
+// Same knob context-budget.js reads, parsed by the same function (config-path.js readContextBudget): the context
+// ceiling below is the SAME T2 tier concept applied to a subagent's own row instead of depth-0's transcript, so
+// context_budget.mode=off and t2=0 switch it off here too. Only the parse is shared; this hook still does not
+// require hooks/context-budget.js itself (single-crash isolation between the two hooks, header note, both files).
 function loadContextBudgetTiers() {
-  const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
+  try { return readContextBudget(); } catch { return null; } // unreadable ⇒ no ceiling (fail-open)
+}
+
+// Same rule as context-budget.js autocompactForT2: compaction on and a window configured ⇒ Claude Code resets the
+// context itself, so stopping the subagent only adds an interruption (BL-0124).
+function autocompactSet(payload) {
   try {
-    const file = configPath();
-    const user = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const cb = user && user.context_budget;
-    if (cb && typeof cb === 'object') {
-      if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
-      if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
-    }
-  } catch { /* absent/corrupt config ⇒ defaults */ }
-  const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
-  const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
-  if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
-  if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
-  return cfg;
+    const autocompact = require('../scripts/lib/autocompact-window.js');
+    const projectDir = process.env.CLAUDE_PROJECT_DIR || (payload && typeof payload.cwd === 'string' ? payload.cwd : undefined);
+    const r = autocompact.resolve({ projectDir });
+    return !!(r.enabled && Number.isFinite(r.configured) && r.configured > 0);
+  } catch { return false; }
 }
 
 // v2.36.1 (P2): read THIS agent's row off the subagent status line's tasks file and decide
@@ -374,8 +370,12 @@ function checkContextCeiling(payload) {
   const w = Number.isFinite(row.contextWindowSize) && row.contextWindowSize > 0 ? row.contextWindowSize : null;
   const tokenCount = Number.isFinite(row.tokenCount) ? row.tokenCount : null;
   if (w === null || tokenCount === null) return {};
-  const tiers = tiersForKnownWindow(loadContextBudgetTiers(), w);
+  const budget = loadContextBudgetTiers();
+  if (!budget || budget.mode === 'off') return {};
+  const tiers = tiersForKnownWindow(budget, w);
+  if (!(tiers.t2 > 0)) return {}; // t2 = 0 is "T2 off"
   if (tokenCount >= tiers.t2) {
+    if (autocompactSet(payload)) return {}; // auto-compact handles it; same as context-budget's "keep working" T2
     return {
       deny: true,
       reason: `foreman-guard: this agent's own context is ${tokenCount} tokens, at or past T2 `

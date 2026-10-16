@@ -75,6 +75,21 @@ function scaleTiers(cfg, inferredWindow) {
 }
 
 /**
+ * One line when a USER-set T2 can never be reached before Claude Code compacts: the window is below the 200K the
+ * defaults were calibrated for and t2 sits past the compaction point (window - 33k buffer). Null otherwise
+ * (default t2 scales down with the window, so only an explicit one can land there).
+ */
+function unreachableT2Warning(cfg, window) {
+  if (!cfg || !cfg.explicitT2 || !(cfg.t2 > 0)) return null;
+  if (!Number.isFinite(window) || window <= 0 || window >= BASE_WINDOW) return null;
+  const { AUTOCOMPACT_BUFFER_TOKENS } = require('../scripts/lib/compaction-handoff.js');
+  const point = window - AUTOCOMPACT_BUFFER_TOKENS;
+  if (cfg.t2 <= point) return null;
+  const k = (n) => `${Math.round(n / 1000)}k`;
+  return `context_budget t2 ${k(cfg.t2)} is past the compaction point ${k(point)} (window ${k(window)} - ${k(AUTOCOMPACT_BUFFER_TOKENS)} buffer), so T2 never fires before Claude Code compacts (lower t2 or remove it to scale with the window)`;
+}
+
+/**
  * Tiers for a window read EXACTLY from the statusline live file (not inferred). Always tags
  * `inferredWindow` so budgetDecision states the proportion and attributes it to the statusline.
  * Defaults never scale UP; a window smaller than the 200K the defaults were calibrated for
@@ -288,6 +303,7 @@ module.exports = {
   inferWindowTokens,
   scaleTiers,
   tiersForKnownWindow,
+  unreachableT2Warning,
   START_WINDOW_BYTES,
   CAP_BYTES,
   DEFAULT_STEP,

@@ -3055,7 +3055,6 @@
       "default": null,
       "readers": [
         "hooks/context-budget.js",
-        "hooks/foreman-guard.js",
         "scripts/lib/config-path.js"
       ],
       "doc": "docs/settings-reference.md",
@@ -3071,7 +3070,6 @@
       "group": "context",
       "default": null,
       "readers": [
-        "hooks/foreman-guard.js",
         "scripts/lib/config-path.js"
       ],
       "doc": "docs/settings-reference.md",
@@ -3475,7 +3473,6 @@
       "default": null,
       "readers": [
         "hooks/_shared/opt-in.js",
-        "hooks/context-budget.js",
         "hooks/exec-boundary.js",
         "hooks/opt-in-multiplexer.js",
         "hooks/orchestrator-edit-gate.js",

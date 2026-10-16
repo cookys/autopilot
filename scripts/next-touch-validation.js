@@ -18,6 +18,7 @@ const verification = require('../src/engine/campaign-verification');
 const composition = require('../src/engine/campaign-composition');
 const mergeIntent = require('../src/status/merge-intent');
 const mergeExecutor = require('../src/merge/cli');
+const reconcile = require('./mission-terminal-reconcile');
 const { normalizeTaskAuthorityEnvelope } = require('../src/engine/owner-kernel/task-authority');
 
 const ADMISSION_BASE_SHA = 'f6805529bdca4cca76f334d8c82c8f2bf141aaf8';
@@ -1752,7 +1753,7 @@ function restoreIntegrationAuthority(file, existed, originalBytes) {
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }
 
-function executeAuthorizedIntegration(input) {
+function executeAuthorizedIntegrationCore(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     fail('INTEGRATION_REQUEST_INVALID', 'integration request must be an object');
   }
@@ -1856,6 +1857,39 @@ function executeAuthorizedIntegration(input) {
     }
     throw error;
   }
+}
+
+// BL-0062: the integration step is the one place that has just CONFIRMED a merge and
+// so knows which same-graph adoption was adopted. Retire the other COMPLETE adoptions
+// here, re-deriving the proof (observed_head is an ancestor of the integration
+// target's HEAD) via mission-terminal-reconcile rather than trusting this bundle.
+// Runs after the core step has committed, so a refusal here never rolls the merge back;
+// it is reported in the result and `mission-terminal-reconcile.js rollover` remains
+// the rescue.
+function retireSupersededAdoptions(input) {
+  const { bundle, bundlePath, repoInfo, args } = input;
+  if (!bundle || !bundle.prepared_receipt) return { status: 'skipped', reason: 'NO_MISSION_BINDING' };
+  try {
+    const prepared = resolveAuthorityRef(bundle.prepared_receipt, 'prepared receipt', repoInfo, bundlePath).value;
+    const target = args && typeof args.integrate_worktree === 'string' ? args.integrate_worktree : repoInfo.repo;
+    const result = reconcile.retireSupersededAfterIntegration({
+      repoRoot: target,
+      graphDigest: prepared.mission_graph_digest,
+      canonicalAdoption: prepared.adoption_key,
+    });
+    return {
+      status: result.status === 'ROLLED_OVER' ? 'retired' : 'nothing_to_retire',
+      superseded: (result.superseded || []).map((item) => item.adoption_key),
+    };
+  } catch (error) {
+    return { status: 'skipped', reason: error.code || error.message };
+  }
+}
+
+function executeAuthorizedIntegration(input) {
+  const result = executeAuthorizedIntegrationCore(input);
+  if (result.status !== 'integrated' && result.status !== 'already_integrated') return result;
+  return { ...result, adoption_retirement: retireSupersededAdoptions(input) };
 }
 
 const VERIFICATION_RECEIPT_KEYS = Object.freeze([
@@ -2243,7 +2277,7 @@ function validateTerminal(args = {}) {
     reviewer_count: independent.reviewers.length,
     integration_state: integration.status === 'integrated' || integration.status === 'already_integrated'
       ? 'integrated' : loaded.bundle.integration_state,
-    integration: { status: integration.status },
+    integration: { status: integration.status, adoption_retirement: integration.adoption_retirement || null },
   };
 }
 

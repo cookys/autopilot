@@ -6,8 +6,17 @@
 #   xai     -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the grok entry)
 #   minimax -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the MiniMax-M3 review seat)
 #   zhipu   -> references/official-qualification-defaults.json (highest-version GLM engine)
-# Negative control: STRICT_POLICY_FILE_OVERRIDE points the check at a copy of provider-bootstrap.js
-# with one model reverted to its pre-2026-10-16 name; the check must go red on it.
+# Mechanism: the embedded check.js takes the policy file as argv[3]. It extracts the six
+# `model:`/`family:` pairs by regex and compares each to the shipped model for that family
+# (openai/zhipu/xai by lookup above; MiniMax by literal match on the entry `MiniMax-M3` in
+# QC_ALL_CALIBRATED, so MiniMax-M3.1-* never satisfies a review seat).
+# Negative control: the check is re-run on a copy of provider-bootstrap.js with one model
+# reverted to its pre-2026-10-16 name (GLM-5.2, gpt-5.6-sol, grok-4.5); each must report DRIFT.
+#
+# Second half (probe driver binding): the node generator embedded in
+# scripts/probe-harness-capabilities.sh is run with fake env. The D4 provider rows must bind to
+# canonical-roster.json via D4_ROSTER_SHA; the D2 agy telemetry rows must keep their agy://
+# locator and AGY_HELP_SHA. Negative control: a copy that makes D2 share the D4 locator is flagged.
 . "$(dirname "$0")/lib.sh"
 
 cat > "$TEST_TMP/check.js" <<'NODE'
@@ -53,5 +62,29 @@ for old in "GLM-5.3:GLM-5.2" "gpt-6.1-sol:gpt-5.6-sol" "grok-4.7:grok-4.5"; do
   NEG="$(node "$TEST_TMP/check.js" "$REPO_ROOT" "$TEST_TMP/reverted.js" 2>&1)"
   assert_contains "$NEG" "DRIFT" "negative control: ${old_name} in the policy is flagged"
 done
+
+awk '/^node - "\$INPUT" <<.NODE.$/{f=1;next} /^NODE$/{f=0} f' "$REPO_ROOT/scripts/probe-harness-capabilities.sh" > "$TEST_TMP/gen.js"
+a64() { printf "$1%.0s" $(seq 1 64); }
+gen_check() {
+  ( cd "$TEST_TMP" && env REPO=x AGY_BIN=/a AGY_VERSION=1.0.0 CODEX_BIN=/c CODEX_VERSION=1.0.0 GROK_BIN=/g GROK_VERSION=1.0.0 \
+      OPENCODE_BIN=/o OPENCODE_VERSION=1.0.0 CLAUDE_BIN=/cl CLAUDE_VERSION=1.0.0 OBSERVED_AT=2026-10-16T00:00:00.000Z \
+      AGY_HELP_SHA="$(a64 a)" AGY_JSON_SHA="$(a64 b)" CODEX_HELP_SHA="$(a64 c)" GROK_HELP_SHA="$(a64 d)" \
+      OPENCODE_HELP_SHA="$(a64 e)" CLAUDE_HELP_SHA="$(a64 f)" D4_ROSTER_SHA="$(a64 1)" CLAUDE_HOOKS_SHA="$(a64 2)" \
+      node "$1" "$TEST_TMP/gen-out.json" && node -e '
+const c = require(process.argv[1]).claims;
+const bad = [];
+for (const x of c.filter((y) => y.consumer_id === "D2")) {
+  if (!x.official_contract.locator.startsWith("agy://") || x.official_contract.document_sha256 !== "a".repeat(64)) bad.push(x.capability_id);
+}
+const d4 = c.filter((y) => y.consumer_id === "D4");
+if (d4.length !== 6) bad.push("d4 count " + d4.length);
+for (const x of d4) {
+  if (!x.official_contract.locator.includes("canonical-roster.json") || x.official_contract.document_sha256 !== "1".repeat(64)) bad.push(x.capability_id);
+}
+console.log(bad.length ? "BINDING-DRIFT " + bad.join(",") : "BINDING-OK");' "$TEST_TMP/gen-out.json" ) 2>&1
+}
+assert_contains "$(gen_check "$TEST_TMP/gen.js")" "BINDING-OK" "D2 keeps agy locator, D4 binds to canonical-roster"
+sed 's/AGY_HELP_SHA, assertion/D4_ROSTER_SHA, assertion/; s#`agy://cli-help/${env.AGY_VERSION}\#output-format-json`, env.AGY_HELP_SHA#d4RosterLocator, env.D4_ROSTER_SHA#' "$TEST_TMP/gen.js" > "$TEST_TMP/gen-shared.js"
+assert_contains "$(gen_check "$TEST_TMP/gen-shared.js")" "BINDING-DRIFT" "negative control: D2 sharing the D4 locator and sha is flagged"
 
 finalize_test

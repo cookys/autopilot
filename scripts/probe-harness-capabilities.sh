@@ -106,13 +106,13 @@ CODEX_HELP_SHA="$(sha256sum "$CODEX_HELP" | cut -d' ' -f1)"
 GROK_HELP_SHA="$(sha256sum "$GROK_HELP" | cut -d' ' -f1)"
 OPENCODE_HELP_SHA="$(sha256sum "$OPENCODE_HELP" | cut -d' ' -f1)"
 CLAUDE_HELP_SHA="$(sha256sum "$CLAUDE_HELP" | cut -d' ' -f1)"
-ROSTER_SHA="$(sha256sum "$REPO/docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json" | cut -d' ' -f1)"
+D4_ROSTER_SHA="$(sha256sum "$REPO/docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json" | cut -d' ' -f1)"
 CLAUDE_HOOKS_SHA="$(sha256sum "$REPO/hooks/hooks.json" | cut -d' ' -f1)"
 
 export REPO AGY_BIN CODEX_BIN GROK_BIN OPENCODE_BIN CLAUDE_BIN
 export AGY_VERSION CODEX_VERSION GROK_VERSION OPENCODE_VERSION CLAUDE_VERSION
 export OBSERVED_AT AGY_HELP_SHA AGY_JSON_SHA CODEX_HELP_SHA GROK_HELP_SHA OPENCODE_HELP_SHA CLAUDE_HELP_SHA
-export ROSTER_SHA CLAUDE_HOOKS_SHA
+export D4_ROSTER_SHA CLAUDE_HOOKS_SHA
 
 INPUT="$PROBE_TMP/probe-input.json"
 node - "$INPUT" <<'NODE'
@@ -170,7 +170,8 @@ function claim(capabilityId, consumerId, targetIdentity, locator, documentSha, a
 
 const agyD2 = target('agy', 'Gemini 3.6 Flash (High)', 'telemetry', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION);
 const codexHook = target('codex', null, 'compaction_hook', null, null, 'openai', env.CODEX_BIN, env.CODEX_VERSION);
-const rosterLocator = 'repo:docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json#tuples';
+// D4 provider rows bind to the canonical strict /l5 roster; the D2 agy telemetry claims bind to the agy CLI help (AGY_HELP_SHA), never to this document.
+const d4RosterLocator = 'repo:docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json#tuples';
 const claims = [];
 
 for (const [suffix, assertion] of [
@@ -247,7 +248,7 @@ for (const row of providerRows) {
   const normalizedModel = row.normalizedModel || row.identity.model;
   claims.push(claim(
     `provider-transport-${row.id}`, 'D4', row.identity,
-    rosterLocator, env.ROSTER_SHA, assertion,
+    d4RosterLocator, env.D4_ROSTER_SHA, assertion,
     [row.identity.binary_realpath, '--version', '--help', row.executionModel, row.effortArgument],
     row.helpSha, 'installed-transport-surface', env.OBSERVED_AT,
     binding(row.executionModel, normalizedModel, row.identity.effort, row.effortArgument),

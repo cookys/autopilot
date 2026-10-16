@@ -18,7 +18,7 @@ CLI="$REPO_ROOT/bin/autopilot.js"
 # host-owned readiness bundle (KR1); strict L4 executable fixture receipt carries the
 # actual level, not an l5 literal; strict L4 executable fixture reaches campaign
 # intake (the v2.36.7 wall is gone); strict L4 executable fixture records the frozen
-# policy digest (D4 claim set untouched); strict L4 CLI warns loudly on an advisory
+# policy digest (BL-0198 re-issued claim set); strict L4 CLI warns loudly on an advisory
 # derivation (KR2c: stderr line present); strict L4 CLI records advisory_default when
 # no override reason is configured (KR2a); strict L4 CLI names the uncertified
 # reviewer seat in the override line (KR2b); strict L4 CLI proceeds to readiness
@@ -402,7 +402,7 @@ assert_not_contains "$OUT" '"rejection_code":"provider_readiness_authority_missi
 assert_not_contains "$OUT" '"unit":"reviewer_qualification"' \
   "strict L4: the bootstrap certified the reviewer, so no waived ledger entry (KR4)"
 assert_contains "$OUT" '"policy_digest":"a37fe1971486164755410597a22d745f50c9608b5fec1975e3dec47c5b8b325c"' \
-  "strict L4 executable fixture records the frozen policy digest (D4 claim set untouched)"
+  "strict L4 executable fixture records the frozen policy digest (BL-0198 re-issued claim set)"
 
 # KR2 — advisory path under l4: an uncertified reviewer seat derives with the loud stderr
 # POLICY OVERRIDE line, reason advisory_default, the uncertified seat named, and readiness

@@ -512,17 +512,23 @@ What an incremental round does:
   seat receives only these: the cumulative diff of the changed ones as `diff.patch`, the fix itself as
   `delta.diff`, and the complete content of the re-check files as `tree/`.
 - **Does not close earlier findings by silence.** The earlier round's findings are carried into the new round
-  as still open. No seat is shown them yet (the prior-round addendum is off, pending an owner decision), so
-  no seat can close one: an incremental round that had findings parks again. The practical use today is to
-  see whether the fix introduced new problems cheaply; the round that issues `ready` is the second `return`,
-  which is always a full round.
+  as still open, and each seat is shown the list (owner ruling d-3cf4dc4c, 2026-10-17): a machine-generated
+  addendum appended to the spec holds one line per open finding, `[id] | severity | path:line | claim`, and
+  nothing else (no verdict, no earlier reasoning, no commit message, no author or disposition text). The
+  blind-evidence scanner runs on it before any seat is dispatched; a claim it flags sends the round to full
+  (`addendum_narrative`). A seat closes a finding by answering inside `FINDINGS:` with
+  `{"findings": ..., "resolutions": [{"finding_id", "status": "resolved|still_present|invalid", "evidence": "path:line"}]}`;
+  evidence must name a file of that seat's packet. A finding closes only when every seat of the panel
+  answers it `resolved` or `invalid` with evidence and none says `still_present`; a silent seat, a missing
+  entry or a finding no seat addresses keeps it open and the round parks again. A full round never carries
+  the addendum.
 - **Never stacks two incremental rounds.** A conclusion is carried only from a full round, so a `return`
   after an incremental round is full (`prior_round_incremental`).
 
 When it falls back to `full` (reason in the receipt): `opt_in_off`, `station_not_panel`,
 `prior_round_unknown` or `prior_round_unverified` (the earlier round's record is missing or disagrees with
 Git), `prior_round_incremental`, `no_carriable_seat`, `seat_not_carriable` (a seat has no re-derivable
-earlier verdict; a mixed round is not built), `finding_unmapped` (an earlier finding names no path in the
+earlier verdict; a mixed round is not built), `addendum_malformed` / `addendum_narrative` (the addendum cannot be built from the stored findings, or the scanner flags a claim), `finding_unmapped` (an earlier finding names no path in the
 range), `base_changed`, `roster_changed`, `spec_changed`, `verify_cmd_changed`, `verification_red`,
 `changed_ratio` (over half the range changed), `delta_packet_size`, `reference_cap`,
 `recheck_content_size`, `shared_surface` (the fix touched a manifest, lock file, schema or CI config),

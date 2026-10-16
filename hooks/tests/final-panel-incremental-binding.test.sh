@@ -78,6 +78,20 @@ function storeChecks(S0, tag) {
   const hit = S.lookupSeat(ctx, canonicalDigest);
   r.identical_binding_hits = hit.action === 'reuse' && hit.outcome.review_input_mode === 'incremental_return'
     && hit.outcome.prior_findings_included === false && hit.outcome.full_diff_required === false;
+  // owner ruling d-3cf4dc4c: the flag says whether the seat's spec carried the addendum; it is true only
+  // for an incremental seat whose context says so, and a stored resolution is re-derived on reuse.
+  const ans = (over = {}) => ({ finding_id: 'prior:s1.f1', status: 'resolved', evidence: 'a.js:3', addressed: true, ...over });
+  const resCtx = (i, extra) => ctxFor(p0, { seatIndex: i, addendumIncluded: true, priorFindingIds: ['prior:s1.f1'], packetPaths: ['a.js', 'b.js'], ...extra });
+  const storeWith = (c, resolutions) => { S.recordAttempt(c, 0); S.recordVerdict(c, 1, { ...outcome(), resolutions }); return S.lookupSeat(c, canonicalDigest); };
+  const withAddendum = storeWith(resCtx(1), [ans()]);
+  r.addendum_flag_true_when_included = withAddendum.action === 'reuse' && withAddendum.outcome.prior_findings_included === true;
+  r.resolution_roundtrips = withAddendum.action === 'reuse' && JSON.stringify(withAddendum.outcome.resolutions) === JSON.stringify([ans()]);
+  const offPacket = storeWith(resCtx(2), [ans({ evidence: 'zzz.js:3' })]);
+  r.resolution_outside_packet_dropped = offPacket.action === 'reuse' && offPacket.outcome.resolutions.length === 0;
+  const noContext = storeWith(resCtx(3, { priorFindingIds: undefined }), [ans()]);
+  r.resolution_without_context_dropped = noContext.action === 'reuse' && noContext.outcome.resolutions.length === 0;
+  const unknownId = storeWith(resCtx(4), [ans({ finding_id: 'prior:s9.zz' })]);
+  r.resolution_unknown_id_dropped = unknownId.action === 'reuse' && unknownId.outcome.resolutions.length === 0;
   // each component change misses (different binding => different file)
   r.component_change_misses = Object.entries(muts).every(([k, v]) => {
     const parts = { ...p0, [k]: v };
@@ -120,6 +134,8 @@ function storeChecks(S0, tag) {
   const stored = JSON.parse(fs.readFileSync(S.seatFile(fc3), 'utf8'));
   r.full_artifact_has_no_incremental_fields = stored.review_scope === undefined && stored.incremental === undefined;
   const fh = S.lookupSeat(fc3, canonicalDigest);
+  r.full_path_flag_false_even_if_ctx_claims_addendum = S.lookupSeat({ ...fc3, addendumIncluded: true }, canonicalDigest).outcome.prior_findings_included === false
+    && S.lookupSeat({ ...fc3, addendumIncluded: true }, canonicalDigest).outcome.resolutions === undefined;
   r.full_path_flags_unchanged = fh.action === 'reuse' && fh.outcome.review_input_mode === 'full_diff_generation'
     && fh.outcome.prior_findings_included === false && fh.outcome.full_diff_required === true;
   return r;
@@ -170,6 +186,10 @@ const NEG = {
   station_scope: [(s) => s.replace("artifact.review_scope !== 'incremental' || !want || !have\n        || canonicalDigest(want) !== canonicalDigest(have)", 'false').replace('const have = artifact.incremental;', 'const have = artifact.incremental || { carried_set: [] };').replace('|| artifact.station !== expect.station', ''), 'full_artifact_planted_in_incremental_misses'],
   full_rejects_incremental: [(s) => s.replace("} else if (artifact.review_scope !== undefined || artifact.incremental !== undefined) {\n    return null;\n  }", '}').replace('|| artifact.station !== expect.station', ''), 'incremental_artifact_planted_in_full_misses'],
   binding_tree_only: [(s) => s.replace(/return canonicalDigest\(\{\n    mode: 'incremental',[\s\S]*?\n  \}\);/, 'return canonicalDigest({ new_tree_sha: parts.new_tree_sha });'), 'every_component_changes_binding'],
+  flag_always_true: [(s) => s.replace('prior_findings_included: incremental && expect.addendumIncluded === true,', 'prior_findings_included: expect.addendumIncluded === true,'), 'full_path_flag_false_even_if_ctx_claims_addendum'],
+  flag_never_true: [(s) => s.replace('prior_findings_included: incremental && expect.addendumIncluded === true,', 'prior_findings_included: false,'), 'addendum_flag_true_when_included'],
+  resolutions_trusted: [(s) => s.replace('resolutions: revalidateResolutions(result.resolutions, expect.priorFindingIds, expect.packetPaths),', 'resolutions: result.resolutions,'), 'resolution_outside_packet_dropped'],
+  resolutions_not_stored: [(s) => s.replace("...(isIncrementalStation(ctx.station) && Array.isArray(outcome.resolutions)\n      ? { resolutions: outcome.resolutions } : {}),", ''), 'resolution_roundtrips'],
   refuse_no_block: [(s) => s.replace('if (isIncrementalStation(ctx.station) && !incrementalBlock(ctx)) return false;', ''), 'record_without_block_refused'],
 };
 for (const [name, [mut, check]] of Object.entries(NEG)) {

@@ -924,7 +924,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
-- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). Addendum off pending ruling d-3cf4dc4c, so an incremental round parks again; mixed-seat rounds (A12) go full. D5 evidence open.
+- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). 附錄已開 (owner 2026-10-17 d-3cf4dc4c: 給清單); 沉默仍不關閉; 混合席位走 full. 剩 D5 實測 (A/B、成本、預設值).
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

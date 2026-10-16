@@ -13,7 +13,11 @@
       "relates": "settings that depend on or override this one",
       "group": "user only: section of docs/settings-reference.md",
       "template": "project_di only",
-      "doc": "where it is explained"
+      "doc": "where it is explained",
+      "type": "config_key only: boolean | number | string | array | object | enum, joined with | for alternatives; read by scripts/lib/config-audit.js",
+      "allowed": "config_key, type enum: the accepted values",
+      "invalid_effect": "config_key: what an out-of-range value does, quoted in the config-audit finding",
+      "changed_in": "config_key: list of {schema, from, to, note}. schema = the config_schema_version at which a default changed. Append one when you change a documented default; config-audit lists entries whose schema is above the user's config_schema_version (up to the current one). Bump CURRENT_SCHEMA in scripts/lib/config-audit.js when you add a schema number."
     },
     "audience_rule": "user = a human sets it to change what autopilot does (a documented knob with an effect they can observe). internal = autopilot sets it for its own child processes, it only redirects a path or injects a fault or clock for tests, or it is a maintainer/diagnostic switch. By name pattern, internal: AUTOPILOT_TEST_*, *_TEST_HOOK, *_FIXTURE, *_CRASH_AT, *_KILL_AFTER*, *_RACE_PATH, *_SEAMS, FAULT_INJECT*, *_NOW(_MS), *_SESSION_ID, *_RUN_ID, and path/binary overrides ending in _DIR/_FILE/_PATH/_BIN/_SH/_SCRIPT/_RESOLVER/_LEDGER/_RECEIPT/_INPUT/_ENV. Everything else is classified by hand and a user entry must appear in docs/settings-reference.md.",
     "scan_rules": "env: AUTOPILOT_[A-Z0-9_]+ in .js .ts .tsx .mjs .sh .py under bin/ hooks/ scripts/ src/ mods/, excluding tests/ dirs, *.test.*, test-*, run-tests.sh, fixtures/, node_modules/ and the platforms/ and .opencode mirrors. config: property reads with a snake_case key in files that mention config-path / AUTOPILOT_CONFIG_FILE / .autopilot/config.json (best effort; keys without an underscore are only checked in the reverse direction). di: every file in project-config-template/."
@@ -140,7 +144,12 @@
       "relates": [
         "AUTOPILOT_ADVISORY_BRIDGE_<HOOK>"
       ],
-      "summary": "Per-hook override of advisory_bridge.mode; <hook> is cost_tracker, version_drift, context_budget or suggest_compact."
+      "summary": "Per-hook override of advisory_bridge.mode; <hook> is cost_tracker, version_drift, context_budget or suggest_compact.",
+      "type": "enum",
+      "allowed": [
+        "sink",
+        "inject"
+      ]
     },
     {
       "name": "advisory_bridge.mode",
@@ -157,7 +166,12 @@
         "AUTOPILOT_ADVISORY_BRIDGE",
         "advisory_bridge.<hook>"
       ],
-      "summary": "Where hook advisories go: \"sink\" shows them as a band toast (default); \"inject\" puts them in the model context as before."
+      "summary": "Where hook advisories go: \"sink\" shows them as a band toast (default); \"inject\" puts them in the model context as before.",
+      "type": "enum",
+      "allowed": [
+        "sink",
+        "inject"
+      ]
     },
     {
       "name": "context_budget.gap",
@@ -174,7 +188,8 @@
         "context_budget.t2",
         "autoCompactWindow"
       ],
-      "summary": "Tokens between the T2 reminder and the point where Claude Code compacts; used by the SessionStart check that T2 can fire before compaction."
+      "summary": "Tokens between the T2 reminder and the point where Claude Code compacts; used by the SessionStart check that T2 can fire before compaction.",
+      "type": "number"
     },
     {
       "name": "context_budget.live_write",
@@ -189,7 +204,8 @@
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE"
       ],
-      "summary": "false stops the hook writing the live context file the status band reads (the reminders keep firing)."
+      "summary": "false stops the hook writing the live context file the status band reads (the reminders keep firing).",
+      "type": "boolean"
     },
     {
       "name": "context_budget.mode",
@@ -204,7 +220,13 @@
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_MODE"
       ],
-      "summary": "\"off\" silences the context-budget reminders and the SessionStart window check; \"warn\" keeps them."
+      "summary": "\"off\" silences the context-budget reminders and the SessionStart window check; \"warn\" keeps them.",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "warn"
+      ],
+      "invalid_effect": "anything but off or warn is ignored, so the reminders stay on"
     },
     {
       "name": "context_budget.step",
@@ -219,7 +241,8 @@
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_STEP"
       ],
-      "summary": "A tier repeats its reminder only after the context grew by this many tokens since it last fired; 0 reminds on every call past the threshold."
+      "summary": "A tier repeats its reminder only after the context grew by this many tokens since it last fired; 0 reminds on every call past the threshold.",
+      "type": "number"
     },
     {
       "name": "context_budget.t1",
@@ -236,7 +259,8 @@
         "AUTOPILOT_CONTEXT_BUDGET_T1",
         "context_budget.t2"
       ],
-      "summary": "Context size (tokens) at which the first reminder fires: plan a checkpoint and avoid loading large files inline."
+      "summary": "Context size (tokens) at which the first reminder fires: plan a checkpoint and avoid loading large files inline.",
+      "type": "number"
     },
     {
       "name": "context_budget.t2",
@@ -254,7 +278,8 @@
         "context_budget.gap",
         "autoCompactWindow"
       ],
-      "summary": "Context size (tokens) of the second, stronger reminder: write a handoff. With auto-compact configured it is only a reminder; without it the hook tells you to stop and /clear."
+      "summary": "Context size (tokens) of the second, stronger reminder: write a handoff. With auto-compact configured it is only a reminder; without it the hook tells you to stop and /clear.",
+      "type": "number"
     },
     {
       "name": "cost_fuse.daily_usd_brain",
@@ -270,7 +295,8 @@
         "AUTOPILOT_COST_FUSE_DAILY_USD",
         "cost_fuse.tiers"
       ],
-      "summary": "Daily USD cap on top-tier (brain) model spend, summed per UTC day from the cost ledger."
+      "summary": "Daily USD cap on top-tier (brain) model spend, summed per UTC day from the cost ledger.",
+      "type": "number"
     },
     {
       "name": "cost_fuse.mode",
@@ -286,7 +312,13 @@
         "AUTOPILOT_COST_FUSE_MODE",
         "cost_fuse.daily_usd_brain"
       ],
-      "summary": "What the daily brain-spend fuse does at the cap: \"warn\" (default), \"block\" or \"off\"."
+      "summary": "What the daily brain-spend fuse does at the cap: \"warn\" (default), \"block\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "block",
+        "off"
+      ]
     },
     {
       "name": "cost_fuse.tiers",
@@ -303,7 +335,8 @@
       "relates": [
         "cost_fuse.daily_usd_brain"
       ],
-      "summary": "Which model tiers count toward the cap."
+      "summary": "Which model tiers count toward the cap.",
+      "type": "array"
     },
     {
       "name": "cost_tracker.cache_read_warn_tokens",
@@ -318,7 +351,8 @@
       "relates": [
         "AUTOPILOT_COST_TRACKER_CACHE_READ_WARN"
       ],
-      "summary": "Cumulative cache-read tokens in one session at which the tracker prints its first warning (then at each doubling)."
+      "summary": "Cumulative cache-read tokens in one session at which the tracker prints its first warning (then at each doubling).",
+      "type": "number"
     },
     {
       "name": "cost_tracker.context_clear_pct",
@@ -333,7 +367,8 @@
       "relates": [
         "AUTOPILOT_COST_TRACKER_CLEAR_PCT"
       ],
-      "summary": "Window fill (percent) at or above which the cost warning recommends a handoff and /clear."
+      "summary": "Window fill (percent) at or above which the cost warning recommends a handoff and /clear.",
+      "type": "number"
     },
     {
       "name": "depth0_delegate_gate.guarded_models",
@@ -349,7 +384,8 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "Model families the gate applies to."
+      "summary": "Model families the gate applies to.",
+      "type": "array"
     },
     {
       "name": "depth0_delegate_gate.mode",
@@ -364,7 +400,13 @@
       "relates": [
         "AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE"
       ],
-      "summary": "Reminder when the top-level session fires many read-class calls in a row: \"off\", \"warn\" or \"block\"."
+      "summary": "Reminder when the top-level session fires many read-class calls in a row: \"off\", \"warn\" or \"block\".",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "warn",
+        "block"
+      ]
     },
     {
       "name": "depth0_delegate_gate.pkill_self_match",
@@ -379,7 +421,13 @@
       "relates": [
         "AUTOPILOT_BASH_GUARD_PKILL_MODE"
       ],
-      "summary": "What to do with a pkill/pgrep -f pattern that would match its own command line: \"deny\", \"warn\" or \"off\"."
+      "summary": "What to do with a pkill/pgrep -f pattern that would match its own command line: \"deny\", \"warn\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
     },
     {
       "name": "depth0_delegate_gate.threshold",
@@ -392,7 +440,8 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "Consecutive read-class calls before the delegate reminder."
+      "summary": "Consecutive read-class calls before the delegate reminder.",
+      "type": "number"
     },
     {
       "name": "depth0_delegate_gate.wait_advice_every",
@@ -407,7 +456,8 @@
       "relates": [
         "AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY"
       ],
-      "summary": "Repeat interval of the foreground-wait advice."
+      "summary": "Repeat interval of the foreground-wait advice.",
+      "type": "number"
     },
     {
       "name": "dirty_tree_reminder",
@@ -422,7 +472,8 @@
       "relates": [
         "AUTOPILOT_DIRTY_TREE_REMINDER"
       ],
-      "summary": "false switches the dirty-working-tree reminder off; an object sets min_files, min_lines and interval_minutes."
+      "summary": "false switches the dirty-working-tree reminder off; an object sets min_files, min_lines and interval_minutes.",
+      "type": "boolean|object"
     },
     {
       "name": "dirty_tree_reminder.interval_minutes",
@@ -437,7 +488,8 @@
       "relates": [
         "AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES"
       ],
-      "summary": "Minimum minutes between two reminders per repo and session; 0 reminds every turn."
+      "summary": "Minimum minutes between two reminders per repo and session; 0 reminds every turn.",
+      "type": "number"
     },
     {
       "name": "dirty_tree_reminder.min_files",
@@ -452,7 +504,8 @@
       "relates": [
         "AUTOPILOT_DIRTY_TREE_MIN_FILES"
       ],
-      "summary": "Changed files that trigger the reminder."
+      "summary": "Changed files that trigger the reminder.",
+      "type": "number"
     },
     {
       "name": "dirty_tree_reminder.min_lines",
@@ -467,7 +520,8 @@
       "relates": [
         "AUTOPILOT_DIRTY_TREE_MIN_LINES"
       ],
-      "summary": "Changed lines that trigger the reminder."
+      "summary": "Changed lines that trigger the reminder.",
+      "type": "number"
     },
     {
       "name": "foreman_guard.advisory_every",
@@ -482,7 +536,8 @@
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY"
       ],
-      "summary": "Repeat interval of the non-denying advisory for other Engine-header subagents."
+      "summary": "Repeat interval of the non-denying advisory for other Engine-header subagents.",
+      "type": "number"
     },
     {
       "name": "foreman_guard.bash_cap",
@@ -497,7 +552,8 @@
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_BASH_CAP"
       ],
-      "summary": "Bash calls a foreman may make before it is told to hand off."
+      "summary": "Bash calls a foreman may make before it is told to hand off.",
+      "type": "number"
     },
     {
       "name": "foreman_guard.mode",
@@ -512,7 +568,13 @@
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_MODE"
       ],
-      "summary": "Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): \"block\", \"warn\" or \"off\"."
+      "summary": "Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): \"block\", \"warn\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "block",
+        "warn",
+        "off"
+      ]
     },
     {
       "name": "foreman_guard.reserve_calls",
@@ -527,7 +589,8 @@
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS"
       ],
-      "summary": "Calls held back after the cap for the closing handoff (git status, add, commit, ...)."
+      "summary": "Calls held back after the cap for the closing handoff (git status, add, commit, ...).",
+      "type": "number"
     },
     {
       "name": "foreman_guard.role_caps",
@@ -542,7 +605,8 @@
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS"
       ],
-      "summary": "Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120)."
+      "summary": "Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120).",
+      "type": "object"
     },
     {
       "name": "handoff_inject",
@@ -558,7 +622,8 @@
       "relates": [
         "AUTOPILOT_HANDOFF_INJECT"
       ],
-      "summary": "true restores the machine session snapshot after /clear (session-handoff + session-start hooks)."
+      "summary": "true restores the machine session snapshot after /clear (session-handoff + session-start hooks).",
+      "type": "boolean"
     },
     {
       "name": "hooks.<stem>",
@@ -574,7 +639,16 @@
       "relates": [
         "AUTOPILOT_HOOK_<STEM>"
       ],
-      "summary": "Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap)."
+      "summary": "Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap).",
+      "type": "boolean",
+      "changed_in": [
+        {
+          "schema": 1,
+          "from": "off",
+          "to": "on (default-on hooks: context-budget, dispatch-model-guard, cost-tracker, foreman-guard; v2.35.15)",
+          "note": "These hooks used to be opt-in. A hook you never enabled now runs; the exit knob is in the Hook switches section of docs/settings-reference.md."
+        }
+      ]
     },
     {
       "name": "orchestrator_edit_gate.mode",
@@ -590,7 +664,13 @@
         "AUTOPILOT_ORCH_EDIT_GATE_MODE",
         "hooks.<stem>"
       ],
-      "summary": "What the (opt-in) orchestrator-edit-gate does when the top-level session edits files itself: \"warn\", \"block\" or \"off\"."
+      "summary": "What the (opt-in) orchestrator-edit-gate does when the top-level session edits files itself: \"warn\", \"block\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "block",
+        "off"
+      ]
     },
     {
       "name": "qualification_feed.url",
@@ -603,7 +683,8 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself."
+      "summary": "Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself.",
+      "type": "string"
     },
     {
       "name": "residue.archive_branch_days",
@@ -618,7 +699,8 @@
       "relates": [
         "AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS"
       ],
-      "summary": "Days before an archive branch is cleaned up."
+      "summary": "Days before an archive branch is cleaned up.",
+      "type": "number"
     },
     {
       "name": "residue.archive_remind_days",
@@ -633,7 +715,8 @@
       "relates": [
         "AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS"
       ],
-      "summary": "Age in days after which an old archive ref is only listed as needing a human, never deleted."
+      "summary": "Age in days after which an old archive ref is only listed as needing a human, never deleted.",
+      "type": "number"
     },
     {
       "name": "residue.auto_reap",
@@ -649,7 +732,8 @@
         "AUTOPILOT_RESIDUE_AUTO_REAP",
         "hooks.<stem>"
       ],
-      "summary": "Automatic reaping of finished dispatch worktrees and branches."
+      "summary": "Automatic reaping of finished dispatch worktrees and branches.",
+      "type": "boolean"
     },
     {
       "name": "residue.branch_prefixes",
@@ -662,7 +746,8 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /)."
+      "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /).",
+      "type": "array"
     },
     {
       "name": "residue.lease_hours",
@@ -677,7 +762,8 @@
       "relates": [
         "AUTOPILOT_RESIDUE_LEASE_HOURS"
       ],
-      "summary": "Hours a dispatch worktree is kept before it may be reaped."
+      "summary": "Hours a dispatch worktree is kept before it may be reaped.",
+      "type": "number"
     },
     {
       "name": "residue.tmp_prune",
@@ -692,7 +778,8 @@
       "relates": [
         "AUTOPILOT_RESIDUE_TMP_PRUNE"
       ],
-      "summary": "Daily host-wide prune of autopilot temp roots, riding on the automatic reap."
+      "summary": "Daily host-wide prune of autopilot temp roots, riding on the automatic reap.",
+      "type": "boolean"
     },
     {
       "name": "review.port",
@@ -707,7 +794,8 @@
       "relates": [
         "AUTOPILOT_REVIEW_SERVER_AUTOSTART"
       ],
-      "summary": "Port of the local review page server (bound to 127.0.0.1 only). A busy port is reported, never replaced."
+      "summary": "Port of the local review page server (bound to 127.0.0.1 only). A busy port is reported, never replaced.",
+      "type": "number"
     },
     {
       "name": "run_approval.mode",
@@ -723,7 +811,12 @@
       "relates": [
         "AUTOPILOT_RUN_APPROVAL_MODE"
       ],
-      "summary": "Human approval gate on dispatches: \"off\" or \"ask-once\". An unattended (claude -p) run must keep it off."
+      "summary": "Human approval gate on dispatches: \"off\" or \"ask-once\". An unattended (claude -p) run must keep it off.",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "ask-once"
+      ]
     },
     {
       "name": "topology.exclude_seats",
@@ -738,7 +831,8 @@
       "relates": [
         "AUTOPILOT_TOPOLOGY_FILE"
       ],
-      "summary": "Seats (engine/effort@runner, or a bare engine) never offered by the dispatch ladders and review panel; unioned with --exclude-seats."
+      "summary": "Seats (engine/effort@runner, or a bare engine) never offered by the dispatch ladders and review panel; unioned with --exclude-seats.",
+      "type": "array"
     },
     {
       "name": "ui.locale",
@@ -753,7 +847,13 @@
       "relates": [
         "AUTOPILOT_LOCALE"
       ],
-      "summary": "Language of the live band and pane: \"en\", \"zh-TW\" or \"auto\" (follow Claude Code)."
+      "summary": "Language of the live band and pane: \"en\", \"zh-TW\" or \"auto\" (follow Claude Code).",
+      "type": "enum",
+      "allowed": [
+        "en",
+        "zh-TW",
+        "auto"
+      ]
     },
     {
       "name": "update_check",
@@ -768,7 +868,8 @@
       "relates": [
         "AUTOPILOT_UPDATE_CHECK"
       ],
-      "summary": "false stops the \"Autopilot updated\" notice at session start."
+      "summary": "false stops the \"Autopilot updated\" notice at session start.",
+      "type": "boolean"
     },
     {
       "name": "AUTOPILOT_ADAPTIVE_INTERVENTION",
@@ -4281,6 +4382,22 @@
       "doc": "docs/settings-reference.md",
       "relates": [],
       "summary": "Per-project cleanup seam for hetero worktrees."
+    },
+    {
+      "name": "config_schema_version",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "update",
+      "type": "number",
+      "default": 0,
+      "readers": [
+        "scripts/lib/config-audit.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "update_check"
+      ],
+      "summary": "The config.json format version you last reviewed (current: 1). Missing counts as 0. Autopilot never writes it; set it to the current number after reading the upgrade check, which then stops listing changes up to that number."
     }
   ]
 }

@@ -525,8 +525,9 @@ Git), `prior_round_incremental`, `no_carriable_seat`, `seat_not_carriable` (a se
 earlier verdict; a mixed round is not built), `finding_unmapped` (an earlier finding names no path in the
 range), `base_changed`, `roster_changed`, `spec_changed`, `verify_cmd_changed`, `verification_red`,
 `changed_ratio` (over half the range changed), `delta_packet_size`, `reference_cap`,
-`recheck_content_size`, `shared_surface` (the fix touched a manifest, lock file, schema or CI config) and
-`binding_unavailable`.
+`recheck_content_size`, `shared_surface` (the fix touched a manifest, lock file, schema or CI config),
+`binding_unavailable`, `seat_store_unavailable` (no seat store root, campaign id or seats to carry from) and
+`evaluation_failed` (Git or an input failed while deciding; the review runs full).
 
 What `review_scope: "incremental"` does **not** claim: that every file was re-read at the new head. A
 behavioural dependency with no textual reference (a setting read by name, dynamic dispatch) is not found.

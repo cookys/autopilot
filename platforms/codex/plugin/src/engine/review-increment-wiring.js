@@ -182,6 +182,19 @@ function decideReturnIncrement(args) {
       })) {
     return full('prior_round_unverified');
   }
+  // The index's roster digest and verification argv hash are re-derived, not read back. The record
+  // keeps the payloads they came from: the review payload re-derives review_input_digest (which the
+  // binding above already pins, and the seat artifacts' directory name repeats) and carries the
+  // verification argv hash; the roster re-derives roster_digest. A record that cannot show them, or
+  // whose values disagree with its own payloads, is no record.
+  const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const payload = record.review_payload;
+  const payloadArgv = isObj(payload) && isObj(payload.verification) ? payload.verification.argv_hash || null : null;
+  if (!isObj(payload) || canonicalDigest(payload) !== record.review_input_digest // guard:index_payload
+      || (record.verify_argv_hash || null) !== payloadArgv // guard:index_argv
+      || !isObj(record.roster) || canonicalDigest(record.roster) !== record.roster_digest) { // guard:index_roster
+    return full('prior_round_unverified');
+  }
 
   const station = 'panel';
   const found = findPriorPanelArtifacts({
@@ -220,7 +233,7 @@ function decideReturnIncrement(args) {
         baseSha: record.base_sha,
         rosterDigest: record.roster_digest,
         specDigest: record.spec_digest,
-        verifyCmd: record.verify_argv_hash === currentArgvHash ? verifyCmd : `changed:${record.verify_argv_hash}`,
+        verifyCmd: (record.verify_argv_hash || null) === (currentArgvHash || null) ? verifyCmd : `changed:${record.verify_argv_hash}`,
         seats: d1Seats,
       },
       current: { rosterDigest, specDigest, verifyCmd, verificationGreen: verificationGreen === true },

@@ -440,6 +440,7 @@ function evaluateReturnIncrement(input) {
     carried,
     recheck,
     recheck_diff: recheckDiff,
+    recheck_diff_paths: inDiff,
     recheck_files: recheckFiles,
     recheck_content_bytes: contentBytes,
     seat_packets: seatPackets,

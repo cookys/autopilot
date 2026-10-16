@@ -609,6 +609,19 @@ function buildReviewPacket({
     }
 
     if (inc !== null) {
+      // Every re-check path the range changed must carry its hunk in diff.patch: a seat that is
+      // handed the content of a changed file without its hunk judges it blind to what changed.
+      const diffSet = new Set(inc.diff_paths);
+      const changedNow = String(runGit('git diff --name-only', [
+        '--literal-pathspecs', 'diff', '--no-renames', '--ignore-submodules=none', '--no-ext-diff',
+        '--no-textconv', '--name-only', '-z', baseOid, candidateOid,
+      ], { cwd: repoAbs, env: gitEnv() })).split('\0').filter(Boolean);
+      const changedSet = new Set(changedNow);
+      for (const p of inc.tree_paths) {
+        if (changedSet.has(p) && !diffSet.has(p)) { // guard:recheck_hunk
+          throw new Error(`incremental descriptor inconsistent: ${p} changed in range but has no hunk`);
+        }
+      }
       // Keep only the re-check files at the candidate. A path denied above is already gone.
       const keep = new Set(inc.tree_paths);
       for (const item of walkLstat(treeDir)) {

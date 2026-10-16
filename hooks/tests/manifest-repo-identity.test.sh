@@ -176,4 +176,9 @@ node -e '
 ' "$OUT"
 eq "0" "$?" "old manifest without repo_identity still listed (reader tolerant) alongside the new one"
 
+# --- control characters in an identity are neutralised so the manifest JSON stays valid (BL-0109) ---
+CTL="$(bash -c '. "$1"; _repo_identity_json_str "$(printf "a\tb\rc\001d\"e")"' _ "$REPO_ROOT/scripts/lib/repo-identity.sh")"
+node -e 'JSON.parse("\"" + process.argv[1] + "\"")' "$CTL" 2>/dev/null
+eq "0" "$?" "json string helper: tab/CR/control bytes still yield valid JSON"
+
 finalize_test

@@ -88,6 +88,22 @@ eq "$W_PID" "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").rea
 kill -9 "$W_PID"
 eq "0" "$(lock_free_within 1)" "kill -9 writer -> flock -n succeeds within 1 s"
 
+# --- 3b. SIGTERM to the foreground launcher reaches the inner writer (BL-0109) -----------------------
+rm -f "$ENV_FILE"
+start_watcher
+wait_envelope
+eq "yes" "$([ -n "$W_PID" ] && echo yes || echo no)" "3b: envelope appears"
+# W_LAUNCHER is the function subshell; the node launcher is its child.
+LAUNCH_NODE="$(ps -o pid= --ppid "$W_LAUNCHER" | tr -d ' ' | head -1)"
+KILL_PIDS="$KILL_PIDS $LAUNCH_NODE"
+eq "yes" "$([ -n "$LAUNCH_NODE" ] && tr '\0' ' ' < "/proc/$LAUNCH_NODE/cmdline" | grep -q "status runs --watch" && echo yes || echo no)" "3b: found the node launcher"
+kill -TERM "$LAUNCH_NODE"
+GONE=no
+for i in $(seq 1 50); do kill -0 "$W_PID" 2>/dev/null || { GONE=yes; break; }; sleep 0.1; done
+eq "yes" "$GONE" "3b: SIGTERM to the launcher stops the inner writer"
+eq "0" "$(lock_free_within 2)" "3b: the lock is free after the launcher is terminated"
+eq "no" "$(kill -0 "$LAUNCH_NODE" 2>/dev/null && echo yes || echo no)" "3b: the launcher itself exits"
+
 # --- 4. writer spawns a long-lived child (via a PATH git shim), then dies -> lock still released ----
 SHIM="$SB/shim"; mkdir -p "$SHIM"
 REAL_GIT="$(command -v git)"

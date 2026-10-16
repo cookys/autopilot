@@ -700,19 +700,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Orphan leaf liveness and resource reconstruction
-- **Id**: BL-0082
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 建立工作樹的過程中當機（工作樹已建好、還沒寫進控制器紀錄）會留下清單裡永遠看不到的工作樹，因為建立前沒有先寫下意圖。其餘兩項（接管前重新確認工作者程序已結束、依 Git 重新推導清單列）已處理。
-- **Impact**: 這種當機後會留下沒人認領的工作樹，要人工清理；清單與容量上限都看不到它。
-- **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/orphan-leaf-liveness-and-resource-reconstruction.md
-- **Context**: Remaining: write a durable intent row BEFORE `git worktree add` so a worktree created but never registered is discoverable. Leaf-liveness check and Git re-derivation of stale rows shipped.
-
 ### HETO task-return detection can miss completed work
 - **Id**: BL-0084
 - **Status**: open
@@ -827,7 +814,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
-- **Context**: 2026-10-16: cursor merge, spawn preflight, autostart gate and clock fixed; foreground launcher SIGTERM, flock message and identity-source items remain (see sidecar).
+- **Context**: 2026-10-16: most items fixed (see sidecar); remaining: repo-identity.sh cache, non-repo diagnostic, manifest-suite PID trap, and the roots-set bound.
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110

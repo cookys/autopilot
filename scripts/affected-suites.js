@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// affected-suites.js — select the test files a diff can affect (BL-0001, stage 1: selector only).
+// affected-suites.js — select the test files a diff can affect (BL-0001: the quality gate's test step runs it first).
 //
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json]

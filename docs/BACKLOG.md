@@ -14,19 +14,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### qc-gate still runs the whole suite; wire the affected-suites selector into the M-XL test step
-- **Id**: BL-0001
-- **Status**: step 2 landed (eval qs v3 SHIP: evals/skill-onoff/prereg and results/qs.v3.jsonl)
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 依改動挑測試的工具已經做好，但只是建議，品質檢查還是每次跑整套。另外活面板的測試不在主測試入口裡，所以改到活面板時工具判斷不了，只能整套跑。
-- **Impact**: 每次中大型改動仍多等約 30 分鐘。最近 10 個改到程式的提交全是整套跑；近 34 個裡只有 7 個能縮小範圍。
-- **Trigger**: phase 2, owner-approved 2026-10-13: run the eval ON/OFF first (scorecard-first), then change the M-XL test step
-- **Effort**: M
-- **Source**: feat/autocompact-detect qc-gate, 2026-10-12; phase 1 merged 2026-10-13
-- **Pointer**: docs/backlog/qc-gate-affected-suites.md
-- **Context**: Phase 2 step 1 (mods/live `extra_runners`, miss-check 0 missed) done at 933b37e2. Remaining: ON/OFF eval (evals/skill-onoff), then guidance commit (quality-gate-config, test-policy, quality-pipeline SKILL.md:36, scripts-inventory).
-
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002
 - **Status**: open
@@ -1064,7 +1051,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
 - **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。方案 C 已於 2026-10-13 寫進 CLAUDE.md；剩方案 B，等 BL-0001。
-- **Trigger**: BL-0001 ships and is shown not to miss suites (then add option B on top of C)
+- **Trigger**: BL-0001 landed 2026-10-16 (quality gate runs affected-suites first) and is shown not to miss suites (then add option B on top of C)
 - **Effort**: M
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md

@@ -4268,8 +4268,7 @@
       "default": null,
       "readers": [
         "skills/onboard/SKILL.md",
-        "skills/quality-pipeline/SKILL.md",
-        "skills/quality-pipeline/references/test-policy.md"
+        "skills/quality-pipeline/SKILL.md"
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],

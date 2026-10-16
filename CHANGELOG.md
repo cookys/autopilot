@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0146 D3 (explicit closure only, not wired): seat output may carry `resolutions[]` (`normalizeSeatReview`), and `evaluateClosure` closes a prior finding only when every sealed-panel seat answers resolved/invalid with path:line evidence and none says still_present; silence never closes; the prior-round addendum stays an off-by-default seam pending owner ruling d-3cf4dc4c.
+
 - Final-panel seat store gained an incremental station (`final-panel-incremental`) with a plan 2.4 binding, per-seat re-derivation including the carried-path digest recheck, and an incremental part in the full-diff gate-journal key (BL-0146 D2); nothing selects it yet, the default path is unchanged.
 
 - `skills/dev-flow/SKILL.md` is now the 483-line contract card (was 534; ladder terms, drift table, anti-patterns table, compatibility notes and the scripts index moved to `references/card-relocated.md`), shipped on the BL-0044 evidence: dc ON/OFF SHIP-GATE-MET and stage-graph coverage 10/12 (`docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/`); the skill-onoff instrument gained the repaired `dc` row (`evals/skill-onoff/score-dc.js`).

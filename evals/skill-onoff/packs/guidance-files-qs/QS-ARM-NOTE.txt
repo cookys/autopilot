@@ -1,0 +1,1 @@
+qs row plugin-root placeholder: identical in every arm. It exists only because run-skill-onoff-eval.sh splits the manifest line on tabs, so an empty "files" field shifts fixture_scripts into it.

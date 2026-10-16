@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0196 -->
+<!-- next-id: BL-0197 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1432,4 +1432,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 再看到共用 live 目錄出現假專案的檔案，或下次動 runs watcher 的啟動路徑
 - **Effort**: S
 - **Source**: loadsrc review 2026-10-15 (deferred suggestion f861f040)
+- **Pointer**: none
+
+
+### run-skill-onoff-eval.sh drops fixture_scripts when a manifest has an empty files field
+- **Id**: BL-0196
+- **Status**: open
+- **Since**: 2026-10-16
+- **Origin**: self
+- **Problem**: 評測 runner 讀臂設定時用 tab 切欄，files 欄位是空的就會讓兩個 tab 被合併，fixture_scripts 錯位進 files。結果 fixture 檔完全沒進測試 repo，而且沒有任何錯誤訊息，格子照跑但環境是壞的。
+- **Impact**: 中。沒有 files pack 的新臂設定會悄悄失效；目前靠兩臂各放一個相同的佔位 pack 繞過。
+- **Trigger**: 下次動 run-skill-onoff-eval.sh 或有 pack 沒有 files 時
+- **Effort**: S
+- **Source**: evals/skill-onoff qs row pilot, 2026-10-16
 - **Pointer**: none

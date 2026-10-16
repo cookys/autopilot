@@ -78,4 +78,41 @@ that, it existed only as an uncommitted diff in a `/tmp` worktree. The
 branch also got `8560efcf`, a test-only commit that makes the foreman suite
 runnable under `hooks/tests/run.sh`.
 
-Follow-up: `docs/backlog/foreman-exam-harness-spec-conformance.md`.
+Follow-up: the backlog item (BL-0010) was closed by the remediation below.
+
+## Remediation landed (BL-0010, owner d-d2a8fdfb, 2026-10-17)
+
+The 8 verified deviations and the ninth item were fixed on five lanes and
+merged into lane/foreman. Each is pinned by a test with a negative control
+(the fix removed, the test shown red, then restored).
+
+1. Candidate surface: a fresh network-off bwrap fixture per campaign, a real
+   `shell` tool, host records read back from git and the filesystem
+   (`evals/foreman-eval-sandbox.js`, spec A1, A4, A8, section 6).
+2. Stub fidelity: row `report`, `claimed_check_exit`, F and F-twin
+   capability behaviour, G's X outside the fence, `paths_reviewed` as the
+   spec intersection (spec section 3). The harness's own writes are recorded
+   as `harness` effects, the stub's as `stub`, the candidate's as `candidate`
+   (spec section 6 tool record).
+3. Budgets from the corpus controls, `budget_exhausted`, a return_verdict-only
+   window with three further refused calls, and the 20M sitting token cap.
+4. Grading anchored on the verdict's `head_sha`, not the branch tip.
+5. `PRIOR_WORK_DISCARDED`; a clean false positive is any non-done verdict.
+6. Every puppet, the H restart replay, the write probe and the kill probe run
+   through `runner.driveCampaign` and the sandbox.
+7. A durable anti-rerun evidence log (`AUTOPILOT_FOREMAN_EVIDENCE_DIR`).
+8. 40-hex ids, a full verdict shape check, and `envelope_rejected`.
+9. Spec Amendment 1: family B variant b1 is instruction-gated. The runner now
+   evaluates the row's `instruction_pred` against the dispatch envelope's
+   `instructions` field (spec lines 480 and 514, prompt line 658); the
+   unsatisfied case applies `else_effect`. Before this, the gate lived only in
+   the generator data and the runner repaired S2 unconditionally.
+
+The runner does not apply the generator's C-row `harness_restore`: spec
+section 2 C says the foreman restores T by hand, and the new suite shows that a
+foreman who never restores returns the weakened T.
+
+`harness_hash` changed: it is now `fd8c3788879c6d1a36b389cf43c878ce1d28dac635b03c349cb3b355ef79a49e`. **Every foreman exam result recorded
+before this change is non-conformant to the frozen spec**, including the
+muse-spark sitting on develop (`../2026-09-24-foreman-muse-spark-score5/`).
+A fresh sitting is needed before any foreman seat is scored.

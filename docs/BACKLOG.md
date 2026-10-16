@@ -40,19 +40,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
-### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
-- **Id**: BL-0010
-- **Status**: open
-- **Since**: 2026-09-29
-- **Origin**: self
-- **Problem**: 工頭考試用的測試工具，實作偏離了事先凍結的規格，有 6 項待補，分支停放在遠端沒有合併。審查已確認這些偏離屬實。 (draft)
-- **Impact**: 考試工具目前無法正式使用；要不要繼續投入需擁有者決定，否則分支一直擱著。 (draft)
-- **Trigger**: FIRED — landing review 2026-09-29 verdict FIX-THEN-SHIP
-- **Effort**: L
-- **Source**: hetero review g1 (gpt-5.6-sol), depth-0 verified 8/8
-- **Pointer**: docs/backlog/foreman-exam-harness-spec-conformance.md
-- **Context**: 已接入 lane/foreman（squash 自 hetero/foreman-phase-5），8 項修補中。Original gaps: no `shell` tool, wrong budgets, and tip-anchored grading; the muse-spark sitting on develop is non-conformant.
-
 ### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
 - **Id**: BL-0011
 - **Status**: open

@@ -40,19 +40,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
-### Qwen3.8-Max-Preview via qoderclicn returned truncated output as the /l6 verification author
-- **Id**: BL-0008
-- **Status**: open
-- **Since**: 2026-10-06
-- **Origin**: self
-- **Problem**: /l6 把驗證測試的撰寫交給 Qwen3.8-Max-Preview（經 qoderclicn）時，輸出被截斷、格式缺漏而失敗。這個席位至今仍設定在驗證作者的位置上。 (draft)
-- **Impact**: /l6 若派到這個席位會直接失敗並浪費一次派工；需要擁有者決定重新考核或換引擎。 (draft)
-- **Trigger**: FIRED — mods P1W W4 gate run l6b, 2026-10-06
-- **Effort**: S
-- **Source**: depth-0 verified (author status truncated, frame_missing, exit 5)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: first live author dispatch after an owner-authorized quota probe; 583-byte garbled log; a qualification signal for that seat, not a band defect.
-
 ### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
 - **Id**: BL-0010
 - **Status**: open
@@ -145,22 +132,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
 - **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
-
-### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
-- **Id**: BL-0020
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: peer
-- **Reporter**: openclaw（hangar-bridge）
-- **Report**: msg_01M2KNFAB7P7TGGMF4K5QYQFYH
-- **Reply**: none
-- **Problem**: openclaw 回報：agy 的 flash/low 實作席位在真實簡報上不可用，建議依簡報長度與是否自己跑測試來考核。但之後的考核紀錄顯示該席位 24 場全過，兩者互相矛盾。 (draft)
-- **Impact**: 可能錯誤地排除或錯誤地信任一個便宜席位；需看考核簡報長度或再問 openclaw。 (draft)
-- **Trigger**: next agy implementer qualification, or a consumer config that still defaults the implementer to agy
-- **Effort**: S
-- **Source**: `openclaw` via hangar-bridge 2026-09-16, msg `msg_01M2KNFAB7P7TGGMF4K5QYQFYH`
-- **Pointer**: none
-- **Context**: agy `-p` self-aborts at 5 min, a >~40-line brief at low ends in silent no_op, `run_command` 10 s cap backgrounds test loops; add scorecard dimensions or auto-degrade the seat with a warning.
 
 ### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
 - **Id**: BL-0021
@@ -339,19 +310,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 - **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
-
-### `engine-qualify-impl.test.js` 單次無法重現的紅(1/24 solo,訊息未捕獲)
-- **Id**: BL-0040
-- **Status**: open
-- **Since**: 2026-08-23
-- **Origin**: self
-- **Problem**: 一個引擎考核的測試檔曾在 2026-08-23 單獨執行時紅過一次（24 次中 1 次），訊息沒保留，之後 7 週沒有再出現，原因不明。現已加上輸出保存以便下次抓到。 (draft)
-- **Impact**: 偶發失敗可能代表隱藏的競態；但已七週未重現，可考慮結案。 (draft)
-- **Trigger**: 下一次它在 full-suite / CI 或 solo 跑紅(歸因半件)。**保存半件已做(2026-08-23)**:`hooks/tests/run.sh` L1 現在把 `node --test` 全輸出 tee 進…
-- **Effort**: S
-- **Source**: 2026-08-23 v2.34.37 收尾實測(run `fix-bundle-l4`),foreman 直接觀察。
-- **Pointer**: docs/backlog/engine-qualify-impl-test-js-1-24-solo.md
-- **Context**: 2026-08-23 v2.34.37 收尾期間,`node --test scripts/engine-qualify-impl.test.js` 在約 24 次 solo 連跑中出現**一次** `pass 0 / fail 1`;當時的 harness 只 grep 摘要行、沒有保留 log,`AssertionError` 的 message…
 
 ### Brain-seat sittings in the shipped qualification defaults (v2 artifact)
 - **Id**: BL-0041
@@ -908,7 +866,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 3.0.0 正式版時，要移除 dispatch-hetero 的舊清理功能（--gc 旗標與 stale_reaper_age_days 設定），因為新的自動清理已取代，且舊功能預設就是關閉。 (draft)
 - **Impact**: 不移除會留下重複又無用的功能與設定，增加維護負擔；屬刻意延到正式版的破壞性移除。 (draft)
-- **Trigger**: the 3.0.0 final cut
+- **Trigger**: the 3.0.0 final cut (checked 2026-10-16: still present, scripts/dispatch-hetero.sh --gc at L1890 and stale_reaper_age_days in resolve-worktree-teardown.sh; remove then, not before)
 - **Effort**: S
 - **Source**: residue auto-reap contract, 2026-10-09
 - **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
@@ -971,7 +929,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: discuss-exam-fix full suite 2026-10-12; narrowed by BL-0122 lane 2026-10-14
 - **Pointer**: none
-- **Context**: The only writer found: t7's own tests/tool.test.js writes {"timeout":5} to repo/config.json when run in place (eval hands, bare node --test). orchestration-eval.test.sh now digests evals/orchestration/tasks before/after.
+- **Context**: Not recurring as of 2026-10-16 (no fixture change in git status or commits since 10-12). Known writer: t7 tests/tool.test.js run in place.
 
 ### mods/live recent conversation: groups expand by mouse only
 - **Id**: BL-0123

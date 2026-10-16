@@ -51,3 +51,51 @@ qualify_stage_identity() {
 
   return 0
 }
+
+# --- Kimi write-back (BL-0199) -------------------------------------------------
+# Kimi rotates its refresh token on every use. The exam must therefore (1) work on a COPY seeded into the staged home
+# (qualify_stage_credential above; the real ~/.kimi-code is never handed to a child) and (2) at exit write the newest
+# credential BACK to the real file, after backing the original up as <file>.bak-<UTC stamp>. Standard step, not optional.
+# Overrides for tests: QUALIFY_KIMI_REAL_DIR (default $HOME/.kimi-code), QUALIFY_KIMI_LOCK (default <real dir>/.qualify-writeback.lock).
+
+# qualify_writeback_credential <staged_file> <real_file>
+# Writes staged over real only when staged is non-empty, differs from real, and is newer than real. Backup first, then
+# temp+rename at 0600, under flock so parallel exams cannot overwrite each other. Unchanged staged => real untouched, no backup.
+qualify_writeback_credential() {
+  local staged=${1-} real=${2-} lock
+  [ -s "$staged" ] || return 0
+  [ -f "$real" ] || return 0
+  cmp -s -- "$staged" "$real" && return 0
+  [ "$staged" -nt "$real" ] || return 0
+  lock="${QUALIFY_KIMI_LOCK:-$(dirname -- "$real")/.qualify-writeback.lock}"
+  (
+    flock -w 60 9 || { echo "qualify: writeback lock timeout, real credential left untouched: $real" >&2; exit 1; }
+    # Re-check under the lock: another exam may have written back already.
+    cmp -s -- "$staged" "$real" && exit 0
+    [ "$staged" -nt "$real" ] || exit 0
+    bak="${real}.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+    cp -p -- "$real" "$bak" && chmod 600 "$bak" || exit 1
+    tmp="${real}.tmp.$$"
+    cp -- "$staged" "$tmp" && chmod 600 "$tmp" && mv -f -- "$tmp" "$real" || { rm -f -- "$tmp"; exit 1; }
+    echo "qualify: wrote rotated credential back to $real (backup $bak)" >&2
+  ) 9>>"$lock"
+}
+
+# qualify_kimi_arm_writeback <staged_kimi_dir>
+# Arms an EXIT/INT/TERM/HUP trap that writes the staged credential files back. Call after seeding.
+qualify_kimi_arm_writeback() {
+  QUALIFY_KIMI_STAGED_DIR=${1-}
+  trap '_qualify_kimi_finish' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+}
+
+_qualify_kimi_finish() {
+  local rc=$? real_dir=${QUALIFY_KIMI_REAL_DIR:-$HOME/.kimi-code} f
+  trap - EXIT
+  for f in credentials/kimi-code.json oauth/kimi-code; do
+    qualify_writeback_credential "$QUALIFY_KIMI_STAGED_DIR/$f" "$real_dir/$f" || true
+  done
+  return "$rc"
+}

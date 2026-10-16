@@ -1,0 +1,6 @@
+kimi28: seeded credential from staged home /home/cookys/.autopilot/qualify-staging/reviewer-kimi-k2.8-preview/kimi-home/.kimi-code
+kimi28 alias label: display_name = "K2.8 Preview"
+kimi28-probe rc=0: kimi version 2.2.0 • The user asked to reply with a single word: PONG.  • PONG  To resume this session: kimi -r session_170b15e0-2f6a-407c-b337-a0acd654501f
+2026-10-16T18:55:30+08:00 lane=kimi28 role=consult START model=kimi-code/kimi-for-coding model_version=kimi-for-coding:K2.8-Preview version_source=operator-asserted dry=0
+2026-10-16T19:04:54+08:00 lane=kimi28 role=consult END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

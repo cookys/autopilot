@@ -35,9 +35,12 @@
       "reason": "2026-07-24 onboarding-era corpora (onboarding-verification-author*), superseded by the va-declared-plan-v1 suite that shipped in v2.34.17. Different corpus, not comparable to event 142."
     },
     {
-      "event_ids": [],
+      "event_ids": [
+        306,
+        309
+      ],
       "role": "owner",
-      "reason": "No brain-seat (owner_brain_seat) row is shipped yet. Brain sittings ARE scorecard rows (since v2.36: recordable via engine-scorecard record, role owner, told apart from foreman rows by methodology_kind owner_brain_seat and the forced brain-seat scope), and the atomic owner-brain-seat-v1 record in the capability store remains their evidence source (no expiry, 3-strike revocation via engine-capability-state.js brain-status). Add an entry here once a passing brain row is worth shipping as a default."
+      "reason": "Owner brain-seat (owner_brain_seat) rows are not shipped as defaults; failed brain sittings (events 306 kimi-code-k3, 309 kimi-k2.8-preview, 2026-10-16) are excluded like the other models' 2026-10-14 brain failures. Brain sittings ARE scorecard rows (since v2.36: recordable via engine-scorecard record, role owner, told apart from foreman rows by methodology_kind owner_brain_seat and the forced brain-seat scope), and the atomic owner-brain-seat-v1 record in the capability store remains their evidence source (no expiry, 3-strike revocation via engine-capability-state.js brain-status). Add an entry here once a passing brain row is worth shipping as a default."
     }
   ],
   "entries": [
@@ -410,6 +413,31 @@
       "event_id": 303,
       "role": "reviewer",
       "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-grok-4.7-low"
+    },
+    {
+      "event_id": 304,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k3-high"
+    },
+    {
+      "event_id": 305,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi-discuss"
+    },
+    {
+      "event_id": 307,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-kimi-k28-high"
+    },
+    {
+      "event_id": 308,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-discuss"
+    },
+    {
+      "event_id": 310,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-consult"
     }
   ]
 }

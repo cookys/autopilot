@@ -1,0 +1,6 @@
+kimi28: seeded credential from staged home /home/cookys/.autopilot/qualify-staging/reviewer-kimi-k2.8-preview/kimi-home/.kimi-code
+kimi28 alias label: display_name = "K2.8 Preview"
+kimi28-probe rc=0: kimi version 2.2.0 • The user is just testing responsiveness. Reply with PONG only.  • PONG  To resume this session: kimi -r session_7f593896-2fd4-4936-aa7d-599de87b52b4
+2026-10-16T18:33:44+08:00 lane=kimi28 role=discuss START model=kimi-code/kimi-for-coding model_version=kimi-for-coding:K2.8-Preview version_source=operator-asserted dry=0
+2026-10-16T18:44:36+08:00 lane=kimi28 role=discuss END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

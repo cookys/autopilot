@@ -1,4 +1,4 @@
-kimi-auth-probe rc=1: kimi version 2.1.1 error: failed to run prompt: provider.auth_error: 403 You've reached your weekly (7-day) usage limit. Your quota will reset when the current 
-2026-10-14T16:07:39+08:00 kimi credential unusable (owner must log in again)
-2026-10-14T16:07:39+08:00 lane=kimi role=brain END rc=3 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
-rc=3
+kimi-auth-probe rc=0: kimi version 2.2.0 • The user asked: "reply with the single word PONG". Simple.  • PONG  To resume this session: kimi -r session_f81756d4-7fd0-4974-a618-f64d484b3169
+2026-10-16T18:06:33+08:00 lane=kimi role=brain START model=kimi-code/k3 model_version=kimi-code-k3 version_source=operator-asserted dry=0
+2026-10-16T18:16:23+08:00 lane=kimi role=brain END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1

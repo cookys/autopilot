@@ -1,0 +1,4 @@
+kimi28 alias label: display_name = "K2.8 Preview"
+kimi28-probe rc=1: kimi version 2.2.0 error: failed to run prompt: The provided authorization grant is invalid See log: /home/cookys/.autopilot/qualify-staging/reviewer-kimi-k2.8-preview/kimi-home/.kimi-code/logs/kimi-code.log
+kimi: credential or other error, owner may need to log in again
+rc=3 probe failed

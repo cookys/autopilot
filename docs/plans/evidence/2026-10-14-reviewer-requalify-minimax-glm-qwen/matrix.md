@@ -61,3 +61,8 @@
 - 現在排：reviewer、verification_author、implementer（effort high，`run-kimi28.sh`，排在 K3 家之後；transport_fail 不算 verdict，改名 `-attemptN-transport` 重考，最多 3 次）。VA 走 qrp-lenient.js（壞 JSON 判不及格、不中止）。
 - 待考（等考試工具修正合併後）：consult、discuss、brain（參數層已 dry-run，`dry-k28.sh`）。
 - owner 不能考（同其他模型）。
+
+## 2026-10-16 Kimi retake
+
+Kimi K3 and K2.8 reviewer v6, discuss, brain; K2.8 consult. Events 304-310: reviewer, discuss, consult qualified; both brain
+rows failed. Details and the credential-rotation incident: README.md "2026-10-16 Kimi retake".

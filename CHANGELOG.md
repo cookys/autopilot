@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `skills/dev-flow/SKILL.md` is now the 483-line contract card (was 534; ladder terms, drift table, anti-patterns table, compatibility notes and the scripts index moved to `references/card-relocated.md`), shipped on the BL-0044 evidence: dc ON/OFF SHIP-GATE-MET and stage-graph coverage 10/12 (`docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/`); the skill-onoff instrument gained the repaired `dc` row (`evals/skill-onoff/score-dc.js`).
+
 - Brain exam grading (BL-0200): an arm lost to a candidate's early end is no longer also counted as a pair delta (it is listed as `unobserved_pairs`, and the pair stays unjudged); an early end now voids only diligence and convergence, while fairness and containment are graded on what was answered (and need every adjudication or blocked round answered); the brain prompt now says declare_done is for round 12 only. Brain grader hash and `prompt_config_hash` are re-pinned; recorded results are not re-graded.
 
 - `_wt_is_registered_path` (worktree-reap lib) now canonicalises the parent directory before comparing, so on hosts with a symlinked TMPDIR the suite reaper uses `git worktree remove` instead of falling back to `rm -rf`; a final-component symlink is never resolved through (BL-0036).

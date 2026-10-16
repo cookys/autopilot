@@ -2071,6 +2071,16 @@
         "56f82e988d3257c7ac48a15a73de4063b22ed71b585e966a11d4f112e18c5ae2"
       ],
       "rationale": "P0 skills/ceo-agent/SKILL.md:307 ('c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is', under step 3 'IF L-size'). Restated (reworded, not verbatim) at skills/ceo-agent/SKILL.md:305 as 'c2. (L/XL) `scripts/tree.js init <proj>` + emit root node …': only the (L/XL) scope tag was added; :306 now names 'CEO L/XL tasks' as the Board-directive default. 3.0.0 stage-graph G2: the 2026-06-12 Board directive covered L-size; tree init needs the project dir, which is L/XL-only."
+    },
+    {
+      "content_hash": "65db850bb9b5eadb6e3ba69b7e8645a17bf62a5669993c4474559e308542fc71",
+      "disposition": "removed",
+      "rationale": "P0 skills/dev-flow/SKILL.md:444 ('| Wrong | Correct |'). BL-0044 dev-flow contract-card swap (eval: docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/): this prose is relocated verbatim or near-verbatim to skills/dev-flow/references/card-relocated.md (a pointer line stays in SKILL.md); it is moved, not deleted, and card-relocated.md is not a rule-universe source."
+    },
+    {
+      "content_hash": "bc1784794023ef3a8ead9e57ff732c79889ed2692e978122d9525a7448a46e79",
+      "disposition": "removed",
+      "rationale": "P0 skills/dev-flow/SKILL.md:467 ('| Defer work that affects the final goal | Never defer goal-'). BL-0044 dev-flow contract-card swap (eval: docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/): this prose is relocated verbatim or near-verbatim to skills/dev-flow/references/card-relocated.md (a pointer line stays in SKILL.md); it is moved, not deleted, and card-relocated.md is not a rule-universe source."
     }
   ]
 }

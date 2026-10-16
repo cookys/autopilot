@@ -141,7 +141,8 @@ error() {
 }
 
 usage() {
-  sed -n '1,240p' "$0" | sed -n '1,220p'
+  # Print only the leading comment block (the usage contract), not the script body.
+  awk 'NR==1 && /^#!/ {next} /^#/ {print; next} {exit}' "$0"
   exit 1
 }
 

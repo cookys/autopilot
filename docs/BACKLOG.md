@@ -212,10 +212,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 實作者的升級階梯有 17 級，其中 11 級位於同一個努力等級，成本排序幾乎失效。原因是未知成本被記成 0，導致排序無法區分。 (draft)
-- **Impact**: 選擇便宜席位時排序不準，可能多花錢；先修成本記錄方式即可改善。 (draft)
+- **Problem**: 階梯排序仍近乎退化；未知成本記成 0 的編碼已修，但各席位都沒有單價，排序缺依據。 (draft)
+- **Impact**: 挑便宜席位仍不準；需 owner 決定是否登記單價。 (draft)
 - **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
-- **Effort**: S
+- **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
 - **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.
@@ -443,19 +443,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero design panel 2026-08-22 synthesis §5/§6 + cut list; deferred by scope=Hold on the M-size first cut.
 - **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
-
-### Capability-claim identity is coupled to its observation timestamp
-- **Id**: BL-0048
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 平台能力的憑證編號是連同觀察時間一起算出來的，每次更新時間，編號就變，而派工腳本裡又寫死了這些編號，所以每次換憑證都得同步改好幾個腳本。 (draft)
-- **Impact**: 每次更新能力憑證都要手動改多處，漏改就出錯；是維護麻煩而非立即故障。 (draft)
-- **Trigger**: When a receipt refresh is next needed, or before adding a fourth consumer to `platform-capability-claims.js`.
-- **Effort**: M
-- **Source**: 2026-08-18 capability-receipt expiry investigation.
-- **Pointer**: docs/backlog/capability-claim-identity-is-coupled-to-its-observation-timestamp.md
-- **Context**: `claim_id = sha256(claim body)` and the body includes `live_evidence.observed_at` + `freshness.expires_at`, while the required IDs are hardcoded constants in `dispatch-hetero.sh:1653-1654`, `dispatch-review.sh:169-170`,…
 
 ### dev-flow F4 ledger rule — re-measure before deciding (F6 leg RESOLVED 2026-08-18)
 - **Id**: BL-0049

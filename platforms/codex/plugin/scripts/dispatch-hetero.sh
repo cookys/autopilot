@@ -2058,9 +2058,16 @@ set_runner_flags() {
   RUNNER_RESOLVED=1
 }
 
-D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
-D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
-D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
+D2_AGY_USAGE_CLAIM="cap-v1-60b3c8d855d3cfb31c4ebf9cce62c4fc5c564f7b340abf2c75614e4cb269d64d"
+# The validator requires and emits the ids sorted ascending; they are content-derived, so their order
+# is not a constant. Hold them sorted once and use that for both the --claim-id arguments and the compare.
+if [[ "$D2_AGY_RESPONSE_CLAIM" < "$D2_AGY_USAGE_CLAIM" ]]; then
+  D2_AGY_CLAIM_LO="$D2_AGY_RESPONSE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_USAGE_CLAIM"
+else
+  D2_AGY_CLAIM_LO="$D2_AGY_USAGE_CLAIM"; D2_AGY_CLAIM_HI="$D2_AGY_RESPONSE_CLAIM"
+fi
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_CLAIM_LO\",\"$D2_AGY_CLAIM_HI\"]"
 validate_d2_agy_claims() {
   local receipt validator observed rc=0
   receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
@@ -2068,7 +2075,7 @@ validate_d2_agy_claims() {
   [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
     || die_precondition "D2 capability claim validation failed"
   observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
-    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --claim-id "$D2_AGY_CLAIM_LO" --claim-id "$D2_AGY_CLAIM_HI" \
     --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"

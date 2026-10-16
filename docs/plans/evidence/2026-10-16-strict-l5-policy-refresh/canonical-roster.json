@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "artifact_type": "strict-l5-canonical-roster",
+  "declared_at": "2026-10-16",
+  "bug": "BL-0198",
+  "purpose": "The six provider tuples the strict /l5 policy (src/readiness/provider-bootstrap.js STRICT_L5_PROVIDER_POLICY) declares as canonical. This is the official contract document the six D4 capability claims bind to by sha256.",
+  "model_source": {
+    "openai": "scripts/resolve-review-loop.sh DEF_REV_ENGINE (gpt-6.1-sol, shipped 2026-10-16 in f3f539d99)",
+    "xai": "scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (grok-4.7)",
+    "zhipu": "references/official-qualification-defaults.json (highest-version zhipu engine: GLM-5.3)",
+    "minimax": "scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (MiniMax-M3; review seats stay on M3, the Flash-Preview model is for non-review roles)"
+  },
+  "tuples": [
+    {"role": "verification_author", "runner": "cc-shim", "model": "GLM-5.3", "effort": "high", "endpoint": "glm", "family": "zhipu"},
+    {"role": "qc", "runner": "cc-shim", "model": "GLM-5.3", "effort": "high", "endpoint": "glm", "family": "zhipu"},
+    {"role": "qc", "runner": "codex", "model": "gpt-6.1-sol", "effort": "max", "endpoint": null, "family": "openai"},
+    {"role": "implementer", "runner": "grok", "model": "grok-4.7", "effort": "high", "endpoint": null, "family": "xai"},
+    {"role": "qc", "runner": "cc-shim", "model": "MiniMax-M3", "effort": "high", "endpoint": "minimax", "family": "minimax"},
+    {"role": "reviewer", "runner": "cc-shim", "model": "MiniMax-M3", "effort": "high", "endpoint": "minimax", "family": "minimax"}
+  ],
+  "transport_evidence": {
+    "how_collected": "scripts/dispatch-author.sh run once per surface on 2026-10-16 with transport/prompt.txt; every run returned status=authored on the first attempt (dispatch-author-*.json). probe_command_sha256 = sha256 of the JSON argv shape recorded in full-input.json; probe_output_sha256 = sha256 of the matching transport/*.out raw author output."
+  }
+}

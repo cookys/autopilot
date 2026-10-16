@@ -1350,19 +1350,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 
 
-### Strict l5 provider-bootstrap is still pinned to the old models
-- **Id**: BL-0198
-- **Status**: open
-- **Since**: 2026-10-16
-- **Origin**: self
-- **Problem**: 出貨預設已換成新一代模型，但嚴格 l5 的供應商就緒檢查仍寫死舊模型。六個能力聲明編號是綁舊模型的雜湊，直接改會讓就緒檢查測試紅六條，要先替新模型重新登記聲明。
-- **Impact**: 嚴格 l5 檢查的是舊模型而非實際出貨的模型，可能漏掉新模型的問題。
-- **Trigger**: 下次動嚴格 l5 或供應商就緒檢查，或 3.0.0 發版前
-- **Effort**: M
-- **Source**: shipdefaults model switch, 2026-10-16
-- **Pointer**: docs/backlog/provider-bootstrap-pinned-to-old-models.md
-- **Context**: Lines ~152-207 hardcode GLM-5.2, grok-4.5, gpt-5.6-sol, MiniMax-M3. Re-register claims via platform-capability-claims.js; re-probe grok-4.7 (src/harness/capabilities/grok.json); add gpt-6.1-sol, grok-4.7 to window lists.
-
 ### Exams borrowing the owner's real Kimi credential get it rotated out from under the owner
 - **Id**: BL-0199
 - **Status**: open

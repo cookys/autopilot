@@ -1,0 +1,1 @@
+Write one short sentence confirming you can answer. Output only that sentence.

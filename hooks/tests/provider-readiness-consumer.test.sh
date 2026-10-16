@@ -684,7 +684,7 @@ const emptyResolved = resolveReviewLoopJson(['--check-scorecard'], {
 assert.strictEqual(emptyResolved.status, 0);
 assert.strictEqual(emptyResolved.error, null);
 assert.strictEqual(emptyResolved.result.reviewer_engine, 'MiniMax-M3');
-assert.strictEqual(emptyResolved.result.implementer_engine, 'grok-4.5');
+assert.strictEqual(emptyResolved.result.implementer_engine, 'grok-4.7');
 const resolved = resolvedResult.result;
 
 const readyObservation = (tuple, axis, now, ttl) => ({
@@ -886,7 +886,7 @@ assert.deepStrictEqual(
 // the bootstrap projects the skipped optional seats out of the collector input so the
 // live roster cannot drift from the derived policy.
 const l4Bootstrap = createStrictL5ProviderBootstrap({ cwd: root, level: 'l4' }, {
-  resolvedRoster: { ...l4Roster, qc_panel: ['gpt-5.6-sol', 'GLM-5.2', 'MiniMax-M3'] },
+  resolvedRoster: { ...l4Roster, qc_panel: ['gpt-6.1-sol', 'GLM-5.3', 'MiniMax-M3'] },
   collectReadiness: readyCollector,
   now: () => NOW,
 });
@@ -902,7 +902,7 @@ assert.strictEqual(l4Bundle.strict_level, 'l4');
 assert.deepStrictEqual(l4Bundle.roster.map((seat) => seat.seat_id), ['implementer', 'reviewer']);
 // The engine hands the authority its OWN resolved roster (names still present): same digest.
 const l4BundleAgain = l4Bootstrap.providerReadinessAuthority({
-  roster: { ...l4Roster, qc_panel: ['gpt-5.6-sol', 'GLM-5.2', 'MiniMax-M3'] },
+  roster: { ...l4Roster, qc_panel: ['gpt-6.1-sol', 'GLM-5.3', 'MiniMax-M3'] },
 });
 assert.strictEqual(l4BundleAgain, l4Bundle);
 const l4Consumed = consumeStrictL5ProviderReadiness(

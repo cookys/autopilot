@@ -278,26 +278,28 @@ function processRunOffenders(src, isRegister) {
   if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
   return out
 }
-// Receiver-agnostic count (a second, wider net): whatever the receiver is called (`eng.process.run`, `const e = $; e.process`, a destructured parameter `{ process }: EngineInterface`,
-// `Reflect.get($, 'process')`), every reach for a `process` member in a mods/live source file (tests and comments excluded) is counted, and the total must be the ONE allowed use.
-const ANY_PROCESS = [/\bprocess\s*(?:\?\.|\.|\[)/g, /\{[^{}]*\bprocess\b[^{}]*\}\s*(?::\s*[\w.<>]+\s*)?(?:=|\))/g, /\bReflect\s*\.\s*get\s*\([^)]*['"`]process['"`]/g, /\[\s*['"`]process['"`]\s*\]/g]
-const anyProcessReaches = src => ANY_PROCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
-test('process allowlist, any receiver: in every non-test mods/live source the reaches for a `process` member total exactly the one allowed use', () => {
+// THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
+// `$.process.run(argv, ...)` in register.ts. No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
+// reach for it past a word count. The other nets above only give a better message. Anything legitimate that needs the word (copy, a type name) goes to a locale string.
+const PROCESS_WORD_BASELINE = 1
+const processWords = src => [...code(src).matchAll(/\bprocess\b/g)].map(m => m[0])
+test('process allowlist, word count: `process` as a whole word occurs exactly ' + PROCESS_WORD_BASELINE + ' time(s) in the non-test sources of mods/, in register.ts', () => {
   const root = path.join(__dirname, '..')
-  const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && !f.endsWith('locales.ts') && !f.endsWith('.d.ts'))
-  const found = files.flatMap(f => anyProcessReaches(code(fs.readFileSync(f, 'utf8'))).map(x => path.relative(root, f) + ': ' + x))
-  assert.equal(found.length, 1, found.join('\n'))
-  assert.match(found[0], /^live\/register\.ts: process\./)
+  const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.(ts|tsx)$/.test(f) && !f.includes('node_modules'))
+  assert.ok(files.some(f => f.endsWith('register.ts')) && files.some(f => f.endsWith('locales.ts')), 'the scan sees register.ts and the generated locales.ts')
+  const found = files.flatMap(f => processWords(fs.readFileSync(f, 'utf8')).map(() => path.relative(root, f)))
+  assert.deepEqual(found, ['live/register.ts'])
+  assert.equal(found.length, PROCESS_WORD_BASELINE)
 })
-test('process allowlist, any receiver, controls: another receiver name, an alias of $, a destructured parameter, Reflect.get and a bracket access are each counted (negative controls)', () => {
+test('process allowlist, word count, controls: an alias, a helper argument, a nested destructuring, a string key and a bracket key each add a count (negative controls)', () => {
   const one = 'const r = await $.process.run(argv, {})'
-  assert.equal(anyProcessReaches(code(one)).length, 1)
-  assert.equal(anyProcessReaches(code(one + '\nawait eng.process.run(x)')).length, 2, 'other receiver')
-  assert.equal(anyProcessReaches(code(one + '\nconst e = $; await e.process.run(x)')).length, 2, 'alias of $')
-  assert.equal(anyProcessReaches(code(one + '\nfunction f({ process }: EngineInterface) { return process.run(x) }')).length >= 3, true, 'destructured parameter')
-  assert.equal(anyProcessReaches(code(one + "\nReflect.get($, 'process')")).length, 2, 'Reflect.get')
-  assert.equal(anyProcessReaches(code(one + "\nawait e['process'].run(x)")).length, 2, 'bracket access on another receiver')
-  assert.equal(anyProcessReaches(code('const { process } = $')).length, 1, 'destructuring')
+  assert.equal(processWords(code(one)).length, 1)
+  assert.equal(processWords(code(one + '\nconst p = $.process; p.run(x)')).length, 2, 'alias')
+  assert.equal(processWords(code(one + '\nhelper(eng.process)')).length, 2, 'helper argument')
+  assert.equal(processWords(code(one + '\nconst { exec: { process } } = $')).length, 2, 'nested destructuring')
+  assert.equal(processWords(code(one + "\nReflect.get($, 'process')")).length, 2, 'string key')
+  assert.equal(processWords(code(one + "\nconst q = $['process']")).length, 2, 'bracket key')
+  assert.equal(processWords(code('const processing = 1; // a process')).length, 0, 'a longer identifier and a comment are not counted')
 })
 test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
   const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\n"

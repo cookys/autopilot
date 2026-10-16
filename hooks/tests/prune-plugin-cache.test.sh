@@ -50,6 +50,12 @@ assert_file_exists "$BASE/2.0.0" "nothing deleted when the installed list cannot
 printf '{"plugins":[1]}' > "$C/plugins/installed_plugins.json"
 OUT="$(run --version 2.0.0)"; assert_eq "$?" "1" "an unknown shape refuses"
 assert_contains "$OUT" "unknown shape" "the reason says why (shape)"
+for bad in '{"plugins":{"autopilot@autopilot":[42]}}' '{"plugins":{"autopilot@autopilot":[{"installPath":7}]}}' '{"plugins":{"autopilot@autopilot":[{"installPath":"/x"},{"version":"1"}]}}'; do
+  printf '%s' "$bad" > "$C/plugins/installed_plugins.json"
+  OUT="$(run --version 2.0.0)"; assert_eq "$?" "1" "an entry that is not an object with a string installPath refuses: $bad"
+  assert_contains "$OUT" "string installPath" "the reason names the entry rule"
+done
+assert_file_exists "$BASE/2.0.0" "nothing deleted for an unrecognised entry"
 rm -f "$C/plugins/installed_plugins.json"
 assert_contains "$(run --version 2.0.0 --dry-run)" '"ok":true' "no installed_plugins.json at all: as before"
 

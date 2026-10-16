@@ -55,7 +55,9 @@ function decide(o) {
     if (!j || typeof j !== 'object' || !j.plugins || typeof j.plugins !== 'object' || Array.isArray(j.plugins)) return { ok: false, reason: 'installed_plugins.json has an unknown shape: refusing to delete', dir };
     const mine = j.plugins['autopilot@autopilot'];
     if (mine !== undefined && !Array.isArray(mine)) return { ok: false, reason: 'installed_plugins.json has an unknown shape: refusing to delete', dir };
-    installed = (mine || []).map((e) => (e && typeof e.installPath === 'string' ? path.resolve(e.installPath) : ''));
+    // every entry must be an object with a string installPath, else we cannot tell which copy is installed: keep everything
+    if ((mine || []).some((e) => !e || typeof e !== 'object' || Array.isArray(e) || typeof e.installPath !== 'string')) return { ok: false, reason: 'installed_plugins.json has an unknown shape (an entry without a string installPath): refusing to delete', dir };
+    installed = (mine || []).map((e) => path.resolve(e.installPath));
   }
   if (installed.includes(path.resolve(dir))) return { ok: false, reason: 'this is the copy the plugin is installed from', dir };
   const src = detectLoadSource({ claudeDir: o.claudeDir, repoDir: o.repoDir, behindUpstream: null });

@@ -911,19 +911,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Portable byte and Work Order lifecycle hardening
-- **Id**: BL-0079
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 工作單處理幾個邊緣情形不夠嚴謹：符號連結的雜湊與 git 不一致、非過期紀錄不該帶處置收據、讀不到程序表時應明確拒絕。其中一項似乎已處理。 (draft)
-- **Impact**: 只有出現符號連結或受限平台時才會踩到，目前很少見。 (draft)
-- **Trigger**: Before Mission paths may contain symlinks, generic Work Order imports are accepted, or reconciliation runs on restricted process-table platforms.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/portable-byte-and-work-order-lifecycle-hardening.md
-- **Context**: Unify symlink byte hashing with Git, reject/strip disposition_receipt on non-stale records, and convert PROCESS_TABLE_UNREADABLE into an explicit fail-closed Work Order classification.
-
 ### Durable resume and review authority binding
 - **Id**: BL-0080
 - **Status**: open

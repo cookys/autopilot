@@ -557,6 +557,18 @@ function validateStoredWorkOrderIntegrity(existing) {
       reason: 'stale_dispositioned Work Order requires its closed prior-generation receipt',
     };
   }
+  // BL-0079: a disposition receipt is authority for the stale transition only. A
+  // record that is not a stale tombstone carries none; name that distinctly so an
+  // imported or hand-edited record is not just an anonymous "invalid receipt".
+  if (Object.prototype.hasOwnProperty.call(existing, 'disposition_receipt')
+      && existing.disposition !== 'stale_dispositioned'
+      && existing.disposition !== 'consumed') {
+    return {
+      ok: false,
+      reason_code: 'disposition_receipt_unexpected',
+      reason: 'a Work Order that is not a stale_dispositioned tombstone cannot carry a disposition receipt',
+    };
+  }
   if (Object.prototype.hasOwnProperty.call(existing, 'disposition_receipt')) {
     const validated = validateDispositionReceipt(existing.disposition_receipt, existing);
     if (!validated.ok) return validated;
@@ -676,6 +688,11 @@ function buildWorkOrder(fields = {}, options = {}) { const owner = isObj(fields.
     wo.controller = ctrl;
   }
   if (fields.disposition_receipt != null) {
+    if (fields.disposition !== 'stale_dispositioned' && fields.disposition !== 'consumed') {
+      const err = new Error('only a stale_dispositioned Work Order may carry a disposition receipt');
+      err.code = 'disposition_receipt_unexpected';
+      throw err;
+    }
     wo.disposition_receipt = fields.disposition_receipt;
     const validated = validateDispositionReceipt(wo.disposition_receipt, wo);
     if (!validated.ok) {
@@ -1590,8 +1607,19 @@ function classifyWorkOrder(wo, options = {}) { if (options.parseError) { return 
       reason: `consume terminal status=${validated.terminal_status}`,
       work_order_id: wo.work_order_id, terminal_status: validated.terminal_status,
       terminal_receipt: receipt, success: validated.success === true,};}
-  const ownerLive = isProcessLiveStrict(wo.owner);
-  const runnerLive = wo.runner ? isProcessLiveStrict(wo.runner) : false;
+  // BL-0079: an unreadable process table is "death unknown", which is neither live
+  // nor dead. Classify it as an explicit blocker instead of letting the throw escape
+  // every caller of classifyWorkOrder.
+  let ownerLive;
+  let runnerLive;
+  try {
+    ownerLive = isProcessLiveStrict(wo.owner);
+    runnerLive = wo.runner ? isProcessLiveStrict(wo.runner) : false;
+  } catch (error) {
+    return { classification: 'orphan_blocked', reason_code: 'process_table_unreadable',
+      reason: `owner/runner liveness cannot be determined: ${error.message || String(error)}`,
+      work_order_id: wo.work_order_id,};
+  }
   const lockFile = options.workOrderPath ? lockPathFor(options.workOrderPath) : null;
   const leaseFile = options.workOrderPath ? leasePathFor(options.workOrderPath) : null;
   const lock = lockFile ? readJsonIfPresent(lockFile) : null;

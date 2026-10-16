@@ -10,6 +10,7 @@ const mission = require('../src/engine/mission-convergence');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
 const { inspect: inspectGraph } = require('./mission-execution-graph-check');
 const { admitExecutableMissionDelta } = require('../src/engine/controller-execution');
+const { gitEquivalentPathBytes } = require('../src/engine/sealed-zero-diff-validator');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const FALLBACKS = new Set(['none', 'solo', 'precondition_failed']);
@@ -345,13 +346,10 @@ function readRelevantBytes(repoRoot, paths) {
   // Canonical sha256 of raw file bytes (not UTF-8 text, not base64 guessing).
   const out = {};
   for (const p of paths) {
-    const abs = path.join(repoRoot, p);
-    try {
-      if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
-        out[p] = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-      }
-    } catch (_e) {
-      // leave missing
+    // BL-0079: the bytes Git stores (a symlink is its target string).
+    const bytes = gitEquivalentPathBytes(repoRoot, p);
+    if (bytes !== null) {
+      out[p] = crypto.createHash('sha256').update(bytes).digest('hex');
     }
   }
   return out;

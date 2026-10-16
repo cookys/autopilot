@@ -10,6 +10,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { gitEquivalentPathBytes } = require('./sealed-zero-diff-validator');
 
 const CONTROLLER_SCHEMA = 1;
 const PROGRESS_RECEIPT_ARTIFACT = 'controller_progress_receipt';
@@ -2923,13 +2924,11 @@ function bytesEqual(a, b) {
 /** Canonical sha256 of raw file bytes (not UTF-8-normalized text). */
 function pathContentDigest(repoRoot, relativePath) {
   if (!isStr(repoRoot) || !isStr(relativePath)) return null;
-  const abs = path.join(repoRoot, relativePath);
-  try {
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return null;
-    return crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-  } catch (_e) {
-    return null;
-  }
+  // BL-0079: hash the bytes Git stores (a symlink is its target string), not the
+  // bytes the link points at, so this agrees with `git show <base>:<path>`.
+  const bytes = gitEquivalentPathBytes(repoRoot, relativePath);
+  if (bytes === null) return null;
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 function admitExecutableMissionDelta({

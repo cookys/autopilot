@@ -276,6 +276,21 @@ assert_contains "$__RUN_STDERR" '2 tasks[] row' "context-ceiling: a DIFFERENT di
 run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
 assert_eq "" "$__RUN_STDERR" "context-ceiling: 2-row diagnostic NOT repeated"
 
+# cfgfix: the ceiling parses context_budget through the shared reader, so mode=off, t2=0 and an auto-compact
+# window all act on it like they do on the depth-0 hook.
+set_marker l4
+for knob in 'AUTOPILOT_CONTEXT_BUDGET_MODE=off' 'AUTOPILOT_CONTEXT_BUDGET_MODE=OFF' 'AUTOPILOT_CONTEXT_BUDGET_T2=0' 'CLAUDE_CODE_AUTO_COMPACT_WINDOW=250000'; do
+  reset_state
+  write_tasks fg-test-session '[{"id":"agent-1","tokenCount":160000,"contextWindowSize":200000}]'
+  ( export "$knob"; run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"; printf '%s' "$__RUN_STDOUT" > "$TEST_TMP/knob.out" )
+  assert_eq "" "$(cat "$TEST_TMP/knob.out")" "context-ceiling: $knob ⇒ 160k/200k row allowed (no ceiling)"
+done
+# negative control: the same row with no knob is still denied
+reset_state
+write_tasks fg-test-session '[{"id":"agent-1","tokenCount":160000,"contextWindowSize":200000}]'
+run_hook foreman-guard.js "$(bash_payload agent-1 'echo work')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "context-ceiling: negative control — no knob ⇒ still denied"
+
 # no marker ⇒ the whole hook (context-ceiling included) is untouched
 clear_marker; reset_state
 write_tasks fg-test-session '[{"id":"agent-1","tokenCount":190000,"contextWindowSize":200000}]'

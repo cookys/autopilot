@@ -264,10 +264,10 @@ function recentActivityMs(repo, p, branch) {
     for (const f of ['HEAD', 'index', 'logs/HEAD']) mt(path.join(dir, f));
   }
   if (branch) {
-    const cd = git(p, ['rev-parse', '--git-common-dir']);
+    const cd = git(p, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
     if (cd.ok) {
       try {
-        const first = fs.readFileSync(path.resolve(p, cd.out.trim(), 'logs', 'refs', 'heads', ...branch.split('/')), 'utf8').split('\n')[0];
+        const first = fs.readFileSync(path.join(cd.out.trim(), 'logs', 'refs', 'heads', ...branch.split('/')), 'utf8').split('\n')[0];
         const m = /> (\d+) [+-]\d{4}\t/.exec(first);
         if (m) stamps.push(Number(m[1]) * 1000);
       } catch { /* no reflog */ }
@@ -303,7 +303,7 @@ function classifyWorktrees(repo, mainPath, integrationSha) {
     const rh = recentActivityHours();
     if (rh > 0) {
       const last = recentActivityMs(repo, p, wt.branch);
-      if (last !== null && now - last < rh * 3600 * 1000) { row.class = 'live'; row.reason = `recent activity (under ${rh}h): in use, not a leftover`; rows.push(row); continue; }
+      if (last !== null && now - last < rh * 3600 * 1000) { row.class = 'live'; row.reason += `${row.reason ? '; ' : ''}recent activity (under ${rh}h): in use, not a leftover`; rows.push(row); continue; }
     }
     row.integrated = wt.head ? isAncestor(repo, wt.head, integrationSha) : null;
     if (row.integrated === null) { row.class = 'unverifiable'; row.reason += 'merge-base could not run'; }

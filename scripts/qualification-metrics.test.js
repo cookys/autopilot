@@ -35,6 +35,19 @@ function feedDirWithMetrics(generatedAt) {
 }
 
 // ── mutation harness ──
+// Mutant copies live in scripts/lib/ so their relative requires resolve. A crashed or interrupted
+// earlier run can leave some behind: sweep them before starting and again on exit / SIGINT / SIGTERM.
+const MUT_RE = /^qualification-metrics\.mut-.*\.js$/;
+function sweepMutants() {
+  const dir = path.join(__dirname, 'lib');
+  for (const f of fs.readdirSync(dir)) {
+    if (MUT_RE.test(f)) { try { fs.unlinkSync(path.join(dir, f)); } catch { /* already gone */ } }
+  }
+}
+sweepMutants();
+process.on('exit', sweepMutants);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { sweepMutants(); process.exit(130); });
+
 function mutatedLib(replacements) {
   let source = fs.readFileSync(LIB_PATH, 'utf8');
   for (const [from, to] of replacements) {
@@ -183,8 +196,27 @@ function staleCache() {
 }
 
 // ── parity with the llm-playground fixture set ──
+function fixtureSetDiff(dir, manifest) {
+  const listed = new Set(manifest.cases.map((c) => c.file));
+  const support = new Set(['manifest.json', 'json-domain', 'record-id-parity.json']);
+  const onDisk = fs.readdirSync(dir).filter((f) => !support.has(f));
+  return {
+    orphans: onDisk.filter((f) => !listed.has(f)).sort(),
+    missing: [...listed].filter((f) => !onDisk.includes(f)).sort(),
+  };
+}
+
+test('negative control: fixtureSetDiff reports an orphan file and a missing file', () => {
+  const dir = tmp('fxset');
+  fs.writeFileSync(path.join(dir, 'a.valid.json'), '{}');
+  fs.writeFileSync(path.join(dir, 'orphan.invalid.json'), '{}');
+  const d = fixtureSetDiff(dir, { cases: [{ file: 'a.valid.json' }, { file: 'gone.valid.json' }] });
+  assert.deepEqual(d, { orphans: ['orphan.invalid.json'], missing: ['gone.valid.json'] });
+});
+
 test('fixture manifest: every case validates or is rejected with the stated first code', () => {
   const manifest = fxJson('manifest.json');
+  assert.deepEqual(fixtureSetDiff(FIX, manifest), { orphans: [], missing: [] }, 'manifest and fixtures on disk must be the same set');
   for (const c of manifest.cases) {
     const raw = fx(c.file);
     const r = c.doc === 'record' ? lib.validateRecord(raw) : lib.validateMetrics(raw, c.max_bytes ? { maxBytes: c.max_bytes } : {});
@@ -457,7 +489,32 @@ test('CLI: fetch, status and order work end to end and order never drops a seat'
   assert.ok(JSON.parse(cli2('status', '--max-age-s', '0').stdout).warnings.length >= 1, '0 means always warn');
 });
 
+// latest_per_task rows (null n_attempts) still get the attempt-free lints (aligned with Python).
+function latestPerTaskRow() {
+  const doc = fxJson('seat-metrics-latest-per-task.valid.json');
+  return { doc, entry: doc.seat_metrics.find((e) => e.benchmark && e.benchmark.n_attempts === null) };
+}
+const A_lpt = {
+  lintsRun(m) {
+    const { doc, entry } = latestPerTaskRow();
+    assert.ok(entry, 'fixture has a latest_per_task benchmark row');
+    assert.deepEqual(m.validateMetrics(JSON.stringify(doc)).errors, []);
+    entry.sampling.low_n = !entry.sampling.low_n;
+    const r = m.validateMetrics(JSON.stringify(doc));
+    assert.ok(r.errors.some((x) => x[0] === 'DERIVED_MISMATCH' && /low_n/.test(x[1])), 'low_n mismatch caught');
+    const d2 = latestPerTaskRow();
+    d2.entry.speed.speed_basis = 'bogus..bogus';
+    assert.ok(m.validateMetrics(JSON.stringify(d2.doc)).errors.length > 0, 'speed_basis mismatch caught');
+  },
+};
+test('latest_per_task: low_n / speed_basis lints run although n_attempts is null', () => A_lpt.lintsRun(lib));
+
 // ── negative controls: the same assertions on deliberately broken copies must go RED ──
+expectRed('latest_per_task skips the attempt-free lints', [[
+  'if (b.n_attempts === null || b.n_attempts === undefined) { attemptFree(); return out; }',
+  'if (b.n_attempts === null || b.n_attempts === undefined) return out;',
+]], A_lpt.lintsRun);
+
 expectRed('feed lift removes a local strike', [[
   '    local: localStrikes,',
   '    local: localStrikes.filter((s) => !strikeEvents.some((e) => e.lifted_by !== null && e.strike_id === localStrikeId(s))),',

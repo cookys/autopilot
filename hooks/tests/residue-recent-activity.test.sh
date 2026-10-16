@@ -32,4 +32,17 @@ touch -d "@$OLD" "$WT" "$ADMIN/HEAD" "$ADMIN/index" "$ADMIN/logs/HEAD" 2>/dev/nu
 assert_eq "$(listed)" "clean-integrated" "aged worktree is clearable"
 node "$SCRIPT" reap --repo "$SBX" --yes --worktree "$WT" >/dev/null
 [ -d "$WT" ] && fail "reap --yes kept an aged clean-integrated worktree" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+
+# only the branch's first reflog line is new: directory and admin files are old, yet the worktree is still in use
+WT2="$TEST_TMP/wt-reflog-only"
+G worktree add -q "$WT2" -b reflogonly "$BASE"
+ADMIN2="$(git -C "$WT2" rev-parse --absolute-git-dir)"
+touch -d "@$OLD" "$WT2" "$ADMIN2/HEAD" "$ADMIN2/index" "$ADMIN2/logs/HEAD" 2>/dev/null
+class_of2() { node "$SCRIPT" scan --repo "$SBX" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.worktrees||[]).filter(e=>e.path===process.argv[1]).map(e=>e.class+"|"+e.reason).join(","))})' "$WT2"; }
+assert_eq "$(class_of2 | cut -d'|' -f1)" "live" "only a new first reflog line still classes the worktree as in use"
+case "$(class_of2)" in *"recent activity"*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1));; *) fail "live reason lost its recent-activity text";; esac
+# negative control: the same worktree with the reflog line aged too is clearable
+COMMON2="$(git -C "$WT2" rev-parse --path-format=absolute --git-common-dir)"
+sed -i "s/> [0-9]\{10\} /> $OLD /" "$COMMON2/logs/refs/heads/reflogonly"
+assert_eq "$(class_of2 | cut -d'|' -f1)" "clean-integrated" "negative control: with the reflog line aged the worktree is no longer live"
 finalize_test

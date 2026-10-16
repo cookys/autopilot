@@ -752,8 +752,11 @@ validate_review_block() {
     copy_c="$(printf '%s' "$proof_checked" | sed 's/[[:space:];,.]*$//')"
     copy_e="$(printf '%s' "$proof_evidence" | sed 's/[[:space:];,.]*$//')"
     copy_k="$(printf '%s' "$proof_conclusion" | sed 's/[[:space:];,.]*$//')"
-    if [ "$copy_c" = "$PROOF_EXAMPLE_CHECKED" ] || [ "$copy_e" = "$PROOF_EXAMPLE_EVIDENCE" ] \
-      || [ "$copy_k" = "$PROOF_EXAMPLE_CONCLUSION" ]; then
+    # Compare case-insensitively and trimmed so changing the case or padding does not slip a copy through.
+    _norm_copy() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+    if [ "$(_norm_copy "$copy_c")" = "$(_norm_copy "$PROOF_EXAMPLE_CHECKED")" ] \
+      || [ "$(_norm_copy "$copy_e")" = "$(_norm_copy "$PROOF_EXAMPLE_EVIDENCE")" ] \
+      || [ "$(_norm_copy "$copy_k")" = "$(_norm_copy "$PROOF_EXAMPLE_CONCLUSION")" ]; then
       BATTERY_FAIL_REASON="NO-FINDING-PROOF copies a field of the prompt example verbatim; do not copy the example, write your own checked, evidence, and conclusion"; return 1
     fi
     for proof_value in "$proof_checked" "$proof_evidence" "$proof_conclusion"; do

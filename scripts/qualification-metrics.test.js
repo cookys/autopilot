@@ -296,6 +296,87 @@ test('an unreachable or invalid feed never throws, writes nothing, and keeps the
   assert.equal(lib.siblingMetricsSource('https://h.example/a/b/feed.json'), 'https://h.example/a/b/qualification-metrics.json');
 });
 
+// ── strict UTF-8 on every path that reads a registry document (fetch and cache) ──
+function metricsBytesWith(bad) {
+  const doc = fxJson('metrics-qualification-and-strikes.valid.json');
+  doc.producer = 'PLACEHOLDER';
+  const [head, tail] = Buffer.from(JSON.stringify(doc)).toString('utf8').split('PLACEHOLDER');
+  return Buffer.concat([Buffer.from(head), Buffer.from(bad), Buffer.from(tail)]);
+}
+const BAD_UTF8 = {
+  'encoded surrogate ED A0 80': [0xed, 0xa0, 0x80],
+  'truncated sequence': [0xe2, 0x82],
+  'lone 0xFF': [0xff],
+};
+const A_ENC = {
+  async fetchRefusesInvalidUtf8(m) {
+    for (const [name, bad] of Object.entries(BAD_UTF8)) {
+      const f = feedDirWithMetrics(isoAgo(1));
+      fs.writeFileSync(path.join(path.dirname(f.feed), 'qualification-metrics.json'), metricsBytesWith(bad));
+      const cacheDir = tmp('cache');
+      const r = await m.fetchMetrics(f.feed, { cacheDir, now: NOW });
+      assert.equal(r.ok, false, `${name}: fetch accepted invalid UTF-8`);
+      assert.equal(fs.existsSync(path.join(cacheDir, 'metrics', 'current.json')), false, `${name}: cache written`);
+      assert.equal(m.readStatus({ cacheDir, now: NOW }).present, false);
+    }
+  },
+  async cacheReadRefusesInvalidUtf8(m) {
+    const f = feedDirWithMetrics(isoAgo(1));
+    const cacheDir = tmp('cache');
+    assert.equal((await m.fetchMetrics(f.feed, { cacheDir, now: NOW })).ok, true);
+    const cur = JSON.parse(fs.readFileSync(path.join(cacheDir, 'metrics', 'current.json'), 'utf8'));
+    fs.writeFileSync(path.join(cacheDir, 'metrics', cur.digest, 'metrics.json'), metricsBytesWith(BAD_UTF8['encoded surrogate ED A0 80']));
+    const st = m.readStatus({ cacheDir, now: NOW });
+    assert.equal(st.present, false);
+    assert.equal(st.doc, null);
+    assert.ok(st.labels.includes('cache-invalid'));
+  },
+  validateRefusesInvalidUtf8(m) {
+    for (const [name, bad] of Object.entries(BAD_UTF8)) {
+      assert.ok(m.validateMetrics(metricsBytesWith(bad)).errors.length > 0, `${name}: accepted`);
+    }
+  },
+  validateRefusesBom(m) {
+    const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), fx('metrics-qualification-and-strikes.valid.json')]);
+    assert.ok(m.validateMetrics(bytes).errors.length > 0, 'BOM accepted');
+  },
+};
+test('fetch refuses invalid UTF-8 and writes no cache', () => A_ENC.fetchRefusesInvalidUtf8(lib));
+test('a cached document with invalid UTF-8 is not adopted', () => A_ENC.cacheReadRefusesInvalidUtf8(lib));
+test('a document with a leading BOM is refused', () => A_ENC.validateRefusesBom(lib));
+test('validateMetrics refuses invalid UTF-8', () => A_ENC.validateRefusesInvalidUtf8(lib));
+expectRed('lenient UTF-8 decode accepts invalid bytes in validateMetrics', [["{ fatal: true, ignoreBOM: true }", "{ fatal: false, ignoreBOM: true }"]], A_ENC.validateRefusesInvalidUtf8);
+expectRed('lenient UTF-8 decode adopts an invalid cache entry', [["{ fatal: true, ignoreBOM: true }", "{ fatal: false, ignoreBOM: true }"]], A_ENC.cacheReadRefusesInvalidUtf8);
+expectRed('BOM stripped by the decoder is accepted', [["{ fatal: true, ignoreBOM: true }", "{ fatal: true, ignoreBOM: false }"]], A_ENC.validateRefusesBom);
+
+// The v1 feed reader shares the same decode + preflight. The documents below are otherwise a valid
+// defaults artifact, so only the encoding rule can refuse them.
+async function readAndParse(feedLib, file) {
+  const r = await feedLib.readFeedSource(file);
+  return feedLib.parseFeed(r.body, r.origin, r.bytes);
+}
+const FEED_HEAD = '{"artifact_type":"official-qualification-defaults","note":"';
+const FEED_TAIL = '"}';
+test('feed reader: a valid artifact parses (control for the rejections below)', async () => {
+  const feedLib = require('./lib/qualification-feed.js');
+  const f = path.join(tmp('feedsrc'), 'ok.json');
+  fs.writeFileSync(f, FEED_HEAD + 'é\u{1F600}' + FEED_TAIL);
+  assert.ok((await readAndParse(feedLib, f)).doc);
+});
+for (const [name, content] of [
+  ['invalid UTF-8 ED A0 80', Buffer.concat([Buffer.from(FEED_HEAD), Buffer.from([0xed, 0xa0, 0x80]), Buffer.from(FEED_TAIL)])],
+  ['truncated sequence', Buffer.concat([Buffer.from(FEED_HEAD), Buffer.from([0xe2, 0x82]), Buffer.from(FEED_TAIL)])],
+  ['leading BOM', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(FEED_HEAD + FEED_TAIL)])],
+  ['escaped lone surrogate', Buffer.from(FEED_HEAD + '\\ud800' + FEED_TAIL)],
+]) {
+  test(`feed reader refuses: ${name}`, async () => {
+    const feedLib = require('./lib/qualification-feed.js');
+    const f = path.join(tmp('feedsrc'), 'bad.json');
+    fs.writeFileSync(f, content);
+    await assert.rejects(() => readAndParse(feedLib, f));
+  });
+}
+
 // ── positive: authority ──
 test('feed lift / omission leave local strikes untouched', () => { A.feedLiftLeavesLocalStrikes(lib); A.feedOmissionLeavesLocalStrikes(lib); });
 test('feed qualified with no local row admits nothing', () => A.feedQualifiedWithoutLocalRowAdmitsNothing(lib));

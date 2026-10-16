@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted.
+- `scripts/validate-json-schema.js` now rejects a lone surrogate (such as an escaped `\ud800`) in any JSON string value or object key with `UNSUPPORTED_JSON_STRING` when the file is read, matching the llm-playground registry parser; paired surrogates (emoji) are still accepted. Registry documents (metrics, feed, cache) are also read as strict UTF-8 now: invalid bytes (such as an encoded surrogate) and a leading BOM are refused instead of being turned into U+FFFD or silently stripped.
 
 - BL-0194 P2: autopilot can now read the registry's sibling `qualification-metrics.json` (`scripts/qualification-metrics.js fetch|status|order`, vendored v2 schema, Node `record_id`/`entry_id`/`strike_id` parity); it only re-orders seats local evidence already admitted, warns past 7 days, and never admits, lifts or overwrites a local strike.
 

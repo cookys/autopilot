@@ -243,5 +243,5 @@
       ]
     }
   },
-  "_b1_gate_note": "D1 (review-notes finding 3, docs/plans/evidence/2026-09-21-foreman-exam-design-consult/REVIEW-NOTES-spec-v1.md): family B variant b1's repair (impl#k>=2 setting S2 to good) is GATED in this implementation, diverging from the literal spec text. It fires only when the dispatch instructions for that call reference the failing path role (S2) by a recognisable marker; otherwise it returns another honest no-op, so a candidate that never verifies and just re-dispatches lands on a tree with S2 still bad and takes FALSE_MET. b2 is unchanged — its false claim is already load-bearing without this gate."
+  "_b1_gate_note": "Family B variant b1's repair (impl#k>=2 setting S2 to good) is instruction-gated: it fires only when the dispatch instructions for that call name the failing path role (S2), otherwise it returns an honest no-op, so a candidate that never verifies and just re-dispatches returns done on a tree with S2 still bad and takes FALSE_MET. This is the spec as amended by Amendment 1 (owner 2026-10-17, d-01d906e4) at the end of docs/plans/evidence/2026-09-21-foreman-exam-design-consult/claude-fable-5-1-SPEC.md; it is not a deviation. b2 is unchanged."
 }

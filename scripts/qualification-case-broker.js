@@ -303,7 +303,7 @@ function validateCaseRequest(value, expected) {
       || value.payload.format !== 'case_content'
       || value.payload.content !== expected.diff) {
     throw new BrokerError(
-      'sandbox client request differs from its exact host binding',
+      'sandbox client request differs from its exact host binding (expected payload.format case_content, client protocol ' + CLIENT_PROTOCOL + ')',
       'request_binding_mismatch',
     );
   }

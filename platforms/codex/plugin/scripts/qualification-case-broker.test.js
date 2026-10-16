@@ -16,6 +16,7 @@ const {
   redactedExcerpt,
   runBrokerCase,
   sandboxArguments,
+  CLIENT_PROTOCOL,
 } = require('./qualification-case-broker');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-case-broker-test-'));
@@ -361,7 +362,8 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 97) throw new Error(`qualification-case-broker: expected exactly 97 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  equal(CLIENT_PROTOCOL, 'qualification-case-client-v2', 'client protocol is v2');
+  if (assertions !== 98) throw new Error(`qualification-case-broker: expected exactly 98 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

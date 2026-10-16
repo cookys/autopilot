@@ -1837,7 +1837,7 @@ async function main() {
   if (!request || request.role !== expectedRole
       || !request.payload || request.payload.format !== 'case_content'
       || typeof request.payload.content !== 'string') {
-    fail(`broker request is not a ${expectedRole}-role case for prompt mode ${promptMode}`);
+    fail(`broker request is not a ${expectedRole}-role case for prompt mode ${promptMode} (expected payload.format case_content, client protocol qualification-case-client-v2)`);
   }
   if (promptMode === 'owner'
       && !/^diff --git a\/\S+ b\/\S+\n/u.test(request.payload.content)) {

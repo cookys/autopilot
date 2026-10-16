@@ -18,6 +18,34 @@
    "why": "population latest_per_task claiming an n_attempts (all-attempt numbers under the wrong label)"
   },
   {
+   "file": "strict-json-nan.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "STRICT_JSON",
+   "why": "NaN is not JSON (Node's parser rejects it; Python must refuse before persisting)"
+  },
+  {
+   "file": "strict-json-duplicate-key.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "STRICT_JSON",
+   "why": "duplicate object key: JSON.parse would silently keep the last, Python's json the last too, so both refuse"
+  },
+  {
+   "file": "strict-json-unsafe-int.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "STRICT_JSON",
+   "why": "integer beyond +-(2^53-1): Node would round it"
+  },
+  {
+   "file": "pass-plus-timeout-exceeds-attempts.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "DERIVED_MISMATCH",
+   "why": "n_pass + n_timeout > n_attempts: a passed attempt cannot also have used up the step cap"
+  },
+  {
    "file": "seat-metrics-benchmark.valid.json",
    "doc": "metrics",
    "expect": "valid",
@@ -57,9 +85,8 @@
    "file": "permille-float-literal.invalid.json",
    "doc": "metrics",
    "expect": "invalid",
-   "reject_code": "SCHEMA",
-   "reject_hint": "pass_rate_permille",
-   "why": "pass_rate_permille 872.0: lossy float literal is not an integer (Node validator refuses the literal)"
+   "reject_code": "STRICT_JSON",
+   "why": "pass_rate_permille 872.0: not the canonical JSON.stringify spelling (Node refuses the literal; Python json.dumps would write it)"
   },
   {
    "file": "cost-unknown-as-zero.invalid.json",

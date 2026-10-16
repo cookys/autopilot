@@ -126,6 +126,7 @@ function checkBenchmark(p, e) {
   if (b.n_attempts === null || b.n_attempts === undefined) return out;
   if (b.n_attempts < b.n_tasks * b.n_trials) bad('n_attempts < n_tasks*n_trials');
   if (b.n_pass > b.n_attempts || (b.n_timeout !== null && b.n_timeout > b.n_attempts)) bad('n_pass or n_timeout exceeds n_attempts');
+  if (b.n_timeout !== null && b.n_pass + b.n_timeout > b.n_attempts) bad('n_pass + n_timeout exceeds n_attempts');
   const wantRate = b.n_attempts ? roundHalfUp(1000 * b.n_pass, b.n_attempts) : null;
   if (b.pass_rate_permille !== wantRate) bad(`pass_rate_permille ${b.pass_rate_permille} != ${wantRate}`);
   const lo = b.ci_low_permille;
@@ -210,7 +211,7 @@ function parseStrict(raw, schemaFile, semantic, maxBytes, semanticFn) {
     try {
       preflightJsonSource(source, 'document');
     } catch (error) {
-      return { errors: [['SCHEMA', error.message]], doc: null };
+      return { errors: [['STRICT_JSON', error.message]], doc: null };
     }
     doc = JSON.parse(source);
   } catch (error) {

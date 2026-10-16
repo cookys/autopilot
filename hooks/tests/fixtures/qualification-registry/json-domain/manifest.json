@@ -1,0 +1,166 @@
+{
+ "schema": "qualification-json-domain-fixtures.v1",
+ "about": "The shared JSON input range. Each file is run through Python strict_loads and through autopilot's validate-json-schema.js (--schema schema.json): both must accept exactly the `accept` files and refuse exactly the `reject` files. Reference Node file sha256 is pinned in doc/plan/078.",
+ "cases": [
+  {
+   "file": "num-449-0.json",
+   "expect": "reject",
+   "why": "integral float spelling: Python json.dumps writes it, Node refuses"
+  },
+  {
+   "file": "num-1-0.json",
+   "expect": "reject",
+   "why": "1.0"
+  },
+  {
+   "file": "num-neg-zero-float.json",
+   "expect": "reject",
+   "why": "negative zero float"
+  },
+  {
+   "file": "num-neg-zero-int.json",
+   "expect": "reject",
+   "why": "-0 does not round-trip (JSON.stringify(-0) is '0')"
+  },
+  {
+   "file": "num-1e21-bare.json",
+   "expect": "reject",
+   "why": "exponent without sign is not the JSON.stringify spelling"
+  },
+  {
+   "file": "num-1E21-upper.json",
+   "expect": "reject",
+   "why": "upper-case E"
+  },
+  {
+   "file": "num-1e-6.json",
+   "expect": "reject",
+   "why": "JSON.stringify(1e-6) is 0.000001"
+  },
+  {
+   "file": "num-1e16.json",
+   "expect": "reject",
+   "why": "JSON.stringify(1e16) is 10000000000000000"
+  },
+  {
+   "file": "num-1e16-plus.json",
+   "expect": "reject",
+   "why": "same value, still not the canonical spelling"
+  },
+  {
+   "file": "num-unsafe-int.json",
+   "expect": "reject",
+   "why": "integer beyond 2^53-1"
+  },
+  {
+   "file": "num-big-int-literal.json",
+   "expect": "reject",
+   "why": "integer literal beyond 2^53-1 even though JS prints that value without an exponent"
+  },
+  {
+   "file": "num-trailing-zero.json",
+   "expect": "reject",
+   "why": "trailing zero"
+  },
+  {
+   "file": "num-0-10.json",
+   "expect": "reject",
+   "why": "trailing zero"
+  },
+  {
+   "file": "num-nan.json",
+   "expect": "reject",
+   "why": "not JSON"
+  },
+  {
+   "file": "num-overflow.json",
+   "expect": "reject",
+   "why": "overflows to Infinity"
+  },
+  {
+   "file": "num-449.json",
+   "expect": "accept",
+   "why": "plain integer"
+  },
+  {
+   "file": "num-0-1.json",
+   "expect": "accept",
+   "why": "shortest decimal"
+  },
+  {
+   "file": "num-1e-7.json",
+   "expect": "accept",
+   "why": "exponent form below 1e-6"
+  },
+  {
+   "file": "num-1e+21.json",
+   "expect": "reject",
+   "why": "canonical spelling, but an integer-valued number beyond 2^53-1 (Node assertJsonValue)"
+  },
+  {
+   "file": "num-5e-324.json",
+   "expect": "accept",
+   "why": "smallest subnormal"
+  },
+  {
+   "file": "num-max-double.json",
+   "expect": "reject",
+   "why": "largest double is integer-valued and beyond 2^53-1"
+  },
+  {
+   "file": "num-0-00001.json",
+   "expect": "accept",
+   "why": "1e-5 is written positionally"
+  },
+  {
+   "file": "num-0-000001.json",
+   "expect": "accept",
+   "why": "1e-6 is written positionally"
+  },
+  {
+   "file": "num-1-5e-7.json",
+   "expect": "accept",
+   "why": "mantissa with a fraction in exponent form"
+  },
+  {
+   "file": "num-1-23e+21.json",
+   "expect": "reject",
+   "why": "long mantissa, but integer-valued beyond 2^53-1"
+  },
+  {
+   "file": "num-safe-max.json",
+   "expect": "accept",
+   "why": "2^53-1"
+  },
+  {
+   "file": "num-safe-min.json",
+   "expect": "accept",
+   "why": "-(2^53-1)"
+  },
+  {
+   "file": "num-zero.json",
+   "expect": "accept",
+   "why": "zero"
+  },
+  {
+   "file": "num-neg-1.json",
+   "expect": "accept",
+   "why": "negative integer"
+  },
+  {
+   "file": "dup-key.json",
+   "expect": "reject",
+   "why": "duplicate key"
+  },
+  {
+   "file": "depth-256.json",
+   "expect": "accept",
+   "why": "256 nested arrays around a scalar: the scalar sits at depth 256 (root = 0); the limit is 256"
+  },
+  {
+   "file": "depth-257.json",
+   "expect": "reject",
+   "why": "257 nested arrays around a scalar: the scalar sits at depth 257 (root = 0); the limit is 256"
+  }
+ ]
+}

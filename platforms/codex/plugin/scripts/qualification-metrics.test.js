@@ -193,6 +193,26 @@ test('fixture manifest: every case validates or is rejected with the stated firs
   }
 });
 
+test('json-domain: Node accepts exactly the accept files and refuses exactly the reject files', () => {
+  const { readJson, validateJsonSchema } = require('./validate-json-schema.js');
+  const dir = path.join(FIX, 'json-domain');
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  const schema = JSON.parse(fs.readFileSync(path.join(dir, 'schema.json'), 'utf8'));
+  assert.equal(manifest.cases.length, 32);
+  const names = new Set(manifest.cases.map((c) => c.file));
+  const onDisk = fs.readdirSync(dir).filter((f) => !['manifest.json', 'schema.json'].includes(f));
+  assert.deepEqual(onDisk.sort(), [...names].sort(), 'no orphan or missing json-domain fixture');
+  for (const c of manifest.cases) {
+    let accepted;
+    try {
+      accepted = validateJsonSchema(schema, readJson(path.join(dir, c.file), c.file)).valid;
+    } catch {
+      accepted = false;
+    }
+    assert.equal(accepted, c.expect === 'accept', `${c.file}: expected ${c.expect}`);
+  }
+});
+
 test('record_id / entry_id / strike_id match the cross-language parity fixture', () => {
   const p = fxJson('record-id-parity.json');
   for (const c of p.record_id_cases) {
@@ -401,3 +421,11 @@ expectRed('old behaviour: lookup through the deduped rows starves the other seat
   '  const own = latestOf(',
   '  if (seat) return latestOf(dedupeBenchmarkRows(doc).filter((e) => seatMatches(seat, e.seat)));\n  const own = latestOf(',
 ]], A.twoRolesOneCellBothGetData);
+
+expectRed('n_pass + n_timeout check removed: the manifest fixture is no longer rejected', [[
+  "if (b.n_timeout !== null && b.n_pass + b.n_timeout > b.n_attempts) bad('n_pass + n_timeout exceeds n_attempts');",
+  '',
+]], (m) => {
+  const r = m.validateMetrics(fx('pass-plus-timeout-exceeds-attempts.invalid.json'));
+  assert.equal(r.errors[0] && r.errors[0][0], 'DERIVED_MISMATCH');
+});

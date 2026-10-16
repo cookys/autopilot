@@ -1,0 +1,754 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cookys.github.io/model-dyno/schemas/qualification-feed-v2.schema.json",
+ "title": "model-dyno qualification registry v2 (metrics document). Wire numbers are INTEGERS in fixed units: _permille=1/1000, _milli=1/1000 unit, _micro=1e-6 USD, _ms=ms; every derived integer rounds half-up; unknown is null, never 0.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "schema",
+  "generated_at",
+  "producer",
+  "source_revision",
+  "seat_metrics",
+  "strike_events"
+ ],
+ "properties": {
+  "schema": {
+   "type": "string",
+   "enum": [
+    "model-dyno.qualification-metrics.v2"
+   ]
+  },
+  "generated_at": {
+   "$ref": "#/$defs/ts_utc"
+  },
+  "producer": {
+   "type": "string",
+   "minLength": 1
+  },
+  "source_revision": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{40}$",
+   "title": "git sha of the registry commit the document was built from"
+  },
+  "seat_metrics": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/seat_metric_entry"
+   }
+  },
+  "strike_events": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/strike_event"
+   }
+  }
+ },
+ "$defs": {
+  "ts_utc": {
+   "type": "string",
+   "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z$",
+   "title": "UTC timestamp ending in Z, e.g. 2026-10-16T08:00:00Z (millis optional)"
+  },
+  "sha256_hex": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$",
+   "title": "lowercase sha256 hex (64 chars)"
+  },
+  "origin_host_class": {
+   "type": "string",
+   "enum": [
+    "local-gpu",
+    "cloud-api"
+   ],
+   "title": "origin_host_class: where the MODEL ran, NOT where the harness ran. A cloud-API subject examined from a local machine is cloud-api; local-gpu only when the model weights were served on a local GPU. Never a hostname."
+  },
+  "evidence_ref": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "minLength": 1,
+   "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$",
+   "title": "evidence_ref: path relative to the registry repo root, never a URL, never absolute, no '..'; null when no tracked per-cell evidence can be named"
+  },
+  "seat6": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "engine",
+    "model",
+    "model_version",
+    "runner",
+    "role",
+    "effort"
+   ],
+   "properties": {
+    "engine": {
+     "type": "string",
+     "minLength": 1
+    },
+    "model": {
+     "type": "string",
+     "minLength": 1
+    },
+    "model_version": {
+     "type": "string",
+     "minLength": 1
+    },
+    "runner": {
+     "type": "string",
+     "minLength": 1
+    },
+    "role": {
+     "type": "string",
+     "minLength": 1
+    },
+    "effort": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+     "title": "effort tier token, or null for a legacy row that recorded no effort. null is hashed as JSON null; it is NOT the same seat as 'default' (= effort deliberately not sent, endpoint default ran)"
+    }
+   },
+   "title": "seat: exactly these six strings; this object is hashed as-is into entry_id and record_id (no seat hash is published)"
+  },
+  "strike_seat": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "engine",
+    "runner",
+    "role"
+   ],
+   "properties": {
+    "engine": {
+     "type": "string",
+     "minLength": 1
+    },
+    "runner": {
+     "type": "string",
+     "minLength": 1
+    },
+    "role": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "title": "strike seat: engine, runner, role (effort is a sibling field)"
+  },
+  "join": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "board_cell",
+      "board_join",
+      "identity_map_version"
+     ],
+     "properties": {
+      "board_cell": {
+       "type": "string",
+       "minLength": 1
+      },
+      "board_join": {
+       "type": "string",
+       "enum": [
+        "mapped"
+       ]
+      },
+      "identity_map_version": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "title": "mapped"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "board_cell",
+      "board_join",
+      "identity_map_version"
+     ],
+     "properties": {
+      "board_cell": {
+       "type": "null"
+      },
+      "board_join": {
+       "type": "string",
+       "enum": [
+        "unmapped"
+       ]
+      },
+      "identity_map_version": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "title": "unmapped: shown, never ranked"
+    }
+   ],
+   "title": "join to a board cell via qualification-identity.toml; identity_map_version = its version stamp; no map hash is published"
+  },
+  "qualification_block": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "status",
+    "corpus_version",
+    "prompt_config_hash",
+    "administered_at",
+    "record_id",
+    "record_id_basis",
+    "supersedes"
+   ],
+   "properties": {
+    "status": {
+     "type": "string",
+     "enum": [
+      "qualified",
+      "failed",
+      "provisional"
+     ]
+    },
+    "corpus_version": {
+     "type": "string",
+     "minLength": 1
+    },
+    "prompt_config_hash": {
+     "type": "string",
+     "minLength": 1
+    },
+    "administered_at": {
+     "$ref": "#/$defs/ts_utc"
+    },
+    "record_id": {
+     "$ref": "#/$defs/sha256_hex"
+    },
+    "record_id_basis": {
+     "type": "string",
+     "minLength": 1,
+     "title": "evidence_id | row_digest (legacy, kept as imported) | v1:producer,transcript_hash,seat,corpus_version,administered_at"
+    },
+    "supersedes": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[0-9a-f]{64}$",
+     "title": "record_id this one supersedes, or null"
+    },
+    "expires": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "title": "advisory only; calendar never gates admission"
+    }
+   }
+  },
+  "benchmark_block": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "n_tasks",
+    "n_trials",
+    "n_attempts",
+    "n_pass",
+    "n_timeout",
+    "pass_rate_permille",
+    "ci_method",
+    "ci_level_permille",
+    "ci_low_permille",
+    "ci_high_permille"
+   ],
+   "properties": {
+    "n_tasks": {
+     "type": "integer",
+     "minimum": 1,
+     "title": "tasks per trial"
+    },
+    "n_trials": {
+     "type": "integer",
+     "minimum": 1,
+     "title": "repeated runs of the task set"
+    },
+    "n_attempts": {
+     "type": "integer",
+     "minimum": 1,
+     "title": "every execution incl. retries; >= n_tasks*n_trials (semantic check)"
+    },
+    "n_pass": {
+     "type": "integer",
+     "minimum": 0,
+     "title": "attempts that passed"
+    },
+    "n_timeout": {
+     "type": "integer",
+     "minimum": 0,
+     "title": "attempts that used up the step cap (the board's maxstep_fail_n); NOT a wall-clock timeout"
+    },
+    "pass_rate_permille": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0,
+     "title": "round-half-up(1000*n_pass/n_attempts); null iff n_attempts==0; <=1000 (semantic)"
+    },
+    "ci_method": {
+     "type": "string",
+     "enum": [
+      "wilson"
+     ]
+    },
+    "ci_level_permille": {
+     "type": "integer",
+     "enum": [
+      950
+     ]
+    },
+    "ci_low_permille": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0
+    },
+    "ci_high_permille": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0
+    }
+   }
+  },
+  "speed_block": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "solved_per_hour_milli",
+    "wall_s_total",
+    "tasks_per_hour_milli",
+    "median_wall_ms",
+    "concurrency",
+    "speed_basis"
+   ],
+   "properties": {
+    "solved_per_hour_milli": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0,
+     "title": "round-half-up(n_pass*3.6e6/wall_s_total) = solved per hour x 1000; null iff wall_s_total==0"
+    },
+    "wall_s_total": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0,
+     "title": "integer seconds, summed wall time of ALL attempts; null when the source does not record it (then every derived speed field is null too)"
+    },
+    "tasks_per_hour_milli": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0,
+     "title": "same as solved_per_hour_milli but over completed attempts"
+    },
+    "median_wall_ms": {
+     "type": [
+      "integer",
+      "null"
+     ],
+     "minimum": 0,
+     "title": "per task, integer milliseconds"
+    },
+    "concurrency": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "speed_basis": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z\\.\\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z$",
+     "title": "window_start..window_end text"
+    }
+   }
+  },
+  "cost_block": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "cost_basis",
+      "pricing_version",
+      "usd_per_solved_micro",
+      "usd_per_task_micro",
+      "cost_total_micro",
+      "cost_coverage_permille"
+     ],
+     "properties": {
+      "cost_basis": {
+       "type": "string",
+       "enum": [
+        "billed",
+        "estimated"
+       ]
+      },
+      "pricing_version": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "usd_per_solved_micro": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0
+      },
+      "usd_per_task_micro": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0,
+       "title": "round-half-up(cost_total_micro / n_attempts); attempts include retries, so the denominator is n_attempts, not n_tasks"
+      },
+      "cost_total_micro": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 0
+      },
+      "cost_coverage_permille": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "cost_basis",
+      "pricing_version",
+      "usd_per_solved_micro",
+      "usd_per_task_micro",
+      "cost_total_micro",
+      "cost_coverage_permille"
+     ],
+     "properties": {
+      "cost_basis": {
+       "type": "string",
+       "enum": [
+        "unknown"
+       ]
+      },
+      "pricing_version": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "usd_per_solved_micro": {
+       "type": "null"
+      },
+      "usd_per_task_micro": {
+       "type": "null"
+      },
+      "cost_total_micro": {
+       "type": "null"
+      },
+      "cost_coverage_permille": {
+       "type": "integer",
+       "enum": [
+        0
+       ]
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "cost_basis",
+      "pricing_version",
+      "usd_per_solved_micro",
+      "usd_per_task_micro",
+      "cost_total_micro",
+      "cost_coverage_permille"
+     ],
+     "properties": {
+      "cost_basis": {
+       "type": "string",
+       "enum": [
+        "subscription"
+       ]
+      },
+      "pricing_version": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "usd_per_solved_micro": {
+       "type": "null"
+      },
+      "usd_per_task_micro": {
+       "type": "null"
+      },
+      "cost_total_micro": {
+       "type": "null"
+      },
+      "cost_coverage_permille": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    }
+   ],
+   "title": "cost: USD micro-dollars (1e-6). Unknown is null, NEVER 0. cost_basis unknown => all amounts null and coverage 0; subscription => amounts null; billed|estimated => amounts integer or null"
+  },
+  "sampling_block": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "window_start",
+    "low_n"
+   ],
+   "properties": {
+    "window_start": {
+     "$ref": "#/$defs/ts_utc"
+    },
+    "low_n": {
+     "type": "boolean",
+     "title": "n_trials < 5 (semantic)"
+    }
+   }
+  },
+  "seat_metric_entry": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "entry_id",
+      "seat",
+      "instrument_id",
+      "instrument_version",
+      "window_end",
+      "join",
+      "origin_host_class",
+      "evidence_ref",
+      "kind",
+      "qualification"
+     ],
+     "properties": {
+      "entry_id": {
+       "$ref": "#/$defs/sha256_hex"
+      },
+      "seat": {
+       "$ref": "#/$defs/seat6"
+      },
+      "instrument_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "instrument_version": {
+       "type": "string",
+       "minLength": 1
+      },
+      "window_end": {
+       "$ref": "#/$defs/ts_utc"
+      },
+      "join": {
+       "$ref": "#/$defs/join"
+      },
+      "origin_host_class": {
+       "$ref": "#/$defs/origin_host_class"
+      },
+      "evidence_ref": {
+       "$ref": "#/$defs/evidence_ref"
+      },
+      "kind": {
+       "type": "string",
+       "enum": [
+        "qualification"
+       ]
+      },
+      "qualification": {
+       "$ref": "#/$defs/qualification_block"
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "entry_id",
+      "seat",
+      "instrument_id",
+      "instrument_version",
+      "window_end",
+      "join",
+      "origin_host_class",
+      "evidence_ref",
+      "kind",
+      "benchmark",
+      "speed",
+      "cost",
+      "sampling"
+     ],
+     "properties": {
+      "entry_id": {
+       "$ref": "#/$defs/sha256_hex"
+      },
+      "seat": {
+       "$ref": "#/$defs/seat6"
+      },
+      "instrument_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "instrument_version": {
+       "type": "string",
+       "minLength": 1
+      },
+      "window_end": {
+       "$ref": "#/$defs/ts_utc"
+      },
+      "join": {
+       "$ref": "#/$defs/join"
+      },
+      "origin_host_class": {
+       "$ref": "#/$defs/origin_host_class"
+      },
+      "evidence_ref": {
+       "$ref": "#/$defs/evidence_ref"
+      },
+      "kind": {
+       "type": "string",
+       "enum": [
+        "benchmark_observation"
+       ]
+      },
+      "benchmark": {
+       "$ref": "#/$defs/benchmark_block"
+      },
+      "speed": {
+       "$ref": "#/$defs/speed_block"
+      },
+      "cost": {
+       "$ref": "#/$defs/cost_block"
+      },
+      "sampling": {
+       "$ref": "#/$defs/sampling_block"
+      }
+     }
+    }
+   ],
+   "title": "seat_metrics[] entry; kind discriminates. entry_id = sha256(canonical_json([seat, kind, instrument_id, window_end])). qualification => ONLY the qualification block; benchmark_observation => benchmark+speed+cost+sampling; any other block present is invalid (additionalProperties false per branch)"
+  },
+  "strike_event": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "strike_id",
+    "strike_seq",
+    "seat",
+    "effort",
+    "reason",
+    "lifted_by",
+    "record_id",
+    "administered_at"
+   ],
+   "properties": {
+    "strike_id": {
+     "$ref": "#/$defs/sha256_hex"
+    },
+    "strike_seq": {
+     "type": "integer",
+     "minimum": 1,
+     "title": "assigned by the registry at commit, monotonic per seat (engine,runner,role,effort); the sender never supplies it"
+    },
+    "seat": {
+     "$ref": "#/$defs/strike_seat"
+    },
+    "effort": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+     "title": "same rule as seat.effort: token or null; null (legacy) is not default"
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1
+    },
+    "lifted_by": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[0-9a-f]{64}$",
+     "title": "strike_id of the lifting event, or null; informational only"
+    },
+    "record_id": {
+     "$ref": "#/$defs/sha256_hex"
+    },
+    "administered_at": {
+     "$ref": "#/$defs/ts_utc"
+    }
+   },
+   "title": "strike_events[] entry (v1 strikes[] untouched). strike_id = sha256(canonical_json([seat, effort, reason, administered_at, record_id])); record_id/administered_at are the failing record's, carried so consumers can recompute strike_id. Disclosure only"
+  },
+  "strike_submission": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "seat",
+    "effort",
+    "reason",
+    "record_id",
+    "administered_at"
+   ],
+   "properties": {
+    "seat": {
+     "$ref": "#/$defs/strike_seat"
+    },
+    "effort": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$"
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1
+    },
+    "record_id": {
+     "$ref": "#/$defs/sha256_hex"
+    },
+    "administered_at": {
+     "$ref": "#/$defs/ts_utc"
+    }
+   },
+   "title": "what a sender submits for a strike: no strike_seq (the registry assigns it) and no strike_id (derived)"
+  }
+ }
+}

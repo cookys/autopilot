@@ -373,5 +373,6 @@ module.exports = {
   readCurrentManifest,
   defaultCacheDir,
   hasGitMarker,
+  assertOutsideGit,
   sha256,
 };

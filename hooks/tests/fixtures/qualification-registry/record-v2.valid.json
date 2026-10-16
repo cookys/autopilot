@@ -1,0 +1,49 @@
+{
+ "schema": 2,
+ "record_id": "5739c4897fc62c5b2b38293c9cbb5756af525a1d8bc6c2429a83884aa717dd3d",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "producer": "engine-qualify-v2",
+ "transcript_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+ "administered_at": "2026-10-12T10:00:00Z",
+ "origin_host_class": "cloud-api",
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/example.json",
+ "source": {
+  "kind": "autopilot-outbox",
+  "producer": "engine-qualify-v2"
+ },
+ "seat": {
+  "engine": "grok-4.6",
+  "model": "grok-4.6",
+  "model_version": "grok-4.6",
+  "runner": "grok",
+  "role": "implementer",
+  "effort": "low",
+  "family": "xai",
+  "version_source": "runtime",
+  "runner_version": "grok-1.0.5",
+  "harness_version": "engine-qualify-e9eb3890",
+  "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "corpus_version": "impl-live-rail-v1"
+ },
+ "verdict": {
+  "status": "qualified",
+  "capability_score": 1,
+  "quality": {
+   "corpus_pass": "24/24"
+  },
+  "date": "2026-10-12",
+  "qualified_at": "2026-10-12",
+  "expires": "2026-11-11"
+ },
+ "evidence": null,
+ "cost": {
+  "source": "unknown"
+ },
+ "latency": {
+  "sample_wall_time_s": 449
+ },
+ "raw": {
+  "note": "synthetic fixture"
+ },
+ "imported_at": "2026-10-16T09:00:00Z"
+}

@@ -1,0 +1,95 @@
+{
+ "schema": "qualification-fixtures.v1",
+ "about": "Every fixture is a complete document. Both validators (Python here, autopilot Node later) run this list: `valid` must be accepted; `invalid` must be rejected with reject_code as the FIRST reported code and no accepted-by-accident. doc=metrics validates against schemas/qualification-feed-v2.schema.json, doc=record against schemas/qualification-record.schema.json. SCHEMA-coded rejections are expressible in JSON Schema alone; the other codes are semantic and must be reimplemented in Node. max_bytes, when present, overrides the byte cap for that case. reject_hint (SCHEMA cases) is a substring the Python validator's message must contain so a case cannot pass for the wrong reason; Node need only reject.",
+ "cases": [
+  {
+   "file": "seat-metrics-benchmark.valid.json",
+   "doc": "metrics",
+   "expect": "valid",
+   "reject_code": null,
+   "why": "plan 3.2 example: one benchmark_observation entry"
+  },
+  {
+   "file": "metrics-qualification-and-strikes.valid.json",
+   "doc": "metrics",
+   "expect": "valid",
+   "reject_code": null,
+   "why": "qualification entry + two strike_events, one lifted"
+  },
+  {
+   "file": "record-legacy.valid.json",
+   "doc": "record",
+   "expect": "valid",
+   "reject_code": null,
+   "why": "verbatim committed schema-1 row_digest record: legacy keeps its basis"
+  },
+  {
+   "file": "record-v2.valid.json",
+   "doc": "record",
+   "expect": "valid",
+   "reject_code": null,
+   "why": "schema-2 record whose record_id is the v1 hash of its own fields"
+  },
+  {
+   "file": "permille-fractional.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "SCHEMA",
+   "reject_hint": "pass_rate_permille",
+   "why": "pass_rate_permille 912.5: wire numbers are integers"
+  },
+  {
+   "file": "permille-float-literal.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "SCHEMA",
+   "reject_hint": "pass_rate_permille",
+   "why": "pass_rate_permille 872.0: lossy float literal is not an integer (Node validator refuses the literal)"
+  },
+  {
+   "file": "cost-unknown-as-zero.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "SCHEMA",
+   "reject_hint": "usd_per_solved_micro",
+   "why": "cost_basis unknown with amounts 0: unknown is null, never 0"
+  },
+  {
+   "file": "strike-seq-duplicate.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "STRIKE_SEQ_DUPLICATE",
+   "why": "two strike_events of one seat share strike_seq 1"
+  },
+  {
+   "file": "entry-mixed-kind.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "SCHEMA",
+   "reject_hint": "additional property 'qualification'",
+   "why": "benchmark_observation entry also carrying a qualification block"
+  },
+  {
+   "file": "entry-id-conflict.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "ENTRY_ID_CONFLICT",
+   "why": "same entry_id, different payload bytes: conflict, never merged"
+  },
+  {
+   "file": "pass-rate-mismatch.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "DERIVED_MISMATCH",
+   "why": "pass_rate_permille is not round-half-up(1000*n_pass/n_attempts)"
+  },
+  {
+   "file": "oversize.invalid.json",
+   "doc": "metrics",
+   "expect": "invalid",
+   "reject_code": "OVERSIZE",
+   "max_bytes": 1024,
+   "why": "a valid document that exceeds the size cap (manifest max_bytes override; the default 4 MiB cap is tested separately)"
+  }
+ ]
+}

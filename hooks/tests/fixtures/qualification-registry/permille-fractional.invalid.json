@@ -1,0 +1,63 @@
+{
+ "schema": "model-dyno.qualification-metrics.v2",
+ "generated_at": "2026-10-16T09:00:00Z",
+ "producer": "build-qualification-feed.py@2",
+ "source_revision": "1a8b47dee8e4758512ca1e193ff7e000226beb20",
+ "seat_metrics": [
+  {
+   "entry_id": "6e62d21baec58fc51d3b0aac629c6075b7ebc115fe6bff99a4f712374c7b7d5d",
+   "kind": "benchmark_observation",
+   "seat": {
+    "engine": "grok-4.6",
+    "model": "grok-4.6",
+    "model_version": "grok-4.6",
+    "runner": "grok",
+    "role": "implementer",
+    "effort": "low"
+   },
+   "instrument_id": "swe-canonical",
+   "instrument_version": "34t-559c010f",
+   "window_end": "2026-10-11T08:00:00Z",
+   "benchmark": {
+    "n_tasks": 34,
+    "n_trials": 5,
+    "n_attempts": 172,
+    "n_pass": 150,
+    "n_timeout": 6,
+    "pass_rate_permille": 912.5,
+    "ci_method": "wilson",
+    "ci_level_permille": 950,
+    "ci_low_permille": 814,
+    "ci_high_permille": 914
+   },
+   "speed": {
+    "solved_per_hour_milli": 18750,
+    "wall_s_total": 28800,
+    "tasks_per_hour_milli": 20750,
+    "median_wall_ms": 61240,
+    "concurrency": 1,
+    "speed_basis": "2026-10-10T00:00:00Z..2026-10-11T08:00:00Z"
+   },
+   "cost": {
+    "usd_per_solved_micro": 30000,
+    "usd_per_task_micro": 26163,
+    "cost_total_micro": 4500000,
+    "cost_coverage_permille": 1000,
+    "cost_basis": "billed",
+    "pricing_version": "model-economics@2026-10-01"
+   },
+   "sampling": {
+    "window_start": "2026-10-10T00:00:00Z",
+    "low_n": false
+   },
+   "join": {
+    "board_cell": "grok/grok-4.6-low",
+    "board_join": "mapped",
+    "identity_map_version": "2026-10-16.1"
+   },
+   "origin_host_class": "cloud-api",
+   "evidence_ref": "benchmarks/results/example/swe-34t-559c010f-grok-4.6-low.json"
+  }
+ ],
+ "strike_events": []
+}

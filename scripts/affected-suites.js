@@ -33,7 +33,7 @@
 //      change that could matter.
 //   5. A fixed always-run list (ALWAYS_RUN, with a reason each) is added to every selective result
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
-// Contract/evidence: docs/backlog/qc-gate-affected-suites.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
+// Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');

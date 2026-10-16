@@ -131,4 +131,8 @@ Run 2026-10-17, one pass, no cell re-run, 0 infra_fail, 156 rail calls (78 per s
 
 ## Decision
 
-NOT-SHIP is recorded. The production prompt, `think-tank` Step 3.5 text, the reference text and their tests/mirror are reverted to the `develop` versions in the commit that follows this one; this evidence stays. `bind-gate.js` was not run (only SHIP binds). BL-0121 stays open with the result in its Context.
+NOT-SHIP is recorded. The production prompt, `think-tank` Step 3.5 text, the reference text and their tests/mirror were first reverted to the `develop` versions (`109c3977e`); that revert was itself reverted after the owner ruling below.
+
+## Owner ruling (2026-10-17, card d-abc43acd)
+
+The evaluation judged NOT-SHIP under the pre-registered rules; the only failing gate is cost (B total about 2.8x A, above the 2x limit set by depth-0). The verdict in `cells/score.json` is unchanged: NOT-SHIP (cost). The owner reviewed the results on 2026-10-17, accepted the cost and approved shipping the second turn ("接受成本，上線第二輪"). The sonnet red-arm result (red 7 vs B 6, UNINFORMATIVE) stands as recorded. `scripts/check-guidance-eval.js` requires its scorer to reproduce SHIP, so the gate is NOT bound for this change: the guidance-eval verdict is NOT-SHIP (cost), shipped on owner ruling. `bind-gate.js` was not run.

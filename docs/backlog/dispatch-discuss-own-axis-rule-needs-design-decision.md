@@ -1,3 +1,0 @@
-# dispatch-discuss own-axis rule (BL-0121) needs a design decision
-
-2026-10-16 triage (lane-bl0121): NOT a mechanism change, NOT aligned yet. Production rail is single-contribution by contract (dispatch-discuss.js header lines 36-40; prompt line 262 says the seat has never spoken; validator line 449-450 rejects any axis in taken_axes; no this-seat role exists in production bundles). Adding the own-axis rule adds a new requirement and only makes sense once a production multi-turn seat exists, so it needs a design decision (does a discuss seat ever get a second round?) plus ON/OFF eval; until then the exam tests a rule production never exercises.

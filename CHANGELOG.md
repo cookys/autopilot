@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Final-panel seat store gained an incremental station (`final-panel-incremental`) with a plan 2.4 binding, per-seat re-derivation including the carried-path digest recheck, and an incremental part in the full-diff gate-journal key (BL-0146 D2); nothing selects it yet, the default path is unchanged.
+
 - `skills/dev-flow/SKILL.md` is now the 483-line contract card (was 534; ladder terms, drift table, anti-patterns table, compatibility notes and the scripts index moved to `references/card-relocated.md`), shipped on the BL-0044 evidence: dc ON/OFF SHIP-GATE-MET and stage-graph coverage 10/12 (`docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/`); the skill-onoff instrument gained the repaired `dc` row (`evals/skill-onoff/score-dc.js`).
 
 - Review packets may now exclude `evals/skill-onoff/packs/**` via the consumer exclude allowlist: those frozen eval arm packs are verbatim pinned copies that can add ~70k lines to a campaign diff, too large for a packet; reviewers read the arm manifests, prereg and scorer instead.

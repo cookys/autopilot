@@ -27,6 +27,74 @@ const FINAL_PANEL_SEAT_BUDGET_PHASE = 'final_panel_seat_attempt_budget';
 const FINAL_PANEL_SEAT_BUDGET_STATUS = 'attempt_budget_exhausted';
 const FINAL_PANEL_SEAT_BUDGET_REASON = `final_panel_seat_${FINAL_PANEL_SEAT_BUDGET_STATUS}`;
 const SHA256 = /^[0-9a-f]{64}$/;
+// BL-0146 D2: an incremental (return-review) round has its OWN station name, so a stored
+// full-round artifact can never satisfy an incremental lookup and the reverse.
+const INCREMENTAL_STATION = 'final-panel-incremental';
+const INCREMENTAL_REVIEW_INPUT_MODE = 'incremental_return';
+
+function isIncrementalStation(station) {
+  return station === INCREMENTAL_STATION;
+}
+
+function sortedPathDigests(list) {
+  if (!Array.isArray(list)) return null;
+  const rows = [];
+  for (const entry of list) {
+    if (!entry || typeof entry.path !== 'string' || entry.path.length === 0
+        || !SHA256.test(entry.file_digest || '')) return null;
+    rows.push({ path: entry.path, file_digest: entry.file_digest });
+  }
+  return rows.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+// Plan 2.4 reuse key. Returns null when any component is missing or malformed, so a caller
+// cannot build a binding from a partial input (fail closed to the full path).
+function incrementalBinding(canonicalDigest, parts) {
+  if (!parts || typeof parts !== 'object') return null;
+  const strings = ['base_sha', 'prior_head', 'prior_tree_sha', 'prior_binding', 'new_head', 'new_tree_sha'];
+  for (const key of strings) {
+    if (typeof parts[key] !== 'string' || parts[key].length === 0) return null;
+  }
+  for (const key of ['delta_diff_digest', 'carry_packet_digest', 'spec_digest', 'review_input_digest']) {
+    if (!SHA256.test(parts[key] || '')) return null;
+  }
+  const recheck = sortedPathDigests(parts.recheck_set);
+  const carried = sortedPathDigests(parts.carried_set);
+  if (!recheck || !carried) return null;
+  return canonicalDigest({
+    mode: 'incremental',
+    base_sha: parts.base_sha,
+    prior_head: parts.prior_head,
+    prior_tree_sha: parts.prior_tree_sha,
+    prior_binding: parts.prior_binding,
+    new_head: parts.new_head,
+    new_tree_sha: parts.new_tree_sha,
+    delta_diff_digest: parts.delta_diff_digest,
+    recheck_set: recheck,
+    carried_set: carried,
+    carry_packet_digest: parts.carry_packet_digest,
+    spec_digest: parts.spec_digest,
+    review_input_digest: parts.review_input_digest,
+  });
+}
+
+// The incremental block stored with an artifact: what the carry rested on.
+function incrementalBlock(ctx) {
+  const inc = ctx && ctx.incremental;
+  if (!inc || typeof inc !== 'object') return null;
+  const carried = sortedPathDigests(inc.carried_set);
+  const recheck = sortedPathDigests(inc.recheck_set);
+  if (!carried || !recheck || typeof inc.prior_head !== 'string' || inc.prior_head.length === 0
+      || typeof inc.new_head !== 'string' || inc.new_head.length === 0
+      || !SHA256.test(inc.delta_diff_digest || '')) return null;
+  return {
+    prior_head: inc.prior_head,
+    new_head: inc.new_head,
+    delta_diff_digest: inc.delta_diff_digest,
+    carried_set: carried,
+    recheck_set: recheck,
+  };
+}
 
 function seatTuple(seat) {
   return {
@@ -121,15 +189,34 @@ function deriveReusableOutcome(artifact, expect, canonicalDigest) {
       return null;
     }
   }
+  const incremental = isIncrementalStation(expect.station);
+  if (incremental) {
+    // The artifact must say it is incremental and carry the same increment block the caller
+    // derived now (prior head, delta digest, carried and re-check sets). Missing = miss.
+    const want = incrementalBlock(expect);
+    const have = artifact.incremental;
+    if (artifact.review_scope !== 'incremental' || !want || !have
+        || canonicalDigest(want) !== canonicalDigest(have)) return null;
+    // A7: a carried verdict stands for path P only while P's cumulative digest at the new head
+    // still equals the digest recorded with the artifact. The caller recomputes the current
+    // digests from Git at use time (Map path -> digest); a missing map is a miss, never a pass.
+    const current = expect.currentFileDigests;
+    if (!(current instanceof Map)) return null;
+    for (const entry of have.carried_set) {
+      if (current.get(entry.path) !== entry.file_digest) return null;
+    }
+  } else if (artifact.review_scope !== undefined || artifact.incremental !== undefined) {
+    return null;
+  }
   return {
     reviewed: true,
     verdict: result.verdict,
     findings: result.findings,
     review_digest: result.review_digest,
-    review_input_mode: 'full_diff_generation',
+    review_input_mode: incremental ? INCREMENTAL_REVIEW_INPUT_MODE : 'full_diff_generation',
     blind_discovery: true,
-    prior_findings_included: false,
-    full_diff_required: true,
+    prior_findings_included: incremental,
+    full_diff_required: !incremental,
     ...(hasPacket ? { packet_hash: result.packet_hash } : {}),
     reused_from_artifact: true,
   };
@@ -154,7 +241,9 @@ function lookupSeat(ctx, canonicalDigest) {
 }
 
 function baseBody(ctx, attempts, result) {
+  const block = isIncrementalStation(ctx.station) ? incrementalBlock(ctx) : null;
   return {
+    ...(block ? { review_scope: 'incremental', incremental: block } : {}),
     schema_version: 1,
     artifact_type: ARTIFACT_TYPE,
     campaign_id: ctx.campaignId,
@@ -178,6 +267,7 @@ function recordAttempt(ctx, priorAttempts) {
 function recordVerdict(ctx, attempts, outcome) {
   const file = seatFile(ctx);
   if (!file || !outcome || outcome.reviewed !== true) return false;
+  if (isIncrementalStation(ctx.station) && !incrementalBlock(ctx)) return false;
   const result = {
     verdict: outcome.verdict,
     findings: typeof outcome.findings === 'string' ? outcome.findings : '',
@@ -304,6 +394,9 @@ module.exports = {
   reapCampaignSeats,
   reapIfCampaignTerminal,
   ARTIFACT_TYPE,
+  INCREMENTAL_STATION,
+  INCREMENTAL_REVIEW_INPUT_MODE,
+  incrementalBinding,
   FINAL_PANEL_SEAT_ATTEMPT_BUDGET,
   FINAL_PANEL_SEAT_BUDGET_PHASE,
   FINAL_PANEL_SEAT_BUDGET_STATUS,

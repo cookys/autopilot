@@ -798,6 +798,10 @@ exit_probe CLEAN 'guard with ||'           '[ -x /nonexistent/tool ] || exit 0'
 exit_probe CLEAN 'guard if-block'          'if ! command -v nonexistent-tool >/dev/null; then echo bail; exit 0; fi'
 exit_probe CLEAN 'conditional brace group' '[ "$1" = x ] && { echo done; exit 0; }'
 exit_probe CLEAN 'exit inside function'    'bail() { exit 0; }'
+exit_probe CLEAN 'one-line function'       'skip_all() { echo SKIP; exit 0; }'
+exit_probe CLEAN 'one-line function keyword' 'function skip_all { echo SKIP; exit 0; }'
+exit_probe CLEAN 'variable-gated guard (-n "$VAR")' '[ -n "$SKIP" ] && exit 0'
+exit_probe CATCH 'exit after a one-line function' 'f() { :; }; exit 0'
 exit_probe CLEAN 'exit written as data'    'echo "exit 0"'
 
 # a legitimate terminating exit appended after the last assertion

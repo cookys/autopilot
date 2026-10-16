@@ -274,7 +274,7 @@ def shell_code_view(line):
 
 
 _TRIVIAL_TRUE = re.compile(
-    r"^(?:true|:|\[ 1 (?:-eq|=|==) 1 \]|\[\[ 1 (?:-eq|=|==) 1 \]\]|\[ -n Q \]|\[\[ -n Q \]\])$"
+    r"^(?:true|:|\[ 1 (?:-eq|=|==) 1 \]|\[\[ 1 (?:-eq|=|==) 1 \]\])$"
 )
 _TRIVIAL_FALSE = re.compile(r"^(?:false|\[ 1 (?:-eq|=|==) 2 \])$")
 _EXIT_SEG = re.compile(r"^(?:exit|return)(?:\s+0)?$")
@@ -362,10 +362,15 @@ def find_early_exits(text):
                     stack.append("other")
                 prev_op = None
                 continue
-            if re.search(r"\)\s*\{\s*$", seg) or re.match(r"^function\s+\S+.*\{\s*$", seg):
+            fm = re.match(r"^(?:function\s+[\w.:-]+\s*(?:\(\s*\))?|[\w.:-]+\s*\(\s*\))\s*\{(.*)$", seg)
+            if fm:
+                # function definition, including the one-line `name() { ...; }` form:
+                # everything up to the matching `}` is inside the function body.
                 stack.append("other")
+                seg = fm.group(1).strip()
                 prev_op = None
-                continue
+                if not seg:
+                    continue
             if re.match(r"^\{(?:\s|$)", seg):
                 stack.append("other" if conditional else "group")
                 seg = seg[1:].strip()
@@ -2016,6 +2021,8 @@ def main():
             for line in hunk["lines"]:
                 if line.startswith("+"):
                     added.add(cur)
+                    cur += 1
+                elif line.startswith(" "):
                     cur += 1
         if not added:
             continue

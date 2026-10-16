@@ -27,7 +27,7 @@ const { spawnSync } = require('child_process');
 const RULES = [
   ['literal_compare', /(?:[!=]==?\s*|\bcase\s+)(['"])(?:p\d+|fixture[\w-]*|test[\w-]*|dummy[\w-]*|fake[\w-]*|mock[\w-]*|foo|bar|example[\w-]*)\1|(['"])(?:p\d+|fixture[\w-]*|test[\w-]*|dummy[\w-]*|fake[\w-]*|mock[\w-]*|foo|bar|example[\w-]*)\2\s*[!=]==?/i],
   ['fixture_const', /\b(?:FIXTURE_[A-Z0-9_]+|TEST_FIXTURE\w*)\b/],
-  ['fake_sha', /(['"])(?:([0-9a-f])\2{39,63}|[0-9a-f]*(?:deadbeef|cafebabe)[0-9a-f]*)\1/i],
+  ['fake_sha', /(['"])(?:(?!0+\1)([0-9a-f])\2{39,63}|[0-9a-f]*(?:deadbeef|cafebabe)[0-9a-f]*)\1/i],
   ['fake_path', /(['"])(?:\/(?:var\/)?tmp\/(?:fixture|fake|dummy|test)[\w./-]*|\/path\/to\/[\w./-]*)\1/],
   ['test_mode_branch', /NODE_ENV\s*[!=]==?\s*(['"])test\1/],
 ];

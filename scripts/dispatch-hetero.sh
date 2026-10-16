@@ -4152,6 +4152,18 @@ check_main_checkout_boundary() {
   fi
   return 0
 }
+# Advisory scan (evidence-discipline §23): fixture literals written into production code.
+# Branches on the scanner's exit code and can NEVER fail the hands gate: 0 clean and
+# 2/3/anything else (usage, could not run, crash, no node) are silent; only rc 1 with a
+# JSON body prints, as a lead for the reviewer.
+run_fixture_literal_advisory() {
+  local _fl_out="" _fl_rc=0
+  _fl_out="$(node "$SELF_DIR/scan-fixture-literals.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>/dev/null)" || _fl_rc=$?
+  if [ "$_fl_rc" -eq 1 ] && [ -n "$_fl_out" ]; then
+    printf '[hands-advisory] fixture literals in production code (scan-fixture-literals.js) — review before integrating:\n%s\n' "$_fl_out" >&2
+  fi
+  return 0
+}
 run_hands_content_gate() {
   HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
   local content_out content_rc
@@ -4162,12 +4174,7 @@ run_hands_content_gate() {
   content_out="$(node "$SELF_DIR/check-hands-commit.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" "${_subject_args[@]}" 2>&1)" && content_rc=0 || content_rc=$?
   case "$content_rc" in
     0)
-      # Advisory only (evidence-discipline §23): fixture literals written into production code.
-      # A hit is a lead for the reviewer, never a rejection; a scan that cannot run is silent here.
-      local _fl_out
-      _fl_out="$(node "$SELF_DIR/scan-fixture-literals.js" --repo "$WT" --base "$BASE_SHA" --head "$HEAD_SHA" 2>/dev/null)" || {
-        [ -n "$_fl_out" ] && printf '[hands-advisory] fixture literals in production code (scan-fixture-literals.js) — review before integrating:\n%s\n' "$_fl_out" >&2
-      }
+      run_fixture_literal_advisory
       return 0 ;;
     1) HANDS_BOUNDARY_CODE="unsafe_commit_content"; HANDS_BOUNDARY_ERROR="boundary_rejected: unsafe commit content (added symlink / gitlink / ignored path) — ${content_out}" ;;
     *) HANDS_BOUNDARY_CODE="content_check_unverified"; HANDS_BOUNDARY_ERROR="boundary_rejected: hands content check could not run (rc ${content_rc}) — treated as NOT verified: ${content_out}" ;;

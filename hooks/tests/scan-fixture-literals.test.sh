@@ -41,6 +41,7 @@ probe CLEAN 'same literal inside a test file'   scripts/handler.test.js "if (pha
 probe CLEAN 'same literal under hooks/tests/'   hooks/tests/helper.js   "const sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';"
 probe CLEAN 'comment-only line'             scripts/handler.js "// phase === 'p7' is how the test used to do it"
 probe CLEAN 'explicit waiver marker'        scripts/handler.js "if (kind === 'test') run(); // fixture-literal-ok: real kind name"
+probe CLEAN 'null OID (all zeros)'          scripts/handler.js "const z = '0000000000000000000000000000000000000000';"
 probe CLEAN 'ordinary comparison'           scripts/handler.js "if (status === 'pending') run();"
 probe CLEAN 'non-code file'                 docs/notes.md      "phase === 'p7'"
 
@@ -59,5 +60,21 @@ rc=0; node "$S" --repo "$R" --base does-not-exist >/dev/null 2>&1 || rc=$?
 assert_exit_code "$rc" 3 "unresolvable base is exit 3 (not verified)"
 rc=0; node "$S" --repo "$R" >/dev/null 2>&1 || rc=$?
 assert_exit_code "$rc" 2 "missing --base is a usage error"
+
+# dispatch-hetero.sh advisory wrapper: branches on the scanner rc, never fails the gate
+FN="$(sed -n '/^run_fixture_literal_advisory() {/,/^}/p' "$REPO_ROOT/scripts/dispatch-hetero.sh")"
+assert_contains "$FN" "scan-fixture-literals.js" "advisory wrapper present in dispatch-hetero.sh"
+adv() { # adv <stub-body> -> sets ADV_ERR, ADV_RC
+  local d="$TEST_TMP/stub.$RANDOM"; mkdir -p "$d"
+  printf '%s\n' "$1" > "$d/scan-fixture-literals.js"
+  ADV_ERR="$(SELF_DIR="$d" WT=x BASE_SHA=a HEAD_SHA=b bash -c "set -e; $FN; run_fixture_literal_advisory; echo survived" 2>&1 >/dev/null)"
+  ADV_RC=$?
+  ADV_OUT="$(SELF_DIR="$d" WT=x BASE_SHA=a HEAD_SHA=b bash -c "set -e; $FN; run_fixture_literal_advisory; echo survived" 2>/dev/null)"
+}
+adv 'process.exit(0)';                                          assert_not_contains "$ADV_ERR" "hands-advisory" "rc0: silent"; assert_contains "$ADV_OUT" survived "rc0: gate survives"
+adv 'console.log("{\"hits\":[1]}"); process.exit(1)';           assert_contains "$ADV_ERR" "hands-advisory" "rc1: hits printed"; assert_contains "$ADV_OUT" survived "rc1: gate survives"
+adv 'process.exit(1)';                                          assert_not_contains "$ADV_ERR" "hands-advisory" "rc1 with empty stdout: silent"; assert_contains "$ADV_OUT" survived "rc1 empty: gate survives under set -e"
+adv 'console.log("{\"ok\":false}"); process.exit(3)';          assert_not_contains "$ADV_ERR" "hands-advisory" "rc3: not printed as a hit"; assert_contains "$ADV_OUT" survived "rc3: gate survives"
+adv 'process.exit(2)';                                          assert_not_contains "$ADV_ERR" "hands-advisory" "rc2: silent"; assert_contains "$ADV_OUT" survived "rc2: gate survives"
 
 finalize_test

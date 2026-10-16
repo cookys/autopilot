@@ -6,7 +6,7 @@
 INHERITED_CACHE_DIR="${AUTOPILOT_PRICES_CACHE_DIR:-}"
 PRICES="$REPO_ROOT/scripts/qualification-prices.js"
 TOPO="$REPO_ROOT/scripts/resolve-dispatch-topology.js"
-# develop's topology resolver runs from a throwaway tree under TEST_TMP (symlinks to the real repo, plus the develop copy).
+# The pre-price topology resolver runs from a throwaway tree under TEST_TMP (symlinks to the real repo, plus the old copy).
 BASETREE="$TEST_TMP/basetree"
 BASELINE="$BASETREE/scripts/resolve-dispatch-topology.js"
 
@@ -146,13 +146,19 @@ for e in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
   [ "$b" = "resolve-dispatch-topology.js" ] && continue
   ln -s "$e" "$BASETREE/scripts/$b"
 done
-git -C "$REPO_ROOT" show develop:scripts/resolve-dispatch-topology.js > "$BASELINE" 2>/dev/null \
-  || git -C "$REPO_ROOT" show HEAD:scripts/resolve-dispatch-topology.js > "$BASELINE"
+# Pinned to the commit before this feature (1dfa7b9e). Never develop/HEAD: those contain the price logic,
+# which would make the comparison self-against-self. No fallback to another ref.
+PRE_PRICE_COMMIT=1dfa7b9e
+HAVE_BASE=1
+if ! git -C "$REPO_ROOT" show "$PRE_PRICE_COMMIT:scripts/resolve-dispatch-topology.js" > "$BASELINE" 2>/dev/null; then
+  HAVE_BASE=0
+  echo "SKIP [qualification-prices] pre-price comparison: commit $PRE_PRICE_COMMIT is not readable in this clone (shallow or pruned history); hard-coded orders below still run"
+fi
 
-# no cache: identical to the pre-price (develop) ordering
+# no cache: identical to the pre-price ordering
 rm -rf "$AUTOPILOT_PRICES_CACHE_DIR"
 NOCACHE="$(ladder "$TOPO")"
-assert_eq "$NOCACHE" "$(ladder "$BASELINE")" "no cache: ladder identical to develop ordering"
+[ "$HAVE_BASE" = 1 ] && assert_eq "$NOCACHE" "$(ladder "$BASELINE")" "no cache: ladder identical to the pre-price ordering"
 assert_eq "$NOCACHE" "seat-low-exp/low@agy,Alpha/medium@agy,Zulu/medium@agy,seat-assumed/high@agy,seat-cheap/high@agy,seat-exp/high@agy,seat-sub/high@agy,seat-unknown/high@agy" "no cache: effort, then engine name"
 
 # corrupt cache behaves as no cache
@@ -167,10 +173,13 @@ assert_eq "$PRICED" "seat-low-exp/low@agy,Zulu/medium@agy,Alpha/medium@agy,seat-
 assert_contains "$PRICED" "Zulu/medium@agy,Alpha/medium@agy" "price is matched on the scorecard row's model id (engine name order would put Alpha first)"
 # Seats whose price is unknown keep the pre-price tie-break (latency, then engine name) among themselves.
 UNK="seat-unknown/high@agy,seat-assumed/high@agy"
-BASE_L="$(ladder "$BASELINE")"
 sub_order() { node -e "const l=process.argv[1].split(',');process.stdout.write(process.argv[2].split(',').sort((a,b)=>l.indexOf(a)-l.indexOf(b)).join(','))" "$1" "$UNK"; }
-assert_eq "$(sub_order "$PRICED")" "$(sub_order "$BASE_L")" "unknown-priced seats keep the pre-price tie-break order"
-assert_neq "$(ladder "$BASELINE")" "$PRICED" "priced ordering differs from develop (prices are used)"
+if [ "$HAVE_BASE" = 1 ]; then
+  BASE_L="$(ladder "$BASELINE")"
+  assert_eq "$(sub_order "$PRICED")" "$(sub_order "$BASE_L")" "unknown-priced seats keep the pre-price tie-break order"
+  assert_neq "$BASE_L" "$PRICED" "priced ordering differs from the pre-price ordering (prices are used)"
+fi
+assert_eq "$(sub_order "$PRICED")" "seat-assumed/high@agy,seat-unknown/high@agy" "unknown-priced seats: engine-name tie-break (hard-coded)"
 
 # stale prices: warned, still used
 mkfix "$FIX/stale.json" "d => { d.rows.forEach(r => { r.verified = '2025-01-01'; }); }"

@@ -4,6 +4,7 @@
       "stem": "post-compact",
       "harness": "codex",
       "event": "PostCompact",
+      "kind": "packaged",
       "verified_at": "2026-08-05",
       "evidence": "references/multi-agent-portability.md (Last verified 2026-08-05, Codex 0.146.0: installed production package retains PostCompact for manual and auto)"
     }

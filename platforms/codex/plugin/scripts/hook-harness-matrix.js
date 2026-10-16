@@ -7,8 +7,11 @@
  * platforms/codex/hooks/hooks.json for Codex). "Verified" is NEVER derived: it comes only from
  * hooks/harness-support-evidence.json, rows a person added after a hook-probe run showed the
  * event actually fired. No evidence row => the cell says 未驗證. A hook being registered is not a
- * hook running (references/evidence-discipline.md). OpenCode and agy have no hooks.json wiring
- * of ours; their columns are fixed 未驗證 until an evidence row exists.
+ * hook running (references/evidence-discipline.md). Each evidence row has a kind: only `fired`
+ * (a probe run saw the event fire) is shown as 驗證 with a date; `packaged` (the shipped package
+ * contains the hook) and `doc` (a doc claims it) show as 已打包／文件宣稱 (未驗證觸發), never as
+ * verified. OpenCode and agy have no hooks.json wiring of ours: their cells stay — and an evidence
+ * row for them is rejected (not a registered stem/event) until we wire them.
  *
  * Usage:
  *   node scripts/hook-harness-matrix.js            # print the matrix markdown
@@ -16,7 +19,7 @@
  *   node scripts/hook-harness-matrix.js --check    # exit 1 if the doc drifted or an evidence row is
  *                                                  # bogus; WARN (exit 0) on rows older than 60 days
  *   --repo <dir>   operate on another tree (tests)      --today <YYYY-MM-DD>  (tests)
- * Evidence row: {stem, harness: "claude"|"codex"|"opencode"|"agy", event, verified_at, evidence}.
+ * Evidence row: {stem, harness: "claude"|"codex"|"opencode"|"agy", event, kind: "fired"|"packaged"|"doc", verified_at, evidence}.
  * Exit: 0 ok / 1 drift or bad evidence / 2 usage or unreadable input.
  */
 const fs = require('fs');
@@ -77,10 +80,12 @@ function cell(data, stem, harness) {
   const reg = events.length ? events.join(', ') : '—';
   const ver = events.map((ev) => {
     const r = rows.find((x) => x.event === ev);
-    return r ? `${ev} ${r.verified_at}` : null;
+    if (!r) return null;
+    if (r.kind === 'fired') return `驗證: ${ev} ${r.verified_at}`;
+    return `${r.kind === 'packaged' ? '已打包' : '文件宣稱'}（未驗證觸發）: ${ev} ${r.verified_at}`;
   }).filter(Boolean);
   if (!events.length) return rows.length ? `— (${rows.length} orphan evidence row)` : '—';
-  return `${reg}<br>${ver.length ? `驗證: ${ver.join('; ')}` : UNVERIFIED}`;
+  return `${reg}<br>${ver.length ? ver.join('; ') : UNVERIFIED}`;
 }
 
 function render(data) {
@@ -113,6 +118,7 @@ function problems(data, today) {
     if (!(data.wiring[r.harness].get(r.stem) || new Set()).has(r.event)) {
       errs.push(`${tag}: not a registered (stem, event) on that harness — evidence for a hook that is not wired`);
     }
+    if (!['fired', 'packaged', 'doc'].includes(r.kind)) errs.push(`${tag}: kind must be fired|packaged|doc`);
     if (typeof r.evidence !== 'string' || !r.evidence.trim()) errs.push(`${tag}: empty evidence pointer`);
     const t = /^\d{4}-\d{2}-\d{2}$/u.test(r.verified_at || '') ? Date.parse(`${r.verified_at}T00:00:00Z`) : NaN;
     if (Number.isNaN(t)) errs.push(`${tag}: verified_at is not YYYY-MM-DD`);

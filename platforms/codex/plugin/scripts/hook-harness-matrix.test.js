@@ -23,7 +23,7 @@ function tree(name, evidence) {
   return d;
 }
 const run = (d, ...a) => spawnSync('node', [SCRIPT, '--repo', d, '--today', '2026-10-16', ...a], { encoding: 'utf8' });
-const good = { stem: 'post-compact', harness: 'codex', event: 'PostCompact', verified_at: '2026-10-01', evidence: 'probe run' };
+const good = { stem: 'post-compact', harness: 'codex', event: 'PostCompact', kind: 'fired', verified_at: '2026-10-01', evidence: 'probe run' };
 
 // the committed doc matches the committed wiring
 assert.equal(spawnSync('node', [SCRIPT, '--check'], { encoding: 'utf8' }).status, 0, 'repo doc is in sync');
@@ -48,6 +48,13 @@ const neg = (name, ev, wantRe, mutate) => {
 neg('drift', [good], /differs from the wiring/, (t) => fs.appendFileSync(path.join(t, 'docs/hook-harness-matrix.md'), 'x\n'));
 neg('unwired', [{ ...good, harness: 'opencode' }], /not a registered/);
 neg('future', [{ ...good, verified_at: '2026-12-01' }], /future/);
+// a packaged row must never render as verified
+d = tree('pk', [{ ...good, kind: 'packaged' }]);
+run(d, '--write');
+const pk = fs.readFileSync(path.join(d, 'docs/hook-harness-matrix.md'), 'utf8');
+assert.match(pk, /已打包（未驗證觸發）: PostCompact 2026-10-01/);
+assert.doesNotMatch(pk, /驗證: PostCompact/);
+neg('badkind', [{ ...good, kind: 'verified' }], /kind must be/);
 neg('baddate', [{ ...good, verified_at: 'soon' }], /YYYY-MM-DD/);
 neg('noevidence', [{ ...good, evidence: '' }], /empty evidence/);
 // a wired hook that gains no evidence row is never shown as verified

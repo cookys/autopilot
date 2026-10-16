@@ -1,0 +1,30 @@
+{
+  "identity": "claude-opus-5-5",
+  "model_alias": "claude-opus-5-5",
+  "model_version": "claude-opus-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.299-Claude-Code",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+  "semantic_fingerprint": "ff1a1f5cdaa8aca48480942cf271eba361f5aaeb70e0fad1d2e3f1ba4db3924e",
+  "containment_fingerprint": "59ef57411e1554ec4fa93a4ab5d0e6824e65633acc4280e87cc8b80aee068971",
+  "_invented": [
+    "claude transport strings"
+  ],
+  "_semantic_surface": {
+    "kind": "va-semantic-surface-v1",
+    "model": "claude-opus-5-5",
+    "transport": "claude-p-tools-empty",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "va-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "twin_execution": "host-va-runner-bwrap",
+    "credential_isolation": "dedicated-exam-config-dir-credentials-only"
+  }
+}

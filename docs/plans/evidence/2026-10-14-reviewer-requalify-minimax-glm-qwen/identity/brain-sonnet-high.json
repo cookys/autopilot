@@ -1,0 +1,30 @@
+{
+  "identity": "claude-sonnet-5-5",
+  "model_alias": "claude-sonnet-5-5",
+  "model_version": "claude-sonnet-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.299-Claude-Code",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "b4188a3b59ee95a8eb666fc3bee512e1ce272c0cd486382ce63980a06fe0c831",
+  "containment_fingerprint": "2bb6d527c0be600f61f40ffaafeb72b265e6c0a02c260ef2ebbed1da7d4df06f",
+  "_invented": [
+    "credential_isolation string and --strict-mcp-config in posture differ from the 2026-09-24 opus row"
+  ],
+  "_semantic_surface": {
+    "kind": "brain-seat-semantic-surface-v1",
+    "model": "claude-sonnet-5-5",
+    "transport": "claude-p-tools-empty",
+    "reasoning_effort": "high",
+    "setting_sources": "none"
+  },
+  "_containment_surface": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "claude -p --tools \"\" --setting-sources \"\" --strict-mcp-config",
+    "credential_isolation": "dedicated-exam-config-dir-credentials-only"
+  }
+}

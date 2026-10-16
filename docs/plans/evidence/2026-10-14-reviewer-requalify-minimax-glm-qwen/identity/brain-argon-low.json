@@ -1,0 +1,30 @@
+{
+  "identity": "gemini-4-argon-low",
+  "model_alias": "gemini-4-argon-low",
+  "model_version": "gemini-4-argon-low",
+  "family": "google",
+  "runner": "agy",
+  "runner_version": "1.3.5",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "low",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "3c42b92ed7da6b1aacf7e91b4995b81f13d19f296f741da7c40a10eb95fc5212",
+  "containment_fingerprint": "31dbf160186f1fe7dc29bc322d5eb9cabebebb2a5b13c391d1066bb2e5776705",
+  "_invented": [
+    "agy transport/posture/credential surface strings (no precedent for these roles)"
+  ],
+  "_semantic_surface": {
+    "kind": "brain-seat-semantic-surface-v1",
+    "model": "gemini-4-argon-low",
+    "transport": "agy-p-argv-tool-deny",
+    "reasoning_effort": "low",
+    "setting_sources": "none"
+  },
+  "_containment_surface": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "agy -p --model --dangerously-skip-permissions --agent autopilot-toolless-reviewer + forced permissions.deny",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

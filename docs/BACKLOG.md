@@ -911,19 +911,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
 - **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
-### Boundary outcome and root dispatch semantics
-- **Id**: BL-0078
-- **Status**: open
-- **Since**: 2026-07-31
-- **Origin**: self
-- **Problem**: 引擎把「合併失敗」「狀態不明」兩個結果寫死為否，沒有真的判斷；另外同一個根下的派工互相排斥是否是故意設計也還沒定案。 (draft)
-- **Impact**: 若以後依這些結果自動復原或平行派工，會得到錯誤判斷；現在無影響。 (draft)
-- **Trigger**: Before boundary receipts drive automated recovery or parallel independent graph nodes under one root are enabled.
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/boundary-outcome-and-root-dispatch-semantics.md
-- **Context**: Derive or remove mutation_failed/unknown_status instead of hardcoding them, and decide whether root-wide nonterminal exclusion is intentional; if not, retain root CAS while scoping dispatch blockers to the exact graph node.
-
 ### Portable byte and Work Order lifecycle hardening
 - **Id**: BL-0079
 - **Status**: open

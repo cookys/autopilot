@@ -430,8 +430,9 @@ function boundaryRejected(boundary, trace, detail = {}) {
     boundary_code: boundary.boundary_code,
     candidate_ref: boundary.candidate_ref,
     possibly_effectful: boundary.possibly_effectful,
-    mutation_failed: false,
-    unknown_status: false,
+    // Derived by classifyBoundaryRejected (a non-clean outcome never reaches here).
+    mutation_failed: boundary.mutation_failed === true,
+    unknown_status: boundary.unknown_status === true,
     durable_wait: true,
     terminalize: false,
     campaign_event: 'BOUNDARY_REJECTED',

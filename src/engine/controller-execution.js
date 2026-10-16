@@ -742,10 +742,35 @@ function recordFullDiffBarrier(barriers, generation, receipt) {
   return next;
 }
 
+// BL-0078: mutation_failed / unknown_status are derived from the rail evidence,
+// never written as constants. A boundary_rejected outcome is only a clean,
+// durable boundary stop when the rail did not also report a failed mutation,
+// an unknown status, or an effect it cannot point at (possibly_effectful with
+// no candidate ref). Anything else is returned as not-clean so callers refuse
+// to treat it as a resumable boundary.
+function deriveBoundaryOutcomeFlags(dispatchResult) {
+  const r = isObj(dispatchResult) ? dispatchResult : {};
+  const candidateRef = r.commit || r.candidate_ref || r.tip || null;
+  const mutationFailed = r.mutation_failed === true;
+  const unknownStatus = r.unknown_status === true
+    || (r.possibly_effectful === true && !candidateRef)
+    || (r.mutation_failed !== undefined && typeof r.mutation_failed !== 'boolean')
+    || (r.unknown_status !== undefined && typeof r.unknown_status !== 'boolean');
+  return {
+    mutation_failed: mutationFailed,
+    unknown_status: unknownStatus,
+    clean: !mutationFailed && !unknownStatus,
+  };
+}
+
 function classifyBoundaryRejected(dispatchResult) {
   if (!isObj(dispatchResult)) return null;
   const status = dispatchResult.status || dispatchResult.dispatch_status;
   if (status !== BOUNDARY_REJECTED) return null;
+  const flags = deriveBoundaryOutcomeFlags(dispatchResult);
+  // Contradictory evidence is not a boundary stop: let the caller fall through
+  // to its generic non-success handling instead of a durable resumable wait.
+  if (!flags.clean) return null;
   return {
     status: BOUNDARY_REJECTED,
     phase: BOUNDARY_REJECTED,
@@ -754,8 +779,8 @@ function classifyBoundaryRejected(dispatchResult) {
       || 'boundary rejected',
     boundary_code: dispatchResult.boundary_code || 'scope_or_budget_boundary',
     possibly_effectful: Boolean(dispatchResult.commit || dispatchResult.candidate_ref),
-    mutation_failed: false,
-    unknown_status: false,
+    mutation_failed: flags.mutation_failed,
+    unknown_status: flags.unknown_status,
   };
 }
 
@@ -4156,6 +4181,7 @@ module.exports = {
   requireFullDiffBeforeRepair,
   recordFullDiffBarrier,
   classifyBoundaryRejected,
+  deriveBoundaryOutcomeFlags,
   classifyMissingDisposition,
   classifyResourceOutcome,
   recoveryBundleIdentityDigest,

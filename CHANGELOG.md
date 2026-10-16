@@ -225,6 +225,8 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 
 - BL-0077: controller helpers now fail closed on missing input: `checkJointRepairBudget` requires an explicit `projectedDelta`, `attachControllerState` rejects an empty replacement, the default effect admission refuses without repository authority, `admitExecutableMissionDelta` rejects traversal paths itself, and the test-only Mission no-op evidence seam must carry the production binding keys.
 
+- BL-0078: `mutation_failed` and `unknown_status` on a boundary_rejected outcome are now derived from the rail evidence instead of written as constants; a boundary stop the rail reports as a failed mutation, an unknown status, or an effect with no candidate to point at is no longer a durable boundary wait. Root-wide dispatch exclusion is recorded as intentional and pinned by a test.
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

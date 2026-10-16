@@ -2452,6 +2452,13 @@ function claimDispatchCas(commonDir, fields, options = {}) { const owner = isObj
   const casFile = rootCasLockPath(commonDir, rootRunId);
   const rootLock = acquireWorkOrderLock(casFile, owner, options.lockTimeoutMs || 5000);
   if (!rootLock.ok) { return { status: 'reject', reason_code: rootLock.reason_code, reason: rootLock.reason, duplicate_dispatch: 0, };}
+  // BL-0078 decision: exclusion here is ROOT-WIDE on purpose. Any nonterminal Work
+  // Order under this root blocks (or attaches/consumes) a new dispatch, whatever its
+  // graph node, because graph nodes under one root share a worktree budget and are
+  // dispatched strictly in sequence today. It fails closed; scoping blockers to the
+  // exact node is the change to make together with enabling parallel independent
+  // nodes, and the root CAS lock above would stay. Pinned by
+  // hooks/tests/boundary-outcome-derivation.test.sh.
   try { const nonterminal = listNonterminalWorkOrders(commonDir, rootRunId);
     if (nonterminal.length > 0) { const receipt = options.reconcileReceipt|| (options.reconcileReceiptPath? readJsonIfPresent(options.reconcileReceiptPath)
           : readJsonIfPresent(reconcileReceiptPath(commonDir, rootRunId)));

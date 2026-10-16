@@ -101,7 +101,7 @@ function runHookTwice(config, extraEnv, seedState) {
     AUTOPILOT_LIVE_DIR: path.join(dir, 'live'), AUTOPILOT_MANAGED_SETTINGS_FILE: path.join(dir, 'none.json'),
     CLAUDE_CODE_SESSION_ID: sid, ...extraEnv,
   };
-  delete env.AUTOPILOT_CONTEXT_BUDGET_MODE;
+  for (const k of ['AUTOPILOT_CONTEXT_BUDGET_MODE', 'AUTOPILOT_CONTEXT_BUDGET_T1', 'AUTOPILOT_CONTEXT_BUDGET_T2']) delete env[k];
   Object.assign(env, extraEnv);
   const run = () => spawnSync('node', [HOOK], { input: JSON.stringify({ transcript_path: tpath, session_id: sid }), encoding: 'utf8', env });
   return [run(), run()];

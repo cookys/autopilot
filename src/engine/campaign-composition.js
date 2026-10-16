@@ -89,6 +89,19 @@ function validateReviewAuthority(authority, reviewPayload) {
   return authority;
 }
 
+// BL-0146 D2: gate-journal key parts for an incremental return round. Empty on the default
+// (full-diff) path so that key is byte-identical to before; otherwise it names the mode and the
+// seat-store incremental binding, so an incremental gate can never collide with a full one.
+function incrementalGateKeyParts(preparedReview) {
+  if (!isObj(preparedReview) || preparedReview.review_input_mode !== 'incremental_return') return {};
+  return {
+    review_input_mode: 'incremental_return',
+    incremental_binding: isCanonicalSha256(preparedReview.incremental_binding)
+      ? preparedReview.incremental_binding
+      : 'unbound-incremental',
+  };
+}
+
 function stableCandidateGatePayload(candidate) {
   if (!isObj(candidate)) return null;
   return {
@@ -2099,6 +2112,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
       reviewer_digest: canonicalDigest(reviewAuthority.reviewer),
       review_authority_digest: reviewAuthorityDigest,
       vertical_failed: verticalFailed === true,
+      // BL-0146 D2: an incremental return round never shares a gate entry with a full-diff
+      // round. The binding is the seat-store incremental_binding (plan 2.4); absent on the
+      // default path, so the full-diff key is byte-identical to before.
+      ...incrementalGateKeyParts(preparedReview),
       // BL-0080: at the panel station the full-diff verdict IS the sealed roster's,
       // so a different roster / seat set must not reuse it. A single-reviewer
       // station is already keyed by its own reviewer tuple above; the roster there
@@ -3503,6 +3520,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
 module.exports = {
   CampaignCompositionError,
   classifyFullDiffReviewFault,
+  incrementalGateKeyParts,
   runCampaignComposition,
   validateFinalPanelReceipt,
   FINAL_PANEL_SEAT_OPTIONAL_KEYS,

@@ -197,7 +197,9 @@ function parsePricing(options) {
 // unknown block; with one, it carries the stated source and as-of date.
 function costBlock(summary, pricing) {
   if (!pricing || summary.usd_per_solved === null) {
-    return { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 };
+    // Unknown price is null, never 0: a consumer that guards on `!= null` and does arithmetic would
+    // otherwise see every unpriced seat as free (BL-0024).
+    return { source: 'unknown', usd_per_mtok_input: null, usd_per_mtok_output: null, sample_tokens: 0 };
   }
   return {
     source: pricing.source,

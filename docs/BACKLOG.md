@@ -212,10 +212,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 實作者的升級階梯有 17 級，其中 11 級位於同一個努力等級，成本排序幾乎失效。原因是未知成本被記成 0，導致排序無法區分。 (draft)
-- **Impact**: 選擇便宜席位時排序不準，可能多花錢；先修成本記錄方式即可改善。 (draft)
+- **Problem**: 階梯排序仍近乎退化；未知成本記成 0 的編碼已修，但各席位都沒有單價，排序缺依據。 (draft)
+- **Impact**: 挑便宜席位仍不準；需 owner 決定是否登記單價。 (draft)
 - **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
-- **Effort**: S
+- **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
 - **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.

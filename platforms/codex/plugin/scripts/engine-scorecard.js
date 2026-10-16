@@ -2101,14 +2101,15 @@ function sortByCapability(a, b) {
 }
 
 // Cost sort value: a row is worst-cost (Infinity, never "free") if its source is
-// `unknown` OR either unit price is missing/non-numeric — an unpriced `manual`/`measured`
-// row is still unmeasured and must NOT rank as the cheapest (plan: "never rank an
-// unmeasured engine as free").
+// `unknown` OR either unit price is not a finite number. The gate is on `cost.source` and on
+// the TYPE of the price, never on coercion: Number(null) is 0, which would rank an unpriced row
+// as the cheapest (plan: "never rank an unmeasured engine as free"; BL-0024).
 function costSortValue(row) {
-  const src = row.cost && row.cost.source;
-  const inp = Number(row.cost ? row.cost.usd_per_mtok_input : NaN);
-  const out = Number(row.cost ? row.cost.usd_per_mtok_output : NaN);
-  if (src === 'unknown' || !Number.isFinite(inp) || !Number.isFinite(out)) return Infinity;
+  const cost = row.cost;
+  if (!cost || cost.source === 'unknown') return Infinity;
+  const inp = cost.usd_per_mtok_input;
+  const out = cost.usd_per_mtok_output;
+  if (typeof inp !== 'number' || typeof out !== 'number' || !Number.isFinite(inp) || !Number.isFinite(out)) return Infinity;
   return inp + out;
 }
 
@@ -3047,6 +3048,7 @@ if (require.main === module) {
 // store must set those env vars BEFORE requiring this module (see
 // resolve-scaffold-tier.js's own comment at its require site).
 module.exports = {
+  costSortValue, // pinned directly: unknown / null-priced rows must never rank as free (BL-0024)
   computeSeatProjection,
   startOfUtcDayMsOf, // exported so the +-8.64e15 range guard can be pinned directly
   // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver

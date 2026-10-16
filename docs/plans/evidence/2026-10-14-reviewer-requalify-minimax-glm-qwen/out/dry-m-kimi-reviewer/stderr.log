@@ -1,0 +1,1 @@
+{"engine":"kimi-code-k3","model":"kimi-code/k3","runner":"kimi","role":"reviewer","outcome":"transport_fail","cases_attempted":1,"reason":"transport failure on trial-1 case clean-19 — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

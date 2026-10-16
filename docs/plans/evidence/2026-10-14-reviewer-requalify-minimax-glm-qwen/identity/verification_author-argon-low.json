@@ -1,0 +1,30 @@
+{
+  "identity": "gemini-4-argon-low",
+  "model_alias": "gemini-4-argon-low",
+  "model_version": "gemini-4-argon-low",
+  "family": "google",
+  "runner": "agy",
+  "runner_version": "1.3.5",
+  "harness_version": "engine-qualify:67be7ffb",
+  "effort": "low",
+  "identity_resolved": true,
+  "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+  "semantic_fingerprint": "d82cb69d59f3cce203ed3b5466082ce44c85b484946c3a10a90ba99cd854d655",
+  "containment_fingerprint": "00b1a0e8f4566bd04cc2ab3b19e0f4604793b7e9963fef806116cf66736ee14a",
+  "_invented": [
+    "agy transport/posture/credential surface strings (no precedent for these roles)"
+  ],
+  "_semantic_surface": {
+    "kind": "va-semantic-surface-v1",
+    "model": "gemini-4-argon-low",
+    "transport": "agy-p-argv-tool-deny",
+    "reasoning_effort": "low",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "va-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "twin_execution": "host-va-runner-bwrap",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

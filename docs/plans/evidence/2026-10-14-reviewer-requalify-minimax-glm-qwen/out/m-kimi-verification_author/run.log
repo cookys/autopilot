@@ -1,0 +1,4 @@
+kimi-auth-probe rc=0: kimi version 2.1.1 • PONG  • PONG  To resume this session: kimi -r session_40ccf805-dfb3-434b-be80-868392bc5c79
+2026-10-14T13:50:55+08:00 lane=kimi role=verification_author START model=kimi-code/k3 model_version=kimi-code-k3 version_source=operator-asserted dry=0
+2026-10-14T13:57:31+08:00 lane=kimi role=verification_author END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

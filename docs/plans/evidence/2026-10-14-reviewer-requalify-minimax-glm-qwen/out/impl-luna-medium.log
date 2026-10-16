@@ -1,0 +1,4 @@
+qualification-sweep.sh --execute: about to run 1 seat(s) = 25 real, paid dispatches (1 Stage-0 probe + up to 24 administration dispatches per seat, sequential).
+QUALIFICATION-SWEEP START 14:53:10Z (1 seats)
+SEAT gpt-6-luna-medium DONE: qualified 24/24 score=1.000 wall=404s event=299
+QUALIFICATION-SWEEP COMPLETE 15:00:11Z

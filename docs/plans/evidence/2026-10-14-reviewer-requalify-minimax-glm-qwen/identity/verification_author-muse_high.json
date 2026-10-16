@@ -1,0 +1,26 @@
+{
+  "identity": "muse-spark-1.3-contributor",
+  "engine": "muse-spark-1.3-contributor",
+  "family": "meta",
+  "runner": "anthropic-compatible",
+  "runner_version": "opencode-go-responses-v1",
+  "harness_version": "engine-qualify-3a9187f5",
+  "effort": "high",
+  "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+  "semantic_fingerprint": "4b23821908b64f1cd161d4b86624df75f8a6d19bba7f7ddf8dcb0efc81126e98",
+  "containment_fingerprint": "6e8145249308bdb0af54677e59397031cff83c53e101e582615a1b568af75f94",
+  "_invented": [],
+  "_semantic_surface": {
+    "kind": "va-semantic-surface-v1",
+    "model": "muse-spark-1.3-contributor",
+    "transport": "opencode-go-responses-http",
+    "http_reasoning_effort": "high",
+    "endpoint": "opencode-go"
+  },
+  "_containment_surface": {
+    "kind": "va-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "twin_execution": "host-va-runner-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

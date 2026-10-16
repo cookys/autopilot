@@ -1,0 +1,14 @@
+{
+  "identity": "claude-haiku-5-5",
+  "model_alias": "claude-haiku-5-5",
+  "model_version": "claude-haiku-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.299-Claude-Code",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "low",
+  "identity_resolved": true,
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "15e190fd6ecb3037661a683d30128619da476f0516c59d23363d82632167f178",
+  "containment_fingerprint": "2bb6d527c0be600f61f40ffaafeb72b265e6c0a02c260ef2ebbed1da7d4df06f"
+}

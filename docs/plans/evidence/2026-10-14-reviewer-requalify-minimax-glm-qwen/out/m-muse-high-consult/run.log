@@ -1,0 +1,4 @@
+2026-10-14T18:04:50+08:00 runtime probe: status/model/state=200 muse-spark-1.3-contributor completed echo_effort=high
+2026-10-14T18:04:50+08:00 lane=muse-high role=consult START model=muse-spark-1.3-contributor model_version=muse-spark-1.3-contributor version_source=runtime dry=0
+2026-10-14T18:18:43+08:00 lane=muse-high role=consult END rc=0 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=0

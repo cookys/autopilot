@@ -127,6 +127,16 @@
       "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify"
     },
     {
+      "event_id": 193,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-gpt6-low-sweep/implementer/gpt-6.1-sol-qualify"
+    },
+    {
+      "event_id": 194,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-grok-4.7-low-seats/implementer/grok-4.7-qualify"
+    },
+    {
       "event_id": 203,
       "role": "implementer",
       "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify"
@@ -272,14 +282,134 @@
       "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/discuss-high"
     },
     {
-      "event_id": 193,
-      "role": "implementer",
-      "evidence_bundle": "docs/plans/evidence/2026-10-01-gpt6-low-sweep/implementer/gpt-6.1-sol-qualify"
+      "event_id": 270,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-muse-high-verification_author"
     },
     {
-      "event_id": 194,
+      "event_id": 278,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-muse-low-reviewer"
+    },
+    {
+      "event_id": 279,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-sonnet-high/reviewer"
+    },
+    {
+      "event_id": 280,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-opus-high/reviewer"
+    },
+    {
+      "event_id": 281,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-muse-high-reviewer"
+    },
+    {
+      "event_id": 282,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-haiku-high/reviewer"
+    },
+    {
+      "event_id": 283,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-sonnet-low/reviewer"
+    },
+    {
+      "event_id": 284,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-haiku-low/reviewer"
+    },
+    {
+      "event_id": 285,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-claude-opus-low/reviewer"
+    },
+    {
+      "event_id": 286,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-5.6-sol-max"
+    },
+    {
+      "event_id": 287,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-qwen-reviewer"
+    },
+    {
+      "event_id": 288,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-6.1-sol-low"
+    },
+    {
+      "event_id": 289,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-6-astra-low"
+    },
+    {
+      "event_id": 290,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-6-sol-low"
+    },
+    {
+      "event_id": 291,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-6-luna-low"
+    },
+    {
+      "event_id": 292,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-argon-reviewer-low"
+    },
+    {
+      "event_id": 293,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-glm_low"
+    },
+    {
+      "event_id": 294,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-glm_high"
+    },
+    {
+      "event_id": 295,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-minimax31_low"
+    },
+    {
+      "event_id": 296,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-minimax31_high"
+    },
+    {
+      "event_id": 298,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-argon-reviewer-high"
+    },
+    {
+      "event_id": 299,
       "role": "implementer",
-      "evidence_bundle": "docs/plans/evidence/2026-10-01-grok-4.7-low-seats/implementer/grok-4.7-qualify"
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/impl-luna-medium/gpt-6-luna-medium-qualify"
+    },
+    {
+      "event_id": 300,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/impl-luna-low/gpt-6-luna-low-qualify"
+    },
+    {
+      "event_id": 301,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/consult-gpt-6.1-sol-low"
+    },
+    {
+      "event_id": 302,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/impl-sol61-high/gpt-6.1-sol-high-qualify"
+    },
+    {
+      "event_id": 303,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-grok-4.7-low"
     }
   ]
 }

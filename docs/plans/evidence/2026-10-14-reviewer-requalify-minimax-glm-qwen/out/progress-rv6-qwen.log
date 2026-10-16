@@ -1,0 +1,5 @@
+2026-10-14T18:51:08+08:00 SEAT qwen START HEAD=a0bf1f53 generator=reviewer-metamorphic-v6
+2026-10-14T18:51:08+08:00 SEAT qwen sitting=1
+2026-10-14T19:17:12+08:00 SEAT qwen END rc=1 secs=1564
+2026-10-14T19:17:12+08:00 SEAT qwen RECORDED rc=0 event="event_id":287 summary={"corpus_pass":"41/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} failed high err=
+2026-10-14T19:17:12+08:00 SEAT qwen DONE

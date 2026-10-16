@@ -1,0 +1,28 @@
+{
+  "identity": "kimi-code/k3",
+  "engine": "kimi-code-k3",
+  "family": "moonshot",
+  "runner": "kimi",
+  "runner_version": "2.1.1",
+  "harness_version": "qrp:a7355843",
+  "effort": "high",
+  "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
+  "semantic_fingerprint": "518ae23fa0c8e896558637d2d117a23334b5f4ec867d002647231c72121a09c8",
+  "containment_fingerprint": "eca506263b0d5892e96dfc7b1b3540154a3d11a5d183b5a7858309390de62e7e",
+  "_invented": [
+    "kimi brain transport/posture/credential surface strings (no precedent for this role)"
+  ],
+  "_semantic_surface": {
+    "kind": "brain-seat-semantic-surface-v1",
+    "model": "kimi-code/k3",
+    "transport": "kimi-m-p-argv",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "brain-seat-containment-surface-v2",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

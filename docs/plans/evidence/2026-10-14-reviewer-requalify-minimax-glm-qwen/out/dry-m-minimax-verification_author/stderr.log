@@ -1,0 +1,1 @@
+{"engine":"MiniMax-M3","model":"MiniMax-M3","runner":"anthropic-compatible","role":"verification_author","outcome":"transport_fail","reason":"transport failure on values_case_id_2801d19305: case broker failed: provider_process_failed — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

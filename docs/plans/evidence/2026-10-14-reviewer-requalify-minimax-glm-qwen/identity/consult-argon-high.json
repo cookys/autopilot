@@ -1,0 +1,24 @@
+{
+  "identity": "gemini-4-argon-high",
+  "model_alias": "gemini-4-argon-high",
+  "model_version": "gemini-4-argon-high",
+  "family": "google",
+  "runner": "agy",
+  "runner_version": "1.3.5",
+  "harness_version": "engine-qualify:67be7ffb",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+  "semantic_fingerprint": "b5c3c6855ca8bb280993ff5144ea6775d43717d17094a0b5e2cd8151e2b17a88",
+  "containment_fingerprint": "9307f0c86078e3777de528dce45806ff18d083398737627f2a4cd9240c7120d9",
+  "_invented": [
+    "agy transport/posture/credential surface strings (no precedent for these roles)"
+  ],
+  "_semantic_surface": null,
+  "_containment_surface": {
+    "kind": "consult-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "agy -p --model --dangerously-skip-permissions --agent autopilot-toolless-reviewer + forced permissions.deny",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

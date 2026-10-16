@@ -1,0 +1,6 @@
+2026-10-14T13:42:35+08:00 lane=qwen role=brain START model=Qwen3.8-Max model_version=Qwen3.8-Max version_source=operator-asserted dry=1
+2026-10-14T13:42:35+08:00 lane=qwen role=brain END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1
+2026-10-14T15:54:20+08:00 lane=qwen role=brain START model=Qwen3.8-Max model_version=Qwen3.8-Max version_source=operator-asserted dry=1
+2026-10-14T15:54:20+08:00 lane=qwen role=brain END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1

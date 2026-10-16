@@ -1,0 +1,5 @@
+2026-10-14T18:51:08+08:00 SEAT muse-high START HEAD=a0bf1f53 generator=reviewer-metamorphic-v6
+2026-10-14T18:51:08+08:00 SEAT muse-high sitting=1
+2026-10-14T18:59:44+08:00 SEAT muse-high END rc=0 secs=516
+2026-10-14T18:59:44+08:00 SEAT muse-high RECORDED rc=0 event="event_id":281 summary={"corpus_pass":"42/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} qualified high err=
+2026-10-14T18:59:44+08:00 SEAT muse-high DONE

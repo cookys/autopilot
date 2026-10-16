@@ -1,0 +1,1 @@
+{"engine":"kimi-k2.8-preview","model":"kimi-code/kimi-for-coding","runner":"kimi","role":"verification_author","outcome":"transport_fail","reason":"transport failure on values_case_id_17aeff677b: case broker failed: provider_process_failed — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}

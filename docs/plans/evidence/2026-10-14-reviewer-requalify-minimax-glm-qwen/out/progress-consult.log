@@ -1,0 +1,4 @@
+2026-10-14T23:07:41+08:00 ITEM consult-gpt-6.1-sol-low START sitting=1
+2026-10-14T23:23:10+08:00 ITEM consult-gpt-6.1-sol-low END rc=0
+2026-10-14T23:23:10+08:00 ITEM consult-gpt-6.1-sol-low RECORDED rc=0 {"engine":"gpt-6.1-sol","model":"gpt-6.1-sol","runner":"codex","family":"openai","role":"consult","model_version":"gpt-6.1-sol","version_source":"operator-asserted","corpus_version":"consult-v6.consul summary={"corpus_pass":"60/60","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2} qualified
+2026-10-14T23:23:10+08:00 CHAIN consult DONE

@@ -1,0 +1,4 @@
+2026-10-14T15:54:44+08:00 runtime probe: requested=MiniMax-M3 resolved=MiniMax-M3
+2026-10-14T15:54:44+08:00 lane=minimax role=discuss START model=MiniMax-M3 model_version=MiniMax-M3 version_source=runtime dry=0
+2026-10-14T16:03:01+08:00 lane=minimax role=discuss END rc=1 (0 pass,1 fail verdict,2 usage/precond,3 credential,124 wall)
+rc=1

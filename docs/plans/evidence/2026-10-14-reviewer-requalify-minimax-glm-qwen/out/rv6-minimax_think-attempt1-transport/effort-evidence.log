@@ -1,0 +1,2 @@
+{"path":"/v1/messages","anthropic_version":"2023-06-01","model":"MiniMax-M3","max_tokens":32768,"temperature":0,"output_config":"<absent>","thinking":{"type":"adaptive"},"system_chars":5517,"user_chars":165} exit=0
+live_ping status=200 model=MiniMax-M3 stop=end_turn output_tokens=85 blocks=thinking+text

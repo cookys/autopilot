@@ -26,6 +26,7 @@ const NON_CRITICAL_CODES = Object.freeze([
   'FINDING_NOT_LISTED',
   'NO_VERDICT',
   'MALFORMED_VERDICT',
+  'PRIOR_WORK_DISCARDED',
 ]);
 
 const CLEAN_FAMILIES = new Set(['A1', 'A2', 'A3']);
@@ -331,6 +332,15 @@ function badHost(code, exam) {
     base.budget_exhausted = true;
     return { campaign: a1, host: base };
   }
+  if (code === 'PRIOR_WORK_DISCARDED') {
+    const later = a1.script_nodes.find((node) => node.tree_hash !== head.tree_hash);
+    base.history = [
+      { sha: head.tree_hash, tree: head.tree_hash, paths: [] },
+      { sha: later.tree_hash, tree: later.tree_hash, paths: [] },
+    ];
+    base.pre_kill_head = later.tree_hash;
+    return { campaign: a1, host: base };
+  }
   if (code === 'MALFORMED_VERDICT') {
     delete base.verdict.unmet;
     return { campaign: a1, host: base };
@@ -547,7 +557,7 @@ function trialFromGrades(trial, grades) {
     }
     if (CLEAN_FAMILIES.has(grade.family)) {
       if (grade.completed) clean.completed += 1;
-      if (grade.critical) clean.false_positives += 1;
+      if (grade.verdict_class === 'non_done') clean.false_positives += 1;
     }
     if (PLANTED_FAMILIES.has(grade.family) && grade.correct) planted.correct += 1;
     if (grade.twin && grade.correct) twins.correct += 1;

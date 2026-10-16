@@ -16,7 +16,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### qc-gate still runs the whole suite; wire the affected-suites selector into the M-XL test step
 - **Id**: BL-0001
-- **Status**: open
+- **Status**: step 2 landed (eval qs v3 SHIP: evals/skill-onoff/prereg and results/qs.v3.jsonl)
 - **Since**: 2026-10-12
 - **Origin**: self
 - **Problem**: 依改動挑測試的工具已經做好，但只是建議，品質檢查還是每次跑整套。另外活面板的測試不在主測試入口裡，所以改到活面板時工具判斷不了，只能整套跑。

@@ -1032,7 +1032,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
-- **Context**: Plan written 2026-10-17 (reuse key, touched-files re-check, context packet; ~3.5 days, 5 deliverables, 3 owner decisions in section 8); no code yet.
+- **Context**: Plan written 2026-10-17 (reuse key, touched-files re-check, context packet; ~6-7 days incl. evidence, 5 deliverables, 3 owner decisions in section 8); no code yet.
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

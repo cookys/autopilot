@@ -41,17 +41,19 @@ A returned round reviews:
 Eligibility is computed by a pure module (new `src/engine/review-increment.js`) from Git and the stored prior round. Any failing test returns `{ mode: 'full', reason }` and the engine runs exactly today's path, with the reason recorded. Tests:
 
 1. Contract opt-in (section 2.7).
-2. The prior round exists and each seat to be carried has a stored `reviewed` artifact for the prior binding that **re-derives** (same rule as `final-panel-seat-store.js`: artifact type, binding, tuple, findings re-normalize, `review_digest` re-derives). A seat with no such artifact (`no_verdict`, `transport_failed`, tuple changed) is reviewed on the **full** range, not carried.
-3. Same `base_sha`, same sealed roster digest, same spec digest, same `verify_cmd`. (A changed spec or roster means the question changed.)
-4. Verification at H1 is green (already required before review).
-5. Size guard: changed paths are at most `increment_max_changed_ratio` of the cumulative file count (default 0.5) and the delta packet is under the packet ceiling. A large rewrite is just a full review.
-6. Shared-surface guard: if the delta touches a path matching the shared-surface list (package and lock manifests, the sealed `verify_cmd` target and its scripts, schemas, CI config, files named in `vertical_acceptance`), the whole range is re-reviewed. These are the places where a small edit changes the meaning of unchanged files.
+2. The prior round exists. Per seat (not per round): a seat with a stored `reviewed` artifact for the prior binding that **re-derives** (same rule as `final-panel-seat-store.js`: artifact type, binding, tuple, findings re-normalize, `review_digest` re-derives) is carried; a seat with no such artifact (`no_verdict`, `transport_failed`, tuple changed) is **not carried and gets the full-range packet** while the round stays incremental. This is the one rule, used in 2.6 and A5/A12. If no seat can be carried the round is `full` (`no_carriable_seat`).
+3. **A carried conclusion comes only from a full round.** The prior round (H0) must itself have been a full-range round; if it was incremental the result is `{ mode: 'full', reason: 'prior_round_incremental' }`, so a conclusion is never inherited through two hops (round N-2's clean verdict is never carried by round N-1's incremental artifact into round N). Consecutive returns therefore alternate: first return incremental, second return full, third return incremental from that full round. A later plan may lift this with re-derivable carry chains; not here.
+4. Every open finding of the prior round maps to a path in `base..H1` (section 2.5, `finding_unmapped`).
+5. Same `base_sha`, same sealed roster digest, same spec digest, same `verify_cmd`. (A changed spec or roster means the question changed.)
+6. Verification at H1 is green (already required before review).
+7. Size guard: changed paths are at most `increment_max_changed_ratio` of the cumulative file count (default 0.5) and the delta packet is under the packet ceiling. A large rewrite is just a full review.
+8. Shared-surface guard: if the delta touches a path matching the shared-surface list (package and lock manifests, the sealed `verify_cmd` target and its scripts, schemas, CI config, files named in `vertical_acceptance`), the whole range is re-reviewed. These are the places where a small edit changes the meaning of unchanged files.
 
 ### 2.3 Touched-files re-check (the central correctness risk)
 
 A fix in file A can break a conclusion about unchanged file B. Defence, in order of strength, all deterministic and none relying on the model:
 
-1. **Re-check set grows by reference.** R = changed paths, plus unchanged paths that carry an open finding from the prior round (a fix must be judged against its finding's file even if the author did not touch it: a finding with no matching change is **not resolved by silence**), plus unchanged paths that textually reference a changed path's basename or an exported symbol removed or renamed in the delta (bounded grep over the cumulative file list, cap `increment_reference_cap` files; hitting the cap falls back to full).
+1. **Re-check set grows by reference.** R = changed paths, plus unchanged paths that carry an open finding from the prior round (a fix must be judged against its finding's file even if the author did not touch it: a finding with no matching change is **not resolved by silence**), plus unchanged paths related to a changed path in **either direction**: (a) an unchanged file that textually references a changed path's basename or an exported symbol removed, renamed or re-signed in the delta, and (b) an unchanged file that a changed file references (imports, requires, includes, or calls a symbol defined there), because a new call or changed arguments from A into unchanged B was never reviewed against B. Bounded textual matching over the cumulative file list; the union of (a) and (b) is capped at `increment_reference_cap` files, and exceeding the cap falls back to full (`reference_cap`).
 2. **Deleted and renamed paths** are changed on both sides and force their references into R.
 3. **Receipt discloses the cut.** The terminal receipt carries `review_scope: "incremental"`, the carried path list with their `file_digest`, the re-check set and why each path is in it. Disclosure, not attestation (ADR-0001): a reader can re-derive the sets from the two heads.
 4. The delta-only claim stays honest by the opt-in and by section 6 R1 (planted cross-file regression).
@@ -82,7 +84,7 @@ A seat has only a diff file and a spec file. So the earlier round is **written i
 
 ```
 == Prior round (machine generated from the stored seat artifacts of round N-1) ==
-Reviewed head: H0   New head: H1   Delta: H0..H1 (diff file 2)
+Reviewed head: H0   New head: H1   Delta: H0..H1 (file `delta.diff`); changed files in full: `recheck.diff`
 Open findings from round N-1 (id, severity, path:line, claim, one line). Treat each as an unverified
 claim: decide from the code at H1 whether it is resolved, still present, or invalid.
 Carried paths (reviewed clean at H0, byte-identical at H1): <list, no verdict text>.
@@ -93,14 +95,16 @@ Rules:
 
 - **Findings only, no verdicts and no rationale from the previous round.** The anchoring risk is a seat deferring to "the earlier reviewer said fine". The addendum carries claims to test, not conclusions to trust. Carried paths are named but their verdicts are not quoted.
 - **Delta review stays blind to everything except that.** Nothing from the implementer: no commit messages, no author notes, no disposition prose. The addendum is built only from stored seat findings (re-normalized by `normalizeProductReviewFindings`) and Git. `check-blind-evidence.sh` runs on the assembled spec exactly as today; the new content has a fixed shape so the scanner's implementer-narrative classes still apply to the author's repo text and the addendum is whitelisted by structure, not by suppression. The two `prior_findings_included: false` markers become `true` only on the incremental path, with the shape above, and a test pins that the full path still reports `false`.
-- **Closure is explicit.** A prior finding is closed only by a seat's explicit `resolved` entry with evidence `path:line` at H1; absence never closes it (same principle as the BL-0032 rule in `scripts/lib/review-chain-derive.js:29`, "only an explicit `resolutions` entry closes an earlier verified finding"). A finding no seat addresses stays open and parks again. The seat output schema gains a `resolutions[]` array; the normalizer rejects an entry with an unknown id, and a `resolved` without evidence counts as not addressed.
-- **Disagreement among seats** about one finding (`resolved` vs `still_present`) keeps it open (the conservative side); the final panel judges it as it judges any contested finding today.
+- **Statuses**: `resolved` (the defect is gone at H1), `still_present`, `invalid` (the claim was wrong at H0). Both `resolved` and `invalid` require evidence `path:line` at H1; an entry without evidence counts as silence.
+- **Closure is explicit and needs every reviewing seat.** A prior finding closes (as `closed_resolved` or `closed_invalid`, recorded separately) only when every seat that reviewed this round, at least the sealed panel quorum, gives an explicit `resolved` or `invalid` with evidence and none says `still_present`. A seat that is silent, no_verdict, or absent keeps it open: one seat's `resolved` while the others are silent does not close it. A finding that is not closed parks again. Absence never closes it (same principle as the BL-0032 rule in `scripts/lib/review-chain-derive.js:29`, "only an explicit `resolutions` entry closes an earlier verified finding"). A finding no seat addresses stays open and parks again. The seat output schema gains a `resolutions[]` array; the normalizer rejects an entry with an unknown id, and a `resolved` without evidence counts as not addressed.
+- **Disagreement** (`resolved` vs `still_present`, or `invalid` vs `still_present`) keeps it open; the final panel judges it as it judges any contested finding today.
+- **Every open prior finding must map to a place.** A finding maps if it carries a path that exists in `base..H1` (a rename is followed with `git diff -M` to the new path). A finding with no path, a path not in `base..H1`, or an unresolved rename is `unmappable`: the whole round is `{ mode: 'full', reason: 'finding_unmapped' }`, never dropped.
 
 ### 2.6 Engine wiring
 
 - `defaultAdoptionAdmission` is unchanged: scope and file cap stay cumulative (`campaign-intake.js:2023`).
 - On `returnedHead`, before the review station, call the eligibility module. `incremental` builds the delta diff file, the re-check cumulative diff file and the spec addendum, and runs the existing `prepareReview` with `review_input_mode: 'incremental_return'`; `full` runs today's code untouched.
-- The final panel is the same panel and roster. Seats with a re-derivable prior artifact get the incremental packet; the others get the full packet. Quorum and family rules are unchanged and are evaluated on the union.
+- The incremental packet is three files: `delta.diff` (H0..H1), `recheck.diff` (cumulative `base..H1` diff of the re-check set) and the spec with the section 2.5 addendum. The full packet is today's single `base..H1` diff plus the unmodified spec. The final panel is the same panel and roster; per section 2.2 test 2, seats with a re-derivable prior artifact get the incremental packet, the others get the full packet, and the round stays incremental. Quorum and family rules are unchanged and are evaluated on the union.
 - The result is still a `base..head` verdict for the receipt: carried clean paths from the prior artifacts, re-checked paths from this round, findings from both. `review_scope` and the carried/re-check sets are written into the receipt (additive fields).
 
 ### 2.7 Contract surface
@@ -117,7 +121,7 @@ Rules:
 | D4 | Wiring and contract field: `returnedHead` branch, receipt disclosure, schema and checker, operator doc | `src/engine/autopilot-engine.js:7778` region, `src/engine/campaign-intake.js`, schema, checker, `docs/review-candidate.md` | end-to-end return in a temp repo with stub dispatcher, both modes |
 | D5 | Evidence: A/B on planted returns, cost measurement, default decision input; BACKLOG BL-0146 removed with its sidecar line, CHANGELOG `Unreleased` line | `docs/plans/evidence/2026-10-17-review-only-increment/`, `docs/BACKLOG.md`, `docs/backlog/review-candidate-follow-ups.md` | table of cost and misses; owner reads it before any default flip |
 
-Order: D1 then D2 and D3 in parallel (disjoint files except `autopilot-engine.js`; serialize those two edits) then D4 then D5. D1-D4 are mechanism for an opt-in mode, no change to the default requirement list.
+Order, serial: D1, then D2, then D3 (D3 edits `autopilot-engine.js` and builds on D2's binding), then D4, then D5. At D1 start, re-verify every `file:line` in section 0 against the then-current tree and fix the cites in this plan. D1-D4 are mechanism for an opt-in mode, no change to the default requirement list.
 
 ## 4. Acceptance, with negative controls
 
@@ -129,13 +133,18 @@ Each check ships red before green (the repo rule). Fixtures use a temp repo and 
 | A2 | A prior open finding on an unchanged file keeps that file in the re-check set; the finding stays open when the seat is silent | Drop the open-finding rule: the finding closes by silence and the test fails |
 | A3 | Silence never closes: a seat that omits a finding id leaves it open and the campaign parks again | Treat omission as resolved: test fails |
 | A4 | A planted cross-file regression (delta edits A, breaks caller B unchanged) is caught: B is pulled in by reference expansion | Remove reference expansion: the planted break is missed and the test fails |
-| A5 | Each fallback gives `mode: full` plus its reason and the full path runs: shared-surface file touched, ratio over limit, reference cap hit, spec/roster/base changed, seat without a re-derivable artifact, `return_review: full` | For each, force `incremental`: test fails |
+| A5 | Each fallback gives `mode: full` plus its reason and the full path runs: shared-surface file touched, ratio over limit, reference cap hit, spec/roster/base changed, prior round incremental, unmappable finding, no carriable seat, `return_review: full` | For each, force `incremental`: test fails |
 | A6 | A stored incremental artifact is reused only on identical binding; a changed delta digest, carried digest, prior head, spec or seat tuple is a miss. A stored full-round artifact never satisfies an incremental lookup and the reverse | Key on tree only: stale reuse and the test fails |
 | A7 | A carried verdict is rejected when the path's cumulative digest at the new head differs from the digest in the prior artifact (author touched it after the review) | Skip the digest recheck: test fails |
 | A8 | Addendum contains finding id, severity, path:line, claim only; no verdict text, no commit message, no disposition prose; `check-blind-evidence.sh` passes on it and still fails on a planted implementer-narrative line in the author's text | Put a commit message in the addendum: the scanner test fails |
 | A9 | The full path is byte-identical to today: the existing review-candidate suites stay green and `prior_findings_included` stays `false` there | Flip the flag on the full path: pinned test fails |
 | A10 | Receipt discloses `review_scope`, carried and re-check sets; a reader recomputes the sets from the two heads and they match | Corrupt one carried digest: re-derivation disagrees and the test fails |
 | A11 | Contract: `adoption.return_review` accepts `full` and `incremental`, rejects other values and a review-only contract without the field behaves as `full`; the seal pins it | Accept an unknown value: checker test fails |
+| A12 | Seat-level only: with one of three seats lacking a re-derivable prior artifact, that seat receives the full packet, the other two the incremental packet, and the round is incremental | Treat it as round-level full: test fails (pins the one rule) |
+| A13 | End to end, two consecutive returns in a temp repo: return 1 incremental (carries from the full round), return 2 is `full` with reason `prior_round_incremental`; no path verdict is ever inherited through an incremental artifact | Allow carry from an incremental artifact: return 2 carries a stale clean path and the test fails |
+| A14 | A prior finding with no path, a path outside `base..H1`, or an unresolved rename gives `full` with reason `finding_unmapped`; a renamed path is followed and stays incremental | Drop unmappable findings silently: test fails |
+| A15 | Closure: one seat `resolved` with the others silent leaves the finding open; all seats explicit with evidence closes it; `invalid` without evidence does not close; `invalid` with evidence from all seats closes it as `closed_invalid` | Close on the first `resolved`: test fails |
+| A16 | Bidirectional re-check: A newly calls unchanged B with changed arguments, B never mentions A: B is in the re-check set; over the cap gives `full` reason `reference_cap` | Keep only reverse references: the planted break is missed and the test fails |
 
 Cost evidence (D5, not a gate): per return, count seat model calls and fresh input bytes for full vs incremental on the same planted returns (single-file fix, ten-file fix, cross-file regression, rename). Report the median saved and every miss.
 
@@ -161,7 +170,7 @@ Cost evidence (D5, not a gate): per return, count seat model calls and fresh inp
 
 ## 7. Effort
 
-About 3 working days for D1-D4 (D1 0.5, D2 0.5, D3 1, D4 0.5-1) plus 0.5-1 day for D5. This replaces the backlog entry's "M".
+D1-D4 about 4.5 to 5.5 working days (D1 1, D2 1, D3 1.5 to 2, D4 1); D5 evidence about 1.5 days, counted separately (planted returns, A/B runs, reading transcripts). Total 6 to 7 days, hence the 5 to 7 day range; a first merge of D1-D4 with the default `full` is a usable stopping point.
 
 ## 8. Owner decisions needed
 

@@ -846,6 +846,14 @@ function runWatchCli(opts) {
     stderr.write(project ? '--project must be a 16-hex project key\n' : 'status runs --watch|--stop requires --project <key> (or run inside a git repo)\n');
     return 2;
   }
+  // Same guard as startWatcherDetached, for a watcher started by hand: an isolated test environment (own HOME /
+  // CLAUDE_CONFIG_DIR) on the shared live dir must not write its fake project there (BL-0195).
+  const iso = isolatedEnv(env);
+  if (!stop && iso.reason) {
+    stderr.write(`watcher not started: isolated environment on a shared live dir (${iso.reason}); set AUTOPILOT_LIVE_DIR to a private dir\n`);
+    return 1;
+  }
+
   // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): report it, do nothing.
   try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); return 1; }
 

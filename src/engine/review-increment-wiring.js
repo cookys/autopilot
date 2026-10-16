@@ -9,9 +9,13 @@
 // answer. Every refusal is `{ mode: 'full', reason }` and the engine then runs today's path.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { evaluateReturnIncrement, computeFileDigests } = require('./review-increment');
 const seatStore = require('./final-panel-seat-store');
+const { normalizeProductReviewFindings } = require('./product-review-normalizer');
+const { buildPriorRoundAddendum } = require('./review-resolution');
 
 // Reasons raised by this layer (the D1 module raises its own, see review-increment.js REASONS).
 const WIRING_REASONS = Object.freeze([
@@ -22,6 +26,8 @@ const WIRING_REASONS = Object.freeze([
   'seat_not_carriable',
   'binding_unavailable',
   'evaluation_failed',
+  'addendum_malformed',
+  'addendum_narrative',
 ]);
 
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -29,9 +35,18 @@ const full = (reason) => ({ mode: 'full', reason });
 
 // A normalized finding has no path field: the `path:line` the reviewer wrote sits at the start of
 // its claim ("src/a.js:10 retry loop never ends"). First `path:line` token with a path-like shape.
+const CLAIM_LOCATION = /(?:^|[\s([`'"])(((?:[A-Za-z0-9_.@+-]+\/)*[A-Za-z0-9_@+-]+\.[A-Za-z0-9_+-]+|(?:[A-Za-z0-9_.@+-]+\/)+[A-Za-z0-9_.@+-]+):[0-9]+)/;
+
 function findingPathFromClaim(claim) {
   if (typeof claim !== 'string') return null;
-  const match = /(?:^|[\s([`'"])((?:[A-Za-z0-9_.@+-]+\/)*[A-Za-z0-9_@+-]+\.[A-Za-z0-9_+-]+|(?:[A-Za-z0-9_.@+-]+\/)+[A-Za-z0-9_.@+-]+):[0-9]+/.exec(claim);
+  const match = CLAIM_LOCATION.exec(claim);
+  return match ? match[2] : null;
+}
+
+// The same token with its line, `path:line`, as the reviewer wrote it; null when absent.
+function findingLocationFromClaim(claim) {
+  if (typeof claim !== 'string') return null;
+  const match = CLAIM_LOCATION.exec(claim);
   return match ? match[1] : null;
 }
 
@@ -84,6 +99,16 @@ function listDirs(dir, prefix) {
   } catch (_error) {
     return [];
   }
+}
+
+// A stored finding list is read back through the normalizer again before anything is built from it
+// (the seat store already rejects a non-canonical artifact; this keeps the addendum's input honest
+// even for a caller that hands in a parsed list). null = not a valid finding list.
+function renormalized(list) {
+  if (!Array.isArray(list)) return null;
+  if (list.length === 0) return [];
+  const result = normalizeProductReviewFindings(JSON.stringify(list));
+  return result.status === 'normalized' ? result.findings : null;
 }
 
 // Prior round artifacts for `treeSha`, re-derived through the seat store's own rules (artifact
@@ -206,7 +231,7 @@ function decideReturnIncrement(args) {
     return {
       seatId: String(index + 1),
       carriable: outcome !== null,
-      findings: outcome === null ? [] : (parseFindings(outcome) || null),
+      findings: outcome === null ? [] : renormalized(parseFindings(outcome)),
       // Parsed twice on purpose below: D1 wants {id, path}, the carry wants the full finding.
     };
   });
@@ -250,11 +275,26 @@ function decideReturnIncrement(args) {
   // need two packet hashes in one receipt. Not built; the whole round is full instead.
   if (priorSeats.some((seat) => !seat.carriable)) return full('seat_not_carriable');
 
+  // The addendum the seats of this round get (owner ruling d-3cf4dc4c: give the list). Built here, once,
+  // from the re-normalized stored findings and the two heads; the blind-evidence scanner runs on it
+  // before any seat is dispatched, and a round whose addendum cannot be built or scanned clean is full.
+  let addendum;
+  try {
+    addendum = buildPriorRoundAddendum(
+      addendumRows(carriedOpenFindings({ prior_findings: priorSeats.map((seat) => seat.findings || []) })),
+      { priorHead, newHead },
+    );
+  } catch (_error) {
+    return full('addendum_malformed');
+  }
+  if (!scanAddendum(addendum, args.scanAddendum)) return full('addendum_narrative'); // guard:addendum_scan
+
   const recheckSet = res.recheck.map((entry) => ({ path: entry.path, file_digest: entry.file_digest }));
   const carriedSet = res.carried.map((entry) => ({ path: entry.path, file_digest: entry.file_digest }));
   const carryPacketDigest = canonicalDigest({
     findings: res.findings.map((f) => ({ seat_id: f.seat_id, id: f.id, path: f.path })),
     seat_packets: res.seat_packets,
+    addendum_digest: canonicalDigest({ addendum }),
   });
   const parts = {
     base_sha: baseSha,
@@ -282,6 +322,7 @@ function decideReturnIncrement(args) {
     prior_binding: found.binding,
     prior_tree_sha: priorTree,
     prior_findings: priorSeats.map((seat) => seat.findings || []),
+    addendum,
     seat_count: seats.length,
   };
 }
@@ -313,12 +354,20 @@ function incrementalSeatContext(decision, ctx) {
       recheck_set: parts.recheck_set,
     },
     currentFileDigests: computeFileDigests(repo, baseSha, parts.new_head),
+    // For re-deriving a stored seat's resolutions: the ids it was shown and the files it was given.
+    addendumIncluded: typeof decision.addendum === 'string' && decision.addendum.length > 0,
+    priorFindingIds: carriedOpenFindings(decision).map((row) => row.finding_id),
+    packetPaths: [...new Set([
+      ...decision.increment.recheck_diff_paths,
+      ...decision.increment.recheck.map((entry) => entry.path),
+    ])],
   };
 }
 
-// Prior-round findings carried into an incremental round. No seat can answer them yet (the
-// addendum that would show them is off, owner ruling d-3cf4dc4c), so every one stays open: silence
-// never closes (plan 2.5). Ids are prefixed so they cannot collide with a fresh finding's id.
+// Prior-round findings carried into an incremental round. Each seat is shown them in the spec addendum
+// (owner ruling d-3cf4dc4c, 2026-10-17) and may answer with resolutions[]; one nobody explicitly closes
+// stays open, because silence never closes (plan 2.5). Ids are prefixed so they cannot collide with a
+// fresh finding's id; the same prefixed id is what the addendum lists and the seat answers.
 function carriedOpenFindings(decision) {
   const rows = [];
   const seen = new Set();
@@ -332,6 +381,39 @@ function carriedOpenFindings(decision) {
     }
   });
   return rows;
+}
+
+// Rows for the addendum: the carried findings with the `path:line` the reviewer wrote. A row without
+// one cannot be built (the eligibility check already sent such a round to full).
+function addendumRows(carried) {
+  return carried.map((row) => ({
+    finding_id: row.finding_id,
+    severity: row.severity,
+    claim: row.claim,
+    location: findingLocationFromClaim(row.claim),
+  }));
+}
+
+// Run the blind-evidence scanner (the same script dispatch-review.sh runs on the assembled spec) on the
+// addendum alone. Fail closed: a scanner that cannot run, or reports anything, is a refusal. The
+// scanner is never suppressed; a claim that reads like implementer narrative sends the round to full.
+function scanAddendum(addendum, scan) {
+  if (addendum === '') return true;
+  if (typeof scan === 'function') return scan(addendum) === true;
+  let dir = null;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-addendum-scan-'));
+    const file = path.join(dir, 'addendum.md');
+    fs.writeFileSync(file, addendum);
+    const run = spawnSync('bash', [path.join(__dirname, '..', '..', 'scripts', 'check-blind-evidence.sh'), '--payload', file], {
+      encoding: 'utf8', stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return run.status === 0;
+  } catch (_error) {
+    return false;
+  } finally {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // Receipt disclosure (plan 2.3 step 3): the cut, so a reader can re-derive it from the two heads.
@@ -359,6 +441,7 @@ function disclosureFor(decision) {
 module.exports = {
   WIRING_REASONS,
   findingPathFromClaim,
+  findingLocationFromClaim,
   roundRecordFile,
   writeRoundRecord,
   readRoundRecord,

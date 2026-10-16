@@ -36,4 +36,11 @@ runner "$H" kill & P=$!
 for _ in $(seq 50); do [ -s "$H/pid" ] && break; sleep 0.1; done
 kill -TERM "$(cat "$H/pid")"; wait "$P" 2>/dev/null; sleep 1
 grep -q new "$(R "$H")" && [ "$(nbak "$H")" = 1 ]; ok $? "killed exam still writes back"
+# Standard entry: staging via qualify_stage_credential auto-arms; a fake kimi rotates the staged token; no explicit arm call.
+H="$T/d"; mkdir -p "$H/.kimi-code/credentials" "$H/stage/.kimi-code/credentials"
+echo '{"refresh":"old"}' >"$H/.kimi-code/credentials/kimi-code.json"; touch -d '2 hours ago' "$H/.kimi-code/credentials/kimi-code.json"
+printf '#!/bin/sh\necho "{\\"refresh\\":\\"new\\"}" >"$HOME/.kimi-code/credentials/kimi-code.json"\n' >"$T/kimi"; chmod +x "$T/kimi"
+HOME="$H" bash -c 'source "$0"; qualify_stage_credential "$HOME/stage/.kimi-code/credentials/kimi-code.json" "$HOME/.kimi-code/credentials/kimi-code.json" execute
+  HOME="$HOME/stage" "$1"; exit 0' "$LIB" "$T/kimi"
+grep -q new "$(R "$H")" && [ "$(nbak "$H")" = 1 ]; ok $? "standard entry (qualify_stage_credential) auto-arms write-back"
 echo "passed=$pass failed=$fail"; [ "$fail" = 0 ]

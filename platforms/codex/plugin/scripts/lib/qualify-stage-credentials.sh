@@ -32,6 +32,12 @@ qualify_stage_credential() {
     return 0
   fi
 
+  # BL-0199: any recipe staging a Kimi credential gets the exit write-back automatically (new entry points cannot forget).
+  case "$real_file" in
+    */.kimi-code/credentials/kimi-code.json|*/.kimi-code/oauth/kimi-code)
+      [ "$mode" = "execute" ] && qualify_kimi_arm_writeback "$(dirname -- "$(dirname -- "$staged_file")")" "$(dirname -- "$(dirname -- "$real_file")")" ;;
+  esac
+
   if [ ! -f "$staged_file" ] || [ "$staged_sha" != "$real_sha" ]; then
     cp -- "$real_file" "$staged_file"
     chmod 600 "$staged_file" || true
@@ -85,6 +91,7 @@ qualify_writeback_credential() {
 # Arms an EXIT/INT/TERM/HUP trap that writes the staged credential files back. Call after seeding.
 qualify_kimi_arm_writeback() {
   QUALIFY_KIMI_STAGED_DIR=${1-}
+  [ -n "${2-}" ] && QUALIFY_KIMI_REAL_DIR_ARMED=$2
   trap '_qualify_kimi_finish' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
@@ -92,7 +99,7 @@ qualify_kimi_arm_writeback() {
 }
 
 _qualify_kimi_finish() {
-  local rc=$? real_dir=${QUALIFY_KIMI_REAL_DIR:-$HOME/.kimi-code} f
+  local rc=$? real_dir=${QUALIFY_KIMI_REAL_DIR:-${QUALIFY_KIMI_REAL_DIR_ARMED:-$HOME/.kimi-code}} f
   trap - EXIT
   for f in credentials/kimi-code.json oauth/kimi-code; do
     qualify_writeback_credential "$QUALIFY_KIMI_STAGED_DIR/$f" "$real_dir/$f" || true

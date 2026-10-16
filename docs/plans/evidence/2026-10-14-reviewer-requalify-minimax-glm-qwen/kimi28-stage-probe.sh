@@ -16,7 +16,6 @@ for f in config.toml device_id; do qualify_stage_identity "$KD/$f" "$HOME/.kimi-
 qualify_stage_credential "$KD/credentials/kimi-code.json" "$HOME/.kimi-code/credentials/kimi-code.json" execute
 qualify_stage_credential "$KD/oauth/kimi-code" "$HOME/.kimi-code/oauth/kimi-code" execute
 if [ -s "$SAVE/cred" ]; then cp "$SAVE/cred" "$KD/credentials/kimi-code.json"; chmod 600 "$KD/credentials/kimi-code.json"; [ -f "$SAVE/oauth" ] && cp "$SAVE/oauth" "$KD/oauth/kimi-code"; echo "kimi28: seeded credential from staged home $best"; fi; rm -rf "$SAVE"
-qualify_kimi_arm_writeback "$KD"  # BL-0199 standard step: on any exit, back up + write the rotated credential back to ~/.kimi-code
 label="$(awk '/^\[models\."kimi-code\/kimi-for-coding"\]/{f=1;next} /^\[/{f=0} f&&/^display_name/{print}' "$KD/config.toml")"
 echo "kimi28 alias label: $label"
 printf '%s' "$label" | grep -q '2\.8' || { echo "kimi28: alias kimi-code/kimi-for-coding is not labelled 2.8 in the CLI config"; exit 3; }

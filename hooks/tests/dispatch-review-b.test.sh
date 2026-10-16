@@ -95,6 +95,12 @@ assert_eq "1" "$EXIT" "qoderclicn well-formed block + nonzero exit: exit 1 (fail
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn well-formed block + nonzero exit → no_verdict"
 assert_contains "$OUT" "qoder exited non-zero (rc=9)" "qoderclicn well-formed block + nonzero exit names the exit code"
 assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn well-formed block + nonzero exit never authorizes shipping"
+# Model substituted by qoder (stderr notice) + intact SHIP block: rejected, reason names it.
+OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_SUBST" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "qoderclicn substituted model: exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn substituted model → no_verdict"
+assert_contains "$OUT" "model substituted" "qoderclicn substituted model error names the cause"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn substituted model never authorizes shipping"
 
 # 5b'. opencode path: prompt via STDIN, scratch cwd, --format json NDJSON parsed (the
 # dedicated Node scriptlet extracts the last {"type":"text"} event's .part.text before

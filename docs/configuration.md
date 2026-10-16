@@ -2,7 +2,7 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-Skills work out of the box. For project-specific behavior, drop a markdown file into your project's `.claude/` directory — this page explains the injection mechanism, the available config files, and team setup.
+Skills work out of the box. For project-specific behavior, drop a markdown file into your project's `.claude/` directory — this page explains the injection mechanism, the available config files, and team setup. Machine-level settings (`~/.autopilot/config.json`, `AUTOPILOT_*` environment variables, the Claude Code compaction settings) are in the [settings reference](settings-reference.md).
 
 ---
 

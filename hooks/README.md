@@ -1,5 +1,7 @@
 # Autopilot Hooks
 
+Every hook knob (config.json keys and environment variables) is indexed in [docs/settings-reference.md](../docs/settings-reference.md).
+
 37 Claude Code hooks for runtime enforcement of development discipline: **24 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)

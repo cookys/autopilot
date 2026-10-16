@@ -332,6 +332,13 @@ check_tmp_residue_gate() {
   node scripts/check-tmp-residue-registry.js >&2
 }
 
+# ─── 11. settings registry gate ───
+# Every AUTOPILOT_* env var / config.json key the code reads is registered in scripts/lib/config-keys.json, every
+# registered entry is still read, and every audience=user entry is on docs/settings-reference.md.
+check_config_docs_gate() {
+  node scripts/check-config-docs.js >&2
+}
+
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
   if check_slash_entry_probe; then
     exit 0
@@ -353,6 +360,7 @@ run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SL
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
+run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's

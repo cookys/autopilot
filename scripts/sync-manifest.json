@@ -112,6 +112,23 @@
       ]
     },
     {
+      "id": "check-config-docs",
+      "title": "settings registry: AUTOPILOT_* env vars / config.json keys the code reads <-> scripts/lib/config-keys.json <-> docs/settings-reference.md",
+      "generator": null,
+      "check": "node scripts/check-config-docs.js",
+      "fix": "register the new knob in scripts/lib/config-keys.json (audience user + summary, or internal + class) and, for a user knob, add it to docs/settings-reference.md",
+      "tier": "both",
+      "trigger": [
+        "bin/",
+        "hooks/",
+        "scripts/",
+        "src/",
+        "mods/",
+        "project-config-template/",
+        "docs/settings-reference.md"
+      ]
+    },
+    {
       "id": "check-claude-md-inventory",
       "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named + file/line size caps",
       "generator": null,

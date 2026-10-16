@@ -112,7 +112,7 @@ assert_eq "0" "$EXIT" "opencode reviewed exit 0"
 assert_contains "$OUT" '"runner": "opencode"' "opencode runner provenance"
 assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode verdict parsed out of the NDJSON text event"
 assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" 'run --dir' "opencode receives run --dir"
-assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--agent plan' "opencode reviewer runs under the read-only plan agent"
+assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--agent locked' "opencode reviewer runs under the deny-all locked agent (not plan)"
 assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--format json' "opencode requests JSON event output"
 assert_not_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant max' "opencode default effort is not the raw 'max' token"
 

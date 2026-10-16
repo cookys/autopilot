@@ -32,16 +32,18 @@
  *                                 exposes no verified tool-deny/sandbox mechanism —
  *                                 see the callCli() cursor branch for the full
  *                                 reasoning and the R-3 citation.
- *                                 QRP_CLI_KIND=opencode → ALWAYS REFUSES. `opencode
- *                                 run --agent plan` LOOKS like a read-only posture
- *                                 (its permission set denies `edit`) but a live
- *                                 adversarial probe (2026-09-07, opencode 1.18.27:
- *                                 asked it to run `hostname` via its bash tool) ran
- *                                 the command and returned the REAL host's
- *                                 hostname — `--agent plan` only denies `edit`, not
- *                                 tool/bash execution, so it is not a deny mechanism
- *                                 this adapter can rely on. See the callCli()
- *                                 opencode branch.)
+ *                                 QRP_CLI_KIND=opencode → `opencode run --dir <EMPTY
+ *                                 scratch dir> --pure -m <model> --agent locked
+ *                                 --format json`, prompt on stdin, with
+ *                                 OPENCODE_CONFIG_CONTENT = global deny-all PLUS a
+ *                                 deny-all `locked` agent. Allowed ONLY in exactly
+ *                                 that shape: lib/opencode-containment.js
+ *                                 assertLocked() is re-checked against the final
+ *                                 argv+env before spawn and any deviation (no env,
+ *                                 --agent plan, non-empty --dir, no --pure) throws.
+ *                                 Live probe 2026-10-16, opencode 1.19.2,
+ *                                 https://opencode.ai/docs/permissions/ (the earlier
+ *                                 `--agent plan` posture let a bash `hostname` run).
  *
  * ⚠️ agy takes NO --effort. Probed 2026-08-20 (agy 1.1.16) across three model
  * families: `--effort low|medium|high` → "--effort is not supported for <model>",
@@ -1027,6 +1029,7 @@ const { grokEffortClamp } = require('./lib/grok-effort');
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const agyContainment = require('./lib/agy-containment');
 const kimiContainment = require('./lib/kimi-containment');
+const opencodeContainment = require('./lib/opencode-containment');
 const qualificationUsage = require('./lib/qualification-usage');
 
 // BL-0161: a CLI that hits a quota / login wall can still exit 0 and just print the
@@ -1126,6 +1129,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let sidecar = null;
   let promptFile = null;
   let kimiAgentDir = null;
+  let opencodeDir = null;
   // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
@@ -1338,26 +1342,17 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       + 'case until cursor-agent ships a real catch-all deny or a portable sandbox surviving --force.',
     );
   } else if (kind === 'opencode') {
-    // REFUSAL, not containment — same doctrine as the cursor branch above.
-    // `opencode run --agent plan` (the posture scripts/dispatch-review.sh's
-    // reviewer rail uses, best-effort, NOT claimed as a hard sandbox there
-    // either) denies `edit` via its permission set, but a live adversarial
-    // probe (2026-09-07, opencode 1.18.27) asked it to run `hostname` through
-    // its bash tool and it DID — tool_use event, real exit 0, the actual
-    // host's hostname in the output. `--agent plan` only gates `edit`; it has
-    // no `--tools ""` / `--deny "*"` equivalent this adapter could force. Per
-    // this file's own safety contract: refuse rather than expose the host.
-    // This branch NEVER builds args and NEVER spawns. Lifting this refusal
-    // requires a real deny-all mechanism for opencode (a future CLI flag, or
-    // an agent profile that also denies bash/tool execution) plus a fresh
-    // adversarial probe proving it holds.
-    throw new Error(
-      'opencode has no verified tool-deny/sandbox mechanism — CONFIRMED by live '
-      + 'adversarial probing 2026-09-07 (opencode 1.18.27: `--agent plan` denies edit '
-      + 'but let a `hostname` bash-tool call run and return the real host hostname) — '
-      + 'refusing to spawn opencode flag-armed and uncontained. This kind will refuse '
-      + 'EVERY case until opencode ships a real catch-all deny.',
-    );
+    // CONTAINMENT (live adversarial probe 2026-10-16, opencode 1.19.2; one owner:
+    // lib/opencode-containment.js). Global `permission "*":deny` + a custom primary
+    // agent `locked` that is also deny-all, delivered by OPENCODE_CONFIG_CONTENT, run in
+    // an EMPTY --dir so no project opencode.json / agent md exists to re-open anything.
+    // `--agent plan` is NOT containment (it denies only `edit`). The env + argv are
+    // verified again right before spawn (opencodeContainment.assertLocked) so a future
+    // edit that drops any layer fails closed instead of spawning uncontained.
+    // VERSION-DRIFT CAVEAT: re-run hooks/tests/opencode-deny-all-live.test.sh
+    // (AUTOPILOT_LIVE_OPENCODE=1) on any opencode upgrade.
+    opencodeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-opencode-empty-'));
+    args = opencodeContainment.lockedArgs({ model, variant: effort === 'max' ? 'xhigh' : effort, dir: opencodeDir });
   } else if (kind === 'codex') {
     sidecar = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-codex-')),
@@ -1511,7 +1506,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       args.push('--config-dir', cloneHome);
     }
   }
-  const childEnv = cloneHome
+  let childEnv = cloneHome
     ? {
       ...process.env,
       HOME: cloneHome,
@@ -1522,9 +1517,18 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       ...(kind === 'grok' ? { GROK_HOME: cloneHome } : {}),
     }
     : process.env;
+  if (kind === 'opencode') {
+    childEnv = opencodeContainment.lockedEnv(childEnv);
+    const breach = opencodeContainment.assertLocked({ args, env: childEnv });
+    if (breach) {
+      fs.rmSync(opencodeDir, { recursive: true, force: true });
+      throw new Error(`opencode containment verification failed: ${breach} — refusing to spawn opencode uncontained`);
+    }
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv,
+      ...(opencodeDir ? { cwd: opencodeDir } : {}),
     });
     const stdout = [];
     const stderr = [];
@@ -1545,6 +1549,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
       if (kimiAgentDir) fs.rmSync(kimiAgentDir, { recursive: true, force: true });
+      if (opencodeDir) fs.rmSync(opencodeDir, { recursive: true, force: true });
       // A clean exit proves nothing about containment (the fallback-to-default
       // agent also exits 0) — audit agy's own log and transcript BEFORE the clone,
       // the only copy of them, is removed.
@@ -1590,6 +1595,8 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         }
       } else {
         text = Buffer.concat(stdout).toString('utf8');
+        // opencode --format json is NDJSON; the answer is the last text event.
+        if (kind === 'opencode') text = opencodeContainment.extractText(text);
       }
       if (!text.trim()) {
         // Zero-exit + empty stdout is exactly the agy headless soft-deny shape

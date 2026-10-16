@@ -100,17 +100,15 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
-#   opencode runner: drives the OpenCode CLI (`opencode run`). Probe-verified 2026-09-07
-#   (opencode 1.18.27): `--dir <scratch-cwd>` anchors the run outside the repo (the diff
-#   is TEXT in the prompt, this rail needs no repo access at all — scratch cwd is the
-#   ACTUAL containment, same as kimi/cursor below); `--agent plan` denies `edit` for
-#   every path except its own plan-file directory (verified via `opencode agent list`,
-#   NOT the implementer rail's default `build` agent) but is BEST-EFFORT, NOT a hard
-#   sandbox: a live adversarial probe (asked it to run `hostname`) showed `--agent plan`
-#   does NOT block bash/tool execution — the model ran the command and returned the real
-#   host's hostname. So opencode stays OUT of the AUTOPILOT_BLIND_DISCOVERY no-tools
-#   allowlist, same tier as kimi/grok/cursor (see qualification-review-provider.js's
-#   opencode kind, which refuses entirely for the stricter exam-integrity threshold).
+#   opencode runner: drives the OpenCode CLI (`opencode run`). Containment is a real
+#   deny-all (live adversarial probe 2026-10-16, opencode 1.19.2, docs
+#   https://opencode.ai/docs/permissions/): inline OPENCODE_CONFIG_CONTENT sets global
+#   `permission {"*":"deny"}` AND a custom primary agent `locked` that is also deny-all,
+#   run as `--agent locked` with `--dir <EMPTY scratch dir>` (the diff is TEXT in the
+#   prompt; nothing to read). Single owner: scripts/lib/opencode-containment.js. The earlier
+#   `--agent plan` posture denied only `edit` (a `hostname` bash call ran) and is gone.
+#   Whether opencode joins the AUTOPILOT_BLIND_DISCOVERY no-tools allowlist is a separate
+#   decision and is NOT changed here (this edit is containment only).
 #   `--pure` disables external plugins; the prompt is read from STDIN (no positional
 #   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
 #   newline-delimited JSON events — the final assistant text is the LAST
@@ -1514,12 +1512,15 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   OPENCODE_ERR="$(mktemp -t dispatch-review-opencode-err-XXXXXX)"
   OPENCODE_CWD="$(mktemp -d -t dispatch-review-opencodecwd-XXXXXX)"
   OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
-  # --agent plan denies `edit` (best-effort, NOT a hard sandbox — see header comment:
-  # a live probe showed it does not block bash/tool execution). --dir anchors the run
-  # at the scratch cwd (the ACTUAL containment, never the repo). Prompt via STDIN (no
-  # ARG_MAX wall). --format json for machine-parseable events.
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$3" --agent plan --variant "$4" --format json < "$5"' \
-      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+  # Deny-all containment (opencode 1.19.2 probe 2026-10-16; lib/opencode-containment.js is
+  # the one owner): inline OPENCODE_CONFIG_CONTENT = global permission "*":deny PLUS a custom
+  # primary agent "locked" that is also deny-all, run with --agent locked in an EMPTY --dir
+  # (no project opencode.json / agent md to read). --agent plan was NOT enough: it only
+  # denies `edit`. Prompt via STDIN (no ARG_MAX wall). --format json for parseable events.
+  OPENCODE_CONFIG_JSON="$(node "$_REVIEW_SELF_DIR/lib/opencode-containment.js" config)" || die_precondition "could not derive the opencode deny-all config (lib/opencode-containment.js)"
+  [[ -n "$OPENCODE_CONFIG_JSON" ]] || die_precondition "empty opencode deny-all config — refusing to spawn opencode uncontained"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec env OPENCODE_CONFIG_CONTENT="$6" "$2" run --dir "$1" --pure -m "$3" --agent locked --variant "$4" --format json < "$5"' \
+      _ "$OPENCODE_CWD" "$OPENCODE_BIN" "$MODEL" "$OPENCODE_VARIANT" "$PROMPT_FILE" "$OPENCODE_CONFIG_JSON" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
   OPENCODE_RC=$?
   wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$OPENCODE_CWD"; OPENCODE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time

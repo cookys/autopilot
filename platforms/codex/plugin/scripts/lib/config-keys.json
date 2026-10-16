@@ -1832,6 +1832,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_LIVE_OPENCODE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/opencode-containment.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_LOAD_SOURCE_TRUST_ENV",
       "kind": "env",
       "audience": "internal",

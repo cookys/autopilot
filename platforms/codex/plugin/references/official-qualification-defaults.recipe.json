@@ -127,6 +127,16 @@
       "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify"
     },
     {
+      "event_id": 193,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-gpt6-low-sweep/implementer/gpt-6.1-sol-qualify"
+    },
+    {
+      "event_id": 194,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-01-grok-4.7-low-seats/implementer/grok-4.7-qualify"
+    },
+    {
       "event_id": 203,
       "role": "implementer",
       "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify"

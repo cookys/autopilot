@@ -118,7 +118,7 @@ assert_eq "2" "$EXIT" "unknown field exit code"
 # 6. override precedence + non-transport enum fallback on garbage
 CFG="$TEST_TMP/rl.md"
 printf -- '- reviewer_effort: turbo\n- loop_max_rounds: notanum\n- implementer_engine: my-local-model\n' > "$CFG"
-assert_eq "xhigh" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field reviewer_effort)" "bad effort falls back to default"
+assert_eq "low" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field reviewer_effort)" "bad effort falls back to default"
 assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_max_rounds)" "non-numeric rounds falls back to default"
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"

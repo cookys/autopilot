@@ -225,8 +225,8 @@ from inside `$REPO`.)
    Pin each one:
 
    ```bash
-   node scripts/engine-capability-state.js pin-seat --role qc_panel --engine gpt-5.5 --runner codex \
-     --effort xhigh --endpoint @none --reason "operator-chosen review seat" --operator <your name>
+   node scripts/engine-capability-state.js pin-seat --role qc_panel --engine gpt-6.1-sol --runner codex \
+     --effort low --endpoint @none --reason "operator-chosen review seat" --operator <your name>
    ```
 
    Repeat per seat, with the exact engine, runner, effort and endpoint of the seat. This writes the
@@ -294,8 +294,8 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
      [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md).
 
   So running the command from your autopilot checkout with `--cwd` pointing at another repository that
-  has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-5.5`/`codex`,
-  `claude-opus`/`claude-native`, `gemini-3.6-flash-high`/`agy`), not your checkout's own config. Running
+  has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-6.1-sol`/`codex`,
+  `claude-opus`/`claude-native`, `gemini-4-argon-high`/`agy`), not your checkout's own config. Running
   `scripts/resolve-review-loop.sh` by hand gives a different answer depending on where you stand
   (tier 3 applies only when you stand in the autopilot checkout): to see what a run will use, `cd` into
   the repository under review first and read `source`, `config_path` and `qc_panel_seats` in its JSON.
@@ -383,7 +383,7 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
   `provider_live_probe.minimal_no_effect.<outcome>`, and a `ttl_seconds`. It is written so the readiness
   receipt can bind a fresh, recorded observation of each seat (and so later `status` reads see it). The
   probed seats are the `qc_panel` seats **and the roster's `reviewer_*` seat** (for the template that is
-  `gpt-5.5`), so expect one row per probed seat per probe: four rows for a three-seat panel. Every run probes
+  `gpt-6.1-sol`), so expect one row per probed seat per probe: four rows for a three-seat panel. Every run probes
   again: two runs seven minutes apart both appended a row for the same seat. `pins.jsonl` is only read, never
   changed. The same directory is also read for the scorecard, and `~/.autopilot/endpoints.env` is read for
   seats that name an endpoint. The campaign's own state is written next to the contract

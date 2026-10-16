@@ -5,11 +5,14 @@
 
 ## Test Command
 
-```bash
-bash hooks/tests/run.sh
-```
+Test step: select first, then run (from the repository root).
 
-Runs the L1 unit suite (`node --test hooks/*.test.js`) plus all L2 integration tests under `hooks/tests/*.test.sh`. Adopted in v2.7.5 (test-suite-foundation ship). The framework + per-layer conventions live in `hooks/tests/README.md`. Skill bodies and agent prompts remain prose — they don't have unit tests, but the hooks/scripts/lib code they orchestrate now does.
+1. Run `node scripts/affected-suites.js --base <target-branch> --head HEAD --json`.
+2. `mode: "selective"`: run every path in `suites` (it already includes `always_run`) and every path in `extra_runners`, and nothing else is required. `mode: "full"`: run `bash hooks/tests/run.sh` (the whole suite) plus every `extra_runners` entry, because run.sh does not run those.
+3. An empty `suites` list is a pass only when every changed file is prose (selective, no `full_reasons`). An empty list from a non-prose change, or any `full` mode, is never a pass.
+4. Release preflight is always the whole suite (`bash hooks/tests/run.sh` plus `extra_runners`), whatever the selector says.
+
+`bash hooks/tests/run.sh` runs the L1 unit suite (`node --test hooks/*.test.js`) plus all L2 integration tests under `hooks/tests/*.test.sh`. Adopted in v2.7.5 (test-suite-foundation ship). The framework + per-layer conventions live in `hooks/tests/README.md`. Skill bodies and agent prompts remain prose — they don't have unit tests, but the hooks/scripts/lib code they orchestrate now does.
 
 ## Scan Command
 

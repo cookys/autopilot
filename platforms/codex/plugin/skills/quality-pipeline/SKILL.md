@@ -33,7 +33,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | Script | Replaces LLM-judgment for | When invoked |
 |--------|---------------------------|--------------|
 | [`scripts/check-backlog-entries.js`](../../scripts/check-backlog-entries.js) | Per-entry schema/caps/pointer/reporter-field gate; `--range` is the pre-push peer-report guard | After writing a backlog row; pre-merge checklist |
-| [`scripts/affected-suites.js`](../../scripts/affected-suites.js) | "Which suites can this diff break?" — static reference graph; `mode: full` when the diff cannot be judged. Selector only, not yet a gate step (BL-0001) | Opt-in: when you want a fast pre-check before the full suite; never in place of it |
+| [`scripts/affected-suites.js`](../../scripts/affected-suites.js) | "Which suites can this diff break?" — static reference graph; `mode: full` when the diff cannot be judged. The gate's test step (BL-0001) | Tests step, M/L/XL and urgent: before running any test |
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |

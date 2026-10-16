@@ -157,6 +157,9 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `qualification_feed.url` (config.json) | Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself. | unset |  |
+| `qualification_outbox.enqueue` (config.json) | When true, a completed engine-scorecard record is also queued in the registry outbox (`~/.autopilot/qualification-outbox`). The local scorecard write is unchanged; nothing is sent until `qualification-send-queue.js flush` runs with a transport. | `false` |  |
+| `qualification_outbox.transport` (config.json) | How `qualification-send-queue.js flush` sends: `off` (nothing is sent) or `git` (bot branch and pull request in the registry clone; the owner merges, and the merge is the ack). | `off` |  |
+| `qualification_outbox.registry_repo` (config.json) | Path of the dedicated bot clone of the registry repo (llm-playground) that the git transport uses. Required when transport is `git`. | unset |  |
 | `AUTOPILOT_ENDPOINTS_ENV` | Path of the endpoints env file (mode 600) that load-endpoints-env.sh reads. | `~/.autopilot/endpoints.env` |  |
 | `AUTOPILOT_ENDPOINT_<NAME>_URL` | Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_`<NAME>`_URL and AUTOPILOT_ENDPOINT_`<NAME>`_TOKEN. An HTTP seat appears in the topology only when its URL is set. | unset |  |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |

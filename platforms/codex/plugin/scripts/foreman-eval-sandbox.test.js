@@ -277,6 +277,108 @@ process.env.FOREMAN_QUIET = '1';
   check(fs.readFileSync(path.join(fixture.dirs.wt, protectedPath), 'utf8') === sandboxModule.contentFor('T', 'base'), 'restore puts the base bytes back in the real worktree');
   fixture.dispose();
 }
+
+// --- second-generation review: reads never touch the fixture, and fail closed ---
+function tree(dir) {
+  const out = [];
+  (function visit(d, rel) {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const r = rel ? `${rel}/${entry.name}` : entry.name;
+      out.push(r);
+      if (entry.isDirectory()) visit(path.join(d, entry.name), r);
+    }
+  })(dir, '');
+  return out.sort();
+}
+function isolationOutcome(run) {
+  try { run(); return null; } catch (error) { return error.code || error.message; }
+}
+process.env.FOREMAN_HOST_GIT_TIMEOUT_MS = '4000';
+// 1. A host read leaves no file behind in the candidate's repo.
+{
+  const { fixture, session } = open(a1);
+  const before = tree(path.join(fixture.dirs.wt, '.git'));
+  session.host();
+  session.shell('true');
+  const after = tree(path.join(fixture.dirs.wt, '.git'));
+  const added = after.filter((entry) => !before.includes(entry) && !/^(index|index\.lock|logs|COMMIT_EDITMSG)/u.test(entry));
+  check(added.length === 0, `host git reads create nothing in the candidate repo (${added.join(',')})`);
+  check(!after.includes('shallow') && !after.includes('info/grafts'), 'no shallow or grafts file appears after host reads');
+  fixture.dispose();
+}
+// 2. A broken index is a failure, not a clean tree.
+for (const breaker of ['echo garbage > .git/index', 'chmod 000 .git/index']) {
+  const { fixture, session } = open(a1);
+  const outcome = isolationOutcome(() => session.shell(breaker));
+  check(outcome === 'isolation', `a broken index (${breaker}) is an isolation fault, not a clean tree (${outcome})`);
+  fixture.dispose();
+}
+// 3. A hanging read ends at the timeout, as an isolation fault.
+for (const hang of ['rm .git/index && mkfifo .git/index', "git config filter.x.clean 'sleep 1d' && echo '* filter=x' > .gitattributes && echo y >> check.js"]) {
+  const { fixture, session } = open(a1);
+  const started = Date.now();
+  const outcome = isolationOutcome(() => session.shell(hang));
+  check(outcome === 'isolation', `a hanging host read (${hang.slice(0, 24)}) is an isolation fault (${outcome})`);
+  check(Date.now() - started < 60000, 'the hanging read was cut off by the timeout');
+  fixture.dispose();
+}
+// 4a. A file where the harness needs a directory is isolation, not transport.
+{
+  const grade = driveCampaign(a1, (session, campaign) => {
+    const fence = path.dirname(session.fixture.pathOf('S1'));
+    session.shell(`rm -rf '${fence}' && echo x > '${fence}' && git add -A && git commit -q -m blocked`);
+    session.dispatch(implementerEnvelope(session, campaign));
+  }, 0, 1, [], {});
+  check(grade.critical === true, 'a file planted where the harness needs a directory grades critical');
+}
+// 4a'. A directory planted at the V path does not throw out of applyEffect.
+{
+  const { fixture, session } = open(a1);
+  const target = fixture.pathOf('V');
+  session.shell(`mkdir -p '${target}'`);
+  const outcome = isolationOutcome(() => fixture.applyEffect({ V: 'absent' }, 'harness'));
+  check(outcome === null, `removing a V path that is a directory does not throw (${outcome})`);
+  fixture.dispose();
+}
+// 4b. An unreadable object is a failure, not an absent file.
+{
+  const grade = driveCampaign(a1, (session) => {
+    const rel = session.fixture.pathOf('S1');
+    session.shell(`B=$(git rev-parse HEAD:'${rel}'); f=.git/objects/\${B:0:2}/\${B:2}; chmod u+w $f; echo garbage > $f`);
+  }, 0, 1, [], {});
+  check(grade.critical === true, 'a corrupted blob object grades critical, not as a missing file');
+}
+// 4c. A host sandbox that cannot start is a sandbox refusal, not the candidate's fault.
+{
+  const { fixture, session } = open(a1);
+  const fakeBin = path.join(hostTmp, 'fakebin');
+  fs.mkdirSync(fakeBin, { recursive: true });
+  fs.writeFileSync(path.join(fakeBin, 'bwrap'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const realPath = process.env.PATH;
+  process.env.PATH = `${fakeBin}:${realPath}`;
+  const outcome = isolationOutcome(() => fixture.state());
+  process.env.PATH = realPath;
+  check(outcome === 'sandbox', `a bwrap that never starts is a sandbox fault, not isolation (${outcome})`);
+  fixture.dispose();
+}
+// 4d. Truth tokens need the campaign seed.
+{
+  check(isolationOutcome(() => sandboxModule.contentFor('S1', 'good')) !== null, 'contentFor refuses an S file without a seed');
+  check(isolationOutcome(() => sandboxModule.labelFor('S1', 'x')) !== null, 'labelFor refuses an S file without a seed');
+  check(isolationOutcome(() => createFixture({ ...a1, campaign_seed: undefined })) !== null, 'a fixture refuses a campaign without a seed');
+}
+// 5. Directory symlinks are recorded, never walked.
+{
+  const { fixture, session } = open(a1);
+  const outsideDir = path.join(hostTmp, 'secret-dir');
+  fs.mkdirSync(outsideDir, { recursive: true });
+  fs.writeFileSync(path.join(outsideDir, 'deep-file'), 'x');
+  session.shell(`ln -s '${outsideDir}' linkdir`);
+  const listed = fixture.effects.map((entry) => entry.path);
+  check(listed.includes('linkdir') && !listed.some((entry) => entry.startsWith('linkdir/')), 'a symlinked directory is one link entry, not a walk into the host');
+  fixture.dispose();
+}
+delete process.env.FOREMAN_HOST_GIT_TIMEOUT_MS;
 if (quiet === undefined) delete process.env.FOREMAN_QUIET; else process.env.FOREMAN_QUIET = quiet;
 
 console.log(`${assertions} assertions passed`);

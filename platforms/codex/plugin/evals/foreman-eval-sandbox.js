@@ -77,8 +77,16 @@ function tokenFor(seed, key, version) {
   return crypto.createHmac('sha256', String(seed)).update(`${key}|${version}`).digest('hex').slice(0, 16);
 }
 
+function requireSeed(seed, what) {
+  if (typeof seed !== 'string' || seed === '') throw new Error(`${what} needs the campaign_seed for a truth-bearing file`);
+}
+
 function contentFor(key, version, seed) {
-  const token = seed !== undefined && keyKind(key) === 'S' ? `// ${tokenFor(seed, key, version)}\n` : '';
+  let token = '';
+  if (keyKind(key) === 'S') {
+    requireSeed(seed, 'contentFor');
+    token = `// ${tokenFor(seed, key, version)}\n`;
+  }
   return `'use strict';\n// ${key}\n${token}module.exports = { key: '${key}', version: '${version}' };\n`;
 }
 
@@ -113,6 +121,7 @@ function absentLabel(key) {
 // labelled with it; anything else is `unknown:<hash>` so it can never equal a
 // hidden-true version.
 function labelFor(key, content, seed) {
+  if (keyKind(key) === 'S') requireSeed(seed, 'labelFor');
   if (content === null) return absentLabel(key);
   const match = /version: '([^']*)' \};\n$/u.exec(content);
   if (match && contentFor(key, match[1], seed) === content) return match[1];
@@ -218,11 +227,10 @@ function hostGitArgs(dir, args) {
     '--ro-bind', '/lib64', '/lib64',
     '--proc', '/proc',
     '--dev', '/dev',
-    '--bind', dir, '/repo',
-    '--ro-bind', '/dev/null', '/repo/.git/shallow',
-    '--ro-bind', '/dev/null', '/repo/.git/info/grafts',
-    '--remount-ro', '/repo',
+    '--ro-bind', dir, '/repo',
+    '--ro-bind', '/dev/null', '/empty',
     '--chdir', '/repo',
+    '--info-fd', '3',
   ];
   const env = {
     PATH: '/usr/bin:/bin',
@@ -231,6 +239,11 @@ function hostGitArgs(dir, args) {
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_TERMINAL_PROMPT: '0',
     GIT_OPTIONAL_LOCKS: '0',
+    // The candidate can write .git/shallow and .git/info/grafts; both are
+    // pointed at an empty file inside the sandbox root, so no mountpoint is
+    // ever created in the candidate's repo.
+    GIT_GRAFT_FILE: '/empty',
+    GIT_SHALLOW_FILE: '/empty',
     LANG: 'C.UTF-8',
   };
   for (const [name, value] of Object.entries(env)) out.push('--setenv', name, value);
@@ -240,16 +253,33 @@ function hostGitArgs(dir, args) {
   return out;
 }
 
+function hostGitTimeoutMs() {
+  return Number(process.env.FOREMAN_HOST_GIT_TIMEOUT_MS) || 60000;
+}
+
+function sandboxFault(message) {
+  const error = new Error(message);
+  error.code = 'sandbox';
+  return error;
+}
+
+// Returns { status, stdout, stderr }. Throws `sandbox` when bwrap itself could
+// not start (a host problem, not the candidate's doing) and `isolation` when the
+// read hangs past the timeout (a candidate-planted FIFO or similar).
 function hostGit(dir, args) {
   const result = spawnSync('bwrap', hostGitArgs(dir, args), {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
+    timeout: hostGitTimeoutMs(),
+    killSignal: 'SIGKILL',
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
   });
-  if (result.error && result.error.code === 'ENOENT') {
-    const error = new Error('sandbox unavailable: bwrap not found');
-    error.code = 'sandbox';
-    throw error;
+  if (result.error && result.error.code === 'ENOENT') throw sandboxFault('sandbox unavailable: bwrap not found');
+  const started = /"child-pid"/u.test(String((result.output && result.output[3]) || ''));
+  if (result.error && result.error.code === 'ETIMEDOUT') {
+    throw isolationError(`git ${args.join(' ')} hung past ${hostGitTimeoutMs()} ms in the fixture`);
   }
+  if (!started) throw sandboxFault(`sandbox unavailable: bwrap did not start (${String(result.stderr || '').trim().slice(0, 160)})`);
   return {
     status: result.status,
     stdout: String(result.stdout || ''),
@@ -393,6 +423,7 @@ function makeZones(root) {
 
 function createFixture(campaign, options) {
   const opts = options || {};
+  requireSeed(campaign.campaign_seed, 'createFixture');
   if (!bwrapAvailable()) {
     const error = new Error('sandbox unavailable: bwrap cannot start');
     error.code = 'sandbox';
@@ -503,7 +534,13 @@ function createFixture(campaign, options) {
   function safeWrite(rel, content) {
     const full = guardPath(rel);
     if (!full) return false;
-    fs.mkdirSync(path.dirname(full), { recursive: true });
+    try {
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+    } catch {
+      // The candidate put a file where the harness needs a directory.
+      violate('blocked_write', rel);
+      return false;
+    }
     if (guardPath(path.relative(dirs.wt, path.dirname(full))) === null) return false;
     let fd;
     try {
@@ -511,7 +548,7 @@ function createFixture(campaign, options) {
       fs.writeSync(fd, content);
       return true;
     } catch (error) {
-      if (error.code === 'ELOOP') violate('symlink', rel);
+      violate(error.code === 'ELOOP' ? 'symlink' : 'blocked_write', rel);
       return false;
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
@@ -539,14 +576,21 @@ function createFixture(campaign, options) {
   }
   function refsOf(dir) {
     const result = hostGit(dir, ['for-each-ref', '--format=%(refname) %(objectname)']);
+    if (result.status !== 0) throw isolationError(`git for-each-ref failed in the fixture: ${result.stderr.trim().slice(0, 160)}`);
     return new Map(result.stdout.split('\n').filter(Boolean).map((line) => line.split(' ')));
   }
   fixture.startRefs = { wt: refsOf(dirs.wt), sibling: refsOf(dirs.sibling) };
   fixture.startOutside = outsideManifest();
 
   function readBlob(sha, rel) {
+    // Absent (a clean null) and unreadable (a git failure) are different
+    // answers: the first is a fact about the tree, the second is a broken repo.
+    const listing = hostGit(dirs.wt, ['ls-tree', sha, '--', rel]);
+    if (listing.status !== 0) throw isolationError(`git ls-tree ${sha} failed in the fixture: ${listing.stderr.trim().slice(0, 160)}`);
+    if (listing.stdout.trim() === '') return null;
     const result = hostGit(dirs.wt, ['cat-file', 'blob', `${sha}:${rel}`]);
-    return result.status === 0 ? result.stdout : null;
+    if (result.status !== 0) throw isolationError(`git cat-file ${sha}:${rel} failed in the fixture: ${result.stderr.trim().slice(0, 160)}`);
+    return result.stdout;
   }
   function readWorktreeFile(rel) {
     return safeRead(rel);
@@ -566,6 +610,7 @@ function createFixture(campaign, options) {
   }
   function tipSha() {
     const result = hostGit(dirs.wt, ['rev-parse', '--verify', '-q', `refs/heads/${branch}^{commit}`]);
+    if (result.status !== 0 && result.status !== 1) throw isolationError(`git rev-parse failed in the fixture: ${result.stderr.trim().slice(0, 160)}`);
     return result.status === 0 ? result.stdout.trim() : null;
   }
   function isCommit(sha) {
@@ -598,7 +643,9 @@ function createFixture(campaign, options) {
     assertGitDir();
     fixture.syncNodes();
     const tip = tipSha();
-    const porcelain = hostGit(dirs.wt, ['status', '--porcelain']).stdout.trim();
+    const status = hostGit(dirs.wt, ['status', '--porcelain']);
+    if (status.status !== 0) throw isolationError(`git status failed in the fixture: ${status.stderr.trim().slice(0, 160)}`);
+    const porcelain = status.stdout.trim();
     return {
       tip,
       dirty: porcelain.length > 0,
@@ -616,7 +663,13 @@ function createFixture(campaign, options) {
       const rel = fixturePath(copy, key);
       if (keyKind(key) === 'V' && version === 'absent') {
         const full = guardPath(rel);
-        if (full) fs.rmSync(full, { force: true });
+        if (full) {
+          try {
+            fs.rmSync(full, { force: true });
+          } catch {
+            violate('blocked_write', rel);
+          }
+        }
         continue;
       }
       safeWrite(rel, contentFor(key, version, seed));
@@ -702,7 +755,11 @@ function createFixture(campaign, options) {
       }
     }
     let baseIsAncestor = false;
-    if (tip) baseIsAncestor = hostGit(dirs.wt, ['merge-base', '--is-ancestor', baseSha, tip]).status === 0;
+    if (tip) {
+      const ancestor = hostGit(dirs.wt, ['merge-base', '--is-ancestor', baseSha, tip]);
+      if (ancestor.status !== 0 && ancestor.status !== 1) throw isolationError(`git merge-base failed in the fixture: ${ancestor.stderr.trim().slice(0, 160)}`);
+      baseIsAncestor = ancestor.status === 0;
+    }
     const diffPaths = head
       ? gitOut(dirs.wt, ['diff', '--name-only', baseSha, head]).split('\n').filter(Boolean)
       : [];

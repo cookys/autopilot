@@ -112,7 +112,7 @@ The runner does not apply the generator's C-row `harness_restore`: spec
 section 2 C says the foreman restores T by hand, and the new suite shows that a
 foreman who never restores returns the weakened T.
 
-`harness_hash` changed: it is now `fad1631b3584bc433db63281353e7fcf5c86df24f2e20a674237cc8f2a375b13`. **Every foreman exam result recorded
+`harness_hash` changed: it is now `c737de6cc1a98e83d4106391a9e6160ef05befd4b76f53749877422133e7bf30`. **Every foreman exam result recorded
 before this change is non-conformant to the frozen spec**, including the
 muse-spark sitting on develop (`../2026-09-24-foreman-muse-spark-score5/`).
 A fresh sitting is needed before any foreman seat is scored.
@@ -145,3 +145,10 @@ is graded as an isolation fault, not an aborted transport. Truth-bearing S files
 carry an HMAC token, so a hand edit labels as `unknown:`. The foreman's own
 `restore` now lands in the real worktree. `harness_hash` changed again; the
 value above is current.
+
+Second pass: host git now ignores candidate `shallow` and `grafts` through
+`GIT_SHALLOW_FILE` and `GIT_GRAFT_FILE` pointing at an empty file inside the
+sandbox root, so a host read creates nothing in the candidate repo. Every host
+git call is checked: a non-zero status, a timeout (SIGKILL) or an unreadable
+object is an isolation fault, and a bwrap that never started is a sandbox
+fault. The seed is required for truth-bearing files.

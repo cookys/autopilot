@@ -63,6 +63,11 @@ const CONFIG = Object.freeze({
 });
 const CONFIG_JSON = JSON.stringify(CONFIG);
 
+// Ambient variables a contained run must never inherit: config redirects, and the channels that
+// can widen permissions (OPENCODE_PERMISSION: read by v1, which lets it replace the injected
+// top-level `permission`; not present in the 2.0.32 binary; cleared on both adaptors anyway).
+const CLEARED_ENV = Object.freeze(['OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR', 'OPENCODE_PERMISSION', 'OPENCODE_CLI_CONFIG_CONTENT']);
+
 // argv for `opencode run` (prompt goes on stdin). `dir` must be an empty directory.
 function lockedArgs({ model, variant, dir }) {
   const args = ['run', '--dir', dir, '--pure', '-m', model, '--agent', AGENT_NAME];
@@ -73,8 +78,7 @@ function lockedArgs({ model, variant, dir }) {
 
 function lockedEnv(base) {
   const env = { ...base, OPENCODE_CONFIG_CONTENT: CONFIG_JSON };
-  delete env.OPENCODE_CONFIG;
-  delete env.OPENCODE_CONFIG_DIR;
+  for (const k of CLEARED_ENV) delete env[k];
   return env;
 }
 
@@ -124,7 +128,8 @@ function assertLocked({ args, env }) {
   for (const flag of ['--agent', '--dir']) {
     if (args.filter((a) => a === flag).length > 1) return `${flag} given more than once`;
   }
-  if (env.OPENCODE_CONFIG || env.OPENCODE_CONFIG_DIR) return 'OPENCODE_CONFIG / OPENCODE_CONFIG_DIR must be unset';
+  const leaked = CLEARED_ENV.find((k) => env[k]);
+  if (leaked) return `${leaked} must be unset (OPENCODE_CONFIG / OPENCODE_CONFIG_DIR / OPENCODE_PERMISSION / OPENCODE_CLI_CONFIG_CONTENT)`;
   if (args[0] !== 'run') return 'argv is not an `opencode run` invocation';
   if (at('--agent') !== AGENT_NAME) return `--agent is not ${AGENT_NAME}`;
   if (!args.includes('--pure')) return '--pure is missing';
@@ -246,7 +251,8 @@ function prepareHomeV2(root, { bin, realEnv }) {
     } finally { fs.closeSync(fd); }
     if (r.error || r.status !== 0) throw new Error(`opencode auth export failed: ${r.error ? r.error.message : `rc=${r.status} ${String(r.stderr || '').slice(0, 200)}`}`);
     const cleanEnv = { ...(realEnv || process.env), ...clean };
-    delete cleanEnv.OPENCODE_CONFIG; delete cleanEnv.OPENCODE_CONFIG_DIR; delete cleanEnv.OPENCODE_CONFIG_CONTENT;
+    for (const k of CLEARED_ENV) delete cleanEnv[k];
+    delete cleanEnv.OPENCODE_CONFIG_CONTENT;
     cleanEnv.OPENCODE_DISABLE_PROJECT_CONFIG = '1';
     // opencode 2.x works in $PWD: the caller's PWD (the dispatcher's own repo) must not become the import's project dir
     const work = path.join(root, 'work');
@@ -275,7 +281,8 @@ function assertLockedV2({ args, env, cwd, realHome }) {
   if (at('--format') !== 'json') return '--format is not json';
   if (!at('-m')) return '-m has no model';
   if (!env || env.OPENCODE_DISABLE_PROJECT_CONFIG !== '1') return 'OPENCODE_DISABLE_PROJECT_CONFIG=1 is missing';
-  if (env.OPENCODE_CONFIG || env.OPENCODE_CONFIG_DIR) return 'OPENCODE_CONFIG / OPENCODE_CONFIG_DIR must be unset';
+  const leaked = CLEARED_ENV.find((k) => env[k]);
+  if (leaked) return `${leaked} must be unset (OPENCODE_CONFIG / OPENCODE_CONFIG_DIR / OPENCODE_PERMISSION / OPENCODE_CLI_CONFIG_CONTENT)`;
   const raw = env.OPENCODE_CONFIG_CONTENT;
   if (!raw) return 'OPENCODE_CONFIG_CONTENT is not set';
   let parsed;
@@ -336,7 +343,7 @@ function buildPlan({ bin, model, effort, profile, root, cwd, baseEnv, versionStr
       fs.mkdirSync(work, { recursive: true });
       const home = prepareHome(root, dataRoot || (base.XDG_DATA_HOME || path.join(base.HOME || os.homedir(), '.local', 'share')));
       plan.args = lockedArgs({ model, variant, dir: work });
-      plan.env = { set: { ...home, OPENCODE_CONFIG_CONTENT: CONFIG_JSON }, unset: ['OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR'] };
+      plan.env = { set: { ...home, OPENCODE_CONFIG_CONTENT: CONFIG_JSON }, unset: [...CLEARED_ENV] };
       plan.cwd = work;
     }
     return plan;
@@ -357,7 +364,7 @@ function buildPlan({ bin, model, effort, profile, root, cwd, baseEnv, versionStr
     // PWD: opencode 2.x takes its working dir from $PWD, so a spawn(cwd:) without it would run
     // (and write files) in the CALLER's directory — proven by a live write landing in the parent cwd.
     set: { ...home, PWD: work, OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_CONFIG_CONTENT: CONFIG_V2_JSON },
-    unset: ['OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR'],
+    unset: [...CLEARED_ENV],
   };
   plan.cwd = work;
   return plan;
@@ -396,7 +403,7 @@ function parseEnvOperands(ops) {
 const nulSplit = (s) => (s === '' ? [] : s.replace(/\0$/, '').split('\0'));
 
 module.exports = {
-  AGENT_NAME, CONFIG, CONFIG_JSON, CONFIG_V2, CONFIG_V2_JSON, lockedArgs, lockedArgsV2, lockedEnv, prepareHome,
+  AGENT_NAME, CLEARED_ENV, CONFIG, CONFIG_JSON, CONFIG_V2, CONFIG_V2_JSON, lockedArgs, lockedArgsV2, lockedEnv, prepareHome,
   prepareHomeV2, insideGitWorktree, assertLocked, assertLockedV2, extractText, auditEvents, detectAdaptor,
   buildPlan, assertPlan, applyEnv, envOperands, parseEnvOperands, variantFor,
 };

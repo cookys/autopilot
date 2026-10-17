@@ -124,6 +124,11 @@
       "reason": "Bare mktemp -d; `trap ... EXIT INT TERM` naming it is installed a few lines later and the normal path rm -rf's it."
     },
     {
+      "file": "scripts/probe-engine-capability.sh",
+      "match": "PROBE_ROOT=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; the same `trap ... EXIT INT TERM` (naming PROBE_ROOT) is installed a few lines later and the normal path rm -rf's it."
+    },
+    {
       "file": "scripts/qualification-sweep.sh",
       "match": "pd=$(mktemp -d)",
       "reason": "Bare mktemp -d; removed by rm -rf on both the failure and the success path of the function."

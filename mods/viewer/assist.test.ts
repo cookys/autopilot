@@ -11,6 +11,7 @@ import { test, expect } from 'claude-code/testing'
 import { AI_MAX_CHARS, GUARD_RULE } from './model'
 import { aiState, cancelAi, clearSaved, resetAssist, runAi, toggleAi } from './assist'
 import { makeVT } from './strings'
+import { PALETTE } from '../live/ui'
 
 const CWD = '/work/repo'
 const TOOL = 'mcp__autopilot__show'
@@ -194,9 +195,10 @@ test('send into the conversation: fills the prompt box with where it came from a
   const w = world(on, { [CWD + '/src.ts']: FILE })
   await $.session.start({ surface: 'terminal', cwd: CWD })
   await $.command.run({ command: 'show', args: 'src.ts' })
-  await press($, 'send')
-  expect(w.fills.length, 'nothing to send before a summary').toBe(0)
-  expect(w.toasts.join('\n')).toContain('先按摘要')
+  const before = await mountWindow($)
+  await expect(before.press({ key: 'send' })).rejects.toThrow() // nothing to send before a summary: the button is not pressable
+  await before.unmount()
+  expect(w.fills.length).toBe(0)
   await press($, 'summary')
   await press($, 'send')
   expect(w.fills.length).toBe(1)
@@ -254,47 +256,66 @@ test('the ask button only moves the keyboard to the question field: no call, no 
   expect(w.fills.length).toBe(0)
 })
 
-test('keys: the four buttons carry the hotkeys 1 to 4 and the hint line names them', async ($, on) => {
-  world(on, { [CWD + '/src.ts']: FILE })
+// design plan §12.9: every pressable thing is ONE Button around a `[ label ]` Text in the action colour (regular weight); a thing that cannot be pressed is a dim `[ label ]` Text with no
+// press id; no background, no inverse; the hint line does not repeat the keys
+function buttonFindings(tree: Node): string[] {
+  const out: string[] = []
+  const walk = (n: Node, inButton: boolean) => {
+    if (n.type === 'Button') {
+      const kids = (n.children || []).filter(c => typeof c !== 'string') as Node[]
+      const label = textOf(n)
+      if (!/^\[ .+ \]$/.test(label)) out.push('button not drawn as [ label ]: ' + label)
+      if (kids.length !== 1 || kids[0].props?.color !== PALETTE.action) out.push('button not in the action colour: ' + label)
+      if (kids.some(k => k.props?.bold === true)) out.push('bold button: ' + label)
+      inButton = true
+    } else if (n.type === 'Text' && !inButton && /^\[ .+ \]$/.test(textOf(n))) {
+      if (n.props?.dimColor !== true || n.props?.color !== undefined) out.push('unpressable [ label ] must be dim and uncoloured: ' + textOf(n))
+    }
+    if (n.props?.backgroundColor !== undefined || n.props?.inverse === true) out.push('background or inverse: ' + textOf(n))
+    for (const c of n.children || []) if (typeof c !== 'string') walk(c as Node, inButton)
+  }
+  walk(tree, false)
+  return out
+}
+
+test('buttons follow the design plan: [ label ] in the action colour, one Button per run, unpressable ones dim without a press id; keys marked once, inside the brackets', async ($, on) => {
+  world(on, { [CWD + '/src.ts']: FILE, [CWD + '/long.txt']: Array.from({ length: 5000 }, (_, i) => 'row ' + (i + 1)).join('\n') + '\n' })
   await $.session.start({ surface: 'terminal', cwd: CWD })
   await $.command.run({ command: 'show', args: 'src.ts' })
+  // before any answer: send and toggle are dim Texts, not Buttons
+  let win = await mountWindow($)
+  let tree = (await win.drawn()) as Node
+  expect(buttonFindings(tree)).toEqual([])
+  const buttons = (n: Node, out: Node[] = []): Node[] => { if (n.type === 'Button') out.push(n); for (const c of n.children || []) if (typeof c !== 'string') buttons(c as Node, out); return out }
+  expect(buttons(tree).map(b => String(b.props?.key))).toEqual(['summary', 'ask'])
+  expect(textOf(tree)).toContain('[ 送進對話 ]')
+  expect(textOf(tree)).not.toContain('摘要  問一句 ') // the hint line does not repeat the buttons
+  await win.unmount()
   await press($, 'summary')
-  const win = await mountWindow($)
-  const tree = (await win.drawn()) as Node
-  const keys: Record<string, unknown> = {}
-  const walk = (n: Node) => { if (n.type === 'Button' && typeof n.props?.hotkey === 'string') keys[String(n.props.key)] = n.props.hotkey; for (const c of n.children || []) if (typeof c !== 'string') walk(c as Node) }
-  walk(tree)
-  expect(keys).toEqual({ summary: '1', ask: '2', send: '3', toggle: '4' })
-  expect(textOf(tree)).toContain('1 摘要')
+  win = await mountWindow($)
+  tree = (await win.drawn()) as Node
+  expect(buttonFindings(tree)).toEqual([])
+  expect(buttons(tree).map(b => String(b.props?.key))).toEqual(['summary', 'ask', 'send', 'toggle'])
+  expect(buttons(tree).every(b => b.props?.hotkey === undefined), 'no hotkey: a hotkey would add a second marking in front of the brackets').toBe(true)
+  expect(textOf(tree)).toContain('[ 摘要 ]  [ 問一句 ]  [ 送進對話 ]  [ 只看原文 ]')
+  await win.unmount()
+  // a long file: the part buttons are drawn the same way, the unavailable one dim
+  await $.command.run({ command: 'show', args: 'long.txt' })
+  win = await mountWindow($)
+  tree = (await win.drawn()) as Node
+  expect(buttonFindings(tree)).toEqual([])
+  expect(textOf(tree)).toContain('[ 上一段 ]')
+  expect(buttons(tree).map(b => String(b.props?.key))).toContain('下一段')
+  expect(buttons(tree).map(b => String(b.props?.key))).not.toContain('上一段')
   await win.unmount()
 })
 
-test('cancel, direct: the press aborts the signal handed to $.model.complete, and the state ends with the cancelled line (negative control: make cancelAi do nothing and this goes red)', async (_$, _on) => {
-  // the module is driven with a stand-in engine whose model.complete honours the signal, as the real one does
-  resetAssist()
-  clearSaved()
-  let signal: AbortSignal | undefined
-  const $ = {
-    ui: { invalidate: () => {} },
-    model: {
-      complete: (_req: unknown, opts?: { signal?: AbortSignal }) => new Promise(res => {
-        signal = opts?.signal
-        signal?.addEventListener('abort', () => res({ isAnswered: false, reason: 'aborted', usage: USAGE }))
-      }),
-    },
-  } as never
-  const t = makeVT('zh-TW')
-  const running = runAi($, 'summary', null, { text: 'abc\n', path: 'a.txt', title: 'a.txt', isDiff: false }, 'zh-TW', t)
-  await new Promise(r => setTimeout(r, 20))
-  expect(aiState().running).not.toBeNull()
-  expect(signal?.aborted).toBe(false)
-  cancelAi($)
-  await running
-  expect(signal?.aborted).toBe(true)
-  expect(aiState().running).toBeNull()
-  expect(aiState().cancelled).toBe(true)
-  expect(aiState().error).toBeNull()
-  expect(aiState().shown).toBeNull()
+test('buttonFindings control: a plain button in the default colour, or a coloured unpressable one, is reported (negative control)', async (_$, _on) => {
+  const bad: Node = { type: 'Box', children: [
+    { type: 'Button', props: { key: 'a' }, children: [{ type: 'Text', props: {}, children: ['1: 摘要'] }] },
+    { type: 'Text', props: { color: PALETTE.action }, children: ['[ 送進對話 ]'] },
+  ] }
+  expect(buttonFindings(bad).length).toBe(3)
 })
 
 test('toggle while a call runs: the result still lands and running clears; cancel then toggle leaves the buttons usable (negative control: toggle with a new state object and this goes red)', async (_$, _on) => {

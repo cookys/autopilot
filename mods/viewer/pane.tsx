@@ -16,6 +16,14 @@ export type Shown =
   | { kind: 'diff'; view: DiffView }
   | { kind: 'empty'; what: 'file' | 'diff' }
 
+// A button (design plan §12.9): `[ label ]` in the `action` colour, text colour only, regular weight, ONE Button around the whole run (one press id). One that cannot be pressed
+// now is dim, no colour and no press id (a Text, not a Button). No `hotkey`: a plain Button with a hotkey draws `1: ` before its label (a second marking, and not `[ label ]`), and a non-plain one draws bold default-colour brackets of its own; the keyboard way is the host's focus ring (Tab or the arrows, then Enter), as in the live pane (§12.9 point 5).
+function btn(el: { Text: El; Button?: El }, key: string, label: string, press: (() => void) | null) {
+  const { Text, Button } = el
+  if (press === null || Button === undefined) return <Text key={key} dimColor>{'[ ' + label + ' ]'}</Text>
+  return <Button key={key} plain onPress={press}><Text color={PALETTE.action}>{'[ ' + label + ' ]'}</Text></Button>
+}
+
 // what the three buttons do: register.ts binds them to the engine; the pane only draws and presses
 export type AiView = {
   state: AiState
@@ -37,15 +45,13 @@ function aiBar(el: { Box: El; Text: El; Button?: El; Input?: El }, ai: AiView, t
   return (
     <Box key="ai-bar" flexDirection="column">
       <Box>
-        {running === null
-          ? <Button key="summary" plain hotkey="1" onPress={ai.summarize}>{t('viewer.ai.summarize')}</Button>
-          : <Button key="cancel" plain hotkey="1" onPress={ai.cancel}>{t('viewer.ai.cancel')}</Button>}
+        {running === null ? btn(el, 'summary', t('viewer.ai.summarize'), ai.summarize) : btn(el, 'cancel', t('viewer.ai.cancel'), ai.cancel)}
         {Input === undefined ? null : gap}
-        {Input === undefined ? null : <Button key="ask" plain hotkey="2" onPress={ai.focusAsk}>{t('viewer.ai.ask')}</Button>}
+        {Input === undefined ? null : btn(el, 'ask', t('viewer.ai.ask'), ai.focusAsk)}
         {gap}
-        <Button key="send" plain hotkey="3" dimColor={st.shown === null} onPress={ai.toChat}>{t('viewer.ai.send')}</Button>
-        {st.shown === null ? null : gap}
-        {st.shown === null ? null : <Button key="toggle" plain hotkey="4" onPress={ai.toggle}>{t(st.visible ? 'viewer.ai.hide' : 'viewer.ai.show')}</Button>}
+        {btn(el, 'send', t('viewer.ai.send'), st.shown === null ? null : ai.toChat)}
+        {gap}
+        {btn(el, 'toggle', t(st.visible ? 'viewer.ai.hide' : 'viewer.ai.show'), st.shown === null ? null : ai.toggle)}
       </Box>
       {Input === undefined ? null : <Input key="ask-input" label={t('viewer.ai.askLabel')} placeholder={t('viewer.ai.askPlaceholder')} submitLabel={t('viewer.ai.askGo')} onSubmit={(q: string) => ai.ask(q)} />}
       {running === null ? null : <Text color={PALETTE.running}>{t(running.kind === 'ask' ? 'viewer.ai.asking' : 'viewer.ai.working')}</Text>}
@@ -97,16 +103,16 @@ export function Viewer(el: { Box: El; Text: El; Code: El; Button?: El; Input?: E
   if (shown.kind === 'file') {
     const v = shown.view
     const head = v.partial ? t('viewer.lines', { a: v.first, b: v.last, n: v.total }) : t('viewer.whole', { n: v.total })
-    const part = (label: string, start: number | null) => start === null || Button === undefined ? null : <Button key={label} plain onPress={() => goto(start)}>{label}</Button>
+    const part = (label: string, start: number | null) => btn(el, label, label, start === null ? null : () => goto(start))
     return (
       <Box flexDirection="column">
         {name}
         <Box>
           <Text dimColor>{head}</Text>
-          {shown.prev === null ? null : <Text>  </Text>}
-          {part(t('viewer.prev'), shown.prev)}
-          {shown.next === null ? null : <Text>  </Text>}
-          {part(t('viewer.next'), shown.next)}
+          {v.partial ? <Text>   </Text> : null}
+          {v.partial ? part(t('viewer.prev'), shown.prev) : null}
+          {v.partial ? <Text>  </Text> : null}
+          {v.partial ? part(t('viewer.next'), shown.next) : null}
         </Box>
         {hint}
         {ai === undefined ? null : aiBar(el, ai, t)}

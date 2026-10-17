@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The `viewer` window gains three buttons (keys 1 to 4): summary, ask a question, and send into the conversation. The mod calls haiku itself (`$.model.complete`), so the file or diff text never reaches the main model; answers are cached in memory by content hash, shown with their token count, cancellable, and sent into the conversation only by filling the prompt box (`prompt.fill`, never submitted); the `show` tool's one-line answer is unchanged. Details in `docs/configuration.md`.
+- The `viewer` window gains three buttons drawn as `[ label ]` in the action colour (dim and not pressable when they cannot act; the prev/next part buttons too): summary, ask a question, and send into the conversation. The mod calls haiku itself (`$.model.complete`), so the file or diff text never reaches the main model; answers are cached in memory by content hash, shown with their token count, cancellable, and sent into the conversation only by filling the prompt box (`prompt.fill`, never submitted); the `show` tool's one-line answer is unchanged. Details in `docs/configuration.md`.
 
 - New `viewer` mod (`mods/viewer/`, composed with `live` by `mods/register.ts`): a `show` tool (`mcp__autopilot__show`) and `/show` command that display a file or a git diff to the owner in a window without the text reaching the model (the model gets one summary line), and pressable file paths in the live panel (decision-card text, a background command's output tail) that open the same window. `scripts/affected-suites.js` runs both mod suites for a change under either.
 

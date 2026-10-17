@@ -261,6 +261,12 @@ test('the ask button only moves the keyboard to the question field: no call, no 
 function buttonFindings(tree: Node): string[] {
   const out: string[] = []
   const walk = (n: Node, inButton: boolean) => {
+    if (n.type === 'Button' && String(n.props?.key).startsWith('sbj')) {
+      // a cell of the scrollbar track (scroll.tsx): a plain Button around one glyph in the structure / here colour, not an action button
+      const kid = (n.children || []).find(c => typeof c !== 'string') as Node | undefined
+      if (n.props?.plain !== true || (kid?.props?.color !== PALETTE.here && kid?.props?.color !== PALETTE.structure)) out.push('scrollbar cell not plain or not a track colour: ' + textOf(n))
+      return
+    }
     if (n.type === 'Button') {
       const kids = (n.children || []).filter(c => typeof c !== 'string') as Node[]
       const label = textOf(n)

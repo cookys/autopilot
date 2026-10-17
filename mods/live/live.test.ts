@@ -5262,9 +5262,41 @@ for (const surface of SURFACES) {
     const cells = ((small as Node).children || []) as Node[]
     expect(textOf(cells[0]), 'thumb at the top').toBe('█')
     expect(textOf(cells[cells.length - 1]), 'track at the bottom').toBe('│')
-    expect(cells[0].props?.color, 'thumb is the here colour').toBe('claude')
-    expect(cells[cells.length - 1].props?.color, 'track is the structure colour').toBe('subtle')
+    // each of the five jump cells (jumpCells) is a plain Button around the coloured Text, every other cell the Text alone (a click on it jumps the window); the look is the Text's
+    const glyphOf = (c: Node): Node => (c.type === 'Button' ? (c.children as Node[])[0] : c)
+    const pressable = cells.map((c, i) => (c.type === 'Button' ? i : -1)).filter(i => i >= 0)
+    expect(pressable, 'only the five jump cells are pressable (top, quarter, middle, three quarters, bottom); the rest stay plain text').toEqual([0, 3, 7, 10, 13])
+    expect(cells.filter((_, i) => !pressable.includes(i)).every(c => c.type === 'Text'), 'the other cells are not Buttons').toBe(true)
+    expect(glyphOf(cells[0]).props?.color, 'thumb is the here colour').toBe('claude')
+    expect(glyphOf(cells[cells.length - 1]).props?.color, 'track is the structure colour').toBe('subtle')
     expect(bar(await framed($, 90)), 'everything fits: no scrollbar').toBeUndefined()
+  })
+  test('SCROLL decide: a click on a jump cell moves the thumb to that share of the track (bottom, top, middle, three quarters); the cells between are not Buttons (' + surface + ')', async ($, on) => {
+    decideWorld(on, MANY)
+    await start($, surface)
+    const props = { ...PANE_PROPS, scroll: { offset: 0, bodyRows: 20 } }
+    const mount = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const first = await mount()
+    await first.press({ key: 'decide' })
+    await first.unmount()
+    // a press redraws the mounted pane; the test reads the next mount (as the tab tests do), which draws from the same offset
+    const clickThenRead = async (key: string | null): Promise<Node[]> => {
+      const pane = await mount()
+      if (key !== null) await pane.press({ key })
+      await pane.unmount()
+      const again = await mount()
+      const tree = (await again.drawn()) as Node
+      await again.unmount()
+      const content = fixedOf(tree).find(k => k.props?.key === 'content') as Node
+      return (((content.children || []) as Node[]).find(k => k.props?.key === 'scrollbar')?.children || []) as Node[]
+    }
+    const glyphs = (cells: Node[]) => cells.map(c => textOf(c)).join('')
+    const before = await clickThenRead(null)
+    expect(glyphs(before)).toBe('█████│││││││││')
+    expect(glyphs(await clickThenRead('sbj13')), 'the thumb now ends at the bottom cell').toBe('│││││││││█████')
+    expect(glyphs(await clickThenRead('sbj0')), 'back at the top').toBe('█████│││││││││')
+    expect(glyphs(await clickThenRead('sbj7')), 'the middle cell of 14: the thumb has moved to the middle of its travel').toBe('│││││█████││││')
+    expect(glyphs(await clickThenRead('sbj10')), 'the three-quarter cell').toBe('│││││││█████││')
   })
   test('SCROLL decide: another tab is never framed (it keeps the engine scroll) (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)

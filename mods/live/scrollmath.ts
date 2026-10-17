@@ -3,7 +3,8 @@ import { displayWidth } from './ui'
 
 // a window's state: which content it is for, how far down it stands, and the largest legal offset (the frame writes it each draw, the scroll hook clamps to it)
 // `framed` is whether the LAST draw was a frame (the draw sets it, either way); `room` the content rows that draw showed (a page move is capped to it, so no row is skipped)
-export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean }
+// `redraw` (set by the hook that owns the model, optional) asks for a new draw after a click on the track moved the offset
+export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean; redraw?: () => void }
 export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0, room: 0, framed: false })
 // The ONE test for whether the mod, not the engine, takes a ui.scroll: only while the last draw was a frame. Drawn as a plain tree (no Button, no bodyColumns, no band, another tab) the
 // engine scrolls it, so the hook must hand the event to `next`.
@@ -46,6 +47,21 @@ export function thumbOf(total: number, room: number, offset: number): { top: num
   const movable = total - room
   const top = Math.round((Math.min(Math.max(offset, 0), movable) / movable) * (room - len))
   return { top, len }
+}
+
+// A click on cell `i` of a track `trackRows` cells high jumps the window to that share of the way down: the first cell is offset 0, the last is `max`, the cells between are
+// spread evenly (`round(i / (trackRows - 1) * max)`). A one-cell track has no "between": it reads as the top. Always an integer in [0, max].
+export function jumpOffset(i: number, trackRows: number, max: number): number {
+  if (!(trackRows > 1)) return 0
+  return Math.min(max, Math.max(0, Math.round((i / (trackRows - 1)) * max)))
+}
+
+// The track cells that can be clicked: five jump points (top, a quarter, the middle, three quarters, bottom) at round(q * (trackRows - 1)), sorted, each cell once. A track of fewer
+// than five cells has fewer distinct points, so every cell is clickable and none twice; an empty track has none.
+export function jumpCells(trackRows: number): number[] {
+  if (!(trackRows >= 1)) return []
+  const last = Math.floor(trackRows) - 1
+  return [...new Set([0, 0.25, 0.5, 0.75, 1].map(q => Math.round(q * last)))].sort((a, b) => a - b)
 }
 
 // What one `ui.scroll` does to the offset. `by` is the engine's: an arrow a row, PgUp / PgDn `bodyRows`, Home / End `contentRows` (signed), the wheel a few rows. A move as big as

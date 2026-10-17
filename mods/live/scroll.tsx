@@ -7,9 +7,11 @@
 //
 // The cost of drawing the rows ourselves is that every content row must be exactly one row: a line wider than the room is cut (no wrapping), the caller pre-wraps what must wrap.
 // Colour: the track is the `structure` role, the thumb the `here` role (you are here), the rule `structure`; text colour only. Glyphs: GLYPHS.scrollbar and GLYPHS.structure.rule
+// Five track cells (top, quarter, middle, three quarters, bottom: scrollmath.jumpCells) are plain Buttons (no chrome, the Text child keeps its colour); a click on one jumps the window (scrollmath.jumpOffset). The host has no prop to keep a Button out of
+// the Tab ring, so the keyboard walk gains one stop per jump cell (five); the click is the pointer path, the keys scroll as before.
 // (ui.ts owns every glyph; ui-lint L2 keeps literals out of this file).
 import { GLYPHS, PALETTE } from './ui'
-import { roomOf, thumbOf } from './scrollmath'
+import { jumpCells, jumpOffset, roomOf, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 export * from './scrollmath'
 
@@ -27,8 +29,8 @@ export type FrameOptions = {
   model: ScrollModel
 }
 
-export function scrollFrame(el: { Box: El; Text: El }, o: FrameOptions) {
-  const { Box, Text } = el
+export function scrollFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions) {
+  const { Box, Text, Button } = el
   const room = roomOf(o)
   o.model.max = Math.max(0, o.total - room)
   o.model.room = room
@@ -37,10 +39,13 @@ export function scrollFrame(el: { Box: El; Text: El }, o: FrameOptions) {
   const off = o.model.offset
   const th = thumbOf(o.total, room, off)
   const cells: unknown[] = []
+  const jumps = new Set(jumpCells(room))
   if (th !== null) {
     for (let i = 0; i < room; i++) {
       const on = i >= th.top && i < th.top + th.len
-      cells.push(<Text key={'sb' + i} color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>)
+      const glyph = <Text key={'sb' + i} color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>
+      // only the five jump cells (jumpCells) are Buttons: a click jumps the window to that share of the track (jumpOffset); the other cells stay plain Text, as does every cell on a host with no Button
+      cells.push(Button === undefined || !jumps.has(i) ? glyph : <Button key={'sbj' + i} plain onPress={() => { o.model.offset = jumpOffset(i, room, o.model.max); o.model.redraw?.() }}>{glyph}</Button>)
     }
   }
   return (

@@ -1,7 +1,7 @@
 // mods/live/scroll.test.ts — the scrolling window's arithmetic (design plan §12.10): the thumb, the clamp, every ui.scroll key, the cell wrap. The drawing is tested where it is used:
 // the 待決 tab in live.test.ts ("SCROLL decide ...") and the viewer window in viewer.test.ts.
 import { test, expect } from 'claude-code/testing'
-import { applyScroll, frameOf, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
+import { applyScroll, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
 
 test('thumb: flush with the top at offset 0, in the middle halfway, flush with the bottom at the last offset', () => {
   // 100 rows through a 20-row window: the thumb is 4 cells, 16 cells of travel for 80 rows of offset
@@ -137,4 +137,31 @@ test('scrollHook: the wheel down from 0 is taken by the mod and moves it; the wh
     expect(scrollHook(m, { by: -1, contentRows: 31, bodyRows: 30, offset: 0 }, next, () => {})).toEqual({})
     expect(m.offset).toBe(i)
   }
+})
+
+test('jumpOffset: the top cell is offset 0, the bottom cell is max, the middle cell the middle', () => {
+  expect(jumpOffset(0, 21, 80)).toBe(0)
+  expect(jumpOffset(20, 21, 80)).toBe(80)
+  expect(jumpOffset(10, 21, 80)).toBe(40)
+  expect(jumpOffset(1, 21, 80)).toBe(4)
+  expect(jumpOffset(5, 10, 9)).toBe(5) // round(5 / 9 * 9)
+})
+test('jumpOffset: nothing to scroll (max 0) is always 0; a one-cell track reads as the top; a cell outside the track is clamped', () => {
+  expect(jumpOffset(3, 10, 0)).toBe(0)
+  expect(jumpOffset(9, 10, 0)).toBe(0)
+  expect(jumpOffset(0, 1, 50)).toBe(0)
+  expect(jumpOffset(0, 0, 50)).toBe(0)
+  expect(jumpOffset(-4, 10, 50)).toBe(0)
+  expect(jumpOffset(99, 10, 50)).toBe(50)
+})
+
+test('jumpCells: five points (top, quarter, middle, three quarters, bottom) on a long track; fewer cells give every cell once, none twice; an empty track has none', () => {
+  expect(jumpCells(37)).toEqual([0, 9, 18, 27, 36])
+  expect(jumpCells(14)).toEqual([0, 3, 7, 10, 13])
+  expect(jumpCells(5)).toEqual([0, 1, 2, 3, 4])
+  expect(jumpCells(3)).toEqual([0, 1, 2])
+  expect(jumpCells(2)).toEqual([0, 1])
+  expect(jumpCells(1)).toEqual([0])
+  expect(jumpCells(0)).toEqual([])
+  expect(jumpCells(-3)).toEqual([])
 })

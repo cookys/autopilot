@@ -296,11 +296,12 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # skip-permissions flag (a text-only "reply OK" needs no tools; headless -p has no TTY so
   # a denied tool auto-denies). Only the exit code matters here (quota detection). (gpt-5.5 R6.)
   PROBE_CWD="$(mktemp -d)"
+  PROBE_ROOT="$PROBE_CWD.oc"; mkdir -p "$PROBE_ROOT"   # opencode plan files + v2 seat root, a sibling OUTSIDE PROBE_CWD (v1 `--dir` stays an empty dir)
   # Clean up scratch state even if the probed runner times out or the script is
   # interrupted (SIGINT/SIGTERM) — otherwise PROBE_CWD/PROBE_ERR_FILE leak, accumulating
   # scratch dirs and possibly-sensitive runner output (gpt-5.5 R7). The explicit rm's on
   # the normal path below stay (idempotent); this trap covers the abnormal-exit paths.
-  trap 'rm -rf "${PROBE_CWD:-}" 2>/dev/null; rm -f "${PROBE_ERR_FILE:-}" 2>/dev/null' EXIT INT TERM
+  trap 'rm -rf "${PROBE_CWD:-}" "${PROBE_ROOT:-}" 2>/dev/null; rm -f "${PROBE_ERR_FILE:-}" 2>/dev/null' EXIT INT TERM
 
   # Exact-tuple live observation: when --effort/--endpoint are supplied, the
   # runner command must apply them. Never stamp an unobserved exact identity as
@@ -485,10 +486,11 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # contained `--standalone --agent locked` seat in its own empty cwd (v2 removed --dir/
       # --pure/--variant). The version is the RUNNER_VERSION read once above, not re-run.
       # No --auto. An unknown major makes the plan refuse, which fails the probe.
-      _oc_plan="$PROBE_CWD/oc-plan"
+      _oc_plan="$PROBE_ROOT/oc-plan"
       if node "$SELF_DIR/lib/opencode-containment.js" plan --bin "$OPENCODE_BIN" --model "$MODEL" \
-           ${EFFORT:+--effort "$EFFORT"} --profile probe --cwd "$PROBE_CWD" --root "$PROBE_CWD/oc-root" \
-           --version-string "$RUNNER_VERSION" --out "$_oc_plan" >"$PROBE_ERR_FILE" 2>&1; then
+           ${EFFORT:+--effort "$EFFORT"} --profile probe --cwd "$PROBE_CWD" --root "$PROBE_ROOT/oc-root" \
+           --version-string "$RUNNER_VERSION" --out "$_oc_plan" >"$PROBE_ERR_FILE" 2>&1 \
+         && node "$SELF_DIR/lib/opencode-containment.js" assert-plan "$_oc_plan" >>"$PROBE_ERR_FILE" 2>&1; then
         mapfile -d '' -t _oc_argv < "$_oc_plan/argv.nul"
         mapfile -d '' -t _oc_env < "$_oc_plan/env.nul"
         _oc_cwd="$(cat "$_oc_plan/cwd")"

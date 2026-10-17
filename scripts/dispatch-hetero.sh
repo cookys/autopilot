@@ -2216,8 +2216,10 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
   command -v "$OPENCODE_BIN" >/dev/null 2>&1 || die_precondition "opencode binary not found: $OPENCODE_BIN (install OpenCode CLI or pass --opencode-bin)"
   # The ONE `--version` run of this call (lib/opencode-containment.js picks the v1 or v2 adaptor from
   # it; an unknown major refuses here, before any spend). Reused by the plan call at spawn time.
-  OPENCODE_VER="$(node "$SELF_DIR/lib/opencode-containment.js" version --bin "$OPENCODE_BIN" 2>&1)" \
-    || die_precondition "opencode version not usable: ${OPENCODE_VER}"
+  _oc_verr="$(mktemp -t dispatch-hetero-opencode-verr-XXXXXX)"
+  OPENCODE_VER="$(node "$SELF_DIR/lib/opencode-containment.js" version --bin "$OPENCODE_BIN" 2>"$_oc_verr")" \
+    || { _oc_msg="$(cat "$_oc_verr")"; rm -f "$_oc_verr"; die_precondition "opencode version not usable: ${_oc_msg}"; }
+  rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 else

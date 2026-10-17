@@ -248,6 +248,10 @@ function prepareHomeV2(root, { bin, realEnv }) {
     const cleanEnv = { ...(realEnv || process.env), ...clean };
     delete cleanEnv.OPENCODE_CONFIG; delete cleanEnv.OPENCODE_CONFIG_DIR; delete cleanEnv.OPENCODE_CONFIG_CONTENT;
     cleanEnv.OPENCODE_DISABLE_PROJECT_CONFIG = '1';
+    // opencode 2.x works in $PWD: the caller's PWD (the dispatcher's own repo) must not become the import's project dir
+    const work = path.join(root, 'work');
+    if (insideGitWorktree(work)) throw new Error('opencode auth import cwd is under a git worktree');
+    cleanEnv.PWD = work;
     const i = spawnSync(bin, ['auth', 'import', '--standalone', exp], { env: cleanEnv, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 120000, cwd: path.join(root, 'work') });
     if (i.error || i.status !== 0) throw new Error(`opencode auth import failed: ${i.error ? i.error.message : `rc=${i.status} ${String(i.stderr || '').slice(0, 200)}`}`);
   } finally { fs.rmSync(exp, { force: true }); }

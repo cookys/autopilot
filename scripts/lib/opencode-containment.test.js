@@ -107,7 +107,7 @@ if (a[0] === 'auth' && a[1] === 'import') {
   const f = a[a.length - 1];
   fs.mkdirSync(process.env.XDG_DATA_HOME + '/opencode', { recursive: true });
   fs.writeFileSync(process.env.XDG_DATA_HOME + '/opencode/imported.json', fs.readFileSync(f, 'utf8'));
-  fs.writeFileSync(process.env.STUB_CAPTURE + '.import', JSON.stringify({ file: f, mode: (fs.statSync(f).mode & 0o777).toString(8), home: process.env.HOME, standalone: a.includes('--standalone') }));
+  fs.writeFileSync(process.env.STUB_CAPTURE + '.import', JSON.stringify({ file: f, mode: (fs.statSync(f).mode & 0o777).toString(8), home: process.env.HOME, pwd: process.env.PWD, standalone: a.includes('--standalone') }));
   process.exit(0);
 }
 const stdin = fs.readFileSync(0, 'utf8');
@@ -132,13 +132,14 @@ fs.writeFileSync(path.join(tmp, '.local', 'share', 'opencode', 'auth.json'), 'SE
 fs.mkdirSync(path.join(tmp, '.config', 'opencode', 'agent'), { recursive: true });
 fs.writeFileSync(path.join(tmp, '.config', 'opencode', 'agent', 'locked.md'), '---\npermission: allow\n---\n');
 const PROVIDER = path.join(__dirname, '..', 'qualification-review-provider.js');
+let lastCapture = null;
 function runProvider(extraEnv) {
   const capture = path.join(tmp, `cap-${Math.random().toString(36).slice(2)}.json`);
   const child = spawnSync(process.execPath, [PROVIDER], {
     input: `${JSON.stringify({ schema_version: 1, request_id: 'r', role: 'reviewer', payload: { format: 'case_content', content: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n' } })}\n`,
     encoding: 'utf8', timeout: 30000,
     env: {
-      PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
+      PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, PWD: process.cwd(), QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
       QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'opencode', QRP_CLI_BIN: stub, STUB_CAPTURE: capture,
       // hostile ambient values must be overridden, not inherited
       OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'allow' }),
@@ -147,6 +148,7 @@ function runProvider(extraEnv) {
     },
   });
   let captured = null;
+  lastCapture = capture;
   try { captured = JSON.parse(fs.readFileSync(capture, 'utf8')); } catch { /* not spawned */ }
   return { child, captured };
 }
@@ -400,6 +402,9 @@ const OCJS = path.join(__dirname, 'opencode-containment.js');
   ok(captured.env.HOME !== tmp && captured.env.HOME.startsWith(os.tmpdir()), 'provider v2: clean temp HOME');
   eq(captured.imported, '{"credential":"SECRET-V2-CRED"}', 'provider v2: credential imported into the clean home');
   ok(!fs.existsSync(captured.cwd), 'provider v2: scratch root removed');
+  const impInfo = JSON.parse(fs.readFileSync(`${captured.argv.length ? '' : ''}${lastCapture}.import`, 'utf8'));
+  eq(impInfo.pwd, captured.env.PWD, 'provider v2: auth import ran with PWD = the empty work dir, not the caller repo');
+  ok(impInfo.pwd !== process.cwd(), 'provider v2: auth import PWD is not the dispatcher cwd');
 }
 {
   const t13 = runProvider({ STUB_VERSION: '2.0.32', STUB_FIXTURE: path.join(FX, 't13-unavailable-tool-errors.ndjson') });

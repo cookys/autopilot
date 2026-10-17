@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0205 -->
+<!-- next-id: BL-0206 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -925,6 +925,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0146 D5 實測 2026-10-17
 - **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
 - **Context**: 改名情境 4 個增量格中 1 格整組席位都漏，其餘只有 1 席說對；完整審查 6 席全說對。
+
+### PEER-REPORTED (c4140 llm-playground): context-budget T1/T2 should be settable per model
+- **Id**: BL-0205
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: peer
+- **Reporter**: c4140 llm-playground lead（代 owner）
+- **Report**: 01M53QFATXC3KKEBJ0EAMTBM9H
+- **Reply**: 2026-10-17 answered by depth-0 (fleet reply id not recorded)
+- **Problem**: 提醒門檻 T1/T2 是絕對 token 數，跟模型無關；不同模型讀快取的單價不同，同一個門檻在貴的模型上每回合花得更多，卻沒辦法為它設較低的門檻。
+- **Impact**: 要嘛貴的模型太晚提醒，要嘛便宜的模型太早提醒，只能全域取一個折衷值。
+- **Trigger**: 現在就做（owner 代為同意，做法已回覆對方）
+- **Effort**: S
+- **Source**: c4140 llm-playground lead 代 owner 2026-10-17, fleet message 01M53QFATXC3KKEBJ0EAMTBM9H
+- **Pointer**: docs/backlog/context-budget-per-model.md
+- **Context**: 設定 context_budget.per_model 以模型 id 萬用字元為鍵，值只收 t1、t2；最具體的 pattern 優先，env 仍最優先。
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

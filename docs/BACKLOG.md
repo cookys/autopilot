@@ -165,19 +165,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
 
-### The implementer ladder's cost ordering is nearly degenerate — 11 of 17 rungs share one effort tier
-- **Id**: BL-0024
-- **Status**: open
-- **Since**: 2026-09-08
-- **Origin**: self
-- **Problem**: 階梯同 effort 的席位已能依單價排序，但單價資料（model-prices.json）尚未發佈。 (draft)
-- **Impact**: 價格資料上線前，挑便宜席位仍不準。 (draft)
-- **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
-- **Effort**: M
-- **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
-- **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
-- **Context**: 讀取端已做（階梯同 effort 依本機價格快取排序）；等 model-prices.json 發佈。語意修正：effective_basis 是生效日出處，已知價只看 input/output 非 null，basis 僅供參考。
-
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Id**: BL-0025
 - **Status**: open

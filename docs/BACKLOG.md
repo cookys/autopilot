@@ -808,6 +808,124 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Gate blocks: hetero-review SKILL.md and code-loop.md are outside prereg guidance.files; hetero-loops.md hash differs from v10. Write a prereg revision adding both files (as P5 did), freeze v11, then run it.
 
+### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
+- **Id**: BL-0117
+- **Status**: open
+- **Since**: 2026-10-12
+- **Origin**: peer
+- **Reporter**: c4140 llm-playground
+- **Report**: 01M4NVXM8WM1Q6GR4VSTST0P22
+- **Reply**: 2026-10-12 01M4NVY57683RPV21TNXTGQC2D
+- **Problem**: c4140 的 llm-playground 專案回報：dev-flow 說明裡建議在前景等待最多 15 分鐘，這個建議有問題；現在系統對前景輪詢已改為只提醒，但說明文字尚未改。 (draft)
+- **Impact**: 說明文字仍可能誤導使用者在前景久等；改動屬於指引，需要評測證據，排在 3.0.0 正式版前。 (draft)
+- **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
+- **Effort**: S
+- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
+- **Pointer**: none
+- **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
+
+
+
+### Find what rewrites the committed t7-config-rename fixture outside the suite
+- **Id**: BL-0122
+- **Status**: open
+- **Since**: 2026-10-12
+- **Origin**: self
+- **Problem**: 已提交的評測範例檔 config.json 曾被改寫成壓縮格式。測試套件內已確認都只寫暫存副本，並加了斷言：套件內再寫到範例檔會直接點名是哪個檔。真正的寫入者還沒抓到，最可能是有人在原位執行該題自己的測試。
+- **Impact**: 低。範例檔被無聲改動，容易誤提交；套件內的回歸已有斷言擋住。
+- **Trigger**: config.json 再次在 git status 出現改動時，當下查是哪個流程在原位跑了 t7
+- **Effort**: S
+- **Source**: discuss-exam-fix full suite 2026-10-12; narrowed by BL-0122 lane 2026-10-14
+- **Pointer**: none
+- **Context**: Not recurring as of 2026-10-16 (no fixture change in git status or commits since 10-12). Known writer: t7 tests/tool.test.js run in place.
+
+### mods/live recent conversation: groups expand by mouse only
+- **Id**: BL-0123
+- **Status**: open
+- **Since**: 2026-10-12
+- **Origin**: self
+- **Problem**: mods/live 介面的「最近對話」區塊，群組只能用滑鼠點開；在 tmux 裡用鍵盤無法移到群組並展開，按 Enter 反而觸發前面的切換分頁按鈕。 (draft)
+- **Impact**: 只用鍵盤或 ssh 的使用者無法展開群組；擁有者若要用鍵盤才需處理。 (draft)
+- **Trigger**: Claude Code 支援 pane 內非分頁 Button 的鍵盤焦點或 hotkey 時
+- **Effort**: S
+- **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
+- **Pointer**: docs/backlog/mods-live-recent-groups-keyboard.md
+- **Context**: 2026-10-17 measured on Claude Code 2.1.301: in-pane Button hotkey draws its prefix but keys go to the input box; focus stays on top tabs only. Host blocks it; reported to Claude Code.
+
+### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
+- **Id**: BL-0124
+- **Status**: open
+- **Since**: 2026-10-12
+- **Origin**: owner
+- **Problem**: 使用者通常不知道要設定自動壓縮視窗（autoCompactWindow），偵測功能和 T2 新提示文字都已完成，剩下是在下一版發布標題寫出這個設定，讓使用者知道要設。 (draft)
+- **Impact**: 使用者會被不必要地要求停下重開；擁有者已驗證 Claude Code 的摘要夠用，改文字屬指引，需評測證據。 (draft)
+- **Trigger**: next alpha or 3.0.0 release cut
+- **Effort**: M
+- **Source**: context reset cost analysis, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
+
+
+
+
+
+
+
+
+
+
+
+### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
+- **Id**: BL-0144
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 用 fleet 把工作派給另一個 session 時，派工樹在那裡就斷了：fleet 的派工只帶收件人和工作內容，不帶「這是誰底下的工作、第幾層」。
+- **Impact**: 派去別的 session 的工作，派工分頁只會顯示「之後的工作沒有紀錄」。目前很少這樣派，影響小。
+- **Trigger**: fleet 跨 session 派工變成常態（一週數次以上），或派工樹計畫出貨後擁有者要求追到對方那一端
+- **Effort**: M
+- **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
+- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
+### 增量帶回重審在真實席位下用不了
+- **Id**: BL-0201
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: self
+- **Problem**: 帶回重審的增量模式遇到真實審查席位時多半無法運作：審查協定沒要求意見開頭寫檔案與行號，沒寫就退回完整審查；席位照要求答覆時又把意見寫兩份、或漏掉識別碼前綴，整輪被擋下。
+- **Impact**: 增量模式在真實席位下要嘛退回完整審查、要嘛整輪失敗，省不到錢也不能設為預設。
+- **Trigger**: 決定把增量設為預設之前，或有人在真實席位組合上開啟增量帶回
+- **Effort**: M
+- **Source**: BL-0146 D5 實測 2026-10-17
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 實測 9 輪中 9 輪被擋 (主組)；加一句 spec 文字後 12 輪中 4 輪被擋。修法選項在 README 第 5 節。
+
+### 附錄把同一個舊問題按席位重複列出
+- **Id**: BL-0202
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: self
+- **Problem**: 三個席位各報一次同一個舊問題，上一輪留下的問題清單就列三行，而且每個席位都收到全部行；清單約占增量輸入的四分之一。
+- **Impact**: 範圍小的帶回，清單比省下的檔案還大，增量反而多花輸入。
+- **Trigger**: 增量帶回要設為預設，或帶回範圍不大但席位數增加
+- **Effort**: S
+- **Source**: BL-0146 D5 實測 2026-10-17，審查 finding 0ad19dc1
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 每個舊問題 3.0 至 3.1 行；去重後約少三分之二的清單位元組，未實測。
+
+### 帶回修正刪掉或改名的檔案時，舊問題清單會誤導席位
+- **Id**: BL-0203
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: self
+- **Problem**: 修正把某個檔案刪掉或改名後，上一輪留下的問題清單仍指向舊路徑，席位去答覆那一行，說問題還在，卻沒發現另一個檔案還引用已不存在的模組。
+- **Impact**: 增量模式漏掉改名造成的壞引用，並對作者回報不存在的問題。
+- **Trigger**: 增量帶回要設為預設，或有人回報帶回重審漏掉改名造成的壞引用
+- **Effort**: M
+- **Source**: BL-0146 D5 實測 2026-10-17
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 改名情境 4 個增量格中 1 格整組席位都漏，其餘只有 1 席說對；完整審查 6 席全說對。
+
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
 - **Status**: open

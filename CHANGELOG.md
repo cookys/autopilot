@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- BL-0205 (reported by c4140 llm-playground lead on the owner's behalf): `context_budget.per_model` sets T1/T2 per model, keyed by a model-id glob matched against the statusline live file's `model.id` (most literal characters wins; no match or no id keeps the top-level tiers; env T1/T2 still win; the SessionStart budget warning reads it too). Bad keys and values are ignored with a warning. New suite `hooks/context-budget-per-model.test.js`.
+- BL-0205 (reported by c4140 llm-playground lead on the owner's behalf): `context_budget.per_model` sets T1/T2 per model, keyed by a model-id glob matched against the statusline live file's `model.id` (most literal characters wins; no match or no id keeps the top-level tiers; env T1/T2 still win; the SessionStart budget warning reads it too, taking the model id from the SessionStart payload, else the session's live file). Bad keys and values are ignored with a warning. New suites `hooks/context-budget-per-model.test.js` and `hooks/tests/session-start-budget-per-model.test.sh`.
 
 - BL-0204: opencode is now a packet-tier blind-review seat (`reviewSeatTier` in `final-panel-qualification.js`, `dispatch-review.sh`, `resolve-review-loop.sh`), so a review-only campaign no longer refuses a qc_panel that seats opencode (`final_panel_seat_blind_incompatible`); its deny-all refuses tools before they run (live adversarial run, 31 assertions, positive controls seen executing) and the rail still refuses to spawn when the deny-all assert fails.
 

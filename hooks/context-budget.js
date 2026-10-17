@@ -163,7 +163,7 @@ function readStaleModel(base, sid) {
 // No model id or no match leaves cfg as is; new config warnings are said once per session.
 function applyModelTiers(st, cfg) {
   const next = applyPerModel(cfg, st.knownModel);
-  if (next !== cfg) for (const w of next.warnings || []) warnOnce(st, w);
+  if (next !== cfg) for (const w of (next.warnings || []).slice((cfg.warnings || []).length)) warnOnce(st, w);
   return next;
 }
 

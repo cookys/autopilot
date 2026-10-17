@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- BL-0210 closed: the ui-lint bold whitelist (L9, and L1 for tabs/pane/band) now reads each `<Text|Button|Box` opening tag across lines, so a `bold` attribute that JSX wraps onto its own line no longer escapes it; test-only, with a scan-level negative control.
 - The scrollbar the live pane's 待決 tab and the `/show` viewer draw has five jump points (owner cards d-e2e7cf0c, d-a0c6fd10): the top, quarter, middle, three-quarter and bottom cells of the track are plain `Button`s around the same coloured glyph, and a click jumps the window to that share of the content (`jumpCells` and `jumpOffset` in `mods/live/scrollmath.ts`); the other cells are unchanged text.
 - BL-0064 and BL-0061 closed (owner card d-233d4531): the context-budget T3 deny tier was premised on stopping for `/clear`, which autocompact replaced (2026-10-12), and its calibration trigger never fired; the CLI/engine mismatch BL-0061 described was fixed by bc65872aa and 330081b62, and widening the session-marker rule to non-Mission campaigns was already declined. BL-0070 stays open with a revised trigger (owner card d-759c89f1).
 - Fix the live pane's 待決 tab and the `/show` viewer ignoring the mouse wheel and keys downward: `takesScroll` read `ui.scroll`'s `offset` as where the engine window stands, but it is the target (row now plus `by`), so every move down from 0 was handed back to the engine and the mod's own window never moved.

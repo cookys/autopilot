@@ -122,6 +122,7 @@ const L1 = src => [
   ...hits(src, /backgroundColor|\binverse\b/),
   ...hits(src, /\b(color|bold|dimColor)\s*=\s*(\{?\s*["'`]|\{\s*(true|false)\b)/),
   ...hits(src, /<(Text|Button|Box)[^>]*\s(bold|dimColor)(\s|>|\/)/),
+  ...boldTagHits(src),
 ]
 // outside ui.ts: a codepoint in U+2190-2BFF or U+25A0-25FF (arrows, shapes, symbols, enclosed forms)
 const L2_RE = /[←-⯿■-◿]/u
@@ -195,7 +196,8 @@ test('scan-level control: one violation planted in a copy of viewer/pane.tsx is 
     assert.ok(clean.includes(HINT))
     const rows = [
       ['L8 theme-key literal', L8, [], HINT, '<Text key="hint" color=\'warning\'>'],
-      ['L9 bold', src => hits(src, BOLD_ANY), BOLD_FILES, HINT, '<Text key="hint" bold>'],
+      ['L9 bold', boldHits, BOLD_FILES, HINT, '<Text key="hint" bold>'],
+      ['L9 bold on its own line', boldHits, BOLD_FILES, HINT, '<Text\n  key="hint"\n  bold\n>'],
       ['L1b inverse', src => hits(src, BG_RE), [], HINT, '<Text key="hint" inverse>'],
       ['L1b backgroundColor', src => hits(src, BG_RE), [], HINT, '<Text key="hint" backgroundColor={x}>'],
       ['L2 glyph', L2, ['live/ui.ts'], HINT, '<Text key="hint" dimColor>{\'▲\'}</Text>' + HINT],
@@ -228,10 +230,29 @@ test('L8 control: a planted theme-key literal in the real viewer sources is repo
 const BG_RE = /\b(backgroundColor|inverse)\b/
 const BOLD_ANY = /\bbold\s*[:=]|<(Text|Button|Box)[^>]*\sbold(\s|>|\/)/
 const BOLD_FILES = ['live/ui.ts', 'live/model.ts']
+// BL-0210: BOLD_ANY is per line, so a bare `bold` attribute that JSX wraps onto its own line escapes it. This scanner reads each <Text|Button|Box opening tag across lines (brace depth and
+// quotes tracked, so `{...}` expressions, strings and comments never count) and reports a `bold` attribute written at the tag's own level. Same whitelist as BOLD_ANY: callers pass BOLD_FILES as the except list.
+const boldTagHits = src => {
+  const c = code(src), out = [], lineOf = i => c.slice(0, i).split('\n').length
+  for (const m of c.matchAll(/<(Text|Button|Box)\b/g)) {
+    let depth = 0, q = '', i = m.index + m[0].length
+    for (; i < c.length; i++) {
+      const ch = c[i]
+      if (q) { if (ch === '\\') i++; else if (ch === q) q = ''; continue }
+      if (ch === '"' || ch === "'" || ch === '`') q = ch
+      else if (ch === '{') depth++
+      else if (ch === '}') depth--
+      else if (depth === 0 && ch === '>') break
+      else if (depth === 0 && /\s/.test(ch) && /^\s+bold(?![\w$-])/.test(c.slice(i, i + 40))) { const at = i + c.slice(i).search(/bold/); out.push(`${lineOf(at)}: ${c.split('\n')[lineOf(at) - 1].trim().slice(0, 100)}`); i = at + 3 }
+    }
+  }
+  return out
+}
+const boldHits = src => [...new Set([...hits(src, BOLD_ANY), ...boldTagHits(src)])].sort((a, b) => parseInt(a) - parseInt(b))
 test('L1b/L9: no mod source sets a background or inverse, and no mod source but live ui.ts and live model.ts sets bold', () => {
   assert.ok(modSources().includes('viewer/pane.tsx'), 'the scan reaches the viewer')
   assert.deepEqual(scanMods(src => hits(src, BG_RE)), [])
-  assert.deepEqual(scanMods(src => hits(src, BOLD_ANY), BOLD_FILES), [])
+  assert.deepEqual(scanMods(boldHits, BOLD_FILES), [])
 })
 test('L1b/L9 control: a bold, a background and an inverse planted in the real viewer sources are each reported (negative control)', () => {
   const pane = readMod('viewer/pane.tsx')
@@ -244,6 +265,19 @@ test('L1b/L9 control: a bold, a background and an inverse planted in the real vi
   const reg = readMod('viewer/register.ts') // a second viewer file, not only the pane
   assert.ok(hits(reg + '\nconst o = { bold: true }', BOLD_ANY).length > 0)
   assert.ok(hits('<Text bold>x</Text> {bold: true}', BOLD_ANY).length > 0, 'the bold scan sees a planted bold')
+})
+test('L9 control (BL-0210): a bold attribute on its own JSX line is reported; strings, comments, expressions and other attributes are not (negative control)', () => {
+  const own = '<Text\n  key="k"\n  bold\n  color={x}\n>hi</Text>'
+  assert.equal(hits(own, BOLD_ANY).length, 0, 'the per-line rule alone misses it (this is the gap)')
+  assert.deepEqual(boldTagHits(own), ['3: bold'])
+  assert.equal(boldHits('<Button\n  bold={ok}\n/>').length, 1)
+  assert.equal(boldHits('<Box\n  a="1"\n  bold={true}\n>').length, 1)
+  for (const ok of ['<Text\n  key="bold"\n  color={x}\n>bold</Text>', '<Text\n  title="a bold move"\n>x</Text>', '// <Text\n//   bold\n', '<Text\n  {...{ boldly: 1 }}\n  data-bold\n>x</Text>', '<Text\n  onClick={() => (a > b ? 1 : 2)}\n>\n  bold\n</Text>']) assert.deepEqual(boldHits(ok), [], ok)
+  // scan level: planted in a copy of the real viewer pane (outside the whitelist) it is reported; in a whitelisted file it is not
+  const pane = readMod('viewer/pane.tsx'), HINT = '<Text key="hint" dimColor>'
+  assert.ok(pane.includes(HINT))
+  assert.ok(boldHits(pane.replace(HINT, '<Text\n  key="hint"\n  bold\n>')).length > 0)
+  assert.deepEqual(boldHits(pane), [])
 })
 test('L8 control: a prose segment painted with a literal key is reported, a role is not (negative control, red before green)', () => {
   // the planted fixture: a prose seg coloured `warning` directly, exactly the regression this lint exists to stop

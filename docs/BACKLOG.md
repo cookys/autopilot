@@ -901,18 +901,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/opencode-v2-adaptor-follow-ups.md
 - **Context**: spike 報告與 references/multi-agent-portability.md 的 OpenCode 2.x adaptor 一節。
 
-### ui-lint per-line matching misses a bold attribute on its own JSX line
-- **Id**: BL-0210
-- **Status**: open
-- **Since**: 2026-10-18
-- **Origin**: self
-- **Problem**: 版面檢查規則逐行比對，粗體屬性若換行單獨寫，粗體白名單那條規則就抓不到，任何 mod 都一樣。
-- **Impact**: 粗體規範可被換行寫法無意間繞過，只能靠人眼抓。
-- **Trigger**: 下一次動 mods/live/ui-lint.test.js，或 owner 抓到粗體違規
-- **Effort**: S
-- **Source**: uilint 審查第 1 代 e3973182
-- **Pointer**: docs/backlog/ui-lint-bold-attribute-on-own-line.md
-
 ### Autonomous next-pick never checks a row's Trigger, so deliberately parked rows rank first
 - **Id**: BL-0212
 - **Status**: open

@@ -16,7 +16,7 @@ OUT="$(bash "$SYNC" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "clean generated payload passes drift check"
 assert_contains "$OUT" "in sync" "clean drift check reports success"
 
-printf '\nsmoke-drift\n' >> "$TARGET/autopilot.ts"
+printf '\nsmoke-drift\n' >> "$TARGET/server.ts"
 OUT="$(bash "$SYNC" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "tampered generated payload fails drift check"
 assert_contains "$OUT" "drift detected" "drift check reports mismatch"

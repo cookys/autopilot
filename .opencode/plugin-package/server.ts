@@ -165,16 +165,38 @@ function captureIntent(tool: string, input: unknown, sessionID: string): void {
   }
 }
 
+function announce(): void {
+  ensureDir(stateDir)
+  console.error("[autopilot] plugin loaded, version:", getPluginVersion())
+  console.error("[autopilot] working directory:", process.cwd())
+
+  if (process.env.AUTOPILOT_PLUGIN_SMOKE === "1") {
+    captureIntent("autopilot_smoke", { description: "v2 plugin setup smoke" }, "autopilot-smoke")
+  }
+}
+
+// opencode 2.x (GA, verified on 2.0.32) loads a default export of shape { id, setup(context) }
+// (or { id, effect }) and rejects anything else with "Plugin must export a default definition
+// with an id and an effect or setup function"; tool hooks are registered through
+// context.tool.hook("execute.after", cb) and receive { tool, sessionID, input, status, ... }.
+// opencode 1.x loads { id, server(input) } and calls the object-returned "tool.execute.after"
+// hook with { tool, sessionID, args }. One default export carries both entry points; each host
+// ignores the one it does not know.
+type V2ToolAfter = { tool: string; sessionID: string; input?: unknown }
+type V2Context = {
+  tool: { hook: (name: "execute.after", cb: (event: V2ToolAfter) => void | Promise<void>) => Promise<unknown> }
+}
+
 export default {
   id: "autopilot.lifecycle",
+  setup: async (context: V2Context) => {
+    announce()
+    await context.tool.hook("execute.after", (toolEvent) => {
+      captureIntent(toolEvent.tool, toolEvent.input, toolEvent.sessionID)
+    })
+  },
   server: async (input) => {
-    ensureDir(stateDir)
-    console.error("[autopilot] plugin loaded, version:", getPluginVersion())
-    console.error("[autopilot] working directory:", process.cwd())
-
-    if (process.env.AUTOPILOT_PLUGIN_SMOKE === "1") {
-      captureIntent("autopilot_smoke", { description: "v2 plugin setup smoke" }, "autopilot-smoke")
-    }
+    announce()
 
     return {
       "tool.execute.after": async (hookInput, hookOutput) => {
@@ -182,4 +204,4 @@ export default {
       },
     }
   },
-} satisfies PluginModule
+} satisfies PluginModule & { setup: (context: V2Context) => Promise<void> }

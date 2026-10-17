@@ -2,9 +2,10 @@
   "name": "autopilot-opencode",
   "private": true,
   "type": "module",
+  "main": "./server.ts",
   "description": "Autopilot OpenCode V2 extension loaded explicitly by .opencode/opencode.json.",
   "scripts": {
-    "typecheck": "tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --types node --skipLibCheck autopilot.ts"
+    "typecheck": "tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --types node --skipLibCheck server.ts"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.15"

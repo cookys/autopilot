@@ -16,7 +16,7 @@ fi
 build() {
   local dest="$1"
   mkdir -p "$dest/core"
-  cp "$SOURCE/autopilot.ts" "$dest/autopilot.ts"
+  cp "$SOURCE/server.ts" "$dest/server.ts"
   cp "$SOURCE/package.json" "$dest/package.json"
   cp "$ROOT/src/hooks/handlers/intent-capture.js" "$dest/core/intent-capture.cjs"
   cp "$ROOT/src/hooks/normalize/opencode.js" "$dest/core/opencode.cjs"

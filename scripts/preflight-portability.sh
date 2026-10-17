@@ -213,45 +213,86 @@ check_adapter_targets_carry_invariant() {
   return "$ok"
 }
 
-# ─── 10. OpenCode plugin getPluginVersion test (if opencode installed) ───
-check_opencode_plugin_version() {
-  if ! command -v opencode >/dev/null 2>&1; then
-    echo "  (skip: opencode not installed)"
-    return 0
-  fi
-  local out
-  out=$(cd "$REPO" && opencode debug config --print-logs 2>&1 || true)
-  grep -q 'plugin loaded, version: [0-9]\+\.[0-9]\+\.[0-9]\+' < <(echo "$out")
+# ─── 10-12. OpenCode plugin / skill / agent-body checks ───
+# One sandboxed probe answers all three (scripts/lib/opencode-discovery-probe.js): HOME and every
+# XDG_* dir live in a throwaway root, OPENCODE_* env is dropped, the project is a COPY of the
+# consumer layer — the owner's real ~/.local/share/opencode is never touched. The probe picks
+# the adaptor from `opencode --version` (1.x: debug config|skill|agent; 2.x: a private
+# `opencode serve` polled over HTTP, because 2.x removed `debug skill|agent` and fills its lists
+# asynchronously). An unknown major fails closed. Knobs: OPENCODE_BIN (binary under test) and
+# PREFLIGHT_OPENCODE_REPO (repo whose .opencode/ + .agents/ is probed; default this repo) — the
+# negative controls in hooks/tests/opencode-discovery-probe.test.sh drive both.
+OC_PROBE_JSON=""
+OC_PROBE_RC=""
+OC_ROOT=""
+# The script's ONE EXIT trap (nothing else in this file traps EXIT): removes the probe sandbox if
+# the run is cut short between mktemp and the explicit rm below.
+trap 'rm -rf "${OC_ROOT:-}"' EXIT
+oc_probe() {
+  [ -n "$OC_PROBE_RC" ] && return "$OC_PROBE_RC"
+  local bin="${OPENCODE_BIN:-opencode}" repo="${PREFLIGHT_OPENCODE_REPO:-$REPO}"
+  OC_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/preflight-oc-XXXXXX")
+  OC_PROBE_JSON=$(node "$REPO/scripts/lib/opencode-discovery-probe.js" --bin "$bin" --repo "$repo" --root "$OC_ROOT" \
+    --skill "${OC_SKILL:-dev-flow}" --env AUTOPILOT_INTENT_CAPTURE=false 2>&1)
+  OC_PROBE_RC=$?
+  rm -rf "$OC_ROOT"
+  [ "$OC_PROBE_RC" -eq 0 ] || echo "  opencode probe failed (rc=$OC_PROBE_RC): $OC_PROBE_JSON" >&2
+  return "$OC_PROBE_RC"
 }
 
-# ─── 11. OpenCode discovers autopilot skills via .agents/skills/ ───
-check_opencode_skill_discovery() {
-  if ! command -v opencode >/dev/null 2>&1; then
+oc_fact() { # <json field> -> value (empty if absent)
+  node -e 'const o=JSON.parse(process.argv[1]);const v=o[process.argv[2]];process.stdout.write(v===undefined||v===null?"":String(v))' "$OC_PROBE_JSON" "$1"
+}
+
+oc_installed() { command -v "${OPENCODE_BIN:-opencode}" >/dev/null 2>&1; }
+
+check_opencode_plugin_version() {
+  if ! oc_installed; then
     echo "  (skip: opencode not installed)"
     return 0
   fi
-  # opencode's first cold invocation can return a partial skill listing before
-  # discovery finishes indexing .agents/skills/ — retry so a single cold-start
-  # read doesn't fail the gate (false negative). See check_opencode_agent_body_clean.
-  local count attempt
-  for attempt in 1 2 3; do
-    count=$(cd "$REPO" && opencode debug skill 2>/dev/null | grep -c '"name": "dev-flow"' || true)
-    [ "$count" -ge 1 ] && return 0
-    sleep 1
-  done
+  oc_probe || return 1
+  local want got
+  want=$(node -p "require('${PREFLIGHT_OPENCODE_REPO:-$REPO}/.claude-plugin/plugin.json').version")
+  got=$(oc_fact plugin_loaded_version)
+  if [ -z "$got" ] || [ "$got" != "$want" ]; then
+    echo "  plugin reported version '${got:-<none: plugin did not load>}', repo says '$want' (opencode $(oc_fact version))" >&2
+    return 1
+  fi
+}
+
+check_opencode_skill_discovery() {
+  if ! oc_installed; then
+    echo "  (skip: opencode not installed)"
+    return 0
+  fi
+  oc_probe || return 1
+  [ "$(oc_fact skill_found)" = "true" ] && return 0
+  if [ "$(oc_fact adaptor)" = "v1" ]; then
+    # opencode 1.17+ truncates `debug skill` output by corpus volume (listing is partial although
+    # discovery works): advisory on 1.x only, dated 2026-07-17 (BL-0054 history). 2.x has a
+    # reliable listing (GET /api/skill), so there it is a hard failure.
+    ADVISORY_WARNS=$((ADVISORY_WARNS + 1))
+    echo "  ⚠ [ADVISORY] opencode 1.x \`debug skill\` truncates its listing ($(oc_fact skill_count) skills seen); not a hard failure on 1.x (2026-07-17)" >&2
+    return 0
+  fi
+  echo "  skill '${OC_SKILL:-dev-flow}' not discovered by opencode $(oc_fact version) ($(oc_fact skill_count) skills listed)" >&2
   return 1
 }
 
-# ─── 12. OpenCode resolves agent body via {file:..} without frontmatter leak ───
 check_opencode_agent_body_clean() {
-  if ! command -v opencode >/dev/null 2>&1; then
+  if ! oc_installed; then
     echo "  (skip: opencode not installed)"
     return 0
   fi
-  local out
-  out=$(cd "$REPO" && opencode debug agent autopilot-reviewer 2>/dev/null || true)
-  # The body should start with the markdown header, not the YAML frontmatter
-  grep -q '# Reviewer' < <(echo "$out") && ! grep -q '"prompt": "---\\n' < <(echo "$out")
+  oc_probe || return 1
+  local head
+  head=$(oc_fact agent_prompt_head)
+  # The body must start with the markdown header, not the YAML frontmatter.
+  [ "$(oc_fact agent_found)" = "true" ] && [ "$(oc_fact agent_frontmatter_leak)" = "false" ] && case "$head" in "# Reviewer"*) true ;; *) false ;; esac || {
+    echo "  agent body wrong: found=$(oc_fact agent_found) leak=$(oc_fact agent_frontmatter_leak) head='$head'" >&2
+    return 1
+  }
 }
 
 # ─── Run them all ───
@@ -259,6 +300,17 @@ if [ "${1:-}" = "--meta-fixture" ]; then
   echo "preflight-portability — hermetic meta fixture"
   run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seeds)" \
     check_adapter_targets_carry_invariant
+  [ "$FAILS" -eq 0 ] && exit 0
+  exit "$FAILS"
+fi
+
+if [ "${1:-}" = "--opencode-only" ]; then
+  # Just checks 16-18 (hooks/tests/opencode-discovery-probe.test.sh drives this against broken
+  # fixtures; the full run also exercises hooks that read stdin).
+  echo "preflight-portability — OpenCode checks only"
+  run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version
+  run_check "OpenCode discovers autopilot skills via .agents/skills/ (2.x hard; 1.x advisory, listing truncates)" check_opencode_skill_discovery
+  run_check "OpenCode agent body resolves without frontmatter leak" check_opencode_agent_body_clean
   [ "$FAILS" -eq 0 ] && exit 0
   exit "$FAILS"
 fi
@@ -282,7 +334,7 @@ run_check "README parity: README.md ↔ README.zh-TW.md badges + sections" check
 run_check "Codex plugin payload mirror is in sync" check_codex_plugin_payload_sync
 run_check "doc-drift gate: internal links resolve + code-fences balance" check_doc_drift
 run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version
-run_advisory "OpenCode discovers autopilot skills via .agents/skills/" check_opencode_skill_discovery
+run_check "OpenCode discovers autopilot skills via .agents/skills/ (2.x hard; 1.x advisory, listing truncates)" check_opencode_skill_discovery
 run_check "OpenCode agent body resolves without frontmatter leak" check_opencode_agent_body_clean
 
 echo ""

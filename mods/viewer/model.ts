@@ -206,7 +206,10 @@ export function truncateForAi(text: string, max: number = AI_MAX_CHARS): Cut {
   const total = splitLines(text).length
   if (text.length <= max) return { text, lines: total, total, cut: false }
   const at = text.lastIndexOf('\n', max)
-  const head = at > 0 ? text.slice(0, at) : text.slice(0, max)
+  let end = max
+  const last = text.charCodeAt(end - 1)
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1 // do not leave half of a surrogate pair
+  const head = at > 0 ? text.slice(0, at) : text.slice(0, end)
   return { text: head, lines: splitLines(head).length, total, cut: true }
 }
 
@@ -249,7 +252,7 @@ export function promptFor(kind: AiKind, src: AiSource, question: string | null, 
         ? 'Task: summarise this git diff: what it changes, file by file where that helps, and the likely impact or risk. At most about 12 lines.'
         : 'Task: summarise this file: its purpose, its main parts and anything notable. At most about 12 lines.'
   return [
-    'DATA subject: ' + src.label,
+    'DATA subject: ' + src.label.replace(/[\r\n]+/g, ' '),
     '<<<DATA ' + m + ' BEGIN>>>',
     src.content,
     '<<<DATA ' + m + ' END>>>',

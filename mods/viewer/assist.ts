@@ -50,9 +50,9 @@ function redraw($: EngineInterface): void {
 
 // Summary or question about the whole text of the window (cut at AI_MAX_CHARS, said on screen). A saved answer for the same content and question is shown without a call.
 export async function runAi($: EngineInterface, kind: AiKind, question: string | null, src: Source, lang: AiLang, t: VT): Promise<void> {
-  if (state.running !== null) return
+  if (state.running !== null) { $.ui.toast(t('viewer.ai.busy')); return }
   const cut = truncateForAi(src.text)
-  const subject = src.isDiff ? src.title : t('viewer.ai.lines', { path: src.path ?? src.title, n: cut.lines })
+  const subject = src.isDiff ? src.title.replace(/[\r\n]+/g, ' ') : t('viewer.ai.lines', { path: src.path ?? src.title, n: cut.lines })
   const note = cut.cut ? t('viewer.ai.cut', { n: cut.lines, total: cut.total }) : null
   const aiSrc: AiSource = { label: subject, isDiff: src.isDiff, content: cut.text }
   // the call is marked running before the first await, so a second press (or a double Enter) while the key is being computed finds it busy
@@ -77,6 +77,7 @@ export async function runAi($: EngineInterface, kind: AiKind, question: string |
     )
   } catch (err) {
     if (state !== mine) return // the window moved on while this call ran
+    if (ctl.signal.aborted) { state = { shown: mine.shown, visible: mine.visible, running: null, error: null, cancelled: true }; redraw($); return }
     state = { shown: mine.shown, visible: mine.visible, running: null, cancelled: false, error: t('viewer.ai.failed', { why: t('viewer.ai.why.refused', { what: String(err instanceof Error ? err.message : err).slice(0, 160) }) }) }
     redraw($)
     return
@@ -102,7 +103,7 @@ export function cancelAi($: EngineInterface): void {
 
 export function toggleAi($: EngineInterface): void {
   if (state.shown === null) return
-  state = { ...state, visible: !state.visible }
+  state.visible = !state.visible // in place: a running call holds this very object, and a new one would make its result look stale
   redraw($)
 }
 

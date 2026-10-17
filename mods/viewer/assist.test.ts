@@ -9,7 +9,7 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 import { AI_MAX_CHARS, GUARD_RULE } from './model'
-import { aiState, cancelAi, clearSaved, resetAssist, runAi } from './assist'
+import { aiState, cancelAi, clearSaved, resetAssist, runAi, toggleAi } from './assist'
 import { makeVT } from './strings'
 
 const CWD = '/work/repo'
@@ -295,4 +295,40 @@ test('cancel, direct: the press aborts the signal handed to $.model.complete, an
   expect(aiState().cancelled).toBe(true)
   expect(aiState().error).toBeNull()
   expect(aiState().shown).toBeNull()
+})
+
+test('toggle while a call runs: the result still lands and running clears; cancel then toggle leaves the buttons usable (negative control: toggle with a new state object and this goes red)', async (_$, _on) => {
+  resetAssist()
+  clearSaved()
+  let release: (v: unknown) => void = () => {}
+  let signal: AbortSignal | undefined
+  const $ = {
+    ui: { invalidate: () => {}, toast: () => {} },
+    model: { complete: (_r: unknown, o?: { signal?: AbortSignal }) => new Promise(res => { release = res; signal = o?.signal; signal?.addEventListener('abort', () => res({ isAnswered: false, reason: 'aborted', usage: USAGE })) }) },
+  } as never
+  const t = makeVT('zh-TW')
+  const src = { text: 'abc\n', path: 'a.txt', title: 'a.txt', isDiff: false }
+  const p1 = runAi($, 'summary', null, src, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  toggleAi($)
+  release({ isAnswered: true, text: 'done', usage: USAGE })
+  await p1
+  expect(aiState().running).toBeNull()
+  expect(aiState().shown?.text).toBe('done')
+  // cancel, then toggle, then the next press works
+  clearSaved()
+  const p2 = runAi($, 'ask', 'q?', src, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  toggleAi($)
+  cancelAi($)
+  toggleAi($)
+  await p2
+  expect(aiState().running).toBeNull()
+  expect(aiState().cancelled).toBe(true)
+  const p3 = runAi($, 'ask', 'q?', src, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  expect(aiState().running).not.toBeNull()
+  release({ isAnswered: true, text: 'again', usage: USAGE })
+  await p3
+  expect(aiState().shown?.text).toBe('again')
 })

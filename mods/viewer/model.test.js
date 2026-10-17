@@ -171,3 +171,11 @@ test('cacheKeyOf: the same content asked the same way is one key; another questi
 test('totalTokens sums the four counts', () => {
   assert.equal(m.totalTokens({ input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 4 }), 10)
 })
+
+test('truncateForAi: a cut with no line end never leaves half of a surrogate pair', () => {
+  const text = 'a'.repeat(9) + '\u{1F600}'.repeat(5) // the 10th unit is the high half of an emoji
+  const cut = m.truncateForAi(text, 10)
+  assert.equal(cut.cut, true)
+  assert.equal(cut.text, 'a'.repeat(9))
+  assert.doesNotMatch(cut.text, /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/)
+})

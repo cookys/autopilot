@@ -10,6 +10,8 @@ import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
 import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, treeRowCount, withOverflowHint } from './tabs'
 import type { ScrollView } from './tabs'
 import { dimProps, drawSeg } from './ui'
+import { keyedGrow, scrollFrame } from './scroll'
+import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
 
@@ -46,7 +48,7 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
   )
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null) {
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null) {
   const { Box, Text, Link, Button, Input } = el
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded, ...(decide === null ? {} : { decide: { ...decide.state, inputs: decide.inputs && Input !== undefined } }) }
@@ -111,6 +113,18 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   const link = tab === 'dispatch' && snap.link !== null
   const stripH = stripOf(snap, ctx, tab, Button !== undefined)
   const plainHead = headerLines(snap, ctx)
+  // the 待決 tab is a scrolling window of its own (design plan §12.10): the strip and the header stay, the cards scroll, the send row sits in the fixed action strip under a rule
+  if (win !== null) win.framed = false // set again by the frame; a plain tree leaves ui.scroll to the engine
+  if (tab === 'decide' && scroll !== null && win !== null && snap.band !== null) {
+    const cards = body.filter(l => l.bar !== true)
+    const barLines = body.filter(l => l.bar === true)
+    keyedGrow(win, snap.pending.map(d => d.id ?? d.question))
+    return scrollFrame(el, {
+      rows: scroll.bodyRows, cols, head: [strip, ...plainHead.map((l, i) => line(l, i, 'h'))], headRows: stripH.rows + plainHead.length,
+      total: cards.length, window: (off, room) => cards.slice(off, off + room).map((l, i) => line(l, off + i)),
+      bar: barLines.map((l, i) => line(l, i, 'bar')), barRows: barLines.length, model: win,
+    })
+  }
   const head = withOverflowHint(plainHead, ctx, scroll, treeRowCount(stripH.rows, plainHead, body, link ? 1 : 0), stripH.exact).map((l, i) => line(l, i, 'h'))
   return (
     <Box flexDirection="column">

@@ -42,6 +42,7 @@ import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
 import { Band } from './band'
 import { Pane } from './pane'
+import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
@@ -805,7 +806,20 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll)))
+
+  // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
+  // scrolling (`next(e)`).
+  on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
+    return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
+  })
+}
+const decideScroll = newScroll()
+
+// The 待決 tab is exactly the pane's height, so the engine's own window must stand at 0 there; one left scrolled by another tab (the engine keeps one offset per pane) would hide the
+// strip. Best effort: a pane that holds no keys refuses, and the next draw asks again.
+function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefined, tab: PaneTab): void {
+  if (tab === 'decide' && scroll !== undefined && scroll.offset > 0) void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
 }
 
 export const register: Register = on => {

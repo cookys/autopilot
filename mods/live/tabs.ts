@@ -350,8 +350,9 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const open = mine.filter(d => decideOpen(d, dv))
   const answered = open.filter(d => decideLine(d, dv) !== null).length
   if (mine.length === 0) return out.slice(0, -1) // no send row: drop the blank that closed the last card
-  if (open.length === 0) out.push(...ui.actionRow(u, t('decide.sent_all'), { fact: F }))
-  else out.push(...ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, note: t('decide.submit_note'), ...(answered > 0 ? { press: 'submit' } : {}) }))
+  // the send row(s) are tagged `bar`: pane.tsx draws them in the fixed action strip under the scrolling cards (§12.10), not among the cards
+  if (open.length === 0) out.push(...ui.asBar(ui.actionRow(u, t('decide.sent_all'), { fact: F })))
+  else out.push(...ui.asBar(ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, note: t('decide.submit_note'), ...(answered > 0 ? { press: 'submit' } : {}) })))
   return out
 }
 function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {

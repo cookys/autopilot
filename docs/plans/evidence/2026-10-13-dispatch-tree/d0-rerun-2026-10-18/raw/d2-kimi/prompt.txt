@@ -1,0 +1,2 @@
+Measurement task. Use your shell tool to run exactly this one command, then reply with its complete output verbatim and nothing else (no commentary):
+for v in CLAUDE_CODE_SESSION_ID AUTOPILOT_CHILD_SESSION_ID AUTOPILOT_PARENT_RUN_ID AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_ROOT_RUN_ID; do printf '%s=%s\n' "$v" "${!v-<unset>}"; done

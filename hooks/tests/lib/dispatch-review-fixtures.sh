@@ -48,6 +48,16 @@ read_prompt_arg() {
     fi
     i=$((i + 1))
   done
+  # kimi file indirection (BL-0025): the -p value only points at ordered ./autopilot-review-prompt.part-NNN files; like
+  # kimi's Read tool, the stub then takes the real prompt (nonce block included) from those files, in order.
+  case "$prompt" in
+    *./autopilot-review-prompt.part-*)
+      prompt="$(cat ./autopilot-review-prompt.part-*)"
+      if [ -n "${STUB_PROMPT_DUMP:-}" ]; then
+        printf '%s' "$prompt" > "$STUB_PROMPT_DUMP"
+        ls ./autopilot-review-prompt.part-* | wc -l | tr -d ' ' > "$STUB_PROMPT_DUMP.parts"
+      fi ;;
+  esac
   if [ -z "$prompt" ]; then
     prompt="$(cat)"
   fi

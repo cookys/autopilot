@@ -768,29 +768,37 @@ assert_contains "$OUT" '"status": "no_verdict"' "kimi: runner death stays no_ver
 assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
   "kimi: bullet-prefixed block before death is salvaged (normalized capture)"
 
-# Kimi rail argv wall (308 report 2026-09-07): kimi takes the prompt only as one -p argv
-# string, so a prompt above MAX_ARG_STRLEN (128 KiB) used to reach execve and die rc=126
-# ("Argument list too long") AFTER the context-window gate — an opaque no_verdict. The rail
-# now fails closed BEFORE spend with the cause and remedies. --context-window off isolates
-# the argv check from the token gate; AUTOPILOT_KIMI_ARGV_LIMIT is the test seam.
+# Kimi rail argv wall (308 report 2026-09-07, BL-0025): kimi takes the prompt only as one -p argv
+# string, so a prompt above MAX_ARG_STRLEN (128 KiB) used to die rc=126 AFTER the context-window
+# gate. Live probe 2026-10-18 (kimi 2.2.0) showed kimi reads a prompt file from its cwd (nonces at
+# 25%, 60% and the last line of a 140 KB file all came back), so above the threshold the rail now
+# writes the prompt to ./autopilot-review-prompt.md and passes a short -p. The stub emulates kimi's
+# Read tool; a review is only "reviewed" if the nonce block from the FILE reached it, so a rail that
+# does not deliver the file (or delivers a different one) goes no_verdict. --context-window off
+# isolates the argv check from the token gate.
 BIG_DIFF="$TEST_TMP/kimi-big.diff"
 { printf 'diff --git a/big.txt b/big.txt\n--- a/big.txt\n+++ b/big.txt\n'; for i in $(seq 1 3000); do printf '+line %05d %s\n' "$i" "$(printf 'x%.0s' $(seq 1 40))"; done; } > "$BIG_DIFF"
-OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 STUB_PROMPT_DUMP="$TEST_TMP/kimi-prompt-dump" \
   "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$BIG_DIFF" --bin "$STUB_VERDICT" --context-window off 2>/dev/null)"; EXIT=$?
-assert_eq "$EXIT" "2" "kimi: oversized prompt is a precondition failure (exit 2), never an rc=126 death"
-assert_contains "$OUT" '"status": "precondition_failed"' "kimi: oversized prompt reports precondition_failed"
-assert_contains "$OUT" 'MAX_ARG_STRLEN' "kimi: refusal names the kernel argv limit"
-assert_contains "$OUT" 'reads a prompt file' "kimi: refusal names the runner remedy"
+assert_eq "$EXIT" "0" "kimi: oversized prompt is delivered by file indirection and reviews (no rc=126 death)"
+assert_contains "$OUT" '"status": "reviewed"' "kimi: oversized prompt reviews via the file (nonce block came from the file)"
 assert_not_contains "$OUT" 'Argument list too long' "kimi: the execve failure never happens"
-# Positive control: a prompt under the limit still reaches the runner and reviews. (A raised
-# seam cannot serve as the control: the stub is itself exec'd with the prompt as one argv
-# string, so on Linux it dies with the very rc=126 this guard exists to pre-empt.)
+BIG_RAW="$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).raw_log))')"
+assert_contains "$(cat "$BIG_RAW")" 'delivered by file indirection' "kimi: raw log records the indirection"
+# One kimi Read call returns only ~94 KB, so the file rides in ordered parts: more than one part, in order,
+# and the concatenation still ends with the diff's last line (a dropped or reordered part fails here).
+assert_eq "$([ "$(cat "$TEST_TMP/kimi-prompt-dump.parts")" -ge 2 ] && echo multi)" "multi" "kimi: oversized prompt is split into ordered parts"
+assert_contains "$(tail -c 200 "$TEST_TMP/kimi-prompt-dump")" '+line 03000' "kimi: the last part is delivered after the earlier ones, in order"
+assert_contains "$(head -c 400 "$TEST_TMP/kimi-prompt-dump")" 'AUTOPILOT-REVIEW' "kimi: the first part carries the nonce output protocol"
+# Positive control: a prompt under the limit keeps the plain argv path (no indirection note).
 MID_DIFF="$TEST_TMP/kimi-mid.diff"
 { printf 'diff --git a/mid.txt b/mid.txt\n--- a/mid.txt\n+++ b/mid.txt\n'; for i in $(seq 1 1500); do printf '+line %05d %s\n' "$i" "$(printf 'x%.0s' $(seq 1 40))"; done; } > "$MID_DIFF"
 OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
   "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$MID_DIFF" --bin "$STUB_VERDICT" --context-window off 2>/dev/null)"; EXIT=$?
 assert_eq "$EXIT" "0" "kimi: a prompt under the argv limit still reaches the runner"
 assert_contains "$OUT" '"status": "reviewed"' "kimi: under-limit prompt reviews normally"
+MID_RAW="$(printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).raw_log))')"
+assert_not_contains "$(cat "$MID_RAW")" 'file indirection' "kimi: under-limit prompt does not use the file path"
 
 # Reviewed path stays byte-identical: the key is NOT emitted on success (g2 #7)...
 OUT="$(vbp_json pass)"; EXIT=$?

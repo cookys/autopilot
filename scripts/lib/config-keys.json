@@ -1936,6 +1936,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_KIMI_PART_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_LADDER_LEDGER",
       "kind": "env",
       "audience": "internal",

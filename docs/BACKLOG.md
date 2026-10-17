@@ -139,22 +139,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
 
-### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
-- **Id**: BL-0025
-- **Status**: open
-- **Since**: 2026-09-07
-- **Origin**: peer
-- **Reporter**: 308
-- **Report**: 2026-09-07 peer
-- **Reply**: 2026-09-07 session 515b9ae8:2014
-- **Problem**: 308 回報：kimi 審查在提示超過約 12 萬位元組時會失敗，因為舊版 kimi 不支援從檔案讀提示。現在本機已是新版 kimi，是否仍有此限制需要重新探測且需要可用的登入。 (draft)
-- **Impact**: 大型審查包在 kimi 席位上會被拒絕；目前可改用其他席位。 (draft)
-- **Trigger**: a host with a working `kimi login` (this host's managed:kimi-code OAuth has no credential as of 2026-09-07, so the probe could not run), or Kimi Code CLI shipping `--prompt-file` / stdin prompt input (0.39.1 has neither: `-p ''` is…
-- **Effort**: S
-- **Source**: 308 report 2026-09-07, run review-1788751167-2077044-2d7b.
-- **Pointer**: docs/backlog/kimi-reviewer-rail-file-indirection-for-prompts-above-the-argv-wall-needs-a-live.md
-- **Context**: v2.36.14 fails closed pre-spend when the kimi prompt exceeds ~120 KB (Linux MAX_ARG_STRLEN, 308 hit rc=126 on a 145 KB prompt).
-
 ### Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)
 - **Id**: BL-0027
 - **Status**: open
@@ -841,24 +825,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of 763f77de, 2026-10-14
 - **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
 - **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
-
-
-### Dispatch-tree 3d live check: kimi child env
-- **Id**: BL-0176
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: tmux 掛錯上層的問題（3d）與 codex 端到端已實跑確認通過；只剩 kimi 子程序拿到的身分仍只看過程式碼，需要有憑證的環境。
-- **Impact**: 低。程式和模擬測試都已涵蓋；實跑是確認，不是已知缺陷。
-- **Trigger**: a credentialed env for kimi
-- **Effort**: S
-- **Source**: review of lane/dispatch-tree-3b and lane/dt3d, 2026-10-15
-- **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Rows l and d2 (codex) ran and passed 2026-10-15 (d0-rerun-2026-10-15b). Open: kimi with creds.
-
-
-
-
 
 
 ### Move exam registration to llm-playground; autopilot reads one JSON

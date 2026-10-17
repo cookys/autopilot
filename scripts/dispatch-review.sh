@@ -1414,17 +1414,23 @@ elif [[ "$RUNNER" = "kimi" ]]; then
         case "$KIMI_BIN" in /*) ;; *) die_precondition "could not resolve kimi --bin to absolute path: ${BIN:-kimi}" ;; esac ;;
   esac
   [[ -x "$KIMI_BIN" ]] || die_precondition "kimi binary not executable: $KIMI_BIN"
-  # kimi 0.39 takes the prompt ONLY as the -p argv string: no --prompt-file, and -p '' / -p -
-  # are rejected / taken literally (probed 2026-09-07). Linux caps ONE argv string at
-  # MAX_ARG_STRLEN (128 KiB, independent of ARG_MAX), so an oversized prompt makes execve fail
-  # with rc=126 "Argument list too long" AFTER the context-window gate passed (308 report
-  # 2026-09-07: 133 KB diff + 10 KB spec ⇒ 145 KB prompt ⇒ no_verdict with an opaque rc).
-  # Fail closed HERE, before spend, with the real cause and the two remedies. Headroom below
-  # the kernel limit covers the rest of the argv/env block. Test seam: AUTOPILOT_KIMI_ARGV_LIMIT.
+  # kimi takes the prompt only as the -p argv string (2.2.0 still has no --prompt-file; `-p -` is taken
+  # literally). Linux caps ONE argv string at MAX_ARG_STRLEN (128 KiB, independent of ARG_MAX), so a prompt
+  # over that makes execve fail with rc=126 "Argument list too long" AFTER the context-window gate passed
+  # (308 report 2026-09-07: 145 KB prompt => no_verdict with an opaque rc). Above KIMI_ARGV_LIMIT (headroom
+  # below the kernel limit for the rest of the argv/env block; test seam AUTOPILOT_KIMI_ARGV_LIMIT) the
+  # NON-blind rail writes the prompt into the scratch cwd as ordered parts and passes a short -p telling kimi to read them
+  # (BL-0025; live probes 2026-10-18, kimi 2.2.0: nonces at 25%, 60% and the end of a 140 KB file came back,
+  # but ONE 154 KB file made kimi lose its Read offset and stop without a verdict, while ~60 KB parts gave a full review). The blind cleanroom seat runs a tool-less agent that cannot read a file, so it
+  # still fails closed here, before spend, with the real cause. Small prompts keep the plain argv path.
   KIMI_PROMPT_BYTES="$(wc -c < "$PROMPT_FILE" | tr -d ' ')"
   KIMI_ARGV_LIMIT="${AUTOPILOT_KIMI_ARGV_LIMIT:-120000}"
+  KIMI_INDIRECT=0
   if [ "$KIMI_PROMPT_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
-    die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but kimi accepts the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
+    if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
+      die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but the blind kimi seat is tool-less and takes the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
+    fi
+    KIMI_INDIRECT=1
   fi
   KIMI_OUT="$(mktemp -t dispatch-review-kimi-out-XXXXXX)"
   KIMI_ERR="$(mktemp -t dispatch-review-kimi-err-XXXXXX)"
@@ -1454,14 +1460,29 @@ elif [[ "$RUNNER" = "kimi" ]]; then
       KIMI_BREACH="kimi containment audit failed (rc=$KIMI_AUDIT_RC) — containment unverified"
     fi
   else
-  # -p requires the prompt as an argument (no --prompt-file); size guarded above.
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$(cat "$3")" -m "$4" --output-format text' \
-      _ "$KIMI_CWD" "$KIMI_BIN" "$PROMPT_FILE" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
+  if [ "$KIMI_INDIRECT" -eq 1 ]; then
+    # File indirection (BL-0025). One kimi Read call returns only about 94 KB / 1470 lines; a single big file
+    # made kimi paginate, lose its offset, and stop with no verdict (live e2e 2026-10-18). So the prompt rides
+    # in ordered parts of at most KIMI_PART_BYTES (line-preserving), each of which fits one Read call, and
+    # argv carries only the pointer. Concatenating the parts in order gives back $PROMPT_FILE byte for byte.
+    KIMI_PART_BYTES="${AUTOPILOT_KIMI_PART_BYTES:-60000}"
+    split -C "$KIMI_PART_BYTES" -d -a 3 "$PROMPT_FILE" "$KIMI_CWD/autopilot-review-prompt.part-" \
+      || die_precondition "could not stage the kimi prompt parts"
+    KIMI_PARTS=""
+    for _kp in "$KIMI_CWD"/autopilot-review-prompt.part-*; do KIMI_PARTS="${KIMI_PARTS:+$KIMI_PARTS, }./$(basename "$_kp")"; done
+    KIMI_ARGV_PROMPT="Your complete task is split, in order, across these files in the current directory: ${KIMI_PARTS}. Each file fits in one Read call: read EVERY file completely, in that order, before answering. Together they form one prompt; then do exactly what it says, including the exact output format it requires."
+  else
+    KIMI_ARGV_PROMPT="$(cat "$PROMPT_FILE")"
+  fi
+  # -p requires the prompt as an argument (no --prompt-file); big prompts use the file pointer above.
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$3" -m "$4" --output-format text' \
+      _ "$KIMI_CWD" "$KIMI_BIN" "$KIMI_ARGV_PROMPT" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
   KIMI_RC=$?
   fi
   wait_output_quiescent "$KIMI_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$KIMI_CWD"; KIMI_CWD=""
   cat "$KIMI_OUT" > "$RAW_LOG"
+  [ "$KIMI_INDIRECT" -eq 1 ] && printf '\n[dispatch-review: kimi prompt %s bytes > %s — delivered by file indirection (ordered parts ./autopilot-review-prompt.part-NNN)]\n' "$KIMI_PROMPT_BYTES" "$KIMI_ARGV_LIMIT" >> "$RAW_LOG"
   printf '\n--- kimi stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$KIMI_ERR" >> "$RAW_LOG"
   if [ -n "$KIMI_BREACH" ]; then

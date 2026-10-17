@@ -72,3 +72,14 @@ scan found 0 remaining hits.
   produced none. No second paid run was made.
 - kimi, agy, opencode remain `not_run` (no provider credentials under an isolated HOME), so R stays blocked on them.
   Row h (step 5) is unchanged: still bad.
+
+## Re-run 2026-10-18 (row d2, kimi cell)
+
+One real `dispatch-author.sh --runner kimi` run (kimi 2.2.0, credential staged into an isolated HOME; real `~/.kimi-code`
+not handed to the child), evidence in [`d0-rerun-2026-10-18/`](d0-rerun-2026-10-18/README.md).
+
+- **d2 kimi path: pass** (post-3d rule). The kimi child printed its own environment: `AUTOPILOT_SESSION_ID`,
+  `AUTOPILOT_CHILD_SESSION_ID` and `CLAUDE_CODE_SESSION_ID` unset, `AUTOPILOT_PARENT_SESSION_ID` = the resolved parent,
+  parent run id, depth and root run id carried; the rail manifest has `child_session_id` null, `parent_run_id` = the outer run.
+  This replaces the "kimi: `not_run`" line above for kimi. agy and opencode remain `not_run` (no credentials on this host's
+  run).

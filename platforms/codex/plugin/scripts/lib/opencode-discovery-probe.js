@@ -196,6 +196,7 @@ async function probeV2(o, project, env, log) {
     const m = /\[autopilot\] plugin loaded, version: (\S+)/.exec(text);
     const external = (plugins || []).filter((x) => x.source && x.source.type !== 'builtin');
     return {
+      serve_port: port,
       plugin_loaded_version: m ? m[1] : null,
       plugin_registered: external.some((x) => x.state && x.state.status === 'active'),
       plugin_ids: external.map((x) => x.id),

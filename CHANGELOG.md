@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Discovery-probe isolation canary compares the real opencode.log by appended bytes (no probe root or port) instead of size+mtime, which a resident `opencode serve --service` falsified; the probe JSON gains `serve_port`.
 - BL-0208 closed: both opencode adaptors now clear ambient `OPENCODE_PERMISSION` and `OPENCODE_CLI_CONFIG_CONTENT` with `OPENCODE_CONFIG`/`OPENCODE_CONFIG_DIR` (`CLEARED_ENV`, asserted by `assertPlan`; measured: v1 reads `OPENCODE_PERMISSION` but the locked agent still resolves to deny, v2 does not read it), the probe seat root in `probe-engine-capability.sh` is its own `mktemp -d` instead of `$PROBE_CWD.oc`, and a dead ternary is removed from `opencode-containment.test.js`.
 - The scrollbar the live pane's 待決 tab and the `/show` viewer draw has five jump points (owner cards d-e2e7cf0c, d-a0c6fd10): the top, quarter, middle, three-quarter and bottom cells of the track are plain `Button`s around the same coloured glyph, and a click jumps the window to that share of the content (`jumpCells` and `jumpOffset` in `mods/live/scrollmath.ts`); the other cells are unchanged text.
 - BL-0064 and BL-0061 closed (owner card d-233d4531): the context-budget T3 deny tier was premised on stopping for `/clear`, which autocompact replaced (2026-10-12), and its calibration trigger never fired; the CLI/engine mismatch BL-0061 described was fixed by bc65872aa and 330081b62, and widening the session-marker rule to non-Mission campaigns was already declined. BL-0070 stays open with a revised trigger (owner card d-759c89f1).

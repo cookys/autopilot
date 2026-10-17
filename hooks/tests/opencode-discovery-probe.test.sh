@@ -10,15 +10,28 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 0
 fi
 
-# Isolation canary: stat (read-only) the owner's real opencode log before and after the whole
-# suite; the probe must not touch it. Skipped, with the reason, when it does not exist.
+# Isolation canary: read (never write) the owner's real opencode log. Record its byte offset now,
+# and at the end read only what was appended after it: that text must not name any probe temp root
+# or serve port. (size/mtime was unusable: a resident `opencode serve --service` appends to it.)
+# Skipped, with the reason, when the log does not exist.
 REAL_LOG="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/log/opencode.log"
 if [ -f "$REAL_LOG" ]; then
-  CANARY_BEFORE="$(stat -c '%s %Y' "$REAL_LOG")"
+  CANARY_OFFSET="$(stat -c '%s' "$REAL_LOG")"
 else
-  CANARY_BEFORE=""
+  CANARY_OFFSET=""
   echo "SKIP [$TEST_NAME] isolation canary: $REAL_LOG does not exist (nothing of the owner's to protect)"
 fi
+PORTS_FILE="$TEST_TMP/probe-ports"; : > "$PORTS_FILE"
+
+# canary_leaks <log> <offset> -> prints the appended lines that name a probe temp root or port
+canary_leaks() {
+  local log="$1" off="$2" tail_text pat=""
+  tail_text="$(tail -c +"$((off + 1))" "$log" 2>/dev/null)"
+  printf '%s\n' "$tail_text" | grep -F -e "$TEST_TMP" -e "/oc-probe-" || true
+  while read -r p; do
+    [ -n "$p" ] && printf '%s\n' "$tail_text" | grep -E "(:|port[= ])$p([^0-9]|$)" || true
+  done < "$PORTS_FILE"
+}
 
 PROBE="$REPO_ROOT/scripts/lib/opencode-discovery-probe.js"
 PREFLIGHT="$REPO_ROOT/scripts/preflight-portability.sh"
@@ -34,7 +47,10 @@ new_fixture() { # <name> -> prints dir
 }
 
 probe_json() { # <bin> <fixture> <name>
-  node "$PROBE" --bin "$1" --repo "$2" --root "$TEST_TMP/root-$3" 2>&1
+  local out
+  out="$(node "$PROBE" --bin "$1" --repo "$2" --root "$TEST_TMP/root-$3" 2>&1)"
+  printf '%s' "$out" | grep -o '"serve_port":[0-9]*' | cut -d: -f2 >> "$PORTS_FILE" || true
+  printf '%s\n' "$out"
 }
 
 preflight_oc() { # <fixture> [bin] -> the OpenCode lines of preflight (stdout+stderr)
@@ -143,10 +159,18 @@ esac
 # ── isolation: the probe's opencode wrote its state inside the sandbox root ──
 assert_file_exists "$TEST_TMP/root-adaptor/xdg-data/opencode" "isolation: opencode data dir lives under the probe root (XDG_DATA_HOME redirected)"
 assert_file_exists "$TEST_TMP/root-adaptor/home" "isolation: HOME is the probe root's home"
-if [ -n "$CANARY_BEFORE" ]; then
-  CANARY_AFTER="$(stat -c '%s %Y' "$REAL_LOG")"
-  assert_eq "$CANARY_AFTER" "$CANARY_BEFORE" "isolation canary: real opencode.log size+mtime unchanged across the suite"
-  echo "CANARY [$TEST_NAME] real opencode.log before='$CANARY_BEFORE' after='$CANARY_AFTER' (size mtime)"
+if [ -n "$CANARY_OFFSET" ]; then
+  LEAKS="$(canary_leaks "$REAL_LOG" "$CANARY_OFFSET")"
+  assert_eq "$LEAKS" "" "isolation canary: nothing appended to the real opencode.log names a probe root or port"
+  echo "CANARY [$TEST_NAME] real opencode.log offset=$CANARY_OFFSET now=$(stat -c %s "$REAL_LOG") ports_seen=$(wc -l < "$PORTS_FILE")"
 fi
+# negative control (fixture log, no real run): a line naming a probe root after the offset must trip the canary
+FAKE_LOG="$TEST_TMP/fake-opencode.log"; printf 'old line\n' > "$FAKE_LOG"; FAKE_OFF="$(stat -c %s "$FAKE_LOG")"
+printf 'INFO service started cwd=%s/root-x/project\n' "$TEST_TMP" >> "$FAKE_LOG"
+assert_neq "$(canary_leaks "$FAKE_LOG" "$FAKE_OFF")" "" "canary control: appended line with a probe temp root is flagged"
+printf 'old line\nINFO unrelated resident-service line\n' > "$FAKE_LOG"
+assert_eq "$(canary_leaks "$FAKE_LOG" 9)" "" "canary control: unrelated appended line is not flagged"
+echo 4242 > "$PORTS_FILE"; printf 'old line\nINFO listening 127.0.0.1:4242\n' > "$FAKE_LOG"
+assert_neq "$(canary_leaks "$FAKE_LOG" 9)" "" "canary control: appended line with a probe port is flagged"
 
 finalize_test

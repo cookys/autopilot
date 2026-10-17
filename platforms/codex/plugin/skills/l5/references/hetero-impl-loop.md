@@ -300,7 +300,7 @@ Same clone-per-unit shape, but the foreman is a `sonnet` Agent subagent of the d
 foreground call hits the tool timeout) paired with a background dead-man (`sleep N; echo WAKE-<unit>`) started in the SAME turn,
 and the foreman ends its turn — on any wake it checks `rc=` in the dispatch stderr, else waits once more via
 `wait-dispatch-results.js --timeout 500`; every rail call is prefixed `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID`
-so the hand's suites cannot read the depth-0 marker; `dispatch-model-guard` needs `Engine: sonnet` as the prompt's first line;
+so the hand's suites cannot read the depth-0 marker; `dispatch-model-guard` needs `Engine: sonnet` as the prompt's first line (then `Role: <role>` on line 2 and the required `Lane: <name>` on line 3);
 `foreman-guard`'s 40-call cap is live. The depth-0 l5 marker never applies to the clones (`repo_root` mismatch → INACTIVE), which
 is what lets hands run without a sealed campaign — and it also means the marker cannot be cleared through the l5 receipt path;
 degrade it (`set --level l3 --entry-level l5 --fallback precondition_failed`) and clear. Engine units must add cases in NEW
@@ -315,9 +315,12 @@ Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`, `docs/plans
 `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/`, `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
 
 **Brief lines for the subagent budget gate (`hooks/subagent-budget.js`, default-on).** Every Agent dispatch in this recipe is counted per lane
-from the subagent transcripts, so the brief's first five lines carry the lane key and the role: `Lane: <slug>` (letters, digits, `.`, `_`, `-`,
-up to 64; one slug per unit, reused by every relay and repair of that unit) and, for a reviewer, `Role: reviewer`. Without a valid `Lane:` line
-the key falls back to the Agent `description` (first line, lower-cased), which drifts between relays, so write the line. Defaults: the 5th
+from the subagent transcripts, so the brief carries the lane key and the role in its first lines: line 1 `Engine: <model>`, line 2 `Role: <role>`,
+line 3 `Lane: <slug>` (letters, digits, `.`, `_`, `-`, up to 64; one slug per unit, reused by every relay and repair of that unit; for a reviewer also
+`Role: reviewer`). **`Lane:` is required**: a brief whose first line starts with `Engine:` and that has no valid `Lane:` in its first five lines
+(and inherits none from the dispatching subagent or its ancestors) is denied, with or without a session-mode marker, and no owner panel card is
+opened (it is a format problem; fix the brief or pass `Budget-Ack:`). Briefs not starting with `Engine:` (Explore etc.) fall back to the Agent
+`description` and count only toward the session total. Defaults: the 5th
 non-reviewer dispatch of a lane, a lane already past 300 subagent turns, or 400 subagent turns by the whole session in the last 60 minutes is
 denied once and an owner panel card is opened. To continue on purpose, add `Budget-Ack: <reason, at least 8 characters>` within the brief's
 first ten lines; the dispatch passes and a `budget-ack-<lane>-<n>` row lands in the decision ledger. Do not ack to get around a runaway lane:

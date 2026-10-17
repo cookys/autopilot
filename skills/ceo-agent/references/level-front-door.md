@@ -481,7 +481,8 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
 - **In-loop enforcement.** `hooks/foreman-guard.js` (PreToolUse `Bash|Monitor`, scope = session-mode
   marker l4|l5|l6 AND payload `agent_id`): role from a line matching exactly `Role: foreman` /
   `Role: worker` / `Role: reviewer` among the first five lines of the dispatcher-written first
-  message, re-derived every call, never cached. Caps default foreman 40 / worker 120 / reviewer 120
+  message, re-derived every call, never cached. Dispatch briefs are written as line 1 `Engine: <model>`, line 2 `Role: <role>`,
+  line 3 `Lane: <name>` (required: `subagent-budget` denies an `Engine:` brief with no valid or inherited `Lane:`). Caps default foreman 40 / worker 120 / reviewer 120
   (`foreman_guard.role_caps`; env `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` comma list e.g.
   `worker=120,reviewer=120`; env overlays config overlays defaults, per key). Last effective-reserve
   calls (min of `foreman_guard.reserve_calls` default 8 / `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` and

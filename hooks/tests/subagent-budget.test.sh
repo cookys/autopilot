@@ -56,14 +56,14 @@ mk s1c '[{"id":"a1","brief":["Lane: alpha"],"description":"one"},{"id":"a2","bri
 expect_deny s1c 'Engine: sonnet\nLane: alpha\ngo' "unrelated words" "KR1 Lane: line keys the lane over description"
 # description fallback, first line, trimmed, lower-cased (agent side reads meta.json description)
 mk s1d '[{"id":"a1","description":"Fix Loader"},{"id":"a2","description":"fix loader"},{"id":"a3","description":"FIX LOADER  "},{"id":"a4","description":"fix loader"}]'
-expect_deny s1d 'Engine: sonnet\ngo' "  Fix Loader
+expect_deny s1d 'Task: x\ngo' "  Fix Loader
 second line" "description fallback lane"
 # malformed Lane: line falls back to description; a Lane: quoted later in the brief never matches
-expect_deny s1d 'Engine: sonnet\nLane: bad lane!\ngo' "fix loader" "malformed Lane: falls back to description"
+expect_deny s1d 'Task: x\nLane: bad lane!\ngo' "fix loader" "malformed Lane: falls back to description"
 expect_allow s1d 'Engine: sonnet\n1\n2\n3\nLane: other\ngo' "unrelated" "Lane: on line 5 is read"
-expect_allow s1d 'Engine: sonnet\n1\n2\n3\n4\nLane: fix-loader-quoted\ngo' "" "Lane: on line 6 never matches, no description => no lane"
+expect_allow s1d 'Task: x\n1\n2\n3\n4\nLane: fix-loader-quoted\ngo' "" "Lane: on line 6 never matches, no description => no lane"
 # a dispatch with no lane counts only toward the root total
-expect_allow s1d 'Engine: sonnet\ngo' "" "no lane allowed"
+expect_allow s1d 'Task: x\ngo' "" "no lane allowed"
 
 # ---- reviewers are excluded from the relay count (their turns still count) -----------------------------------------
 mk s2 "$(node -e 'console.log(JSON.stringify([0,1,2].map(i=>({id:"i"+i,brief:["Lane: rev"]})).concat([3,4].map(i=>({id:"r"+i,brief:["Lane: rev","Role: reviewer"]})))))')"
@@ -247,7 +247,7 @@ expect_deny n2d 'Engine: sonnet\nLane: near\ngo' "" "BL0209 nearest ancestor Lan
 expect_allow n2d 'Engine: sonnet\nLane: far\ngo' "" "BL0209 a farther ancestor does not get the turns"
 
 # a foreman (agent_id) dispatching without Lane: joins the foreman's lane
-expect_allow n2 'Engine: sonnet\ngo' "" "BL0209 depth-0 dispatch without Lane: has no lane"
+expect_allow n2 'Task: x\ngo' "" "BL0209 depth-0 dispatch without Lane: has no lane"
 fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" f1
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 foreman (agent_id) dispatch without Lane: lands in the foreman's lane"
 assert_contains "$__RUN_STDOUT" "lane 'tl'" "BL0209 the denial names the foreman's lane"
@@ -257,13 +257,13 @@ fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" c1
 assert_contains "$__RUN_STDOUT" "lane 'tl'" "BL0209 a depth-2 dispatcher inherits the ancestor lane"
 fire_x n2 'Engine: sonnet\nLane: other\ngo' "$PROJ/n2.jsonl" f1
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 an explicit Lane: beats the dispatcher's lane"
-fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" no-such-agent
+fire_x n2 'Task: x\ngo' "$PROJ/n2.jsonl" no-such-agent
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 unknown agent_id => no lane, no crash"
 
 # parentAgentId cycle / missing file: no crash, falls back to the description
 mk n3 '[{"id":"c1","parent":"c2","depth":1,"description":"cyc"},{"id":"c2","parent":"c1","depth":1,"description":"cyc"},{"id":"c3","parent":"ghost","depth":1,"description":"cyc"},{"id":"c4","parent":"c4","depth":1,"description":"cyc"}]'
-expect_deny n3 'Engine: sonnet\ngo' "cyc" "BL0209 cycle / ghost parent fall back to description (4 dispatches)"
-fire_x n3 'Engine: sonnet\ngo' "$PROJ/n3.jsonl" c1
+expect_deny n3 'Task: x\ngo' "cyc" "BL0209 cycle / ghost parent fall back to description (4 dispatches)"
+fire_x n3 'Task: x\ngo' "$PROJ/n3.jsonl" c1
 expect_silent_or_allow() { assert_eq 0 "$__RUN_EXIT" "$1: exit 0"; }
 expect_silent_or_allow "BL0209 cyclic dispatcher does not crash"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 cyclic dispatcher without lane is allowed"
@@ -303,6 +303,54 @@ assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 overri
 assert_contains "$__RUN_STDOUT" "last 60 min 0 subagent turns" "BL0209 production clock sees 0 turns in the last hour"
 AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=0 fire n5 'Engine: sonnet\nLane: fresh\ngo'
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 flag value other than 1 does not enable the override"
+
+# ---- d-0bb18035: Engine: briefs must carry a Lane: (own or inherited) --------------------------------------------------
+LR_DENY='"permissionDecision":"deny"'
+mk lr1 '[{"id":"x1","brief":["Lane: other"]}]'
+for withmarker in 0 1; do
+  if [ "$withmarker" = 1 ]; then printf '{"session_id":"lr1","level":"l5","expires_at":"2099-01-01T00:00:00Z"}' >"$AUTOPILOT_SESSION_MODE_DIR/lr1.json"; fi
+  c0=$(cards)
+  fire lr1 'Engine: sonnet\nRole: worker\ngo'
+  assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR marker=$withmarker Engine: without Lane: denied"
+  assert_contains "$__RUN_STDOUT" 'Lane: <name>' "LR marker=$withmarker reason shows the format"
+  assert_contains "$__RUN_STDOUT" '[A-Za-z0-9][A-Za-z0-9._-]{0,63}' "LR marker=$withmarker reason shows the name rule"
+  assert_contains "$__RUN_STDOUT" 'Budget-Ack: <reason' "LR marker=$withmarker reason shows the ack way"
+  assert_eq "$c0" "$(cards)" "LR marker=$withmarker no panel card opened"
+done
+rm -f "$AUTOPILOT_SESSION_MODE_DIR/lr1.json"
+# invalid Lane: values count as no lane
+fire lr1 'Engine: sonnet\nLane:\ngo'; assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR empty Lane: denied"
+fire lr1 'Engine: sonnet\nLane: -x\ngo'; assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR Lane: -x denied"
+fire lr1 'Engine: sonnet\nLane: bad lane!\ngo'; assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR Lane: with a space denied"
+# a description does not stand in for the lane of an Engine: brief
+fire lr1 'Engine: sonnet\ngo' "some description"; assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR description does not replace Lane:"
+expect_allow lr1 'Engine: sonnet\nRole: worker\nLane: lr-ok\ngo' "" "LR valid Lane: allowed"
+# no subagents dir yet (first dispatch of a session): a depth-0 Engine: brief is still checked
+fire lr-never-created 'Engine: sonnet\ngo'; assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR first dispatch, no subagents dir, no Lane: denied"
+fire lr-never-created 'Engine: sonnet\nLane: first\ngo'; expect_silent "LR first dispatch with Lane: stays fail-open"
+# not an Engine: brief (Explore etc.): description fallback, no deny
+expect_allow lr1 'Find the loader\ngo' "explore it" "LR non-Engine brief without Lane: allowed"
+expect_allow lr1 ' Engine: sonnet\ngo' "" "LR leading space is not an Engine: brief"
+# inheritance: a subagent dispatcher that has a lane passes the Engine: brief without Lane:
+mk lr2 '[{"id":"f1","brief":["Lane: parentlane"],"depth":1}]'
+fire_x lr2 'Engine: sonnet\ngo' "$(sub_tp lr2 f1)" f1
+assert_not_contains "$__RUN_STDOUT" "$LR_DENY" "LR inherits the dispatcher's lane"
+mk lr3 '[{"id":"g1","brief":["no lane here"],"depth":1,"description":"desc only"}]'
+fire_x lr3 'Engine: sonnet\ngo' "$(sub_tp lr3 g1)" g1
+assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR dispatcher with only a description gives no lane"
+# Budget-Ack passes, with a ledger row; a short reason does not
+before=$(ledger_rows)
+fire lr1 'Engine: sonnet\nBudget-Ack: short\ngo'
+assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR short ack still denied"
+assert_contains "$__RUN_STDOUT" 'at least 8 characters' "LR short ack explained"
+assert_eq "$before" "$(ledger_rows)" "LR denied ack writes no row"
+expect_allow lr1 'Engine: sonnet\nBudget-Ack: format exception for test\ngo' "" "LR Budget-Ack passes the missing lane"
+assert_eq "$((before + 1))" "$(ledger_rows)" "LR ack writes one ledger row"
+# warn mode only warns; off ignores
+AUTOPILOT_SUBAGENT_BUDGET_MODE=warn fire lr1 'Engine: sonnet\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "LR warn mode never denies"
+assert_contains "$__RUN_STDOUT" 'lane ceilings cannot apply' "LR warn mode adds the warning"
+AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire lr1 'Engine: sonnet\ngo'; expect_silent "LR mode off"
 
 # ---- KR7: latency, 200 transcripts x 300 turns, second call warm ---------------------------------------------------------
 mk s12 "$(node -e 'const a=[];for(let i=0;i<200;i++)a.push({id:"p"+i,brief:["Lane: lat"+i],turns:300,ageMs:4800000});console.log(JSON.stringify(a))')"

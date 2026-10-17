@@ -176,7 +176,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
-- **Context**: 讀取端已做（階梯同 effort 依本機價格快取排序，`scripts/qualification-prices.js`），等 llm-playground 發佈 model-prices.json 到 model-dyno；沒有快取時排序不變。
+- **Context**: 讀取端已做（階梯同 effort 依本機價格快取排序）；等 model-prices.json 發佈。語意修正：effective_basis 是生效日出處，已知價只看 input/output 非 null，basis 僅供參考。
 
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Id**: BL-0025

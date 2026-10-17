@@ -98,16 +98,19 @@ GOOD="$(cur_digest)"
 # an unpriced (null) row and an unknown extra field stay acceptable
 mkfix "$FIX/null.json" "d => { d.rows[1].usd_per_mtok_input_micro = null; d.rows[1].extra = 1; }"
 node "$PRICES" fetch --from "$FIX/null.json" >/dev/null 2>&1
-assert_eq "$?" "0" "null price (unknown) is accepted"
+NULL_RC=$?
+assert_eq "$NULL_RC" "0" "null price (unknown) is accepted"
+assert_contains "$(node "$PRICES" price --model seat-cheap --runner agy)" '"price_micro_per_mtok": null' "null input price reads as unknown"
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 # http transport is refused by the shared fetcher
 node "$PRICES" fetch --from "http://127.0.0.1:1/x.json" >/dev/null 2>&1
 assert_eq "$?" "1" "http fetch URL refused"
 
-# --- price lookup: exact, null when unknown / assumed ----------------------------------------
+# --- price lookup: exact, null when unknown (no row or a null side); assumed basis is still priced ----------------------------------------
 assert_contains "$(node "$PRICES" price --model seat-cheap --runner agy)" '"price_micro_per_mtok": 500000' "price = input+output"
 assert_contains "$(node "$PRICES" price --model seat-sub --runner agy)" '"billing": "subscription"' "subscription row priced, flagged"
-assert_contains "$(node "$PRICES" price --model seat-assumed --runner agy)" '"price_micro_per_mtok": null' "assumed basis reads as unknown"
+assert_contains "$(node "$PRICES" price --model seat-assumed --runner agy)" '"price_micro_per_mtok": 2' "assumed basis with a price is known (basis dates the price, not its source)"
+assert_contains "$(node "$PRICES" price --model seat-assumed --runner agy)" '"effective_basis": "assumed"' "assumed basis shown as reference"
 assert_contains "$(node "$PRICES" price --model seat-ex --runner agy)" '"price_micro_per_mtok": null' "no substring match (seat-ex vs seat-exp)"
 assert_contains "$(node "$PRICES" price --model seat-exp --runner codex)" '"price_micro_per_mtok": null' "runner must match exactly"
 
@@ -169,17 +172,33 @@ rm -rf "$AUTOPILOT_PRICES_CACHE_DIR"
 # with prices: same effort -> cheap first; sub uses its retail price; unknown and assumed last
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 PRICED="$(ladder "$TOPO")"
-assert_eq "$PRICED" "seat-low-exp/low@agy,Zulu/medium@agy,Alpha/medium@agy,seat-cheap/high@agy,seat-sub/high@agy,seat-exp/high@agy,seat-assumed/high@agy,seat-unknown/high@agy" "priced: effort, then price asc, unknown last"
+assert_eq "$PRICED" "seat-low-exp/low@agy,Zulu/medium@agy,Alpha/medium@agy,seat-assumed/high@agy,seat-cheap/high@agy,seat-sub/high@agy,seat-exp/high@agy,seat-unknown/high@agy" "priced: effort, then price asc (assumed-basis row with a price is known), unknown last"
 assert_contains "$PRICED" "Zulu/medium@agy,Alpha/medium@agy" "price is matched on the scorecard row's model id (engine name order would put Alpha first)"
 # Seats whose price is unknown keep the pre-price tie-break (latency, then engine name) among themselves.
-UNK="seat-unknown/high@agy,seat-assumed/high@agy"
+UNK="seat-unknown/high@agy,seat-cheap/high@agy"
 sub_order() { node -e "const l=process.argv[1].split(',');process.stdout.write(process.argv[2].split(',').sort((a,b)=>l.indexOf(a)-l.indexOf(b)).join(','))" "$1" "$UNK"; }
 if [ "$HAVE_BASE" = 1 ]; then
   BASE_L="$(ladder "$BASELINE")"
   assert_eq "$(sub_order "$PRICED")" "$(sub_order "$BASE_L")" "unknown-priced seats keep the pre-price tie-break order"
   assert_neq "$BASE_L" "$PRICED" "priced ordering differs from the pre-price ordering (prices are used)"
 fi
-assert_eq "$(sub_order "$PRICED")" "seat-assumed/high@agy,seat-unknown/high@agy" "unknown-priced seats: engine-name tie-break (hard-coded)"
+assert_eq "$(sub_order "$PRICED")" "seat-cheap/high@agy,seat-unknown/high@agy" "unknown seat sorts after a priced one (hard-coded)"
+
+# top-level extras (unpriced, content_digest, source_revision, n_rows) are accepted; status counts unpriced
+mkfix "$FIX/extras.json" "d => { d.unpriced = [{engine:'x',runner:'agy',model:'x',reason:'no list price'}]; d.content_digest = 'abc'; d.source_revision = 'r1'; d.n_rows = 6; }"
+node "$PRICES" fetch --from "$FIX/extras.json" >/dev/null 2>&1
+assert_eq "$?" "0" "top-level unpriced/content_digest/source_revision/n_rows accepted"
+assert_contains "$(node "$PRICES" status)" '"n_unpriced": 1' "status shows the unpriced count"
+assert_eq "$(ladder "$TOPO")" "$PRICED" "extras do not change the order"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+
+# two unknown seats (no row, and a row with a null input) keep the pre-price tie-break among themselves
+node "$PRICES" fetch --from "$FIX/null.json" >/dev/null 2>&1
+NULLED="$(ladder "$TOPO")"
+UNK="seat-unknown/high@agy,seat-cheap/high@agy"
+assert_eq "$(sub_order "$NULLED")" "seat-cheap/high@agy,seat-unknown/high@agy" "two unknown seats: pre-price tie-break order (hard-coded)"
+[ "$HAVE_BASE" = 1 ] && assert_eq "$(sub_order "$NULLED")" "$(sub_order "$(ladder "$BASELINE")")" "two unknown seats keep the pre-price order"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 
 # stale prices: warned, still used
 mkfix "$FIX/stale.json" "d => { d.rows.forEach(r => { r.verified = '2025-01-01'; }); }"

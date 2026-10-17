@@ -11,7 +11,8 @@
  *   status                       cache age, row count, stale rows, warnings (JSON)
  *   price --model <id> [--runner <r>] [--engine <e>]
  *          exact (engine, runner, model) lookup; engine defaults to the model id.
- *          Prints micro-USD per Mtok (input+output) or null (unknown, incl. basis=assumed).
+ *          Prints micro-USD per Mtok (input+output) or null (unknown: no row, or input/output null).
+ *          effective_basis is shown as-is for reference (it dates the price, it does not rank it).
  *
  * Cache dir: $AUTOPILOT_PRICES_CACHE_DIR, else ~/.autopilot/qualification-prices (never inside a
  * git work tree). Dispatch paths never call `fetch`: resolve-dispatch-topology.js reads the
@@ -67,6 +68,7 @@ async function main(argv) {
       present: fresh.present,
       n_rows: rows.length,
       n_subscription_rows: rows.filter((r) => r.billing === 'subscription').length,
+      n_unpriced: cache && Array.isArray(cache.doc.unpriced) ? cache.doc.unpriced.length : 0,
       n_assumed_rows: rows.filter((r) => r.effective_basis === 'assumed').length,
       manifest: cache ? cache.manifest : null,
       freshness: fresh,

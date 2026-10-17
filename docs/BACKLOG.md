@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0209 -->
+<!-- next-id: BL-0212 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -951,3 +951,39 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: oc2 審查第 1 代 aa784ab5、第 2 代 95279be8／3b543bc0／b311744d（hetero-review-loop ledger）
 - **Pointer**: docs/backlog/opencode-v2-adaptor-follow-ups.md
 - **Context**: spike 報告與 references/multi-agent-portability.md 的 OpenCode 2.x adaptor 一節。
+
+### subagent-budget gaps: nested Agent dispatch is uncounted; the test clock override works in production
+- **Id**: BL-0209
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: self
+- **Problem**: 子代理再派子代理時，預算掛鉤找不到對應目錄，直接放行也不計數；測試用的時鐘覆寫變數在正式環境也生效。
+- **Impact**: 巢狀派工可繞過接棒與輪數上限；時鐘變數誤設會讓每小時上限失準。
+- **Trigger**: 出現巢狀派工的 session，或下一次動 hooks/subagent-budget.js
+- **Effort**: S
+- **Source**: budget 程式碼審查第 1 代 327a284d、d2081fa3
+- **Pointer**: docs/backlog/subagent-budget-nested-dispatch-and-clock-override.md
+
+### ui-lint per-line matching misses a bold attribute on its own JSX line
+- **Id**: BL-0210
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: self
+- **Problem**: 版面檢查規則逐行比對，粗體屬性若換行單獨寫，粗體白名單那條規則就抓不到，任何 mod 都一樣。
+- **Impact**: 粗體規範可被換行寫法無意間繞過，只能靠人眼抓。
+- **Trigger**: 下一次動 mods/live/ui-lint.test.js，或 owner 抓到粗體違規
+- **Effort**: S
+- **Source**: uilint 審查第 1 代 e3973182
+- **Pointer**: docs/backlog/ui-lint-bold-attribute-on-own-line.md
+
+### three suites already red on develop: p7-watcher-data (7), opencode-v2-plugin (3), implementation-campaign-state (3)
+- **Id**: BL-0211
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: self
+- **Problem**: 三組測試在 10/18 開工前就已經是紅的，共 13 個案例失敗，與當天的改動無關。
+- **Impact**: 紅的套件會掩蓋新的回歸，發版前跑全套一定紅。
+- **Trigger**: 發版前跑全套之前
+- **Effort**: M
+- **Source**: self，2026-10-18（oc2 與 budget 工線收尾時在 35f07d836 重跑確認）
+- **Pointer**: docs/backlog/three-suites-red-on-develop-2026-10-18.md

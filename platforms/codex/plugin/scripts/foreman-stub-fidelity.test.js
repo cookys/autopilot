@@ -8,6 +8,7 @@
 
 // Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
 process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'foreman-evidence-test-'));
+process.on('exit', () => { try { require('fs').rmSync(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR, { recursive: true, force: true }); } catch { /* already gone */ } });
 
 const assert = require('assert');
 const { createCampaignSession, campaignBudget, runForemanQualification, createRemoteForeman } = require('../evals/foreman-eval-runner');

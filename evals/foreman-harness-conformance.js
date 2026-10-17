@@ -576,6 +576,8 @@ function assetHashes() {
   };
 }
 
+// sandboxDigest is the sha256 of `bwrap --version`: the pin reproduces only on
+// a host with the same bwrap version.
 function harnessHash(hashes, sandboxDigest) {
   return sha256([
     hashes.generator,

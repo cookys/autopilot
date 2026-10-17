@@ -41,7 +41,6 @@ const {
 } = require('../evals/brain-eval-generator');
 const { gradeAdministration } = require('../evals/brain-eval-grader');
 const campaignState = require('../evals/brain-campaign-state');
-const { runForemanQualification } = require('../evals/foreman-eval-runner');
 const {
   CORPUS: VA_CORPUS,
   GENERATOR_VERSION: VA_GENERATOR_VERSION,
@@ -5154,6 +5153,7 @@ function runPlanDryRun(options) {
 function runQualification(options) {
   const role = options.role || 'reviewer';
   if (role === 'foreman' && options.plan) {
+    const { runForemanQualification } = require('../evals/foreman-eval-runner');
     const plan = runForemanQualification({ plan: true });
     process.stdout.write(`${JSON.stringify(plan, null, 1)}\n`);
     process.exit(0);
@@ -5168,6 +5168,7 @@ function runQualification(options) {
     return runConsultDiscussQualification(options);
   }
   if (role === 'foreman') {
+    const { runForemanQualification } = require('../evals/foreman-eval-runner');
     return runForemanQualification({
       ...options,
       test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
@@ -6030,7 +6031,6 @@ module.exports = {
   qualificationLabelTiers,
   qualificationReasonPrefixTiers,
   runBrainQualification,
-  runForemanQualification,
   runConsultDiscussQualification,
   recoverConsultProtocolReason,
   runConsultQualification,

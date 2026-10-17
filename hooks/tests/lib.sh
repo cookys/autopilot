@@ -109,6 +109,8 @@ unset FORCE_COLOR 2>/dev/null || true
 TEST_NAME="${TEST_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .test.sh)}"
 __TEST_ORIG_TMPDIR="${TMPDIR:-/tmp}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
+# The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
+export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # A host with a real /etc/claude-code/managed-settings.json would change what the autocompact resolver
 # reports; point it at a path that never exists (a test needing a managed file overrides this).
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"

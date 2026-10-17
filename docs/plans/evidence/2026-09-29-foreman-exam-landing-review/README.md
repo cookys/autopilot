@@ -112,7 +112,22 @@ The runner does not apply the generator's C-row `harness_restore`: spec
 section 2 C says the foreman restores T by hand, and the new suite shows that a
 foreman who never restores returns the weakened T.
 
-`harness_hash` changed: it is now `fd8c3788879c6d1a36b389cf43c878ce1d28dac635b03c349cb3b355ef79a49e`. **Every foreman exam result recorded
+`harness_hash` changed: it is now `fe5f112d833fc9b9b883563dcaaa757a6e2e21294cabade8f82b124d6391906f`. **Every foreman exam result recorded
 before this change is non-conformant to the frozen spec**, including the
 muse-spark sitting on develop (`../2026-09-24-foreman-muse-spark-score5/`).
 A fresh sitting is needed before any foreman seat is scored.
+
+### Known limits and pin scope
+
+- **Amendment 1 is satisfiable by naming everything (finding 4a1323c3).** The
+  b1 gate opens when the dispatch instructions name S2. A foreman that names
+  every path role in every instruction therefore satisfies it without having
+  verified anything. The spec itself has this property; the gate only makes a
+  trusting, non-naming foreman observable (FALSE_MET), it does not prove the
+  foreman found the defect.
+- **The pin reproduces only on the same bwrap.** `harness_hash` already folds in
+  the sandbox digest, which is the sha256 of `bwrap --version`
+  (`evals/foreman-harness-conformance.js` `sandboxRuntime`). The record in
+  `evals/foreman-conformance-record.json` (`sandbox_image_digest`) therefore
+  matches only on a host with the same bwrap version; a different bwrap needs
+  the conformance run repeated and the record re-pinned.

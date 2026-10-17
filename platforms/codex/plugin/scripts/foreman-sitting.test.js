@@ -5,6 +5,7 @@
 const fs = require('fs');
 const os = require('os');
 process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+process.on('exit', () => { try { require('fs').rmSync(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR, { recursive: true, force: true }); } catch { /* already gone */ } });
 
 // Phase 4 sitting. No network and no live model: an in-process scripted
 // foreman dispatches, commits, and returns done on A1, and returns blocked

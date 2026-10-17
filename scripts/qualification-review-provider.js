@@ -1945,7 +1945,7 @@ async function main() {
       fail('discuss prompt mode requires a case envelope JSON object with transcript and bundle');
     }
   }
-  let foremanCaseIntro = 'This is the campaign brief. Call dispatch, request_capability, or return_verdict. A tool result continues this same campaign. A restart starts a new session that sees only the brief, the worktree and .autopilot/.';
+  let foremanCaseIntro = 'This is the campaign brief. Call shell, dispatch, request_capability, or return_verdict. A tool result continues this same campaign. A restart starts a new session that sees only the brief, the worktree and .autopilot/.';
   if (promptMode === 'foreman') {
     let brief;
     try {
@@ -1958,7 +1958,7 @@ async function main() {
       fail('foreman prompt mode requires a brief JSON object with campaign_id');
     }
     if (brief.tool_result) {
-      foremanCaseIntro = 'Tool result for the same campaign. Continue with dispatch, request_capability, or return_verdict.';
+      foremanCaseIntro = 'Tool result for the same campaign. Continue with shell, dispatch, request_capability, or return_verdict.';
     } else if (Number(brief.session) > 1) {
       foremanCaseIntro = 'This is a new session for the same campaign. You can see only the brief, the worktree and .autopilot/.';
     }

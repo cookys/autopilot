@@ -129,9 +129,18 @@ function antiRerunDecision(priorRecords, engineId, seatConfigHash) {
 // Durable evidence log (spec §9 anti-rerun, line 768). One JSONL file, append-only,
 // keyed by (engine_id, seat_config_hash) on read. Tests override the directory with
 // AUTOPILOT_FOREMAN_EVIDENCE_DIR; the default is ~/.autopilot/foreman-exam.
+// Set once any call runs in test mode. A test-mode process must never touch
+// the real evidence log, so the default path is refused from then on.
+let testModeSeen = false;
+
 function foremanEvidenceDir() {
   const override = process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR;
   if (override) return path.resolve(override);
+  if (testModeSeen || process.env.AUTOPILOT_QUALIFY_SEED) {
+    const error = new Error('foreman evidence dir: test mode (or AUTOPILOT_QUALIFY_SEED) is set but AUTOPILOT_FOREMAN_EVIDENCE_DIR is not; refusing to use the real ~/.autopilot/foreman-exam');
+    error.code = 'evidence_dir_unsafe';
+    throw error;
+  }
   return path.join(os.homedir(), '.autopilot', 'foreman-exam');
 }
 
@@ -145,6 +154,8 @@ function foremanEngineId(options) {
 
 // Fail closed: an unparseable line could be a hidden failed sitting, so refuse to read on.
 function loadPriorRecords(engineId, seatConfigHash) {
+  // A test-mode sitting is inadmissible and is judged against no real history.
+  if (!process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR && (testModeSeen || process.env.AUTOPILOT_QUALIFY_SEED)) return [];
   const file = foremanEvidenceLogFile();
   if (!fs.existsSync(file)) return [];
   const rows = [];
@@ -356,6 +367,7 @@ function diskForemanPreconditionContext(options) {
 
 function runForemanQualification(options) {
   const input = options || {};
+  if (input.test_mode === true) testModeSeen = true;
   if (input.transport_abort || input.stop === 'transport_error' || input.stop === 'model_turn_timeout') {
     const abort = transportAbortRecord(input.transport_abort || {
       aborted_at_campaign_index: input.aborted_at_campaign_index,
@@ -540,6 +552,8 @@ function matchRow(campaign, role, agentClass, ordinal, sv, instructions) {
 // role lives under the single fence prefix. The out-of-fence directory is
 // nonce-derived and never begins with the fence prefix.
 function logicalPath(campaign, key) {
+  // The protected role lives at the brief's protected path, not in the fence (the fixture does the same).
+  if (key === 'T' && (campaign.brief.protected_set || []).length > 0) return campaign.brief.protected_set[0];
   if (key === 'X' && campaign.family === 'G') {
     return `xdir_${hmac16(campaign.campaign_seed, 'x_dir')}/${key}.js`;
   }
@@ -608,6 +622,10 @@ function createCampaignSession(campaign) {
   // Spec §3: a tree's state vector comes from the generator table, and the
   // stub also remembers the vectors of the trees it built itself, so a path
   // put back by hand is not mistaken for candidate-authored content.
+  // How a path role is spelled in what the foreman sees. A fixture overrides
+  // this with the physical path.
+  session.pathOf = (key) => logicalPath(campaign, key);
+
   session.vectorOf = (tree) => {
     const node = nodeFor(campaign, tree);
     if (node) return node.sv;
@@ -844,7 +862,7 @@ function createCampaignSession(campaign) {
       claimed_check_exit: status !== 'completed' || role !== 'implementer' ? null
         : (claim.claimed_check_exit !== undefined ? claim.claimed_check_exit : honestExit),
       changed_paths: status === 'completed' && role === 'implementer'
-        ? claimedPaths.map((key) => logicalPath(campaign, key)) : [],
+        ? claimedPaths.map((key) => session.pathOf(key)) : [],
       review: role === 'reviewer' ? {
         decision,
         reviewed_tree: envelope.head_sha,

@@ -4,8 +4,10 @@
 // Spec §7 says the seat prompt uses no family, variant, version, or fixture
 // term, and that scanPromptForLeaks must accept it. The text is installed
 // verbatim. The phase-1 projection classifies ordinary words in that text as
-// oracle vocabulary. This test stays red until the spec and the projection
-// agree. Do not edit the prompt or the generator to hide the hits.
+// oracle vocabulary. The spec and the projection now agree: the schema allowlist
+// (evals/foreman-eval-generator.js buildSchemaAllowlist) deliberately admits
+// good, changed, clean and worktree as ordinary wire prose. This test is green
+// and must stay green. Do not edit the prompt to hide hits.
 
 const crypto = require('crypto');
 const { FOREMAN_SYSTEM_PROMPT } = require('./qualification-review-provider');

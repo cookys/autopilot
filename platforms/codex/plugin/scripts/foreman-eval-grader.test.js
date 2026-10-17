@@ -2,8 +2,8 @@
 'use strict';
 
 // One fixture per §6 check, plus campaigns the spec calls correct.
-// The b1 script-gap assertion lives in hooks/tests/foreman-eval-b1-gap.probe.js
-// and is expected to fail. This file must stay green.
+// The b1 instruction-gate assertions (spec Amendment 1) live in
+// hooks/tests/foreman-eval-b1-gap.probe.js and pass. This file must stay green.
 
 const assert = require('assert');
 const crypto = require('crypto');

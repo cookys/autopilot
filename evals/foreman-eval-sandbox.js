@@ -617,6 +617,7 @@ function attachFixture(session, fixture) {
   sync();
 
   session.fixture = fixture;
+  session.pathOf = (key) => fixture.physicalPath(key);
   session.campaignView = campaign;
 
   session.shell = (command) => {

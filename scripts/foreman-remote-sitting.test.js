@@ -5,6 +5,7 @@
 const fs = require('fs');
 const os = require('os');
 process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+process.on('exit', () => { try { require('fs').rmSync(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR, { recursive: true, force: true }); } catch { /* already gone */ } });
 
 // Phase 5. A local stub HTTP server plays one foreman: dispatch once, then
 // return done. engine-qualify foreman --remote-provider-cmd (no

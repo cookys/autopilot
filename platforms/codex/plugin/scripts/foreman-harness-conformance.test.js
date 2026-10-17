@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
+// Never touch the real ~/.autopilot: the durable evidence log goes to a temp dir.
+const fs = require('fs');
+const os = require('os');
+process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR = fs.mkdtempSync(require('path').join(os.tmpdir(), 'foreman-evidence-test-'));
+process.on('exit', () => { try { require('fs').rmSync(process.env.AUTOPILOT_FOREMAN_EVIDENCE_DIR, { recursive: true, force: true }); } catch { /* already gone */ } });
+
 const assert = require('assert');
 const { spawnSync } = require('child_process');
 const path = require('path');
@@ -72,5 +78,18 @@ check(cli.status === 1, `engine-qualify foreman test mode records without a usag
 const body = JSON.parse(cli.stdout);
 check(body.test_mode === true && body.inadmissible === true, 'qualify output keeps test_mode inadmissible');
 check(body.pass === true && body.evidence && body.evidence.trials.length === 2, 'qualify records the puppet campaigns');
+
+// Runner guard: a test-mode process with no evidence-dir override must refuse
+// the real default path instead of writing to it.
+const guardEnv = { ...process.env, AUTOPILOT_QUALIFY_SEED: 'guard-probe' };
+delete guardEnv.AUTOPILOT_FOREMAN_EVIDENCE_DIR;
+const guard = spawnSync(process.execPath, ['-e', `
+  const runner = require(process.cwd() + '/evals/foreman-eval-runner');
+  try { runner.appendEvidenceRow({ type: 'probe' }); console.log('WROTE'); }
+  catch (error) { console.log(error.code); }
+  console.log(JSON.stringify(runner.loadPriorRecords('e', 'h')));
+`], { cwd: path.resolve(__dirname, '..'), env: guardEnv, encoding: 'utf8' });
+check(guard.stdout.split('\n')[0] === 'evidence_dir_unsafe', `test mode without an override refuses the real evidence dir (${guard.stdout} ${guard.stderr})`);
+check(guard.stdout.split('\n')[1] === '[]', 'test mode reads no real prior records');
 
 console.log(`${assertions} assertions passed`);

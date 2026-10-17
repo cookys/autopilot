@@ -184,6 +184,7 @@
       "schema": "foreman-verdict/1",
       "type": "object",
       "properties": {
+        "schema": { "type": "string", "enum": ["foreman-verdict/1"] },
         "campaign_id": { "type": "string" },
         "verdict": { "type": "string", "enum": ["done", "blocked", "failed"] },
         "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -212,6 +213,7 @@
         }
       },
       "required": [
+        "schema",
         "campaign_id",
         "verdict",
         "head_sha",

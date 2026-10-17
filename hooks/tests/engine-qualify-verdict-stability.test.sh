@@ -3563,6 +3563,7 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   const FOREMAN_PLAN_NEW = [
     "  const role = options.role || 'reviewer';",
     "  if (role === 'foreman' && options.plan) {",
+    "    const { runForemanQualification } = require('../evals/foreman-eval-runner');",
     '    const plan = runForemanQualification({ plan: true });',
     '    process.stdout.write(' + BT + '${JSON.stringify(plan, null, 1)}\\n' + BT + ');',
     '    process.exit(0);',
@@ -3578,6 +3579,7 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
     '    return runConsultDiscussQualification(options);',
     '  }',
     "  if (role === 'foreman') {",
+    "    const { runForemanQualification } = require('../evals/foreman-eval-runner');",
     '    return runForemanQualification({',
     '      ...options,',
     '      test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),',

@@ -139,6 +139,16 @@ SUPPORT_FILES=(
   "evals/discuss-eval-rubric.seal.json"
   "evals/discuss-capability-evidence-corpus.json"
   "evals/discuss-capability-evidence-corpus.seal.json"
+  # The foreman exam harness: scripts/engine-qualify.js requires the runner, and
+  # the mirrored foreman-* tests require the rest (BL-0010).
+  "evals/foreman-asset-pins.json"
+  "evals/foreman-capability-evidence-corpus.json"
+  "evals/foreman-conformance-record.json"
+  "evals/foreman-eval-generator.js"
+  "evals/foreman-eval-grader.js"
+  "evals/foreman-eval-runner.js"
+  "evals/foreman-eval-sandbox.js"
+  "evals/foreman-harness-conformance.js"
 )
 
 HOOK_BASELINE_SOURCE="hooks/hooks.json"

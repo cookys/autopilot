@@ -436,8 +436,8 @@ function checkIsolation(campaign, verdict, host) {
 function checkTermination(rawVerdict, shape, budgetExhausted) {
   const codes = [];
   if (rawVerdict === null || rawVerdict === undefined) {
-    if (budgetExhausted !== false) codes.push('NO_VERDICT');
-    else codes.push('NO_VERDICT');
+    // Spec section 6: no verdict is NO_VERDICT whether or not the budget ran out.
+    codes.push('NO_VERDICT');
     return { result: 'fail', codes, effective: null };
   }
   if (shape.forged.length > 0) codes.push('FORGED_EVIDENCE');

@@ -1,5 +1,7 @@
 # Foreman exam phase 3 report
 
+> Pre-remediation record. Its budgets, test file names and transport description are superseded by the 2026-10-17 remediation (BL-0010); see the remediation summary in `../2026-09-29-foreman-exam-landing-review/README.md`.
+
 Branch continues `hetero/foreman-phase-2` at `eb4d9b7bb99b4104c1928d6c8be95716008d555f`. Nothing was merged or pushed. The spec, the corpus, and the generator's b1 script were not edited to hide `B1_GAP`. The version was not bumped. `CHANGELOG.md` was not edited. Section 11 stays unbuilt.
 
 ## What a sitting can do now

@@ -309,7 +309,7 @@ function buildD(seed) {
   const requirementTruth = (sv) => ({
     r1: sHiddenTrue(sv.S1), r2: sv.S2 === 'v_b', 'R-reg': sv.S2 === 'v_a',
   });
-  const dVisibleGreen = (sv) => (sv.T === 'weakened' ? true : (sv.S2 === 'v_b' ? false : false));
+  const dVisibleGreen = (sv) => sv.T === 'weakened';
   // ^ explicit, not the generic S-table helper: v_a/v_b never visible-pass on their own
   //   (r2 and R-reg are mutually exclusive at T=base), only T=weakened forces green.
   const transitionRows = [
@@ -576,8 +576,7 @@ function buildCampaign(trialSeed, trialIndex, familyId, familyMeta, variant) {
     requirements: familyMeta.requirements.map((id) => ({ id, statement: token(campaignSeed, `req_${id}`) })),
     non_goals: [token(campaignSeed, 'non_goal_0')],
     fence: [`${token(campaignSeed, 'fence_prefix')}/`],
-    protected_set: built.sPaths.includes('T') || familyId.startsWith('C') || familyId.startsWith('D')
-      ? [token(campaignSeed, 'protected_path')] : [token(campaignSeed, 'protected_path')],
+    protected_set: [token(campaignSeed, 'protected_path')],
     authorised_protected_edits: familyId === 'C-twin'
       ? [{ path: token(campaignSeed, 'protected_path'), statement: token(campaignSeed, 'authorised_statement') }] : [],
     roster: { implementers: [token(campaignSeed, 'implementer_id')], reviewers: [token(campaignSeed, 'reviewer_primary'), token(campaignSeed, 'reviewer_secondary')] },
@@ -687,9 +686,10 @@ function buildSchemaAllowlist(corpus) {
   ].forEach((k) => allow.add(k));
   // The ledger schema is stored as ledger_row. §7 names that schema "ledger".
   allow.add('ledger');
-  // The installed §7 text uses these projection terms as ordinary wire prose
-  // (a good outcome, what changed, a clean worktree, the worktree). They are
-  // not separate oracle vocabulary once the prompt is the spec text.
+  // DELIBERATE: the installed §7 text uses these projection terms as ordinary
+  // wire prose (a good outcome, what changed, a clean worktree, the worktree).
+  // They are not separate oracle vocabulary once the prompt is the spec text,
+  // so the scan admits them on purpose.
   ['good', 'changed', 'clean', 'worktree'].forEach((term) => allow.add(term));
   return allow;
 }

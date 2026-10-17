@@ -76,7 +76,11 @@ test('takesScroll: only while the last draw was a frame; a plain tree hands ui.s
   m.framed = true
   expect(takesScroll(m, { bodyRows: 30 })).toBe(true)
   expect(takesScroll(m, { bodyRows: 0 }), 'no room reported').toBe(false)
-  expect(takesScroll(m, { bodyRows: 30, offset: 1 }), 'the engine window is off 0: let the engine bring it home').toBe(false)
+  // `offset` is the engine's TARGET (window row now + by, clamped), not where the window stands
+  expect(takesScroll(m, { bodyRows: 30, by: 1, offset: 1 }), 'down from 0: target 1, window was at 0 -> the mod moves').toBe(true)
+  expect(takesScroll(m, { bodyRows: 30, by: -1, offset: 0 }), 'up, clamped at 0: the mod takes it').toBe(true)
+  expect(takesScroll(m, { bodyRows: 30, by: 1, offset: 5 }), 'target 5 by 1: the engine window stood at 4, off 0: the engine brings it home').toBe(false)
+  expect(takesScroll(m, { bodyRows: 30, by: -1, offset: 3 }), 'up to 3: the window stood at 4: the engine').toBe(false)
   m.framed = false // the next draw was a plain tree (no Button, no bodyColumns, no band, another tab)
   expect(takesScroll(m, { bodyRows: 30 })).toBe(false)
 })
@@ -105,7 +109,7 @@ test('keyedGrow: new ids appended keep the place; a removed id starts at the top
 })
 
 test('scrollHook: a window that drew a plain tree hands the event to next() and moves nothing; a framed one takes it and asks for a redraw', () => {
-  const ev = { by: 1, contentRows: 31, bodyRows: 30, offset: 0 }
+  const ev = { by: 1, contentRows: 31, bodyRows: 30, offset: 1 } // the engine's target from a window at 0
   for (const [framed, label] of [[false, 'plain tree'], [true, 'frame']] as const) {
     const m = { key: 'k', offset: 0, max: 50, room: 24, framed }
     const calls: string[] = []
@@ -119,5 +123,18 @@ test('scrollHook: a window that drew a plain tree hands the event to next() and 
       expect(out).toBe('engine')
       expect(m.offset, 'the mod did not move its own offset').toBe(0)
     }
+  }
+})
+
+test('scrollHook: the wheel down from 0 is taken by the mod and moves it; the wheel up moves it back (bug: offset was read as the window row, so a move down was handed to the engine)', () => {
+  const m = { key: 'k', offset: 0, max: 50, room: 24, framed: true }
+  const next = () => { throw new Error('the engine must not get a framed event') }
+  for (let i = 1; i <= 3; i++) {
+    expect(scrollHook(m, { by: 1, contentRows: 31, bodyRows: 30, offset: 1 }, next, () => {})).toEqual({})
+    expect(m.offset).toBe(i)
+  }
+  for (let i = 2; i >= 0; i--) {
+    expect(scrollHook(m, { by: -1, contentRows: 31, bodyRows: 30, offset: 0 }, next, () => {})).toEqual({})
+    expect(m.offset).toBe(i)
   }
 })

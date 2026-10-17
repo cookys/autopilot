@@ -3,6 +3,7 @@
 ## Unreleased
 
 - BL-0064 and BL-0061 closed (owner card d-233d4531): the context-budget T3 deny tier was premised on stopping for `/clear`, which autocompact replaced (2026-10-12), and its calibration trigger never fired; the CLI/engine mismatch BL-0061 described was fixed by bc65872aa and 330081b62, and widening the session-marker rule to non-Mission campaigns was already declined. BL-0070 stays open with a revised trigger (owner card d-759c89f1).
+- Fix the live pane's 待決 tab and the `/show` viewer ignoring the mouse wheel and keys downward: `takesScroll` read `ui.scroll`'s `offset` as where the engine window stands, but it is the target (row now plus `by`), so every move down from 0 was handed back to the engine and the mod's own window never moved.
 
 - BL-0071 closed (owner card d-b0a0c856): a 30-day re-measure of 957 autopilot subagents found Bash output at 55% of tool output, led by cat/sed file reads (38%) that compaction would only cut; rtk-addressable test output plus git diff is about 12% (11% in June) and the harness already caps one output at about 30k characters.
 

@@ -314,6 +314,25 @@ and STOPS on any 🔴/🟠; refuting a finding is depth-0's job, done by re-deri
 Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`, `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`,
 `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/`, `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
 
+**Brief lines for the subagent budget gate (`hooks/subagent-budget.js`, default-on).** Every Agent dispatch in this recipe is counted per lane
+from the subagent transcripts, so the brief's first five lines carry the lane key and the role: `Lane: <slug>` (letters, digits, `.`, `_`, `-`,
+up to 64; one slug per unit, reused by every relay and repair of that unit) and, for a reviewer, `Role: reviewer`. Without a valid `Lane:` line
+the key falls back to the Agent `description` (first line, lower-cased), which drifts between relays, so write the line. Defaults: the 5th
+non-reviewer dispatch of a lane, a lane already past 300 subagent turns, or 400 subagent turns by the whole session in the last 60 minutes is
+denied once and an owner panel card is opened. To continue on purpose, add `Budget-Ack: <reason, at least 8 characters>` within the brief's
+first ten lines; the dispatch passes and a `budget-ack-<lane>-<n>` row lands in the decision ledger. Do not ack to get around a runaway lane:
+the ceiling is the signal that the unit should be re-scoped, not re-run. Knobs: `subagent_budget.*` in `~/.autopilot/config.json`,
+`AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off`.
+
+## Measurement and deploy-acceptance units
+
+A unit whose job is to run a measurement or to accept a deploy does not need a judging model in the loop. Run it as a fixed script: a
+systemd unit or one shell entry point runs the whole measurement and writes a result table. A `test-runner`-role dispatch
+(`scripts/resolve-dispatch.sh --role test-runner`, haiku) reads only that table and reports rc; depth-0 judges the table. Judgement steps that
+need eyes (screenshots, A/B comparisons) go to a sonnet dispatch with the turn ceiling stated in the brief (`Lane:` line plus a sentence such
+as "stop after 60 turns and report"), so the lane gate and the brief agree. Never let a sonnet subagent re-run a long measurement itself:
+that is the shape (one lane re-dispatched about ten times) that the budget gate exists to stop.
+
 ## Degradation
 
 `--solo` → fall back to the `/l3` inline engine. This is also the automatic

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0204: opencode is now a packet-tier blind-review seat (`reviewSeatTier` in `final-panel-qualification.js`, `dispatch-review.sh`, `resolve-review-loop.sh`), so a review-only campaign no longer refuses a qc_panel that seats opencode (`final_panel_seat_blind_incompatible`); its deny-all refuses tools before they run (live adversarial run, 31 assertions, positive controls seen executing) and the rail still refuses to spawn when the deny-all assert fails.
+
 - BL-0024 (read side): the implementer ladder now orders same-effort seats by unit price from a local cache of model-dyno's `model-prices.json` (`scripts/qualification-prices.js` `fetch` / `status` / `price`, exact `(engine, runner, model)` match, unknown or `assumed` last, no cache means the unchanged order); the cache is refreshed by a detached, throttled SessionStart call (`AUTOPILOT_PRICES_FETCH=0` / `prices_fetch: false` turns it off). New suite `hooks/tests/qualification-prices.test.sh`.
 
 - Qualification exams: a tool attempt by a seat whose CLI prompt carried the fixed tools-forbidden notice is now scored as that case wrong (`tool_attempt_forbidden`) and the exam continues, instead of aborting the whole sitting as `transport_fail` (owner ruling d-80d327c9); a tool event without the notice and real connection errors keep `transport_fail`. Covers opencode, kimi and agy proven tool calls; brain and VA raw rows carry the reason. Muse Spark 1.3 reviewer-v6 attempt 1 stays a transport failure (its prompt had no prohibition).

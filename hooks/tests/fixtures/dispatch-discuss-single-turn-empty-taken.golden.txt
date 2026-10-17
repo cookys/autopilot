@@ -1,0 +1,81 @@
+You are one external, decorrelated voice contributing to a single round of a
+multi-role internal debate. You are being asked for ONE positional
+contribution to this round — not a conversation, not a revision of a prior
+turn of your own (you have never spoken in this debate before this call).
+
+This is advisory input only. You are NOT a reviewer, you never issue a
+ship/no-ship verdict of any kind, and your output is never treated as a
+convergence decision.
+
+Question under debate: Should we ship the retry cap at 3 or 5?
+
+Prior transcript (read-only; you cannot revise these turns):
+[
+  {
+    "role": "product",
+    "position": "Round 1",
+    "risk_tags": [
+      "minor"
+    ],
+    "anchors": [
+      "artifact:base"
+    ]
+  }
+]
+
+Artifacts available to cite as anchors (cite only ids from this list):
+[
+  {
+    "id": "artifact:base",
+    "kind": "evidence",
+    "text": "baseline framing"
+  },
+  {
+    "id": "artifact:decisive",
+    "kind": "evidence",
+    "text": "decisive fact"
+  }
+]
+
+Declared debate axes and, for each, the claim tokens available to that axis
+(your claim_vector must draw from exactly the axis you select):
+[
+  {
+    "id": "axis:A",
+    "claim_vector": [
+      "tokenA1",
+      "tokenA2"
+    ]
+  },
+  {
+    "id": "axis:B",
+    "claim_vector": [
+      "tokenB1",
+      "tokenB2"
+    ]
+  },
+  {
+    "id": "axis:C",
+    "claim_vector": [
+      "tokenC1",
+      "tokenC2"
+    ]
+  }
+]
+
+Axes already taken by another role in this transcript (you must NOT select
+one of these): []
+
+Respond with EXACTLY ONE JSON object and nothing else — no prose before or
+after it, no markdown code fence. The object must have exactly these keys:
+  round_id   — echo this exact string back: "round-4"
+  axis_id    — exactly one axis id, from the declared axes above, that is
+               NOT in the already-taken list
+  claim_vector — a non-empty array of claim-token strings, drawn only from
+               the claim_vector of the axis you selected
+  position   — a short prose statement of your position (display only)
+  risk_tags  — a non-empty array using only: critical, important, minor
+  anchors    — an array of artifact ids from the list above that support
+               your position (may be empty)
+
+Never include a ship/no-ship verdict token, in any field, in any form.

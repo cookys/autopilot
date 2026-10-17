@@ -305,8 +305,8 @@ function buildPromptFile(bundle, seatAxis) {
     'You are one external, decorrelated voice contributing to a single round of a',
     'multi-role internal debate. You are being asked for ONE positional',
     ...(secondRound
-      ? ['contribution to this round — not a conversation. You have spoken once before in this',
-        'debate (the "this-seat" turn in the transcript).']
+      ? ['contribution to this round — not a conversation.',
+        'You have spoken once before in this debate (the "this-seat" turn in the transcript).']
       : ['contribution to this round — not a conversation, not a revision of a prior',
         'turn of your own (you have never spoken in this debate before this call).']),
     '',

@@ -402,5 +402,17 @@ assert_contains "$P1" "never spoken in this debate" "first-turn prompt keeps the
 # (golden generated from that commit's buildPromptFile; not read from develop/HEAD).
 GOLDEN="$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-single-turn-prompt.golden.txt"
 if cmp -s "$STUB_PROMPT_COPY" "$GOLDEN"; then assert_eq "same" "same" "single-turn prompt is byte-identical to the 16dd391e baseline"; else assert_eq "same" "differs" "single-turn prompt is byte-identical to the 16dd391e baseline"; fi
+# Same pin with an empty taken_axes (16dd391e baseline) and for the second-turn prompt (32716fef4,
+# the version the ON/OFF eval ran). Goldens come from those commits' functions, not from develop/HEAD.
+golden_cmp() { # <bundle> <golden> <label>
+  export STUB_RAW_CONTENT='{"round_id":"x","axis_id":"axis:A","claim_vector":["tokenA1"],"position":"x","risk_tags":["minor"],"anchors":[]}'
+  rm -f "$STUB_PROMPT_COPY"
+  AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$1" --dispatch-author-bin "$PROMPT_STUB" >/dev/null 2>&1
+  if cmp -s "$STUB_PROMPT_COPY" "$2"; then assert_eq "same" "same" "$3"; else assert_eq "same" "differs" "$3"; fi
+}
+BUNDLE_EMPTY="$TEST_TMP/bundle-empty-taken.json"
+node -e 'const fs=require("fs");const b=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));b.taken_axes=[];fs.writeFileSync(process.argv[2],JSON.stringify(b));' "$BUNDLE" "$BUNDLE_EMPTY"
+golden_cmp "$BUNDLE_EMPTY" "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-single-turn-empty-taken.golden.txt" "single-turn prompt with empty taken_axes is byte-identical to the 16dd391e baseline"
+golden_cmp "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-second-turn.bundle.json" "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-second-turn-prompt.golden.txt" "second-turn prompt is byte-identical to the 32716fef4 version the eval ran"
 
 finalize_test

@@ -74,6 +74,8 @@ eq(JSON.parse(oc.CONFIG_JSON), { permission: { '*': 'deny' }, agent: { locked: {
 {
   const g = good(); g.env.OPENCODE_CONFIG = '/x/opencode.json';
   ok(/unset/.test(oc.assertLocked(g)), 'OPENCODE_CONFIG in env refused');
+  eq(oc.lockedEnv({ OPENCODE_PERMISSION: '{"*":"allow"}', K: 'v' }).OPENCODE_PERMISSION, undefined, 'lockedEnv drops OPENCODE_PERMISSION');
+  eq(oc.lockedEnv({ OPENCODE_CLI_CONFIG_CONTENT: '{}' }).OPENCODE_CLI_CONFIG_CONTENT, undefined, 'lockedEnv drops OPENCODE_CLI_CONFIG_CONTENT');
   eq(oc.lockedEnv({ OPENCODE_CONFIG: 'a', OPENCODE_CONFIG_DIR: 'b', K: 'v' }).OPENCODE_CONFIG, undefined, 'lockedEnv drops OPENCODE_CONFIG');
   eq(oc.lockedEnv({ OPENCODE_CONFIG_DIR: 'b' }).OPENCODE_CONFIG_DIR, undefined, 'lockedEnv drops OPENCODE_CONFIG_DIR');
 }
@@ -144,6 +146,7 @@ function runProvider(extraEnv) {
       // hostile ambient values must be overridden, not inherited
       OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'allow' }),
       OPENCODE_CONFIG: '/ambient/opencode.json', OPENCODE_CONFIG_DIR: '/ambient/dir',
+      OPENCODE_PERMISSION: '{"*":"allow"}', OPENCODE_CLI_CONFIG_CONTENT: '{"permission":"allow"}',
       ...extraEnv,
     },
   });
@@ -170,6 +173,8 @@ function runProvider(extraEnv) {
   ok(captured.stdin.includes('precision code reviewer'), 'prompt travels on stdin');
   eq(captured.env.OPENCODE_CONFIG, undefined, 'ambient OPENCODE_CONFIG removed');
   eq(captured.env.OPENCODE_CONFIG_DIR, undefined, 'ambient OPENCODE_CONFIG_DIR removed');
+  eq(captured.env.OPENCODE_PERMISSION, undefined, 'provider v1: ambient OPENCODE_PERMISSION removed');
+  eq(captured.env.OPENCODE_CLI_CONFIG_CONTENT, undefined, 'provider v1: ambient OPENCODE_CLI_CONFIG_CONTENT removed');
   ok(captured.env.HOME !== tmp && captured.env.HOME.startsWith(os.tmpdir()), 'seat runs under a temp HOME, not the ambient one');
   eq(captured.configDirEntries, [], 'XDG_CONFIG_HOME is empty (no ~/.config/opencode agents/MCP/plugins)');
   eq(captured.auth, 'SECRET-AUTH', 'only auth.json was carried over');
@@ -339,6 +344,7 @@ const OCJS = path.join(__dirname, 'opencode-containment.js');
   refuse('PWD points at another directory (the caller\'s cwd)', (g) => { g.env.PWD = process.cwd(); }, /PWD is not the empty cwd/);
   refuse('PWD unset', (g) => { delete g.env.PWD; }, /PWD is not the empty cwd/);
   refuse('OPENCODE_CONFIG set', (g) => { g.env.OPENCODE_CONFIG = '/x'; }, /unset/);
+  refuse('OPENCODE_PERMISSION set', (g) => { g.env.OPENCODE_PERMISSION = '{"*":"allow"}'; }, /OPENCODE_PERMISSION must be unset/);
   refuse('cwd inside a git worktree', (g) => { const r = fs.mkdtempSync(path.join(tmp, 'wt-')); fs.mkdirSync(path.join(r, '.git')); g.cwd = path.join(r, 'sub'); fs.mkdirSync(g.cwd); g.env.PWD = g.cwd; }, /git worktree/);
   refuse('HOME is the real home', (g) => { g.realHome = home; }, /real home/);
   refuse('HOME unset', (g) => { delete g.env.HOME; }, /HOME is not set/);
@@ -397,12 +403,14 @@ const OCJS = path.join(__dirname, 'opencode-containment.js');
   eq(JSON.parse(captured.env.OPENCODE_CONFIG_CONTENT), oc.CONFIG_V2, 'provider v2: canonical v2 env (ambient allow overridden)');
   eq(captured.env.OPENCODE_DISABLE_PROJECT_CONFIG, '1', 'provider v2: project config disabled');
   eq(captured.env.OPENCODE_CONFIG, undefined, 'provider v2: ambient OPENCODE_CONFIG removed');
+  eq(captured.env.OPENCODE_PERMISSION, undefined, 'provider v2: ambient OPENCODE_PERMISSION removed');
+  eq(captured.env.OPENCODE_CLI_CONFIG_CONTENT, undefined, 'provider v2: ambient OPENCODE_CLI_CONFIG_CONTENT removed');
   eq(captured.cwdEntries, [], 'provider v2: cwd empty');
   eq(captured.env.PWD, captured.cwd, 'provider v2: PWD is the empty cwd (v2 resolves its project dir from $PWD)');
   ok(captured.env.HOME !== tmp && captured.env.HOME.startsWith(os.tmpdir()), 'provider v2: clean temp HOME');
   eq(captured.imported, '{"credential":"SECRET-V2-CRED"}', 'provider v2: credential imported into the clean home');
   ok(!fs.existsSync(captured.cwd), 'provider v2: scratch root removed');
-  const impInfo = JSON.parse(fs.readFileSync(`${captured.argv.length ? '' : ''}${lastCapture}.import`, 'utf8'));
+  const impInfo = JSON.parse(fs.readFileSync(`${lastCapture}.import`, 'utf8'));
   eq(impInfo.pwd, captured.env.PWD, 'provider v2: auth import ran with PWD = the empty work dir, not the caller repo');
   ok(impInfo.pwd !== process.cwd(), 'provider v2: auth import PWD is not the dispatcher cwd');
 }

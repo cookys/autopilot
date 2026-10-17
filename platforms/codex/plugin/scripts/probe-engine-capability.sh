@@ -296,7 +296,8 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # skip-permissions flag (a text-only "reply OK" needs no tools; headless -p has no TTY so
   # a denied tool auto-denies). Only the exit code matters here (quota detection). (gpt-5.5 R6.)
   PROBE_CWD="$(mktemp -d)"
-  PROBE_ROOT="$PROBE_CWD.oc"; mkdir -p "$PROBE_ROOT"   # opencode plan files + v2 seat root, a sibling OUTSIDE PROBE_CWD (v1 `--dir` stays an empty dir)
+  # opencode plan files + v2 seat root: its own scratch dir, never derived from PROBE_CWD (v1 `--dir` stays an empty dir)
+  PROBE_ROOT="$(mktemp -d)"
   # Clean up scratch state even if the probed runner times out or the script is
   # interrupted (SIGINT/SIGTERM) — otherwise PROBE_CWD/PROBE_ERR_FILE leak, accumulating
   # scratch dirs and possibly-sensitive runner output (gpt-5.5 R7). The explicit rm's on

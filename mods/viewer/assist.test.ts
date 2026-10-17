@@ -308,13 +308,21 @@ test('toggle while a call runs: the result still lands and running clears; cance
   } as never
   const t = makeVT('zh-TW')
   const src = { text: 'abc\n', path: 'a.txt', title: 'a.txt', isDiff: false }
-  const p1 = runAi($, 'summary', null, src, 'zh-TW', t)
+  // a first answer so that `shown` holds something (toggleAi does nothing while it is null)
+  const p0 = runAi($, 'summary', null, src, 'zh-TW', t)
   await new Promise(r => setTimeout(r, 20))
+  release({ isAnswered: true, text: 'first', usage: USAGE })
+  await p0
+  expect(aiState().shown?.text).toBe('first')
+  const p1 = runAi($, 'ask', 'q1?', src, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  const visibleBefore = aiState().visible
   toggleAi($)
+  expect(aiState().visible).toBe(!visibleBefore)
   release({ isAnswered: true, text: 'done', usage: USAGE })
   await p1
   expect(aiState().running).toBeNull()
-  expect(aiState().shown?.text).toBe('done')
+  expect(aiState().shown?.text, 'the second result is drawn although the window was toggled while it ran').toBe('done')
   // cancel, then toggle, then the next press works
   clearSaved()
   const p2 = runAi($, 'ask', 'q?', src, 'zh-TW', t)
@@ -331,4 +339,21 @@ test('toggle while a call runs: the result still lands and running clears; cance
   release({ isAnswered: true, text: 'again', usage: USAGE })
   await p3
   expect(aiState().shown?.text).toBe('again')
+})
+
+test('a call that rejects after its signal was aborted shows cancelled, not a failure', async (_$, _on) => {
+  resetAssist()
+  clearSaved()
+  const $ = {
+    ui: { invalidate: () => {}, toast: () => {} },
+    model: { complete: (_r: unknown, o?: { signal?: AbortSignal }) => new Promise((_res, rej) => { o?.signal?.addEventListener('abort', () => rej(new Error('aborted by signal'))) }) },
+  } as never
+  const t = makeVT('zh-TW')
+  const p = runAi($, 'summary', null, { text: 'abc\n', path: 'a.txt', title: 'a.txt', isDiff: false }, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  cancelAi($)
+  await p
+  expect(aiState().cancelled).toBe(true)
+  expect(aiState().error).toBeNull()
+  expect(aiState().running).toBeNull()
 })

@@ -60,7 +60,7 @@ export type LiveDecision = {
 
 // `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
 // `fact` are required: a line no component made does not type-check.
-export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number; field?: { key: string; placeholder: string; value: string } }
+export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number; field?: { key: string; placeholder: string; value: string }; bar?: true }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // P4: the sections are DATA, the tab builders turn them into lines (design plan §7). attention = a permission / question the session waits on; the notes say why a
 // source has nothing to show (its writer is not wired); the rest is the source view as read.

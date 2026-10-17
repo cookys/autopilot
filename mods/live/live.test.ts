@@ -310,19 +310,32 @@ async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string
   const tree = (await pane.drawn()) as Node
   const link = await pane.find({ type: 'Link' })
   await pane.unmount()
-  return { texts: rowsOf(tree), head: headOf(tree), href: link?.props.href as string | undefined, tree }
+  return { texts: rowsOf(tree), head: headOf(tree), href: link?.props.href as string | undefined, tree: flat(tree) }
 }
 
 // the lines of a pane: every child of the pane's column Box after the tab strip (child 0), one string per line. P4: pane.tsx draws the global header (verdict
 // line, the metrics when narrow, one blank) on every tab, so `rowsOf` is the tab's own body (its first row is the first section; a 'b' + index key counts from
 // there) and `headOf` is the header. A pane with no snapshot has no header (no blank row), so its body starts at 0.
-const allRows = (tree: Node): string[] => ((tree.children || []) as Node[]).slice(1).map(k => textOf(k))
+// A tab drawn in the scrolling frame (design plan §12.10: today only 待決) nests its rows: frame > fixed (the strip and header rows, a content Box holding the rows and the scrollbar, the
+// rule, the action strip) + a spare row. `flat` gives such a tree the shape every tab had before the frame: the strip, the header, the content rows, then the action strip (the rule and
+// the spare row are chrome, not rows), so every row assertion below reads the same list as before. A tree that is not framed passes through.
+const flat = (tree: Node): Node => {
+  const fixed = ((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')
+  if (fixed === undefined) return tree // not framed
+  const kids = (fixed.children || []) as Node[]
+  const content = kids.find(k => k.props?.key === 'content') as Node
+  const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
+  const at = kids.indexOf(content)
+  const rest = kids.slice(at + 1).filter((k, i) => !(i === 0 && /^─+$/.test(textOf(k)))) // the rule is the first child under the content window
+  return { ...tree, children: [...kids.slice(0, at), ...((rows.children || []) as Node[]), ...rest] }
+}
+const allRows = (tree: Node): string[] => ((flat(tree).children || []) as Node[]).slice(1).map(k => textOf(k))
 const headEnd = (rows: string[]): number => rows.findIndex(r => r.trim() === '') + 1 // the blank is drawn as a one-cell Text (an empty Text takes no row)
 const rowsOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(headEnd(r)) }
 const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(0, headEnd(r)) }
 // the tab strip: one entry per tab, `[label, badge]` as drawn
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
-const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
+const stripOf = (tree: Node): string => fullText(((flat(tree).children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
 
 // the drawn Text of one tab's name in the strip (its colour and weight say whether the tab needs the owner)
 const tabName = (tree: Node, id: string): Drawn => walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id && n.props?.key !== 'next') ? (walkAll(walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id) as Drawn).find(n => n.type === 'Text') as Drawn) : ({} as Drawn)
@@ -5214,6 +5227,53 @@ for (const surface of SURFACES) {
     expect(w.toasts[0]).toMatch(/design\.md/)
   })
 
+  // ---- the scrolling window (design plan §12.10): cards scroll, the send row is the fixed action strip under a rule, the thumb sits in a right-hand column ----
+  const MANY = Array.from({ length: 8 }, (_, i) => ({ id: 'd-0000000' + (i + 1), question: '第 ' + (i + 1) + ' 個問題', background: '背景 ' + (i + 1), options: [{ label: '開', description: '' }, { label: '關', description: '' }] }))
+  const framed = async ($: any, bodyRows: number) => {
+    const first = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, scroll: { offset: 0, bodyRows } }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await first.press({ key: 'decide' })
+    await first.unmount()
+    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, scroll: { offset: 0, bodyRows } }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const tree = (await pane.drawn()) as Node
+    await pane.unmount()
+    return tree
+  }
+  const fixedOf = (tree: Node): Node[] => (((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')?.children || []) as Node[]
+  test('SCROLL decide: the tree is the pane height plus a spare row; the send row is the LAST child of the fixed box, under a rule, outside the scrolling rows (' + surface + ')', async ($, on) => {
+    decideWorld(on, MANY)
+    await start($, surface)
+    const tree = await framed($, 20)
+    const kids = fixedOf(tree)
+    expect(kids.length, 'a frame was drawn').toBeGreaterThan(0)
+    const last = kids[kids.length - 1]
+    expect(textOf(last)).toContain('送出')
+    expect(textOf(kids[kids.length - 2]), 'the rule is just above the strip').toMatch(/^─+$/)
+    const content = kids.find(k => k.props?.key === 'content') as Node
+    const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
+    expect(textOf(rows), 'the send row is not among the scrolling rows').not.toContain('送出')
+    expect(((tree.children || []) as Node[]).length, 'a spare row under the frame, so the tree is taller than the window and the engine raises ui.scroll').toBe(2)
+  })
+  test('SCROLL decide: more cards than room draws the scrollbar with the thumb at the top; few cards draw none (' + surface + ')', async ($, on) => {
+    decideWorld(on, MANY)
+    await start($, surface)
+    const bar = (tree: Node): Node | undefined => (((fixedOf(tree).find(k => k.props?.key === 'content') as Node).children || []) as Node[]).find(k => k.props?.key === 'scrollbar')
+    const small = bar(await framed($, 20))
+    expect(small, 'scrollbar present').toBeDefined()
+    const cells = ((small as Node).children || []) as Node[]
+    expect(textOf(cells[0]), 'thumb at the top').toBe('█')
+    expect(textOf(cells[cells.length - 1]), 'track at the bottom').toBe('│')
+    expect(cells[0].props?.color, 'thumb is the here colour').toBe('claude')
+    expect(cells[cells.length - 1].props?.color, 'track is the structure colour').toBe('subtle')
+    expect(bar(await framed($, 90)), 'everything fits: no scrollbar').toBeUndefined()
+  })
+  test('SCROLL decide: another tab is never framed (it keeps the engine scroll) (' + surface + ')', async ($, on) => {
+    decideWorld(on, MANY)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'dispatch')
+    const tree = (await pane.drawn()) as Node
+    await pane.unmount()
+    expect(((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')).toBeUndefined()
+  })
   test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {
     decideWorld(on)
     await start($, surface)

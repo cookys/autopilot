@@ -47,6 +47,7 @@ export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
   structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
+  scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
   verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner' } as Record<string, string>,
@@ -106,7 +107,7 @@ export const isStale = (kind: FreshKind, ageMs: number): boolean => ageMs > FRES
 // glyph and vocabulary lint (the pure checks behind I5 (a), I20 and ui-lint.test.js L3; tests also call them on planted tables)
 
 const EXT_PICT = /\p{Extended_Pictographic}/u
-export type GlyphTables = { state: Record<string, string>; structure: Record<string, string>; chart: Record<string, string>; spark?: readonly string[]; fallback?: Record<string, string>; verified?: Record<string, string> }
+export type GlyphTables = { state: Record<string, string>; structure: Record<string, string>; chart: Record<string, string>; scrollbar?: Record<string, string>; spark?: readonly string[]; fallback?: Record<string, string>; verified?: Record<string, string> }
 // I5 (c) for one text: an emoji-presentation hazard. `allowPictographic` is true for kind 'detail' lines only. Digits, `#` and `*` are legal (keycap bases, not pictographs).
 export function emojiViolations(text: string, allowPictographic = false): string[] {
   const out: string[] = []
@@ -119,7 +120,7 @@ export function emojiViolations(text: string, allowPictographic = false): string
   }
   return out
 }
-const tableGlyphs = (g: GlyphTables): string[] => [...Object.values(g.state), ...Object.values(g.structure), ...Object.values(g.chart), ...(g.spark ?? []), ...Object.values(g.fallback ?? {})]
+const tableGlyphs = (g: GlyphTables): string[] => [...Object.values(g.state), ...Object.values(g.structure), ...Object.values(g.chart), ...Object.values(g.scrollbar ?? {}), ...(g.spark ?? []), ...Object.values(g.fallback ?? {})]
 // a `verified` entry is `pending-owner` or `<YYYY-MM-DD> <terminal>`; anything else (`yes`, ``, `pending`) is refused
 export const verifiedOk = (v: unknown): boolean => typeof v === 'string' && (v === 'pending-owner' || /^\d{4}-\d{2}-\d{2} \S/.test(v))
 // I5 (a) + L3: every glyph is non-emoji, and each new-to-vocabulary glyph carries a `verified` entry
@@ -135,19 +136,23 @@ export function glyphTableViolations(g: GlyphTables = GLYPHS): string[] {
 }
 // I20 (tables): one glyph, one meaning. No glyph character under two meanings across the state, structure and chart tables; the ten state glyphs are pairwise distinct.
 // (the fallbacks are alternatives for an existing meaning, so they are exempt from the cross-table check.)
+// The one deliberate exception to one-glyph-one-meaning: the scrollbar's track and thumb are drawn with characters another table already owns (a vertical line, a full block), in
+// their own place (the right-hand column of a scrolling window) and their own colours (structure, here). Each pairing is named here, so any other shared glyph is still reported.
+export const SHARED_GLYPHS: readonly (readonly [string, string])[] = [['structure.bandSep', 'scrollbar.track'], ['spark', 'scrollbar.thumb']]
+const sharedOk = (a: string, b: string): boolean => SHARED_GLYPHS.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
 export function vocabularyViolations(g: GlyphTables = GLYPHS): string[] {
   const out: string[] = []
   const seen = new Map<string, string>()
-  for (const [group, table] of [['state', g.state], ['structure', g.structure], ['chart', g.chart]] as const) {
+  for (const [group, table] of [['state', g.state], ['structure', g.structure], ['chart', g.chart], ['scrollbar', g.scrollbar ?? {}]] as const) {
     for (const [name, glyph] of Object.entries(table)) {
       const prior = seen.get(glyph)
-      if (prior !== undefined) out.push(`glyph ${glyph} means both ${prior} and ${group}.${name}`)
-      else seen.set(glyph, group + '.' + name)
+      if (prior !== undefined && !sharedOk(prior, group + '.' + name)) out.push(`glyph ${glyph} means both ${prior} and ${group}.${name}`)
+      else if (prior === undefined) seen.set(glyph, group + '.' + name)
     }
   }
   for (const glyph of g.spark ?? []) {
     const prior = seen.get(glyph)
-    if (prior !== undefined) out.push(`glyph ${glyph} means both ${prior} and spark`)
+    if (prior !== undefined && !sharedOk(prior, 'spark')) out.push(`glyph ${glyph} means both ${prior} and spark`)
   }
   return out
 }
@@ -652,6 +657,8 @@ export function actionRow(u: Ctx, label: string, o: { press?: string; note?: str
 export function buttonRow(u: Ctx, label: string, o: { press: string; fact: FactId }): PaneLine {
   return lineOf('choice', [sg('  '), sg(cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2)), { role: 'act', color: PALETTE.action, press: o.press })], { fact: o.fact })
 }
+// lines meant for a scrolling window's fixed action strip (§12.10): pane.tsx draws them under the rule, not among the scrolling rows
+export const asBar = (ls: PaneLine[]): PaneLine[] => ls.map(l => carry(l, { ...l, bar: true as const }))
 export const resultRow = (u: Ctx, text: string, fact: FactId): PaneLine[] => detail(u, text, { fact })
 // a labelled text field: the key at column 2, the Input at column 12 (drawn by pane.tsx; a surface without Input never gets this line: the card says to answer in the conversation)
 export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: string; value: string; fact: FactId }): PaneLine {

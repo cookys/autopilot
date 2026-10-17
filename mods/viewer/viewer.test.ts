@@ -246,7 +246,11 @@ test('a long file is shown in parts: the first part says which lines, the next-p
   expect(last).toBeLessThanOrEqual(2000)
   let win = await mountWindow($)
   const code = (n: Node) => find(n, 'Code')[0]
-  expect(String(code((await win.drawn()) as Node).props?.source).split('\n').length).toBe(last)
+  // the window draws only the rows that fit (the frame cuts the part into rows itself); it starts at the part's first line and is shorter than the part
+  const firstWindow = code((await win.drawn()) as Node)
+  expect(firstWindow.props?.startLine).toBe(1)
+  expect(String(firstWindow.props?.source).split('\n').length).toBeLessThan(last)
+  expect(String(firstWindow.props?.source).startsWith('row 1\n')).toBe(true)
   await win.press({ key: 'next part' })
   await win.unmount()
   win = await mountWindow($) // the engine draws the pane again after the press (ui.invalidate); the mock does not
@@ -315,4 +319,28 @@ test('a press-opened window that fails puts the previous window back (what a bar
   expect(closes).toBe(2)
   expect(await reopenWindow($)).toBe(true)
   expect(opens[opens.length - 1]).toBe('a.md')
+})
+
+// ---- the scrolling window (design plan §12.10): the head, a scrolling content, a rule and a fixed action strip ----
+const fixedKids = (tree: Node): Node[] => ((((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')?.children || []) as Node[])
+test('SCROLL viewer: the AI buttons sit in the fixed strip under a rule, the scrollbar shows with the thumb at the top, and the count line reads the range on screen', async ($, on) => {
+  const long = Array.from({ length: 300 }, (_, i) => 'row ' + (i + 1)).join('\n') + '\n'
+  world(on, { [CWD + '/long.txt']: long })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'long.txt' })
+  const win = await mountWindow($)
+  const tree = (await win.drawn()) as Node
+  const kids = fixedKids(tree)
+  expect(kids.length, 'a frame was drawn').toBeGreaterThan(0)
+  const ruleAt = kids.findIndex(k => /^─+$/.test(textOf(k)))
+  expect(ruleAt).toBeGreaterThan(0)
+  const strip = kids.slice(ruleAt + 1)
+  const stripText = strip.map(textOf).join('\n')
+  for (const label of ['[ summary ]', '[ ask ]', '[ send to chat ]']) expect(stripText, label).toContain(label)
+  const content = kids.find(k => k.props?.key === 'content') as Node
+  expect(textOf(content), 'no button inside the scrolling rows').not.toContain('[ ')
+  const bar = ((content.children || []) as Node[]).find(k => k.props?.key === 'scrollbar') as Node
+  expect(textOf(((bar.children || []) as Node[])[0])).toBe('█')
+  expect(textOf(kids[1]), 'the count line is the second head row and names the range').toMatch(/^lines 1 to \d+ of 300$/)
+  await win.unmount()
 })

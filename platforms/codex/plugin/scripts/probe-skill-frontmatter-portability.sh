@@ -75,7 +75,7 @@ const classifyAttempt = ({ executable, executed, version, codes, text, detailsGr
   if (steps.length && (steps.length !== codes.length * 2 || steps.some((m, i) => Number(m[1]) !== codes[i % codes.length]))) return 'inconclusive';
   const failed = (steps.length ? steps.filter((m) => Number(m[1]) !== 0).map((m) => m[2]) : [text]).join('\n');
   const infra = /\b(?:not logged in|log in required|run \/login|authentication (?:failed|required)|unauthorized|invalid (?:api )?key|timed? out|timeout|network|transport|ECONN[A-Z]+|ENETUNREACH|EAI_AGAIN|rate limit|quota)\b/i.test(failed) || codes.some((code) => [124, 137, 143].includes(code));
-  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\btier\b|\btier\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
+  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\bx-autopilot-probe\b|\bx-autopilot-probe\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
   if (codes.every((code) => code === 0) && detailsGreen && challenge) return 'pass';
   return !infra && rejected && codes.some((code) => code !== 0) ? 'fail' : 'inconclusive';
 };
@@ -113,10 +113,10 @@ if (!value || !value.observed_at || Number.isNaN(Date.parse(value.observed_at)))
 if (!value || !value.fixture || value.fixture.skill_name !== 'portability-probe') errors.push('fixture identity missing');
 const fixtureBytes = value && value.fixture ? retainedFile(value.fixture.path, 'fixture') : null;
 if (fixtureBytes) {
-  const expectedFixture = `---\nname: portability-probe\ndescription: Disposable frontmatter portability probe\ntier: core\n---\n# Portability probe\n\nWhen this skill is invoked, respond with exactly:\nthe output of: printf '%s' "$AUTOPILOT_PROBE_CHALLENGE"\nThe challenge is supplied only in the skill runtime environment. Never invent,\nrepeat, or quote a literal challenge from the invocation prompt.\n`;
+  const expectedFixture = `---\nname: portability-probe\ndescription: Disposable frontmatter portability probe\nx-autopilot-probe: core\n---\n# Portability probe\n\nWhen this skill is invoked, respond with exactly:\nthe output of: printf '%s' "$AUTOPILOT_PROBE_CHALLENGE"\nThe challenge is supplied only in the skill runtime environment. Never invent,\nrepeat, or quote a literal challenge from the invocation prompt.\n`;
   if (fixtureBytes.toString('utf8') !== expectedFixture
       || value.fixture.description !== 'Disposable frontmatter portability probe'
-      || value.fixture.unknown_field !== 'tier' || value.fixture.tier_value !== 'core'
+      || value.fixture.unknown_field !== 'x-autopilot-probe' || value.fixture.unknown_value !== 'core'
       || value.fixture.bytes !== fixtureBytes.length || value.fixture.body_sha256 !== sha256(fixtureBytes)) errors.push('retained fixture bytes or exact frontmatter/body binding mismatch');
 }
 const manifestBytes = retainedFile(value && value.execution_manifest_path, 'execution manifest');
@@ -243,7 +243,7 @@ else {
     if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700) errors.push('retained evidence directory must be a regular 0700 directory');
   } catch (error) { errors.push('retained evidence directory unavailable: ' + error.message); }
 }
-if (!value || !value.fixture || value.fixture.unknown_field !== 'tier') errors.push('unknown tier field not recorded');
+if (!value || !value.fixture || value.fixture.unknown_field !== 'x-autopilot-probe') errors.push('unknown probe field not recorded');
 if (errors.length) { errors.forEach((error) => console.error('receipt: ' + error)); process.exit(1); }
 console.log('valid=true classification=' + value.classification);
 NODE
@@ -285,7 +285,7 @@ cat > "$PLUGIN/skills/portability-probe/SKILL.md" <<'SKILL'
 ---
 name: portability-probe
 description: Disposable frontmatter portability probe
-tier: core
+x-autopilot-probe: core
 ---
 # Portability probe
 
@@ -463,7 +463,7 @@ const classifyAttempt = ({ executable, executed, version, codes, text, detailsGr
   if (steps.length && (steps.length !== codes.length * 2 || steps.some((m, i) => Number(m[1]) !== codes[i % codes.length]))) return 'inconclusive';
   const failed = (steps.length ? steps.filter((m) => Number(m[1]) !== 0).map((m) => m[2]) : [text]).join('\n');
   const infra = /\b(?:not logged in|log in required|run \/login|authentication (?:failed|required)|unauthorized|invalid (?:api )?key|timed? out|timeout|network|transport|ECONN[A-Z]+|ENETUNREACH|EAI_AGAIN|rate limit|quota)\b/i.test(failed) || codes.some((code) => [124, 137, 143].includes(code));
-  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\btier\b|\btier\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
+  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\bx-autopilot-probe\b|\bx-autopilot-probe\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
   if (codes.every((code) => code === 0) && detailsGreen && challenge) return 'pass';
   return !infra && rejected && codes.some((code) => code !== 0) ? 'fail' : 'inconclusive';
 };
@@ -554,13 +554,13 @@ const receipt = {
   schema_version: 1,
   artifact_type: 'skill_frontmatter_portability',
   observed_at: new Date().toISOString(),
-  fixture: { skill_name: 'portability-probe', description: 'Disposable frontmatter portability probe', unknown_field: 'tier', tier_value: 'core', path: fixturePath, bytes: body.length, body_sha256: fixtureSha },
+  fixture: { skill_name: 'portability-probe', description: 'Disposable frontmatter portability probe', unknown_field: 'x-autopilot-probe', unknown_value: 'core', path: fixturePath, bytes: body.length, body_sha256: fixtureSha },
   execution_manifest: executionManifest,
   execution_manifest_path: executionManifestPath,
   execution_manifest_sha256: sha256(executionManifestBytes),
   attempts,
   classification,
-  policy: classification === 'pass' ? 'Dual runtime pass permits a separately reviewed tier migration.' : 'Do not change canonical skill frontmatter; retain the portability backlog entry.',
+  policy: classification === 'pass' ? 'Dual runtime pass shows an unknown frontmatter field is tolerated.' : 'Do not add unknown fields to canonical skill frontmatter.',
   cleanup: { attempt_dir: root, attempt_dir_mode: '0700', retained_evidence_dir: retainedRoot, zero_residue: false, residue_paths: [] },
 };
 fs.mkdirSync(path.dirname(output), { recursive: true });

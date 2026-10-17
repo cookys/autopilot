@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0206 -->
+<!-- next-id: BL-0207 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -65,19 +65,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-09-20 orphan-plan triage (plan frozen into a mission graph, zero identifiers in history)
 - **Pointer**: docs/backlog/foreman-depth0-typed-worker-condition.md
 - **Context**: plan archived as dropped-never-built; the mission graph that sealed it is terminal.
-
-### Skill frontmatter `tier:` migration never landed — the portability probe checks a key no SKILL.md carries
-- **Id**: BL-0013
-- **Status**: open
-- **Since**: 2026-09-20
-- **Origin**: self
-- **Problem**: 技能檔的前置資料原本計畫新增 tier 欄位並全面遷移，實際沒有任何技能檔帶這個欄位，但可攜性探測腳本仍在檢查它。計畫與現況不一致。 (draft)
-- **Impact**: 探測腳本檢查的是不存在的欄位，結果意義不大；需擁有者決定保留或放棄 tier。 (draft)
-- **Trigger**: any edit to `scripts/probe-skill-frontmatter-portability.sh`, OR the next cross-harness skill-portability report
-- **Effort**: S
-- **Source**: 2026-09-20 orphan-plan triage (`grep -rln '^tier:' skills/*/SKILL.md` empty)
-- **Pointer**: docs/backlog/skill-frontmatter-tier-migration.md
-- **Context**: decide keep-or-drop `tier:`; the probe and the plan's §0 note must agree either way.
 
 ### Host Conformance tool — authorized by the 2026-08-23 consolidation decision, never built
 - **Id**: BL-0014
@@ -480,19 +467,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: context-budget follow-up audit。
 - **Pointer**: docs/backlog/context-budget-t3-deny-tier-calibration-and-obedience-evidence.md
 - **Context**: 先前 finish-flow marker blocker 已解；真正未完成的是用 session evidence 校準 deny threshold、handoff structure 與 anti-spiral policy，不能只靠靜態 token 比例。
-
-### skills frontmatter `tier:` 欄位（B4 step 2 — 分層進 frontmatter）
-- **Id**: BL-0065
-- **Status**: open
-- **Since**: 2026-07-04
-- **Origin**: self
-- **Problem**: 想把技能分層寫進各技能檔案開頭的欄位，讓工具讀取。但必須先在 Claude Code 與 codex 驗證多一個未知欄位不會出錯，驗證前不能動。 (draft)
-- **Impact**: 不做只是少了機器可讀的分層標記，沒有功能影響。 (draft)
-- **Trigger**: 先在 Claude Code ＋ codex 兩平台各做一次「帶未知 frontmatter 欄位」的 plugin load dry-run 且確認解析容忍（R1-F5：未驗不得宣稱無行為影響）；兩平台紀錄在手才動工。
-- **Effort**: S
-- **Source**: docs/plans/2026-07-04-surface-area-reduction.md §B4；v2.31.16 收尾 deferred。
-- **Pointer**: docs/backlog/skills-frontmatter-tier-b4-step-2-frontmatter.md
-- **Context**: v2.31.16 B4 step 1 已把 docs/skills.md 排成 core/delegation/pioneer 三層（純排版）。step 2 = 把層級寫進各 SKILL.md frontmatter `tier:` 欄位，讓工具可機讀。風險面＝frontmatter 是路由面。
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -965,3 +939,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: 2026-10-17: P1, P2, P3 and P4a autopilot side merged; P4a llm-playground side in review (two owner decisions pending); P4b remains, plus llm-playground r4/t15 SKIP follow-up (see plan Progress line).
 
 
+
+### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）
+- **Id**: BL-0206
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: owner
+- **Problem**: autopilot 同時含異質引擎（panel、discuss、plan review、code review）、軟體開發流程、實驗性功能，使用者難分辨哪些是核心。拆法還沒定。
+- **Impact**: 不分組只是說明與目錄較雜，沒有功能影響；使用者要分辨用途時較費力。
+- **Trigger**: owner 重新提起分組，或新增的技能與腳本再次難以歸類
+- **Effort**: M
+- **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
+- **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md

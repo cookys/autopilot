@@ -64,6 +64,7 @@ canonical **不得含相對連結**（lint 一行 —— gpt-R1-G5；實測今�
    finish-flow、debug）／委派（ceo-agent＋lN 家族）／pioneer（其餘）。零 frontmatter 改動。
 2. frontmatter `tier:` 欄位＝獨立後續：先在 claude code＋codex 兩平台各做一次帶未知欄位的
    plugin load dry-run，確認解析容忍，才動手。
+   > 附註：2026-10-18 owner 裁定放棄（d-8a4c6dbc）；分層只在 docs/skills.md。
 驗收：第一步後 `check-readme-parity`／`validate.sh` 綠；第二步有兩平台 load 紀錄。
 
 ## 2. C 組 — 一個 sprint（結構性）

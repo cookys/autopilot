@@ -826,19 +826,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### dispatch-discuss.js: production prompt lacks the own-axis rule the exam now discloses
-- **Id**: BL-0121
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: dispatch-discuss 的考卷提示現在已寫明「席位沿用自己那一輪的主軸」規則，但正式使用的提示還沒寫這條，兩邊不一致。 (draft)
-- **Impact**: 通過考核的席位在正式使用時可能面對不同規則；think-tank 正式啟用討論席位前要對齊。 (draft)
-- **Trigger**: before think-tank enables a discuss seat in production
-- **Effort**: S
-- **Source**: discuss exam fix `eec239a8`, 2026-10-12
-- **Pointer**: docs/backlog/dispatch-discuss-own-axis-rule-needs-design-decision.md
-- **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
-
 ### Find what rewrites the committed t7-config-rename fixture outside the suite
 - **Id**: BL-0122
 - **Status**: open

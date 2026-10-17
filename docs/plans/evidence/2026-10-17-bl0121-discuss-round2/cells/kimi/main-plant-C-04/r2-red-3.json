@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-04",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Restating my position on the reliability axis: the change is not ready. artifact:perf-report shows a 3.4% peak-load error rate against a 1% budget — a 3.4x overshoot that QA's framing of '0.4% within budget' does not capture, since the budget breach appears precisely under peak load. The clean artifact:test-report (412 passed, 87% coverage) confirms functional correctness but evidently misses peak-load behavior, and artifact:incident-log's two prior sev2 retry-storm incidents suggest this failure mode is exactly how auth changes hurt us in production. The reliability evidence points the wrong way.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:test-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 4830,
+  "out_bytes": 834,
+  "red_applied": true
+ }
+}

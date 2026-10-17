@@ -1,0 +1,89 @@
+{
+ "phase": "pilot",
+ "overall": "PILOT",
+ "seats": [
+  {
+   "seat": "sonnet",
+   "planted_selected": 1,
+   "controls_selected": 0,
+   "reps": 1,
+   "A_catch": 0,
+   "B_catch": 1,
+   "red_catch": 1,
+   "B_minus_A": 1,
+   "B_minus_red": 0,
+   "control_harm_cases": 0,
+   "validator_pass_rate": 1,
+   "B_calls_scored": 1,
+   "infra_fail_excluded": 0,
+   "hold_rate": 1,
+   "mean_position_jaccard": 0.222,
+   "cost_incremental_ratio": 1.819,
+   "calls": {
+    "A": 1,
+    "B_round2": 1,
+    "red_round2": 1
+   },
+   "per_case": [
+    {
+     "case_id": "pilot-plant-C-07",
+     "kind": "plant-C",
+     "B_caught_reps": 1,
+     "red_caught_reps": 1
+    }
+   ],
+   "gates": {
+    "G1_B_minus_A_ge_3": false,
+    "G2_control_harm_le_1": true,
+    "G3_validator_pass_ge_0_90": true,
+    "G4_red_at_least_3_below_B": false,
+    "G5_cost_incremental_le_2": true
+   },
+   "verdict": "PILOT (no verdict; pipeline and scorer-readability check only)"
+  },
+  {
+   "seat": "kimi",
+   "planted_selected": 1,
+   "controls_selected": 1,
+   "reps": 1,
+   "A_catch": 0,
+   "B_catch": 1,
+   "red_catch": 0,
+   "B_minus_A": 1,
+   "B_minus_red": 1,
+   "control_harm_cases": 0,
+   "validator_pass_rate": 1,
+   "B_calls_scored": 2,
+   "infra_fail_excluded": 0,
+   "hold_rate": 1,
+   "mean_position_jaccard": 0.248,
+   "cost_incremental_ratio": 1.838,
+   "calls": {
+    "A": 2,
+    "B_round2": 2,
+    "red_round2": 1
+   },
+   "per_case": [
+    {
+     "case_id": "pilot-plant-C-07",
+     "kind": "plant-C",
+     "B_caught_reps": 1,
+     "red_caught_reps": 0
+    },
+    {
+     "case_id": "pilot-control-07",
+     "kind": "control",
+     "B_harm_reps": 0
+    }
+   ],
+   "gates": {
+    "G1_B_minus_A_ge_3": false,
+    "G2_control_harm_le_1": true,
+    "G3_validator_pass_ge_0_90": true,
+    "G4_red_at_least_3_below_B": false,
+    "G5_cost_incremental_le_2": true
+   },
+   "verdict": "PILOT (no verdict; pipeline and scorer-readability check only)"
+  }
+ ]
+}

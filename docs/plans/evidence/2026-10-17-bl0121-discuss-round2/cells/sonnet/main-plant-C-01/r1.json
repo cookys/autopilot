@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "On reliability, the evidence points against the change as measured. The perf report shows p99 latency of 410ms at peak load against a 250ms budget, about 64% over. The incident log shows two sev2 incidents last quarter, both traced to retry storms. Latency above budget is the condition that usually triggers client timeouts and retries, so the measured overrun matches the failure mode already seen in production. The passing test report (412 passed, 0 failed) does not contradict this, since functional pass rates say nothing about behavior under peak load. Before reliability can be considered supported, we need evidence of (a) whether the 410ms figure comes from the changed code path or from the test environment, (b) the client retry and backoff configuration and whether it is bounded under that latency, and (c) a repeat load test showing p99 within budget or a documented, approved exception.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3215,
+  "out_bytes": 1153,
+  "red_applied": false
+ }
+}

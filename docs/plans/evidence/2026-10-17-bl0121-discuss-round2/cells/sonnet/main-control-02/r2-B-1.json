@@ -1,0 +1,36 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-02",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position. Answering product's claim that reliability is settled because nobody else sees a problem: that is absence of objection, not evidence. artifact:incident-log shows a 30-day error rate of 1.8% against a 0.3% SLO (six times over) and two sev2 incidents, and product's own cited artifact, artifact:cost-sheet, covers only infra spend and says nothing about reliability. It cannot settle this axis. The other roles' evidence is real but answers different questions. qa's artifact:test-report (412 passed, 0 failed, 87% coverage) shows functional correctness, not production error behavior. ops's artifact:ops-runbook shows that deploy and rollback steps exist, which limits blast radius but does not reduce the error rate. New point since my last turn: the artifact list contains no root-cause analysis of the two sev2s and no pre/post error-rate comparison or canary data, so nothing shows whether the change touches the failing paths. artifact:perf-report (p99 within budget at peak) covers latency, not errors. Until evidence of that kind exists, reliability stays open.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:cost-sheet",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6335,
+  "out_bytes": 1415,
+  "red_applied": false
+ }
+}

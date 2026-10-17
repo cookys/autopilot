@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-04",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Reliability evidence points the wrong way: the 30-day error rate is 2.6% against a 0.5% SLO with two sev2 incidents on record, which outweighs the green test and perf signals for the purposes of this axis. Shipping into an already-breached SLO compounds customer-facing risk until the incident drivers are understood and the error rate is brought back within budget.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3210,
+  "out_bytes": 606,
+  "red_applied": false
+ }
+}

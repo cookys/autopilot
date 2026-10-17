@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability is the weak axis here. The order sync job's 30-day error rate is 2.1% against a 0.5% SLO, roughly four times the budget, with two sev2 incidents. The job is already out of SLO before this change lands. The test report (412 passed, 0 failed, 87% coverage) and the perf report (p99 within budget at peak) show the change is functionally sound and fast enough, but neither speaks to the failure modes behind the current error rate. Nothing provided shows whether the change reduces, leaves unchanged, or worsens those errors, or whether the sev2 root causes are fixed or mitigated. That evidence is needed: the root causes of the two sev2s, and whether the 2.1% comes from paths this change touches. The runbook's documented rollback helps contain impact but does not make up for an unaddressed reliability gap.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3204,
+  "out_bytes": 1117,
+  "red_applied": false
+ }
+}

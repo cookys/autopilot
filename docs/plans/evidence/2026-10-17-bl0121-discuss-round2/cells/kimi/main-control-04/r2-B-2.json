@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-04",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier position on reliability, and I am responding directly to product's claim that 'on reliability, nobody else sees a problem, so I would treat it as settled.' That is factually wrong about the transcript: my prior turn explicitly raised the reliability problem, so product's inference from silence is invalid. I also answer qa: artifact:test-report (412 passed, 0 failed) measures pre-deploy correctness, not live-service reliability, so it cannot settle the axis. Nothing new has appeared since my last turn, and the dispositive datum remains artifact:incident-log: a 2.6% 30-day error rate against a 0.5% SLO (a 5x breach) plus two sev2 incidents. A green test suite and p99-in-budget perf report do not explain, let alone reverse, an active SLO breach; shipping the pricing refresh on top of it risks compounding an unresolved customer-facing failure mode. The reliability axis stays opposing until the incident drivers are root-caused and the error rate returns within budget.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5882,
+  "out_bytes": 1235,
+  "red_applied": false
+ }
+}

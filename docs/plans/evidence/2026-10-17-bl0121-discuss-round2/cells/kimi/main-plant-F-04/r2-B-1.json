@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-04",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding needs-evidence: nothing new in this round addresses the retry-storm failure mode from artifact:incident-log. Responding to ops: their rollback claim anchors on artifact:restore-test-2026-08, which does not exist in the artifact list — that artifact id is a gap and cannot be accepted. Worse, the actual operability artifact (artifact:ops-runbook) states a restore has never been tested, so the rollback path ops calls 'proven' is in fact unverified, which compounds rather than offsets reliability risk: if a retry-storm regression ships, the unproven restore is what we would fall back on. QA's artifact:test-report (412 passed, 0 failed) still exercises neither retry behavior under downstream failure nor restore. Reliability remains blocked on evidence the retry-storm mode is not regressed.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6018,
+  "out_bytes": 1041,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-02",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-02-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Peak memory is measured at 740MB against a 512MB budget, about 45% over. Under load, workers would likely be OOM-killed and their jobs retried. Last quarter's two sev2 incidents were both retry storms, so this is the failure mode the history already shows. The passing tests (412 passed, 87% coverage) do not show behavior at peak load, so they don't offset the memory finding. Before this goes out, we need evidence that the memory overage doesn't trigger OOM kills and retry amplification. That could be a load test at the production memory limit, confirmation of retry backoff or caps, or a revised budget. The runbook's rollback steps reduce recovery time but do not prevent the incident.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3257,
+  "out_bytes": 989,
+  "red_applied": false
+ }
+}

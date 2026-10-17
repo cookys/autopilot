@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-03",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. Product says reliability is settled because nobody else raised it. That is not evidence, and artifact:incident-log contradicts it: a 30-day error rate of 3.2% against a 1% SLO, with two sev2 incidents. QA's claim that risk is contained rests on 412 passed and 0 failed in artifact:test-report. That shows functional correctness at 87% coverage, not an effect on the error rate or the incident failure modes. The cost margin (+3% against a 5% ceiling) and the runbook's deploy and rollback steps are fine, but they answer different axes. Two gaps remain. First, no artifact links the change to the root causes of the sev2s, and there are no postmortems or change-scope mapping. Second, no artifact gives the error-budget state or the headroom left after the SLO breach. Until those exist, reliability stays open. Evidence that the change touches the incident failure modes or reduces errors, plus the current budget burn, would move me.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:cost-sheet",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6305,
+  "out_bytes": 1259,
+  "red_applied": false
+ }
+}

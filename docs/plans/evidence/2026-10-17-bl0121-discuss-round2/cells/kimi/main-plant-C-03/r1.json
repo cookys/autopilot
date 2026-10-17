@@ -1,0 +1,34 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "On the reliability axis the change is not yet in a defensible state: peak-load run_time measured 118s against a 60s budget (nearly 2x over), and the service's own history shows two sev2 incidents last quarter caused by retry storms — exactly the failure mode an over-budget, slow-running report generator is most likely to aggravate under load. The green test suite (412 passed, 87% coverage) does not cover this gap, since unit-level correctness says nothing about behavior at peak load. Before the reliability question can be settled, we need evidence that the 118s peak run_time is either remediated or demonstrably non-interacting with the retry-storm failure mode, e.g. load tests with realistic concurrency and retry behavior, plus a stated error-budget impact analysis.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3233,
+  "out_bytes": 1052,
+  "red_applied": false
+ }
+}

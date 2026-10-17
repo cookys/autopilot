@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-03",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. Product says reliability is settled because nobody else raised it, but that is silence, not evidence. artifact:incident-log still shows a 30-day error rate of 3.2% against a 1% SLO and two sev2 incidents, and none of the other roles' artifacts address it. The cost sheet covers budget only. QA's test-report (412 passed, 0 failed) shows functional correctness, not error-rate impact. Ops' runbook covers deploy and rollback, which limits blast radius but does not repair an existing SLO breach. The artifact list has a gap: nothing links the change to the sev2 root causes, and nothing states remaining error-budget headroom. Until those two items exist, reliability stays open. If they appear and show the change avoids the failure modes and fits the budget, I would update.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:cost-sheet"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6305,
+  "out_bytes": 1099,
+  "red_applied": false
+ }
+}

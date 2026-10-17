@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-04",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier reliability position, with a direct correction to qa on axis:risk. qa says error_rate is 0.4%, inside the 1% budget, citing artifact:perf-report. That artifact says error_rate was measured at 3.4% at peak load against a 1% budget. The 0.4% figure does not appear in it, so qa's risk-is-contained claim rests on a number the cited evidence does not contain. No other artifact in the list supplies 0.4%, for example a re-run or a different load profile. If that run exists, it should be added as evidence. Until then the 3.4% figure stands, and qa's conclusion does not carry over to reliability. New evidence since my last turn: artifact:test-report (412 passed, 0 failed, 87% coverage) is functional coverage and says nothing about behavior under peak load, so it does not offset the perf result. product's cost point (artifact:cost-sheet, +3% against a 5% ceiling) and ops's runbook point (artifact:ops-runbook, deploy and rollback steps in v4) are accepted as stated, but they sit on other axes. The runbook text covers deploy and rollback only. It does not mention retry or backoff handling, which is the failure mode in artifact:incident-log (two sev2 incidents from retry storms). Gap: the artifact list has no data on client retry/backoff behavior at a 3.4% error rate. That data, or a perf run inside budget, is what would change my view.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6186,
+  "out_bytes": 1615,
+  "red_applied": false
+ }
+}

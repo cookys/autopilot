@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence",
+   "axis:reliability:opposes"
+  ],
+  "position": "Reliability evidence is incomplete for a session-store migration. Functional tests and peak-load p99 look healthy, but neither exercises the dual-write path, and the runbook lists the dual-write soak test as TODO and never run. Last quarter's two sev2 incidents were both retry storms, a failure mode that dual-write and cutover can plausibly trigger, and nothing here shows the migration is protected against it. Until the soak test runs and retry/backoff behavior under dual-write is shown, the reliability case rests on untested ground. Passing tests (412/0, 87% coverage) and the perf report speak to correctness and steady-state latency, not to sustained dual-write or retry amplification.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3322,
+  "out_bytes": 991,
+  "red_applied": false
+ }
+}

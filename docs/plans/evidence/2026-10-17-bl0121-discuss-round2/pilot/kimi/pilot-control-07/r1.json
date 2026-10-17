@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "pilot-control-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-control-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On reliability grounds the change is not ready: the 30-day error rate of 2.4% is nearly five times the 0.5% SLO and two sev2 incidents were logged in that window, so the service is already outside its reliability budget before this change lands. Green tests (412 passed, 87% coverage) and in-budget p99 do not offset a live SLO breach; the reliability gap should be closed or explained before proceeding.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3235,
+  "out_bytes": 645,
+  "red_applied": false
+ }
+}

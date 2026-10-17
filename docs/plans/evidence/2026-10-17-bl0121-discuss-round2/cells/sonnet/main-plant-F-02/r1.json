@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-02",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability evidence is incomplete in one specific area. The tests (412 passed, 0 failed, 87% coverage) and the peak-load p99 result are good, but neither says whether the rebuild job handles retry storms. Retry storms caused both sev2 incidents last quarter. The runbook documents rollback, but no rollback rehearsal has been run for this job, so the recovery path is untested. Two things would settle this: a retry-storm or failure-injection result for the rebuild job, and one rehearsed rollback with a timing measurement. I am not weighing cost or schedule here.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3295,
+  "out_bytes": 825,
+  "red_applied": false
+ }
+}

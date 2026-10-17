@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "pilot-plant-C-07",
+ "arm": "red",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-C-07-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Restating: the reliability evidence opposes shipping this week. artifact:perf-report shows peak queue_depth of 4200 items against a 1000-item budget (over 4x capacity), and artifact:incident-log shows both of last quarter's sev2 incidents were retry storms — precisely the failure mode sustained queue overload aggravates. The 412/0 test pass and 87% coverage in artifact:test-report do not exercise this load path, so green tests do not close the gap.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 4902,
+  "out_bytes": 683,
+  "red_applied": true
+ }
+}

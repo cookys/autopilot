@@ -1,0 +1,14 @@
+{
+ "plants": [
+  "pilot-plant-C-07"
+ ],
+ "controls": [
+  "pilot-control-07"
+ ],
+ "excluded": [
+  {
+   "case_id": "pilot-plant-F-07",
+   "why": "round1_already_caught_or_surplus"
+  }
+ ]
+}

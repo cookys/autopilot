@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-05",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-05-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "On reliability the evidence is unfavorable as it stands. Cold_start measured 1900ms at peak load against an 800ms budget, about 2.4x over, so the change misses a stated performance bound at the point where the warmer matters most. The incident log shows two sev2 incidents last quarter, both from retry storms. A slow cold start at peak is the kind of condition that can trigger retries, so the existing failure mode may be amplified. The passing tests (412 passed, 0 failed, 87% coverage) show functional correctness but say nothing about behavior under peak load or retry pressure, so they do not offset the perf gap. Needed before this axis could support the change: a load test showing cold_start within budget, or a documented waiver for the overage, and evidence of retry and backoff behavior under peak load that rules out a repeat of the retry-storm incidents. The runbook's documented rollback (v4) reduces recovery cost but does not prevent the failure.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3215,
+  "out_bytes": 1260,
+  "red_applied": false
+ }
+}

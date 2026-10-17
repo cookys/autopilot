@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "From the reliability axis, the current 30-day error rate of 3.2% against a 1% SLO, together with two sev2 incidents in the same window, indicates the service is already outside its reliability budget; introducing a change under these conditions adds regression surface to a system that has not demonstrated stable baseline behavior, regardless of the clean test and perf results.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3208,
+  "out_bytes": 619,
+  "red_applied": false
+ }
+}

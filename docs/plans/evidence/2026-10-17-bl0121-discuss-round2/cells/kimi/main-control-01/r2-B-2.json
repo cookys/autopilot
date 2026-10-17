@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-01",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my reliability opposition. QA's claim that risk is contained by artifact:test-report does not answer production reliability: 412 passed / 0 failed and 87% coverage are pre-change evidence, while artifact:incident-log shows the live job already at 2.1% against a 0.5% SLO with two sev2 incidents. Product's statement that nobody else sees a problem is also not evidence; the incident log is the contrary datum, so adding a change now compounds an active SLO breach.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5811,
+  "out_bytes": 689,
+  "red_applied": false
+ }
+}

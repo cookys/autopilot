@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-02",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding needs-evidence. Responding to ops: the claimed artifact:rollback-rehearsal-q3 does not appear in the artifact list, so that evidence cannot be accepted; worse, artifact:ops-runbook explicitly states no rollback rehearsal has been run for the rebuild job, directly contradicting ops' 'rollback path is proven' claim. Combined with artifact:incident-log (two sev2 retry storms last quarter) and the absence of any failure-condition or retry-behavior testing in artifact:test-report or artifact:perf-report, the reliability question — does the rebuild survive the failure modes that actually burned us, and can we roll it back if it doesn't — remains unanswered.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5859,
+  "out_bytes": 930,
+  "red_applied": false
+ }
+}

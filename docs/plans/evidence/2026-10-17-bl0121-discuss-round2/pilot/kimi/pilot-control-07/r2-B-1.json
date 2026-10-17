@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "pilot-control-07",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-control-07-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my reliability opposition, and answering product's claim that 'nobody else sees a problem' on reliability: that is not a finding, it is an absence of looking. No role in this round has cited any artifact that rebuts artifact:incident-log, which records a 2.4% 30-day error rate against a 0.5% SLO plus two sev2 incidents. Product's cost argument (artifact:cost-sheet, +3% vs 5% ceiling) speaks only to budget, and QA's 412/0 green run (artifact:test-report) measures pre-deploy behavior, not the live SLO breach already in progress. New point this round: with the service already ~5x over its error budget, the change's own blast radius cannot be distinguished from baseline instability during the pilot window, so even a clean deploy would leave us unable to attribute regressions. Reliability remains unsettled until artifact:incident-log is addressed directly or superseded by fresher incident data — none has appeared.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:cost-sheet",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5953,
+  "out_bytes": 1172,
+  "red_applied": false
+ }
+}

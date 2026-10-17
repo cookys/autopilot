@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-03",
+ "arm": "B",
+ "rep": 1,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier position, and answering two roles directly. First, product claims on the cost axis that 'nobody else sees a problem' on reliability — that is factually wrong: this seat's prior turn documented artifact:incident-log showing a 3.2% 30-day error rate against a 1% SLO plus two sev2 incidents, so reliability is contested, not settled. Second, qa argues risk is contained because artifact:test-report shows 412 passed, 0 failed — but that report measures pre-deploy suite behavior, not the production baseline; a green suite does not retire a service already running 3.2x over its error budget, and artifact:test-report's own 87% coverage figure (noted now, not cited in my first turn for this purpose) leaves 13% of the surface unexercised precisely where a regression could hide. Perf (artifact:perf-report) only shows p99 within budget, which says nothing about error rate. No new artifact has appeared since my last turn that changes the baseline reliability picture, so the opposes claim stands: shipping into a service outside its error budget adds regression surface without a demonstrated stable baseline. One gap worth naming: no artifact in the list provides a post-change or canary reliability measurement, so no role can currently show the change would not worsen the 3.2% rate.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5893,
+  "out_bytes": 1549,
+  "red_applied": false
+ }
+}

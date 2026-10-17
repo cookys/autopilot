@@ -1,0 +1,210 @@
+{
+ "phase": "main",
+ "overall": "NOT-SHIP",
+ "seats": [
+  {
+   "seat": "sonnet",
+   "planted_selected": 8,
+   "controls_selected": 4,
+   "reps": 3,
+   "A_catch": 0,
+   "B_catch": 6,
+   "red_catch": 7,
+   "B_minus_A": 6,
+   "B_minus_red": -1,
+   "control_harm_cases": 0,
+   "validator_pass_rate": 1,
+   "B_calls_scored": 36,
+   "infra_fail_excluded": 0,
+   "hold_rate": 1,
+   "mean_position_jaccard": 0.292,
+   "cost_incremental_ratio": 1.842,
+   "calls": {
+    "A": 12,
+    "B_round2": 36,
+    "red_round2": 24
+   },
+   "per_case": [
+    {
+     "case_id": "main-plant-C-01",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-F-02",
+     "kind": "plant-F",
+     "B_caught_reps": 3,
+     "red_caught_reps": 1
+    },
+    {
+     "case_id": "main-plant-C-02",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 3
+    },
+    {
+     "case_id": "main-plant-C-03",
+     "kind": "plant-C",
+     "B_caught_reps": 2,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-F-04",
+     "kind": "plant-F",
+     "B_caught_reps": 3,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-C-04",
+     "kind": "plant-C",
+     "B_caught_reps": 1,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-C-05",
+     "kind": "plant-C",
+     "B_caught_reps": 1,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-C-06",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 3
+    },
+    {
+     "case_id": "main-control-01",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-02",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-03",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-04",
+     "kind": "control",
+     "B_harm_reps": 0
+    }
+   ],
+   "gates": {
+    "G1_B_minus_A_ge_3": true,
+    "G2_control_harm_le_1": true,
+    "G3_validator_pass_ge_0_90": true,
+    "G4_red_at_least_3_below_B": false,
+    "G5_cost_total_le_2x": false
+   },
+   "red_gate_status": "UNINFORMATIVE",
+   "verdict": "NOT-SHIP"
+  },
+  {
+   "seat": "kimi",
+   "planted_selected": 8,
+   "controls_selected": 4,
+   "reps": 3,
+   "A_catch": 0,
+   "B_catch": 8,
+   "red_catch": 2,
+   "B_minus_A": 8,
+   "B_minus_red": 6,
+   "control_harm_cases": 0,
+   "validator_pass_rate": 1,
+   "B_calls_scored": 36,
+   "infra_fail_excluded": 0,
+   "hold_rate": 1,
+   "mean_position_jaccard": 0.257,
+   "cost_incremental_ratio": 1.804,
+   "calls": {
+    "A": 12,
+    "B_round2": 36,
+    "red_round2": 24
+   },
+   "per_case": [
+    {
+     "case_id": "main-plant-F-01",
+     "kind": "plant-F",
+     "B_caught_reps": 3,
+     "red_caught_reps": 1
+    },
+    {
+     "case_id": "main-plant-C-01",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 1
+    },
+    {
+     "case_id": "main-plant-F-02",
+     "kind": "plant-F",
+     "B_caught_reps": 3,
+     "red_caught_reps": 0
+    },
+    {
+     "case_id": "main-plant-C-02",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 0
+    },
+    {
+     "case_id": "main-plant-C-03",
+     "kind": "plant-C",
+     "B_caught_reps": 3,
+     "red_caught_reps": 0
+    },
+    {
+     "case_id": "main-plant-F-04",
+     "kind": "plant-F",
+     "B_caught_reps": 3,
+     "red_caught_reps": 0
+    },
+    {
+     "case_id": "main-plant-C-04",
+     "kind": "plant-C",
+     "B_caught_reps": 2,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-plant-F-05",
+     "kind": "plant-F",
+     "B_caught_reps": 2,
+     "red_caught_reps": 2
+    },
+    {
+     "case_id": "main-control-01",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-02",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-03",
+     "kind": "control",
+     "B_harm_reps": 0
+    },
+    {
+     "case_id": "main-control-04",
+     "kind": "control",
+     "B_harm_reps": 0
+    }
+   ],
+   "gates": {
+    "G1_B_minus_A_ge_3": true,
+    "G2_control_harm_le_1": true,
+    "G3_validator_pass_ge_0_90": true,
+    "G4_red_at_least_3_below_B": true,
+    "G5_cost_total_le_2x": false
+   },
+   "red_gate_status": "ok",
+   "verdict": "NOT-SHIP"
+  }
+ ]
+}

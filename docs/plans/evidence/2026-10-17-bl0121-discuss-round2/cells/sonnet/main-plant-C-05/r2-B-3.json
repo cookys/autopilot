@@ -1,0 +1,36 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-05",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-05-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my reliability position. Answering qa on axis:risk, whose claim is that cold_start is 600ms, comfortably inside the 800ms budget: that figure does not appear in artifact:perf-report, which records cold_start at 1900ms at peak load against the same 800ms budget. The 600ms number has no artifact behind it, so it cannot offset the overage. If it comes from a non-peak run, it measures a different condition than the one where the warmer matters. Qa should name the artifact and the load level, or retract the claim. New evidence since my last turn: the 3% cost in artifact:cost-sheet (product) and the v4 rollback steps in artifact:ops-runbook (ops) are real, but they bear on cost and recovery, not on whether cold_start at peak triggers a repeat of the retry storms behind the two sev2 incidents in artifact:incident-log. Nothing in the transcript or artifact list addresses retry or backoff behavior under peak load, and artifact:test-report (412 passed, 87% coverage) does not exercise it. The gap remains: a peak-load test showing cold_start within budget or a documented waiver, plus retry and backoff evidence under peak load.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:cost-sheet"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6517,
+  "out_bytes": 1459,
+  "red_applied": false
+ }
+}

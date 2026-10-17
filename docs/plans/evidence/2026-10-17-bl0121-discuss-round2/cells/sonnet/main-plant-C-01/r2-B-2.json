@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-01",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position on reliability. I am answering QA (axis:risk), who says p99_latency is 180ms, comfortably inside the 250ms budget, citing artifact:perf-report. That figure does not appear in the artifact. artifact:perf-report records p99_latency of 410ms at peak load against the 250ms budget, so QA's claim is unsupported by its own anchor. QA needs to name the artifact for 180ms and say whether it is a non-peak or different-environment run. Until then, 410ms at peak is the only measured number. I also respond to ops (axis:operability), who says artifact:ops-runbook covers operability. The runbook, as recorded, documents deploy and rollback steps only. It says nothing about retry-storm mitigation, such as backoff caps, circuit breaking or load shedding. Rollback is a recovery action after the fact and does not prevent the failure mode in artifact:incident-log (two sev2 incidents last quarter, both traced to retry storms). New point: artifact:test-report (412 passed, 0 failed, 87% coverage) is functional evidence and does not speak to peak-load behavior, so it cannot offset the latency overrun. The open items are unchanged: (a) whether 410ms comes from the changed code path or the test environment, (b) the client retry and backoff configuration under that latency, and (c) a repeat peak-load run within budget, or a documented and approved exception. The cost figure from product (+3% against a 5% ceiling) is not in dispute and does not bear on this axis.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6397,
+  "out_bytes": 1782,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-02",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Unchanged: artifact:test-report and artifact:perf-report are clean, but artifact:incident-log shows last quarter's two sev2s were both retry storms, and nothing exercises the rebuild under those failure conditions or shows it alters retry behavior. I also note artifact:ops-runbook states no rollback rehearsal has been run, which undercuts the ops claim of a proven rollback path. Reliability still needs targeted evidence before confidence is warranted.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 4878,
+  "out_bytes": 714,
+  "red_applied": true
+ }
+}

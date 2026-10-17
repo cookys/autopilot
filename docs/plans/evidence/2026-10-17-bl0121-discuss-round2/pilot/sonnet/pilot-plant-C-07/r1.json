@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "pilot-plant-C-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-C-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On reliability, the evidence points against going out this week. Peak queue_depth was 4200 items against a budget of 1000, about 4x over. Last quarter's two sev2 incidents were both retry storms, and a queue running far past its budget is the condition where retries pile up. The passing tests (412 passed, 0 failed) do not show how the system behaves at peak load, so they don't offset the perf result. The runbook's rollback steps limit the damage if something goes wrong, but they do not remove the overload risk. The queue_depth overrun needs to be explained or fixed first, and the retry-storm exposure needs to be shown as mitigated.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3272,
+  "out_bytes": 903,
+  "red_applied": false
+ }
+}

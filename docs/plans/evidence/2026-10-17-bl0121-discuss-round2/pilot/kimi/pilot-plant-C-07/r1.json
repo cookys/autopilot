@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "pilot-plant-C-07",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "pilot-plant-C-07-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Reliability evidence points against shipping now: peak queue depth measured 4200 items against a 1000-item budget (4x over capacity), and last quarter's two sev2 incidents were both retry storms — a failure mode that sustained queue pressure directly aggravates. Passing tests and 87% coverage do not address this load-path gap.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3272,
+  "out_bytes": 559,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,66 @@
+{
+  "round_id": "round-5",
+  "question": "Should we ship the retry cap at 3 or 5?",
+  "transcript": [
+    {
+      "role": "product",
+      "axis_id": "axis:B",
+      "position": "Round 1",
+      "risk_tags": [
+        "minor"
+      ],
+      "anchors": [
+        "artifact:base"
+      ]
+    },
+    {
+      "role": "this-seat",
+      "axis_id": "axis:A",
+      "position": "my first turn",
+      "risk_tags": [
+        "important"
+      ],
+      "anchors": [
+        "artifact:base"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact:base",
+      "kind": "evidence",
+      "text": "baseline"
+    },
+    {
+      "id": "artifact:decisive",
+      "kind": "evidence",
+      "text": "decisive"
+    }
+  ],
+  "axes": [
+    {
+      "id": "axis:A",
+      "claim_vector": [
+        "tokenA1",
+        "tokenA2"
+      ]
+    },
+    {
+      "id": "axis:B",
+      "claim_vector": [
+        "tokenB1",
+        "tokenB2"
+      ]
+    },
+    {
+      "id": "axis:C",
+      "claim_vector": [
+        "tokenC1",
+        "tokenC2"
+      ]
+    }
+  ],
+  "taken_axes": [
+    "axis:B"
+  ]
+}

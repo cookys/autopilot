@@ -312,4 +312,107 @@ if [ -f "$BRAINSTORM_MD" ]; then
   assert_eq "0" "${BRAIN_COUNT:-0}" "brainstorm is NOT wired to dispatch-discuss.js (plan §7 non-goal)"
 fi
 
+# ── 16. second turn (BL-0121): this-seat transcript turn ───────────────────
+# A bundle whose transcript holds the seat's own earlier turn (role this-seat,
+# axis:A). taken_axes lists only the OTHER roles' axes (axis:B).
+BUNDLE_R2="$TEST_TMP/bundle-r2.json"
+cat > "$BUNDLE_R2" <<'EOF'
+{
+  "round_id": "round-5",
+  "question": "Should we ship the retry cap at 3 or 5?",
+  "transcript": [
+    { "role": "product", "axis_id": "axis:B", "position": "Round 1", "risk_tags": ["minor"], "anchors": ["artifact:base"] },
+    { "role": "this-seat", "axis_id": "axis:A", "position": "my first turn", "risk_tags": ["important"], "anchors": ["artifact:base"] }
+  ],
+  "artifacts": [
+    { "id": "artifact:base", "kind": "evidence", "text": "baseline" },
+    { "id": "artifact:decisive", "kind": "evidence", "text": "decisive" }
+  ],
+  "axes": [
+    { "id": "axis:A", "claim_vector": ["tokenA1", "tokenA2"] },
+    { "id": "axis:B", "claim_vector": ["tokenB1", "tokenB2"] },
+    { "id": "axis:C", "claim_vector": ["tokenC1", "tokenC2"] }
+  ],
+  "taken_axes": ["axis:B"]
+}
+EOF
+
+run_r2() { # run_r2 <response-json>  -> sets out/rc
+  reset_author_stub
+  export STUB_STATUS="authored"; export STUB_EXIT="0"
+  export STUB_RAW_CONTENT="$1"
+  out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$BUNDLE_R2" --dispatch-author-bin "$AUTHOR_STUB" 2>&1)"; rc=$?
+}
+R2_OWN='{"round_id":"round-5","axis_id":"axis:A","claim_vector":["tokenA2"],"position":"answering product: updating","risk_tags":["minor"],"anchors":["artifact:decisive"]}'
+R2_OTHER_UNTAKEN='{"round_id":"round-5","axis_id":"axis:C","claim_vector":["tokenC1"],"position":"moving axes","risk_tags":["minor"],"anchors":[]}'
+R2_TAKEN='{"round_id":"round-5","axis_id":"axis:B","claim_vector":["tokenB1"],"position":"taking product axis","risk_tags":["minor"],"anchors":[]}'
+
+run_r2 "$R2_OWN"
+assert_eq "0" "$rc" "second turn: staying on the this-seat axis is accepted"
+run_r2 "$R2_OTHER_UNTAKEN"
+assert_eq "4" "$rc" "second turn: a different UNTAKEN axis is rejected (must stay on own axis)"
+assert_contains "$out" "own earlier axis axis:A" "second turn: rejection names the seat's own axis"
+run_r2 "$R2_TAKEN"
+assert_eq "4" "$rc" "second turn: another role's axis is rejected"
+
+# bundle-shape rejections for the second-turn contract (exit 2, no transport)
+run_r2_bundle_bad() { # <label> <js mutation of b>
+  local f="$TEST_TMP/bundle-r2-bad.json"
+  node -e '
+    const b = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    (new Function("b", process.argv[2]))(b);
+    require("fs").writeFileSync(process.argv[3], JSON.stringify(b));
+  ' "$BUNDLE_R2" "$2" "$f"
+  reset_author_stub
+  out="$(node "$SCRIPT" --bundle-file "$f" --dispatch-author-bin "$AUTHOR_EXIT99" --resolve-review-loop-bin "$AUTHOR_EXIT99" 2>&1)"; rc=$?
+  assert_eq "2" "$rc" "second-turn bundle ($1) exits 2"
+  assert_file_absent "$AUTHOR_EXIT99_SENTINEL" "second-turn bundle ($1) never spawns transport"
+}
+run_r2_bundle_bad "this-seat turn without axis_id" 'delete b.transcript[1].axis_id'
+run_r2_bundle_bad "this-seat axis undeclared" 'b.transcript[1].axis_id = "axis:nope"'
+run_r2_bundle_bad "two this-seat turns" 'b.transcript.push(Object.assign({}, b.transcript[1]))'
+run_r2_bundle_bad "this-seat axis listed as taken" 'b.taken_axes.push("axis:A")'
+
+# prompt content: the second-turn paragraph appears iff a this-seat turn exists.
+PROMPT_STUB="$TEST_TMP/dispatch-author-prompt-capture.sh"
+cat > "$PROMPT_STUB" <<'EOF'
+#!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ]; then cp "$2" "$STUB_PROMPT_COPY"; fi
+  shift
+done
+RAW_LOG="$STUB_TMP/raw_log_prompt_$$.txt"
+printf '%s' "$STUB_RAW_CONTENT" > "$RAW_LOG"
+printf '{ "runner": "stub", "model": "stub", "status": "authored", "raw_log": "%s", "error": null }\n' "$RAW_LOG"
+EOF
+chmod +x "$PROMPT_STUB"
+export STUB_PROMPT_COPY="$TEST_TMP/captured-prompt.txt"
+export STUB_RAW_CONTENT="$R2_OWN"
+AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$BUNDLE_R2" --dispatch-author-bin "$PROMPT_STUB" >/dev/null 2>&1
+P2="$(cat "$STUB_PROMPT_COPY")"
+assert_contains "$P2" "SECOND TURN" "second-turn prompt carries the second-turn paragraph"
+assert_contains "$P2" "respond to at least one OTHER role" "second-turn prompt demands a response to another role"
+assert_contains "$P2" 'exactly "axis:A"' "second-turn prompt pins the own axis in the output contract"
+export STUB_RAW_CONTENT='{"round_id":"round-4","axis_id":"axis:A","claim_vector":["tokenA1"],"position":"x","risk_tags":["minor"],"anchors":[]}'
+AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$BUNDLE" --dispatch-author-bin "$PROMPT_STUB" >/dev/null 2>&1
+P1="$(cat "$STUB_PROMPT_COPY")"
+assert_not_contains "$P1" "SECOND TURN" "first-turn prompt (no this-seat turn) has no second-turn paragraph"
+assert_contains "$P1" "never spoken in this debate" "first-turn prompt keeps the single-turn framing"
+# Byte-for-byte pin: the single-turn prompt must equal the one 16dd391e produced for this bundle
+# (golden generated from that commit's buildPromptFile; not read from develop/HEAD).
+GOLDEN="$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-single-turn-prompt.golden.txt"
+if cmp -s "$STUB_PROMPT_COPY" "$GOLDEN"; then assert_eq "same" "same" "single-turn prompt is byte-identical to the 16dd391e baseline"; else assert_eq "same" "differs" "single-turn prompt is byte-identical to the 16dd391e baseline"; fi
+# Same pin with an empty taken_axes (16dd391e baseline) and for the second-turn prompt (32716fef4,
+# the version the ON/OFF eval ran). Goldens come from those commits' functions, not from develop/HEAD.
+golden_cmp() { # <bundle> <golden> <label>
+  export STUB_RAW_CONTENT='{"round_id":"x","axis_id":"axis:A","claim_vector":["tokenA1"],"position":"x","risk_tags":["minor"],"anchors":[]}'
+  rm -f "$STUB_PROMPT_COPY"
+  AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$1" --dispatch-author-bin "$PROMPT_STUB" >/dev/null 2>&1
+  if cmp -s "$STUB_PROMPT_COPY" "$2"; then assert_eq "same" "same" "$3"; else assert_eq "same" "differs" "$3"; fi
+}
+BUNDLE_EMPTY="$TEST_TMP/bundle-empty-taken.json"
+node -e 'const fs=require("fs");const b=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));b.taken_axes=[];fs.writeFileSync(process.argv[2],JSON.stringify(b));' "$BUNDLE" "$BUNDLE_EMPTY"
+golden_cmp "$BUNDLE_EMPTY" "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-single-turn-empty-taken.golden.txt" "single-turn prompt with empty taken_axes is byte-identical to the 16dd391e baseline"
+golden_cmp "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-second-turn.bundle.json" "$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-second-turn-prompt.golden.txt" "second-turn prompt is byte-identical to the 32716fef4 version the eval ran"
+
 finalize_test

@@ -1,0 +1,31 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-04",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "I hold my earlier opposition on the reliability axis. QA's position must be answered directly: QA asserts artifact:perf-report shows an error_rate of 0.4% inside the 1% budget, but no such 0.4% figure exists anywhere in the artifact list — artifact:perf-report actually records 3.4% at peak load against a 1% budget. QA's 'risk contained' claim rests on a datum that does not appear in any listed artifact, and the artifact QA cites contradicts it. Beyond correcting that, I add new evidence I did not cite before: artifact:incident-log shows two sev2 incidents last quarter from retry storms — exactly the failure mode a misbehaving token refresh at peak load would amplify, and a concrete historical link between this subsystem's load behavior and production severity. So the reliability evidence, including the incident history, continues to point the wrong way: peak-load error rate is 3.4x over budget and the subsystem has a documented sev2 track record under load-induced retry storms.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5811,
+  "out_bytes": 1201,
+  "red_applied": false
+ }
+}

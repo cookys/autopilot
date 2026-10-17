@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-01",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "Holding my earlier position, and answering product's claim that reliability should be treated as settled because 'nobody else sees a problem': that premise is factually wrong. artifact:incident-log — already in the evidence list and cited in my prior turn — shows a 2.1% 30-day error rate against a 0.5% SLO plus two sev2 incidents, which is a live reliability breach, not an absence of signal. product's cost argument (artifact:cost-sheet) is fine on its own axis, but treating reliability as uncontested when the incident log is on the table is a framing error, not evidence. I also note artifact:perf-report shows p99 latency within budget, but latency headroom says nothing about the error budget, so it does not soften the incident-log finding. Shipping into a job already running 4x outside its SLO compounds reliability exposure; nothing new in this round addresses that.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 5811,
+  "out_bytes": 1099,
+  "red_applied": false
+ }
+}

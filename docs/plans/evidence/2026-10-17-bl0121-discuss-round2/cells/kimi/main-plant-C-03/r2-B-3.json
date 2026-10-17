@@ -1,0 +1,34 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-03",
+ "arm": "B",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my reliability position, and I must directly contest qa on axis:risk: qa claims artifact:perf-report shows run_time of 45s inside a 60s budget, but artifact:perf-report as listed actually records run_time 118s at peak load against a 60s budget — the 45s figure appears nowhere in the available artifacts. This is not a minor citation slip: it inverts the only load-bearing performance datum in the debate, and qa's 'risk is contained' conclusion rests on a number that does not exist in evidence. The actual perf data shows a nearly 2x budget overrun at peak, and combined with artifact:incident-log's two sev2 retry-storm incidents last quarter, the reliability exposure stands exactly as I stated before. artifact:test-report's green suite (412 passed, 87% coverage) remains unit-level and says nothing about peak-load interaction with retry behavior. Nothing new has appeared this round to close that gap: no load test with realistic concurrency, no error-budget impact analysis, and no contradiction of the 118s measurement has been offered by any role. Until the 118s peak run_time is either remediated or shown non-interacting with the retry-storm failure mode, this axis remains opposed pending evidence.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6326,
+  "out_bytes": 1523,
+  "red_applied": false
+ }
+}

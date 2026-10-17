@@ -1,0 +1,34 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-03",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier reliability position, and I must directly answer qa, whose position states 'run_time for the report generator is 45s, comfortably inside the 60s budget' citing artifact:perf-report. That reading is wrong: artifact:perf-report actually records run_time measured 118s at peak load against a 60s budget. The 45s figure qa cites appears in no artifact in the list — that datum is a gap, and qa has effectively evaluated a perf report that does not exist. The risk axis is therefore being argued from a misread artifact, not from evidence. The actual artifact:perf-report shows the run_time is nearly 2x over budget, and artifact:incident-log shows two sev2 retry-storm incidents last quarter, the exact failure mode a slow, over-budget generator aggravates at peak load; artifact:test-report (412 passed, 87% coverage) says nothing about peak-load or retry behavior. I also note ops' rollback steps in artifact:ops-runbook do not address retry-storm containment. Until load tests with realistic concurrency/retry behavior and an error-budget impact analysis exist, the reliability axis remains opposed and evidence-pending.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6326,
+  "out_bytes": 1413,
+  "red_applied": false
+ }
+}

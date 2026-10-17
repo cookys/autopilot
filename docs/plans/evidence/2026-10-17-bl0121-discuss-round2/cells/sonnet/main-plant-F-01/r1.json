@@ -1,0 +1,33 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-F-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Functional and load evidence is good: 412 tests pass with 0 failures, and p99 is within budget at peak. Neither report shows how the queue behaves under a retry storm, which caused both sev2 incidents last quarter. The runbook documents rollback, but no failover drill has been run and the last one is still marked planned. So the failure mode that has actually hurt this queue is not shown to be covered, and the recovery path has never been exercised. I would want evidence of storm or backoff behavior under the change, plus either a completed failover drill or an explicit acceptance of that gap, before treating reliability as settled.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:ops-runbook",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3316,
+  "out_bytes": 898,
+  "red_applied": false
+ }
+}

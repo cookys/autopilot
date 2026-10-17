@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-01",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-01-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Reliability signals are mixed: the test report shows 412 passed with 0 failures and 87% coverage, and the perf report shows p99 within budget at peak load, but the incident log records two sev2 incidents last quarter traced to retry storms — precisely the failure mode this queue change touches. Before confidence in reliability is warranted, evidence is needed that the change's behavior under retry-storm conditions has been exercised, since neither the test report nor the perf report explicitly addresses that scenario.",
+  "risk_tags": [
+   "important"
+  ],
+  "anchors": [
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3316,
+  "out_bytes": 761,
+  "red_applied": false
+ }
+}

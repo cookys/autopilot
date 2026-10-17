@@ -1,0 +1,35 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-01",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-01-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "I hold my earlier position. Nothing new has appeared that changes it. Product says nobody else sees a reliability problem, so it should be treated as settled. That is not evidence. The other roles did not examine this axis: artifact:cost-sheet covers budget (+3% vs a 5% ceiling), and artifact:ops-runbook covers deploy and rollback steps. artifact:incident-log is the only artifact that measures reliability, and it shows a 2.1% 30-day error rate against a 0.5% SLO, with two sev2 incidents. QA says risk is contained because artifact:test-report shows 412 passed, 0 failed. That result is pre-production and functional, and it does not measure the production error rate. The incident log shows the job failing at about four times its budget even though the suite is green, so a green suite does not tell us whether the change reduces, preserves or worsens those errors. On ops, artifact:ops-runbook (v4) is only recorded as documenting deploy and rollback steps. Nothing in it says what error-rate threshold triggers a rollback, or that the rollback has been exercised. Gap: no artifact in the list gives sev2 root causes, maps the 2.1% to code paths this change touches, or reports a canary or staging error rate. I cannot treat these as established. They remain the evidence needed on this axis.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:ops-runbook",
+   "artifact:cost-sheet"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6399,
+  "out_bytes": 1595,
+  "red_applied": false
+ }
+}

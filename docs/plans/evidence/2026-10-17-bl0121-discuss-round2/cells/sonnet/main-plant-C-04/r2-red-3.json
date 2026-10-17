@@ -1,0 +1,31 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-04",
+ "arm": "red",
+ "rep": 3,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-04-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "My reliability position is unchanged. The perf report measures a 3.4% error rate at peak load against a 1% budget. The incident log shows two sev2 incidents last quarter, both traced to retry storms. Elevated errors on a token refresh path are the condition that drives client retries, so this is the same failure pattern. The other roles' points on cost, runbook coverage and risk do not address it. The cost and runbook points are on separate axes. The risk point cites a 0.4% error rate, which conflicts with the 3.4% in the perf report. The passing functional tests (412 passed, 0 failed) say nothing about load behavior. Two things would move me: evidence that the peak-load error rate is within budget, or evidence that retry and backoff behavior stays safe at 3.4%. The first step is to reconcile the 0.4% and 3.4% figures, since they may come from different conditions or measurements.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "red",
+  "prompt_bytes": 5205,
+  "out_bytes": 1098,
+  "red_applied": true
+ }
+}

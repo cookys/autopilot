@@ -1,0 +1,34 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-F-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-F-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "On reliability grounds the change is not yet demonstrated: the unit and perf results are green (412 passed, 0 failed, 87% coverage; p99 within budget), but the dual-write soak test in the runbook is still TODO and has never been run, and the two sev2 incidents last quarter were both retry storms — exactly the failure mode an unsoaked dual-write path can amplify. The reliability question should stay open until the soak test is executed and retry behavior under failure injection is observed.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:ops-runbook",
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3322,
+  "out_bytes": 766,
+  "red_applied": false
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-control-02",
+ "arm": "B",
+ "rep": 2,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r2",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Holding my earlier position. Answering product: it says nobody else sees a reliability problem and treats the axis as settled. That is not supported. artifact:incident-log shows a 30-day error rate of 1.8% against a 0.3% SLO (six times over) and two sev2 incidents, and no other role has addressed it. Their silence is not evidence. Product's cost point stands on artifact:cost-sheet (+3% vs 5% ceiling), but cost says nothing about reliability. Answering qa: artifact:test-report (412 passed, 0 failed, 87% coverage) shows functional correctness in test, not production error behavior, so it does not support calling risk contained given the incident history. Answering ops: artifact:ops-runbook v4 covers deploy and rollback, which limits blast radius but does not reduce the baseline error rate. Gaps I name: the transcript cites no artifact showing the change's effect on production error rate, no root-cause analysis for the two sev2s, and no mapping of whether the change touches those code paths. The perf-report (p99 within budget at peak) covers latency, not errors. Until that evidence exists, reliability remains open.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report",
+   "artifact:ops-runbook",
+   "artifact:cost-sheet"
+  ]
+ },
+ "wrap": {
+  "arm": "B",
+  "prompt_bytes": 6335,
+  "out_bytes": 1448,
+  "red_applied": false
+ }
+}

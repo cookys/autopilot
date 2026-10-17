@@ -1,0 +1,32 @@
+{
+ "seat": "kimi",
+ "case_id": "main-plant-C-05",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-05-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "The test suite is green (412 passed, 87% coverage), but the measured cold_start of 1900ms at peak load is more than double the 800ms performance budget, which is a direct reliability exposure under load. Combined with last quarter's two sev2 retry-storm incidents, the service's behavior at peak is exactly where it has already proven fragile; shipping this week with a known 2.4x budget breach on cold start would widen that fragility rather than close it.",
+  "risk_tags": [
+   "critical"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:test-report",
+   "artifact:incident-log"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3215,
+  "out_bytes": 685,
+  "red_applied": false
+ }
+}

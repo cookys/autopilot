@@ -1,0 +1,34 @@
+{
+ "seat": "sonnet",
+ "case_id": "main-plant-C-03",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-plant-C-03-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes",
+   "axis:reliability:needs-evidence"
+  ],
+  "position": "Peak-load run_time is 118s against a 60s budget, nearly double. Last quarter's two sev2 incidents were both retry storms, and a run that overshoots its budget can hit timeouts and trigger retries. The passing test suite (412 passed, 87% coverage) says nothing about behavior under load, so it does not offset the perf result. Before this goes forward, we need evidence that the 118s run time cannot set off retry amplification. That means retry and timeout settings checked against the 118s figure, plus a load test showing retry behavior stays bounded. A waiver or revised budget for the 60s target would also settle the gap.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:perf-report",
+   "artifact:incident-log",
+   "artifact:test-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3233,
+  "out_bytes": 900,
+  "red_applied": false
+ }
+}

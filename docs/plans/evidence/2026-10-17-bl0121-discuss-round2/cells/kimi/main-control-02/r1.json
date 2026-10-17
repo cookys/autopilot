@@ -1,0 +1,33 @@
+{
+ "seat": "kimi",
+ "case_id": "main-control-02",
+ "arm": "r1",
+ "rep": 0,
+ "attempts": 1,
+ "rc": 0,
+ "status": "ok",
+ "stderr": "",
+ "contribution": {
+  "round_id": "main-control-02-r1",
+  "axis_id": "axis:reliability",
+  "claim_vector": [
+   "axis:reliability:opposes"
+  ],
+  "position": "On the reliability axis, the gateway is not in a healthy state to absorb change: the 30-day error rate of 1.8% sits six times above the 0.3% SLO, and two sev2 incidents in the same window indicate an already-degraded service. Even with a clean test report (412 passed, 0 failed, 87% coverage) and p99 within budget at peak load, those green signals measure the change in isolation, not the system's current error budget. Shipping into a service that is actively breaching its SLO risks compounding an existing reliability problem and makes attribution of any new errors harder.",
+  "risk_tags": [
+   "critical",
+   "important"
+  ],
+  "anchors": [
+   "artifact:incident-log",
+   "artifact:test-report",
+   "artifact:perf-report"
+  ]
+ },
+ "wrap": {
+  "arm": "r1",
+  "prompt_bytes": 3198,
+  "out_bytes": 817,
+  "red_applied": false
+ }
+}

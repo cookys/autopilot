@@ -926,19 +926,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
 - **Context**: 改名情境 4 個增量格中 1 格整組席位都漏，其餘只有 1 席說對；完整審查 6 席全說對。
 
-### review-only campaign 拒收審查設定裡的第四席 opencode
-- **Id**: BL-0204
-- **Status**: open
-- **Since**: 2026-10-17
-- **Origin**: owner
-- **Problem**: 審查設定列的四席 qc_panel 裡，第四席 opencode 在 review-only campaign 一開始就被拒收，整個 campaign 起不來；但 opencode 已有完整的無工具封鎖，一般 hetero 審查迴圈四席都能正常跑。
-- **Impact**: 照目前設定開 review-only campaign 會被擋，只能先手動換掉這一席。
-- **Trigger**: 下一次用現行 qc_panel 開 review-only campaign，或決定讓 opencode 通過盲審 admission
-- **Effort**: S
-- **Source**: BL-0146 D5 實測 2026-10-17；owner 追問
-- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
-- **Context**: 拒收碼 final_panel_seat_blind_incompatible，名單在 final-panel-qualification.js，dispatch-review.sh 註明是否納入名單是另案決定。
-
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
 - **Status**: open

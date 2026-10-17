@@ -32,18 +32,19 @@
  *                                 exposes no verified tool-deny/sandbox mechanism —
  *                                 see the callCli() cursor branch for the full
  *                                 reasoning and the R-3 citation.
- *                                 QRP_CLI_KIND=opencode → `opencode run --dir <EMPTY
- *                                 scratch dir> --pure -m <model> --agent locked
- *                                 --format json`, prompt on stdin, with
- *                                 OPENCODE_CONFIG_CONTENT = global deny-all PLUS a
- *                                 deny-all `locked` agent. Allowed ONLY in exactly
- *                                 that shape: lib/opencode-containment.js
- *                                 assertLocked() is re-checked against the final
- *                                 argv+env before spawn and any deviation (no env,
- *                                 --agent plan, non-empty --dir, no --pure) throws.
- *                                 Live probe 2026-10-16, opencode 1.19.2,
- *                                 https://opencode.ai/docs/permissions/ (the earlier
- *                                 `--agent plan` posture let a bash `hostname` run).
+ *                                 QRP_CLI_KIND=opencode → a deny-all `locked` agent in an
+ *                                 EMPTY cwd under a clean HOME, prompt on stdin. Two
+ *                                 adaptors chosen by `<bin> --version`: v1 =
+ *                                 `run --dir <EMPTY dir> --pure -m <model> --agent locked
+ *                                 --format json`; v2 = `run --standalone -m <model>#<variant>
+ *                                 --agent locked --format json` with
+ *                                 OPENCODE_DISABLE_PROJECT_CONFIG=1. An unknown major
+ *                                 refuses. Allowed ONLY in exactly that shape:
+ *                                 lib/opencode-containment.js assertPlan() is re-checked
+ *                                 against the final argv+env+cwd before spawn and any
+ *                                 deviation throws. Probes 2026-10-16 (1.19.2) and
+ *                                 2026-10-18 (2.0.32), https://opencode.ai/docs/permissions/
+ *                                 (the earlier `--agent plan` posture let a bash `hostname` run).
  *
  * ⚠️ agy takes NO --effort. Probed 2026-08-20 (agy 1.1.16) across three model
  * families: `--effort low|medium|high` → "--effort is not supported for <model>",
@@ -1236,6 +1237,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let kimiAgentDir = null;
   let opencodeDir = null;
   let opencodeRoot = null;
+  let opencodeAdaptor = 'v1';
   // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
@@ -1448,21 +1450,17 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       + 'case until cursor-agent ships a real catch-all deny or a portable sandbox surviving --force.',
     );
   } else if (kind === 'opencode') {
-    // CONTAINMENT (live adversarial probe 2026-10-16, opencode 1.19.2; one owner:
-    // lib/opencode-containment.js). Global `permission "*":deny` + a custom primary
-    // agent `locked` that is also deny-all, delivered by OPENCODE_CONFIG_CONTENT, run in
-    // an EMPTY --dir so no project opencode.json / agent md exists to re-open anything.
-    // `--agent plan` is NOT containment (it denies only `edit`). The env + argv are
-    // verified again right before spawn (opencodeContainment.assertLocked) so a future
-    // edit that drops any layer fails closed instead of spawning uncontained.
-    // VERSION-DRIFT CAVEAT: re-run hooks/tests/opencode-deny-all-live.test.sh
-    // (AUTOPILOT_LIVE_OPENCODE=1) on any opencode upgrade.
-    // <root>/work is the EMPTY --dir; <root>/home is a clean HOME/XDG tree with only
-    // auth.json (so ~/.config/opencode agents/MCP/plugins are never loaded).
+    // CONTAINMENT (one owner: lib/opencode-containment.js, both adaptors). v1 (opencode 1.x,
+    // probe 2026-10-16): global deny + custom primary agent `locked`, run in an EMPTY --dir.
+    // v2 (opencode 2.x, spike 2026-10-18): `run --standalone ... --agent locked` in an empty cwd
+    // under a clean HOME with OPENCODE_DISABLE_PROJECT_CONFIG=1. The adaptor comes from
+    // `<bin> --version` (once, in buildPlan below; an unknown major refuses). `--agent plan` is
+    // NOT containment (it denies only `edit`). The plan is verified again right before spawn
+    // (assertPlan) so a future edit that drops any layer fails closed.
+    // <root>/work is the EMPTY cwd; <root>/home is a clean HOME/XDG tree (so ~/.config/opencode
+    // agents/MCP/plugins are never loaded). args/env/cwd are filled in at the spawn step.
     opencodeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-opencode-empty-'));
-    opencodeDir = path.join(opencodeRoot, 'work');
-    fs.mkdirSync(opencodeDir);
-    args = opencodeContainment.lockedArgs({ model, variant: effort === 'max' ? 'xhigh' : effort, dir: opencodeDir });
+    args = [];
   } else if (kind === 'codex') {
     sidecar = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-codex-')),
@@ -1630,16 +1628,25 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   if (kind === 'opencode') {
     // credentials come from the cloned QRP_CLI_HOME when set, else the ambient HOME
     const authHome = cloneHome || process.env.HOME || os.homedir();
-    const isolated = opencodeContainment.prepareHome(
-      opencodeRoot,
-      cloneHome ? path.join(cloneHome, '.local', 'share') : (process.env.XDG_DATA_HOME || path.join(authHome, '.local', 'share')),
-    );
-    childEnv = opencodeContainment.lockedEnv({ ...childEnv, ...isolated });
-    const breach = opencodeContainment.assertLocked({ args, env: childEnv });
+    let plan;
+    try {
+      plan = opencodeContainment.buildPlan({
+        bin, model, effort, profile: 'review', root: opencodeRoot, baseEnv: childEnv,
+        dataRoot: cloneHome ? path.join(cloneHome, '.local', 'share') : (process.env.XDG_DATA_HOME || path.join(authHome, '.local', 'share')),
+      });
+    } catch (e) {
+      fs.rmSync(opencodeRoot, { recursive: true, force: true });
+      throw new Error(`opencode containment plan failed: ${e.message}`);
+    }
+    opencodeAdaptor = plan.adaptor;
+    opencodeDir = plan.cwd;
+    args = plan.args;
+    const breach = opencodeContainment.assertPlan(plan, { baseEnv: childEnv });
     if (breach) {
       fs.rmSync(opencodeRoot, { recursive: true, force: true });
       throw new Error(`opencode containment verification failed: ${breach} — refusing to spawn opencode uncontained`);
     }
+    childEnv = opencodeContainment.applyEnv(childEnv, plan.env);
   }
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -1715,7 +1722,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         if (kind === 'opencode') {
           // a clean exit proves nothing: any tool event voids the case (transport/containment
           // failure, never a clean answer)
-          const breaches = opencodeContainment.auditEvents(text);
+          const breaches = opencodeContainment.auditEvents(text, opencodeAdaptor);
           if (breaches.length) {
             // Tool events only (auditEvents lists nothing else). Prompt forbade tools ->
             // the seat disobeyed an explicit instruction: tagged so the exam driver

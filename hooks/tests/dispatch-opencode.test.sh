@@ -23,6 +23,7 @@ STDIN_LOG="$TEST_TMP/stdin.log"
 STUB_OK="$TEST_TMP/opencode-ok"
 cat > "$STUB_OK" <<__EOF1
 #!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo 1.19.2; exit 0; fi
 printf '%s\n' "\$*" > "$ARGV_LOG"
 cat > "$STDIN_LOG"
 dir=""
@@ -39,6 +40,7 @@ chmod +x "$STUB_OK"
 STUB_NOOP="$TEST_TMP/opencode-noop"
 cat > "$STUB_NOOP" <<'__EOF2'
 #!/usr/bin/env bash
+[ "$1" = "--version" ] && { echo 1.19.2; exit 0; }
 cat >/dev/null
 printf '%s\n' '{"type":"text","part":{"text":"nothing to do"}}'
 __EOF2
@@ -48,6 +50,7 @@ chmod +x "$STUB_NOOP"
 STUB_FAIL="$TEST_TMP/opencode-fail"
 cat > "$STUB_FAIL" <<'__EOF3'
 #!/usr/bin/env bash
+[ "$1" = "--version" ] && { echo 1.19.2; exit 0; }
 cat >/dev/null
 echo "provider error" >&2
 exit 1
@@ -92,6 +95,30 @@ done
 OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-eff-max --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
 assert_contains "$(cat "$ARGV_LOG")" ' --variant xhigh ' "--effort max is clamped to --variant xhigh (provider has no max)"
 assert_not_contains "$(cat "$ARGV_LOG")" ' --variant max ' "max never reaches opencode (it would fall through to the provider default silently)"
+
+# 1c) opencode 2.x: --dir/--pure/--variant are gone; the plan is `run --standalone -m model#variant
+# --format json` with the worktree as cwd (lib/opencode-containment.js `plan --profile implement`)
+STUB_V2="$TEST_TMP/opencode-v2"
+cat > "$STUB_V2" <<__EOFV2
+#!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo v2.0.32; exit 0; fi
+printf '%s\n' "\$*" > "$ARGV_LOG"
+pwd > "$ARGV_LOG.cwd"
+cat > "$STDIN_LOG"
+echo opencode-v2-edited > oc_v2_out.txt
+printf '%s\n' '{"type":"step_start","timestamp":1}'
+__EOFV2
+chmod +x "$STUB_V2"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-v2 --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
+assert_contains "$OUT" '"status": "committed"' "opencode v2 committed path"
+assert_eq "run --standalone -m opencode-go/muse-spark-1.3-contributor#xhigh --format json" "$(cat "$ARGV_LOG")" "opencode v2 argv: --standalone, model#variant (max->xhigh), no --dir/--pure/--variant"
+assert_contains "$(cat "$ARGV_LOG.cwd")" "feat-oc-v2" "opencode v2 runs with the worktree as cwd"
+assert_contains "$(cat "$STDIN_LOG")" 'HARNESS DIRECTIVE' "opencode v2 prompt still travels on stdin"
+STUB_V9="$TEST_TMP/opencode-v9"
+printf '#!/usr/bin/env bash\n[ "$1" = "--version" ] && { echo 9.0.1; exit 0; }\nexit 0\n' > "$STUB_V9"; chmod +x "$STUB_V9"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/x --branch feat/oc-v9 --prompt-file "$PROMPT" --opencode-bin "$STUB_V9" --context-window off 2>&1)"
+assert_contains "$OUT" '"status": "precondition_failed"' "opencode unknown major fails closed before spend"
+assert_contains "$OUT" 'unsupported opencode version' "opencode unknown major names the version"
 
 # 2) no_op path
 OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-noop --prompt-file "$PROMPT" --opencode-bin "$STUB_NOOP" --context-window off 2>&1)"

@@ -95,7 +95,10 @@ cat > "$USTUB" <<'EOS'
 # an unwritable dump (the agy author wraps its runner in `bwrap --ro-bind / /`) falls back to stdout, which lands in the raw log
 if [ -n "${STUB_DUMP:-}" ]; then { echo "---INVOCATION $(basename "$0") $*"; env | LC_ALL=C sort; } >> "$STUB_DUMP" 2>/dev/null || { echo "---INVOCATION $(basename "$0") $*"; env | LC_ALL=C sort; }; fi
 case "$*" in
-  *--version*) echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
+  *--version*)
+    # opencode picks its adaptor from --version (an unrecognised line refuses), so the opencode-named stubs report one
+    case "$(basename "$0")" in opencode|ocstub) echo "1.19.2" ;; *) echo "codex-cli 9.9.9 (test stub)" ;; esac
+    exit 0 ;;
   *--help*)
     printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'
     printf '%s\n' 'Usage: kimi --model=<model>, --prompt <prompt>; --output-format=text [--plan]'
@@ -107,6 +110,7 @@ touch stub_edit.txt 2>/dev/null || true
 exit 0
 EOS
 chmod +x "$USTUB"
+OCSTUB="$TEST_TMP/ocstub"; ln -sf "$USTUB" "$OCSTUB"
 PROBEBIN="$TEST_TMP/probebin"; mkdir -p "$PROBEBIN"
 for n in codex agy grok qoderclicn cursor-agent claude kimi opencode; do ln -sf "$USTUB" "$PROBEBIN/$n"; done
 
@@ -284,7 +288,7 @@ scrub_case "(f) author codex" PATH="$BINDIR:$PATH" bash "$AUTHOR" --runner codex
 scrub_case "(f) author kimi" PATH="$PROBEBIN:$PATH" bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$PROMPT" --bin kimi --timeout 30s --run-id cpr-a-kimi
 scrub_case "(f) author agy" PATH="$BINDIR:$PATH" bash "$AUTHOR" --runner agy --model gemini-test --prompt-file "$PROMPT" --bin "$USTUB" --timeout 30s --run-id cpr-a-agy
 scrub_case "(f) review codex" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$USTUB" --run-id cpr-r-codex
-scrub_case "(f) review opencode" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner opencode --model oc-test --diff-file "$DIFF" --bin "$USTUB" --run-id cpr-r-opencode
+scrub_case "(f) review opencode" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner opencode --model oc-test --diff-file "$DIFF" --bin "$OCSTUB" --run-id cpr-r-opencode
 scrub_case "(f) review kimi" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner kimi --model kimi-test --diff-file "$DIFF" --bin "$USTUB" --run-id cpr-r-kimi
 scrub_case "(f) explore codex" PATH="$BINDIR:$PATH" bash "$EXPLORE" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo "$SBX" --bin "$USTUB" --timeout 30s --no-probe
 scrub_case "(f) explore agy" PATH="$BINDIR:$PATH" bash "$EXPLORE" --runner agy --model gemini-test --prompt-file "$PROMPT" --repo "$SBX" --bin "$USTUB" --timeout 30s --no-probe
@@ -292,10 +296,11 @@ HN2=0
 # hetero_scrub <label> <runner> <bin-flag> [detached 0|1] [script path]
 hetero_scrub() {
   local label="$1" runner="$2" binflag="$3" detached="${4:-0}" script="${5:-$HETERO}"
+  local stub="$USTUB"; [ "$runner" = opencode ] && stub="$OCSTUB"
   HN2=$((HN2+1)); local id="cpr-hs$HN2" led="$TEST_TMP/ledger-hs-$HN2.jsonl"
   local -a coords=(--run-id "$id"); local flag=0
   if [ "$detached" = 1 ]; then bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$led" >/dev/null; coords=(--ledger "$led" --run-id "$id" --stage implement); flag=1; fi
-  scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --runner "$runner" --model m "$binflag" "$USTUB" --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}"
+  scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --runner "$runner" --model m "$binflag" "$stub" --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}"
 }
 hetero_scrub "(f) hetero codex" codex --codex-bin
 hetero_scrub "(f) hetero kimi" kimi --kimi-bin

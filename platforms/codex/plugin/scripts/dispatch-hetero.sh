@@ -265,6 +265,7 @@ GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TE
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
+OPENCODE_VER=""  # opencode --version line, read once at the pre-spend gate (declare -p carries it to the detached child)
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
 REPO_IDENTITY_FIELDS=""   # manifest repo-identity JSON members, cached by repo_identity_resolve_fields; init early so it is SET for the detach declare -p and an ambient value is never copied verbatim (BL-0109)
@@ -2213,6 +2214,12 @@ elif [ "$IS_CURSOR" -eq 1 ]; then
   command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
 elif [ "$IS_OPENCODE" -eq 1 ]; then
   command -v "$OPENCODE_BIN" >/dev/null 2>&1 || die_precondition "opencode binary not found: $OPENCODE_BIN (install OpenCode CLI or pass --opencode-bin)"
+  # The ONE `--version` run of this call (lib/opencode-containment.js picks the v1 or v2 adaptor from
+  # it; an unknown major refuses here, before any spend). Reused by the plan call at spawn time.
+  _oc_verr="$(mktemp -t dispatch-hetero-opencode-verr-XXXXXX)"
+  OPENCODE_VER="$(node "$SELF_DIR/lib/opencode-containment.js" version --bin "$OPENCODE_BIN" 2>"$_oc_verr")" \
+    || { _oc_msg="$(cat "$_oc_verr")"; rm -f "$_oc_verr"; die_precondition "opencode version not usable: ${_oc_msg}"; }
+  rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 else
@@ -3717,7 +3724,8 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
   # 1.18.25, docs/plans/2026-09-03-opencode-implementer-rail.md § Stage-0):
   #   --dir anchors edits at the real worktree (no agy-style absolute-path anchor needed);
   #   the prompt is read from STDIN when no positional message is given (no ARG_MAX wall);
-  #   --pure runs without the operator's external plugins (hermetic exam surface);
+  #   --pure runs without the operator's external plugins (hermetic exam surface; v1 only —
+  #   opencode 2.x removed --dir/--pure/--variant, see lib/opencode-containment.js);
   #   --format json streams events (step_finish carries token usage — parsing is a follow-up,
   #   log_format stays plain and usage null); edit-only: it never commits → wrapper-commit
   #   rail, same as grok/qoderclicn. --model is a provider/model id verbatim.
@@ -3737,9 +3745,20 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   OPENCODE_PROMPT_FILE="$(mktemp -t dispatch-hetero-opencode-prompt-XXXXXX)"
   printf '%s' "${OPENCODE_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$OPENCODE_PROMPT_FILE"
-  OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
-  run_worker bash -c 'cd "$1" && exec "$2" run --dir "$1" --pure -m "$4" --variant "$5" --format json < "$3"' \
-      _ "$WT" "$OPENCODE_BIN" "$OPENCODE_PROMPT_FILE" "$MODEL" "$OPENCODE_VARIANT"
+  # argv/env come from lib/opencode-containment.js (`plan --profile implement`): v1 =
+  # `run --dir <wt> --pure -m M --variant V --format json`; v2 (opencode 2.x removed those flags) =
+  # `run --standalone -m M#V --format json` with the worktree as cwd. Max→xhigh in both.
+  OC_PLAN_DIR="$(mktemp -d -t dispatch-hetero-opencode-plan-XXXXXX)"
+  if node "$SELF_DIR/lib/opencode-containment.js" plan --bin "$OPENCODE_BIN" --model "$MODEL" --effort "$EFFORT" \
+       --profile implement --cwd "$WT" --version-string "$OPENCODE_VER" --out "$OC_PLAN_DIR" >"$OC_PLAN_DIR/err" 2>&1; then
+    mapfile -d '' -t OC_ARGV < "$OC_PLAN_DIR/argv.nul"
+    mapfile -d '' -t OC_ENV < "$OC_PLAN_DIR/env.nul"
+    run_worker bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+        _ "$WT" "$OPENCODE_PROMPT_FILE" ${OC_ENV[@]+env "${OC_ENV[@]}"} "$OPENCODE_BIN" "${OC_ARGV[@]}"
+  else
+    run_worker bash -c 'echo "opencode plan failed: $(cat "$1")" >&2; exit 2' _ "$OC_PLAN_DIR/err"
+  fi
+  rm -rf "$OC_PLAN_DIR"
   rm -f "$OPENCODE_PROMPT_FILE"
 elif [ "$IS_KIMI" -eq 1 ]; then
   # Kimi Code CLI (Moonshot). Stage-0 spike 2026-09-11 (kimi 0.41.0), see
@@ -4842,7 +4861,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \

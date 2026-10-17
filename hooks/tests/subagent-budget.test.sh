@@ -352,6 +352,29 @@ assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "LR warn mode never d
 assert_contains "$__RUN_STDOUT" 'lane ceilings cannot apply' "LR warn mode adds the warning"
 AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire lr1 'Engine: sonnet\ngo'; expect_silent "LR mode off"
 
+# an Engine: brief without Lane: is never billed to its description lane (that lane is at its ceiling here)
+mk lr4 '[{"id":"d0","description":"dsc"},{"id":"d1","description":"dsc"},{"id":"d2","description":"dsc"},{"id":"d3","description":"dsc"}]'
+AUTOPILOT_SUBAGENT_BUDGET_MODE=warn fire lr4 'Engine: sonnet\ngo' "dsc"
+assert_contains "$__RUN_STDOUT" 'lane ceilings cannot apply' "LR warn: missing Lane: still warned"
+assert_not_contains "$__RUN_STDOUT" "lane 'dsc' already has" "LR warn: description lane is not counted for an Engine: brief"
+c0=$(cards); before=$(ledger_rows)
+expect_allow lr4 'Engine: sonnet\nBudget-Ack: format exception for test\ngo' "dsc" "LR ack: Engine: brief without Lane: passes"
+assert_not_contains "$__RUN_STDOUT" "lane 'dsc'" "LR ack: description lane is not counted"
+assert_eq "$c0" "$(cards)" "LR ack: no panel card opened"
+assert_not_contains "$(tail -n 1 "$LEDGER")" "budget-ack-dsc" "LR ack: ledger row is not filed under the description lane"
+assert_eq "$((before + 1))" "$(ledger_rows)" "LR ack: one ledger row"
+# remind mode, no Lane:, description lane at its ceiling: still the format deny, and no card
+c0=$(cards)
+fire lr4 'Engine: sonnet\ngo' "dsc"
+assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR remind: denied for the missing Lane:"
+assert_not_contains "$__RUN_STDOUT" "lane 'dsc'" "LR remind: reason does not name the description lane"
+assert_eq "$c0" "$(cards)" "LR remind: no panel card from the description lane"
+# depth-0 Engine: brief without Lane: is checked even when the payload has no transcript_path
+fire lr1 'Engine: sonnet\ngo' "" NONE
+assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR no transcript_path: Engine: without Lane: denied"
+fire lr1 'Engine: sonnet\nLane: x\ngo' "" NONE; expect_silent "LR no transcript_path with Lane: stays fail-open"
+fire lr1 'Task: x\ngo' "" NONE; expect_silent "LR no transcript_path non-Engine stays fail-open"
+
 # ---- KR7: latency, 200 transcripts x 300 turns, second call warm ---------------------------------------------------------
 mk s12 "$(node -e 'const a=[];for(let i=0;i<200;i++)a.push({id:"p"+i,brief:["Lane: lat"+i],turns:300,ageMs:4800000});console.log(JSON.stringify(a))')"
 fire s12 'Engine: sonnet\nLane: latnew\ngo'

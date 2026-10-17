@@ -393,16 +393,23 @@ function run(payload) {
   if (payload.tool_name !== 'Agent' && payload.tool_name !== 'Task') return;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return;
-  if (typeof payload.session_id !== 'string' || !payload.session_id
-    || typeof payload.transcript_path !== 'string' || !payload.transcript_path) {
-    process.stderr.write('subagent-budget: no session_id/transcript_path on the payload, allowing (fail-open)\n');
-    return;
-  }
-  const now = nowMs();
-  const raw = collect(payload);
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
   const brief = typeof input.prompt === 'string' ? input.prompt : '';
   const needLane = isEngineBrief(brief);
+  const noTranscript = typeof payload.session_id !== 'string' || !payload.session_id
+    || typeof payload.transcript_path !== 'string' || !payload.transcript_path;
+  if (noTranscript) {
+    // Nothing to count. The lane format rule needs no transcript though: a depth-0 Engine: brief without a Lane: is
+    // still checked; every other payload fails open.
+    const sub = typeof payload.agent_id === 'string' && payload.agent_id;
+    if (!(needLane && !sub && !laneFromBrief(brief))) {
+      process.stderr.write('subagent-budget: no session_id/transcript_path on the payload, allowing (fail-open)\n');
+      return;
+    }
+    payload = { ...payload, transcript_path: '' };
+  }
+  const now = nowMs();
+  const raw = noTranscript ? null : collect(payload);
   if (raw === null) {
     // No subagents dir: nothing to count and no ancestry to inherit from. A depth-0 Engine: brief with no Lane: is
     // still a format error (the first dispatch of a session is where the lane must start); anything else fails open.
@@ -418,7 +425,9 @@ function run(payload) {
     if (own && raw) lane = laneOf(raw, `agent-${own}.jsonl`, false);
   }
   const laneMissing = needLane && !lane;
-  if (!lane) lane = laneFromDescription(input.description);
+  // Only a brief that is not an Engine: brief falls back to the description; an Engine: brief with no lane stays
+  // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
+  if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
   const c = tally(entries, lane, now);
 

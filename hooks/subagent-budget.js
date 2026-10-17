@@ -16,8 +16,14 @@
  * lower-cased; else no lane (counts only toward the root total). A transcript's lane uses the same rule on its first user
  * message, then the nearest ancestor's (meta.json parentAgentId chain, at most 8 hops) brief Lane:, then `description` in
  * agent-<id>.meta.json. A brief with no Lane: from a subagent dispatcher joins that dispatcher's lane. Nested transcripts
- * (spawnDepth >= 2) add turns to their lane but take no dispatch slot (COUNT_NESTED_DISPATCHES, owner card d-53cf611a). `Role: reviewer` in the first 5 lines excludes a brief
+ * (spawnDepth >= 2) add turns to their lane but take no dispatch slot (COUNT_NESTED_DISPATCHES=false, decided by owner card d-53cf611a). `Role: reviewer` in the first 5 lines excludes a brief
  * from the lane RELAY count (its turns still count).
+ *
+ * LANE REQUIRED (owner card d-0bb18035): a brief whose line 1 starts with `Engine:` (same test as foreman-guard's
+ * isAutopilotDispatched) must carry a lane: a valid `Lane:` in its first 5 lines, or one inherited from the dispatching
+ * subagent / its ancestors. Otherwise remind mode denies (marker-independent, no panel card: a format problem the
+ * dispatcher fixes itself), warn mode only warns, off ignores. `Budget-Ack:` passes it. A brief not starting with
+ * `Engine:` (Explore etc.) still falls back to `description` and only counts toward the root total.
  *
  * CEILINGS (deny, remind mode): lane dispatches >= lane_dispatch_max (default 4, so the 5th is denied); lane turns >=
  * lane_turns_max (300); root subagent turns in the last 60 min >= root_turns_per_hour_max (400). Lane totals use every
@@ -47,9 +53,11 @@ const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const ACK_MIN_REASON = 8;
 const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/2';
 const MAX_ANCESTOR_DEPTH = 8;
-// BL-0209 / panel card d-53cf611a: whether a nested (spawnDepth >= 2) transcript occupies a lane DISPATCH slot is the
-// owner's call. Default: it does not (its turns always count). tally()'s fourth parameter overrides this for tests.
+// BL-0209 / panel card d-53cf611a (decided): a nested (spawnDepth >= 2) transcript occupies no lane DISPATCH slot
+// (its turns always count). tally()'s fourth parameter overrides this for tests.
 const COUNT_NESTED_DISPATCHES = false;
+const LANE_FORMAT_HELP = 'Add a line "Lane: <name>" within the first 5 lines of the brief (convention: line 3, after "Engine:" and "Role:"); '
+  + 'name rule [A-Za-z0-9][A-Za-z0-9._-]{0,63}, e.g. "Lane: revival-3d".';
 
 function posInt(v) {
   if (typeof v === 'number') return Number.isInteger(v) && v > 0 ? v : null;
@@ -111,6 +119,13 @@ function laneFromDescription(desc) {
   if (typeof desc !== 'string') return null;
   const first = desc.replace(/\r\n/g, '\n').split('\n')[0].trim().toLowerCase();
   return first || null;
+}
+
+// Same test as hooks/foreman-guard.js isAutopilotDispatched: the brief's first line starts with `Engine:`.
+function isEngineBrief(text) {
+  if (typeof text !== 'string') return false;
+  const nl = text.indexOf('\n');
+  return (nl < 0 ? text : text.slice(0, nl)).startsWith('Engine:');
 }
 
 function isReviewer(text) {
@@ -378,25 +393,41 @@ function run(payload) {
   if (payload.tool_name !== 'Agent' && payload.tool_name !== 'Task') return;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return;
-  if (typeof payload.session_id !== 'string' || !payload.session_id
-    || typeof payload.transcript_path !== 'string' || !payload.transcript_path) {
-    process.stderr.write('subagent-budget: no session_id/transcript_path on the payload, allowing (fail-open)\n');
-    return;
-  }
-  const now = nowMs();
-  const raw = collect(payload);
-  if (raw === null) return;
-  const entries = withLanes(raw);
-
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
   const brief = typeof input.prompt === 'string' ? input.prompt : '';
+  const needLane = isEngineBrief(brief);
+  const noTranscript = typeof payload.session_id !== 'string' || !payload.session_id
+    || typeof payload.transcript_path !== 'string' || !payload.transcript_path;
+  if (noTranscript) {
+    // Nothing to count. The lane format rule needs no transcript though: a depth-0 Engine: brief without a Lane: is
+    // still checked; every other payload fails open.
+    const sub = typeof payload.agent_id === 'string' && payload.agent_id;
+    if (!(needLane && !sub && !laneFromBrief(brief))) {
+      process.stderr.write('subagent-budget: no session_id/transcript_path on the payload, allowing (fail-open)\n');
+      return;
+    }
+    payload = { ...payload, transcript_path: '' };
+  }
+  const now = nowMs();
+  const raw = noTranscript ? null : collect(payload);
+  if (raw === null) {
+    // No subagents dir: nothing to count and no ancestry to inherit from. A depth-0 Engine: brief with no Lane: is
+    // still a format error (the first dispatch of a session is where the lane must start); anything else fails open.
+    const sub = (typeof payload.agent_id === 'string' && payload.agent_id) || OWN_TRANSCRIPT_RE.test(payload.transcript_path);
+    if (!(needLane && !sub && !laneFromBrief(brief))) return;
+  }
+  const entries = withLanes(raw || {});
+
   let lane = laneFromBrief(brief);
   if (!lane) {
     // A subagent dispatching without a Lane: line joins its own lane (the one its transcript is attributed to).
     const own = typeof payload.agent_id === 'string' && payload.agent_id ? payload.agent_id : (OWN_TRANSCRIPT_RE.exec(payload.transcript_path) || [])[1];
-    if (own) lane = laneOf(raw, `agent-${own}.jsonl`, false);
+    if (own && raw) lane = laneOf(raw, `agent-${own}.jsonl`, false);
   }
-  if (!lane) lane = laneFromDescription(input.description);
+  const laneMissing = needLane && !lane;
+  // Only a brief that is not an Engine: brief falls back to the description; an Engine: brief with no lane stays
+  // lane-less (root total only), so a missing Lane: is never billed to, or carded under, a description lane.
+  if (!lane && !needLane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
   const c = tally(entries, lane, now);
 
@@ -409,6 +440,15 @@ function run(payload) {
   }
   if (c.hourTurns >= cfg.root_turns_per_hour_max) {
     hits.push({ id: 'root_turns_per_hour_max', scope: 'root', text: `this session's subagents used ${c.hourTurns} turns in the last 60 minutes (root_turns_per_hour_max ${cfg.root_turns_per_hour_max})` });
+  }
+
+  if (laneMissing) {
+    hits.push({
+      id: 'lane_missing',
+      scope: 'format',
+      noCard: true,
+      text: 'the brief starts with "Engine:" but carries no valid "Lane:" line (and none is inherited from the dispatcher), so the lane ceilings cannot apply',
+    });
   }
 
   const line = contextLine(c);
@@ -426,9 +466,13 @@ function run(payload) {
     emit({ additionalContext: `subagent-budget: passed on Budget-Ack (${summary}). ${line}` });
     return;
   }
-  const card = ensureCard(payload, hits[0].scope, hits[0], c);
-  const cardNote = card
-    ? `Owner panel card ${card.id} ${card.fresh ? 'has been opened' : 'is already open'} for this ${hits[0].scope === 'root' ? 'session' : 'lane'}.`
+  const budgetHit = hits.find((h) => !h.noCard);
+  const card = budgetHit ? ensureCard(payload, budgetHit.scope, budgetHit, c) : null;
+  const laneNote = laneMissing ? `${LANE_FORMAT_HELP} ` : '';
+  const cardNote = !budgetHit
+    ? 'No owner panel card is opened for this (format problem only).'
+    : card
+    ? `Owner panel card ${card.id} ${card.fresh ? 'has been opened' : 'is already open'} for this ${budgetHit.scope === 'root' ? 'session' : 'lane'}.`
     : 'No owner panel card could be opened.';
   const ackNote = ack
     ? 'Your Budget-Ack line was ignored: the reason needs at least 8 characters. '
@@ -437,13 +481,13 @@ function run(payload) {
     permissionDecision: 'deny',
     permissionDecisionReason: `subagent-budget: dispatch denied. ${summary}. `
       + `Counts: lane dispatches ${c.laneDispatches}, lane turns ${c.laneTurns}, root turns in last 60 min ${c.hourTurns}. `
-      + `${ackNote}To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief `
+      + `${laneNote}${ackNote}To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief `
       + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
       + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off.`,
   });
 }
 
-module.exports = { run, collect, withLanes, tally, resolveDir, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer };
+module.exports = { run, collect, withLanes, tally, resolveDir, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer, isEngineBrief };
 
 if (require.main === module) {
   try {

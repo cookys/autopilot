@@ -429,32 +429,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
 - **Context**: v2.34.38 刻意停在 `warn`。原因不是保守,是 L0 的判準粒度:它對 match 到的測試檔**每一行
 
-### Engine and CLI have no session-mode fallback for bounded non-Mission campaigns
-- **Id**: BL-0061
-- **Status**: open
-- **Since**: 2026-08-08
-- **Origin**: self
-- **Problem**: 有界限的一次性 campaign 若沒有 Mission 資料，引擎與命令列的處理方式不一致：派工腳本已放行，但命令列仍被擋，使用者會遇到莫名拒絕。 (draft)
-- **Impact**: 一般使用不會碰到，只有走特殊路徑才被擋。擁有者 2026-10-13 同意先不做。
-- **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。
-- **Effort**: M
-- **Source**: 2026-08-08 v2.34.8 pre-push QC。兩個 family（MiniMax-M3、GLM-5.2）皆回 SHIP-AS-IS 且 findings=none，都沒抓到這條；MiniMax-M3…
-- **Pointer**: docs/backlog/engine-and-cli-have-no-session-mode-fallback-for-bounded-non-mission-campaigns.md
-- **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` +…
-
-### context-budget T3 deny tier — calibration and obedience evidence
-- **Id**: BL-0064
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: 上下文用量警告的最高一級（直接拒絕）尚未啟用，因為門檻與交接格式還沒用真實紀錄校準。次高一級已在子代理上線。 (draft)
-- **Impact**: 上下文爆滿時主代理沒有硬性攔阻，可能越做越亂。 (draft)
-- **Trigger**: 有可持久化的 context calibration／handoff obedience receipts，或再次觀察到 T3 後新派遣造成 spiral。
-- **Effort**: M
-- **Source**: context-budget follow-up audit。
-- **Pointer**: docs/backlog/context-budget-t3-deny-tier-calibration-and-obedience-evidence.md
-- **Context**: 先前 finish-flow marker blocker 已解；真正未完成的是用 session evidence 校準 deny threshold、handoff structure 與 anti-spiral policy，不能只靠靜態 token 比例。
-
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
 - **Status**: open
@@ -514,7 +488,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: /l5 想把一批工作同時分給多個不同廠牌的模型並行處理，相關機制做好了但刻意沒接上，因為沒有實際需求。 (draft)
 - **Impact**: 沒人需要就沒有影響；可考慮直接決定不做。 (draft)
-- **Trigger**: a **concrete, repeated** need to fan a single batch out across multiple *heterogeneous* (agy/Gemini) workers in parallel — i.e. real `/l5` task-supply where the cost-arbitrage of a second engine actually pays, AND the base-correctness…
+- **Trigger**: a concrete, repeated need to fan one batch across heterogeneous engines in parallel that clone-per-unit (l5 Parallel units) cannot serve; wiring must first lift the one-rail-per-.git limit
 - **Effort**: S
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
 - **Pointer**: docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md

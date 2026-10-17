@@ -1081,6 +1081,53 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
   }
 }
 
+// claude runtime identity (BL-0052). `claude -p --output-format json` prints one envelope whose
+// `modelUsage` is keyed by the model ids that actually served the call. Compare those keys with
+// the declared model so a silent alias drift cannot be recorded as the declared model.
+// Normalised before comparing: case, a `[1m]`-style context suffix, a trailing `-YYYYMMDD`
+// snapshot date, and `-latest`. A bare family alias (opus|sonnet|haiku|fable) matches any
+// key of that family. Missing/broken JSON, a missing or empty modelUsage, or any key that is
+// not the declared model all throw (fail closed; codex stays operator-asserted).
+const CLAUDE_FAMILY_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
+function normalizeClaudeModelId(id) {
+  return String(id).trim().toLowerCase().replace(/\[[^\]]*\]$/u, '')
+    .replace(/-latest$/u, '').replace(/-\d{8}$/u, '');
+}
+function verifyClaudeRuntimeIdentity(stdoutText, declared) {
+  let envelope;
+  try {
+    envelope = JSON.parse(stdoutText);
+  } catch {
+    throw new Error('claude CLI identity unverifiable: stdout is not the --output-format json envelope');
+  }
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)
+      || typeof envelope.result !== 'string') {
+    throw new Error('claude CLI identity unverifiable: JSON envelope has no string `result`');
+  }
+  const usage = envelope.modelUsage;
+  const keys = usage && typeof usage === 'object' && !Array.isArray(usage) ? Object.keys(usage) : [];
+  if (keys.length === 0) {
+    throw new Error(
+      'claude CLI identity unverifiable: envelope carries no modelUsage '
+      + `(is_error=${envelope.is_error}): ${envelope.result.slice(0, 200)}`,
+    );
+  }
+  const want = normalizeClaudeModelId(declared);
+  const matches = (key) => {
+    const got = normalizeClaudeModelId(key);
+    if (CLAUDE_FAMILY_ALIASES.has(want)) return got.split('-').includes(want);
+    return got === want;
+  };
+  const bad = keys.filter((key) => !matches(key));
+  if (bad.length) {
+    throw new Error(
+      `claude CLI model identity mismatch: declared "${declared}" but modelUsage reports `
+      + `${keys.map((k) => `"${k}"`).join(', ')}`,
+    );
+  }
+  return { text: envelope.result, resolvedModel: keys[0] };
+}
+
 // Run a local CLI harness as the exam transport: prompt on stdin, single shot,
 // no tools. detached:true makes the child a process-group leader so the timeout
 // kill reaps its whole tree (the broker's own outer timeout does the same to us).
@@ -1473,7 +1520,10 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     // --setting-sources '' keeps the exam child from loading ANY project/user
     // settings (probed on claude 2.1.233): the exam surface is the prompt and
     // the credentials, nothing ambient.
-    args = ['-p', '--model', model,
+    // --output-format json (probed claude 2.1.x, 2026-10-18): the envelope carries
+    // `result` plus `modelUsage`, keyed by the model id that actually ran. That key is
+    // the runtime identity signal checked in verifyClaudeRuntimeIdentity().
+    args = ['-p', '--model', model, '--output-format', 'json',
       '--setting-sources', '', '--strict-mcp-config', '--tools', ''];
     // claude 2.1.281: --effort low|medium|high|xhigh|max. Probed
     // `claude -p --model opus --effort low` returns PONG. Without this flag
@@ -1699,6 +1749,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       if (error) reject(error);
       else resolve(value);
     };
+    let claudeResolvedModel = null;
     const settleFromExit = (status, signal) => {
       if (timedOut) {
         finish(new Error(`${kind} CLI timed out after ${timeoutMs}ms`));
@@ -1718,6 +1769,18 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         }
       } else {
         text = Buffer.concat(stdout).toString('utf8');
+        if (kind === 'claude' && text.trim()) {
+          // Fail closed: a claude run whose runtime model cannot be proven to be the
+          // declared one is a transport failure, never a scored answer.
+          try {
+            const verified = verifyClaudeRuntimeIdentity(text, model);
+            text = verified.text;
+            claudeResolvedModel = verified.resolvedModel;
+          } catch (error) {
+            finish(error);
+            return;
+          }
+        }
         // opencode --format json is NDJSON; the answer is the last text event.
         if (kind === 'opencode') {
           // a clean exit proves nothing: any tool event voids the case (transport/containment
@@ -1754,7 +1817,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         ));
         return;
       }
-      finish(null, { text, resolvedModel: model });
+      finish(null, { text, resolvedModel: claudeResolvedModel || model });
     };
     // The promise MUST settle within its declared budget. 'close' alone cannot be
     // trusted for that: a detached descendant that inherits a stdio pipe keeps
@@ -2061,7 +2124,7 @@ async function main() {
     model,
     output: normalized,
     // Optional wire key. HTTP transports report what the endpoint returned; the
-    // CLI transports run in plain-text mode and report all-null (not measured).
+    // CLI transports report all-null (not measured); claude's identity is checked, not usage.
     usage: qualificationUsage.normalizeUsage(result.usage),
   }));
 }
@@ -2069,5 +2132,5 @@ async function main() {
 if (require.main === module) {
   main().catch((error) => fail(error.message || String(error)));
 } else {
-  module.exports = { FOREMAN_SYSTEM_PROMPT };
+  module.exports = { FOREMAN_SYSTEM_PROMPT, normalizeClaudeModelId, verifyClaudeRuntimeIdentity };
 }

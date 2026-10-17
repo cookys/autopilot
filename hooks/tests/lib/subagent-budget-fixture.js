@@ -5,7 +5,7 @@
 // Writes <projectDir>/<sessionId>.jsonl (main transcript, empty) and, per agent,
 // <projectDir>/<sessionId>/subagents/agent-<id>.jsonl (+ .meta.json when `description` is given).
 // Agent spec: { id, brief?: [lines after the Engine header], description?, turns?: n, ageMs?: age of every turn
-// (default 60000), ages?: [per-turn ages], noTs?: true, mtimeAgeMs?: file mtime age (default 0), raw?: literal file text }.
+// (default 60000), parent?: parentAgentId, depth?: spawnDepth (either writes a meta.json), ages?: [per-turn ages], noTs?: true, mtimeAgeMs?: file mtime age (default 0), raw?: literal file text }.
 const fs = require('fs');
 const path = require('path');
 
@@ -39,7 +39,13 @@ for (const a of agents) {
     text = `${rows.join('\n')}\n`;
   }
   fs.writeFileSync(file, text);
-  if (a.description !== undefined) fs.writeFileSync(path.join(dir, `agent-${a.id}.meta.json`), JSON.stringify({ agentType: 'general-purpose', description: a.description }));
+  if (a.description !== undefined || a.parent !== undefined || a.depth !== undefined) {
+    const meta = { agentType: 'general-purpose' };
+    if (a.description !== undefined) meta.description = a.description;
+    if (a.parent !== undefined) meta.parentAgentId = a.parent;
+    if (a.depth !== undefined) meta.spawnDepth = a.depth;
+    fs.writeFileSync(path.join(dir, `agent-${a.id}.meta.json`), JSON.stringify(meta));
+  }
   const t = new Date(now - (a.mtimeAgeMs || 0));
   fs.utimesSync(file, t, t);
 }

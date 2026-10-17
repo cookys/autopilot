@@ -952,18 +952,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/opencode-v2-adaptor-follow-ups.md
 - **Context**: spike 報告與 references/multi-agent-portability.md 的 OpenCode 2.x adaptor 一節。
 
-### subagent-budget gaps: nested Agent dispatch is uncounted; the test clock override works in production
-- **Id**: BL-0209
-- **Status**: open
-- **Since**: 2026-10-18
-- **Origin**: self
-- **Problem**: 子代理再派子代理時，預算掛鉤找不到對應目錄，直接放行也不計數；測試用的時鐘覆寫變數在正式環境也生效。
-- **Impact**: 巢狀派工可繞過接棒與輪數上限；時鐘變數誤設會讓每小時上限失準。
-- **Trigger**: 出現巢狀派工的 session，或下一次動 hooks/subagent-budget.js
-- **Effort**: S
-- **Source**: budget 程式碼審查第 1 代 327a284d、d2081fa3
-- **Pointer**: docs/backlog/subagent-budget-nested-dispatch-and-clock-override.md
-
 ### ui-lint per-line matching misses a bold attribute on its own JSX line
 - **Id**: BL-0210
 - **Status**: open

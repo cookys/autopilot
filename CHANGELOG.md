@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- BL-0209 done: `hooks/subagent-budget.js` now finds the flat subagents dir from either a main or a subagent `transcript_path`, attributes nested transcripts' turns to the nearest ancestor `Lane:` (meta `parentAgentId`, 8-hop cap), puts a Lane-less dispatch from a subagent into its own lane, and honours `AUTOPILOT_SUBAGENT_BUDGET_NOW_MS` only with `AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1`; whether spawnDepth>=2 transcripts take a lane dispatch slot stays the owner's call (panel card d-53cf611a), default no, switch is `COUNT_NESTED_DISPATCHES`.
 - opencode 2.x support: `scripts/lib/opencode-containment.js` now picks a v1 or v2 adaptor from `opencode --version` (v2 removed `run --dir/--pure/--variant`, which made every call exit rc=1) and is the single source of argv/env/cwd for `dispatch-review.sh`, `dispatch-hetero.sh`, `probe-engine-capability.sh` and the exam provider; an unknown major refuses, v1 behaviour is unchanged.
 - BL-0207 done: `mods/live/ui-lint.test.js` scans every `mods/*` source through one shared list (L8, L9/L1b, L2, L5 hand-made lines, L6 core) with a scan-level negative control planted in a copy of the viewer pane; rules that name live's own files stay live-only, each with its reason.
 - `references/evidence-discipline.md` gains sections 59 and 60 (a moving merge-target baseline; a design rule enforced in only one mod directory), plus a foreman-exam note under 53; new backlog row BL-0207 (extend ui-lint to all `mods/*`).

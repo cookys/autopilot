@@ -7,13 +7,16 @@
  * campaign's, and the parallel-units recipe bypasses it. This hook makes the relay chain of one LANE share one account,
  * re-derived at dispatch time from the subagent transcripts themselves (plan docs/plans/2026-10-18-subagent-budget-gate.md).
  *
- * COUNTS come from <dirname(transcript_path)>/<session_id>/subagents/agent-*.jsonl on every call (never costs.jsonl, which
+ * COUNTS come from the session's subagents dir (<dirname(transcript_path)>/<session_id>/subagents, or the dir of
+ * transcript_path itself when a subagent is the dispatcher), agent-*.jsonl, on every call (never costs.jsonl, which
  * misses in-flight background agents). The hook only READS transcripts. Persisted state: a parse cache keyed by
  * (path, size, mtimeMs) and the card pointers, both under the live-state dir.
  *
  * LANE KEY: first of the brief's first 5 lines matching `Lane: <slug>`; else the Agent `description`, first line, trimmed,
  * lower-cased; else no lane (counts only toward the root total). A transcript's lane uses the same rule on its first user
- * message, falling back to `description` in agent-<id>.meta.json. `Role: reviewer` in the first 5 lines excludes a brief
+ * message, then the nearest ancestor's (meta.json parentAgentId chain, at most 8 hops) brief Lane:, then `description` in
+ * agent-<id>.meta.json. A brief with no Lane: from a subagent dispatcher joins that dispatcher's lane. Nested transcripts
+ * (spawnDepth >= 2) add turns to their lane but take no dispatch slot (COUNT_NESTED_DISPATCHES, owner card d-53cf611a). `Role: reviewer` in the first 5 lines excludes a brief
  * from the lane RELAY count (its turns still count).
  *
  * CEILINGS (deny, remind mode): lane dispatches >= lane_dispatch_max (default 4, so the 5th is denied); lane turns >=
@@ -27,7 +30,7 @@
  *
  * MODES: ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
  * "root_turns_per_hour_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
- * Clock: AUTOPILOT_SUBAGENT_BUDGET_NOW_MS (tests). FAIL-OPEN: no transcript_path, an unreadable or corrupt transcript, or any
+ * Clock: AUTOPILOT_SUBAGENT_BUDGET_NOW_MS, honoured only with AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1 (tests). FAIL-OPEN: no transcript_path, an unreadable or corrupt transcript, or any
  * internal error => exit 0 with no stdout. This hook is its own process, separate from dispatch-model-guard.
  */
 'use strict';
@@ -42,7 +45,11 @@ const LANE_RE = /^Lane:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]*$/;
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const ACK_MIN_REASON = 8;
-const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/1';
+const CACHE_SCHEMA = 'autopilot.subagent-budget-cache/2';
+const MAX_ANCESTOR_DEPTH = 8;
+// BL-0209 / panel card d-53cf611a: whether a nested (spawnDepth >= 2) transcript occupies a lane DISPATCH slot is the
+// owner's call. Default: it does not (its turns always count). tally()'s fourth parameter overrides this for tests.
+const COUNT_NESTED_DISPATCHES = false;
 
 function posInt(v) {
   if (typeof v === 'number') return Number.isInteger(v) && v > 0 ? v : null;
@@ -78,8 +85,11 @@ function loadConfig() {
 }
 
 function nowMs() {
-  const raw = process.env.AUTOPILOT_SUBAGENT_BUDGET_NOW_MS;
-  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+  // The clock override is a test seam: it only applies together with the explicit test flag, never in production.
+  if (process.env.AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK === '1') {
+    const raw = process.env.AUTOPILOT_SUBAGENT_BUDGET_NOW_MS;
+    if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+  }
   return Date.now();
 }
 
@@ -147,19 +157,24 @@ function parseTranscript(file, metaFile) {
   }
   if (raw.trim() && valid === 0) throw new Error(`corrupt transcript: ${path.basename(file)}`);
   const head = firstUser || '';
-  let lane = laneFromBrief(head);
-  if (lane === null) {
-    try {
-      const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-      lane = laneFromDescription(meta && meta.description);
-    } catch { lane = null; }
-  }
+  const briefLane = laneFromBrief(head);
+  let descLane = null;
+  let parent = null;
+  let depth = null;
+  try {
+    const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+    if (meta && typeof meta === 'object') {
+      descLane = laneFromDescription(meta.description);
+      if (typeof meta.parentAgentId === 'string' && meta.parentAgentId) parent = meta.parentAgentId;
+      if (Number.isInteger(meta.spawnDepth)) depth = meta.spawnDepth;
+    }
+  } catch { /* no or unreadable meta => no description lane, no parent */ }
   const turns = parseAssistantTurns(raw);
   const t = [];
   for (const turn of turns) {
     t.push(Number.isFinite(turn.ts) ? turn.ts : null, costOf(turn));
   }
-  return { lane, reviewer: isReviewer(head), n: turns.length, t };
+  return { briefLane, descLane, parent, depth, reviewer: isReviewer(head), n: turns.length, t };
 }
 
 function cacheFile(sessionId) {
@@ -185,9 +200,42 @@ function saveCache(file, files) {
   } catch { /* a cache that cannot be written is only slower */ }
 }
 
+function isDir(p) {
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
+const OWN_TRANSCRIPT_RE = /(?:^|[\\/])subagents[\\/]agent-([^\\/]+)\.jsonl$/;
+
+// The subagents dir of the session, whether the dispatcher is depth-0 (transcript_path = main transcript) or a subagent
+// (transcript_path = its own agent-*.jsonl inside that dir). Unknown which one the harness sends, so try both.
+function resolveDir(payload) {
+  const tp = payload.transcript_path;
+  const cands = [];
+  if (OWN_TRANSCRIPT_RE.test(tp)) cands.push(path.dirname(tp));
+  cands.push(path.join(path.dirname(tp), String(payload.session_id), 'subagents'));
+  for (const c of cands) if (isDir(c)) return c;
+  return null;
+}
+
+// Lane of a transcript: its own brief Lane:, else the first ancestor (meta parentAgentId chain, a cycle is cut by the
+// MAX_ANCESTOR_DEPTH hop cap) with a brief Lane:, else (withDesc) its own description. Entries are keyed by file name.
+function laneOf(entries, name, withDesc) {
+  const e = entries[name];
+  if (!e) return null;
+  if (e.briefLane) return e.briefLane;
+  let cur = e;
+  for (let i = 0; i < MAX_ANCESTOR_DEPTH && cur && cur.parent; i++) {
+    const pn = `agent-${cur.parent}.jsonl`;
+    cur = Object.prototype.hasOwnProperty.call(entries, pn) ? entries[pn] : null;
+    if (cur && cur.briefLane) return cur.briefLane;
+  }
+  return withDesc ? e.descLane : null;
+}
+
 // Entries for every agent-*.jsonl of the session. null => no subagents dir yet (nothing to count).
 function collect(payload) {
-  const dir = path.join(path.dirname(payload.transcript_path), String(payload.session_id), 'subagents');
+  const dir = resolveDir(payload);
+  if (dir === null) return null;
   let names;
   try {
     names = fs.readdirSync(dir);
@@ -218,9 +266,16 @@ function collect(payload) {
   return next;
 }
 
+// Cached entries plus the resolved lane (ancestry applied) for counting.
+function withLanes(entries) {
+  const out = {};
+  for (const name of Object.keys(entries)) out[name] = { ...entries[name], lane: laneOf(entries, name, true) };
+  return out;
+}
+
 // ---- counting ------------------------------------------------------------------------------------------------------
 
-function tally(entries, lane, now) {
+function tally(entries, lane, now, countNested = COUNT_NESTED_DISPATCHES) {
   const floor = now - HOUR_MS;
   const lanes = new Map();
   let hourTurns = 0;
@@ -228,7 +283,7 @@ function tally(entries, lane, now) {
   for (const e of Object.values(entries)) {
     if (e.lane) {
       const l = lanes.get(e.lane) || { dispatches: 0, turns: 0 };
-      if (!e.reviewer) l.dispatches += 1;
+      if (!e.reviewer && (countNested || !(e.depth >= 2))) l.dispatches += 1;
       l.turns += e.n;
       lanes.set(e.lane, l);
     }
@@ -329,12 +384,19 @@ function run(payload) {
     return;
   }
   const now = nowMs();
-  const entries = collect(payload);
-  if (entries === null) return;
+  const raw = collect(payload);
+  if (raw === null) return;
+  const entries = withLanes(raw);
 
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
   const brief = typeof input.prompt === 'string' ? input.prompt : '';
-  const lane = laneFromBrief(brief) || laneFromDescription(input.description);
+  let lane = laneFromBrief(brief);
+  if (!lane) {
+    // A subagent dispatching without a Lane: line joins its own lane (the one its transcript is attributed to).
+    const own = typeof payload.agent_id === 'string' && payload.agent_id ? payload.agent_id : (OWN_TRANSCRIPT_RE.exec(payload.transcript_path) || [])[1];
+    if (own) lane = laneOf(raw, `agent-${own}.jsonl`, false);
+  }
+  if (!lane) lane = laneFromDescription(input.description);
   const reviewer = isReviewer(brief);
   const c = tally(entries, lane, now);
 
@@ -381,7 +443,7 @@ function run(payload) {
   });
 }
 
-module.exports = { run, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer };
+module.exports = { run, collect, withLanes, tally, resolveDir, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer };
 
 if (require.main === module) {
   try {

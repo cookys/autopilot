@@ -20,7 +20,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # the string tables: locales.ts must match the JSON sources, both locales must carry the same ids and placeholders (gen-locales.js --check)
 node "$here/gen-locales.js" --check
 node --test "$here/gen-locales.test.js"
-# the glyph tables and vocabulary (L3, I5 (a), I20): imports the real ui.ts, so the tables it lints are the ones the pane draws
+# the glyph tables, vocabulary and the all-mod design lints (L3, I5 (a), I20, L1b-L9 over every mods/* source): imports the real ui.ts, so the tables it lints are the ones the pane draws
 node --test "$here/ui-lint.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

@@ -1296,5 +1296,6 @@ from a screenshot; the brief had attached the spec, and the hand applied only th
 Rule: a rule's enforcement scope must equal its stated scope. "Applies to every mod" needs a check that
 actually scans a newly added mod.
 
-Preventing artifact: a `buttonFindings` check in the viewer render test (35f07d836) as the stopgap; the
-real fix is extending ui-lint to all `mods/*`, tracked as BL-0207.
+Preventing artifact: `mods/live/ui-lint.test.js` now scans every `mods/*` source through one shared list
+(`modSources()`), with a scan-level control that plants a violation in a copy of the viewer pane; the
+render-level `buttonFindings` in the viewer test stays as the other layer.

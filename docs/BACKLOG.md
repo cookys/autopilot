@@ -240,7 +240,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 實作者考核套件在合併前審查，提出一批加固項目被砍到之後處理，例如惡意 git 設定、被替換的參照、拖延不動的實作者等測試情境。這些測試至今沒有補。 (draft)
 - **Impact**: 考核套件對惡意或異常情況較不堅固；目前沒有實際出事，屬加固性質。 (draft)
-- **Trigger**: 下一次動 `evals/impl-eval-*`/`runImplQualification` 時捎帶;或第三場正式施測之前(屆時 Stage-0 機械化與 live-rail smoke 應先落);或 reviewer 再報同類。
+- **Trigger**: 第三場實作者正式施測之前（Stage-0 機械化與 live-rail smoke 應先落），或 reviewer 再報同類；config labelling 要改 grader 並重封資產，屬 owner 決定。
 - **Effort**: M
 - **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`docs/plans/2026-08-22-implementer-qualification-suite.md` §6-§8。
 - **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
@@ -654,9 +654,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-04
 - **Origin**: self
-- **Problem**: mods 第一階段（P1a）審查留下的強化事項，游標檔案鎖、啟動程序錯誤處理、自動啟動開關已修；剩下前景啟動器收不到 SIGTERM、flock 訊息誤導、專案身分識別的邊角情況。 (draft)
-- **Impact**: 都是強化項，不影響目前功能；預計在下一階段（P1b）開始時處理。 (draft)
-- **Trigger**: P1b start
+- **Problem**: mods P1a 審查留下的強化事項，只剩 watcher 的 roots 集合沒有上限（src/status/runs-watch.js 的 `new Set()`），其餘已在 P1b 修完。
+- **Impact**: 長時間跑、追蹤很多專案時集合會一直長大；目前沒有實際問題。
+- **Trigger**: P3 start
 - **Effort**: M
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
@@ -868,7 +868,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
 - **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
-- **Trigger**: P3 starts (per the plan)
+- **Trigger**: P4a llm-playground side merged and the reconcile report clean (P4b cutover per the plan)
 - **Effort**: M
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md

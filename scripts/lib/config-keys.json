@@ -229,6 +229,26 @@
       "invalid_effect": "anything but off or warn is ignored, so the reminders stay on"
     },
     {
+      "name": "context_budget.per_model",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "scripts/lib/config-path.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.t1",
+        "context_budget.t2",
+        "AUTOPILOT_CONTEXT_BUDGET_T1",
+        "AUTOPILOT_CONTEXT_BUDGET_T2"
+      ],
+      "summary": "Per-model t1/t2 keyed by a model-id glob (matched against the statusline live file's model.id; the pattern with the most literal characters wins; no match uses the top-level tiers).",
+      "type": "object",
+      "invalid_effect": "keys other than t1 and t2, and values that are not positive integers, are ignored with a one-line warning"
+    },
+    {
       "name": "context_budget.step",
       "kind": "config_key",
       "audience": "user",

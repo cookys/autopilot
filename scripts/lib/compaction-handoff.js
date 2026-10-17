@@ -322,7 +322,7 @@ function buildHandoff(opts = {}) {
 // second reader here would drift (it once ignored context_budget.mode=off).
 function readBudget(opts = {}) {
   const { readContextBudget } = require('./config-path.js');
-  const c = readContextBudget({ env: opts.env, home: opts.home });
+  const c = readContextBudget({ env: opts.env, home: opts.home, model: opts.model });
   return { t2: c.t2, gap: c.gap, mode: c.mode };
 }
 

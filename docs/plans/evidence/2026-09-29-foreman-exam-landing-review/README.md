@@ -152,3 +152,7 @@ sandbox root, so a host read creates nothing in the candidate repo. Every host
 git call is checked: a non-zero status, a timeout (SIGKILL) or an unreadable
 object is an isolation fault, and a bwrap that never started is a sandbox
 fault. The seed is required for truth-bearing files.
+
+On 2026-10-17 the second sub-package review (foreman2, four packages) found and
+fixed sandbox-escape and grading-hardening problems (a94cc7ac6, 90367505a,
+3b5a583f2). The final `harness_hash` is `c737de6c…`.

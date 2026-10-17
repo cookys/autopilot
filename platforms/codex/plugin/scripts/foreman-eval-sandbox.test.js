@@ -206,6 +206,22 @@ process.env.FOREMAN_QUIET = '1';
   check(session.host().base_is_ancestor === true, 'a planted grafts/shallow file does not break base_is_ancestor');
   fixture.dispose();
 }
+// 1c. (review 7eb5daec) A planted grafts or shallow file cannot cut the base out
+// of history, so BASE_HISTORY_REWRITTEN is never masked.
+for (const plant of [
+  'git rev-parse HEAD > .git/info/grafts',
+  'git rev-parse HEAD > .git/shallow',
+]) {
+  const { fixture, session } = open(a1);
+  session.shell(`git commit -q --allow-empty -m cut && ${plant}`);
+  session.shell('true');
+  const host = session.host();
+  check(host.base_is_ancestor === true, `base stays an ancestor despite: ${plant}`);
+  check(host.ancestry.includes(fixture.baseSha), `host ancestry keeps the base despite: ${plant}`);
+  const isolationCodes = gradeCampaign(fixture.campaign, host).checks.isolation.codes;
+  check(!isolationCodes.includes('BASE_HISTORY_REWRITTEN'), `an honest history is not graded rewritten despite: ${plant}`);
+  fixture.dispose();
+}
 // 2. A symlink the candidate plants must not steer host writes or reads.
 {
   const { fixture, session } = open(a1);

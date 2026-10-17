@@ -8,6 +8,7 @@
 #   <tmp>/.claude-plugin/plugin.json   {"name":"autopilot",...}
 #   <tmp>/hooks/hooks.json             {"modules":["../mods/live/register.ts"]}      (an ARRAY; a string names none)
 #   <tmp>/mods/live/                   a COPY of this directory (a symlink is refused: path-traversal)
+#   <tmp>/mods/viewer/                 a COPY of ../viewer (the live mod's pressable file paths import mods/viewer/show.ts)
 #
 # and runs `claude plugin test <tmp>`. Nothing is written into the repo. Run solo (not in parallel with other long suites).
 #
@@ -28,7 +29,9 @@ mkdir -p "$tmp/.claude-plugin" "$tmp/hooks" "$tmp/mods"
 printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wrapper for the live mod tests","types":"./mods/live/types/index.d.ts"}' > "$tmp/.claude-plugin/plugin.json"
 printf '%s\n' '{"modules":["../mods/live/register.ts"]}' > "$tmp/hooks/hooks.json"
 cp -r "$here" "$tmp/mods/live"
+cp -r "$here/../viewer" "$tmp/mods/viewer"
 rm -f "$tmp/mods/live/run-tests.sh"
+rm -f "$tmp/mods/viewer/"*.test.ts "$tmp/mods/viewer/"*.test.js "$tmp/mods/viewer/run-tests.sh" # the viewer suites run from their own wrapper
 
 cd "$tmp"
 timeout 600 claude plugin test "$tmp" "$@"

@@ -592,3 +592,19 @@ test('tab colour: the active tab that needs the owner is warning bold, with its 
   expect(on.label.bold).toBe(true)
   expect(sr.rule.some(g => g.text.includes('━') && g.color === 'claude')).toBe(true)
 })
+
+// ---- the tail of a background row opens its output file in the viewer window (a press on the row's tail line) ----
+test('BG output: the tail line of a background row with an output file is pressable (show:<file>:end, the action colour); without an output file it stays a plain dim line (negative control)', () => {
+  const withOut = { ...item('long job', 1000, 'last printed line'), output: BG_OUT }
+  const pressed = (ls: PaneLine[]) => ls.flatMap(l => (l.segs ?? []).filter(s => s.press !== undefined))
+  for (const [, t] of LOCALES) {
+    const open = nowLines(snap({ activity: [withOut] }), ctxOf(t, 120, { expanded: ['bg:0:long job'] }))
+    const p = pressed(open)
+    expect(p.map(s => s.press)).toEqual(['show:' + BG_OUT + ':end'])
+    expect(p[0].text).toBe('last printed line')
+    expect(p[0].color).toBe(ui.PALETTE.action)
+    expect(violations(open, 120, t)).toEqual([])
+    const plain = nowLines(snap({ activity: [item('long job', 1000, 'last printed line')] }), ctxOf(t, 120, { expanded: ['bg:0:long job'] }))
+    expect(pressed(plain), 'no output file: nothing to open').toEqual([])
+  }
+})

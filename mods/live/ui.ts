@@ -403,6 +403,35 @@ export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | '
 type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
+
+// ---- pressable file paths: a press opens the viewer window (mods/viewer) on the file ----
+// A press id of the form `show:<path>[:<line>|:end]`. The pane routes it to the viewer; the segment is drawn in the `action` role, the one colour that means "press this".
+export const SHOW_PRESS = 'show:'
+export const showPress = (path: string, at?: number | 'end'): string => SHOW_PRESS + path + (at === undefined ? '' : ':' + at)
+export function showTarget(id: string): { path: string; line: number | 'end' | null } | null {
+  if (!id.startsWith(SHOW_PRESS)) return null
+  const m = /^(.+?)(?::(\d+|end))?$/.exec(id.slice(SHOW_PRESS.length))
+  if (m === null || m[1] === '') return null
+  return { path: m[1], line: m[2] === undefined ? null : m[2] === 'end' ? 'end' : Number(m[2]) }
+}
+// a path written in prose: it has a directory part or a known file extension, optionally followed by `:<line>`; a trailing sentence mark is not part of it
+const PATH_IN_TEXT = /(?<![\w./~-])(?:~\/|\.{1,2}\/|\/)?(?:[\w.@+-]+\/)+[\w.@+-]*[\w@+-]\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+)?|(?<![\w./~-])[\w@+-][\w.@+-]*\.(?:md|ts|tsx|js|mjs|cjs|json|sh|py|txt|log|yml|yaml|toml|diff|patch)(?::\d+)?(?![\w/-])/g
+// Split `text` into segments: the paths in it become pressable (action colour), the rest keeps `base`. No path -> one segment, exactly `sg(text, base)`.
+export function linkSegs(text: string, base: SegOpts): Seg[] {
+  const out: Seg[] = []
+  let last = 0
+  for (const m of text.matchAll(PATH_IN_TEXT)) {
+    const at = m.index as number
+    if (at > last) out.push(sg(text.slice(last, at), base))
+    const hit = m[0]
+    const line = /:(\d+)$/.exec(hit)
+    out.push(sg(hit, { role: base.role, color: PALETTE.action, press: showPress(line === null ? hit : hit.slice(0, line.index), line === null ? undefined : Number(line[1])) }))
+    last = at + hit.length
+  }
+  if (last === 0) return [sg(text, base)]
+  if (last < text.length) out.push(sg(text.slice(last), base))
+  return out
+}
 export type Ctx = { t: Translate; cols: number; expanded?: ReadonlySet<string> }
 
 // inline fragments: they exist only as arguments of a builder
@@ -579,7 +608,7 @@ export function cardTitle(u: Ctx, s: Stated, title: string, meta: string | undef
 export function cardRow(u: Ctx, key: string, value: string, o: { fact: FactId; subtle?: boolean }): PaneLine[] {
   const room = Math.max(1, u.cols - 1 - KEY_W)
   return wrapPlain(value, room, room).map((piece, i) =>
-    lineOf('kv', [...(i === 0 ? cardLead(key) : [cardHang()]), sg(piece, { role: 'prose', ...(o.subtle === true ? { dim: true } : {}) })], { hang: KEY_W, fact: o.fact }))
+    lineOf('kv', [...(i === 0 ? cardLead(key) : [cardHang()]), ...linkSegs(piece, { role: 'prose', ...(o.subtle === true ? { dim: true } : {}) })], { hang: KEY_W, fact: o.fact }))
 }
 // the options of one question: the key `選項` at column 2, then rows of at most `cols - 1` cells from column 12: `[x] ★ label` (picked: bold default text) beside `[ ] label`, two
 // cells between options. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
@@ -676,12 +705,12 @@ export function command(u: Ctx, cmd: string, o: { at?: 0 | 12 } = {}): PaneLine[
 }
 // `└` at 2 with text at 4 when it belongs to the item above (it inherits that item's fact); a plain note at 2 otherwise (then it needs its own fact).
 // The only kind allowed to carry raw tokens.
-export function detail(u: Ctx, body: string, o: { attached: true; at?: 0 | 12; fact?: FactId } | { attached?: false; at?: 0 | 12; fact: FactId }): PaneLine[] {
+export function detail(u: Ctx, body: string, o: { attached: true; at?: 0 | 12; fact?: FactId; press?: string } | { attached?: false; at?: 0 | 12; fact: FactId }): PaneLine[] {
   const at = o.at ?? 0
   const pad = ' '.repeat(at)
   if (o.attached === true) {
     return wrapPlain(body, u.cols - 1 - at - 4, u.cols - 1 - at - 4).map((piece, i) =>
-      lineOf('detail', [sg(pad + '  '), dim(i === 0 ? GLYPHS.structure.detail : ' ', { role: 'glyph' }), sg(' '), dim(piece, { role: 'prose' })], o.fact === undefined ? {} : { fact: o.fact }))
+      lineOf('detail', [sg(pad + '  '), dim(i === 0 ? GLYPHS.structure.detail : ' ', { role: 'glyph' }), sg(' '), o.press === undefined ? dim(piece, { role: 'prose' }) : sg(piece, { role: 'prose', color: PALETTE.action, press: o.press })], o.fact === undefined ? {} : { fact: o.fact }))
   }
   return wrapPlain(body, u.cols - 1 - at - 2, u.cols - 1 - at - 2).map(piece => lineOf('detail', [sg(pad + '  '), dim(piece, { role: 'prose' })], { fact: (o as { fact: FactId }).fact }))
 }

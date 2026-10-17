@@ -11,7 +11,7 @@
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
 //   always_run:[], extra_runners:[], full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
-//   extra_runners = entry points outside run.sh that the diff needs (mods/live/** => mods/live/run-tests.sh);
+//   extra_runners = entry points outside run.sh that the diff needs (mods/live/**, mods/viewer/**, mods/register.ts => mods/live/run-tests.sh + mods/viewer/run-tests.sh);
 //   present in both modes. Text output prints them as extra lines after the suites (or after FULL).
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
 // Exit: 0 ok (selective or full), 2 usage/git error.
@@ -56,8 +56,12 @@ const FULL_TRIGGERS = [
 
 // Entry points that run.sh does NOT run. Any changed path matching `re` adds `runner` to the result's
 // extra_runners (selective AND full: a full run.sh still skips them). [re, runner]
+// The live and viewer mods import each other's files (the viewer takes the live mod's locale choice and colour roles, the live mod's pressable file paths call the viewer's
+// show.ts), and mods/register.ts composes both, so a change under either one runs both runners.
+const MODS_RE = /^mods\/(live|viewer)\/|^mods\/register\.ts$/;
 const EXTRA_RUNNERS = [
-  [/^mods\/live\//, 'mods/live/run-tests.sh'],
+  [MODS_RE, 'mods/live/run-tests.sh'],
+  [MODS_RE, 'mods/viewer/run-tests.sh'],
 ];
 function extraRunners(changed) {
   return EXTRA_RUNNERS.filter(([re]) => changed.some((p) => re.test(p))).map(([, r]) => r);

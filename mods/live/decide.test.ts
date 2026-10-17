@@ -375,3 +375,38 @@ test('DECIDE reply: one question is one line whatever the labels and typed text 
   expect(r?.text).toBe('[待決回覆]\nd-x｜第一行 第二行 第三行？ → 甲 乙｜補充：先做 再做|然後\nd-0000free｜這個分支要叫什麼名字？ → 一行 又一行|x')
   expect(r?.text.split('\n').length, 'the head and one line per question').toBe(3)
 })
+
+// ---- pressable file paths (the viewer mod): a path written in a card's text opens the viewer window ----
+const LINKED = [dec('d-link0001', '看哪一份設計？', { background: '見 docs/plans/2026-10-13-live-pane-design-system.md §12 與 mods/live/ui.ts:120，也可看 README.md。網址 https://example.com/a/b.html 不算，版本 v2.36.1 和 3/4 也不算。', options: [OPT('A'), OPT('B')] })]
+const linkSegsOf = (ls: PaneLine[]) => ls.flatMap(l => (l.segs ?? []).filter(s => s.press !== undefined && s.press.startsWith(ui.SHOW_PRESS)))
+
+test('DECIDE paths: a file path in a card\'s text is a pressable run in the action colour; a :line suffix opens at that line; URLs, versions and plain fractions are not links', () => {
+  for (const [, t] of LOCALES) {
+    const ls = decideTabLines(snapOf(LINKED), ctxOf(t, 120, view()))
+    const links = linkSegsOf(ls)
+    expect(links.map(s => s.text)).toEqual(['docs/plans/2026-10-13-live-pane-design-system.md', 'mods/live/ui.ts:120', 'README.md'])
+    expect(links.map(s => s.press)).toEqual(['show:docs/plans/2026-10-13-live-pane-design-system.md', 'show:mods/live/ui.ts:120', 'show:README.md'])
+    for (const s of links) expect(s.color, 'one colour, one meaning: a pressable run is the action role').toBe(ui.PALETTE.action)
+    // the text of the line is unchanged by the links (they only split it into runs)
+    const bg = ls.find(l => l.kind === 'kv' && l.text.includes('見 docs/plans'))
+    expect(bg?.text).toContain('見 docs/plans/2026-10-13-live-pane-design-system.md §12 與 mods/live/ui.ts:120，也可看 README.md。')
+    expect(violations(ls, 120, t)).toEqual([])
+  }
+})
+
+test('DECIDE paths: showTarget reads the press id back; a malformed id is nothing (negative controls)', () => {
+  expect(ui.showTarget('show:mods/live/ui.ts:120')).toEqual({ path: 'mods/live/ui.ts', line: 120 })
+  expect(ui.showTarget('show:/tmp/x/out.log:end')).toEqual({ path: '/tmp/x/out.log', line: 'end' })
+  expect(ui.showTarget('show:README.md')).toEqual({ path: 'README.md', line: null })
+  expect(ui.showTarget('show:')).toBeNull()
+  expect(ui.showTarget('pick:d-1:0')).toBeNull()
+  expect(ui.showPress('a/b.md', 'end')).toBe('show:a/b.md:end')
+  // linkSegs: no path -> exactly one segment with the base options
+  expect(ui.linkSegs('只有文字 and words', { role: 'prose', dim: true })).toEqual([{ text: '只有文字 and words', role: 'prose', dim: true }])
+  for (const not of ['https://example.com/a/b.html', 'v2.36.1', '3/4', 'a/b', 'e.g.']) expect(ui.linkSegs('see ' + not + ' now', { role: 'prose' }).length, not).toBe(1)
+})
+
+test('DECIDE paths: a sent card links its paths too (reading the background does not need the card to be open)', () => {
+  const ls = decideTabLines(snapOf(LINKED), ctxOf(makeT('en'), 120, view({ sent: { 'd-link0001': 1 } })))
+  expect(linkSegsOf(ls).length).toBe(3)
+})

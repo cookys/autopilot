@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New `viewer` mod (`mods/viewer/`, composed with `live` by `mods/register.ts`): a `show` tool (`mcp__autopilot__show`) and `/show` command that display a file or a git diff to the owner in a window without the text reaching the model (the model gets one summary line), and pressable file paths in the live panel (decision-card text, a background command's output tail) that open the same window. `scripts/affected-suites.js` runs both mod suites for a change under either.
+
 - BL-0147 (c): `docs/settings-reference.md` now documents per-model `modelSettings.<model-id>.autoCompactWindow` (with the do-not-set-`CLAUDE_CODE_AUTO_COMPACT_WINDOW` warning and subagent frontmatter) and records the first measured compaction point (window minus 33K, preTokens about 500K at window 533000).
 
 - BL-0147 (follow-up, asked by the c4140 peer): the compaction checkpoint now gives the model's own handoff note at least 4000 bytes (was a fixed 2200) plus whatever git, dispatch and marker leave unused, with the transcript tail taking the remainder inside the same body cap (`scripts/lib/compaction-handoff.js`); the reader also waits and re-reads a note modified in the last 2 seconds and marks one that is still changing as possibly incomplete.

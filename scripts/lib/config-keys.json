@@ -942,7 +942,8 @@
       "group": "ui",
       "default": "auto",
       "readers": [
-        "mods/live/i18n.ts"
+        "mods/live/i18n.ts",
+        "mods/viewer/show.ts"
       ],
       "doc": "docs/settings-reference.md",
       "relates": [
@@ -3799,7 +3800,8 @@
       "default": null,
       "readers": [
         "mods/live/i18n.ts",
-        "mods/live/register.ts"
+        "mods/live/register.ts",
+        "mods/viewer/show.ts"
       ],
       "doc": "docs/settings-reference.md",
       "relates": [

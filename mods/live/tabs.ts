@@ -255,7 +255,7 @@ function backgroundPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] 
     const meta: ui.MetaPart[] = [t(ACTIVITY_KEYS[it.kind]), ...(it.detail === null ? [] : [it.detail]), ...(showQuiet ? [{ text: t('bg.quiet', { age: ui.dur(it.quietMs as number) }), fmt: 'ago' as const }] : [])]
     const spec: U.RowSpec = {
       group: key, ts: nowMs - (it.quietMs ?? 0) + i / 1000, state, fact: 'now.background', body: it.label, meta,
-      ...(it.tail === null ? {} : { toggle: key, children: ui.detail(u, it.tail, { attached: true }) }),
+      ...(it.tail === null ? {} : { toggle: key, children: ui.detail(u, it.tail, { attached: true, ...(it.output == null ? {} : { press: ui.showPress(it.output, 'end') }) }) }),
     }
     ;(ui.isRunning(state) ? live : gone).push(spec)
   })

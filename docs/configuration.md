@@ -68,6 +68,16 @@ The `live` mod (the band above the prompt and its panel, Claude Code only) speak
 
 The string tables are `mods/live/locales/en.json` (source of truth) and `zh-TW.json`; `node mods/live/gen-locales.js` compiles them into `locales.ts` and `--check` verifies both tables carry the same ids and placeholders.
 
+### File and diff viewer (`show` tool, `/show`)
+
+The `viewer` mod (Claude Code only, the second module of the same plugin; code in `mods/viewer/`, composed with `live` by `mods/register.ts`) shows a file or a git diff to the owner in a window without the text passing through the model.
+
+* **The `show` tool** (`mcp__autopilot__show`, schema in the prompt): `path` (optional `start` / `end`, 1-based) or `diff` (the arguments after `git diff`, one string each, run by argument vector with `--no-ext-diff --no-textconv`; options that write a file or run a program are refused). The model gets one line back (`Shown to the user: <path> lines a-b of N ...`); the text goes only to the window. A binary file, a file over 4 MiB, a directory or a missing file answers with the reason and no text.
+* **The window**: the path on its first line, line numbers, syntax colour by file extension, a unified diff drawn as a diff. Arrow keys, PgUp, PgDn, Home and End scroll; Esc closes it and hands the keyboard back (and the live panel shows again). A file over 2000 lines or 80000 characters is shown in parts with next / previous buttons.
+* **`/show <path>[:line]`, `/show diff <git diff arguments>`, `/show`** (the last window again): the owner's own open. It answers no text, so nothing reaches the model; a failure is a toast. This is also the way in when the model asked for a window and the terminal was too narrow for the engine to place it unasked (under 144 columns, 110 once you have opened it by hand): the tool tells the model and a toast tells you to type `/show`.
+* **In the live panel**: a file path written in a decision card's text (`docs/plans/x.md`, `mods/live/ui.ts:120`) and the last line of a background command's output are pressable and open the same window (a `path:line` from two lines above that line, the output file from its last 40 lines).
+* Words follow the live mod's language rule (`ui.locale`, above). Tests: `bash mods/viewer/run-tests.sh` (and `bash mods/live/run-tests.sh`, which also covers the pressable paths). Spike evidence: `docs/plans/evidence/2026-10-17-viewer/README.md`.
+
 ### Project governance (`owner-kernel-governance.json`)
 
 The decision/acceptance state machine that once consumed this file was retired on 2026-08-16

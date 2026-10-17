@@ -156,6 +156,26 @@ test('L8: no theme-key literal outside the PALETTE table (every source file unde
   for (const f of files) assert.deepEqual(L8(read(f)), [], f)
   assert.match(read('ui.ts'), PALETTE_DECL, 'ui.ts declares PALETTE') // the exemption must be real: a renamed table would otherwise leave the lint with nothing to exempt
 })
+test('L8: no theme-key literal in the viewer mod either (its quiet lines are dim, its code colours are the engine\'s)', () => {
+  const dir = path.join(__dirname, '..', 'viewer')
+  const files = fs.readdirSync(dir).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f))
+  assert.ok(files.includes('pane.tsx') && files.includes('show.ts') && files.includes('register.ts'))
+  for (const f of files) assert.deepEqual(L8(fs.readFileSync(path.join(dir, f), 'utf8')), [], f)
+  // control: a planted literal in pane.tsx is reported (the pane draws no colour of its own: its quiet lines are dim)
+  const pane = fs.readFileSync(path.join(dir, 'pane.tsx'), 'utf8')
+  const planted = pane.replace('<Text key="hint" dimColor>', '<Text key="hint" color=\'subtle\'>')
+  assert.notEqual(planted, pane)
+  assert.ok(L8(planted).length > 0)
+})
+test('L9/L1: the viewer mod sets no bold, no background and no inverse', () => {
+  const dir = path.join(__dirname, '..', 'viewer')
+  for (const f of fs.readdirSync(dir).filter(x => /\.(ts|tsx)$/.test(x) && !/\.(test|testkit)\.ts$/.test(x))) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8')
+    assert.deepEqual(hits(src, BOLD_PROP), [], f + ' bold')
+    assert.deepEqual(hits(src, /\b(backgroundColor|inverse)\b/), [], f + ' background / inverse')
+  }
+  assert.ok(hits('<Text bold>x</Text> {bold: true}', BOLD_PROP).length > 0, 'control: the bold scan sees a planted bold')
+})
 test('L8 control: a prose segment painted with a literal key is reported, a role is not (negative control, red before green)', () => {
   // the planted fixture: a prose seg coloured `warning` directly, exactly the regression this lint exists to stop
   assert.ok(L8("const s = sg(body, { role: 'prose', color: 'warning' })").length > 0)
@@ -261,14 +281,27 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // permission dialog) because the two scripts they run re-check the safety condition themselves at run time (repo-residue-sweep.js reap classifies every worktree again;
 // prune-plugin-cache.js re-checks the path, the live pids and the loaded copy). So the ban on `$.process` stays for everything else: `process.run` is allowed once, in
 // register.ts, and only while CLEAN_SCRIPTS names exactly those two scripts; `process.spawn`, any other file and any second use are offenders.
+// Owner ruling 2026-10-17 (the viewer mod): ONE more use, in mods/viewer/show.ts, `$.process.run(gitDiffArgv(args))` - the `show` tool's `git diff` (argument vector, no shell). It is
+// allowed only while gitDiffArgv (viewer/model.ts) starts with the fixed `git --no-pager diff --no-color --no-ext-diff --no-textconv` and parseShowInput refuses the options that
+// write a file or run a program (--output, --ext-diff, --textconv, --open-files-in-pager / -O, --no-index).
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
 const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
 const processAccesses = src => PROCESS_ACCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
-function processRunOffenders(src, isRegister) {
+const VIEWER_SHOW = path.join('viewer', 'show.ts')
+function viewerDiffOffenders(src) {
+  const uses = processAccesses(src)
+  const out = []
+  if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
+  if (!/\$\.process\.run\(gitDiffArgv\(/.test(src)) out.push('the one use is not `$.process.run(gitDiffArgv(...))`')
+  return out
+}
+function processRunOffenders(src, where) {
+  const isRegister = where === true || where === 'register'
   const uses = processAccesses(src)
   if (uses.length === 0) return []
+  if (where === 'viewer') return viewerDiffOffenders(src)
   if (!isRegister) return ['$.process outside register.ts']
   const out = []
   if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
@@ -279,16 +312,16 @@ function processRunOffenders(src, isRegister) {
   return out
 }
 // THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
-// `$.process.run(argv, ...)` in register.ts. No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
+// `$.process.run(argv, ...)` in live/register.ts and `$.process.run(gitDiffArgv(...))` in viewer/show.ts. No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
 // reach for it past a word count. The other nets above only give a better message. Anything legitimate that needs the word (copy, a type name) goes to a locale string.
-const PROCESS_WORD_BASELINE = 1
+const PROCESS_WORD_BASELINE = 2 // live/register.ts (the cleanup scripts) and viewer/show.ts (the show tool's git diff)
 const processWords = src => [...code(src).matchAll(/\bprocess\b/g)].map(m => m[0])
 test('process allowlist, word count: `process` as a whole word occurs exactly ' + PROCESS_WORD_BASELINE + ' time(s) in the non-test sources of mods/, in register.ts', () => {
   const root = path.join(__dirname, '..')
   const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.(ts|tsx)$/.test(f) && !f.includes('node_modules'))
   assert.ok(files.some(f => f.endsWith('register.ts')) && files.some(f => f.endsWith('locales.ts')), 'the scan sees register.ts and the generated locales.ts')
   const found = files.flatMap(f => processWords(fs.readFileSync(f, 'utf8')).map(() => path.relative(root, f)))
-  assert.deepEqual(found, ['live/register.ts'])
+  assert.deepEqual(found, ['live/register.ts', 'viewer/show.ts'])
   assert.equal(found.length, PROCESS_WORD_BASELINE)
 })
 test('process allowlist, word count, controls: an alias, a helper argument, a nested destructuring, a string key and a bracket key each add a count (negative controls)', () => {
@@ -317,6 +350,21 @@ test('process allowlist controls: an alias, a destructuring, a bracket access, a
   assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
   assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
 })
+test('process allowlist, viewer: show.ts may run exactly one `$.process.run(gitDiffArgv(...))`; a second use, an alias, another argv and another file are each reported (negative controls)', async () => {
+  const ok = 'const ran = await $.process.run(gitDiffArgv(req.args))'
+  assert.deepEqual(processRunOffenders(code(ok), 'viewer'), [])
+  assert.ok(processRunOffenders(code(ok + '\nawait $.process.run(argv)'), 'viewer').length > 0, 'a second use')
+  assert.ok(processRunOffenders(code('await $.process.run(["git", "diff", x])'), 'viewer').length > 0, 'another argv')
+  assert.ok(processRunOffenders(code(ok + '\nconst p = $.process'), 'viewer').length > 0, 'alias')
+  assert.equal(processRunOffenders(code(ok), '').length, 1, 'any other file is refused')
+  // the argv head and the refused options are the ones the rule above names
+  const vm = await import(path.join(__dirname, '..', 'viewer', 'model.ts'))
+  assert.deepEqual(vm.gitDiffArgv(['HEAD~1']), ['git', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', 'HEAD~1'])
+  for (const bad of ['--output=/tmp/x', '--output', '--ext-diff', '--textconv', '--open-files-in-pager', '-O', '-Oorder', '--no-index']) {
+    assert.equal(vm.parseShowInput({ diff: ['HEAD', bad] }).ok, false, bad)
+  }
+  assert.equal(vm.parseShowInput({ diff: ['HEAD', '--', '--output=x'] }).ok, true, 'after -- an argument is a path')
+})
 test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prompt.submit; nothing uses asUser or process spawning', () => {
   const root = path.join(__dirname, '..')
   const files = walk(root).filter(f => /\.(ts|tsx|js|mjs|cjs)$/.test(f) && !/\.(test|testkit)\.(ts|js)$/.test(f) && !f.endsWith('locales.ts'))
@@ -327,7 +375,7 @@ test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prom
     const src = code(fs.readFileSync(f, 'utf8'))
     if (/\basUser\b/.test(src)) offenders.push(rel + ': asUser')
     if (/process\s*\.\s*spawn\b/.test(src)) offenders.push(rel + ': process spawn')
-    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts'))) offenders.push(rel + ': ' + bad)
+    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts') ? 'register' : rel === VIEWER_SHOW ? 'viewer' : '')) offenders.push(rel + ': ' + bad)
     const uses = submitUses(src)
     if (rel !== path.join('live', 'register.ts')) { if (uses.length > 0) offenders.push(rel + ': prompt.submit') ; continue }
     assert.equal(uses.length, 1, 'exactly one use in register.ts')

@@ -939,7 +939,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: 2026-10-17: P1, P2, P3 and P4a autopilot side merged; P4a llm-playground side in review (two owner decisions pending); P4b remains, plus llm-playground r4/t15 SKIP follow-up (see plan Progress line).
 
 
-
 ### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）
 - **Id**: BL-0206
 - **Status**: open
@@ -951,3 +950,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
+- **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。

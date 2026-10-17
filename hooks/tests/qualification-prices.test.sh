@@ -98,14 +98,15 @@ GOOD="$(cur_digest)"
 # an unpriced (null) row and an unknown extra field stay acceptable
 mkfix "$FIX/null.json" "d => { d.rows[1].usd_per_mtok_input_micro = null; d.rows[1].extra = 1; }"
 node "$PRICES" fetch --from "$FIX/null.json" >/dev/null 2>&1
+NULL_RC=$?
+assert_eq "$NULL_RC" "0" "null price (unknown) is accepted"
 assert_contains "$(node "$PRICES" price --model seat-cheap --runner agy)" '"price_micro_per_mtok": null' "null input price reads as unknown"
-assert_eq "$?" "0" "null price (unknown) is accepted"
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 # http transport is refused by the shared fetcher
 node "$PRICES" fetch --from "http://127.0.0.1:1/x.json" >/dev/null 2>&1
 assert_eq "$?" "1" "http fetch URL refused"
 
-# --- price lookup: exact, null when unknown / assumed ----------------------------------------
+# --- price lookup: exact, null when unknown (no row or a null side); assumed basis is still priced ----------------------------------------
 assert_contains "$(node "$PRICES" price --model seat-cheap --runner agy)" '"price_micro_per_mtok": 500000' "price = input+output"
 assert_contains "$(node "$PRICES" price --model seat-sub --runner agy)" '"billing": "subscription"' "subscription row priced, flagged"
 assert_contains "$(node "$PRICES" price --model seat-assumed --runner agy)" '"price_micro_per_mtok": 2' "assumed basis with a price is known (basis dates the price, not its source)"
@@ -189,6 +190,14 @@ node "$PRICES" fetch --from "$FIX/extras.json" >/dev/null 2>&1
 assert_eq "$?" "0" "top-level unpriced/content_digest/source_revision/n_rows accepted"
 assert_contains "$(node "$PRICES" status)" '"n_unpriced": 1' "status shows the unpriced count"
 assert_eq "$(ladder "$TOPO")" "$PRICED" "extras do not change the order"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+
+# two unknown seats (no row, and a row with a null input) keep the pre-price tie-break among themselves
+node "$PRICES" fetch --from "$FIX/null.json" >/dev/null 2>&1
+NULLED="$(ladder "$TOPO")"
+UNK="seat-unknown/high@agy,seat-cheap/high@agy"
+assert_eq "$(sub_order "$NULLED")" "seat-cheap/high@agy,seat-unknown/high@agy" "two unknown seats: pre-price tie-break order (hard-coded)"
+[ "$HAVE_BASE" = 1 ] && assert_eq "$(sub_order "$NULLED")" "$(sub_order "$(ladder "$BASELINE")")" "two unknown seats keep the pre-price order"
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 
 # stale prices: warned, still used

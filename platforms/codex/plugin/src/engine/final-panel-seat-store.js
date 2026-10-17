@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { normalizeProductReviewFindings } = require('./product-review-normalizer');
+const { normalizeProductReviewFindings, revalidateResolutions } = require('./product-review-normalizer');
 
 const ARTIFACT_TYPE = 'implementation_campaign_final_panel_seat_artifact';
 // Dispatch attempts a single seat may consume for one packet binding (the first run
@@ -227,10 +227,14 @@ function deriveReusableOutcome(artifact, expect, canonicalDigest) {
     review_digest: result.review_digest,
     review_input_mode: incremental ? INCREMENTAL_REVIEW_INPUT_MODE : 'full_diff_generation',
     blind_discovery: true,
-    // The prior-round addendum that would show findings to a seat is off (owner ruling d-3cf4dc4c
-    // pending), so no seat was shown them: false on both paths.
-    prior_findings_included: false,
+    // True only for an incremental seat whose spec carried the prior-round addendum (owner ruling
+    // d-3cf4dc4c); a full-round seat never had one.
+    prior_findings_included: incremental && expect.addendumIncluded === true,
     full_diff_required: !incremental,
+    // The seat's explicit answers about the earlier findings, re-derived from the packet it was given.
+    ...(incremental ? {
+      resolutions: revalidateResolutions(result.resolutions, expect.priorFindingIds, expect.packetPaths),
+    } : {}),
     ...(hasPacket ? { packet_hash: result.packet_hash } : {}),
     reused_from_artifact: true,
   };
@@ -288,6 +292,8 @@ function recordVerdict(ctx, attempts, outcome) {
     scope: 'final',
     tree_sha: ctx.treeSha,
     review_digest: outcome.review_digest,
+    ...(isIncrementalStation(ctx.station) && Array.isArray(outcome.resolutions)
+      ? { resolutions: outcome.resolutions } : {}),
     ...(typeof outcome.packet_hash === 'string' && SHA256.test(outcome.packet_hash)
       ? { packet_hash: outcome.packet_hash } : {}),
   };

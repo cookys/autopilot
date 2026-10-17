@@ -150,3 +150,17 @@ diligence/fairness/convergence/containment, P = pass:
 Claude Fable 5.1 still fails: diligence and convergence need a completed stream, and its early end at round 8 left round 11
 (an adjudication pair arm and a blocked round) unanswered, so fairness and containment are unjudged.
 
+
+## 2026-10-17 d-80d327c9: Muse Spark 1.3 reviewer v6 (opencode, high), classification unchanged
+
+Rule (owner, d-80d327c9): when the exam prompt forbids tools, a tool attempt makes THAT case wrong (`tool_attempt_forbidden`)
+and the exam keeps going; only a real connection or program error, or a tool event under a prompt WITHOUT the prohibition, is
+`transport_fail`. The prohibition is the fixed `TOOL_FORBID_NOTICE` sentence in `scripts/qualification-review-provider.js`,
+added 2026-10-17. The rule applies only to sittings run with that sentence.
+
+- `out/rv6-muse-opencode-high-attempt1-transport` (2026-10-16): trial-2 case 31 (`known-bad-02`) drew a `bash` tool event and the
+  driver stopped. The prompt sent that day did NOT carry the prohibition, so the original class is correct: it stays a
+  transport failure, not a failed sitting. Nothing is re-judged.
+- `out/rv6-muse-opencode-high` (second sitting, 82 of 82 cases, no tool event): 42/42, scorecard event 312. The qualification
+  stays passed.
+- No scorecard row is added; the scorecard is unchanged.

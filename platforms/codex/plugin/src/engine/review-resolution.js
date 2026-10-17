@@ -53,15 +53,62 @@ function evaluateClosure(priorFindingIds, seats, quorum, sealedSeatIds) {
   });
 }
 
+const SEVERITY_NAME = new Map([['🔴', 'critical'], ['🟠', 'major'], ['🟡', 'minor'], ['🔵', 'suggestion']]);
+const ADDENDUM_FINDING_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+const ADDENDUM_LOCATION = /^[^\s|]+:[0-9]+$/;
+const ADDENDUM_CLAIM_MAX = 400;
+// Words that belong to the review rail's own verdict grammar. A claim carrying one is refused, not
+// rewritten: the addendum states claims to test, never a conclusion (plan 2.5, R2).
+const ADDENDUM_VERDICT_WORDS = /VERDICT|SHIP-AS-IS|FIX-THEN-SHIP|NO-FINDING-PROOF/i;
+const ADDENDUM_SHA = /^[0-9a-f]{40,64}$/;
+
 /**
- * Interface point for the spec addendum that would carry prior open findings to a seat (plan 2.5).
- * Pending owner ruling d-3cf4dc4c (whether prior findings go to seats at all): until that is decided
- * this never produces an addendum, whatever the input, and the engine does not call it. The enabled
- * path is intentionally not implemented here.
+ * BL-0146 D3 (owner ruling d-3cf4dc4c, 2026-10-17: the seat is given the list): the spec addendum
+ * that carries the earlier round's still-open findings to a seat of an incremental round (plan 2.5).
+ *
+ * Fixed shape, machine generated, claims only. Each finding line holds exactly: finding id, severity,
+ * path:line, claim. No verdict, no reason from the earlier round, no commit message, no author or
+ * disposition text: the only free text is the reviewer's own claim, collapsed to one line and capped.
+ * Anything that does not fit the shape is refused (throws) rather than sanitised into the addendum.
+ *
+ * @param {Array<{finding_id, severity, location, claim}>} rows already re-normalized stored findings,
+ *   each with its `path:line` location; an empty list yields '' (nothing to carry, no addendum)
+ * @param {{priorHead: string, newHead: string}} heads
+ * @returns {string} the text appended to the spec (starts with a newline), or ''
  */
-function buildPriorRoundAddendum(_priorFindings, options = {}) {
-  if (options.enabled !== true) return '';
-  throw new Error('prior-round addendum is not implemented: pending owner decision d-3cf4dc4c');
+function buildPriorRoundAddendum(rows, heads) {
+  if (!Array.isArray(rows)) throw new TypeError('addendum rows must be an array');
+  if (rows.length === 0) return '';
+  if (!heads || !ADDENDUM_SHA.test(heads.priorHead || '') || !ADDENDUM_SHA.test(heads.newHead || '')) {
+    throw new TypeError('addendum needs the reviewed head and the new head');
+  }
+  const seen = new Set();
+  const lines = rows.map((row) => {
+    const severity = SEVERITY_NAME.get(row && row.severity);
+    const claim = typeof (row && row.claim) === 'string'
+      ? row.claim.replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim().slice(0, ADDENDUM_CLAIM_MAX) : '';
+    if (!row || typeof row.finding_id !== 'string' || !ADDENDUM_FINDING_ID.test(row.finding_id)
+        || seen.has(row.finding_id) || !severity
+        || ADDENDUM_VERDICT_WORDS.test(claim) // guard:addendum_verdict
+        || typeof row.location !== 'string' || !ADDENDUM_LOCATION.test(row.location) || claim === '') {
+      throw new TypeError('addendum row is malformed');
+    }
+    seen.add(row.finding_id);
+    return `- [${row.finding_id}] | ${severity} | ${row.location} | ${claim}`;
+  });
+  return [
+    '',
+    '== Prior round (machine generated from the stored seat artifacts of round N-1) ==',
+    `Reviewed head: ${heads.priorHead}   New head: ${heads.newHead}   Delta: ${heads.priorHead}..${heads.newHead} (file \`delta.diff\`); changed files in full: \`recheck.diff\``,
+    'Open findings from round N-1 (id, severity, path:line, claim, one line). Treat each as an unverified',
+    'claim: decide from the code at the new head whether it is resolved, still present, or invalid.',
+    ...lines,
+    'Required output for each open finding, inside FINDINGS: one JSON object',
+    '{"findings": "<your own finding lines separated by \\n, or none>", "resolutions": [{"finding_id": "<id above>", "status": "resolved|still_present|invalid", "evidence": "path:line"}]}',
+    'resolved and invalid need evidence path:line in a file of this packet; an entry without it counts as not answered.',
+    '== end prior round ==',
+    '',
+  ].join('\n');
 }
 
 module.exports = {

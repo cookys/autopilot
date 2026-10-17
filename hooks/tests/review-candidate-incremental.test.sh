@@ -2,9 +2,11 @@
 # BL-0146 D4: end to end, a returned head of a review-only campaign in a throwaway repo through the real
 # runCampaignComposition (hooks/tests/lib/review-candidate-driver.js, stub dispatch-review.sh). Both modes:
 #   - adoption.return_review absent / "full": the existing behaviour, bytes unchanged, no new receipt fields;
-#   - "incremental": the seats receive the re-check set only, the receipt discloses review_scope, and because
-#     the prior-round addendum is off (owner ruling d-3cf4dc4c pending) the earlier finding is NOT closed by
-#     silence, so the round parks again; a second return falls back to a full round and converges.
+#   - "incremental": the seats receive the re-check set only and the prior-round addendum (owner ruling
+#     d-3cf4dc4c: the seat is given the list) appended to the spec; the receipt discloses review_scope. A seat
+#     that stays silent about the earlier finding does NOT close it (the round parks again); seats that answer
+#     it with resolutions[] do (converged); one seat answering for only some ids leaves the rest open. A
+#     second return falls back to a full round.
 # Negative controls (MUTATION block): each guard is broken in a private copy of the source tree and the matching
 # scenario must flip; the copy is restored and the scenario shown green again.
 TEST_NAME="review-candidate-incremental"
@@ -77,6 +79,41 @@ eq "true" "$(jf d_inc 'j.steps[0].store_files.some((f) => f.includes("final-pane
 eq "true" "$(jf d_inc 'j.steps[0].store_files.some((f) => f.includes("round-"))')" "incremental: the round index is written for an opted-in campaign"
 eq "true" "$(jf d_inc 'j.steps[0].disclosure.incremental.carried.every((e) => /^[0-9a-f]{64}$/.test(e.file_digest))')" "incremental: every carried path discloses its file_digest"
 
+# ---- the prior-round addendum (owner ruling d-3cf4dc4c) ------------------------------------------------------------
+ADDSPEC='j.steps[0].seat_inputs["claude-opus-4-6"].spec'
+DEFSPEC='j.steps[0].seat_inputs["claude-opus-4-6"].spec'
+eq "true" "$(jf d_inc "$ADDSPEC.includes('== Prior round')")" "addendum: an incremental seat's spec carries the prior-round addendum"
+eq "3" "$(jf d_inc "$ADDSPEC.split('\\n').filter((l) => /^- \\[prior:s[123]\\.rc-001\\] \\| critical \\| src\\/value.txt:1 \\| /.test(l)).length")" "addendum: one line per carried finding, id | severity | path:line | claim"
+eq "false" "$(jf d_inc "/author follow-up|external-2|SHIP-AS-IS|FIX-THEN-SHIP|VERDICT/.test($ADDSPEC.slice($ADDSPEC.indexOf('== Prior round')))")" "A8: the addendum holds no commit message, no verdict, no author text"
+jf d_inc "$ADDSPEC" > "$RC/d_inc.seat-spec.md"
+bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$RC/d_inc.seat-spec.md" >/dev/null 2>&1
+eq "0" "$?" "A8: check-blind-evidence.sh passes on the spec an incremental seat actually received (assembled spec, no suppression)"
+eq "false" "$(jf d_def "$DEFSPEC.includes('Prior round')")" "A9: the default (full) path's spec has no addendum"
+eq "false" "$(jf d_full "$DEFSPEC.includes('Prior round')")" "A9: return_review full: the spec has no addendum"
+eq "true" "$(jf d_inc "$ADDSPEC.startsWith(j.steps[0].seat_inputs['claude-opus-4-6'].spec.slice(0, $ADDSPEC.indexOf('\\n== Prior round') + 1))")" "addendum: appended after the unmodified campaign spec"
+eq "$(jf d_def "$DEFSPEC")" "$(jf d_inc "$ADDSPEC.slice(0, $ADDSPEC.indexOf('\\n== Prior round'))")" "addendum: the part before it is byte-identical to the full path's spec"
+run_sc d_res ",$FIX"',"returnReview":"incremental","steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"resolve"}}]'
+eq "converged" "$(sf d_res 0 status)" "resolutions: every seat answering every carried finding with evidence closes them and the return converges"
+eq "incremental" "$(sf d_res 0 disclosure.review_scope)" "resolutions: and the round was incremental"
+run_sc d_part ",$FIX"',"returnReview":"incremental","steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"resolve_s1"}}]'
+eq "awaiting_disposition" "$(sf d_part 0 status)" "resolutions: ids only some were answered stay open, so the return parks again"
+
+# ---- round index, written then read back (BL-0146 D5) ------------------------------------------------------------------
+# The engine writes one pointer per reviewed head; a later return reads it through readRoundRecord. Compare what
+# the engine wrote with what the wiring module reads back and with what the receipt disclosed.
+RTRIP="require(process.env.REPO_ROOT + '/src/engine/review-increment-wiring').readRoundRecord"
+rr() { # <scenario> <js over: s (the step), read(head)>; reads back through the wiring of ${RR_ROOT:-$REPO_ROOT}
+  REPO_ROOT="${RR_ROOT:-$REPO_ROOT}" node -e "
+    const j=JSON.parse(require('fs').readFileSync('$RC/$1.json','utf8'));const s=j.steps[0];
+    const readRoundRecord=$RTRIP;
+    const read=(head)=>{const row=s.round_records.find((r)=>r.record.head===head);return row?readRoundRecord({root:s.store_root,campaignId:row.campaign,head}):null;};
+    process.stdout.write(String($2));" 2>/dev/null
+}
+eq "2" "$(jf d_inc 'j.steps[0].round_records.length')" "round index: one record for the first (full) head and one for the returned head"
+eq "true" "$(rr d_inc "s.round_records.every((r) => read(r.record.head) !== null && JSON.stringify(read(r.record.head)) === JSON.stringify(r.record))")" "round index: every record the engine wrote reads back identically through readRoundRecord"
+eq "full" "$(rr d_inc "read(s.round_records.find((r) => r.record.mode !== 'incremental').record.head).mode")" "round index: the first head's record says it was a full round"
+eq "true" "$(rr d_inc "read(s.head).mode === 'incremental' && read(s.head).binding === s.disclosure.incremental.incremental_binding")" "round index: the returned head's record carries the incremental binding the receipt disclosed"
+
 # item 5: the mode and the binding sit at the top level of the prepared review; the authority keeps the
 # full_diff_generation digest of its own payload and carries neither field.
 run_sc d_cap ",$FIX"',"returnReview":"incremental","capturePrepared":true,"steps":['"$RET"']'
@@ -135,6 +172,43 @@ eq "true" "$(jf m1 'j.steps[0].seat_inputs["claude-opus-4-6"] === undefined || j
 restore "$ENG"
 run_in "$MC" m1r ",$FIX"',"returnReview":"incremental","steps":['"$RET"']' multi
 eq "./src/value.txt" "$(jf m1r 'j.steps[0].seat_inputs["claude-opus-4-6"].tree.trim()')" "MUTATION restored: the seats see the re-check file only (green)"
+
+# M6 the addendum never appended: the incremental seat gets the bare spec (and nothing for it to answer)
+mut "$ENG" "fs.readFileSync(promptFile), Buffer.from(decision.addendum, 'utf8')," "fs.readFileSync(promptFile), Buffer.alloc(0),"
+run_in "$MC" m6 ",$FIX"',"returnReview":"incremental","steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"resolve"}}]' multi
+eq "true" "$(jf m6 'j.steps[0].seat_inputs["claude-opus-4-6"].spec.includes("== Prior round") === false')" "MUTATION addendum not appended: the seat's spec has no addendum (red)"
+eq "awaiting_disposition" "$(sf m6 0 status)" "MUTATION addendum not appended: nothing to answer, the return parks instead of converging (red)"
+restore "$ENG"
+
+# M7 the generator call removed from the decision: no addendum is built
+mut "src/engine/review-increment-wiring.js" "addendum = buildPriorRoundAddendum(" "addendum = ((...unused) => '')("
+run_in "$MC" m7 ",$FIX"',"returnReview":"incremental","steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"resolve"}}]' multi
+eq "awaiting_disposition" "$(sf m7 0 status)" "MUTATION generator call removed: no addendum, the incremental return cannot converge (red)"
+restore "src/engine/review-increment-wiring.js"
+
+# M8 a commit-message / narrative line planted in the addendum: the scanner on the received spec goes red
+mut "$ENG" "fs.readFileSync(promptFile), Buffer.from(decision.addendum, 'utf8')," "fs.readFileSync(promptFile), Buffer.from(\`\${decision.addendum}commit 3f2a: The implementation is correct and robust.\\n\`, 'utf8'),"
+run_in "$MC" m8 ",$FIX"',"returnReview":"incremental","steps":['"$RET"']' multi
+jf m8 "j.steps[0].seat_inputs['claude-opus-4-6'].spec" > "$RC/m8.seat-spec.md"
+bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$RC/m8.seat-spec.md" >/dev/null 2>&1
+eq "1" "$?" "MUTATION commit-message line planted in the addendum: the blind-evidence scan on the seat's spec fails (red)"
+restore "$ENG"
+
+# M9 a full-path seat is handed an addendum: the full spec is no longer byte-identical (A9)
+mut "$ENG" "if (incrementalSeat && isStr(decision.addendum) && decision.addendum.length > 0) {" "if (decision === null || decision.mode !== 'incremental') { decision = { mode: 'full', addendum: '\\n== Prior round (planted on a full path) ==\\n' }; }
+      if (true) {"
+mut "$ENG" "const composed = path.join(ownedIncrementalDir, 'spec.md');" "const composed = path.join(ownedIncrementalDir || os.tmpdir(), 'spec-' + process.pid + '.md');"
+run_in "$MC" m9 ",$FIX"',"steps":['"$RET"']' multi
+eq "true" "$(jf m9 "$DEFSPEC.includes('Prior round')")" "MUTATION addendum on the full path: the full spec now carries it (red)"
+restore "$ENG"
+run_in "$MC" m9r ",$FIX"',"steps":['"$RET"']' multi
+eq "false" "$(jf m9r "$DEFSPEC.includes('Prior round')")" "MUTATION restored: the full path's spec is untouched (green)"
+
+# M10 the round index cannot be read back: a record the engine wrote is not found again
+mut "src/engine/review-increment-wiring.js" "&& parsed.head === head ? parsed : null;" "&& false ? parsed : null;"
+run_in "$MC" m10 ",$FIX"',"returnReview":"incremental","steps":['"$RET"']' multi
+RR_ROOT="$MC" eq "false" "$(RR_ROOT="$MC" rr m10 "s.round_records.length > 0 && s.round_records.every((r) => read(r.record.head) !== null)")" "MUTATION round index read-back broken: the engine's own records are not found again (red)"
+restore "src/engine/review-increment-wiring.js"
 
 # M5 the mode and binding placed inside the authority instead of at the top level (item 5)
 mut "$ENG" "preparedReceipt.review_input_mode = 'incremental_return';

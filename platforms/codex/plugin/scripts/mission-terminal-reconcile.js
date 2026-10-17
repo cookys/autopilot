@@ -43,6 +43,13 @@
 // adoption only while the prior mission is UNRESOLVED, so every retry after a
 // COMPLETE mints another permanent "current ready" terminal. Rollover retires them
 // after the fact; retiring them AT CLOSE would stop the ambiguity accruing at all.
+//
+// Automatic retirement (BL-0062): `retireSupersededAfterIntegration` runs the SAME
+// rollover, with the SAME ancestry proof, at the moment the integration step
+// (next-touch-validation.js executeAuthorizedIntegration) confirms the merge and so
+// knows which adoption was adopted. It never retires by chronology and never at
+// COMPLETE. The `rollover` subcommand stays as the rescue tool for chains that
+// predate it or whose automatic step was skipped (the integration result says why).
 
 const fs = require('fs');
 const path = require('path');
@@ -91,7 +98,7 @@ function rolloverPath(common) { return path.join(common, 'autopilot', 'mission',
 // provably already in shipped history cannot be replayed by definition. Anything
 // weaker (a receipt that merely SAYS integrated) would not carry that argument, which
 // is why integration_state alone is insufficient here.
-function rolloverMissionTerminals({ repoRoot, graphDigest, canonicalAdoption }) {
+function rolloverMissionTerminals({ repoRoot, graphDigest, canonicalAdoption, onlyIfSuperseded = false }) {
   const { root, common, missionRoot } = canonicalPaths(repoRoot);
   if (!HEX64.test(graphDigest || '')) fail('ROLLOVER_GRAPH', 'graph digest is required');
   if (!HEX64.test(canonicalAdoption || '')) fail('ROLLOVER_CANONICAL', 'canonical adoption key is required');
@@ -175,6 +182,12 @@ function rolloverMissionTerminals({ repoRoot, graphDigest, canonicalAdoption }) 
     .map((a) => ({ adoption_key: a.key, state: a.state.state, disposition: 'retained_non_complete' }))
     .sort((x, y) => (x.adoption_key < y.adoption_key ? -1 : 1));
 
+  // Automatic path only: a graph with a single COMPLETE adoption has nothing to retire,
+  // so record nothing (the manual subcommand keeps writing its record as before).
+  if (onlyIfSuperseded && superseded.length === 0) {
+    return { status: 'NOTHING_TO_RETIRE', mission_graph_digest: graphDigest, integrated_adoption_key: canonicalAdoption, writes: 0 };
+  }
+
   const body = {
     schema_version: 1,
     artifact_type: 'mission_terminal_rollover',
@@ -206,6 +219,14 @@ function rolloverMissionTerminals({ repoRoot, graphDigest, canonicalAdoption }) 
   fs.writeFileSync(tmp, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(tmp, target);
   return { status: 'ROLLED_OVER', ...artifact, writes: 1 };
+}
+
+// Automatic retirement hook: called once an integration is CONFIRMED. All the proof
+// obligations of `rollover` apply unchanged (COMPLETE, journal-matched terminals,
+// integrated + zero-residue evidence, observed_head an ancestor of HEAD of `repoRoot`),
+// so an adoption that is not actually in shipped history retires nothing.
+function retireSupersededAfterIntegration({ repoRoot, graphDigest, canonicalAdoption }) {
+  return rolloverMissionTerminals({ repoRoot, graphDigest, canonicalAdoption, onlyIfSuperseded: true });
 }
 
 function reconcileLegacyMissionTerminals({ repoRoot, currentGraphDigest }) {
@@ -260,6 +281,7 @@ if (require.main === module) {
       '      Refuses unless the named adoption is COMPLETE, its terminals resolve to',
       '      exactly one matching journal receipt each, its evidence says integrated',
       '      with zero residue, and its observed_head is an ancestor of HEAD.',
+      '      Rescue tool: the integration step retires them automatically after merge.',
       '',
     ].join('\n'));
     process.exit(0);
@@ -288,5 +310,5 @@ if (require.main === module) {
 
 module.exports = {
   LEGACY, dispositionPath, reconcileLegacyMissionTerminals,
-  rolloverPath, rolloverMissionTerminals,
+  rolloverPath, rolloverMissionTerminals, retireSupersededAfterIntegration,
 };

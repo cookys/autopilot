@@ -53,6 +53,36 @@ const bad = attempt(real, 'bad', ['a.txt'], ['a.txt', 'b.txt']);
 out.hunkless_changed_file_refused = /no hunk/.test(bad);
 const negMod = load((s) => s.replace(/if \(changedSet\.has\(p\) && !diffSet\.has\(p\)\) \{ \/\/ guard:recheck_hunk/, 'if (false) {'), 'neg');
 out.neg_guard_removed_accepts_broken = attempt(negMod, 'negbad', ['a.txt'], ['a.txt', 'b.txt']) === 'built';
+
+// A renamed re-check file (e060df59 follow-up, plan A14): the range shows the rename as a delete of the old
+// path plus an add of the new one (the packet diff runs --no-renames). The seat must get both hunks, and
+// only the new path's content; a descriptor that lists the new path without its hunk is refused.
+git(repo, 'mv', 'README', 'README-renamed');
+git(repo, 'commit', '-qm', 'rename');
+const headR = git(repo, 'rev-parse', 'HEAD');
+function attemptRename(mod, tag, diffPaths, treePaths) {
+  const diffFile = path.join(tmp, `${tag}.diff`);
+  fs.writeFileSync(diffFile, pathDiff(repo, base, headR, diffPaths));
+  try {
+    const built = mod.buildReviewPacket({
+      repo, baseSha: base, candidateSha: headR, diffFile, specFile: path.join(tmp, 'spec.md'),
+      outDir: path.join(tmp, `out-${tag}`),
+      incremental: { diff_paths: diffPaths, tree_paths: treePaths, delta_diff: Buffer.from('') },
+    });
+    const dir = built.dir;
+    const patch = fs.readFileSync(path.join(dir, 'diff.patch'), 'utf8');
+    const tree = fs.readdirSync(path.join(dir, 'tree')).sort().join();
+    return { built: true, patch, tree };
+  } catch (e) { return { built: false, message: String(e.message) }; }
+}
+const ren = attemptRename(real, 'ren', ['README-renamed', 'README'], ['README-renamed']);
+out.rename_builds_with_both_sides = ren.built === true;
+out.rename_patch_has_delete_and_add = ren.built === true && /deleted file mode[\s\S]*README/.test(ren.patch)
+  && /new file mode/.test(ren.patch) && ren.patch.includes('README-renamed') && ren.patch.includes('a/README');
+out.rename_tree_holds_new_path_only = ren.built === true && ren.tree === 'README-renamed';
+const renBad = attemptRename(real, 'renbad', ['README'], ['README-renamed']);
+out.rename_new_path_without_hunk_refused = renBad.built === false && /no hunk/.test(renBad.message);
+out.neg_rename_guard_removed_accepts_broken = attemptRename(negMod, 'negrenbad', ['README'], ['README-renamed']).built === true;
 console.log(JSON.stringify(out));
 NODE
 )"

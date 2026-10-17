@@ -149,6 +149,7 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 | Setting | What it does | Default | Environment variable |
 |---|---|---|---|
 | `topology.exclude_seats` (config.json) | Seats (engine/effort@runner, or a bare engine) never offered by the dispatch ladders and review panel; unioned with --exclude-seats. | `[]` | `AUTOPILOT_TOPOLOGY_FILE`: Where the derived dispatch topology is written and read. |
+| `prices_fetch` (config.json) | false stops the SessionStart refresh of the seat price cache (`scripts/qualification-prices.js fetch`, detached, at most once per 24 h). | `true` | `AUTOPILOT_PRICES_FETCH`: Set to "0" to stop the refresh (either this or prices_fetch: false switches it off). `AUTOPILOT_PRICES_CACHE_DIR`: where the seat price cache lives (default `~/.autopilot/qualification-prices`, never inside a git work tree). |
 | `AUTOPILOT_REVIEW_MAX_CONCURRENCY` | Most review seats that run at once in a review fan-out (qc panel, final panel); the rest queue in order and each seat's timeout starts when it actually starts. Unset, 0 or not a whole number means all seats at once. | unlimited |  |
 | `AUTOPILOT_MIN_REVIEWED_SEATS` | Minimum seats that must have reviewed before a review loop or phase receipt passes (same grammar as --min-reviewed-seats). | all seats |  |
 | `AUTOPILOT_QUALIFICATION_OVERRIDE` | A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it. | unset |  |

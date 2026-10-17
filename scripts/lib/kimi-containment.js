@@ -131,7 +131,13 @@ function auditKimiRun({ seatHome }) {
   return null;
 }
 
-module.exports = { AGENT_NAME, AGENT_MD, writeToollessAgent, auditKimiRun };
+// True only for a breach that proves the MODEL emitted a tool call (the exam driver may then
+// score the case wrong, d-80d327c9); config / unverified / fallback breaches are not that.
+function isToolAttemptBreach(breach) {
+  return typeof breach === 'string' && breach.startsWith('tool-call encoding in kimi wire') && !/: non-empty /.test(breach);
+}
+
+module.exports = { AGENT_NAME, AGENT_MD, writeToollessAgent, auditKimiRun, isToolAttemptBreach };
 
 if (require.main === module) {
   const [cmd, a, b] = process.argv.slice(2);

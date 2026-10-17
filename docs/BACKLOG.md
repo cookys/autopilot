@@ -170,13 +170,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 階梯排序仍近乎退化；未知成本記成 0 的編碼已修，但各席位都沒有單價，排序缺依據。 (draft)
-- **Impact**: 挑便宜席位仍不準；需 owner 決定是否登記單價。 (draft)
+- **Problem**: 階梯同 effort 的席位已能依單價排序，但單價資料（model-prices.json）尚未發佈。 (draft)
+- **Impact**: 價格資料上線前，挑便宜席位仍不準。 (draft)
 - **Trigger**: the next time a climb picks a seat whose price is wildly out of line with the rung below it, or any work that wants the ladder to mean "cheaper first" in dollars rather than in label order.
 - **Effort**: M
 - **Source**: v2.36.20 follow-up, 2026-09-08; the adjacency rule shipped, this is the ordering key underneath it
 - **Pointer**: docs/backlog/the-implementer-ladder-s-cost-ordering-is-nearly-degenerate-11-of-17-rungs-share.md
-- **Context**: measured on this host 2026-09-08 (`~/.autopilot/topology.json`, 17 rungs): indices 5–16 are ALL `high`, so within that region the ordering falls through to `latency.sample_wall_time_s` then engine name.
+- **Context**: 讀取端已做（階梯同 effort 依本機價格快取排序，`scripts/qualification-prices.js`），等 llm-playground 發佈 model-prices.json 到 model-dyno；沒有快取時排序不變。
 
 ### kimi reviewer rail: file-indirection for prompts above the argv wall (needs a live kimi credential to probe)
 - **Id**: BL-0025
@@ -480,19 +480,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-08-08 v2.34.8 pre-push QC。兩個 family（MiniMax-M3、GLM-5.2）皆回 SHIP-AS-IS 且 findings=none，都沒抓到這條；MiniMax-M3…
 - **Pointer**: docs/backlog/engine-and-cli-have-no-session-mode-fallback-for-bounded-non-mission-campaigns.md
 - **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` +…
-
-### Mission runtime retires superseded adoptions at closeout, not after the fact
-- **Id**: BL-0062
-- **Status**: open
-- **Since**: 2026-08-08
-- **Origin**: self
-- **Problem**: Mission 失敗重試後會留下多個已完成的採用紀錄，現在是事後用腳本清理，根本原因（結束時沒有自動退役舊的）沒處理。 (draft)
-- **Impact**: 每次重試都要人工清理，不清會造成殘留與混淆。 (draft)
-- **Trigger**: 下一次 Mission 重試鏈再留下多個 COMPLETE adoption，或要動 `src/mission/runtime.js` 的收尾路徑時。
-- **Effort**: M
-- **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
-- **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
-- **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
 
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Id**: BL-0064
@@ -911,7 +898,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
-- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). Addendum off pending ruling d-3cf4dc4c, so an incremental round parks again; mixed-seat rounds (A12) go full. D5 evidence open.
+- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). 附錄已開 (owner 2026-10-17 d-3cf4dc4c: 給清單); 沉默仍不關閉; 混合席位走 full. 剩 D5 實測 (A/B、成本、預設值).
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

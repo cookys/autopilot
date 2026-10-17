@@ -20,7 +20,7 @@ if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH/repo" >/dev/null
   echo "FAIL: could not clone the repo"; exit 1
 fi
 
-REPO_ROOT_LIVE="$LIVE_ROOT" SCRATCH_ROOT="$SCRATCH" FIXTURE_DIR="$FIXTURE" node - <<'NODE'
+NODE_OUT="$(REPO_ROOT_LIVE="$LIVE_ROOT" SCRATCH_ROOT="$SCRATCH" FIXTURE_DIR="$FIXTURE" node - <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -158,4 +158,10 @@ check('(c) single adoption -> nothing_to_retire and no record', single && single
 console.log(`\nmission-retire-on-integration.test.sh: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 NODE
-exit $?
+)"
+NODE_RC=$?
+printf '%s\n' "$NODE_OUT"
+assert_eq "$NODE_RC" "0" "every scenario in the embedded node block passed"
+assert_contains "$NODE_OUT" "0 failed" "the node block reported zero failed scenarios"
+
+finalize_test

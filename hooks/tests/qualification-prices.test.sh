@@ -227,4 +227,31 @@ mkdir -p "$HOME/.autopilot"; echo '{"prices_fetch":false}' > "$HOME/.autopilot/c
 assert_eq "$(ss AUTOPILOT_PRICES_FETCH=1)" "0" "config prices_fetch:false turns the refresh off"
 rm -f "$HOME/.autopilot/config.json"
 
+# --- real producer sample (llm-playground model-prices v1, plan 079) ------------------------------
+# The fixture is a verbatim copy of what the producer's generator emitted; it pins the reader to the real
+# shape (extra top-level keys, plan, unpriced, subscription rows). Own cache dir, never ~/.autopilot.
+SAMPLE="$REPO_ROOT/hooks/tests/fixtures/qualification-prices/model-prices-v1-sample.json"
+SAMPLE_CACHE="$TEST_TMP/sample-cache"
+sp() { AUTOPILOT_PRICES_CACHE_DIR="$SAMPLE_CACHE" node "$PRICES" "$@"; }
+sp fetch --from "$SAMPLE" >/dev/null 2>&1; EX=$?
+assert_eq "$EX" "0" "real sample accepted"
+SST="$(sp status)"
+assert_contains "$SST" '"n_rows": 13' "real sample: 13 priced rows"
+assert_contains "$SST" '"n_unpriced": 14' "real sample: 14 unpriced entries"
+sprice() { sp price --model "$1" --runner "$2" | node -e "process.stdout.write(String(JSON.parse(require('fs').readFileSync(0,'utf8')).price_micro_per_mtok))"; }
+assert_eq "$(sprice gemini-3.8-flash-low agy)" "4500000" "real sample: gemini-3.8-flash-low|agy priced"
+assert_eq "$(sprice gpt-6-luna codex)" "600000" "real sample: gpt-6-luna|codex priced"
+assert_eq "$(sprice grok-4.7 grok)" "8000000" "real sample: grok-4.7|grok priced"
+assert_eq "$(sprice Qwen3.8-Max qoderclicn)" "8000000" "real sample: Qwen3.8-Max|qoderclicn priced"
+assert_eq "$(sprice claude-sonnet-5-5 cc-shim)" "null" "real sample: claude-sonnet-5-5|cc-shim unknown"
+assert_eq "$(sprice cursor-grok-4.6-high-fast cursor)" "null" "real sample: cursor-grok-4.6-high-fast|cursor unknown"
+assert_eq "$(sprice opencode-go/muse-spark-1.3-contributor opencode)" "null" "real sample: opencode muse-spark unknown"
+# negative control: the same sample with one row's output price key removed is refused whole.
+node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));delete d.rows[0].usd_per_mtok_output_micro;require('fs').writeFileSync(process.argv[2],JSON.stringify(d))" "$SAMPLE" "$FIX/sample-broken.json"
+SBEFORE="$(AUTOPILOT_PRICES_CACHE_DIR="$SAMPLE_CACHE" node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1]+'/current.json','utf8')).digest)" "$SAMPLE_CACHE")"
+sp fetch --from "$FIX/sample-broken.json" >/dev/null 2>&1; EX=$?
+assert_eq "$EX" "1" "real sample with a row's output price key removed is rejected"
+SAFTER="$(AUTOPILOT_PRICES_CACHE_DIR="$SAMPLE_CACHE" node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1]+'/current.json','utf8')).digest)" "$SAMPLE_CACHE")"
+assert_eq "$SAFTER" "$SBEFORE" "rejected sample keeps the previous cache"
+
 finalize_test

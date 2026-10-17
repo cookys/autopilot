@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "budget-gate-g1",
+  "logical_plan_id": "subagent-budget-gate-2026-10-18",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "febb227edd03c72bddf7ff76751b17d71c508bc157e8141c35929d1a1afd2754",
+  "generation": 2,
+  "verdict": "READY",
+  "semantic_verdict": "READY",
+  "terminal": true,
+  "policy_reason": "generation_2_terminal",
+  "rubric_sha256": "de10a1a039fb658d891237a048b9cb63b8a547786359e7423eb06adc528a018b",
+  "manifest_sha256": "b00f5a713ce3ae904e4780f4870ab188a542c5f327396946a5e1515b24407271",
+  "plan_sha256": "ff0346a64fd15568b2d226a582100f06e5898a8779df04b4a2debedd6feb368d",
+  "growth_ratio": {
+    "numerator": 6688,
+    "denominator": 5701
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "33df5657979d027ffdac337c24c10125d0df582603882c9033a1d0dd342bb367"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-mG9F1R/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "eb9f1ab8523a9921ba46dfb5eebd2dbc94b13dd387a76c25c96f2c7c65ea4100"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "776ec350bb59896ffcd508f2b175f81e78e27ed74ed40a3407d3a5fedd7d89d5"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8d816ad964bbe0088b6eea027af9901e7a90755c46d24a6c6c65a1872ab56215",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sRHHRD",
+          "digest": "8d816ad964bbe0088b6eea027af9901e7a90755c46d24a6c6c65a1872ab56215"
+        },
+        "receipt_digest": "b6a31e85bbeaaed901a94d9cfe4ff505b8cfafd3f3b0ca13f5df42f5e9bc3697"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "READY",
+          "findings": []
+        },
+        "parser_status": "extracted",
+        "attempt": 1,
+        "target_id": "minimax_deep",
+        "family": "minimax",
+        "request_digest": "776ec350bb59896ffcd508f2b175f81e78e27ed74ed40a3407d3a5fedd7d89d5",
+        "raw_digest": "8d816ad964bbe0088b6eea027af9901e7a90755c46d24a6c6c65a1872ab56215"
+      }
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "auto-fb-minimax_deep-1",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "b293521ebf9babd4facec37d2b94a8af9a34e0720182771c62527db28ef2151c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-iovdA7",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "0f0d5a059ca4bbb35594facf90918caf3869e5b942b02dc1f5a5a41e3fb2b819"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [
+    {
+      "seat_id": "minimax_deep",
+      "from_id": "minimax_deep",
+      "to_id": "auto-fb-minimax_deep-1",
+      "attempt": 2,
+      "reason": "retry_substitution"
+    }
+  ],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "auto-fb-minimax_deep-1",
+      "family": "alibaba",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-17T18:17:27.562Z"
+}

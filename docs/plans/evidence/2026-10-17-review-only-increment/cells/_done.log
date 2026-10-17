@@ -33,3 +33,7 @@ rc=0 tag=s4-incj-r2
 rc=0 tag=s3-incj-r2
 rc=0 tag=s2-incj-r2
 rc=0 tag=s5-incj-r2
+rc=0 tag=s6-full-r1
+rc=0 tag=s6-incj-r1
+rc=0 tag=s6-incj-r2
+rc=0 tag=s6-full-r2

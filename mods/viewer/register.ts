@@ -16,7 +16,7 @@ import type { ShowInput, ShowRequest } from './model'
 import { aiState, cancelAi, runAi, sendToChat, toggleAi } from './assist'
 import type { Source } from './assist'
 import { Viewer } from './pane'
-import { applyScroll, newScroll } from '../live/scroll'
+import { newScroll, scrollHook } from '../live/scroll'
 import type { AiView } from './pane'
 import { PANE_ID, TOOL_DESCRIPTION, TOOL_FULL, TOOL_NAME, TOOL_SCHEMA, currentView, reopenWindow, setCurrentView, shownFile, show } from './show'
 import { makeVT } from './strings'
@@ -89,10 +89,7 @@ export function registerViewer(on: Parameters<Register>[0]): void {
 
   // the person's scroll keys on the window: the mod moves its own offset (the frame, ../live/scroll.tsx); without a frame the engine scrolls as before
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
-    const k = currentView()?.shown.kind
-    if ((k !== 'file' && k !== 'diff') || !(e.bodyRows > 0)) return next(e)
-    if (applyScroll(viewerScroll, e)) void $.ui.invalidate('ui.render')
-    return {}
+    return scrollHook(viewerScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 }
 const viewerScroll = newScroll()

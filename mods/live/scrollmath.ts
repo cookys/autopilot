@@ -2,8 +2,25 @@
 import { displayWidth } from './ui'
 
 // a window's state: which content it is for, how far down it stands, and the largest legal offset (the frame writes it each draw, the scroll hook clamps to it)
-export type ScrollModel = { key: string; offset: number; max: number }
-export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0 })
+// `framed` is whether the LAST draw was a frame (the draw sets it, either way); `room` the content rows that draw showed (a page move is capped to it, so no row is skipped)
+export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean }
+export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0, room: 0, framed: false })
+// The ONE test for whether the mod, not the engine, takes a ui.scroll: only while the last draw was a frame. Drawn as a plain tree (no Button, no bodyColumns, no band, another tab) the
+// engine scrolls it, so the hook must hand the event to `next`.
+export const takesScroll = (m: ScrollModel, e: { bodyRows: number; offset?: number }): boolean => m.framed && e.bodyRows > 0 && !(typeof e.offset === 'number' && e.offset > 0)
+// the whole `ui.scroll` hook of a window, one body for the viewer and the live decide tab: the mod's own window moves its offset and asks for a redraw; anything else is the engine's
+export function scrollHook<E extends { by: number; contentRows: number; bodyRows: number; offset?: number }, R>(model: ScrollModel, e: E, next: (e: E) => R, redraw: () => void): R | Record<string, never> {
+  if (!takesScroll(model, e)) return next(e)
+  if (applyScroll(model, e)) redraw()
+  return {}
+}
+// a list that only GREW (new ids appended or inserted, none gone) keeps its place; anything else is another content and starts at the top
+export function keyedGrow(model: ScrollModel, ids: readonly string[]): void {
+  const prev = model.key === '' ? [] : model.key.split('\u0001')
+  const now = new Set(ids)
+  if (!prev.every(i => now.has(i))) { model.offset = 0; model.max = 0 }
+  model.key = ids.join('\u0001')
+}
 // a new content (another file, another list) starts at the top
 export function keyed(model: ScrollModel, key: string): void {
   if (model.key !== key) { model.key = key; model.offset = 0; model.max = 0 }
@@ -31,7 +48,8 @@ export function thumbOf(total: number, room: number, offset: number): { top: num
 // the whole tree is Home or End; anything else is relative. Always clamped to [0, max]. Returns true when the offset changed.
 export function applyScroll(model: ScrollModel, e: { by: number; contentRows: number }): boolean {
   const before = model.offset
-  const target = Math.abs(e.by) >= e.contentRows && e.contentRows > 0 ? (e.by < 0 ? 0 : model.max) : model.offset + e.by
+  const room = model.room > 0 ? model.room : Math.max(1, Math.abs(e.by)) // a page move never passes the rows on screen
+  const target = Math.abs(e.by) >= e.contentRows && e.contentRows > 0 ? (e.by < 0 ? 0 : model.max) : Math.max(-room, Math.min(room, e.by)) + model.offset
   model.offset = Math.max(0, Math.min(model.max, target))
   return model.offset !== before
 }

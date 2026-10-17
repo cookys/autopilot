@@ -344,3 +344,15 @@ test('SCROLL viewer: the AI buttons sit in the fixed strip under a rule, the scr
   expect(textOf(kids[1]), 'the count line is the second head row and names the range').toMatch(/^lines 1 to \d+ of 300$/)
   await win.unmount()
 })
+
+test('SCROLL viewer: a host that gives no body columns gets the plain tree (no frame), so the engine can scroll it', async ($, on) => {
+  world(on, { [CWD + '/long.txt']: Array.from({ length: 300 }, (_, i) => 'row ' + (i + 1)).join('\n') + '\n' })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'long.txt' })
+  const { bodyColumns: _drop, ...noCols } = PANE_PROPS
+  const win = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-viewer', props: noCols, viewport: { columns: 120, rows: 40, isFullscreen: true } })
+  const tree = (await win.drawn()) as Node
+  expect(fixedKids(tree).length, 'no frame without bodyColumns').toBe(0)
+  expect(find(tree, 'Code')[0].props?.source, 'the whole part is one Code for the engine to scroll').toContain('row 300')
+  await win.unmount()
+})

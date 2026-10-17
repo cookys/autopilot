@@ -1,7 +1,7 @@
 // mods/live/scroll.test.ts — the scrolling window's arithmetic (design plan §12.10): the thumb, the clamp, every ui.scroll key, the cell wrap. The drawing is tested where it is used:
 // the 待決 tab in live.test.ts ("SCROLL decide ...") and the viewer window in viewer.test.ts.
 import { test, expect } from 'claude-code/testing'
-import { applyScroll, frameOf, newScroll, roomOf, thumbOf, wrapCells } from './scrollmath'
+import { applyScroll, frameOf, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
 
 test('thumb: flush with the top at offset 0, in the middle halfway, flush with the bottom at the last offset', () => {
   // 100 rows through a 20-row window: the thumb is 4 cells, 16 cells of travel for 80 rows of offset
@@ -29,7 +29,7 @@ test('thumb: an offset outside the range is clamped, not drawn outside the track
 })
 
 test('ui.scroll: every key moves the offset as the engine reports it, clamped to [0, max]', () => {
-  const m = { key: 'k', offset: 10, max: 50 }
+  const m = { key: 'k', offset: 10, max: 50, room: 0, framed: true }
   const total = 70 // contentRows
   expect(applyScroll(m, { by: 1, contentRows: total }) && m.offset).toBe(11) // down arrow
   expect(applyScroll(m, { by: -1, contentRows: total }) && m.offset).toBe(10) // up arrow
@@ -39,7 +39,7 @@ test('ui.scroll: every key moves the offset as the engine reports it, clamped to
   expect(applyScroll(m, { by: -total, contentRows: total }) && m.offset).toBe(0) // Home
 })
 test('ui.scroll: past either end stays at the end and reports no change', () => {
-  const m = { key: 'k', offset: 50, max: 50 }
+  const m = { key: 'k', offset: 50, max: 50, room: 0, framed: true }
   expect(applyScroll(m, { by: 1, contentRows: 70 })).toBe(false)
   expect(applyScroll(m, { by: 20, contentRows: 70 })).toBe(false)
   expect(m.offset).toBe(50)
@@ -67,4 +67,57 @@ test('wrapCells: rows of at most the width in terminal cells (a CJK character is
   expect(wrapCells('abcdef', 4)).toEqual(['abcd', 'ef'])
   expect(wrapCells('你好嗎', 4)).toEqual(['你好', '嗎'])
   expect(wrapCells('ab\ncd', 10)).toEqual(['ab', 'cd'])
+})
+
+// ---- review round 6 ----
+test('takesScroll: only while the last draw was a frame; a plain tree hands ui.scroll to the engine', () => {
+  const m = newScroll()
+  expect(takesScroll(m, { bodyRows: 30 }), 'nothing drawn yet: the engine scrolls').toBe(false)
+  m.framed = true
+  expect(takesScroll(m, { bodyRows: 30 })).toBe(true)
+  expect(takesScroll(m, { bodyRows: 0 }), 'no room reported').toBe(false)
+  expect(takesScroll(m, { bodyRows: 30, offset: 1 }), 'the engine window is off 0: let the engine bring it home').toBe(false)
+  m.framed = false // the next draw was a plain tree (no Button, no bodyColumns, no band, another tab)
+  expect(takesScroll(m, { bodyRows: 30 })).toBe(false)
+})
+test('paging: a page move is capped to the rows on screen, so consecutive pages leave no row out', () => {
+  const m = { key: 'k', offset: 0, max: 400, room: 24, framed: true }
+  const seen = new Set<number>()
+  let at = 0
+  for (let i = 0; i < 6; i++) {
+    for (let r = m.offset; r < m.offset + m.room; r++) seen.add(r)
+    applyScroll(m, { by: 30, contentRows: 31 }) // the engine's PgDn: bodyRows = 30 > room
+    at = m.offset
+  }
+  expect(at).toBe(144)
+  for (let r = 0; r < 144; r++) expect(seen.has(r), 'row ' + r + ' was shown').toBe(true)
+  applyScroll(m, { by: -30, contentRows: 31 })
+  expect(m.offset, 'PgUp is capped the same way').toBe(120)
+})
+test('keyedGrow: new ids appended keep the place; a removed id starts at the top', () => {
+  const m = { key: '', offset: 0, max: 0, room: 0, framed: true }
+  keyedGrow(m, ['a', 'b', 'c'])
+  m.offset = 7
+  keyedGrow(m, ['a', 'b', 'c', 'd'])
+  expect(m.offset).toBe(7)
+  keyedGrow(m, ['a', 'c', 'd'])
+  expect(m.offset).toBe(0)
+})
+
+test('scrollHook: a window that drew a plain tree hands the event to next() and moves nothing; a framed one takes it and asks for a redraw', () => {
+  const ev = { by: 1, contentRows: 31, bodyRows: 30, offset: 0 }
+  for (const [framed, label] of [[false, 'plain tree'], [true, 'frame']] as const) {
+    const m = { key: 'k', offset: 0, max: 50, room: 24, framed }
+    const calls: string[] = []
+    const out = scrollHook(m, ev, () => { calls.push('next'); return 'engine' }, () => calls.push('redraw'))
+    if (framed) {
+      expect(calls, label).toEqual(['redraw'])
+      expect(out).toEqual({})
+      expect(m.offset).toBe(1)
+    } else {
+      expect(calls, label).toEqual(['next'])
+      expect(out).toBe('engine')
+      expect(m.offset, 'the mod did not move its own offset').toBe(0)
+    }
+  }
 })

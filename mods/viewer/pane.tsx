@@ -161,6 +161,7 @@ function drawRows(el: { Text: El; Code: El }, rows: Row[], lo: number, hi: numbe
 
 export function Viewer(el: { Box: El; Text: El; Code: El; Button?: El; Input?: El }, shown: Shown, title: string, t: VT, goto: (start: number) => void, ai?: AiView, win?: { props: unknown; model: ScrollModel }) {
   const { Box, Text, Code, Button } = el
+  if (win !== undefined) win.model.framed = false // set again by the frame; a plain tree (loading, empty, no room, no Button) leaves ui.scroll to the engine
   const hint = <Text key="hint" dimColor>{t('viewer.hint')}</Text>
   // the title row of a pane is drawn only while a second pane is open, so the path is also the first line of the body
   const name = <Text key="name" wrap="truncate-start">{title}</Text>

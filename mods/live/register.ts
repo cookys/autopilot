@@ -42,7 +42,7 @@ import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
 import { Band } from './band'
 import { Pane } from './pane'
-import { applyScroll, newScroll } from './scroll'
+import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
@@ -811,9 +811,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
-    if (paneTab !== 'decide' || !(e.bodyRows > 0)) return next(e)
-    if (applyScroll(decideScroll, e)) void $.ui.invalidate('ui.render')
-    return {}
+    return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 }
 const decideScroll = newScroll()

@@ -31,6 +31,8 @@ export function scrollFrame(el: { Box: El; Text: El }, o: FrameOptions) {
   const { Box, Text } = el
   const room = roomOf(o)
   o.model.max = Math.max(0, o.total - room)
+  o.model.room = room
+  o.model.framed = true
   o.model.offset = Math.min(o.model.offset, o.model.max)
   const off = o.model.offset
   const th = thumbOf(o.total, room, off)

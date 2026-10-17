@@ -3553,8 +3553,46 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // must occur exactly once in the base body, so a stale entry fails loudly instead of masking.
   const BT = String.fromCharCode(96);
   const SINK = BT + '${rawExchanges.map((row) => JSON.stringify(row)).join(\'\\n\')}\\n' + BT + ',';
+  // The foreman role (BL-0010, landed with lane/foreman) adds two branches to runQualification:
+  // the --plan dry-run before the shared plan return, and the live sitting before the brain
+  // branch. Both only act when role === 'foreman', so the reviewer/owner path is unchanged.
+  const FOREMAN_PLAN_ANCHOR = [
+    "  const role = options.role || 'reviewer';",
+    '  if (options.plan) return runPlanDryRun(options);',
+  ].join('\n');
+  const FOREMAN_PLAN_NEW = [
+    "  const role = options.role || 'reviewer';",
+    "  if (role === 'foreman' && options.plan) {",
+    "    const { runForemanQualification } = require('../evals/foreman-eval-runner');",
+    '    const plan = runForemanQualification({ plan: true });',
+    '    process.stdout.write(' + BT + '${JSON.stringify(plan, null, 1)}\\n' + BT + ');',
+    '    process.exit(0);',
+    '  }',
+    '  if (options.plan) return runPlanDryRun(options);',
+  ].join('\n');
+  const FOREMAN_RUN_ANCHOR = [
+    '    return runConsultDiscussQualification(options);',
+    '  }',
+    "  if (role === 'brain') return runBrainQualification(options);",
+  ].join('\n');
+  const FOREMAN_RUN_NEW = [
+    '    return runConsultDiscussQualification(options);',
+    '  }',
+    "  if (role === 'foreman') {",
+    "    const { runForemanQualification } = require('../evals/foreman-eval-runner');",
+    '    return runForemanQualification({',
+    '      ...options,',
+    '      test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),',
+    '    });',
+    '  }',
+    "  if (role === 'brain') return runBrainQualification(options);",
+  ].join('\n');
   const DELTAS = {
-    runQualification: [[SINK, 'rawRowsText(rawExchanges),']],
+    runQualification: [
+      [SINK, 'rawRowsText(rawExchanges),'],
+      [FOREMAN_PLAN_ANCHOR, FOREMAN_PLAN_NEW],
+      [FOREMAN_RUN_ANCHOR, FOREMAN_RUN_NEW],
+    ],
   };
   const expectedBody = (name, baseText) => {
     let text = baseText;

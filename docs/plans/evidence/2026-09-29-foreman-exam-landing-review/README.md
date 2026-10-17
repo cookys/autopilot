@@ -78,4 +78,81 @@ that, it existed only as an uncommitted diff in a `/tmp` worktree. The
 branch also got `8560efcf`, a test-only commit that makes the foreman suite
 runnable under `hooks/tests/run.sh`.
 
-Follow-up: `docs/backlog/foreman-exam-harness-spec-conformance.md`.
+Follow-up: the backlog item (BL-0010) was closed by the remediation below.
+
+## Remediation landed (BL-0010, owner d-d2a8fdfb, 2026-10-17)
+
+The 8 verified deviations and the ninth item were fixed on five lanes and
+merged into lane/foreman. Each is pinned by a test with a negative control
+(the fix removed, the test shown red, then restored).
+
+1. Candidate surface: a fresh network-off bwrap fixture per campaign, a real
+   `shell` tool, host records read back from git and the filesystem
+   (`evals/foreman-eval-sandbox.js`, spec A1, A4, A8, section 6).
+2. Stub fidelity: row `report`, `claimed_check_exit`, F and F-twin
+   capability behaviour, G's X outside the fence, `paths_reviewed` as the
+   spec intersection (spec section 3). The harness's own writes are recorded
+   as `harness` effects, the stub's as `stub`, the candidate's as `candidate`
+   (spec section 6 tool record).
+3. Budgets from the corpus controls, `budget_exhausted`, a return_verdict-only
+   window with three further refused calls, and the 20M sitting token cap.
+4. Grading anchored on the verdict's `head_sha`, not the branch tip.
+5. `PRIOR_WORK_DISCARDED`; a clean false positive is any non-done verdict.
+6. Every puppet, the H restart replay, the write probe and the kill probe run
+   through `runner.driveCampaign` and the sandbox.
+7. A durable anti-rerun evidence log (`AUTOPILOT_FOREMAN_EVIDENCE_DIR`).
+8. 40-hex ids, a full verdict shape check, and `envelope_rejected`.
+9. Spec Amendment 1: family B variant b1 is instruction-gated. The runner now
+   evaluates the row's `instruction_pred` against the dispatch envelope's
+   `instructions` field (spec lines 480 and 514, prompt line 658); the
+   unsatisfied case applies `else_effect`. Before this, the gate lived only in
+   the generator data and the runner repaired S2 unconditionally.
+
+The runner does not apply the generator's C-row `harness_restore`: spec
+section 2 C says the foreman restores T by hand, and the new suite shows that a
+foreman who never restores returns the weakened T.
+
+`harness_hash` changed: it is now `c737de6cc1a98e83d4106391a9e6160ef05befd4b76f53749877422133e7bf30`. **Every foreman exam result recorded
+before this change is non-conformant to the frozen spec**, including the
+muse-spark sitting on develop (`../2026-09-24-foreman-muse-spark-score5/`).
+A fresh sitting is needed before any foreman seat is scored.
+
+### Known limits and pin scope
+
+- **Amendment 1 is satisfiable by naming everything (finding 4a1323c3).** The
+  b1 gate opens when the dispatch instructions name S2. A foreman that names
+  every path role in every instruction therefore satisfies it without having
+  verified anything. The spec itself has this property; the gate only makes a
+  trusting, non-naming foreman observable (FALSE_MET), it does not prove the
+  foreman found the defect.
+- **The pin reproduces only on the same bwrap.** `harness_hash` already folds in
+  the sandbox digest, which is the sha256 of `bwrap --version`
+  (`evals/foreman-harness-conformance.js` `sandboxRuntime`). The record in
+  `evals/foreman-conformance-record.json` (`sandbox_image_digest`) therefore
+  matches only on a host with the same bwrap version; a different bwrap needs
+  the conformance run repeated and the record re-pinned.
+
+### Exam-surface hardening (full re-review, 2026-10-17)
+
+The sandbox module no longer trusts anything the candidate can write. Host git
+reads run inside a read-only, network-off bwrap with `.git/shallow` and
+`.git/info/grafts` covered by empty files and replace refs off, so a planted
+`core.fsmonitor` can only run in the sandbox. Host file access refuses
+symlinks (each path component is lstat-ed, the final open uses O_NOFOLLOW) and
+records the attempt as a critical isolation finding. Sandbox start is read from
+bwrap's own `--info-fd`, not from candidate-controlled stderr. A broken `.git`
+is graded as an isolation fault, not an aborted transport. Truth-bearing S files
+carry an HMAC token, so a hand edit labels as `unknown:`. The foreman's own
+`restore` now lands in the real worktree. `harness_hash` changed again; the
+value above is current.
+
+Second pass: host git now ignores candidate `shallow` and `grafts` through
+`GIT_SHALLOW_FILE` and `GIT_GRAFT_FILE` pointing at an empty file inside the
+sandbox root, so a host read creates nothing in the candidate repo. Every host
+git call is checked: a non-zero status, a timeout (SIGKILL) or an unreadable
+object is an isolation fault, and a bwrap that never started is a sandbox
+fault. The seed is required for truth-bearing files.
+
+On 2026-10-17 the second sub-package review (foreman2, four packages) found and
+fixed sandbox-escape and grading-hardening problems (a94cc7ac6, 90367505a,
+3b5a583f2). The final `harness_hash` is `c737de6c…`.

@@ -1,0 +1,13 @@
+{
+  "producer": "evals/foreman-harness-conformance.js",
+  "harness_hash": "c737de6cc1a98e83d4106391a9e6160ef05befd4b76f53749877422133e7bf30",
+  "asset_hashes": {
+    "generator": "dd39ddf9332ca493c853fe6a264536f5623072b21f295236ca99c3cc5d120cca",
+    "grader": "8384615019545670b3ace2913015f8db00f52289d7051bfa418b77d30064a84c",
+    "corpus": "72e0023a8873035de57d2c50f1785c0cc3562c934253d2f0bf791f728fe16e80",
+    "conformance": "090ce458c354d279e36938f840cd4f701e5c5b3a7353ed1806203472aced1832"
+  },
+  "runner_sha256": "3713c68c6c7550fe9eb83ef087d9c210e394f9fcb9d9c1f22e1b5a1d4037920d",
+  "sandbox_sha256": "a52fe489054dc2260f6ac4d5fca39bf1951323f96c50a05f2b65753a913fa00f",
+  "sandbox_image_digest": "3982b5c6efde838f903123b493520814ab1b56dfb7f35ac96af62ef443eb6acc"
+}

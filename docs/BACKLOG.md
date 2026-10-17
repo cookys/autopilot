@@ -952,15 +952,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
 - **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。
 
-### ui-lint 只掃 mods/live，viewer 等其他 mod 沒被規範檢查涵蓋
-- **Id**: BL-0207
-- **Status**: open
-- **Since**: 2026-10-17
-- **Origin**: self
-- **Problem**: 設計規範宣稱適用所有畫面，但自動檢查只掃 live 這一個資料夾，viewer 的按鈕沒照規範上色也沒被擋，是 owner 看截圖才發現。
-- **Impact**: 每個新 mod 都可能違反配色、粗體、按鈕與捲動框規範而檢查全綠，要靠人眼補抓。
-- **Trigger**: 下一次新增或大改 mod 畫面，或 owner 再抓到規範違反
-- **Effort**: M
-- **Source**: self, 2026-10-17（viewer 按鈕配色事件）
-- **Pointer**: docs/backlog/ui-lint-scans-only-mods-live-while-design-rules-claim-all-mods.md
-- **Context**: 暫時的補救是 viewer render 測試裡的 buttonFindings（35f07d836）；根治要把 ui-lint 的檔案清單擴到 mods/*，每條規則附一個負向對照；見 evidence-discipline §60。

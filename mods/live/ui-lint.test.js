@@ -1,6 +1,7 @@
 // mods/live/ui-lint.test.js — L3 of the live pane design system (docs/plans/2026-10-13-live-pane-design-system.md, I5 (a) and I20).
 // Imports the REAL ui.ts (erasable syntax only, so Node strips the types) and lints its glyph tables; the planted-table cases are the
 // negative controls (M7 to M10): each broken table must be reported, so a checker that goes quiet turns this suite red.
+// Scope (BL-0207): the rules about what a mod screen may draw scan EVERY mod under mods/ through modSources(); the rules that name live's own files say why they stay live (see SCOPE below).
 // Run: node --test mods/live/ui-lint.test.js   (also run by run-tests.sh)
 const test = require('node:test')
 const assert = require('node:assert/strict')
@@ -94,6 +95,21 @@ test('FRESH_MS pins the six freshness thresholds (section 2.5)', () => {
 // feeds it a planted violation and the real-source test feeds it the shipped file; a rule that goes quiet turns the control red.
 const fs = require('node:fs')
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8')
+// BL-0207 (evidence-discipline section 60): a rule's enforcement scope must equal its stated scope. Section 12 of the design plan binds EVERY mod surface, so a rule that is
+// about what a mod screen may draw scans every mod through THIS one list, not `fs.readdirSync(__dirname)`. The list is every non-test source under mods/ (each mod directory,
+// recursively, plus the composed mods/register.ts): .ts and .tsx, minus *.test.* and *.testkit.*, the generated locales.ts, the `types/` declaration folder and node_modules.
+// Paths are relative to mods/ with the mod name first ('live/ui.ts', 'viewer/pane.tsx', 'register.ts'). A mod added tomorrow is scanned with no edit here.
+const MODS_ROOT = path.join(__dirname, '..')
+const modSources = (root = MODS_ROOT) => {
+  const walkDir = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+    if (e.isDirectory()) return e.name === 'types' || e.name === 'node_modules' ? [] : walkDir(path.join(dir, e.name), path.join(rel, e.name))
+    return [path.join(rel, e.name)]
+  })
+  return walkDir(root, '').filter(f => /\.(ts|tsx)$/.test(f) && !/\.d\.ts$/.test(f) && !/\.(test|testkit)\.(ts|tsx)$/.test(f) && path.basename(f) !== 'locales.ts').sort()
+}
+const readMod = (rel, root = MODS_ROOT) => fs.readFileSync(path.join(root, rel), 'utf8')
+// per-file scan: returns `rel: finding` lines for every source under mods/ that `rule` reports on, except the files named in `except`
+const scanMods = (rule, except = [], root = MODS_ROOT) => modSources(root).filter(f => !except.includes(f)).flatMap(f => rule(readMod(f, root)).map(x => f + ' ' + x))
 // code only: block comments and `// ...` line comments are dropped (a glyph in a comment is documentation, not drawing)
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
@@ -130,9 +146,14 @@ const L6 = src => [
 ]
 const L7 = src => [...hits(src, new RegExp(`['"\`](${STATE_IDS_RE})['"\`]`)), ...hits(src, /\b(GLYPHS|STATES)\b/)]
 
+// SCOPE of each rule (BL-0207, judged one by one; shared rules scan every mod through modSources(), see below):
+//   all mods:  L2 (glyphs), L5_HAND (no hand-made PaneLine), L6_CORE (no hand-formatted number in drawing code), L8 (palette), L1b/L9 (no background / inverse, bold whitelist), process and prompt.submit allowlists.
+//   live only: L1 full / L4 / L5 full / L7 name live's own files (tabs.ts, pane.tsx, band.tsx are live's chrome layer over ui.ts / model.ts; the viewer has no such layering, its
+//              look is covered by the all-mod rules and the render-level buttonFindings); L3 and the glyph tables test live's ui.ts exports (GLYPHS, PALETTE live in the one file).
 const TABS = 'tabs.ts'
 const CHROME = ['tabs.ts', 'pane.tsx', 'band.tsx']
 
+// live only: these three files are live's chrome layer; the all-mod part of this rule is L8 and L1b/L9 below.
 test('L1: tabs.ts, pane.tsx and band.tsx hold no theme-key literal, no color:/bold:/dim: property, no background and no inverse', () => {
   for (const f of CHROME) assert.deepEqual(L1(read(f)), [], f)
 })
@@ -149,32 +170,80 @@ const PALETTE_DECL = /export const PALETTE\b[^=]*=\s*\{[^}]*\}/
 const THEME_TYPE = /^export type ThemeKey = .*$/m
 const blank = m => m.replace(/[^\n]/g, '')
 const L8 = src => hits(src.replace(PALETTE_DECL, blank).replace(THEME_TYPE, blank), new RegExp(`['"\`](${THEME_KEYS})['"\`]`))
-const SOURCES = () => fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'locales.ts')
-test('L8: no theme-key literal outside the PALETTE table (every source file under mods/live)', () => {
-  const files = SOURCES()
-  assert.ok(files.includes('ui.ts') && files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))
-  for (const f of files) assert.deepEqual(L8(read(f)), [], f)
+test('mods source list: every mod directory and mods/register.ts is scanned, tests and generated files are not, and a newly added mod shows up with no edit', () => {
+  const files = modSources()
+  for (const f of ['live/ui.ts', 'live/model.ts', 'live/tabs.ts', 'live/band.tsx', 'live/scroll.tsx', 'viewer/pane.tsx', 'viewer/show.ts', 'viewer/register.ts', 'register.ts']) assert.ok(files.includes(f), f)
+  for (const f of files) assert.ok(!/\.(test|testkit)\./.test(f) && !f.endsWith('locales.ts') && !f.endsWith('.d.ts') && !f.split(path.sep).includes('types'), 'excluded kind in the list: ' + f)
+  // negative control: a throwaway mods root with a brand-new mod, a test, a generated file and a types folder; only the new mod's source is listed
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'modsrc-'))
+  try {
+    fs.mkdirSync(path.join(tmp, 'newmod', 'types'), { recursive: true })
+    for (const f of ['newmod/pane.tsx', 'newmod/x.test.ts', 'newmod/y.testkit.ts', 'newmod/locales.ts', 'newmod/types/index.d.ts', 'register.ts']) fs.writeFileSync(path.join(tmp, f), '')
+    assert.deepEqual(modSources(tmp), [path.join('newmod', 'pane.tsx'), 'register.ts'])
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+// The scan-level negative control (BL-0207): the pure-function controls below feed a rule a planted string, which proves the RULE but not that the LIST reaches the viewer. This one
+// copies the real mods/ tree to a temp dir, plants ONE violation per shared rule in the copied viewer/pane.tsx and runs the real list + real rule over the copy: each must come
+// back non-empty, and the unplanted copy must come back empty. Shrink modSources() to live only and every row below turns red.
+test('scan-level control: one violation planted in a copy of viewer/pane.tsx is found by every all-mod rule through the shared source list', () => {
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'modscan-'))
+  try {
+    fs.cpSync(MODS_ROOT, tmp, { recursive: true, filter: src => !src.includes('node_modules') })
+    const target = path.join(tmp, 'viewer', 'pane.tsx')
+    const clean = fs.readFileSync(target, 'utf8')
+    const HINT = '<Text key="hint" dimColor>'
+    assert.ok(clean.includes(HINT))
+    const rows = [
+      ['L8 theme-key literal', L8, [], HINT, '<Text key="hint" color=\'warning\'>'],
+      ['L9 bold', src => hits(src, BOLD_ANY), BOLD_FILES, HINT, '<Text key="hint" bold>'],
+      ['L1b inverse', src => hits(src, BG_RE), [], HINT, '<Text key="hint" inverse>'],
+      ['L1b backgroundColor', src => hits(src, BG_RE), [], HINT, '<Text key="hint" backgroundColor={x}>'],
+      ['L2 glyph', L2, ['live/ui.ts'], HINT, '<Text key="hint" dimColor>{\'▲\'}</Text>' + HINT],
+      ['L5 hand-made line', L5_HAND, ['live/ui.ts'], HINT, 'void ({ text: x } as PaneLine)\n' + HINT],
+      ['L6 core hand formatting', L6_CORE, modSources().filter(f => !L6_FILES().includes(f)), HINT, 'void x.toFixed(1)\n' + HINT],
+    ]
+    for (const [name, rule, except, from, to] of rows) {
+      fs.writeFileSync(target, clean)
+      assert.deepEqual(scanMods(rule, except, tmp), [], name + ': the unplanted copy is clean')
+      fs.writeFileSync(target, clean.replace(from, to))
+      const found = scanMods(rule, except, tmp)
+      assert.ok(found.length > 0 && found.every(x => x.startsWith('viewer/pane.tsx ')), name + ': ' + JSON.stringify(found))
+    }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+test('L8: no theme-key literal outside the PALETTE table (every source file under every mod in mods/)', () => {
+  const files = modSources()
+  assert.ok(files.includes('live/ui.ts') && files.includes('live/model.ts') && files.includes('live/tabs.ts') && files.includes('live/band.tsx') && files.includes('viewer/pane.tsx'))
+  assert.deepEqual(scanMods(L8), [])
   assert.match(read('ui.ts'), PALETTE_DECL, 'ui.ts declares PALETTE') // the exemption must be real: a renamed table would otherwise leave the lint with nothing to exempt
 })
-test('L8: no theme-key literal in the viewer mod either (its quiet lines are dim, its code colours are the engine\'s)', () => {
-  const dir = path.join(__dirname, '..', 'viewer')
-  const files = fs.readdirSync(dir).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f))
-  assert.ok(files.includes('pane.tsx') && files.includes('show.ts') && files.includes('register.ts'))
-  for (const f of files) assert.deepEqual(L8(fs.readFileSync(path.join(dir, f), 'utf8')), [], f)
-  // control: a planted literal in pane.tsx is reported (the pane draws no colour of its own: its quiet lines are dim)
-  const pane = fs.readFileSync(path.join(dir, 'pane.tsx'), 'utf8')
+test('L8 control: a planted theme-key literal in the real viewer sources is reported (the viewer pane draws no colour of its own: its quiet lines are dim)', () => {
+  const pane = readMod('viewer/pane.tsx')
   const planted = pane.replace('<Text key="hint" dimColor>', '<Text key="hint" color=\'subtle\'>')
   assert.notEqual(planted, pane)
   assert.ok(L8(planted).length > 0)
+  assert.deepEqual(L8(pane), [])
 })
-test('L9/L1: the viewer mod sets no bold, no background and no inverse', () => {
-  const dir = path.join(__dirname, '..', 'viewer')
-  for (const f of fs.readdirSync(dir).filter(x => /\.(ts|tsx)$/.test(x) && !/\.(test|testkit)\.ts$/.test(x))) {
-    const src = fs.readFileSync(path.join(dir, f), 'utf8')
-    assert.deepEqual(hits(src, BOLD_PROP), [], f + ' bold')
-    assert.deepEqual(hits(src, /\b(backgroundColor|inverse)\b/), [], f + ' background / inverse')
+// L1b / L9 (all mods): no background and no inverse anywhere; bold is a whitelist. The only bold in all of mods/ is live's ui.ts (BOLD_USES, checked by the I4 invariant) and live's model.ts (the band: pinned below).
+const BG_RE = /\b(backgroundColor|inverse)\b/
+const BOLD_ANY = /\bbold\s*[:=]|<(Text|Button|Box)[^>]*\sbold(\s|>|\/)/
+const BOLD_FILES = ['live/ui.ts', 'live/model.ts']
+test('L1b/L9: no mod source sets a background or inverse, and no mod source but live ui.ts and live model.ts sets bold', () => {
+  assert.ok(modSources().includes('viewer/pane.tsx'), 'the scan reaches the viewer')
+  assert.deepEqual(scanMods(src => hits(src, BG_RE)), [])
+  assert.deepEqual(scanMods(src => hits(src, BOLD_ANY), BOLD_FILES), [])
+})
+test('L1b/L9 control: a bold, a background and an inverse planted in the real viewer sources are each reported (negative control)', () => {
+  const pane = readMod('viewer/pane.tsx')
+  for (const [name, re, ins] of [['bold attr', BOLD_ANY, '<Text key="hint" bold>'], ['bold prop', BOLD_ANY, '<Text key="hint" {...{ bold: true }}>'], ['background', BG_RE, '<Text key="hint" backgroundColor={x}>'], ['inverse', BG_RE, '<Text key="hint" inverse>']]) {
+    const planted = pane.replace('<Text key="hint" dimColor>', ins)
+    assert.notEqual(planted, pane, name)
+    assert.ok(hits(planted, re).length > 0, name)
+    assert.deepEqual(hits(pane, re), [], name + ': the unmodified file is clean')
   }
-  assert.ok(hits('<Text bold>x</Text> {bold: true}', BOLD_PROP).length > 0, 'control: the bold scan sees a planted bold')
+  const reg = readMod('viewer/register.ts') // a second viewer file, not only the pane
+  assert.ok(hits(reg + '\nconst o = { bold: true }', BOLD_ANY).length > 0)
+  assert.ok(hits('<Text bold>x</Text> {bold: true}', BOLD_ANY).length > 0, 'the bold scan sees a planted bold')
 })
 test('L8 control: a prose segment painted with a literal key is reported, a role is not (negative control, red before green)', () => {
   // the planted fixture: a prose seg coloured `warning` directly, exactly the regression this lint exists to stop
@@ -209,10 +278,17 @@ test('L9 control: a second bold in the band source is reported', () => {
   assert.equal(hits(planted, BOLD_PROP).length, 3)
 })
 
-test('L2: outside ui.ts no source file carries a glyph; glyphs come from GLYPHS', () => {
-  const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'ui.ts' && f !== 'locales.ts')
-  assert.ok(files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))
-  for (const f of files) assert.deepEqual(L2(read(f)), [], f)
+test('L2: outside live ui.ts no mod source file carries a glyph; glyphs come from GLYPHS', () => {
+  const files = modSources().filter(f => f !== 'live/ui.ts')
+  assert.ok(files.includes('live/model.ts') && files.includes('live/tabs.ts') && files.includes('live/band.tsx') && files.includes('viewer/pane.tsx') && files.includes('viewer/strings.ts'))
+  assert.deepEqual(scanMods(L2, ['live/ui.ts']), [])
+})
+test('L2 control: a glyph planted in the real viewer pane and viewer strings is reported', () => {
+  for (const f of ['viewer/pane.tsx', 'viewer/strings.ts']) {
+    const src = readMod(f)
+    assert.deepEqual(L2(src), [], f)
+    assert.ok(L2(src + "\nconst g = '▲'").length > 0, f)
+  }
 })
 test('L2: no string-table value carries a state or structure glyph', () => {
   for (const loc of ['en', 'zh-TW']) {
@@ -229,6 +305,7 @@ test('L2 control: a planted glyph is reported, a comment is not', () => {
   assert.ok(L2_RE.test('⚑') && !L2_RE.test('abc 現況'))
 })
 
+// live only: tabs.ts is live's tab-content layer, retired helpers are live's model.ts exports.
 test('L4: tabs.ts imports none of seg, row, rule, kv, padCells, NO_DATA from ./model', () => {
   assert.deepEqual(L4(read(TABS)), [])
 })
@@ -237,9 +314,18 @@ test('L4 control: each retired helper is reported', () => {
   assert.deepEqual(L4("import { oneLine } from './model'"), [])
 })
 
+// L5 full (a `kind:` literal) is live only: PaneLine kinds are live's line vocabulary and the chrome files are the ones that must not build one. The hand-made-line scan
+// (a PaneLine cast, typed literal or spread) applies to EVERY mod source but live ui.ts, the one place a PaneLine is made.
 test('L5: outside ui.ts no source builds a line by hand', () => {
   for (const f of CHROME) assert.deepEqual(L5(read(f)), [], f)
-  for (const f of ['model.ts', 'register.ts']) assert.deepEqual(L5_HAND(read(f)), [], f)
+  assert.ok(modSources().includes('viewer/pane.tsx'), 'the scan reaches the viewer')
+  assert.deepEqual(scanMods(L5_HAND, ['live/ui.ts']), [])
+})
+test('L5 control: a hand-made line planted in the real viewer pane is reported', () => {
+  const pane = readMod('viewer/pane.tsx')
+  assert.deepEqual(L5_HAND(pane), [])
+  assert.ok(L5_HAND(pane + '\nconst l = { text: x } as PaneLine').length > 0)
+  assert.ok(L5_HAND(pane + '\nconst l: PaneLine = { text: x }').length > 0)
 })
 test('L5 control: a hand-made line, a cast, a typed literal and a spread are reported', () => {
   assert.ok(L5("return { kind: 'kv', text: 'x' }").length > 0)
@@ -249,8 +335,21 @@ test('L5 control: a hand-made line, a cast, a typed literal and a spread are rep
   assert.deepEqual(L5("const a = { kind: 'plan', verdict: v }"), [])
 })
 
-test('L6: tabs.ts formats no number by hand', () => {
+// L6 full is live's tabs.ts only: ui.ts and model.ts are where live's formatters live (they carry toFixed and the unit suffixes by design), and the bare quoted-unit pattern also
+// matches a cache key like `(v ? 'v' : 'h')`. The unambiguous core (toFixed, toLocaleString, a unit after a template placeholder, a currency sign before one) applies to
+// every drawing file: tabs.ts and every .tsx under mods/.
+const L6_CORE = src => [...hits(src, /toFixed|toLocaleString/), ...hits(src, /\$\{[^}]*\}\s?(%|[KMGT]B|ms|s|m|h|d)(?![A-Za-z0-9_])/), ...hits(src, /\$\$\{/)]
+const L6_FILES = () => modSources().filter(f => f.endsWith('.tsx') || f === path.join('live', 'tabs.ts'))
+test('L6: tabs.ts formats no number by hand; no drawing file (tabs.ts, every .tsx in mods/) does either, in the L6 core', () => {
   assert.deepEqual(L6(read(TABS)), [])
+  assert.ok(L6_FILES().includes('viewer/pane.tsx') && L6_FILES().includes('live/tabs.ts'))
+  assert.deepEqual(scanMods(L6_CORE, modSources().filter(f => !L6_FILES().includes(f))), [])
+})
+test('L6 control: toFixed and a unit after a placeholder planted in the real viewer pane are reported', () => {
+  const pane = readMod('viewer/pane.tsx')
+  assert.deepEqual(L6_CORE(pane), [])
+  assert.ok(L6_CORE(pane + '\nconst s = x.toFixed(1)').length > 0)
+  assert.ok(L6_CORE(pane + '\nconst s = `${n} MB`').length > 0)
 })
 test('L6 control: toFixed, toLocaleString and a hand-typed unit are reported', () => {
   for (const bad of ['x.toFixed(1)', 'x.toLocaleString()', "const s = n + ' MB'", "const s = n + '%'", "const s = '$' + n", "const s = n + 'h'", "const s = n + 'm'", 'const s = `${n} MB`', 'const s = `${n}%`', 'const s = `${n}m`', 'const s = `${a} ${b}h`', 'const s = `$${n}`']) assert.ok(L6(bad).length > 0, bad)
@@ -261,6 +360,7 @@ test('L6 control: toFixed, toLocaleString and a hand-typed unit are reported', (
   assert.deepEqual(L6('const s = `${a}/${b}`'), [])
 })
 
+// live only: StateId, GLYPHS and STATES are live's state vocabulary, and tabs.ts is the file that must go through ui.stateOf.
 test('L7: tabs.ts holds no StateId literal and never reads GLYPHS or STATES', () => {
   assert.deepEqual(L7(read(TABS)), [])
 })

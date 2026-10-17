@@ -1195,6 +1195,11 @@ Preventing artifact: `hooks/tests/lib.sh` defaults `AUTOPILOT_LIVE_DIR` to a 070
 the live pointer location follows the session-mode dir; the remaining fall-through is BACKLOG row
 "A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir".
 
+Same family, 2026-10-17: the foreman exam tests never set `AUTOPILOT_FOREMAN_EVIDENCE_DIR` at all and
+wrote into the real `~/.autopilot/foreman-exam`. Preventing artifact: `hooks/tests/lib.sh` exports a
+temporary evidence dir, and the runner refuses an unsafe one with an `evidence_dir_unsafe` guard
+(BL-0010, merge 072382773).
+
 ## 54. A token found anywhere in the line is not the token in its slot
 
 The W4 gate checker judged the band's phase by `line1.includes(expected)`. The expected phase label
@@ -1268,3 +1273,28 @@ Preventing artifact: `hooks/tests/check-test-integrity.test.sh` §11 (BEFORE/AFT
 gaming actions, plus a coverage meta-test bound to `git ls-files`) is the shape to copy. This rule is the
 routine; there is still no meta-gate that checks every gate has such a case (BL-0058). Owner approved as a
 development rule 2026-10-13.
+
+## 59. A baseline taken from the merge target compares the code to itself after the merge
+
+2026-10-17, BL-0024 prices lane. The `qualification-prices` test compared its sorted output against the
+same program run from `develop:`. Once the branch merged into `develop`, the baseline was the branch
+itself and the test could never fail again.
+
+Rule: the reference a test compares against must be a fixed point from before the change — a literal
+expected value, or a pinned sha — never a ref that moves when the change merges.
+
+Preventing artifact: the test now asserts a hard-coded expected ordering and pins the baseline commit
+1dfa7b9e (2026-10-17).
+
+## 60. A design rule enforced in one mod directory does not bind the next mod
+
+2026-10-17, viewer mod. Design system section 12.9 says anything pressable is drawn as an action-colour
+`[ ... ]`, but `mods/live/ui-lint.test.js` scans only `mods/live` (`fs.readdirSync(__dirname)`). The new
+`mods/viewer` drew its buttons in the plain default colour and the lint stayed green. The owner caught it
+from a screenshot; the brief had attached the spec, and the hand applied only the colours.
+
+Rule: a rule's enforcement scope must equal its stated scope. "Applies to every mod" needs a check that
+actually scans a newly added mod.
+
+Preventing artifact: a `buttonFindings` check in the viewer render test (35f07d836) as the stopgap; the
+real fix is extending ui-lint to all `mods/*`, tracked as BL-0207.

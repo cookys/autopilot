@@ -117,8 +117,8 @@ assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--format json' "openco
 assert_not_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant max' "opencode default effort is not the raw 'max' token"
 
 # opencode: empty capture (binary present, no output at all) fails closed, same as
-# every other rail — format-agnostic, the shared STUB_EMPTY covers this.
-OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
+# every other rail — format-agnostic (the opencode-shaped empty stub still answers --version).
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_EMPTY" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "opencode empty capture exit is no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "opencode empty capture fails closed"
 
@@ -145,6 +145,21 @@ rm -f "$OPENCODE_ARGV_FILE"
 OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" --effort max 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "opencode --effort max reviewed exit 0"
 assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "opencode clamps 'max' effort to '--variant xhigh'"
+
+# opencode v2 (2.x removed --dir/--pure/--variant): the same stub reporting v2.0.32 gets the --standalone
+# shape and still yields a parsed verdict end to end.
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$(OPENCODE_STUB_VERSION=v2.0.32 "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" --effort max 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode v2 reviewed exit 0"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "opencode v2 verdict parsed out of the NDJSON text event"
+V2ARGV="$(paste -sd ' ' "$OPENCODE_ARGV_FILE")"
+assert_contains "$V2ARGV" 'run --standalone -m opencode-go/muse-spark-1.3-contributor#xhigh --agent locked --format json' "opencode v2 argv: --standalone, model#variant (max->xhigh), locked agent"
+assert_not_contains "$V2ARGV" '--dir' "opencode v2 argv has no --dir"
+assert_not_contains "$V2ARGV" '--pure' "opencode v2 argv has no --pure"
+# unknown major: refused before any run
+OUT="$(OPENCODE_STUB_VERSION=9.1.0 "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "opencode unknown major is a precondition failure"
+assert_contains "$OUT" 'unsupported opencode version' "opencode unknown major names the version problem"
 
 # opencode: scratch cwd is created (--dir), used, and reaped — never the repo (the
 # shared spawn-marker stub only proves it was invoked; the cwd's own removal is
@@ -232,15 +247,19 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
 done
 
 # BL-0204: blind opencode is admitted ONLY while the deny-all is genuinely applied. A fault-injecting
-# `node` shim makes the lib's `config` print an allow-all config; the pre-spawn assert must refuse
+# `node` shim rewrites the lib's `plan` output (env.nul) to an allow-all config; the pre-spawn assert must refuse
 # (precondition, exit 2) and the opencode binary must never start. Negative control: with the shim
 # delegating faithfully the same call reaches the stub (rc=99), so the refusal is the assert's doing.
-OC_STUB="$TEST_TMP/oc-blind-stub"; printf '#!/usr/bin/env bash\necho spawned > "%s/oc-blind-spawned"\nexit 99\n' "$TEST_TMP" > "$OC_STUB"; chmod +x "$OC_STUB"
+OC_STUB="$TEST_TMP/oc-blind-stub"; printf '#!/usr/bin/env bash\n[ "$1" = "--version" ] && { echo 1.19.2; exit 0; }\necho spawned > "%s/oc-blind-spawned"\nexit 99\n' "$TEST_TMP" > "$OC_STUB"; chmod +x "$OC_STUB"
 OC_SHIM_DIR="$TEST_TMP/oc-shim"; mkdir -p "$OC_SHIM_DIR"
 REAL_NODE="$(command -v node)"
 cat > "$OC_SHIM_DIR/node" <<SHIM
 #!/usr/bin/env bash
-if [ "\${OC_SHIM_BREAK:-0}" = "1" ] && [ "\${2:-}" = "config" ]; then printf '{"permission":"allow"}\n'; exit 0; fi
+if [ "\${OC_SHIM_BREAK:-0}" = "1" ] && [ "\${2:-}" = "plan" ]; then
+  "$REAL_NODE" "\$@" || exit \$?
+  out=""; prev=""; for a in "\$@"; do [ "\$prev" = "--out" ] && out="\$a"; prev="\$a"; done
+  sed -i 's/deny/allow/g' "\$out/env.nul"; exit 0
+fi
 exec "$REAL_NODE" "\$@"
 SHIM
 chmod +x "$OC_SHIM_DIR/node"

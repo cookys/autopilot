@@ -479,18 +479,23 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       ;;
     opencode)
       # $OPENCODE_BIN resolved in the binary-presence case above (PATH, same as the
-      # dispatcher without --bin). Mirror the dispatch-review.sh rail: prompt on STDIN,
-      # `run --dir <scratch> --pure --agent plan`, and `--variant` only when an exact
-      # effort is requested (max→xhigh, the dispatcher's own mapping). No --auto.
-      if [ -n "$EFFORT" ]; then
-        _ov="$EFFORT"; [ "$_ov" = "max" ] && _ov="xhigh"
-        ( cd "$PROBE_CWD" && printf 'Respond only with OK\n' | "$OPENCODE_BIN" run --dir "$PROBE_CWD" --pure \
-            -m "$MODEL" --agent plan --variant "$_ov" ) \
+      # dispatcher without --bin). argv/env/cwd come from lib/opencode-containment.js (the one
+      # owner, `plan --profile probe`): prompt on STDIN; v1 = `run --dir <scratch> --pure --agent
+      # plan` (+ `--variant` only when an exact effort is requested, max→xhigh); v2 = the
+      # contained `--standalone --agent locked` seat in its own empty cwd (v2 removed --dir/
+      # --pure/--variant). The version is the RUNNER_VERSION read once above, not re-run.
+      # No --auto. An unknown major makes the plan refuse, which fails the probe.
+      _oc_plan="$PROBE_CWD/oc-plan"
+      if node "$SELF_DIR/lib/opencode-containment.js" plan --bin "$OPENCODE_BIN" --model "$MODEL" \
+           ${EFFORT:+--effort "$EFFORT"} --profile probe --cwd "$PROBE_CWD" --root "$PROBE_CWD/oc-root" \
+           --version-string "$RUNNER_VERSION" --out "$_oc_plan" >"$PROBE_ERR_FILE" 2>&1; then
+        mapfile -d '' -t _oc_argv < "$_oc_plan/argv.nul"
+        mapfile -d '' -t _oc_env < "$_oc_plan/env.nul"
+        _oc_cwd="$(cat "$_oc_plan/cwd")"
+        ( cd "$_oc_cwd" && printf 'Respond only with OK\n' | env "${_oc_env[@]}" "$OPENCODE_BIN" "${_oc_argv[@]}" ) \
           >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       else
-        ( cd "$PROBE_CWD" && printf 'Respond only with OK\n' | "$OPENCODE_BIN" run --dir "$PROBE_CWD" --pure \
-            -m "$MODEL" --agent plan ) \
-          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+        PROBE_EXIT=1
       fi
       ;;
     anthropic-compatible)

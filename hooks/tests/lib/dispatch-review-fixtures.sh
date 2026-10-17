@@ -630,6 +630,9 @@ chmod +x "$STUB_QODERCN_NONZERO"
 STUB_OPENCODE_JSON="$TEST_TMP/opencode-json-marker"
 cat > "$STUB_OPENCODE_JSON" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo "${OPENCODE_STUB_VERSION:-1.19.2}"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "import" ]; then exit 0; fi
 [ -z "${OPENCODE_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$OPENCODE_ARGV_FILE"
 PROMPT="$(cat)"
 begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
@@ -646,6 +649,9 @@ chmod +x "$STUB_OPENCODE_JSON"
 STUB_OPENCODE_NONZERO="$TEST_TMP/opencode-json-nonzero"
 cat > "$STUB_OPENCODE_NONZERO" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo "${OPENCODE_STUB_VERSION:-1.19.2}"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "import" ]; then exit 0; fi
 PROMPT="$(cat)"
 begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
@@ -655,6 +661,18 @@ TEXT="$TEXT" node -e 'process.stdout.write(JSON.stringify({type:"text",timestamp
 exit 9
 EOF
 chmod +x "$STUB_OPENCODE_NONZERO"
+
+# opencode-shaped empty-output stub: answers --version (the adaptor is chosen from it) then emits nothing.
+STUB_OPENCODE_EMPTY="$TEST_TMP/opencode-empty"
+cat > "$STUB_OPENCODE_EMPTY" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo "${OPENCODE_STUB_VERSION:-1.19.2}"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "import" ]; then exit 0; fi
+cat >/dev/null 2>&1 || true
+exit 0
+EOF
+chmod +x "$STUB_OPENCODE_EMPTY"
 
 STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
 cat > "$STUB_SPAWN_MARKER" <<'EOF'

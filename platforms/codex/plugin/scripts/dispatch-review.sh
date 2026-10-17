@@ -111,7 +111,9 @@
 #   before any tool can run, re-asserted before every spawn (a drifted config or a non-empty
 #   --dir refuses with precondition_failed) and audited after; live evidence in
 #   hooks/tests/opencode-deny-all-live.test.sh. The blind path has no separate setup.
-#   `--pure` disables external plugins; the prompt is read from STDIN (no positional
+#   v1: `--pure` disables external plugins. v2 (opencode 2.x removed --dir/--pure/--variant):
+#   `--standalone`, `-m model#variant`, empty cwd, no --pure equivalent (see the lib header).
+#   The prompt is read from STDIN (no positional
 #   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
 #   newline-delimited JSON events — the final assistant text is the LAST
 #   `{"type":"text",...}` event's `.part.text` (probe-verified: one complete text event
@@ -1524,41 +1526,40 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   [[ -x "$OPENCODE_BIN" ]] || die_precondition "opencode binary not executable: $OPENCODE_BIN"
   OPENCODE_OUT="$(mktemp -t dispatch-review-opencode-out-XXXXXX)"
   OPENCODE_ERR="$(mktemp -t dispatch-review-opencode-err-XXXXXX)"
-  OPENCODE_CWD="$(mktemp -d -t dispatch-review-opencodecwd-XXXXXX)"
-  OPENCODE_VARIANT="$EFFORT"; [ "$OPENCODE_VARIANT" = "max" ] && OPENCODE_VARIANT="xhigh"
-  # Deny-all containment (opencode 1.19.2 probe 2026-10-16; lib/opencode-containment.js is
-  # the one owner): inline OPENCODE_CONFIG_CONTENT = global permission "*":deny PLUS a custom
-  # primary agent "locked" that is also deny-all, run with --agent locked in an EMPTY --dir
-  # (no project opencode.json / agent md to read). --agent plan was NOT enough: it only
+  # Containment (lib/opencode-containment.js is the ONE owner of argv/env/cwd for BOTH opencode
+  # adaptors: v1 = `run --dir --pure ... --agent locked`, v2 = `run --standalone ... --agent
+  # locked` in an empty cwd with OPENCODE_DISABLE_PROJECT_CONFIG=1; chosen from `--version`,
+  # run exactly once here; an unknown major refuses). Both are deny-all: a global deny plus a
+  # custom primary agent `locked` that is also deny-all, a clean HOME/XDG tree, and an EMPTY cwd
+  # (the diff is TEXT in the prompt; nothing to read). --agent plan was NOT enough: it only
   # denies `edit`. Prompt via STDIN (no ARG_MAX wall). --format json for parseable events.
   OC_LIB="$_REVIEW_SELF_DIR/lib/opencode-containment.js"
-  OPENCODE_CONFIG_JSON="$(node "$OC_LIB" config)" || die_precondition "could not derive the opencode deny-all config (lib/opencode-containment.js)"
-  [[ -n "$OPENCODE_CONFIG_JSON" ]] || die_precondition "empty opencode deny-all config — refusing to spawn opencode uncontained"
-  # Clean HOME/XDG tree holding only auth.json: ~/.config/opencode agents/MCP/plugins are never
-  # loaded. OPENCODE_CONFIG / OPENCODE_CONFIG_DIR are removed below with env -u.
-  OPENCODE_HOME_ROOT="$(mktemp -d -t dispatch-review-opencodehome-XXXXXX)"
-  mapfile -t OC_HOME_ENV < <(node "$OC_LIB" prepare-home "$OPENCODE_HOME_ROOT")
-  [[ "${#OC_HOME_ENV[@]}" -ge 5 ]] || die_precondition "could not prepare the opencode clean HOME (lib/opencode-containment.js prepare-home)"
-  OC_ARGS=(run --dir "$OPENCODE_CWD" --pure -m "$MODEL" --agent locked --variant "$OPENCODE_VARIANT" --format json)
-  # Verify the final argv + config right before spawn (same check the exam provider uses):
-  # any drift (no --pure, other agent, non-empty --dir, --dir under a git worktree) refuses.
-  # ONE env prefix array is used for BOTH the assert and the spawn, so the verified environment
-  # is exactly the spawned one (an operator-exported OPENCODE_CONFIG is stripped in both).
-  OC_ENV_PREFIX=(env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR "${OC_HOME_ENV[@]}" OPENCODE_CONFIG_CONTENT="$OPENCODE_CONFIG_JSON")
-  OC_BREACH="$("${OC_ENV_PREFIX[@]}" node "$OC_LIB" assert "${OC_ARGS[@]}" 2>&1)" \
+  OPENCODE_HOME_ROOT="$(mktemp -d -t dispatch-review-opencoderoot-XXXXXX)"
+  OC_PLAN_DIR="$OPENCODE_HOME_ROOT/plan"
+  OC_PLAN_ERR="$(node "$OC_LIB" plan --bin "$OPENCODE_BIN" --model "$MODEL" --effort "$EFFORT" --profile review \
+      --root "$OPENCODE_HOME_ROOT" --out "$OC_PLAN_DIR" 2>&1)" \
+    || die_precondition "opencode containment plan failed: ${OC_PLAN_ERR} — refusing to spawn opencode"
+  # Verify the plan files right before spawn: they are EXACTLY what is spawned below (same argv.nul /
+  # env.nul / cwd), so a drifted adaptor (no --standalone, no DISABLE_PROJECT_CONFIG, allow config,
+  # non-empty cwd, cwd under a git worktree, real HOME) refuses with precondition_failed.
+  OC_BREACH="$(node "$OC_LIB" assert-plan "$OC_PLAN_DIR" 2>&1)" \
     || die_precondition "opencode containment verification failed: ${OC_BREACH} — refusing to spawn opencode uncontained"
+  mapfile -d '' -t OC_ARGV < "$OC_PLAN_DIR/argv.nul"
+  mapfile -d '' -t OC_ENV < "$OC_PLAN_DIR/env.nul"
+  OC_ADAPTOR="$(cat "$OC_PLAN_DIR/adaptor")"
+  OPENCODE_CWD="$(cat "$OC_PLAN_DIR/cwd")"
   timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
-      "${OC_ENV_PREFIX[@]}" "$OPENCODE_BIN" "${OC_ARGS[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+      env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
   OPENCODE_RC=$?
   wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
-  rm -rf "$OPENCODE_CWD" "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # clear so the EXIT trap doesn't rm the paths a 2nd time
+  rm -rf "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # one root holds work/ + home/ + plan/; clear so the EXIT trap doesn't rm it a 2nd time
   cat "$OPENCODE_OUT" > "$RAW_LOG"
   printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$OPENCODE_ERR" >> "$RAW_LOG"
   # Containment audit BEFORE normalising: a clean exit proves nothing, so ANY tool event in the
   # NDJSON voids the seat (never salvage an answer from a run that touched a tool).
-  if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" 2>&1)"; then
+  if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" "$OC_ADAPTOR" 2>&1)"; then
     printf '\n[dispatch-review: opencode containment breach: %s]\n' "$OC_AUDIT" >> "$RAW_LOG"
     SALVAGE_CAPTURE=/dev/null
     emit_no_verdict "opencode containment breach: ${OC_AUDIT} — answer discarded"

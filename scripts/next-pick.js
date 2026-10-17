@@ -27,10 +27,14 @@
  *   4. title lexicographic (total order — no ties survive)
  *
  * Modes:
- *   parse --backlog <file>
+ *   parse --backlog <file> [--today YYYY-MM-DD]
  *     Mechanically extracts candidate rows from docs/BACKLOG.md active entries:
  *     {title, effort, tags, source}. effort = first size token (read from references/stage-graph.json) of the
  *     Effort field, with `urgent: true` when it carries the `!`/`急` suffix; tags gains "board" when that field mentions Board.
+ *     age_days = whole UTC days from the entry's `- **Since**: YYYY-MM-DD` to the reference day
+ *     (`--today YYYY-MM-DD`, default the current UTC date; a malformed --today is a usage error, exit 2);
+ *     null when Since is missing or malformed, 0 when it is in the future. pick-record stores the candidate
+ *     list as a digest, so replay never depends on the reference day.
  *   pick --candidates <file> --preferences <file> [--readiness <file>]
  *        [--ledger <file>] [--decision-id <id>] [--round <n>]
  *     candidates: JSON array [{title, effort, tags[], class, age_days, source}]
@@ -67,6 +71,14 @@ function usage(message) {
   process.exit(2);
 }
 
+// YYYY-MM-DD -> UTC midnight epoch ms, or null when not a real calendar day.
+function parseUtcDay(text) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(String(text).trim());
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(ms).toISOString().slice(0, 10) === m[0] ? ms : null;
+}
+
 function parseArgs(argv) {
   const mode = argv[0];
   if (!['parse', 'pick'].includes(mode)) usage('mode must be parse|pick');
@@ -76,6 +88,7 @@ function parseArgs(argv) {
     const value = argv[i + 1];
     if (value === undefined) usage(`${arg} needs a value`);
     if (arg === '--backlog') opts.backlog = value;
+    else if (arg === '--today') opts.today = value;
     else if (arg === '--candidates') opts.candidates = value;
     else if (arg === '--preferences') opts.preferences = value;
     else if (arg === '--readiness') opts.readiness = value;
@@ -90,6 +103,9 @@ function parseArgs(argv) {
     i += 1;
   }
   if (mode === 'parse' && !opts.backlog) usage('parse requires --backlog');
+  if (opts.today !== undefined && parseUtcDay(opts.today) === null) {
+    usage('--today must be a real calendar date, YYYY-MM-DD');
+  }
   if (mode === 'pick' && (!opts.candidates || !opts.preferences)) {
     usage('pick requires --candidates and --preferences');
   }
@@ -165,6 +181,7 @@ function parseBacklog(opts) {
   } catch (err) {
     usage(`--backlog unreadable: ${opts.backlog}`);
   }
+  const todayMs = parseUtcDay(opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10));
   const rows = [];
   const sections = raw.split(/^### /mu).slice(1);
   for (const section of sections) {
@@ -176,6 +193,10 @@ function parseBacklog(opts) {
     const sizeAlt = SIZES.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
     // size token + optional urgency suffix (! / 急); XS/XL must win over S/L (longest first).
     const tokenMatch = effortText.match(new RegExp(`(?<![A-Za-z])(${sizeAlt})(!|急)?(?![A-Za-z])`, 'u'));
+    const sinceMatch = section.match(/^- \*\*Since\*\*:\s*(\S+)/mu);
+    const sinceMs = sinceMatch ? parseUtcDay(sinceMatch[1]) : null;
+    // Whole UTC days since the entry's Since date; a future Since clamps to 0, a missing or malformed one stays null.
+    const ageDays = sinceMs === null ? null : Math.max(0, Math.round((todayMs - sinceMs) / 86400000));
     const tags = [];
     if (/board/iu.test(effortText)) tags.push('board');
     rows.push({
@@ -184,7 +205,7 @@ function parseBacklog(opts) {
       urgent: Boolean(tokenMatch && tokenMatch[2]),
       tags,
       class: 'standard-impl',
-      age_days: null,
+      age_days: ageDays,
       source: sourceMatch ? sourceMatch[1].trim() : '',
     });
   }

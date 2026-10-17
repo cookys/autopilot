@@ -520,18 +520,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md
 - **Context**: Phase L shipped `/l4` homogeneous (Claude) batch fan-out.
 
-### Leaf-level output compaction for dispatched implementer / qc shell commands (rtk-style)
-- **Id**: BL-0071
-- **Status**: open
-- **Since**: 2026-06-23
-- **Origin**: owner
-- **Problem**: 擁有者要求評估：派出去的實作或品管子代理跑 git diff、測試時輸出太長會撐爆上下文，是否要壓縮輸出。調查後暫不做，等實際遇到再說。 (draft)
-- **Impact**: 子代理偶爾可能因輸出太長而浪費上下文；目前沒發生記錄。 (draft)
-- **Trigger**: next time a `/l4` / `/l5` foreman or a `quality-pipeline` / `qc-panel` sub-agent's context bloats from raw shell output (full `git diff`, full `pytest`/`vitest` runs, linter dumps) — i.e. a concrete in-the-wild "the leaf agent burned…
-- **Effort**: S
-- **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC…
-- **Pointer**: docs/backlog/leaf-level-output-compaction-for-dispatched-implementer-qc-shell-commands-rtk-st.md
-
 ### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
 - **Id**: BL-0072
 - **Status**: open

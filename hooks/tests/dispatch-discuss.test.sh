@@ -398,5 +398,9 @@ AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$
 P1="$(cat "$STUB_PROMPT_COPY")"
 assert_not_contains "$P1" "SECOND TURN" "first-turn prompt (no this-seat turn) has no second-turn paragraph"
 assert_contains "$P1" "never spoken in this debate" "first-turn prompt keeps the single-turn framing"
+# Byte-for-byte pin: the single-turn prompt must equal the one 16dd391e produced for this bundle
+# (golden generated from that commit's buildPromptFile; not read from develop/HEAD).
+GOLDEN="$REPO_ROOT/hooks/tests/fixtures/dispatch-discuss-single-turn-prompt.golden.txt"
+if cmp -s "$STUB_PROMPT_COPY" "$GOLDEN"; then assert_eq "same" "same" "single-turn prompt is byte-identical to the 16dd391e baseline"; else assert_eq "same" "differs" "single-turn prompt is byte-identical to the 16dd391e baseline"; fi
 
 finalize_test

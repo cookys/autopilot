@@ -110,7 +110,7 @@ Coordinator rulings, made after seeing the pilot and before any main-campaign ce
 
 ## Results
 
-Run 2026-10-17, one pass, no cell re-run, 0 infra_fail, 156 rail calls (78 per seat). Raw cells under `cells/` (`cells/score.json` is the scorer output). Cost: about 250k tokens by the byte proxy across both seats, a few USD at most (cap 40 USD not approached). Reproduction of the exact cells needs the implementation at commit `32716fef4` (the second-turn prompt and validator); that code is reverted on this branch (see Decision).
+Run 2026-10-17, one pass, no cell re-run, 0 infra_fail, 156 rail calls (78 per seat). Raw cells under `cells/` (`cells/score.json` is the scorer output). Cost: about 250k tokens by the byte proxy across both seats, a few USD at most (cap 40 USD not approached). Reproduction of the exact cells needs the implementation at commit `32716fef4` (the second-turn prompt and validator); the implementation shipped on owner ruling (see Owner ruling); use commit `32716fef4` as the version that reproduces the evaluation.
 
 | Gate | sonnet | kimi |
 |---|---|---|
@@ -136,3 +136,5 @@ NOT-SHIP is recorded. The production prompt, `think-tank` Step 3.5 text, the ref
 ## Owner ruling (2026-10-17, card d-abc43acd)
 
 The evaluation judged NOT-SHIP under the pre-registered rules; the only failing gate is cost (B total about 2.8x A, above the 2x limit set by depth-0). The verdict in `cells/score.json` is unchanged: NOT-SHIP (cost). The owner reviewed the results on 2026-10-17, accepted the cost and approved shipping the second turn ("接受成本，上線第二輪"). The sonnet red-arm result (red 7 vs B 6, UNINFORMATIVE) stands as recorded. `scripts/check-guidance-eval.js` requires its scorer to reproduce SHIP, so the gate is NOT bound for this change: the guidance-eval verdict is NOT-SHIP (cost), shipped on owner ruling. `bind-gate.js` was not run.
+
+Note on the single-turn prompt: the evaluation's round-one calls ran with a rewritten opening of the prompt (two sentences instead of the original "not a revision of a prior turn of your own (you have never spoken in this debate before this call)", and the taken-axes line merged). The shipped single-turn prompt was restored byte-for-byte to the original text (pinned by a golden test against 16dd391e). The second-turn paragraph, which is what the evaluation tested, is unchanged.

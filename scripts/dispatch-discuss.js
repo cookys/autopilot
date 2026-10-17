@@ -304,10 +304,11 @@ function buildPromptFile(bundle, seatAxis) {
   const promptLines = [
     'You are one external, decorrelated voice contributing to a single round of a',
     'multi-role internal debate. You are being asked for ONE positional',
-    'contribution to this round — not a conversation.',
-    secondRound
-      ? 'You have spoken once before in this debate (the "this-seat" turn in the transcript).'
-      : 'You have never spoken in this debate before this call.',
+    ...(secondRound
+      ? ['contribution to this round — not a conversation. You have spoken once before in this',
+        'debate (the "this-seat" turn in the transcript).']
+      : ['contribution to this round — not a conversation, not a revision of a prior',
+        'turn of your own (you have never spoken in this debate before this call).']),
     '',
     'This is advisory input only. You are NOT a reviewer, you never issue a',
     'ship/no-ship verdict of any kind, and your output is never treated as a',
@@ -330,9 +331,10 @@ function buildPromptFile(bundle, seatAxis) {
     '(your claim_vector must draw from exactly the axis you select):',
     JSON.stringify(bundle.axes, null, 2),
     '',
-    secondRound
-      ? `Axes taken by OTHER roles in this transcript: ${JSON.stringify(bundle.taken_axes)}. Your own axis is ${JSON.stringify(seatAxis)} — stay on it.`
-      : `Axes already taken by another role in this transcript (you must NOT select one of these): ${JSON.stringify(bundle.taken_axes)}`,
+    ...(secondRound
+      ? [`Axes taken by OTHER roles in this transcript: ${JSON.stringify(bundle.taken_axes)}. Your own axis is ${JSON.stringify(seatAxis)} — stay on it.`]
+      : [`Axes already taken by another role in this transcript (you must NOT select`,
+        `one of these): ${JSON.stringify(bundle.taken_axes)}`]),
     '',
     'Respond with EXACTLY ONE JSON object and nothing else — no prose before or',
     'after it, no markdown code fence. The object must have exactly these keys:',

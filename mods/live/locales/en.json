@@ -103,6 +103,8 @@
   "now.where": "Position",
   "now.cost": "Cost today",
   "now.since": "{e} since start",
+  "now.walk_step": "step {n}/{total}",
+  "now.walk_next": "  next: {stage}",
   "now.in_stage": "{e} in this stage",
   "now.families": "{n} review families",
   "now.running": "{n} running",

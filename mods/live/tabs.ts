@@ -130,8 +130,7 @@ function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) {
     const labels = d.stage.walk.map(id => { const key = 'stage.' + id; const text = t(key); return text === key ? id : text })
     const at = d.stage.walk.indexOf(m.stage)
-    const all = labels.join(' ')
-    body.push(...ui.chart(u, head, ui.walkValue(at, d.stage.walk.length), ui.KEY_W + displayWidth(all) <= ctx.cols - 1 ? all : labels[at], F))
+    body.push(...ui.walkChart(u, head, labels, at, F))
   }
   if (noStage && noUnit) body.push(ui.empty(t('nodata.stage_unit'), F))
   else {

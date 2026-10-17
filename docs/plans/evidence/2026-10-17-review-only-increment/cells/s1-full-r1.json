@@ -1,0 +1,3160 @@
+{
+  "tag": "s1-full-r1",
+  "scenario": "s1",
+  "arm": "full",
+  "spec_variant": "loc",
+  "base": "865c3212b1bc612964717868724a135df94c359f",
+  "h0": "4049f29feb956aba4da65d819a4582970a863bda",
+  "h1": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+  "sealed_head": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+  "delta_files": [
+    "src/coupon.js"
+  ],
+  "range_files": [
+    "src/bulk.js",
+    "src/checkout.js",
+    "src/clamp.js",
+    "src/coupon.js",
+    "src/fee.js",
+    "src/invoice.js",
+    "src/ship.js",
+    "src/split.js",
+    "src/tax.js"
+  ],
+  "truth": {
+    "h0": [
+      {
+        "id": "O1",
+        "kind": "old_unfixed",
+        "path": "src/coupon.js",
+        "line": 5,
+        "keyword": "coupon|discount|1000|pct|percent"
+      },
+      {
+        "id": "O3",
+        "kind": "old_unfixed",
+        "path": "src/bulk.js",
+        "line": 5,
+        "keyword": "bulk|qty|>=|10"
+      }
+    ],
+    "h1": [
+      {
+        "id": "O1",
+        "kind": "old_fixed",
+        "path": "src/coupon.js",
+        "line": 5,
+        "keyword": "coupon|discount|1000|pct|percent"
+      },
+      {
+        "id": "O3",
+        "kind": "old_unfixed",
+        "path": "src/bulk.js",
+        "line": 5,
+        "keyword": "bulk|qty|>=|10"
+      }
+    ]
+  },
+  "started_at": "2026-10-16T23:44:53.156Z",
+  "round1": {
+    "status": "awaiting_disposition",
+    "phase": "awaiting_disposition",
+    "code": null,
+    "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+    "verdict": "FIX-THEN-SHIP",
+    "findings": null,
+    "model_calls": null,
+    "keys": [
+      "status",
+      "phase",
+      "reason",
+      "rounds",
+      "verdict",
+      "roster",
+      "resolveResult",
+      "base",
+      "implementation",
+      "review",
+      "implementationChain",
+      "reviewChain",
+      "campaign_receipt",
+      "controller",
+      "durable_wait",
+      "resumable",
+      "ledger",
+      "wall_seconds_remaining",
+      "repair_round_estimate_seconds",
+      "repair_round_fits",
+      "campaign_control",
+      "verify_cmd_provided",
+      "convergence_reason",
+      "ratchet_reverted_rounds",
+      "advisory_findings",
+      "commit"
+    ],
+    "thrown": null,
+    "phase_after": "AWAITING_DISPOSITION",
+    "batches_so_far": 1,
+    "full": {
+      "status": "awaiting_disposition",
+      "phase": "awaiting_disposition",
+      "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+      "rounds": 0,
+      "verdict": "FIX-THEN-SHIP",
+      "roster": {
+        "reviewer_engine": "claude-fable-5-1",
+        "reviewer_effort": "high",
+        "reviewer_runner": "claude-native",
+        "reviewer_qualified": true,
+        "implementer_engine": "fixture-implementer",
+        "implementer_effort": "high",
+        "implementer_runner": "fixture",
+        "loop_max_rounds": 3,
+        "loop_convergence_verdict": "SHIP-AS-IS",
+        "min_panel_size": 3,
+        "qc_panel_seats_complete": true,
+        "qc_panel_seats": [
+          {
+            "role": "qc",
+            "runner": "claude-native",
+            "model": "claude-fable-5-1",
+            "effort": "high",
+            "endpoint": null,
+            "family": "anthropic"
+          },
+          {
+            "role": "qc",
+            "runner": "cc-shim",
+            "model": "GLM-5.3",
+            "effort": "high",
+            "endpoint": "glm",
+            "family": "zhipu"
+          },
+          {
+            "role": "qc",
+            "runner": "qoderclicn",
+            "model": "Qwen3.8-Max",
+            "effort": "high",
+            "endpoint": null,
+            "family": "alibaba"
+          }
+        ],
+        "in_rail_review": "panel",
+        "override_admitted_seats": [
+          "qc_panel[0]",
+          "qc_panel[1]",
+          "qc_panel[2]"
+        ],
+        "implementer_family": "unknown"
+      },
+      "resolveResult": null,
+      "base": "865c3212b1bc612964717868724a135df94c359f",
+      "implementation": null,
+      "review": {
+        "status": "reviewed",
+        "verdict": "FIX-THEN-SHIP",
+        "riskClassification": null,
+        "reviewRisk": null,
+        "roster": {
+          "reviewer_engine": "Qwen3.8-Max",
+          "reviewer_effort": "high",
+          "reviewer_runner": "qoderclicn",
+          "reviewer_qualified": true,
+          "implementer_engine": "fixture-implementer",
+          "implementer_effort": "high",
+          "implementer_runner": "fixture",
+          "loop_max_rounds": 3,
+          "loop_convergence_verdict": "SHIP-AS-IS",
+          "min_panel_size": 3,
+          "qc_panel_seats_complete": true,
+          "qc_panel_seats": [
+            {
+              "role": "qc",
+              "runner": "claude-native",
+              "model": "claude-fable-5-1",
+              "effort": "high",
+              "endpoint": null,
+              "family": "anthropic"
+            },
+            {
+              "role": "qc",
+              "runner": "cc-shim",
+              "model": "GLM-5.3",
+              "effort": "high",
+              "endpoint": "glm",
+              "family": "zhipu"
+            },
+            {
+              "role": "qc",
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "effort": "high",
+              "endpoint": null,
+              "family": "alibaba"
+            }
+          ],
+          "in_rail_review": "panel",
+          "override_admitted_seats": [
+            "qc_panel[0]",
+            "qc_panel[1]",
+            "qc_panel[2]"
+          ],
+          "implementer_family": "unknown",
+          "reviewer_endpoint": ""
+        },
+        "resolveResult": null,
+        "reviewResult": {
+          "error": null,
+          "status": 0,
+          "signal": null,
+          "stdout": "{ \"runner\": \"qoderclicn\", \"model\": \"Qwen3.8-Max\", \"status\": \"reviewed\", \"verdict\": \"FIX-THEN-SHIP\", \"findings\": \"🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\", \"no_finding_proof\": null, \"raw_log\": \"/tmp/dispatch-review-log-3e2OsH\", \"error\": null, \"usage\": null, \"frame_closed_by\": \"end-marker\" }",
+          "stderr": "",
+          "result": {
+            "runner": "qoderclicn",
+            "model": "Qwen3.8-Max",
+            "status": "reviewed",
+            "verdict": "FIX-THEN-SHIP",
+            "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+            "no_finding_proof": null,
+            "raw_log": "/tmp/dispatch-review-log-3e2OsH",
+            "error": null,
+            "usage": null,
+            "frame_closed_by": "end-marker"
+          },
+          "parseError": null,
+          "transportEnvelope": {
+            "schema_version": 1,
+            "artifact_type": "runner_transport_envelope",
+            "request_binding": {
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "operation": "review",
+              "request_digest": "66f0744607dd247a7b56001b41bd1b266ce31bf8520a940c6520357173e1ca78"
+            },
+            "outcome": {
+              "classification": "success",
+              "exit_status": 0,
+              "signal": null,
+              "error_code": null
+            },
+            "output_digests": {
+              "stdout_sha256": "1a5887495840a90e35227a37be5932277adadba3695638aa3542317dd75b0c84",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "private_raw_reference": null,
+            "receipt_digest": "8b91fb18d86059d637da1502d6bbe53ffe13ec6dee9affb1a7c7324e686b67a4"
+          },
+          "packet": {
+            "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+            "entries_count": 13,
+            "denied_paths": []
+          }
+        },
+        "review": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+          "no_finding_proof": null,
+          "raw_log": "/tmp/dispatch-review-log-3e2OsH",
+          "error": null,
+          "usage": null,
+          "frame_closed_by": "end-marker"
+        },
+        "reviewArgs": [
+          "--runner",
+          "qoderclicn",
+          "--model",
+          "Qwen3.8-Max",
+          "--diff-file",
+          "/tmp/autopilot-review-loop-ext-s1-full-r1-1-JiBSig/range.diff",
+          "--effort",
+          "high",
+          "--spec-file",
+          "/tmp/d5-work/d5-s1-full-r1-tFrezm/spec.md",
+          "--timeout",
+          "3600s",
+          "--ledger",
+          "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+          "--run-id",
+          "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "--stage",
+          "campaign-final-review#seat-3"
+        ],
+        "ledger": [
+          {
+            "unit": "dispatch_review",
+            "status": "reviewed",
+            "started_at": "2026-10-16T23:44:53.700Z",
+            "ended_at": "2026-10-16T23:45:54.351Z",
+            "runner": "qoderclicn",
+            "model": "Qwen3.8-Max",
+            "exit_status": 0
+          }
+        ],
+        "packet": {
+          "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+          "entries_count": 13,
+          "denied_paths": []
+        }
+      },
+      "implementationChain": [],
+      "reviewChain": [
+        {
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "riskClassification": null,
+          "reviewRisk": null,
+          "roster": {
+            "reviewer_engine": "claude-fable-5-1",
+            "reviewer_effort": "high",
+            "reviewer_runner": "claude-native",
+            "reviewer_qualified": true,
+            "implementer_engine": "fixture-implementer",
+            "implementer_effort": "high",
+            "implementer_runner": "fixture",
+            "loop_max_rounds": 3,
+            "loop_convergence_verdict": "SHIP-AS-IS",
+            "min_panel_size": 3,
+            "qc_panel_seats_complete": true,
+            "qc_panel_seats": [
+              {
+                "role": "qc",
+                "runner": "claude-native",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "endpoint": null,
+                "family": "anthropic"
+              },
+              {
+                "role": "qc",
+                "runner": "cc-shim",
+                "model": "GLM-5.3",
+                "effort": "high",
+                "endpoint": "glm",
+                "family": "zhipu"
+              },
+              {
+                "role": "qc",
+                "runner": "qoderclicn",
+                "model": "Qwen3.8-Max",
+                "effort": "high",
+                "endpoint": null,
+                "family": "alibaba"
+              }
+            ],
+            "in_rail_review": "panel",
+            "override_admitted_seats": [
+              "qc_panel[0]",
+              "qc_panel[1]",
+              "qc_panel[2]"
+            ],
+            "implementer_family": "unknown",
+            "reviewer_endpoint": ""
+          },
+          "resolveResult": null,
+          "reviewResult": {
+            "error": null,
+            "status": 0,
+            "signal": null,
+            "stdout": "{ \"runner\": \"claude-native\", \"model\": \"claude-fable-5-1\", \"status\": \"reviewed\", \"verdict\": \"FIX-THEN-SHIP\", \"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\", \"no_finding_proof\": null, \"raw_log\": \"/tmp/dispatch-review-log-fp8VAb\", \"error\": null, \"usage\": null, \"frame_closed_by\": \"end-marker\" }",
+            "stderr": "",
+            "result": {
+              "runner": "claude-native",
+              "model": "claude-fable-5-1",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.",
+              "no_finding_proof": null,
+              "raw_log": "/tmp/dispatch-review-log-fp8VAb",
+              "error": null,
+              "usage": null,
+              "frame_closed_by": "end-marker"
+            },
+            "parseError": null,
+            "transportEnvelope": {
+              "schema_version": 1,
+              "artifact_type": "runner_transport_envelope",
+              "request_binding": {
+                "runner": "claude-native",
+                "model": "claude-fable-5-1",
+                "operation": "review",
+                "request_digest": "47623743f283a0ddd9d5ea447864ea39da2775209b4a802e5b8069e58e727d9e"
+              },
+              "outcome": {
+                "classification": "success",
+                "exit_status": 0,
+                "signal": null,
+                "error_code": null
+              },
+              "output_digests": {
+                "stdout_sha256": "43cb92eca7f663e52ea5056d9bef914a4c479ea1658673af6cf9fe9e63953c84",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "private_raw_reference": null,
+              "receipt_digest": "b6d8dbab07b83284a33e298d5993c095a68e6dc80b83d32e72768e164ef5b6de"
+            },
+            "packet": {
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "entries_count": 13,
+              "denied_paths": []
+            }
+          },
+          "review": {
+            "runner": "claude-native",
+            "model": "claude-fable-5-1",
+            "status": "reviewed",
+            "verdict": "FIX-THEN-SHIP",
+            "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.",
+            "no_finding_proof": null,
+            "raw_log": "/tmp/dispatch-review-log-fp8VAb",
+            "error": null,
+            "usage": null,
+            "frame_closed_by": "end-marker"
+          },
+          "reviewArgs": [
+            "--runner",
+            "claude-native",
+            "--model",
+            "claude-fable-5-1",
+            "--diff-file",
+            "/tmp/autopilot-review-loop-ext-s1-full-r1-1-CdeL1H/range.diff",
+            "--effort",
+            "high",
+            "--spec-file",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/spec.md",
+            "--timeout",
+            "3600s",
+            "--ledger",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+            "--run-id",
+            "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "--stage",
+            "campaign-final-review#seat-1"
+          ],
+          "ledger": [
+            {
+              "unit": "dispatch_review",
+              "status": "reviewed",
+              "started_at": "2026-10-16T23:44:53.700Z",
+              "ended_at": "2026-10-16T23:45:54.351Z",
+              "runner": "claude-native",
+              "model": "claude-fable-5-1",
+              "exit_status": 0
+            }
+          ],
+          "packet": {
+            "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+            "entries_count": 13,
+            "denied_paths": []
+          }
+        },
+        {
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "riskClassification": null,
+          "reviewRisk": null,
+          "roster": {
+            "reviewer_engine": "GLM-5.3",
+            "reviewer_effort": "high",
+            "reviewer_runner": "cc-shim",
+            "reviewer_qualified": true,
+            "implementer_engine": "fixture-implementer",
+            "implementer_effort": "high",
+            "implementer_runner": "fixture",
+            "loop_max_rounds": 3,
+            "loop_convergence_verdict": "SHIP-AS-IS",
+            "min_panel_size": 3,
+            "qc_panel_seats_complete": true,
+            "qc_panel_seats": [
+              {
+                "role": "qc",
+                "runner": "claude-native",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "endpoint": null,
+                "family": "anthropic"
+              },
+              {
+                "role": "qc",
+                "runner": "cc-shim",
+                "model": "GLM-5.3",
+                "effort": "high",
+                "endpoint": "glm",
+                "family": "zhipu"
+              },
+              {
+                "role": "qc",
+                "runner": "qoderclicn",
+                "model": "Qwen3.8-Max",
+                "effort": "high",
+                "endpoint": null,
+                "family": "alibaba"
+              }
+            ],
+            "in_rail_review": "panel",
+            "override_admitted_seats": [
+              "qc_panel[0]",
+              "qc_panel[1]",
+              "qc_panel[2]"
+            ],
+            "implementer_family": "unknown",
+            "reviewer_endpoint": "glm"
+          },
+          "resolveResult": null,
+          "reviewResult": {
+            "error": null,
+            "status": 0,
+            "signal": null,
+            "stdout": "{ \"runner\": \"cc-shim\", \"model\": \"GLM-5.3\", \"status\": \"reviewed\", \"verdict\": \"FIX-THEN-SHIP\", \"findings\": \"🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\", \"no_finding_proof\": null, \"raw_log\": \"/tmp/dispatch-review-log-7VbABI\", \"error\": null, \"usage\": null, \"frame_closed_by\": \"end-marker\" }",
+            "stderr": "",
+            "result": {
+              "runner": "cc-shim",
+              "model": "GLM-5.3",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \"when qty is 10 or more\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`",
+              "no_finding_proof": null,
+              "raw_log": "/tmp/dispatch-review-log-7VbABI",
+              "error": null,
+              "usage": null,
+              "frame_closed_by": "end-marker"
+            },
+            "parseError": null,
+            "transportEnvelope": {
+              "schema_version": 1,
+              "artifact_type": "runner_transport_envelope",
+              "request_binding": {
+                "runner": "cc-shim",
+                "model": "GLM-5.3",
+                "operation": "review",
+                "request_digest": "0654a8591baa8a89065929633fe31d16b540bd0f484a6b773da90d8407313122"
+              },
+              "outcome": {
+                "classification": "success",
+                "exit_status": 0,
+                "signal": null,
+                "error_code": null
+              },
+              "output_digests": {
+                "stdout_sha256": "64b1e8f7db562f99cd90b50545849895047943c84fb971dd6b5287dcb9c13faa",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "private_raw_reference": null,
+              "receipt_digest": "4ac3286ab1bd64e843ec16754a87ad93415778d341f6f49fb9239e850ab47148"
+            },
+            "packet": {
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "entries_count": 13,
+              "denied_paths": []
+            }
+          },
+          "review": {
+            "runner": "cc-shim",
+            "model": "GLM-5.3",
+            "status": "reviewed",
+            "verdict": "FIX-THEN-SHIP",
+            "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \"when qty is 10 or more\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`",
+            "no_finding_proof": null,
+            "raw_log": "/tmp/dispatch-review-log-7VbABI",
+            "error": null,
+            "usage": null,
+            "frame_closed_by": "end-marker"
+          },
+          "reviewArgs": [
+            "--runner",
+            "cc-shim",
+            "--model",
+            "GLM-5.3",
+            "--diff-file",
+            "/tmp/autopilot-review-loop-ext-s1-full-r1-1-eiHo3x/range.diff",
+            "--effort",
+            "high",
+            "--endpoint",
+            "glm",
+            "--spec-file",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/spec.md",
+            "--timeout",
+            "3600s",
+            "--ledger",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+            "--run-id",
+            "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "--stage",
+            "campaign-final-review#seat-2"
+          ],
+          "ledger": [
+            {
+              "unit": "dispatch_review",
+              "status": "reviewed",
+              "started_at": "2026-10-16T23:44:53.700Z",
+              "ended_at": "2026-10-16T23:45:54.351Z",
+              "runner": "cc-shim",
+              "model": "GLM-5.3",
+              "exit_status": 0
+            }
+          ],
+          "packet": {
+            "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+            "entries_count": 13,
+            "denied_paths": []
+          }
+        },
+        {
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "riskClassification": null,
+          "reviewRisk": null,
+          "roster": {
+            "reviewer_engine": "Qwen3.8-Max",
+            "reviewer_effort": "high",
+            "reviewer_runner": "qoderclicn",
+            "reviewer_qualified": true,
+            "implementer_engine": "fixture-implementer",
+            "implementer_effort": "high",
+            "implementer_runner": "fixture",
+            "loop_max_rounds": 3,
+            "loop_convergence_verdict": "SHIP-AS-IS",
+            "min_panel_size": 3,
+            "qc_panel_seats_complete": true,
+            "qc_panel_seats": [
+              {
+                "role": "qc",
+                "runner": "claude-native",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "endpoint": null,
+                "family": "anthropic"
+              },
+              {
+                "role": "qc",
+                "runner": "cc-shim",
+                "model": "GLM-5.3",
+                "effort": "high",
+                "endpoint": "glm",
+                "family": "zhipu"
+              },
+              {
+                "role": "qc",
+                "runner": "qoderclicn",
+                "model": "Qwen3.8-Max",
+                "effort": "high",
+                "endpoint": null,
+                "family": "alibaba"
+              }
+            ],
+            "in_rail_review": "panel",
+            "override_admitted_seats": [
+              "qc_panel[0]",
+              "qc_panel[1]",
+              "qc_panel[2]"
+            ],
+            "implementer_family": "unknown",
+            "reviewer_endpoint": ""
+          },
+          "resolveResult": null,
+          "reviewResult": {
+            "error": null,
+            "status": 0,
+            "signal": null,
+            "stdout": "{ \"runner\": \"qoderclicn\", \"model\": \"Qwen3.8-Max\", \"status\": \"reviewed\", \"verdict\": \"FIX-THEN-SHIP\", \"findings\": \"🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\", \"no_finding_proof\": null, \"raw_log\": \"/tmp/dispatch-review-log-3e2OsH\", \"error\": null, \"usage\": null, \"frame_closed_by\": \"end-marker\" }",
+            "stderr": "",
+            "result": {
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+              "no_finding_proof": null,
+              "raw_log": "/tmp/dispatch-review-log-3e2OsH",
+              "error": null,
+              "usage": null,
+              "frame_closed_by": "end-marker"
+            },
+            "parseError": null,
+            "transportEnvelope": {
+              "schema_version": 1,
+              "artifact_type": "runner_transport_envelope",
+              "request_binding": {
+                "runner": "qoderclicn",
+                "model": "Qwen3.8-Max",
+                "operation": "review",
+                "request_digest": "66f0744607dd247a7b56001b41bd1b266ce31bf8520a940c6520357173e1ca78"
+              },
+              "outcome": {
+                "classification": "success",
+                "exit_status": 0,
+                "signal": null,
+                "error_code": null
+              },
+              "output_digests": {
+                "stdout_sha256": "1a5887495840a90e35227a37be5932277adadba3695638aa3542317dd75b0c84",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "private_raw_reference": null,
+              "receipt_digest": "8b91fb18d86059d637da1502d6bbe53ffe13ec6dee9affb1a7c7324e686b67a4"
+            },
+            "packet": {
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "entries_count": 13,
+              "denied_paths": []
+            }
+          },
+          "review": {
+            "runner": "qoderclicn",
+            "model": "Qwen3.8-Max",
+            "status": "reviewed",
+            "verdict": "FIX-THEN-SHIP",
+            "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+            "no_finding_proof": null,
+            "raw_log": "/tmp/dispatch-review-log-3e2OsH",
+            "error": null,
+            "usage": null,
+            "frame_closed_by": "end-marker"
+          },
+          "reviewArgs": [
+            "--runner",
+            "qoderclicn",
+            "--model",
+            "Qwen3.8-Max",
+            "--diff-file",
+            "/tmp/autopilot-review-loop-ext-s1-full-r1-1-JiBSig/range.diff",
+            "--effort",
+            "high",
+            "--spec-file",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/spec.md",
+            "--timeout",
+            "3600s",
+            "--ledger",
+            "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+            "--run-id",
+            "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "--stage",
+            "campaign-final-review#seat-3"
+          ],
+          "ledger": [
+            {
+              "unit": "dispatch_review",
+              "status": "reviewed",
+              "started_at": "2026-10-16T23:44:53.700Z",
+              "ended_at": "2026-10-16T23:45:54.351Z",
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "exit_status": 0
+            }
+          ],
+          "packet": {
+            "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+            "entries_count": 13,
+            "denied_paths": []
+          }
+        }
+      ],
+      "campaign_receipt": {
+        "status": "awaiting_disposition",
+        "phase": "awaiting_disposition",
+        "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+        "trace": [
+          "preflight",
+          "resume_adopt_candidate",
+          "verify",
+          "full_diff_review",
+          "full_suite",
+          "adjudicate"
+        ],
+        "resumable": true,
+        "durable_wait": true,
+        "terminalize": false,
+        "final_panel_count": 0,
+        "campaign_event": "AWAITING_DISPOSITION",
+        "candidate": {
+          "committed": true,
+          "commit": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+          "tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+          "branch": "ext/s1-full-r1",
+          "owned_worktrees_current": 0,
+          "resource_inventory_delta": [],
+          "dispatcher_called": false,
+          "model_calls": 0,
+          "mutation_attempts": 0,
+          "gate_attempts": 0,
+          "resources_created": 0,
+          "writer_fence": {
+            "schema_version": 1,
+            "artifact_type": "implementation_campaign_writer_fence",
+            "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "stage_identity": "campaign-adoption:0",
+            "candidate_commit": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+            "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+            "status": "closed",
+            "evidence_mode": "adopted_range",
+            "closure_evidence_digest": "c402f7761509f2b6ad92a0c8926f8df6a6662aba219111024428ef353c7de654",
+            "receipt_digest": "b253eb76cfc82df0183f3df340b43a350a3b17440db17141b17c83214ec52424"
+          }
+        },
+        "verification": {
+          "passed": true,
+          "cached": false,
+          "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+          "receipt": {
+            "schema_version": 1,
+            "artifact_type": "implementation_campaign_verification",
+            "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+            "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+            "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+            "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd",
+            "verdict": "GREEN",
+            "exit_status": 0,
+            "writer_lease_closed": true,
+            "detached_checkout": true,
+            "runner_argv_attested": true,
+            "writer_fence_digest": "b253eb76cfc82df0183f3df340b43a350a3b17440db17141b17c83214ec52424",
+            "checkout_attestation_digest": "e0121226e453cc6688b055a42dc86abb7d1a580d596365c172556e223dfce07e",
+            "stdout_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stderr_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "started_at": "2026-10-16T23:44:53.438Z",
+            "ended_at": "2026-10-16T23:44:53.574Z",
+            "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48"
+          }
+        },
+        "review": {
+          "reviewed": true,
+          "success": true,
+          "verdict": "FIX-THEN-SHIP",
+          "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+          "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+          "sealed_min_panel_size": 3,
+          "final_panel_count": 3,
+          "final_panel_seat_receipts": [
+            {
+              "schema_version": 1,
+              "artifact_type": "implementation_campaign_final_panel_seat",
+              "seat_index": 1,
+              "runner": "claude-native",
+              "model": "claude-fable-5-1",
+              "effort": "high",
+              "endpoint": null,
+              "family": "anthropic",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "review_digest": "358a1d3e3ea946df54c1099dd1266c5358cfcf70749296c998f54faa1f9ef67d",
+              "reason": null,
+              "load_bearing": true,
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "receipt_digest": "b13aea01e2a5a0f652fcdeef6890266b5ba31bba6c75aed3081570e5ec9c0db1"
+            },
+            {
+              "schema_version": 1,
+              "artifact_type": "implementation_campaign_final_panel_seat",
+              "seat_index": 2,
+              "runner": "cc-shim",
+              "model": "GLM-5.3",
+              "effort": "high",
+              "endpoint": "glm",
+              "family": "zhipu",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "review_digest": "73a86172d5bb98249e166a97b9c8c9d05600b632e4d26a815faf124f07955d17",
+              "reason": null,
+              "load_bearing": true,
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "receipt_digest": "672fd76d72e6839cab36844568621fcff01bdc80fd43c99e3418d3fc77b10936"
+            },
+            {
+              "schema_version": 1,
+              "artifact_type": "implementation_campaign_final_panel_seat",
+              "seat_index": 3,
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "effort": "high",
+              "endpoint": null,
+              "family": "alibaba",
+              "status": "reviewed",
+              "verdict": "FIX-THEN-SHIP",
+              "review_digest": "c037216884b1ff5b7857ac3a36531c5d3c1fe0d8dd68280e0d9e1b3a9db5b2d4",
+              "reason": null,
+              "load_bearing": true,
+              "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+              "receipt_digest": "82067b5c110de52c8534f2981990d4d0968d3f1ee5afe54a4621ae0951323cfe"
+            }
+          ],
+          "final_panel_quorum_met": true,
+          "sealed_required_review_families": 1,
+          "implementer_family": "unknown",
+          "author_family_excluded": true,
+          "started_at": "2026-10-16T23:44:53.700Z",
+          "ended_at": "2026-10-16T23:45:54.351Z",
+          "budget_source": "wall",
+          "seat_timeout_seconds": 3600,
+          "packet_hash": "637b551cfb5a685f4719f3f5634709d4e981b85fb537473c9d5459bc12c32252",
+          "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+          "station": "panel",
+          "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+          "reviewer_roster_digest": "0e4eaa90be58a3878766a1680503e67114d01e6f0dd844baba4ff9e1188a6231",
+          "review_input_mode": "full_diff_generation"
+        },
+        "findings": [
+          {
+            "finding_id": "bulk-threshold-off-by-one",
+            "claim": "MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.",
+            "severity": "🟠",
+            "source": "product-review"
+          },
+          {
+            "finding_id": "s1.bulk-off-by-one",
+            "claim": "MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \"when qty is 10 or more\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`",
+            "severity": "🟠",
+            "source": "product-review"
+          },
+          {
+            "finding_id": "s2.bulk-off-by-one",
+            "claim": "MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+            "severity": "🟠",
+            "source": "product-review"
+          }
+        ],
+        "repair_generations": 0,
+        "repair_generation": 0,
+        "full_diff_barriers": {
+          "0": {
+            "kind": "full_diff_review",
+            "success": true,
+            "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+            "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+            "recorded_at": "2026-10-16T23:45:54.427Z"
+          }
+        },
+        "work_order_resumable": true,
+        "controller": {
+          "schema_version": 1,
+          "frozen_denominator": {
+            "schema_version": 1,
+            "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "graph_digest": "a6981496c950ceb3c98a665e78c899c151509bdd482ea434bcd8eb087e8c8050",
+            "deliverable_ids": [
+              "s1-full-r1"
+            ],
+            "deliverable_count": 1,
+            "active_node_id": "s1-full-r1",
+            "digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f"
+          },
+          "original_dispatch_run": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "provider_session": null,
+          "unresolved_findings": [],
+          "review_verdict": null,
+          "expires_at": null,
+          "resource_inventory": [],
+          "process_parentage": {
+            "schema_version": 1,
+            "owner": {
+              "pid": 3124345,
+              "process_start_time": 1792194292,
+              "pgid": 3121010,
+              "sid": 3121010
+            },
+            "relationships": [
+              {
+                "child": {
+                  "pid": 3124345,
+                  "process_start_time": 1792194292,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121035,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121035,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121026,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121026,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121023,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121023,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121010,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121010,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 1,
+                  "process_start_time": 1791343392,
+                  "pgid": 1,
+                  "sid": 1
+                }
+              }
+            ],
+            "observed_at": "2026-10-16T23:44:53.352Z",
+            "digest": "ad45a9297e05612f3132499df5b029b501547592706a29308d4c45f71ef76334"
+          },
+          "repair_tickets": [],
+          "audit_events": [
+            {
+              "event": "progress_receipt_appended",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:44:53.344Z",
+              "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+              "phase": "PREPARED"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "focused_verification",
+              "effect_kind": "gate",
+              "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 0,
+              "fresh_input_bytes": 0,
+              "generation": 0,
+              "at": "2026-10-16T23:44:53.639Z",
+              "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-focused_verification-1",
+              "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+              "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+              "stage": "focused_verification",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:44:53.649Z",
+              "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077"
+            },
+            {
+              "event": "controller_effect_reserved",
+              "stage": "full_diff_review",
+              "effect_kind": "gate",
+              "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "generation": 0,
+              "authority": {
+                "schema_version": 1,
+                "artifact_type": "controller_full_diff_review_input",
+                "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+                "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+                "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66",
+                "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+                "reviewer": {
+                  "runner": "claude-native",
+                  "model": "claude-fable-5-1",
+                  "effort": "high",
+                  "endpoint": null
+                }
+              },
+              "at": "2026-10-16T23:44:53.690Z",
+              "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "full_diff_review",
+              "effect_kind": "gate",
+              "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 1,
+              "fresh_input_bytes": 706,
+              "generation": 0,
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "at": "2026-10-16T23:45:54.409Z",
+              "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-full_diff_review-2",
+              "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+              "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+              "stage": "full_diff_review",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:45:54.419Z",
+              "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "full_suite",
+              "effect_kind": "gate",
+              "effect_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+              "result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 0,
+              "fresh_input_bytes": 0,
+              "generation": 0,
+              "at": "2026-10-16T23:45:54.450Z",
+              "digest": "10dd54a8cfcdf2b619390e6d7a481f98b0143ba4b64ce060fa3038621eaf8946"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-full_suite-3",
+              "invocation_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+              "invocation_result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+              "effect_result_digest": "c7f37f902f8f2a0126dc74e4498d1eb3b8c40427835c3b048df1ea2020f8794e",
+              "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+              "stage": "full_suite",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:45:54.450Z",
+              "digest": "fda452eb606552c64ced8149a7e02c297343e8c9da6fa1306c948f21af5fd470"
+            }
+          ],
+          "gate_journal": {
+            "schema_version": 1,
+            "artifact_type": "controller_gate_journal",
+            "entries": [
+              {
+                "gate_id": "gate-focused_verification-1",
+                "kind": "focused_verification",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "started_at": "2026-10-16T23:44:53.649Z",
+                "finished_at": "2026-10-16T23:44:53.649Z",
+                "result": {
+                  "success": true,
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              },
+              {
+                "gate_id": "gate-full_diff_review-2",
+                "kind": "full_diff_review",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "started_at": "2026-10-16T23:44:53.700Z",
+                "finished_at": "2026-10-16T23:45:54.419Z",
+                "result": {
+                  "success": true,
+                  "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                  "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                  "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                  "verdict": "FIX-THEN-SHIP"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              },
+              {
+                "gate_id": "gate-full_suite-3",
+                "kind": "full_suite",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+                "started_at": "2026-10-16T23:45:54.449Z",
+                "finished_at": "2026-10-16T23:45:54.450Z",
+                "result": {
+                  "success": true,
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "command_digest": "7ae2a824a7bb6a5679037fcc64d9c46b3949001c33109dfdce23181eeb2715d5",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              }
+            ],
+            "digest": "42dad526f5dc0ea3ee0200aacf090f1594f522977ec105a9211285caf46c290a"
+          },
+          "repair_budget_usage": {
+            "model_calls": 1,
+            "fresh_input_bytes": 706,
+            "fresh_input_tokens": null,
+            "elapsed_wall_ms": 61107,
+            "owned_worktrees": 0,
+            "finding_recurrence": 0,
+            "observable_axes": [
+              "model_calls",
+              "fresh_input_bytes",
+              "elapsed_wall_ms",
+              "owned_worktrees",
+              "finding_recurrence"
+            ],
+            "unobserved_axes": [
+              "fresh_input_tokens"
+            ]
+          },
+          "repair_budget_limits": {
+            "model_calls": 6,
+            "fresh_input_bytes": 50000000,
+            "fresh_input_tokens": null,
+            "elapsed_wall_ms": 3600000,
+            "owned_worktrees": 4,
+            "finding_recurrence": 2
+          },
+          "resource_debt": {
+            "schema_version": 1,
+            "artifact_type": "controller_resource_debt",
+            "open": [],
+            "released": [],
+            "blocks_dispatch": false,
+            "digest": "c03d4a3a887db40376e1752c7de53327f7802228c685e66805dab8dffae3c416"
+          },
+          "full_diff_barriers": {
+            "0": {
+              "kind": "full_diff_review",
+              "success": true,
+              "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+              "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+              "recorded_at": "2026-10-16T23:45:54.427Z"
+            }
+          },
+          "progress_receipts": [
+            {
+              "schema_version": 1,
+              "artifact_type": "controller_progress_receipt",
+              "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "deliverable_id": "s1-full-r1",
+              "generation": 0,
+              "active_process": {
+                "pid": 3124345
+              },
+              "completed_deliverables": [],
+              "remaining_deliverables": [
+                "s1-full-r1"
+              ],
+              "deliverable_count": 1,
+              "frozen_denominator_digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f",
+              "blocked_reason": null,
+              "eta_basis": "frozen_graph_remaining",
+              "gate_state": {
+                "schema_version": 1,
+                "artifact_type": "controller_gate_journal",
+                "entries": []
+              },
+              "resource_debt_state": {
+                "open": [],
+                "released": []
+              },
+              "phase": "PREPARED",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "issued_at": "2026-10-16T23:44:53.344Z",
+              "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f"
+            }
+          ],
+          "historical_outputs": null,
+          "historical_outputs_digest": null,
+          "noop_receipt": null,
+          "adoption_receipts": [],
+          "phase": null,
+          "next_action": null,
+          "started_at_ms": 1792194293343,
+          "dispatch_records": [],
+          "transcript_audit": {
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "rows": [
+              {
+                "finished_at": "2026-10-16T23:44:53.649Z",
+                "gate_id": "gate-focused_verification-1",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "invalidated": false,
+                "invalidation_reason": null,
+                "kind": "gate_return",
+                "owner": "depth-0",
+                "result": {
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd",
+                  "success": true
+                },
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "started_at": "2026-10-16T23:44:53.649Z",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "identity": "gate-focused_verification-1",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "finished_at": "2026-10-16T23:45:54.419Z",
+                "gate_id": "gate-full_diff_review-2",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "invalidated": false,
+                "invalidation_reason": null,
+                "kind": "gate_return",
+                "owner": "depth-0",
+                "result": {
+                  "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                  "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                  "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                  "success": true,
+                  "verdict": "FIX-THEN-SHIP"
+                },
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "started_at": "2026-10-16T23:44:53.700Z",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "identity": "gate-full_diff_review-2",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.344Z",
+                "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+                "event": "progress_receipt_appended",
+                "phase": "PREPARED",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.639Z",
+                "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+                "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+                "effect_kind": "gate",
+                "event": "controller_effect_invoked",
+                "fresh_input_bytes": 0,
+                "generation": 0,
+                "invocation_ordinal": 1,
+                "model_calls": 0,
+                "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "focused_verification",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.649Z",
+                "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+                "effect_identity": "gate-focused_verification-1",
+                "effect_kind": "gate",
+                "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+                "event": "controller_effect_result",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+                "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "focused_verification",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.690Z",
+                "authority": {
+                  "artifact_type": "controller_full_diff_review_input",
+                  "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+                  "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+                  "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+                  "reviewer": {
+                    "effort": "high",
+                    "endpoint": null,
+                    "model": "claude-fable-5-1",
+                    "runner": "claude-native"
+                  },
+                  "schema_version": 1,
+                  "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66"
+                },
+                "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+                "effect_kind": "gate",
+                "event": "controller_effect_reserved",
+                "generation": 0,
+                "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+                "invocation_ordinal": 1,
+                "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:45:54.409Z",
+                "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+                "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+                "effect_kind": "gate",
+                "event": "controller_effect_invoked",
+                "fresh_input_bytes": 706,
+                "generation": 0,
+                "invocation_ordinal": 1,
+                "model_calls": 1,
+                "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+                "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:45:54.419Z",
+                "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+                "effect_identity": "gate-full_diff_review-2",
+                "effect_kind": "gate",
+                "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+                "event": "controller_effect_result",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+                "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              }
+            ],
+            "explains_all": true,
+            "expected_counts": {
+              "dispatches": 0,
+              "resources": 0,
+              "gates": 2,
+              "repairs": 0,
+              "dispositions": 0,
+              "resumes": 0,
+              "terminals": 0,
+              "effect_results": 2
+            },
+            "counted": {
+              "dispatches": 0,
+              "resources": 0,
+              "gates": 2,
+              "repairs": 0,
+              "dispositions": 0,
+              "resumes": 0,
+              "terminals": 0,
+              "effect_results": 2
+            },
+            "problems": [],
+            "blocks_next_dispatch": false,
+            "blocks_terminal": false,
+            "open_debt": [],
+            "authority_sources_checked": [],
+            "digest": "f9a06281652556514ab419a84b5b88cab9f682907e5f73d5694ab91c3821f03d"
+          },
+          "accepted_commit": null,
+          "branch": null,
+          "worktree": null,
+          "provider_lineage": null,
+          "verification_receipt": null,
+          "review_payload": null,
+          "findings_snapshot": null,
+          "candidate": null,
+          "completed_deliverables": [],
+          "inventory_observation_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "recovery_receipts": [],
+          "resume_receipts": [],
+          "convergence_adjudication_receipt": null,
+          "temp_capacity_limit": null,
+          "controller_digest": "2f6745104422149be772733bbae01610da3da0091866b4ddd0b1ec31c06cdf72"
+        }
+      },
+      "controller": {
+        "schema_version": 1,
+        "frozen_denominator": {
+          "schema_version": 1,
+          "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "graph_digest": "a6981496c950ceb3c98a665e78c899c151509bdd482ea434bcd8eb087e8c8050",
+          "deliverable_ids": [
+            "s1-full-r1"
+          ],
+          "deliverable_count": 1,
+          "active_node_id": "s1-full-r1",
+          "digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f"
+        },
+        "original_dispatch_run": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+        "provider_session": null,
+        "unresolved_findings": [],
+        "review_verdict": null,
+        "expires_at": null,
+        "resource_inventory": [],
+        "process_parentage": {
+          "schema_version": 1,
+          "owner": {
+            "pid": 3124345,
+            "process_start_time": 1792194292,
+            "pgid": 3121010,
+            "sid": 3121010
+          },
+          "relationships": [
+            {
+              "child": {
+                "pid": 3124345,
+                "process_start_time": 1792194292,
+                "pgid": 3121010,
+                "sid": 3121010
+              },
+              "parent": {
+                "pid": 3121035,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              }
+            },
+            {
+              "child": {
+                "pid": 3121035,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              },
+              "parent": {
+                "pid": 3121026,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              }
+            },
+            {
+              "child": {
+                "pid": 3121026,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              },
+              "parent": {
+                "pid": 3121023,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              }
+            },
+            {
+              "child": {
+                "pid": 3121023,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              },
+              "parent": {
+                "pid": 3121010,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              }
+            },
+            {
+              "child": {
+                "pid": 3121010,
+                "process_start_time": 1792194291,
+                "pgid": 3121010,
+                "sid": 3121010
+              },
+              "parent": {
+                "pid": 1,
+                "process_start_time": 1791343392,
+                "pgid": 1,
+                "sid": 1
+              }
+            }
+          ],
+          "observed_at": "2026-10-16T23:44:53.352Z",
+          "digest": "ad45a9297e05612f3132499df5b029b501547592706a29308d4c45f71ef76334"
+        },
+        "repair_tickets": [],
+        "audit_events": [
+          {
+            "event": "progress_receipt_appended",
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "at": "2026-10-16T23:44:53.344Z",
+            "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+            "phase": "PREPARED"
+          },
+          {
+            "event": "controller_effect_invoked",
+            "stage": "focused_verification",
+            "effect_kind": "gate",
+            "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+            "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+            "invocation_ordinal": 1,
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "model_calls": 0,
+            "fresh_input_bytes": 0,
+            "generation": 0,
+            "at": "2026-10-16T23:44:53.639Z",
+            "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f"
+          },
+          {
+            "event": "controller_effect_result",
+            "effect_kind": "gate",
+            "effect_identity": "gate-focused_verification-1",
+            "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+            "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+            "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+            "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+            "stage": "focused_verification",
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "at": "2026-10-16T23:44:53.649Z",
+            "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077"
+          },
+          {
+            "event": "controller_effect_reserved",
+            "stage": "full_diff_review",
+            "effect_kind": "gate",
+            "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+            "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+            "invocation_ordinal": 1,
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "generation": 0,
+            "authority": {
+              "schema_version": 1,
+              "artifact_type": "controller_full_diff_review_input",
+              "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+              "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+              "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+              "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+              "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66",
+              "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+              "reviewer": {
+                "runner": "claude-native",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "endpoint": null
+              }
+            },
+            "at": "2026-10-16T23:44:53.690Z",
+            "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74"
+          },
+          {
+            "event": "controller_effect_invoked",
+            "stage": "full_diff_review",
+            "effect_kind": "gate",
+            "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+            "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+            "invocation_ordinal": 1,
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "model_calls": 1,
+            "fresh_input_bytes": 706,
+            "generation": 0,
+            "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+            "at": "2026-10-16T23:45:54.409Z",
+            "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1"
+          },
+          {
+            "event": "controller_effect_result",
+            "effect_kind": "gate",
+            "effect_identity": "gate-full_diff_review-2",
+            "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+            "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+            "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+            "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+            "stage": "full_diff_review",
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "at": "2026-10-16T23:45:54.419Z",
+            "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f"
+          },
+          {
+            "event": "controller_effect_invoked",
+            "stage": "full_suite",
+            "effect_kind": "gate",
+            "effect_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+            "result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+            "invocation_ordinal": 1,
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "model_calls": 0,
+            "fresh_input_bytes": 0,
+            "generation": 0,
+            "at": "2026-10-16T23:45:54.450Z",
+            "digest": "10dd54a8cfcdf2b619390e6d7a481f98b0143ba4b64ce060fa3038621eaf8946"
+          },
+          {
+            "event": "controller_effect_result",
+            "effect_kind": "gate",
+            "effect_identity": "gate-full_suite-3",
+            "invocation_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+            "invocation_result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+            "effect_result_digest": "c7f37f902f8f2a0126dc74e4498d1eb3b8c40427835c3b048df1ea2020f8794e",
+            "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+            "stage": "full_suite",
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "at": "2026-10-16T23:45:54.450Z",
+            "digest": "fda452eb606552c64ced8149a7e02c297343e8c9da6fa1306c948f21af5fd470"
+          }
+        ],
+        "gate_journal": {
+          "schema_version": 1,
+          "artifact_type": "controller_gate_journal",
+          "entries": [
+            {
+              "gate_id": "gate-focused_verification-1",
+              "kind": "focused_verification",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+              "started_at": "2026-10-16T23:44:53.649Z",
+              "finished_at": "2026-10-16T23:44:53.649Z",
+              "result": {
+                "success": true,
+                "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            },
+            {
+              "gate_id": "gate-full_diff_review-2",
+              "kind": "full_diff_review",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+              "started_at": "2026-10-16T23:44:53.700Z",
+              "finished_at": "2026-10-16T23:45:54.419Z",
+              "result": {
+                "success": true,
+                "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                "verdict": "FIX-THEN-SHIP"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            },
+            {
+              "gate_id": "gate-full_suite-3",
+              "kind": "full_suite",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+              "started_at": "2026-10-16T23:45:54.449Z",
+              "finished_at": "2026-10-16T23:45:54.450Z",
+              "result": {
+                "success": true,
+                "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                "command_digest": "7ae2a824a7bb6a5679037fcc64d9c46b3949001c33109dfdce23181eeb2715d5",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            }
+          ],
+          "digest": "42dad526f5dc0ea3ee0200aacf090f1594f522977ec105a9211285caf46c290a"
+        },
+        "repair_budget_usage": {
+          "model_calls": 1,
+          "fresh_input_bytes": 706,
+          "fresh_input_tokens": null,
+          "elapsed_wall_ms": 61107,
+          "owned_worktrees": 0,
+          "finding_recurrence": 0,
+          "observable_axes": [
+            "model_calls",
+            "fresh_input_bytes",
+            "elapsed_wall_ms",
+            "owned_worktrees",
+            "finding_recurrence"
+          ],
+          "unobserved_axes": [
+            "fresh_input_tokens"
+          ]
+        },
+        "repair_budget_limits": {
+          "model_calls": 6,
+          "fresh_input_bytes": 50000000,
+          "fresh_input_tokens": null,
+          "elapsed_wall_ms": 3600000,
+          "owned_worktrees": 4,
+          "finding_recurrence": 2
+        },
+        "resource_debt": {
+          "schema_version": 1,
+          "artifact_type": "controller_resource_debt",
+          "open": [],
+          "released": [],
+          "blocks_dispatch": false,
+          "digest": "c03d4a3a887db40376e1752c7de53327f7802228c685e66805dab8dffae3c416"
+        },
+        "full_diff_barriers": {
+          "0": {
+            "kind": "full_diff_review",
+            "success": true,
+            "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+            "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+            "recorded_at": "2026-10-16T23:45:54.427Z"
+          }
+        },
+        "progress_receipts": [
+          {
+            "schema_version": 1,
+            "artifact_type": "controller_progress_receipt",
+            "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "deliverable_id": "s1-full-r1",
+            "generation": 0,
+            "active_process": {
+              "pid": 3124345
+            },
+            "completed_deliverables": [],
+            "remaining_deliverables": [
+              "s1-full-r1"
+            ],
+            "deliverable_count": 1,
+            "frozen_denominator_digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f",
+            "blocked_reason": null,
+            "eta_basis": "frozen_graph_remaining",
+            "gate_state": {
+              "schema_version": 1,
+              "artifact_type": "controller_gate_journal",
+              "entries": []
+            },
+            "resource_debt_state": {
+              "open": [],
+              "released": []
+            },
+            "phase": "PREPARED",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "issued_at": "2026-10-16T23:44:53.344Z",
+            "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f"
+          }
+        ],
+        "historical_outputs": null,
+        "historical_outputs_digest": null,
+        "noop_receipt": null,
+        "adoption_receipts": [],
+        "phase": null,
+        "next_action": null,
+        "started_at_ms": 1792194293343,
+        "dispatch_records": [],
+        "transcript_audit": {
+          "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+          "rows": [
+            {
+              "finished_at": "2026-10-16T23:44:53.649Z",
+              "gate_id": "gate-focused_verification-1",
+              "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+              "invalidated": false,
+              "invalidation_reason": null,
+              "kind": "gate_return",
+              "owner": "depth-0",
+              "result": {
+                "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd",
+                "success": true
+              },
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "started_at": "2026-10-16T23:44:53.649Z",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "identity": "gate-focused_verification-1",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "finished_at": "2026-10-16T23:45:54.419Z",
+              "gate_id": "gate-full_diff_review-2",
+              "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+              "invalidated": false,
+              "invalidation_reason": null,
+              "kind": "gate_return",
+              "owner": "depth-0",
+              "result": {
+                "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                "success": true,
+                "verdict": "FIX-THEN-SHIP"
+              },
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "started_at": "2026-10-16T23:44:53.700Z",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "identity": "gate-full_diff_review-2",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:44:53.344Z",
+              "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+              "event": "progress_receipt_appended",
+              "phase": "PREPARED",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:44:53.639Z",
+              "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+              "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "effect_kind": "gate",
+              "event": "controller_effect_invoked",
+              "fresh_input_bytes": 0,
+              "generation": 0,
+              "invocation_ordinal": 1,
+              "model_calls": 0,
+              "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "stage": "focused_verification",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:44:53.649Z",
+              "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+              "effect_identity": "gate-focused_verification-1",
+              "effect_kind": "gate",
+              "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+              "event": "controller_effect_result",
+              "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+              "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "stage": "focused_verification",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:44:53.690Z",
+              "authority": {
+                "artifact_type": "controller_full_diff_review_input",
+                "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+                "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+                "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+                "reviewer": {
+                  "effort": "high",
+                  "endpoint": null,
+                  "model": "claude-fable-5-1",
+                  "runner": "claude-native"
+                },
+                "schema_version": 1,
+                "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66"
+              },
+              "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+              "effect_kind": "gate",
+              "event": "controller_effect_reserved",
+              "generation": 0,
+              "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+              "invocation_ordinal": 1,
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "stage": "full_diff_review",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:45:54.409Z",
+              "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+              "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "effect_kind": "gate",
+              "event": "controller_effect_invoked",
+              "fresh_input_bytes": 706,
+              "generation": 0,
+              "invocation_ordinal": 1,
+              "model_calls": 1,
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "stage": "full_diff_review",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            },
+            {
+              "at": "2026-10-16T23:45:54.419Z",
+              "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+              "effect_identity": "gate-full_diff_review-2",
+              "effect_kind": "gate",
+              "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+              "event": "controller_effect_result",
+              "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+              "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "stage": "full_diff_review",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "kind": "audit_event",
+              "identity": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+              "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+            }
+          ],
+          "explains_all": true,
+          "expected_counts": {
+            "dispatches": 0,
+            "resources": 0,
+            "gates": 2,
+            "repairs": 0,
+            "dispositions": 0,
+            "resumes": 0,
+            "terminals": 0,
+            "effect_results": 2
+          },
+          "counted": {
+            "dispatches": 0,
+            "resources": 0,
+            "gates": 2,
+            "repairs": 0,
+            "dispositions": 0,
+            "resumes": 0,
+            "terminals": 0,
+            "effect_results": 2
+          },
+          "problems": [],
+          "blocks_next_dispatch": false,
+          "blocks_terminal": false,
+          "open_debt": [],
+          "authority_sources_checked": [],
+          "digest": "f9a06281652556514ab419a84b5b88cab9f682907e5f73d5694ab91c3821f03d"
+        },
+        "accepted_commit": null,
+        "branch": null,
+        "worktree": null,
+        "provider_lineage": null,
+        "verification_receipt": null,
+        "review_payload": null,
+        "findings_snapshot": null,
+        "candidate": null,
+        "completed_deliverables": [],
+        "inventory_observation_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "recovery_receipts": [],
+        "resume_receipts": [],
+        "convergence_adjudication_receipt": null,
+        "temp_capacity_limit": null,
+        "controller_digest": "2f6745104422149be772733bbae01610da3da0091866b4ddd0b1ec31c06cdf72"
+      },
+      "durable_wait": true,
+      "resumable": true,
+      "ledger": [
+        {
+          "unit": "campaign_intake",
+          "status": "admitted",
+          "started_at": "2026-10-16T23:44:53.159Z",
+          "ended_at": "2026-10-16T23:44:53.338Z",
+          "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "rejection_owner": null,
+          "rejection_code": null
+        },
+        {
+          "unit": "adoption_admission",
+          "status": "admitted",
+          "started_at": "2026-10-16T23:44:53.417Z",
+          "ended_at": "2026-10-16T23:44:53.417Z",
+          "head": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+          "warnings": [
+            {
+              "reason": "ratio_trip",
+              "total_churn": 36,
+              "limit": 15,
+              "baseline_churn": 10,
+              "max_growth_ratio": 1.5,
+              "code": "review_candidate_churn_ratio_trip"
+            },
+            {
+              "reason": "absolute_trip",
+              "total_churn": 36,
+              "added_churn": 26,
+              "max_extra_churn": 5,
+              "baseline_churn": 10,
+              "code": "review_candidate_churn_absolute_trip"
+            }
+          ]
+        },
+        {
+          "unit": "campaign_verification",
+          "status": "passed",
+          "started_at": "2026-10-16T23:44:53.438Z",
+          "ended_at": "2026-10-16T23:44:53.574Z",
+          "tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+          "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+          "cached": false,
+          "cleanup_warning": null,
+          "verify_stdout_tail": "",
+          "verify_stderr_tail": ""
+        },
+        {
+          "unit": "dispatch_review",
+          "status": "reviewed",
+          "started_at": "2026-10-16T23:44:53.700Z",
+          "ended_at": "2026-10-16T23:45:54.351Z",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "exit_status": 0
+        },
+        {
+          "unit": "dispatch_review",
+          "status": "reviewed",
+          "started_at": "2026-10-16T23:44:53.700Z",
+          "ended_at": "2026-10-16T23:45:54.351Z",
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "exit_status": 0
+        },
+        {
+          "unit": "dispatch_review",
+          "status": "reviewed",
+          "started_at": "2026-10-16T23:44:53.700Z",
+          "ended_at": "2026-10-16T23:45:54.351Z",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "exit_status": 0
+        },
+        {
+          "unit": "full_diff_review",
+          "status": "passed",
+          "started_at": "2026-10-16T23:44:53.700Z",
+          "ended_at": "2026-10-16T23:45:54.351Z",
+          "budget_source": "wall",
+          "seat_timeout_seconds": 3600,
+          "station": "panel",
+          "seat_count": 3
+        },
+        {
+          "unit": "full_suite",
+          "status": "passed",
+          "started_at": "2026-10-16T23:45:54.449Z",
+          "ended_at": "2026-10-16T23:45:54.449Z",
+          "reused_from": "campaign_verification",
+          "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+          "tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c"
+        }
+      ],
+      "wall_seconds_remaining": 3539,
+      "repair_round_estimate_seconds": null,
+      "repair_round_fits": null,
+      "campaign_control": {
+        "status": "admitted",
+        "reason": null,
+        "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+        "contract_digest": "1dcbdd6106e6d06bb597937dfb737f62a5b1f86ac4db17c973b8e5b5ad798ce3",
+        "contract": {
+          "schema_version": 1,
+          "ticket": "s1-full-r1",
+          "profile": "poc",
+          "mission_grant_ref": null,
+          "repo_identity": "git-common-dir:/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git",
+          "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+          "branch": "ext/s1-full-r1",
+          "vertical_acceptance": [
+            "src/ pricing modules implement the contracts in the review specification"
+          ],
+          "allowed_path_prefixes": [
+            "src/"
+          ],
+          "max_changed_files": 30,
+          "baseline_churn": 10,
+          "max_growth_ratio": 1.5,
+          "max_extra_churn": 5,
+          "max_repair_generations": 0,
+          "max_wall_seconds": 3600,
+          "final_panel_reserve_seconds": 0,
+          "verify_cmd": "node check.js",
+          "rubric_ids": [
+            "ICC-RC1"
+          ],
+          "adoption": {
+            "head_sha": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef"
+          }
+        },
+        "contract_path": "/tmp/d5-work/d5-s1-full-r1-tFrezm/campaign.json",
+        "seal_path": "/tmp/d5-work/d5-s1-full-r1-tFrezm/campaign.seal.json",
+        "initial_state": {
+          "schema_version": 1,
+          "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "contract_digest": "1dcbdd6106e6d06bb597937dfb737f62a5b1f86ac4db17c973b8e5b5ad798ce3",
+          "repo_identity": "git-common-dir:/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git",
+          "ticket": "s1-full-r1",
+          "profile": "poc",
+          "phase": "AWAITING_DISPOSITION",
+          "generation": 0,
+          "limits": {
+            "max_repair_generations": 0,
+            "max_wall_seconds": 3600,
+            "max_changed_files": 30,
+            "baseline_churn": 10,
+            "max_churn": 15,
+            "final_panel_reserve_seconds": 0,
+            "full_suite_reuse": 1
+          },
+          "usage": {
+            "repair_generations": 0,
+            "elapsed_wall_seconds": 61,
+            "changed_files": 9,
+            "churn": 0
+          },
+          "started_at": "2026-10-16T23:44:53.159Z",
+          "last_event_at": "2026-10-16T23:45:54.492Z",
+          "live_lease": null,
+          "idempotency_records": [
+            {
+              "key": "campaign-event:b1c81bb2944a3bf7ea6c57f324ccba7af4e6895755dbb8113ffeac74fd0f12e6",
+              "event_digest": "492f2767304d216f9cc584b3d262c986f3da5b546bae89cbd381e5ce692c2796"
+            },
+            {
+              "key": "campaign-event:06c1c6564e3fa3cb03da2748e360a3c0713abf31d934c736a09abd3c74dd58c9",
+              "event_digest": "6165524209c45347d492d6083a70237f828128011da5e4945074ab8e5974a2f7"
+            },
+            {
+              "key": "campaign-event:c320bef7722dcb40dc4d05691a315e21e9fd6a3c71e6d29321dcfce70c9f1785",
+              "event_digest": "4c7d056b6f563e32bcf1d6eeb85b2410c8f827c737d77e83a68a2d3b8828793e"
+            },
+            {
+              "key": "campaign-event:1d09ecd150e311d0b98a95200ba2cbbebcfb77e7bddf335383b777758b0eda2a",
+              "event_digest": "99352da4caf91229fa91bc7f54b2756283bff3ffe322b5370c9e5db9cd3dc5a8"
+            }
+          ],
+          "event_count": 4,
+          "last_input_artifact_digest": "a60634243a85072afb2b2e042f687747b5102ea6629b49738d882a5c55a4289d",
+          "last_output_artifact_digest": "912cf5d22939fe7c3a85bd44f843123d786cc8b1b514bd1f26eb241ee45775cf",
+          "terminal_reason": null,
+          "awaiting_disposition": {
+            "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+            "findings_digest": "17c4d84ee792520c4dc5b82e9b6b9cb851fe4c95d2995ff846f28dbf44bc1440",
+            "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+            "wall_seconds_remaining": 3539,
+            "repair_round_estimate_seconds": null,
+            "repair_round_fits": null
+          }
+        },
+        "mission_claim": null,
+        "generation_claim": {
+          "owner": "campaign_generation",
+          "status": "claimed",
+          "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "generation": 1,
+          "nonce": "095b2db43d627bf8",
+          "ledger": "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+          "stage_identity": "run-ledger:1:095b2db43d627bf8",
+          "resumed_state": null,
+          "durable_journal": true,
+          "resume_candidate": null,
+          "resume_review_digest": null,
+          "resume_durable_wait": null
+        },
+        "full_enforcement": false,
+        "shadow_axes": [
+          "mission"
+        ],
+        "steps": [
+          {
+            "owner": "mission",
+            "status": "unknown",
+            "enforcement": "shadow",
+            "reason": "Mission supervision is not enforced for this campaign"
+          },
+          {
+            "owner": "qc_panel_snapshot",
+            "status": "ready",
+            "digest": "5469cf5d173559210ce01cf20910413a5ef1f26d6f8859a991bd15701c1db51e",
+            "seat_count": 3,
+            "path": "/tmp/d5-work/d5-s1-full-r1-tFrezm/qc_panel_snapshot.json",
+            "review_station": "panel"
+          },
+          {
+            "owner": "campaign_contract",
+            "status": "ready",
+            "contract_digest": "1dcbdd6106e6d06bb597937dfb737f62a5b1f86ac4db17c973b8e5b5ad798ce3",
+            "seal_path": "/tmp/d5-work/d5-s1-full-r1-tFrezm/campaign.seal.json"
+          },
+          {
+            "owner": "adoption_admission",
+            "status": "ready",
+            "phase": "admission",
+            "head": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+            "base": "865c3212b1bc612964717868724a135df94c359f",
+            "branch": "ext/s1-full-r1",
+            "tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+            "changed_files": [
+              "src/bulk.js",
+              "src/checkout.js",
+              "src/clamp.js",
+              "src/coupon.js",
+              "src/fee.js",
+              "src/invoice.js",
+              "src/ship.js",
+              "src/split.js",
+              "src/tax.js"
+            ],
+            "total_churn": 36,
+            "scope_receipt_digest": "5eeb9d6fefe7ba0fe0f9c848f2f35061da7814a4db6444512b76bd2d69cdcb1f",
+            "warnings": [
+              {
+                "reason": "ratio_trip",
+                "total_churn": 36,
+                "limit": 15,
+                "baseline_churn": 10,
+                "max_growth_ratio": 1.5,
+                "code": "review_candidate_churn_ratio_trip"
+              },
+              {
+                "reason": "absolute_trip",
+                "total_churn": 36,
+                "added_churn": 26,
+                "max_extra_churn": 5,
+                "baseline_churn": 10,
+                "code": "review_candidate_churn_absolute_trip"
+              }
+            ]
+          },
+          {
+            "owner": "provider_readiness",
+            "status": "ready"
+          },
+          {
+            "owner": "context_window",
+            "status": "ready"
+          },
+          {
+            "owner": "worktree_lifecycle",
+            "status": "ready"
+          },
+          {
+            "owner": "campaign_generation",
+            "status": "claimed",
+            "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "generation": 1,
+            "nonce": "095b2db43d627bf8",
+            "ledger": "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/implementation-campaign.jsonl",
+            "stage_identity": "run-ledger:1:095b2db43d627bf8",
+            "resumed_state": null,
+            "durable_journal": true,
+            "resume_candidate": null,
+            "resume_review_digest": null,
+            "resume_durable_wait": null
+          }
+        ],
+        "advisories": [],
+        "qc_panel_snapshot": {
+          "schema_version": 1,
+          "campaign_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "contract_digest": "1dcbdd6106e6d06bb597937dfb737f62a5b1f86ac4db17c973b8e5b5ad798ce3",
+          "seats": [
+            {
+              "role": "qc",
+              "runner": "claude-native",
+              "model": "claude-fable-5-1",
+              "effort": "high",
+              "endpoint": null,
+              "family": "anthropic"
+            },
+            {
+              "role": "qc",
+              "runner": "cc-shim",
+              "model": "GLM-5.3",
+              "effort": "high",
+              "endpoint": "glm",
+              "family": "zhipu"
+            },
+            {
+              "role": "qc",
+              "runner": "qoderclicn",
+              "model": "Qwen3.8-Max",
+              "effort": "high",
+              "endpoint": null,
+              "family": "alibaba"
+            }
+          ],
+          "seats_complete": true,
+          "min_panel_size": 3,
+          "required_review_families": 1,
+          "implementer_family": "unknown",
+          "review_station": "panel",
+          "digest": "5469cf5d173559210ce01cf20910413a5ef1f26d6f8859a991bd15701c1db51e"
+        },
+        "pre_spend_no_effect_receipt": null,
+        "review_candidate_continuation": {
+          "continuation": null,
+          "parked": false,
+          "phase": null,
+          "reviewed_head": null
+        },
+        "controller": {
+          "schema_version": 1,
+          "frozen_denominator": {
+            "schema_version": 1,
+            "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "graph_digest": "a6981496c950ceb3c98a665e78c899c151509bdd482ea434bcd8eb087e8c8050",
+            "deliverable_ids": [
+              "s1-full-r1"
+            ],
+            "deliverable_count": 1,
+            "active_node_id": "s1-full-r1",
+            "digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f"
+          },
+          "original_dispatch_run": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+          "provider_session": null,
+          "unresolved_findings": [],
+          "review_verdict": null,
+          "expires_at": null,
+          "resource_inventory": [],
+          "process_parentage": {
+            "schema_version": 1,
+            "owner": {
+              "pid": 3124345,
+              "process_start_time": 1792194292,
+              "pgid": 3121010,
+              "sid": 3121010
+            },
+            "relationships": [
+              {
+                "child": {
+                  "pid": 3124345,
+                  "process_start_time": 1792194292,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121035,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121035,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121026,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121026,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121023,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121023,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 3121010,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                }
+              },
+              {
+                "child": {
+                  "pid": 3121010,
+                  "process_start_time": 1792194291,
+                  "pgid": 3121010,
+                  "sid": 3121010
+                },
+                "parent": {
+                  "pid": 1,
+                  "process_start_time": 1791343392,
+                  "pgid": 1,
+                  "sid": 1
+                }
+              }
+            ],
+            "observed_at": "2026-10-16T23:44:53.352Z",
+            "digest": "ad45a9297e05612f3132499df5b029b501547592706a29308d4c45f71ef76334"
+          },
+          "repair_tickets": [],
+          "audit_events": [
+            {
+              "event": "progress_receipt_appended",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:44:53.344Z",
+              "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+              "phase": "PREPARED"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "focused_verification",
+              "effect_kind": "gate",
+              "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 0,
+              "fresh_input_bytes": 0,
+              "generation": 0,
+              "at": "2026-10-16T23:44:53.639Z",
+              "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-focused_verification-1",
+              "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+              "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+              "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+              "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+              "stage": "focused_verification",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:44:53.649Z",
+              "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077"
+            },
+            {
+              "event": "controller_effect_reserved",
+              "stage": "full_diff_review",
+              "effect_kind": "gate",
+              "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "generation": 0,
+              "authority": {
+                "schema_version": 1,
+                "artifact_type": "controller_full_diff_review_input",
+                "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+                "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+                "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+                "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66",
+                "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+                "reviewer": {
+                  "runner": "claude-native",
+                  "model": "claude-fable-5-1",
+                  "effort": "high",
+                  "endpoint": null
+                }
+              },
+              "at": "2026-10-16T23:44:53.690Z",
+              "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "full_diff_review",
+              "effect_kind": "gate",
+              "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 1,
+              "fresh_input_bytes": 706,
+              "generation": 0,
+              "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+              "at": "2026-10-16T23:45:54.409Z",
+              "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-full_diff_review-2",
+              "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+              "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+              "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+              "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+              "stage": "full_diff_review",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:45:54.419Z",
+              "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f"
+            },
+            {
+              "event": "controller_effect_invoked",
+              "stage": "full_suite",
+              "effect_kind": "gate",
+              "effect_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+              "result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+              "invocation_ordinal": 1,
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "model_calls": 0,
+              "fresh_input_bytes": 0,
+              "generation": 0,
+              "at": "2026-10-16T23:45:54.450Z",
+              "digest": "10dd54a8cfcdf2b619390e6d7a481f98b0143ba4b64ce060fa3038621eaf8946"
+            },
+            {
+              "event": "controller_effect_result",
+              "effect_kind": "gate",
+              "effect_identity": "gate-full_suite-3",
+              "invocation_identity": "102ffbaeb9ac60c9bd05b2fbdb3a51f812916b6b9d8dd1e262362ea2e9182602",
+              "invocation_result_identity": "783f44f9997adc424ed132a655aa26872ea1740a7f4493fccecd763bd22013fd",
+              "effect_result_digest": "c7f37f902f8f2a0126dc74e4498d1eb3b8c40427835c3b048df1ea2020f8794e",
+              "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+              "stage": "full_suite",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "at": "2026-10-16T23:45:54.450Z",
+              "digest": "fda452eb606552c64ced8149a7e02c297343e8c9da6fa1306c948f21af5fd470"
+            }
+          ],
+          "gate_journal": {
+            "schema_version": 1,
+            "artifact_type": "controller_gate_journal",
+            "entries": [
+              {
+                "gate_id": "gate-focused_verification-1",
+                "kind": "focused_verification",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "started_at": "2026-10-16T23:44:53.649Z",
+                "finished_at": "2026-10-16T23:44:53.649Z",
+                "result": {
+                  "success": true,
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              },
+              {
+                "gate_id": "gate-full_diff_review-2",
+                "kind": "full_diff_review",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "started_at": "2026-10-16T23:44:53.700Z",
+                "finished_at": "2026-10-16T23:45:54.419Z",
+                "result": {
+                  "success": true,
+                  "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                  "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                  "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                  "verdict": "FIX-THEN-SHIP"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              },
+              {
+                "gate_id": "gate-full_suite-3",
+                "kind": "full_suite",
+                "owner": "depth-0",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "input_digest": "2731c5485c0992ae9e1d6d3af161d9061210a7544ce9330ff7418cde0f68ca56",
+                "started_at": "2026-10-16T23:45:54.449Z",
+                "finished_at": "2026-10-16T23:45:54.450Z",
+                "result": {
+                  "success": true,
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "command_digest": "7ae2a824a7bb6a5679037fcc64d9c46b3949001c33109dfdce23181eeb2715d5",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd"
+                },
+                "invalidated": false,
+                "invalidation_reason": null
+              }
+            ],
+            "digest": "42dad526f5dc0ea3ee0200aacf090f1594f522977ec105a9211285caf46c290a"
+          },
+          "repair_budget_usage": {
+            "model_calls": 1,
+            "fresh_input_bytes": 706,
+            "fresh_input_tokens": null,
+            "elapsed_wall_ms": 61107,
+            "owned_worktrees": 0,
+            "finding_recurrence": 0,
+            "observable_axes": [
+              "model_calls",
+              "fresh_input_bytes",
+              "elapsed_wall_ms",
+              "owned_worktrees",
+              "finding_recurrence"
+            ],
+            "unobserved_axes": [
+              "fresh_input_tokens"
+            ]
+          },
+          "repair_budget_limits": {
+            "model_calls": 6,
+            "fresh_input_bytes": 50000000,
+            "fresh_input_tokens": null,
+            "elapsed_wall_ms": 3600000,
+            "owned_worktrees": 4,
+            "finding_recurrence": 2
+          },
+          "resource_debt": {
+            "schema_version": 1,
+            "artifact_type": "controller_resource_debt",
+            "open": [],
+            "released": [],
+            "blocks_dispatch": false,
+            "digest": "c03d4a3a887db40376e1752c7de53327f7802228c685e66805dab8dffae3c416"
+          },
+          "full_diff_barriers": {
+            "0": {
+              "kind": "full_diff_review",
+              "success": true,
+              "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+              "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+              "recorded_at": "2026-10-16T23:45:54.427Z"
+            }
+          },
+          "progress_receipts": [
+            {
+              "schema_version": 1,
+              "artifact_type": "controller_progress_receipt",
+              "project_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "deliverable_id": "s1-full-r1",
+              "generation": 0,
+              "active_process": {
+                "pid": 3124345
+              },
+              "completed_deliverables": [],
+              "remaining_deliverables": [
+                "s1-full-r1"
+              ],
+              "deliverable_count": 1,
+              "frozen_denominator_digest": "94131b2b2b3372d000cd1b83ae0abe86fd8ad530b60d509c00bdf61cef508c5f",
+              "blocked_reason": null,
+              "eta_basis": "frozen_graph_remaining",
+              "gate_state": {
+                "schema_version": 1,
+                "artifact_type": "controller_gate_journal",
+                "entries": []
+              },
+              "resource_debt_state": {
+                "open": [],
+                "released": []
+              },
+              "phase": "PREPARED",
+              "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+              "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+              "issued_at": "2026-10-16T23:44:53.344Z",
+              "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f"
+            }
+          ],
+          "historical_outputs": null,
+          "historical_outputs_digest": null,
+          "noop_receipt": null,
+          "adoption_receipts": [],
+          "phase": null,
+          "next_action": null,
+          "started_at_ms": 1792194293343,
+          "dispatch_records": [],
+          "transcript_audit": {
+            "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+            "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+            "rows": [
+              {
+                "finished_at": "2026-10-16T23:44:53.649Z",
+                "gate_id": "gate-focused_verification-1",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "invalidated": false,
+                "invalidation_reason": null,
+                "kind": "gate_return",
+                "owner": "depth-0",
+                "result": {
+                  "argv_hash": "5e23546827ffb4cb626771ed715d419e15914b27af2f92f0cc732d74c85d70e8",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "env_fingerprint": "b7b8e2029cb4590da129c351f4d1e0542ed29e4a82dffb17b4b70e27eeeab078",
+                  "receipt_digest": "d465d0be0d63215bb0088d61a9a09d339609947aac7377675df76393f4e10b48",
+                  "request_digest": "07e3ceba1f575852cc18ec772d9350b6d5a5284fc7241fcf08bca1e75a0857dd",
+                  "success": true
+                },
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "started_at": "2026-10-16T23:44:53.649Z",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "identity": "gate-focused_verification-1",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "finished_at": "2026-10-16T23:45:54.419Z",
+                "gate_id": "gate-full_diff_review-2",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "invalidated": false,
+                "invalidation_reason": null,
+                "kind": "gate_return",
+                "owner": "depth-0",
+                "result": {
+                  "findings": "[{\"finding_id\":\"bulk-threshold-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s1.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \\\"when qty is 10 or more\\\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`\",\"severity\":\"🟠\",\"source\":\"product-review\"},{\"finding_id\":\"s2.bulk-off-by-one\",\"claim\":\"MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \\\"when qty is 10 or more the whole line is 10 percent cheaper\\\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.\",\"severity\":\"🟠\",\"source\":\"product-review\"}]",
+                  "review_authority_digest": "2fed94f7597f9125c076d51d4c1761545b1af280458f1b3c08f8eba0789b31eb",
+                  "review_digest": "dd5e0bd474e270b9d897893475281d5b3c1248e7556508662c032446b11e55f4",
+                  "success": true,
+                  "verdict": "FIX-THEN-SHIP"
+                },
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "started_at": "2026-10-16T23:44:53.700Z",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "identity": "gate-full_diff_review-2",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.344Z",
+                "digest": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+                "event": "progress_receipt_appended",
+                "phase": "PREPARED",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "0e330a29b993f50c645aaac723b231618863c2233efa8074ff0baaaae6df0f8f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.639Z",
+                "digest": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+                "effect_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+                "effect_kind": "gate",
+                "event": "controller_effect_invoked",
+                "fresh_input_bytes": 0,
+                "generation": 0,
+                "invocation_ordinal": 1,
+                "model_calls": 0,
+                "result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "focused_verification",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "13bb9170f459782a8205d86c110e1160fa43823910706b168f91cc19df45029f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.649Z",
+                "digest": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+                "effect_identity": "gate-focused_verification-1",
+                "effect_kind": "gate",
+                "effect_result_digest": "189bfa2ce0026d4a549485b9b1d8096eb48efe57e28af3a1b2cf9584713e2b44",
+                "event": "controller_effect_result",
+                "input_digest": "efadc22d724ffa8f11f8455c4053d6aa6b24c80d1e5dea5c3b6022d098635b21",
+                "invocation_identity": "06e89b9c937f1f4be2f773200595bd06b53648679ccb26f7e7a5c69167369352",
+                "invocation_result_identity": "f515f45da76b34ebac2327e78fc08dda5f715f023d4c4e13fc974c464b49f12a",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "focused_verification",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "b0027d5e24368dc8de0714d0fb0591d5d4ad473c4c124d0c4501fa28edb7e077",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:44:53.690Z",
+                "authority": {
+                  "artifact_type": "controller_full_diff_review_input",
+                  "base_sha": "865c3212b1bc612964717868724a135df94c359f",
+                  "candidate_ref": "ee3072b0438bb539d5d6b18f6b95f4e206b57fef",
+                  "candidate_tree_sha": "30849d95ba416d525ed5bdddd1d7768e78a1612c",
+                  "diff_digest": "463bd80e7cbf90dd311e075fc6cc33214b667677461c3126db88e3313ed052be",
+                  "review_input_digest": "87bd3b4727d4139f49c13c031288c85c039242fd242d63f799e81eb4df11dde5",
+                  "reviewer": {
+                    "effort": "high",
+                    "endpoint": null,
+                    "model": "claude-fable-5-1",
+                    "runner": "claude-native"
+                  },
+                  "schema_version": 1,
+                  "spec_digest": "4bd34d1635ccc771a11bbcbf30a31116ddf94ba5e1f2aa61cfbcce0fe4582c66"
+                },
+                "digest": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+                "effect_kind": "gate",
+                "event": "controller_effect_reserved",
+                "generation": 0,
+                "input_identity": "572d95ff33a6708d33cd32738c63c9088f87e41b9a5b019b75c63ebf84a26928",
+                "invocation_ordinal": 1,
+                "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "f4ceb7f5a2f813f0e715caa4c80eb5ce9bd5bfaa341c38c58a1ad32e0216eb74",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:45:54.409Z",
+                "digest": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+                "effect_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+                "effect_kind": "gate",
+                "event": "controller_effect_invoked",
+                "fresh_input_bytes": 706,
+                "generation": 0,
+                "invocation_ordinal": 1,
+                "model_calls": 1,
+                "reservation_identity": "3fcbe7a7eb0525d1654fbec17c042f426a78dccb5bdb81bac2a9383e82af3c8d",
+                "result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "cabf19662ceeb24413882ddbc63c3b72f6022e31660b8ae5a7751ee1e3356bc1",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              },
+              {
+                "at": "2026-10-16T23:45:54.419Z",
+                "digest": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+                "effect_identity": "gate-full_diff_review-2",
+                "effect_kind": "gate",
+                "effect_result_digest": "7100ab9464bc232d87448fae20d5758438da2971b0104ddfbcb940297683f49d",
+                "event": "controller_effect_result",
+                "input_digest": "5f6eeff02412221ae615c1cd46af6070cf04c8c13839e093f17c99c2838c5cb2",
+                "invocation_identity": "9335ebf70873197e79e79e1cf1b98653d8b4ea9fe78faaca43584456ae1c2b9b",
+                "invocation_result_identity": "9920544ed2bd9c9f094dd1c24b9155dcacf9a2b9be2e011768022b9fa13e3912",
+                "root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "stage": "full_diff_review",
+                "work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+                "kind": "audit_event",
+                "identity": "f130b9cdd046f2481df4324e58624b8fbf21521edb31ba6fc3b166e580654d2f",
+                "observed_root_run_id": "campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618",
+                "observed_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1"
+              }
+            ],
+            "explains_all": true,
+            "expected_counts": {
+              "dispatches": 0,
+              "resources": 0,
+              "gates": 2,
+              "repairs": 0,
+              "dispositions": 0,
+              "resumes": 0,
+              "terminals": 0,
+              "effect_results": 2
+            },
+            "counted": {
+              "dispatches": 0,
+              "resources": 0,
+              "gates": 2,
+              "repairs": 0,
+              "dispositions": 0,
+              "resumes": 0,
+              "terminals": 0,
+              "effect_results": 2
+            },
+            "problems": [],
+            "blocks_next_dispatch": false,
+            "blocks_terminal": false,
+            "open_debt": [],
+            "authority_sources_checked": [],
+            "digest": "f9a06281652556514ab419a84b5b88cab9f682907e5f73d5694ab91c3821f03d"
+          },
+          "accepted_commit": null,
+          "branch": null,
+          "worktree": null,
+          "provider_lineage": null,
+          "verification_receipt": null,
+          "review_payload": null,
+          "findings_snapshot": null,
+          "candidate": null,
+          "completed_deliverables": [],
+          "inventory_observation_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "recovery_receipts": [],
+          "resume_receipts": [],
+          "convergence_adjudication_receipt": null,
+          "temp_capacity_limit": null,
+          "controller_digest": "2f6745104422149be772733bbae01610da3da0091866b4ddd0b1ec31c06cdf72"
+        },
+        "controller_work_order_id": "wo-campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618-s1-full-r1-a1",
+        "controller_work_order_path": "/tmp/d5-work/d5-s1-full-r1-tFrezm/repo/.git/autopilot/work-orders/campaign-v1-d1576329d8ee4d62b00078bc84b26a0a0031bfae7634866020801190c5050618/s1-full-r1-a1.json"
+      },
+      "verify_cmd_provided": true,
+      "convergence_reason": null,
+      "ratchet_reverted_rounds": 0,
+      "advisory_findings": [],
+      "commit": null
+    }
+  },
+  "return": null,
+  "round1_disclosure": null,
+  "thrown": null,
+  "batches": [
+    {
+      "round": "r1",
+      "wall_ms": 60557,
+      "shared_packet": {
+        "total": 12548,
+        "files": {
+          "MANIFEST.json": 2761,
+          "diff.patch": 4505,
+          "spec.md": 1866,
+          "tree/.gitignore": 9,
+          "tree/check.js": 284,
+          "tree/src/bulk.js": 315,
+          "tree/src/checkout.js": 751,
+          "tree/src/clamp.js": 227,
+          "tree/src/coupon.js": 311,
+          "tree/src/fee.js": 233,
+          "tree/src/invoice.js": 322,
+          "tree/src/ship.js": 343,
+          "tree/src/split.js": 364,
+          "tree/src/tax.js": 257
+        }
+      },
+      "seats": [
+        {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says 10 or more is 10 percent cheaper; bulkCents(10, 100) returns 1000 instead of 900. Change the condition to `qty >= 10`.",
+          "no_finding_proof": null,
+          "usage": null,
+          "raw_log": "/tmp/dispatch-review-log-fp8VAb",
+          "error": null,
+          "parse_error": null,
+          "exit_status": 0,
+          "addendum": null,
+          "packet_bytes": 12548,
+          "arg_bytes": 6371,
+          "cost_usd": 0.20387,
+          "cost_basis": "estimated_from_bytes"
+        },
+        {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:5 the discount condition `qty > 10` applies the 10 percent discount only from qty 11, but the contract (and the file's own comment) grant it \"when qty is 10 or more\"; bulkCents(10, 100) returns 1000 instead of the required Math.round(1000 * 0.9) = 900, undercharging/overcharging every order line of exactly 10 units across checkout and invoice consumers; smallest remediation: change the test to `qty >= 10`",
+          "no_finding_proof": null,
+          "usage": null,
+          "raw_log": "/tmp/dispatch-review-log-7VbABI",
+          "error": null,
+          "parse_error": null,
+          "exit_status": 0,
+          "addendum": null,
+          "packet_bytes": 12548,
+          "arg_bytes": 6371,
+          "cost_usd": 0.017387,
+          "cost_basis": "estimated_from_bytes"
+        },
+        {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "status": "reviewed",
+          "verdict": "FIX-THEN-SHIP",
+          "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more the whole line is 10 percent cheaper\"; qty=10 incorrectly receives no discount. Change the condition to `qty >= 10`.",
+          "no_finding_proof": null,
+          "usage": null,
+          "raw_log": "/tmp/dispatch-review-log-3e2OsH",
+          "error": null,
+          "parse_error": null,
+          "exit_status": 0,
+          "addendum": null,
+          "packet_bytes": 12548,
+          "arg_bytes": 6371,
+          "cost_usd": 0.0260805,
+          "cost_basis": "estimated_from_bytes"
+        }
+      ]
+    }
+  ],
+  "finished_at": "2026-10-16T23:45:54.578Z",
+  "total_cost_usd": 0.2473375
+}

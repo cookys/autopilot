@@ -109,3 +109,18 @@ Every change after the first model call is appended here with its reason and the
   object the prior-round block asks for, and do not also write the findings as separate lines outside it."). Arm `inc` only, tags
   `s<k>-incj-r<rep>`, 2 repetitions of the 5 scenarios, compared in the README against the `full` cells of the main grid (the sentence does
   not apply to a first-round spec). Reported in its own table; not mixed into the main-grid medians. Budget stays under the section 7 cap.
+
+- A3 (after reading the s4 cells of the main grid and the A2 grid): reading the s4 findings showed that `s4-inc-*` and `s4-incj-*` seats
+  cited `src/invoice.js:3` but described a defect that does not exist ("src/tax.js still divides by 1000", while the delta deletes
+  `src/tax.js`); the pre-registered rule (file within +-3 lines) counts that as surfacing R1, the real defect (invoice requires a module
+  the delta removed) is not named. The scorer therefore reports a second, stricter column for every must-surface defect: located AND the
+  same finding line matches a per-defect `describe` pattern (`harness/fixtures.js`, patterns written after seeing the data and listed
+  there). Both columns are reported for every cell; the first is the pre-registered one.
+
+- A4 (after the main grid and A2, budget used about USD 16 of 40): the five scenarios have small ranges (9 to 26 files, 10 to 30 KB of
+  packet per seat), so the carried bytes are about the size of the addendum and the saving cannot show. One more scenario is added to see
+  the saving where the premise of the feature holds: `s6` = a 26-file range (the same 24 modules plus checkout and invoice) with two
+  defects (coupon, bulk); H1 fixes only coupon, bulk stays wrong (so the return still has one open prior finding on an untouched file).
+  Arms: `full` (spec `loc`) and `inc` with the spec-wording sentence of A2 (`incj`, because that is the condition in which the engine
+  can read the answers), 2 repetitions each, tags `s6-full-r<rep>` and `s6-incj-r<rep>`. Reported in the tables next to the others and
+  never mixed into the main-grid medians.

@@ -41,7 +41,12 @@ const KW = {
   clamp: /clamp|98|99/i, loyalty: /loyal|point|round|floor/i, refund: /refund|fee|restock|min|max/i, fee: /fee|card|30|\b3\b/i,
   split: /split|<=|remainder|share/i, cap: /cap|ceil|floor|50/i, minorder: /minimum|1000|>=|>\s*1000/i,
 };
-const old = (id, name, fixed) => ({ id, kind: fixed ? 'old_fixed' : 'old_unfixed', path: f(name), line: plantedLine(name), keyword: KW[name] });
+// A3 (post-hoc, stricter): a located finding also has to describe the planted defect itself.
+const DESC = {
+  bulk: /qty\s*>\s*10|>=\s*10|10 or more|exactly 10|threshold|boundary/i,
+  minorder: />\s*1000|>=\s*1000|at least 1000|exactly 1000|boundary|strict/i,
+};
+const old = (id, name, fixed) => ({ id, kind: fixed ? 'old_fixed' : 'old_unfixed', path: f(name), line: plantedLine(name), keyword: KW[name], describe: DESC[name] });
 
 function buildSpec(names, extra, loc) {
   const lines = names.filter((n) => !(extra && extra.omit && extra.omit.includes(n))).map((n) => `- ${BY_NAME[n].contract}`);
@@ -89,6 +94,16 @@ const SCENARIOS = {
       h1: badOnes.map((n, i) => old(`O${i + 1}`, n, fixed.includes(n))),
     } };
   },
+  // 6 (A4) single-file fix inside a 26-file range: coupon fixed, bulk left wrong, the other 22 modules correct
+  s6: (o) => {
+    const names = MODULES.map((m) => m.name);
+    const h0 = headMap(names, { coupon: 'bad', bulk: 'bad' });
+    const h1 = { ...h0, [f('coupon')]: src('coupon', 'good') };
+    return { names, base: baseMap(names), h0, h1, spec: buildSpec(names, null, o && o.loc), truth: {
+      h0: [old('O1', 'coupon'), old('O3', 'bulk')],
+      h1: [old('O1', 'coupon', true), old('O3', 'bulk', false)],
+    } };
+  },
   // 3 cross-file regression: coupon is fixed, and rewritten to return the discounted subtotal;
   // unchanged checkout.js still subtracts it (double discount). coupon has no contract line of its own.
   s3: (o) => {
@@ -101,7 +116,7 @@ const SCENARIOS = {
       h0: [old('O1', 'coupon')],
       h1: [
         { id: 'O1', kind: 'old_fixed', path: f('coupon'), line: plantedLine('coupon'), keyword: KW.coupon },
-        { id: 'R1', kind: 'regression', path: 'src/checkout.js', line: checkoutLine, alt_paths: [{ path: f('coupon'), line: lineOf(couponH1, 'return subtotal') }], keyword: /discount|subtotal|double|twice|remaining|couponCents/i },
+        { id: 'R1', kind: 'regression', path: 'src/checkout.js', line: checkoutLine, alt_paths: [{ path: f('coupon'), line: lineOf(couponH1, 'return subtotal') }], keyword: /discount|subtotal|double|twice|remaining|couponCents/i, describe: /double|twice|post-discount|discounted subtotal|returns the (subtotal|remaining)|already|inverted|subtract/i },
       ],
     } };
   },
@@ -119,7 +134,7 @@ const SCENARIOS = {
       h0: [old('O1', 'tax')],
       h1: [
         { id: 'O1', kind: 'old_fixed', path: f('tax'), line: plantedLine('tax'), alt_paths: [{ path: f('vat'), line: 4 }], keyword: KW.tax },
-        { id: 'R1', kind: 'regression', path: 'src/invoice.js', line: invLine, keyword: /tax|require|module|missing|vat|not found|cannot find|stale|rename/i },
+        { id: 'R1', kind: 'regression', path: 'src/invoice.js', line: invLine, keyword: /tax|require|module|missing|vat|not found|cannot find|stale|rename/i, describe: /delet|MODULE_NOT_FOUND|not found|no longer exist|does not exist|missing|cannot find|removed|renam/i },
       ],
     } };
   },
@@ -134,8 +149,8 @@ const SCENARIOS = {
       h0: [old('O1', 'coupon'), old('O2', 'ship')],
       h1: [
         old('O1', 'coupon', true), old('O2', 'ship', true),
-        { id: 'N1', kind: 'new_next_to_old', path: f('coupon'), line: lineOf(couponH1, 'Math.max(1, pct)'), keyword: /clamp|0|zero|min|max|1/i },
-        { id: 'N2', kind: 'new_next_to_old', path: f('ship'), line: lineOf(shipH1, 'weightG < 0'), keyword: /zero|0|weight|<\s*0|<=/i },
+        { id: 'N1', kind: 'new_next_to_old', path: f('coupon'), line: lineOf(couponH1, 'Math.max(1, pct)'), keyword: /clamp|0|zero|min|max|1/i, describe: /Math\.max\(1|lower bound|1\.\.100|forced to 1|instead of 0|floor/i },
+        { id: 'N2', kind: 'new_next_to_old', path: f('ship'), line: lineOf(shipH1, 'weightG < 0'), keyword: /zero|0|weight|<\s*0|<=/i, describe: /weight 0|zero weight|weightG\s*<\s*0|returns 500|shippingCents\(0\)|weight of 0/i },
       ],
     } };
   },

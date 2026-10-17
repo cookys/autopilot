@@ -17,12 +17,25 @@ function findingLines(raw) {
     } else if (Array.isArray(j)) {
       text = j.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n');
     }
-  } catch (_e) { /* plain text findings */ }
+  } catch (_e) {
+    // lines followed by the answer object (the seats' usual shape): read the object that starts at {"findings"
+    const at = raw.indexOf('{"findings"');
+    if (at >= 0) {
+      try {
+        const j = JSON.parse(raw.slice(at));
+        text = `${raw.slice(0, at)}\n${typeof j.findings === 'string' ? j.findings : ''}`;
+        resolutions = Array.isArray(j.resolutions) ? j.resolutions : [];
+      } catch (_e2) { /* plain text findings */ }
+    }
+  }
   const lines = String(text).split('\n').map((l) => l.trim()).filter((l) => l && !/^none$/i.test(l));
   return { lines, resolutions };
 }
 const cites = (line) => [...line.matchAll(/([A-Za-z0-9_./-]+\.js):(\d+)/g)].map((m) => ({ path: m[1].replace(/^\.\//, ''), line: Number(m[2]) }));
 
+function describes(t, line) {
+  return !t.describe || new RegExp(t.describe, 'i').test(line);
+}
 function matches(t, line) {
   const targets = [{ path: t.path, line: t.line }, ...(t.alt_paths || [])];
   for (const c of cites(line)) {
@@ -42,7 +55,9 @@ function returnBatches(cell) {
   return cell.arm === 'inc' ? cell.batches.filter((b) => b.round === 'return') : cell.batches.filter((b) => b.round === 'r1');
 }
 
-function scoreCell(cell) {
+function scoreCell(cell0) {
+  // truth is re-read from the fixtures (the recorded copy predates the A3 `describe` patterns; paths and lines are identical)
+  const cell = { ...cell0, truth: require('./fixtures').SCENARIOS[cell0.scenario]({ loc: true }).truth };
   const batches = returnBatches(cell);
   const seats = batches.flatMap((b) => b.seats);
   const out = {
@@ -70,7 +85,8 @@ function scoreCell(cell) {
       const viaStill = p.resolutions.some((r) => r.status === 'still_present' && cites(`${r.evidence || ''}`).some((c) => c.path.endsWith(t.path) && Math.abs(c.line - t.line) <= WINDOW));
       return viaFinding || viaStill;
     });
-    out.surfaced[t.id] = { kind: t.kind, seats: bySeat.map((b, i) => (b ? perSeat[i].model : null)).filter(Boolean), panel: bySeat.some(Boolean) };
+    const byDesc = perSeat.map((p) => p.lines.some((l) => matches(t, l) && describes(t, l)) || p.resolutions.some((r) => r.status === 'still_present' && cites(`${r.evidence || ''}`).some((c) => c.path.endsWith(t.path) && Math.abs(c.line - t.line) <= WINDOW)));
+    out.surfaced[t.id] = { kind: t.kind, seats: bySeat.map((b, i) => (b ? perSeat[i].model : null)).filter(Boolean), panel: bySeat.some(Boolean), described_seats: byDesc.map((b, i) => (b ? perSeat[i].model : null)).filter(Boolean), described_panel: byDesc.some(Boolean) };
   }
   // false positives: findings that match an already-fixed old defect (reported as still present)
   const fixed = truth.filter((t) => t.kind === 'old_fixed');
@@ -142,4 +158,4 @@ function main() {
   else process.stdout.write(`${JSON.stringify(summary, null, 1)}\n`);
 }
 if (require.main === module) main();
-module.exports = { scoreCell, findingLines, matches, cites };
+module.exports = { scoreCell, findingLines, matches, describes, cites };

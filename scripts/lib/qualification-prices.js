@@ -9,6 +9,9 @@
  * module is the READ side. Producer joins prices to autopilot seats; the reader only does
  * EXACT equality on (engine, runner, model). No substring or longest-prefix matching.
  *
+ * Top-level fields beyond schema/generated_at/stale_after_days/rows (unpriced, content_digest,
+ * source_revision, n_rows, ...) are accepted and ignored by the reader.
+ *
  * Posture (ADR-0001): the document is untrusted input. A document that fails any check is
  * rejected whole and the previous cache stays. Nothing here is a trust claim; the cache digest
  * is a cache key. Prices are advisory ordering input: stale or missing data warns, never blocks.
@@ -31,6 +34,7 @@ const PRICES_SCHEMA_ID = 'model-dyno.model-prices.v1';
 const DEFAULT_PRICES_URL = 'https://cookys.github.io/model-dyno/public-bundles/model-prices.json';
 const PRICE_FIELDS = ['usd_per_mtok_input_micro', 'usd_per_mtok_output_micro', 'usd_per_mtok_cache_read_micro'];
 const BILLING = ['metered', 'subscription'];
+// Provenance of the row's effective DATE (assumed = an inferred pin, not a claim about the price). Informational.
 const BASIS = ['sourced', 'assumed'];
 const MAX_PERCENT_DECODE_ROUNDS = 8;
 
@@ -140,13 +144,16 @@ function indexPrices(doc) {
 
 /**
  * Unit price in micro-USD per Mtok (input + output) for one seat, or null when unknown.
- * Unknown: no exact row, `assumed` basis, or either of input/output is null. Never 0 for unknown.
+ * Known = an exact row (rows in a cache already passed validation: https source_url, verified date)
+ * whose input and output are both non-null (cache_read may be null). Unknown otherwise, never 0.
+ * `effective_basis` says how the price's EFFECTIVE DATE was pinned (sourced|assumed), not where the
+ * price came from, so it is informational only and never affects the price or the order.
  * A subscription row uses its retail-converted price (shared quota is not free).
  */
 function priceMicro(index, seat) {
   if (!index || !seat) return null;
   const row = index.get(seatKey(seat.engine, seat.runner, seat.model || seat.engine));
-  if (!row || row.effective_basis !== 'sourced') return null;
+  if (!row) return null;
   const inp = row.usd_per_mtok_input_micro;
   const out = row.usd_per_mtok_output_micro;
   if (typeof inp !== 'number' || typeof out !== 'number') return null;

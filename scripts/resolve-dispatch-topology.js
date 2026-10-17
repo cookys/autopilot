@@ -9,7 +9,7 @@
  * Cheapest-first. Effort rank low < medium < high < xhigh < max < default; within one rank,
  * ascending unit price (input+output micro-USD per Mtok) from the LOCAL price cache
  * (scripts/qualification-prices.js, lib/qualification-prices.js): exact (engine, runner, model)
- * match, unknown / `assumed` / no cache sorts last (never 0). Then explicit effort before legacy,
+ * match, unknown (no row, or input/output null) / no cache sorts last (never 0). Then explicit effort before legacy,
  * ascending latency.sample_wall_time_s, then engine name (string compare) as final tiebreak.
  * The cache is read here, never fetched (no network on the dispatch path); with no cache every
  * seat is unknown, so the order is identical to the pre-price ordering. Stale prices only warn

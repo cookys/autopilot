@@ -100,3 +100,12 @@ Every change after the first model call is appended here with its reason and the
 - Estimated cost (note, not a change): the runners report no `usage` (`null` for all seats, and `dispatch-status.js --usage-only`
   returns `null` on the raw logs), so every cost figure is the byte-derived estimate of section 5. Calls and bytes are measured;
   cost is a model of bytes and is labelled so in the README.
+
+- A2 (after rep 1 and rep 2 of the main grid, before any further cell): in 8 of 9 `inc` cells that stayed incremental the engine returned
+  `blocked` (`final_panel_seat_parser_failed` or `final_panel_families_below_minimum`) because the real seats wrote their findings as
+  separate lines AND as the single JSON object the prior-round block asks for, and the engine reads only the object. This was not
+  foreseen. To learn whether the block is a wording problem the operator can fix in the spec (no engine change), a third condition is run:
+  `locjson` = the `loc` spec plus one sentence ("When the packet lists prior findings, put the whole answer in FINDINGS as the single JSON
+  object the prior-round block asks for, and do not also write the findings as separate lines outside it."). Arm `inc` only, tags
+  `s<k>-incj-r<rep>`, 2 repetitions of the 5 scenarios, compared in the README against the `full` cells of the main grid (the sentence does
+  not apply to a first-round spec). Reported in its own table; not mixed into the main-grid medians. Budget stays under the section 7 cap.

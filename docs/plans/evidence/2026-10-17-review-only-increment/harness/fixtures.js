@@ -57,6 +57,7 @@ function buildSpec(names, extra, loc) {
     `- ${CHECKOUT_SPEC_FULL}`,
     `- ${INVOICE_SPEC}`,
     ...(loc ? ['', '## Reporting format', 'Start the claim of every finding with the file and line it concerns, written path:line (for example src/a.js:12), then state the defect.'] : []),
+    ...(loc === 'json' ? ['When the packet lists prior findings, put the whole answer in FINDINGS as the single JSON object the prior-round block asks for, and do not also write the findings as separate lines outside it.'] : []),
     '',
   ].join('\n');
 }

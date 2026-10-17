@@ -106,10 +106,11 @@ function median(xs) { if (!xs.length) return null; const s = [...xs].sort((a, b)
 
 function main() {
   const dir = process.argv[2];
-  const cells = fs.readdirSync(dir).filter((n) => /^s\d-(inc|full|incraw|fullraw)-r\d\.json$/.test(n)).sort().map((n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')));
+  const cells = fs.readdirSync(dir).filter((n) => /^s\d-(inc|full|incraw|fullraw|incj)-r\d\.json$/.test(n)).sort().map((n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')));
   const allRows = cells.map(scoreCell);
   const rawRows = allRows.filter((r) => /raw-r\d$/.test(r.tag));
-  const rows = allRows.filter((r) => !/raw-r\d$/.test(r.tag));
+  const jsonRows = allRows.filter((r) => /-incj-r\d$/.test(r.tag));
+  const rows = allRows.filter((r) => !/raw-r\d$/.test(r.tag) && !/-incj-r\d$/.test(r.tag));
   const pairs = [];
   for (const sc of ['s1', 's2', 's3', 's4', 's5']) {
     for (const rep of [1, 2]) {
@@ -134,6 +135,7 @@ function main() {
     incremental_only_misses: incOnlyMiss,
     saved_median: savings.length ? { bytes: 1 - median(savings.map((x) => x.bytes)), cost: 1 - median(savings.map((x) => x.cost)), n: savings.length } : null,
     raw_condition: rawRows.map((r) => ({ tag: r.tag, calls: r.calls, bytes: r.bytes, cost_usd: r.cost_usd, scope: r.review_scope, fallback_reason: r.fallback_reason })),
+    json_condition: jsonRows,
     fallbacks: rows.filter((r) => r.arm === 'inc').map((r) => ({ tag: r.tag, scope: r.review_scope, reason: r.fallback_reason })),
   };
   if (process.argv.includes('--json')) process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

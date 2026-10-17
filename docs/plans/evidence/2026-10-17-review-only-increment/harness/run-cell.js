@@ -113,7 +113,7 @@ const { AutopilotEngine, runCampaignIntake, compileCampaignDispositionPolicy } =
 const git = (repo, ...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 // ---- fixture repo --------------------------------------------------------------------------------------------
-const sc = SCENARIOS[ctx.scenario]({ loc: ctx.specVariant !== 'raw' });
+const sc = SCENARIOS[ctx.scenario]({ loc: ctx.specVariant === 'raw' ? false : (ctx.specVariant === 'locjson' ? 'json' : true) });
 const writeMap = (dir, map) => {
   // remove tracked src files not in map, then write
   const srcDir = path.join(dir, 'src');

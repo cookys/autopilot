@@ -758,7 +758,7 @@ export function walkChart(u: Ctx, key: string, labels: readonly string[], curren
   const rule = GLYPHS.structure.rule
   if (KEY_W + total > u.cols - 1) {
     const next = current < n - 1 ? u.t('now.walk_next', { stage: labels[current + 1] }) : ''
-    const line = lineOf('chart', [sg(' '.repeat(KEY_W)), dim(u.t('now.walk_step', { n: current + 1, total: n }) + ' · ', { role: 'prose' }), sg(labels[current], { role: 'prose', color: PALETTE.here, here: true }), ...(next === '' ? [] : [dim(next, { role: 'prose' })])], { fact })
+    const line = lineOf('chart', [sg(' '.repeat(KEY_W)), dim(u.t('now.walk_step', { n: current + 1, total: n }) + ' · ', { role: 'prose' }), sg(labels[current], { role: 'prose', color: PALETTE.here, here: true }), ...(next === '' ? [] : [dim(next, { role: 'prose' })])], { hang: KEY_W, fact })
     return [lineOf('chart', [dim(padCells(key, KEY_W), { role: 'key' }), ...walkValue(current, n).segs], { hang: KEY_W, fact }), line]
   }
   const dots: Seg[] = [dim(padCells(key, KEY_W), { role: 'key' })]

@@ -1,7 +1,7 @@
 // mods/live/walkchart.test.ts — the stage walk drawn as aligned columns (ui.walkChart): each dot sits over its label's first cell,
 // the current label wears the `here` colour, and a narrow pane falls back to the dot row plus a "step k/n" line.
 import { test, expect } from 'claude-code/testing'
-import { walkChart, displayWidth, PALETTE } from './ui'
+import { walkChart, displayWidth, PALETTE, KEY_W } from './ui'
 import type { Ctx } from './ui'
 import { EN, ZH_TW } from './locales'
 
@@ -53,6 +53,7 @@ test('walk fallback: a narrow pane keeps the dot row and adds "step k/n · stage
   const narrow: Ctx = { t: tr(ZH_TW), cols: 60 }
   const mid = walkChart(narrow, 'L', labels, 4, 'now.position')
   expect(mid.length).toBe(2)
+  expect((mid[1] as unknown as { hang?: number }).hang, 'the step line hangs at the key column').toBe(KEY_W)
   expect(textOf(mid[1]).trim()).toBe('第 5／9 步 · 實作　下一步：驗證')
   const last = walkChart(narrow, 'L', labels, 8, 'now.position')
   expect(textOf(last[1]).trim()).toBe('第 9／9 步 · 收尾')

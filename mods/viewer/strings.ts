@@ -6,7 +6,7 @@ import type { Locale, Vars } from '../live/i18n'
 const EN: Record<string, string> = {
   'viewer.lines': 'lines {a} to {b} of {n}',
   'viewer.whole': '{n} lines',
-  'viewer.hint': 'Esc closes   arrows, PgUp, PgDn, Home, End scroll',
+  'viewer.hint': 'Esc closes   Tab picks a button, Enter presses it   arrows, PgUp, PgDn, Home, End scroll',
   'viewer.prev': 'previous part',
   'viewer.next': 'next part',
   'viewer.empty': 'the file is empty',
@@ -53,7 +53,7 @@ const EN: Record<string, string> = {
 const ZH_TW: Record<string, string> = {
   'viewer.lines': '第 {a} 到 {b} 行，共 {n} 行',
   'viewer.whole': '共 {n} 行',
-  'viewer.hint': 'Esc 關閉   方向鍵、PgUp、PgDn、Home、End 捲動',
+  'viewer.hint': 'Esc 關閉   Tab 選按鈕、Enter 按下   方向鍵、PgUp、PgDn、Home、End 捲動',
   'viewer.prev': '上一段',
   'viewer.next': '下一段',
   'viewer.empty': '這個檔案是空的',

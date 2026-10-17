@@ -17,7 +17,7 @@ export type Shown =
   | { kind: 'empty'; what: 'file' | 'diff' }
 
 // A button (design plan §12.9): `[ label ]` in the `action` colour, text colour only, regular weight, ONE Button around the whole run (one press id). One that cannot be pressed
-// now is dim, no colour and no press id (a Text, not a Button). No `hotkey`: a plain Button with a hotkey draws `1: ` before its label (a second marking, and not `[ label ]`), and a non-plain one draws bold default-colour brackets of its own; the keyboard way is the host's focus ring (Tab or the arrows, then Enter), as in the live pane (§12.9 point 5).
+// now is dim, no colour and no press id (a Text, not a Button). No `hotkey`: a plain Button with a hotkey draws `1: ` before its label (a second marking, and not `[ label ]`), and a non-plain one draws bold default-colour brackets of its own; the keyboard way is the host's focus ring (Tab moves it, Enter presses; the arrow keys scroll the text), as in the live pane (§12.9 point 5).
 function btn(el: { Text: El; Button?: El }, key: string, label: string, press: (() => void) | null) {
   const { Text, Button } = el
   if (press === null || Button === undefined) return <Text key={key} dimColor>{'[ ' + label + ' ]'}</Text>

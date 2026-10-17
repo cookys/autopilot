@@ -18,3 +18,12 @@ Other facts measured on the way:
 * A lone pane draws no title row (main-screen inline, or fullscreen with only the viewer open), so the path is also the first body line of the window.
 * The tool needs no permission hook: with `--permission-mode default` no dialog appeared, with and without a `tool.check` allow hook, so none is registered.
 * Engine-owned scrolling works on a plugin's pane: arrows, PgUp, PgDn, Home, End move the body while the pane holds the keyboard. One drawing holds 100000 characters of `Code` in all, so a long file is shown in parts of at most 2000 lines / 80000 characters with next/previous-part Buttons; a diff chunk stays under 10000 characters (whole hunks).
+
+## Buttons and the keyboard (real session, Claude Code 2.1.302, 150 columns, `tmux -L vsum`, long.txt of 5000 lines)
+
+Question: with the digit hotkeys gone (a hotkey adds a `1: ` marking before the label, and a non-plain Button draws bold default-colour brackets of its own), can every button still be reached and pressed from the keyboard, and what do the arrow keys do?
+
+* The window opened with `/show` holds the keyboard. Tab moves the focus ring (drawn inverse by the host) in document order: first Tab on `[ 下一段 ]` (the dim `[ 上一段 ]` is a Text, never reached), then `[ 摘要 ]`, `[ 問一句 ]`, the question field, one more stop that is not in the window's rows, then round to `[ 下一段 ]`. Dim buttons (`[ 送進對話 ]`, `[ 只看原文 ]` before an answer) are skipped; once there is an answer they are Buttons and join the order.
+* Enter on the focused button presses it: `[ 摘要 ]` started a summary, `[ 下一段 ]` showed lines 2001 to 4000.
+* The arrow keys do NOT move the focus: three Down presses scrolled the text three lines. Arrows, PgUp, PgDn, Home and End scroll; Tab and Enter are the button keys.
+* Not automatable: the focus ring is the host's, and the test kit has no ring to read. The render test (assist.test.ts, "buttons follow the design plan") instead asserts that every pressable `[ label ]` is a Button (so it is in the ring) with no hotkey, and every other `[ label ]` is a dim Text.

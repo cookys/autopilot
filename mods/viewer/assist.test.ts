@@ -310,12 +310,47 @@ test('buttons follow the design plan: [ label ] in the action colour, one Button
   await win.unmount()
 })
 
-test('buttonFindings control: a plain button in the default colour, or a coloured unpressable one, is reported (negative control)', async (_$, _on) => {
-  const bad: Node = { type: 'Box', children: [
-    { type: 'Button', props: { key: 'a' }, children: [{ type: 'Text', props: {}, children: ['1: 摘要'] }] },
-    { type: 'Text', props: { color: PALETTE.action }, children: ['[ 送進對話 ]'] },
-  ] }
-  expect(buttonFindings(bad).length).toBe(3)
+test('buttonFindings control: every kind of violation is reported (negative control)', async (_$, _on) => {
+  const text = (props: Record<string, unknown>, label: string): Node => ({ type: 'Text', props, children: [label] })
+  const button = (child: Node): Node => ({ type: 'Button', props: { key: 'a' }, children: [child] })
+  const found = (n: Node) => buttonFindings({ type: 'Box', children: [n] })
+  expect(found(button(text({ color: PALETTE.action }, '[ ok ]'))), 'a good button').toEqual([])
+  expect(found(text({ dimColor: true }, '[ ok ]')), 'a good unpressable one').toEqual([])
+  expect(found(button(text({}, '[ ok ]'))).length, 'default colour').toBe(1)
+  expect(found(button(text({ color: PALETTE.action }, '1: ok'))).length, 'not [ label ]').toBe(1)
+  expect(found(button(text({ color: PALETTE.action, bold: true }, '[ ok ]'))).length, 'bold').toBe(1)
+  expect(found(button(text({ color: PALETTE.action, backgroundColor: PALETTE.idle }, '[ ok ]'))).length, 'background').toBeGreaterThan(0)
+  expect(found(button(text({ color: PALETTE.action, inverse: true }, '[ ok ]'))).length, 'inverse').toBeGreaterThan(0)
+  expect(found(text({ color: PALETTE.action }, '[ ok ]')).length, 'coloured unpressable').toBe(1)
+  expect(found(text({ color: PALETTE.action, dimColor: true }, '[ ok ]')).length, 'action colour plus dim').toBe(1)
+})
+
+test('cancel, direct: the press aborts the signal handed to $.model.complete, and the state ends with the cancelled line (negative control: make cancelAi do nothing and this goes red)', async (_$, _on) => {
+  // the module is driven with a stand-in engine whose model.complete honours the signal, as the real one does
+  resetAssist()
+  clearSaved()
+  let signal: AbortSignal | undefined
+  const $ = {
+    ui: { invalidate: () => {} },
+    model: {
+      complete: (_req: unknown, opts?: { signal?: AbortSignal }) => new Promise(res => {
+        signal = opts?.signal
+        signal?.addEventListener('abort', () => res({ isAnswered: false, reason: 'aborted', usage: USAGE }))
+      }),
+    },
+  } as never
+  const t = makeVT('zh-TW')
+  const running = runAi($, 'summary', null, { text: 'abc\n', path: 'a.txt', title: 'a.txt', isDiff: false }, 'zh-TW', t)
+  await new Promise(r => setTimeout(r, 20))
+  expect(aiState().running).not.toBeNull()
+  expect(signal?.aborted).toBe(false)
+  cancelAi($)
+  await running
+  expect(signal?.aborted).toBe(true)
+  expect(aiState().running).toBeNull()
+  expect(aiState().cancelled).toBe(true)
+  expect(aiState().error).toBeNull()
+  expect(aiState().shown).toBeNull()
 })
 
 test('toggle while a call runs: the result still lands and running clears; cancel then toggle leaves the buttons usable (negative control: toggle with a new state object and this goes red)', async (_$, _on) => {

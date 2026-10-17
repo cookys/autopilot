@@ -364,19 +364,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qualification-cli-transport-runtime-identity-capture.md
 - **Context**: CLI transports return no model id, so administered identity is operator-asserted (pre-run probe recorded per the v2.34.15 governance rule; the HTTP path caught glm-5.2→glm-5.3 exactly via its runtime echo).
 
-### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
-- **Id**: BL-0054
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: OpenCode 1.17 版列出技能時，技能多了會被截斷，我們的可攜性檢查因此從強制改成僅提醒。等官方修好後要改回強制。 (draft)
-- **Impact**: 目前檢查只提醒，不會擋下漏掉技能的問題；影響小。 (draft)
-- **Trigger**: Upstream OpenCode fixes the corpus-volume-dependent `opencode debug skill` output truncation, or a supported OpenCode release changes the plugin/serve discovery surface again.
-- **Effort**: S
-- **Source**: 2026-07-17 OpenCode 1.17 migration run (v2.32.50); current `scripts/preflight-portability.sh` advisory wiring.
-- **Pointer**: docs/backlog/opencode-debug-skill-truncation-restore-portability-check-16-to-hard-fail.md
-- **Context**: `scripts/preflight-portability.sh` check 16 is intentionally advisory while OpenCode 1.17 can omit discovered skills from `debug skill` output.
-
 ### t14 long-horizon per-turn verification gate
 - **Id**: BL-0055
 - **Status**: open
@@ -964,12 +951,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: uilint 審查第 1 代 e3973182
 - **Pointer**: docs/backlog/ui-lint-bold-attribute-on-own-line.md
 
-### three suites already red on develop: p7-watcher-data (7), opencode-v2-plugin (3), implementation-campaign-state (3)
+### two suites already red on develop: p7-watcher-data (7), implementation-campaign-state (3)
 - **Id**: BL-0211
 - **Status**: open
 - **Since**: 2026-10-18
 - **Origin**: self
-- **Problem**: 三組測試在 10/18 開工前就已經是紅的，共 13 個案例失敗，與當天的改動無關。
+- **Problem**: 兩組測試在 10/18 開工前就已經是紅的，共 10 個案例失敗，與當天的改動無關（原本是三組，opencode-v2-plugin 那組已修好）。
 - **Impact**: 紅的套件會掩蓋新的回歸，發版前跑全套一定紅。
 - **Trigger**: 發版前跑全套之前
 - **Effort**: M

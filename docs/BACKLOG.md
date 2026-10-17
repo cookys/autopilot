@@ -937,7 +937,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Eval reuses the build-rehydration-bundle quiz/grade on real large transcripts: ON = model handoff file plus script sections, OFF = 20-turn tail. Window 533k, t2 450k, gap 50k.
+- **Context**: Eval reuses the build-rehydration-bundle quiz/grade on real large transcripts: ON = model handoff file plus script sections, OFF = 20-turn tail. Window 533k, t2 450k, gap 50k. Done: model note budget 4000B+, half-write read guard.
 
 
 

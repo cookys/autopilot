@@ -118,6 +118,22 @@ for (const { c } of rows) {
 P(`Round-1 finding lines scanned: ${claims}. Matching the verdict-word filter (${re}): ${hit}${hitList.length ? ` (${hitList.join(', ')})` : ''}. Longer than the 400-character addendum cap: ${long}. Without any path:line: ${nopath}.`);
 P('Cells whose fallback reason was the verdict-word filter (`addendum_malformed`): ' + rows.filter((r) => r.s.fallback_reason === 'addendum_malformed').length + '.');
 
+
+// ---- T0 headline counts (README section 2 quotes these)
+P('\n### T0. Headline counts by condition\n');
+P('| condition | cells | defect instances | panel misses, located rule | panel misses, A3 rule | seat answers located | seat answers located and described |');
+P('|---|---|---|---|---|---|---|');
+const g = {};
+for (const { c, s } of rows.filter((r) => /^s\d-(inc|full|incj)-r\d$/.test(r.c.tag))) {
+  const cond = /incj/.test(c.tag) ? 'inc, spec wording (A2, A4)' : (c.arm === 'inc' ? (packetIncremental(c) ? 'inc, main grid, incremental packets' : 'inc, main grid, fell back') : 'full');
+  const o = (g[cond] = g[cond] || { cells: 0, inst: 0, lm: 0, dm: 0, sn: 0, sl: 0, sd: 0 });
+  const ret = c.arm === 'inc' ? c.batches.find((b) => b.round === 'return') : c.batches.find((b) => b.round === 'r1');
+  const n = ret.seats.filter((x) => x.status === 'reviewed').length;
+  o.cells += 1;
+  for (const v of Object.values(s.surfaced)) { o.inst += 1; if (!v.panel) o.lm += 1; if (!v.described_panel) o.dm += 1; o.sn += n; o.sl += v.seats.length; o.sd += v.described_seats.length; }
+}
+for (const [k, o] of Object.entries(g)) P(`| ${k} | ${o.cells} | ${o.inst} | ${o.lm} | ${o.dm} | ${o.sl} of ${o.sn} | ${o.sd} of ${o.sn} |`);
+
 // ---- T8 spend
 let spend = null; try { spend = JSON.parse(fs.readFileSync(path.join(dir, 'spend.json'), 'utf8')); } catch (_e) { /* none */ }
 if (spend) P(`\nTotal estimated spend: USD ${spend.usd.toFixed(2)} over ${spend.calls} seat calls (cap USD 40).`);

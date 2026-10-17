@@ -124,3 +124,9 @@ Every change after the first model call is appended here with its reason and the
   Arms: `full` (spec `loc`) and `inc` with the spec-wording sentence of A2 (`incj`, because that is the condition in which the engine
   can read the answers), 2 repetitions each, tags `s6-full-r<rep>` and `s6-incj-r<rep>`. Reported in the tables next to the others and
   never mixed into the main-grid medians.
+
+- A5 (after the fifth review): the A3 `described` column also credited a `still_present` resolution whose evidence cited the defect's line, without
+  testing the describe pattern (seats answering the old `src/tax.js` row `still_present` with evidence `src/invoice.js:3` were counted). Fixed in
+  `harness/score.js`: such an answer counts only when the answered row's own claim plus the evidence text matches the pattern. Effect: the s4 cells
+  `s4-inc-r1`, `s4-inc-r2` and `s4-incj-r2` change from surfaced to missed at panel level (4 of 4 incremental s4 cells now); no other cell changes.
+  The pre-registered located column is unchanged.

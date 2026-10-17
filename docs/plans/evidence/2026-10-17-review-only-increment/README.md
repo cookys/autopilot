@@ -35,13 +35,13 @@ its reason. Harness and scorer: [`harness/`](harness/). One JSON record per cell
 | Estimated cost saved, median | 0 percent (main grid), 1 percent (A2 plus A4 cells). Largest single saving 15 percent (s6). Estimate, see section 1. |
 | Where it pays | only a small fix inside a large range: s6 (one file of 26) saved 49 percent of bytes. s2 (10 of 26 files fixed, 11 prior findings) cost 8 to 9 percent more bytes than full, because the prior-round block (24 to 26 KB over three seats) is larger than the carried files. |
 | Missed defects (pre-registered rule: finding cites the defect's file within 3 lines) | 0 of 25 defect instances in the incremental cells (11 main grid, 14 A2 and A4); 0 of 14 in the `full` cells. |
-| Missed defects (stricter A3 rule: located and also described) | 1 panel-level miss: `s4-incj-r1`, the stale `require('./tax')` in an unchanged file after a rename; 3 of 3 seats cited the right line and described a defect that does not exist. Seat level: full 42 of 42, main-grid incremental 29 of 32, A2/A4 incremental 36 of 40; all 7 seat-level misses are in s4. Details in section 4. |
+| Missed defects (stricter A3 rule: located and also described) | 4 panel-level misses, all in s4 (the stale `require('./tax')` in an unchanged file after a rename): `s4-inc-r1`, `s4-inc-r2`, `s4-incj-r1`, `s4-incj-r2`, i.e. every incremental s4 cell; the seats cited the right line and described a defect that does not exist. Seat level (table T0): full 42 of 42, main-grid incremental 27 of 32, A2/A4 incremental 35 of 40; all 10 seat-level misses are in s4 (0 of 10 s4 incremental seat answers against 6 of 6 for full). Corrected after review: the first scorer counted a `still_present` answer as describing the defect (A5). Details in section 4. |
 | R2 (new defect planted beside a listed old finding, s5) | no anchoring miss: N1 and N2 were found by 3 of 3 seats in all 4 incremental cells and in all `full` cells. |
 | Prior-finding closure | no seat closed a finding that H1 left in place (0 dangerous closures in 21 cells with a prior-round block). Benign: in s4 the seats left the renamed file's finding open in every cell. |
 | Fallback to full (R6) | with the shipped protocol, 5 of 5 cells fell back (`finding_unmapped`: real seats write no `path:line`); with a spec asking for `path:line`, 1 of 10 (one claim that named a file without a line). No other reason code occurred: no `changed_ratio`, `reference_cap`, `recheck_content_size`, `addendum_malformed`. |
 | The engine could not use the incremental answers | main grid: 9 of 9 incremental rounds ended `blocked` (7 `final_panel_families_below_minimum`, 2 `final_panel_seat_parser_failed`). With one extra spec sentence (A2 and A4): 8 of 12 parked as the fixture requires, 4 of 12 blocked. Section 5. |
 | Duplicated findings (review finding 0ad19dc1) | the same planted defect arrives as 3 rows (one per seat) and every seat receives all rows: 3.0 rows per defect in the main grid for s1, s3, s5 (6, 3, 6 rows for 2, 1, 2 defects), 3.1 in s2 (34 rows for 11). The block is 17 to 27 percent of an incremental packet (about a quarter in s1, s2, s3, s5, s6). |
-| Verdict-word filter (review finding 5b2be4ec) | 0 fallbacks. 0 of 338 real round-1 finding lines match the filter. Not part of the question but seen: 28 of 338 lines exceed the 400-character cap and are cut silently. |
+| Verdict-word filter (review finding 5b2be4ec) | 0 fallbacks. 0 of 362 real round-1 finding lines match the filter (table T7). Not part of the question but seen: 29 of 362 lines exceed the 400-character cap and are cut silently. |
 
 ## 3. Savings
 
@@ -55,7 +55,7 @@ No call is saved in either mode. Larger real ranges were not measured; the arith
 
 ## 4. The misses, in detail
 
-Pre-registered rule: none. Stricter rule (A3): s4, the rename.
+Pre-registered rule: none. Stricter rule (A3, as corrected by A5): s4, the rename, in every incremental cell.
 
 - What happened. H1 renames `src/tax.js` to `src/vat.js` (fixing the old divisor defect there), updates `checkout.js`, and forgets the
   unchanged `invoice.js`, which still requires `./tax`. The engine did its job: `invoice.js` entered the re-check set with the reason
@@ -64,8 +64,8 @@ Pre-registered rule: none. Stricter rule (A3): s4, the rename.
   findings such as "src/tax.js:4 is untouched by this delta, so taxCents still divides by 1000", which is false (the file is gone), and
   they did not say that `invoice.js` requires a module that no longer exists. The `full` arm, blind, said it in 6 of 6 seat answers
   ("src/invoice.js:3 requires './tax' but the diff deletes src/tax.js ... MODULE_NOT_FOUND").
-- Counts. `s4-inc-r1` 1 of 2 seats described the real defect, `s4-inc-r2` 1 of 3, `s4-incj-r1` 0 of 3 (panel-level miss), `s4-incj-r2` 1 of 2;
-  `full` 3 of 3 and 3 of 3. The seats' wrong statements also reach the author as findings.
+- Counts. `s4-inc-r1` 0 of 2 seats described the real defect, `s4-inc-r2` 0 of 3, `s4-incj-r1` 0 of 3, `s4-incj-r2` 0 of 2 (4 panel-level misses of 4);
+  `full` 3 of 3 and 3 of 3. (Before the A5 correction three of these seats were credited through a `still_present` answer whose evidence pointed at `invoice.js:3`; none of them wrote a line describing the missing module.) The seats' wrong statements also reach the author as findings.
 - Reading. This is the anchoring risk of R2 in its sharpest form, not on a new bug beside a listed one (s5 showed none) but on a listed
   finding whose file the fix deleted: the row points at a path that no longer exists, and the seats answered the row instead of reading
   the delta. The re-check set was correct; the block is what misled. Whether the stricter rule is the right one is the owner's reading;
@@ -82,7 +82,7 @@ reads only the object, so a seat's answer failed normalization and the panel fel
 (`final_panel_families_below_minimum` 7, `final_panel_seat_parser_failed` 2, all 9 incremental cells of the main grid). Adding one sentence
 to the operator's spec ("put the whole answer in FINDINGS as the single JSON object ... do not also write the findings as separate lines",
 condition A2) fixed that for most seats, and the remaining 4 blocks of 12 were: GLM-5.3 dropped the `prior:` prefix of every finding id
-in 2 cells (unknown ids are rejected by the normalizer), and 2 transport failures (one GLM no-verdict, one fable framing failure, both also
+in 2 cells (unknown ids are rejected by the normalizer), and 2 transport failures (one GLM answer rejected by the runner with the parse error `review output JSON has unknown field: format_reject`, one fable framing failure, both also
 possible in a full round). The shipped protocol never asks for `path:line` either (`dispatch-review.sh` has no such text), which is why
 the raw condition fell back 5 of 5 times: `findingPathFromClaim` finds no path in "[id] MUST-FIX bulkCents uses `qty > 10` ...".
 Both are compliance gaps between the engine's contract and what real seats write; neither is a correctness gap of the carry itself.
@@ -91,7 +91,7 @@ Both are compliance gaps between the engine's contract and what real seats write
 
 | condition for moving the default to `incremental` | result |
 |---|---|
-| no incremental-only miss of a regression or new defect | pre-registered rule: met (0). Stricter rule: not met (s4, 1 panel-level miss in 4 incremental cells of that scenario, 7 seat-level) |
+| no incremental-only miss of a regression or new defect | pre-registered rule: met (0). Stricter rule: not met (s4, a panel-level miss in 4 of 4 incremental cells of that scenario, 10 of 10 seat-level) |
 | no dangerous closure | met (0 in 21 cells) |
 | median saving of at least 30 percent on cost and bytes | not met: bytes -2 percent (main grid) and 6 percent (A2 and A4), cost 0 and 1 percent; met only for the one large-range scenario (49 percent bytes, 15 percent estimated cost) |
 | at most 40 percent of incremental cells fall back to full | not met with the shipped protocol (5 of 5), met once the spec asks for `path:line` (1 of 10) |
@@ -102,7 +102,7 @@ files, once the two compliance gaps (section 5) are closed and the deleted or re
 
 ## 7. Follow-ups written to BACKLOG
 
-BL-0201 (seat output format and `path:line` do not match the engine's contract; incremental is unusable on real seats), BL-0202 (the
+BL-0204 (the shipped `qc_panel` has a seat, opencode, that a review-only campaign refuses at intake), BL-0201 (seat output format and `path:line` do not match the engine's contract; incremental is unusable on real seats), BL-0202 (the
 same old finding is listed once per seat; cross-seat deduplication), BL-0203 (a prior finding on a file the delta deleted or renamed
 anchors the seats). BL-0146 itself is removed with its sidecar line.
 
@@ -113,7 +113,7 @@ bash docs/plans/evidence/2026-10-17-review-only-increment/harness/launch-cell.sh
 node docs/plans/evidence/2026-10-17-review-only-increment/harness/report.js docs/plans/evidence/2026-10-17-review-only-increment/cells
 ```
 `harness/stub-review.sh` replaces the dispatcher with a stand-in that makes no model call (used to check the harness before the first
-real call, see `PREREG.md`). `cells/*.json` hold the per-seat findings, usage (null), packet sizes and the receipt disclosure.
+real call, see `PREREG.md`). `cells/_done.log` lacks the rc line of `s4-inc-r2` (the process outlived the first grid's bookkeeping, one seat took 1064 s); its record and `spend.json` are complete and the 201 seat calls add up. `cells/*.json` hold the per-seat findings, usage (null), packet sizes and the receipt disclosure.
 
 ## 9. Tables (generated by `harness/report.js`)
 
@@ -216,8 +216,8 @@ Median saved over the 12 cells where the incremental packet was sent: bytes 6%, 
 | s3-inc-r2 | R1 (regression) | 3 of 3 | 3 of 3 | surfaced |
 | s4-full-r1 | R1 (regression) | 3 of 3 | 3 of 3 | surfaced |
 | s4-full-r2 | R1 (regression) | 3 of 3 | 3 of 3 | surfaced |
-| s4-inc-r1 | R1 (regression) | 2 of 2 | 1 of 2 | surfaced |
-| s4-inc-r2 | R1 (regression) | 3 of 3 | 1 of 3 | surfaced |
+| s4-inc-r1 | R1 (regression) | 2 of 2 | 0 of 2 | **MISSED** |
+| s4-inc-r2 | R1 (regression) | 3 of 3 | 0 of 3 | **MISSED** |
 | s5-full-r1 | N1 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
 | s5-full-r1 | N2 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
 | s5-full-r2 | N1 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
@@ -240,7 +240,7 @@ Median saved over the 12 cells where the incremental packet was sent: bytes 6%, 
 | s3-incj-r1 | R1 (regression) | 3 of 3 | 3 of 3 | surfaced |
 | s3-incj-r2 | R1 (regression) | 3 of 3 | 3 of 3 | surfaced |
 | s4-incj-r1 | R1 (regression) | 3 of 3 | 0 of 3 | **MISSED** |
-| s4-incj-r2 | R1 (regression) | 2 of 2 | 1 of 2 | surfaced |
+| s4-incj-r2 | R1 (regression) | 2 of 2 | 0 of 2 | **MISSED** |
 | s5-incj-r1 | N1 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
 | s5-incj-r1 | N2 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
 | s5-incj-r2 | N1 (new_next_to_old) | 3 of 3 | 3 of 3 | surfaced |
@@ -305,5 +305,14 @@ Dangerous closures in all cells above: 0.
 
 Round-1 finding lines scanned: 362. Matching the verdict-word filter (/VERDICT|SHIP-AS-IS|FIX-THEN-SHIP|NO-FINDING-PROOF/i): 0. Longer than the 400-character addendum cap: 29. Without any path:line: 63.
 Cells whose fallback reason was the verdict-word filter (`addendum_malformed`): 0.
+
+### T0. Headline counts by condition
+
+| condition | cells | defect instances | panel misses, located rule | panel misses, A3 rule | seat answers located | seat answers located and described |
+|---|---|---|---|---|---|---|
+| full | 12 | 14 | 0 | 0 | 42 of 42 | 42 of 42 |
+| inc, main grid, incremental packets | 9 | 11 | 0 | 2 | 32 of 32 | 27 of 32 |
+| inc, main grid, fell back | 1 | 1 | 0 | 0 | 3 of 3 | 3 of 3 |
+| inc, spec wording (A2, A4) | 12 | 14 | 0 | 2 | 40 of 40 | 35 of 40 |
 
 Total estimated spend: USD 17.40 over 201 seat calls (cap USD 40).

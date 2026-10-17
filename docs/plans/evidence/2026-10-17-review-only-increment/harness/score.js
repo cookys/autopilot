@@ -76,7 +76,7 @@ function scoreCell(cell0) {
   const mustSurface = truth.filter((t) => ['old_unfixed', 'regression', 'new_next_to_old'].includes(t.kind));
   const perSeat = seats.map((s) => {
     const { lines, resolutions } = findingLines(s.findings);
-    return { model: s.model, status: s.status, lines, resolutions, addendum_rows: s.addendum ? s.addendum.rows.length : 0 };
+    return { model: s.model, status: s.status, lines, resolutions, addendum_rows: s.addendum ? s.addendum.rows.length : 0, rows: s.addendum ? s.addendum.rows : [] };
   });
   out.surfaced = {};
   for (const t of mustSurface) {
@@ -85,7 +85,9 @@ function scoreCell(cell0) {
       const viaStill = p.resolutions.some((r) => r.status === 'still_present' && cites(`${r.evidence || ''}`).some((c) => c.path.endsWith(t.path) && Math.abs(c.line - t.line) <= WINDOW));
       return viaFinding || viaStill;
     });
-    const byDesc = perSeat.map((p) => p.lines.some((l) => matches(t, l) && describes(t, l)) || p.resolutions.some((r) => r.status === 'still_present' && cites(`${r.evidence || ''}`).some((c) => c.path.endsWith(t.path) && Math.abs(c.line - t.line) <= WINDOW)));
+    const byDesc = perSeat.map((p) => p.lines.some((l) => matches(t, l) && describes(t, l)) || p.resolutions.some((r) => r.status === 'still_present' && cites(`${r.evidence || ''}`).some((c) => c.path.endsWith(t.path) && Math.abs(c.line - t.line) <= WINDOW)
+      // A3: the answered row's own claim (plus the evidence text) must describe the defect, like a finding line does
+      && describes(t, `${(p.rows.find((x) => x.startsWith(`- [${r.finding_id}]`)) || '')} ${r.evidence || ''}`)));
     out.surfaced[t.id] = { kind: t.kind, seats: bySeat.map((b, i) => (b ? perSeat[i].model : null)).filter(Boolean), panel: bySeat.some(Boolean), described_seats: byDesc.map((b, i) => (b ? perSeat[i].model : null)).filter(Boolean), described_panel: byDesc.some(Boolean) };
   }
   // false positives: findings that match an already-fixed old defect (reported as still present)

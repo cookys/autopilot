@@ -89,13 +89,17 @@ const titleOf = (req: ShowRequest): string => (req.kind === 'path' ? req.path : 
 export async function show($: EngineInterface, req: ShowRequest, opts: ShowOpts = {}): Promise<ShowOutcome> {
   const title = titleOf(req)
   let early: Promise<boolean> | null = null
+  const before = current // what the window showed before a press-opened one: a failed open puts it back
   if (opts.openFirst === true) {
     current = { shown: { kind: 'loading' }, title, text: null, locale: current === null ? 'en' : current.locale }
     $.ui.invalidate('ui.render')
     early = openWindow($, title)
   }
   const fail = async (why: string): Promise<ShowOutcome> => {
-    if (early !== null) await early.then(() => $.ui.close({ id: PANE_ID })).catch(() => undefined)
+    if (early !== null) {
+      await early.then(() => $.ui.close({ id: PANE_ID })).catch(() => undefined)
+      current = before
+    }
     return { ok: false, why }
   }
   const finish = async (shown: Shown, text: string | null, locale: Locale, summary: string): Promise<ShowOutcome> => {

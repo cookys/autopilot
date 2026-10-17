@@ -28,16 +28,17 @@ test('parseShowInput: bad lines, ranges and control characters are refused', () 
   assert.equal(m.parseShowInput({ diff: Array.from({ length: 41 }, () => 'a') }).ok, false)
 })
 
-test('parseShowInput: the git options that write a file or run a program are refused before the dashes, allowed after them as paths (negative controls)', () => {
-  for (const bad of ['--output=/tmp/x', '--output', '--ext-diff', '--textconv', '--open-files-in-pager', '-O', '-Oorder', '--no-index', '--exit-code']) {
+test('parseShowInput: only revisions and a few safe options before the dashes (a whitelist: git takes any unique abbreviation of a long option); after the dashes everything is a path (negative controls)', () => {
+  for (const bad of ['--output=/tmp/x', '--output', '--outp', '--ext-diff', '--ext', '--textconv', '--textc', '--open-files-in-pager', '--open', '-O', '-Oorder', '--no-index', '--exit-code', '--stat', '-U', '-Ux', '--unified', '--unified=x', '--cache', '-c']) {
     assert.equal(m.parseShowInput({ diff: ['HEAD', bad] }).ok, false, bad)
   }
   assert.equal(m.parseShowInput({ diff: ['HEAD', '--', '--output=x'] }).ok, true)
-  assert.equal(m.parseShowInput({ diff: ['--stat', '--cached'] }).ok, true)
+  for (const good of ['--cached', '--staged', '-U5', '--unified=10', 'HEAD~1', 'A..B', 'main']) assert.equal(m.parseShowInput({ diff: [good] }).ok, true, good)
 })
 
-test('gitDiffArgv: the fixed options come first and the model\'s arguments are appended unchanged', () => {
-  assert.deepEqual(m.gitDiffArgv(['A..B', '--', 'x y']), ['git', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', 'A..B', '--', 'x y'])
+test('gitDiffArgv: the forced --no-ext-diff --no-textconv come after the model\'s revisions and options and before the dashes', () => {
+  assert.deepEqual(m.gitDiffArgv(['A..B', '--', 'x y']), ['git', '--no-pager', 'diff', '--no-color', 'A..B', '--no-ext-diff', '--no-textconv', '--', 'x y'])
+  assert.deepEqual(m.gitDiffArgv(['--cached']), ['git', '--no-pager', 'diff', '--no-color', '--cached', '--no-ext-diff', '--no-textconv'])
 })
 
 test('fileView: the whole file, a range, a clamp, an empty file, CRLF and a missing trailing newline', () => {

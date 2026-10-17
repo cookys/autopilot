@@ -6,6 +6,7 @@
 // "model never reads the text" cases turn red.
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
+import { currentView, reopenWindow, show } from './show'
 
 const CWD = '/work/repo'
 const TOOL = 'mcp__autopilot__show'
@@ -22,10 +23,13 @@ type World = {
   registered: { name: string; description: string; inputSchema?: Record<string, unknown> }[]
   diff: { exitCode: number; stdout: string; stderr: string }
   env: Record<string, string>
+  live: number // clock.every calls: the live mod's timer
+  chain: number // times the engine's own session.start was reached (next(e) called)
+  throwRegister: boolean
 }
 
 function world(on: On, files: Record<string, string> = {}, locale: 'en' | 'zh-TW' = 'en'): World {
-  const w: World = { files, sizes: {}, opens: [], closes: [], toasts: [], runs: [], placed: true, registered: [], diff: { exitCode: 0, stdout: '', stderr: '' }, env: { AUTOPILOT_LOCALE: locale, HOME: '/home/u' } }
+  const w: World = { files, sizes: {}, opens: [], closes: [], toasts: [], runs: [], placed: true, registered: [], diff: { exitCode: 0, stdout: '', stderr: '' }, env: { AUTOPILOT_LOCALE: locale, HOME: '/home/u' }, live: 0, chain: 0, throwRegister: false }
   on('env.get', ($, e) => ({ value: w.env[e.name] }))
   on('fs.read', ($, e) => {
     const t = w.files[e.path]
@@ -39,9 +43,10 @@ function world(on: On, files: Record<string, string> = {}, locale: 'en' | 'zh-TW
     return { value: { kind: 'file' as const, size: w.sizes[e.path] ?? t.length, mtimeMs: 0, isLink: false } }
   })
   on('config.list', () => ({ value: [] }))
+  on('clock.every', () => { w.live += 1; return { value: { cancel: () => {} } } })
   on('session.cwd', () => ({ value: CWD }))
-  on('session.start', () => ({ cwd: CWD }))
-  on('tool.register', ($, e) => { w.registered.push(e as never); return { value: { tool: 'mcp__autopilot__' + e.name } } })
+  on('session.start', () => { w.chain += 1; return { cwd: CWD } })
+  on('tool.register', ($, e) => { if (w.throwRegister) throw new Error('registration refused'); w.registered.push(e as never); return { value: { tool: 'mcp__autopilot__' + e.name } } })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
@@ -147,7 +152,7 @@ test('show diff: git runs by argument vector with fixed options; the model reads
   w.diff = { exitCode: 0, stdout: DIFF, stderr: '' }
   await $.session.start({ surface: 'terminal', cwd: CWD })
   const r = await call($, { diff: ['HEAD~1', '--', 'src'] })
-  expect(w.runs).toEqual([['git', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', 'HEAD~1', '--', 'src']])
+  expect(w.runs).toEqual([['git', '--no-pager', 'diff', '--no-color', 'HEAD~1', '--no-ext-diff', '--no-textconv', '--', 'src']])
   expect(r.isError).not.toBe(true)
   expect(r.text).toContain('2 files, 2 hunks')
   expect(r.text).not.toContain(MARK)
@@ -167,7 +172,7 @@ test('show diff: git runs by argument vector with fixed options; the model reads
 test('show diff: an option that writes a file or runs a program is refused and git never runs; a failing git is a reason', async ($, on) => {
   const w = world(on)
   await $.session.start({ surface: 'terminal', cwd: CWD })
-  for (const bad of ['--output=/tmp/x', '--ext-diff', '--textconv', '-O', '--no-index', '--open-files-in-pager']) {
+  for (const bad of ['--output=/tmp/x', '--outp', '--ext-diff', '--ext', '--textconv', '--textc', '-O', '--no-index', '--open', '--open-files-in-pager']) {
     const r = await call($, { diff: ['HEAD', bad] })
     expect(r.isError, bad).toBe(true)
   }
@@ -275,4 +280,39 @@ test('the tool says in its description that the content is shown to the user onl
   expect(s.description).toMatch(/NOT returned to you/)
   expect(s.description).toMatch(/read the file/i)
   expect(Object.keys(s.inputSchema.properties).sort()).toEqual(['diff', 'end', 'path', 'start'])
+})
+
+test('session start: a viewer registration that fails does not stop the live mod or the chain (negative control: start the viewer first, uncaught, and this goes red)', async ($, on) => {
+  const w = world(on)
+  w.throwRegister = true
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  expect(w.live, 'the live mod started').toBe(1)
+  expect(w.chain, 'next(e) was called: the engine\'s own session.start ran').toBeGreaterThan(0)
+  expect(w.registered.length).toBe(0)
+})
+
+test('a press-opened window that fails puts the previous window back (what a bare /show reopens is A, not the failed B)', async (_$, _on) => {
+  // the module is driven directly with a small stand-in engine: its module state is the test file's own copy, and `show` is what a live press calls
+  const files: Record<string, string> = { [CWD + '/a.md']: 'alpha\n', [CWD + '/bin.dat']: 'x\u0000y' }
+  const opens: string[] = []
+  let closes = 0
+  const $ = {
+    env: { get: async () => undefined },
+    fs: {
+      read: async (p: string) => { if (files[p] === undefined) throw new Error('ENOENT'); return files[p] },
+      stat: async (p: string) => { if (files[p] === undefined) throw new Error('ENOENT'); return { kind: 'file', size: files[p].length, mtimeMs: 0, isLink: false } },
+    },
+    config: { list: async () => [] },
+    session: { cwd: async () => CWD },
+    ui: { invalidate: () => {}, toast: () => {}, open: async (a: { title: string }) => { opens.push(a.title); return { isPlaced: true } }, close: async () => { closes += 1 } },
+  } as never
+  expect((await show($, { kind: 'path', path: 'a.md', start: null, end: null }, { openFirst: true })).ok).toBe(true)
+  for (const bad of ['missing.md', 'bin.dat']) {
+    expect((await show($, { kind: 'path', path: bad, start: null, end: null }, { openFirst: true })).ok, bad).toBe(false)
+    expect(currentView()?.title, 'after failed ' + bad).toBe('a.md')
+    expect(currentView()?.shown.kind).toBe('file')
+  }
+  expect(closes).toBe(2)
+  expect(await reopenWindow($)).toBe(true)
+  expect(opens[opens.length - 1]).toBe('a.md')
 })

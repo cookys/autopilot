@@ -3,7 +3,7 @@
 //
 // The model calls `mcp__autopilot__show` with a file path (optionally a line range) or git diff arguments. This module reads the file (or runs `git diff` by argv, no shell),
 // opens a dialog-style pane with the text, and answers the model with ONE short line (model.ts summaryOf*): the path, the line numbers, the counts — never the text.
-// The live mod's pressable file paths call the same tool through `$.tool.call`, so one window serves both. Esc closes the window (closeOnEscape) and the keyboard goes back.
+// The live mod's pressable file paths import showPath and call it directly (the spike showed a plugin's own `$.tool.call` of its own tool is not served), so one window serves both. Esc closes the window (closeOnEscape) and the keyboard goes back.
 //
 //   tool     show { path, start?, end? } | { diff: ["HEAD~1", "--", "src"] }
 //   command  /show <path[:line]> | /show diff <git diff arguments>     (opens the same window; answers no text, so nothing reaches the model)

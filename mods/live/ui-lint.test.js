@@ -282,8 +282,8 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // prune-plugin-cache.js re-checks the path, the live pids and the loaded copy). So the ban on `$.process` stays for everything else: `process.run` is allowed once, in
 // register.ts, and only while CLEAN_SCRIPTS names exactly those two scripts; `process.spawn`, any other file and any second use are offenders.
 // Owner ruling 2026-10-17 (the viewer mod): ONE more use, in mods/viewer/show.ts, `$.process.run(gitDiffArgv(args))` - the `show` tool's `git diff` (argument vector, no shell). It is
-// allowed only while gitDiffArgv (viewer/model.ts) starts with the fixed `git --no-pager diff --no-color --no-ext-diff --no-textconv` and parseShowInput refuses the options that
-// write a file or run a program (--output, --ext-diff, --textconv, --open-files-in-pager / -O, --no-index).
+// allowed only while gitDiffArgv (viewer/model.ts) forces `--no-ext-diff --no-textconv` after the model's arguments and parseShowInput is a WHITELIST (revisions, --cached, --staged,
+// -U<n>, --unified=<n>; git accepts abbreviated long options, so a blacklist is bypassed by --ext / --textc / --open / --outp).
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
@@ -359,8 +359,8 @@ test('process allowlist, viewer: show.ts may run exactly one `$.process.run(gitD
   assert.equal(processRunOffenders(code(ok), '').length, 1, 'any other file is refused')
   // the argv head and the refused options are the ones the rule above names
   const vm = await import(path.join(__dirname, '..', 'viewer', 'model.ts'))
-  assert.deepEqual(vm.gitDiffArgv(['HEAD~1']), ['git', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', 'HEAD~1'])
-  for (const bad of ['--output=/tmp/x', '--output', '--ext-diff', '--textconv', '--open-files-in-pager', '-O', '-Oorder', '--no-index']) {
+  assert.deepEqual(vm.gitDiffArgv(['HEAD~1', '--', 'p']), ['git', '--no-pager', 'diff', '--no-color', 'HEAD~1', '--no-ext-diff', '--no-textconv', '--', 'p'])
+  for (const bad of ['--output=/tmp/x', '--output', '--outp', '--ext-diff', '--ext', '--textconv', '--textc', '--open-files-in-pager', '--open', '-O', '-Oorder', '--no-index']) {
     assert.equal(vm.parseShowInput({ diff: ['HEAD', bad] }).ok, false, bad)
   }
   assert.equal(vm.parseShowInput({ diff: ['HEAD', '--', '--output=x'] }).ok, true, 'after -- an argument is a path')

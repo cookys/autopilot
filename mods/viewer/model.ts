@@ -25,7 +25,9 @@ export const WINDOW_LINES = 2000 // a part never holds more lines than this, so 
 export const DIFF_CHUNK_CHARS = 9_500 // Code format:'diff' takes 10000 characters of source; a hunk cut in the middle does not parse
 export const DIFF_TOTAL_CHARS = 80_000
 
-const GIT_DENIED = /^(--output(=|$)|--ext-diff$|--textconv$|--open-files-in-pager(=|$)|-O|--no-index$|--exit-code$)/
+// Before `--` only a revision (no leading dash) or one of these options is accepted. A blacklist is not enough: git takes any unique abbreviation of a long option
+// (`--ext`, `--textc`, `--open`, `--outp`), so every other dash-argument is refused. After `--` everything is a path.
+const GIT_OPTION_OK = /^(--cached|--staged|-U\d{1,3}|--unified=\d{1,3})$/
 const hasControl = (s: string): boolean => /[\0\r\n]/.test(s)
 
 const asLine = (v: unknown): number | null | undefined => (v === undefined || v === null ? null : typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : undefined)
@@ -53,14 +55,19 @@ export function parseShowInput(input: ShowInput): Parsed {
   for (const a of args) {
     if (typeof a !== 'string' || hasControl(a)) return { ok: false, why: 'diff arguments must be single-line strings' }
     if (!afterDashes && a === '--') afterDashes = true
-    else if (!afterDashes && GIT_DENIED.test(a)) return { ok: false, why: 'git diff option ' + a + ' is not allowed here' }
+    else if (!afterDashes && a.startsWith('-') && !GIT_OPTION_OK.test(a)) return { ok: false, why: 'git diff option ' + a + ' is not allowed here (only --cached, --staged, -U<n>, --unified=<n>)' }
     out.push(a)
   }
   return { ok: true, req: { kind: 'diff', args: out } }
 }
 
-// the argument vector for the diff run: fixed options first, then the model's arguments (never through a shell)
-export const gitDiffArgv = (args: readonly string[]): string[] => ['git', '--no-pager', 'diff', '--no-color', '--no-ext-diff', '--no-textconv', ...args]
+// the argument vector for the diff run (never through a shell): the model's revisions and options, then --no-ext-diff --no-textconv AFTER them (so nothing the model wrote
+// can undo them) and BEFORE a `--` (after it they would be paths), then the paths
+export function gitDiffArgv(args: readonly string[]): string[] {
+  const at = args.indexOf('--')
+  const head = at < 0 ? args : args.slice(0, at)
+  return ['git', '--no-pager', 'diff', '--no-color', ...head, '--no-ext-diff', '--no-textconv', ...(at < 0 ? [] : args.slice(at))]
+}
 
 // ---- file view ----
 

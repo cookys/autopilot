@@ -654,7 +654,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-04
 - **Origin**: self
-- **Problem**: mods P1a 審查留下的強化事項，只剩 watcher 的 roots 集合沒有上限（src/status/runs-watch.js 的 `new Set()`），其餘已在 P1b 修完。
+- **Problem**: mods P1a 審查留下的強化事項，只剩 watcher 記錄要監看的專案根目錄那份清單沒有上限，其餘已在 P1b 修完。
 - **Impact**: 長時間跑、追蹤很多專案時集合會一直長大；目前沒有實際問題。
 - **Trigger**: P3 start
 - **Effort**: M

@@ -231,6 +231,27 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
   fi
 done
 
+# BL-0204: blind opencode is admitted ONLY while the deny-all is genuinely applied. A fault-injecting
+# `node` shim makes the lib's `config` print an allow-all config; the pre-spawn assert must refuse
+# (precondition, exit 2) and the opencode binary must never start. Negative control: with the shim
+# delegating faithfully the same call reaches the stub (rc=99), so the refusal is the assert's doing.
+OC_STUB="$TEST_TMP/oc-blind-stub"; printf '#!/usr/bin/env bash\necho spawned > "%s/oc-blind-spawned"\nexit 99\n' "$TEST_TMP" > "$OC_STUB"; chmod +x "$OC_STUB"
+OC_SHIM_DIR="$TEST_TMP/oc-shim"; mkdir -p "$OC_SHIM_DIR"
+REAL_NODE="$(command -v node)"
+cat > "$OC_SHIM_DIR/node" <<SHIM
+#!/usr/bin/env bash
+if [ "\${OC_SHIM_BREAK:-0}" = "1" ] && [ "\${2:-}" = "config" ]; then printf '{"permission":"allow"}\n'; exit 0; fi
+exec "$REAL_NODE" "\$@"
+SHIM
+chmod +x "$OC_SHIM_DIR/node"
+rm -f "$TEST_TMP/oc-blind-spawned"
+OUT="$(PATH="$OC_SHIM_DIR:$PATH" OC_SHIM_BREAK=1 AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$OC_STUB" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind opencode with a drifted (non deny-all) config is refused"
+assert_contains "$OUT" "opencode containment verification failed" "blind opencode names the failed containment assert"
+assert_eq "no" "$([ -e "$TEST_TMP/oc-blind-spawned" ] && echo yes || echo no)" "blind opencode with drifted config never spawned the binary"
+OUT="$(PATH="$OC_SHIM_DIR:$PATH" OC_SHIM_BREAK=0 AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$OC_STUB" 2>&1)"
+assert_contains "$OUT" "rc=99" "blind opencode with the canonical deny-all config reaches the binary (control)"
+
 # Resolver mirror agrees for every contract enum member (minus auto).
 RESOLVER_SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 EMPTY_SCDIR="$TEST_TMP/parity-empty-scorecard"

@@ -2216,7 +2216,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       const tier = reviewSeatTier(seat && seat.runner);
       if (tier === 'none') {
         blindFailures.push(
-          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn, nor a cleanroom-tier runner codex, kimi, agy); replace it with a blind-capable seat — pins and overrides do not bypass containment`,
+          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn, opencode, nor a cleanroom-tier runner codex, kimi, agy); replace it with a blind-capable seat — pins and overrides do not bypass containment`,
         );
         continue;
       }

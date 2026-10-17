@@ -27,7 +27,8 @@ for R in $RUNNERS; do
   assert_eq "$J" "$V" "$R: JS tier equals resolve-review-loop.sh tier"
   case "$R" in
     kimi|agy|codex) assert_eq "cleanroom" "$J" "tier tables: $R: js=$J shell=$S resolver=$V, expected cleanroom" ;;
-    grok|cursor|opencode) assert_eq "none" "$J" "$R stays tier none" ;;
+    grok|cursor) assert_eq "none" "$J" "$R stays tier none" ;;
+    opencode) assert_eq "packet" "$J" "$R is packet (BL-0204: deny-all enforced before tool execution)" ;;
     *) assert_eq "packet" "$J" "$R stays tier packet" ;;
   esac
 done
@@ -170,16 +171,24 @@ for (const runner of ['kimi', 'agy']) {
 console.log('no_bypass=true');
 
 // none-tier runners keep the blind-incompatible refusal (and never reach a probe)
-for (const runner of ['grok', 'cursor', 'opencode']) {
+for (const runner of ['grok', 'cursor']) {
   const r = intake(repoShadow, runner, 'green-kimi');
   assert.strictEqual(code(r), 'final_panel_seat_blind_incompatible', `${runner}: ${JSON.stringify(r.rejection)}`);
   assert.ok(!probeStep(r), `${runner} must not be probed`);
 }
 console.log('none_tier=true');
+
+// BL-0204: opencode is packet-tier: never blind-incompatible and never probed
+{
+  const r = intake(repoShadow, 'opencode', 'green-kimi');
+  assert.notStrictEqual(code(r), 'final_panel_seat_blind_incompatible', `opencode: ${JSON.stringify(r.rejection)}`);
+  assert.ok(!probeStep(r), 'opencode must not be probed');
+}
+console.log('opencode_packet=true');
 NODE
 )"
 assert_exit_code "$?" "0" "intake kimi/agy probe suite: $OUT"
-for M in green_admits refusals unknown no_bypass none_tier; do
+for M in green_admits refusals unknown no_bypass none_tier opencode_packet; do
   assert_contains "$OUT" "${M}=true" "intake probe section $M"
 done
 

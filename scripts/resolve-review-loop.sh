@@ -2389,7 +2389,7 @@ done
 # (parity test keeps the JS table, dispatch-review.sh, and this copy equal).
 review_seat_tier() {
   case "$1" in
-    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
+    anthropic-compatible|cc-shim|claude-native|qoderclicn|opencode) printf '%s\n' packet ;;
     codex|kimi|agy) printf '%s\n' cleanroom ;;
     *) printf '%s\n' none ;;
   esac

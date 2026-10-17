@@ -12,6 +12,10 @@ const REVIEW_SEAT_TIERS = Object.freeze({
     'cc-shim',
     'claude-native',
     'qoderclicn',
+    // opencode: tools are refused BEFORE they can run (deny-all permission config + custom
+    // agent, empty non-git --dir, clean HOME), re-asserted before every spawn and audited
+    // after (scripts/lib/opencode-containment.js). Prompt-only like the other packet runners.
+    'opencode',
   ]),
   cleanroom: Object.freeze(['codex', 'kimi', 'agy']),
 });

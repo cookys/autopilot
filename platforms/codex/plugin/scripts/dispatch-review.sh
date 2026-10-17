@@ -107,8 +107,10 @@
 #   run as `--agent locked` with `--dir <EMPTY scratch dir>` (the diff is TEXT in the
 #   prompt; nothing to read). Single owner: scripts/lib/opencode-containment.js. The earlier
 #   `--agent plan` posture denied only `edit` (a `hostname` bash call ran) and is gone.
-#   Whether opencode joins the AUTOPILOT_BLIND_DISCOVERY no-tools allowlist is a separate
-#   decision and is NOT changed here (this edit is containment only).
+#   opencode is packet-tier for AUTOPILOT_BLIND_DISCOVERY (BL-0204): the deny-all is applied
+#   before any tool can run, re-asserted before every spawn (a drifted config or a non-empty
+#   --dir refuses with precondition_failed) and audited after; live evidence in
+#   hooks/tests/opencode-deny-all-live.test.sh. The blind path has no separate setup.
 #   `--pure` disables external plugins; the prompt is read from STDIN (no positional
 #   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
 #   newline-delimited JSON events — the final assistant text is the LAST
@@ -134,9 +136,9 @@
 #   NOT treat as pass) ; 2 = precondition_failed.
 #
 # Seat tiers (the table lives only in review_seat_tier below):
-#   packet     anthropic-compatible cc-shim claude-native qoderclicn (prompt-only, as today)
-#   cleanroom  codex (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
-#   none       agy grok kimi cursor opencode (blind: existing no-tools message)
+#   packet     anthropic-compatible cc-shim claude-native qoderclicn opencode (prompt-only)
+#   cleanroom  codex kimi agy (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
+#   none       grok cursor (blind: existing no-tools message)
 # Blind cleanroom env:
 #   AUTOPILOT_CLEANROOM_LAUNCHER   replace the launcher script (test seam)
 #   AUTOPILOT_CLEANROOM_BWRAP      bwrap binary (must be AppArmor-allowed to create userns)
@@ -314,7 +316,7 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qode
 # This function is the ONLY place the seat-tier table lives in this script.
 review_seat_tier() {
   case "$1" in
-    anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
+    anthropic-compatible|cc-shim|claude-native|qoderclicn|opencode) printf '%s\n' packet ;;
     codex|kimi|agy) printf '%s\n' cleanroom ;;
     *) printf '%s\n' none ;;
   esac

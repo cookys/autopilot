@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix the live pane's 待決 tab and the `/show` viewer ignoring the mouse wheel and keys downward: `takesScroll` read `ui.scroll`'s `offset` as where the engine window stands, but it is the target (row now plus `by`), so every move down from 0 was handed back to the engine and the mod's own window never moved.
+
 - BL-0071 closed (owner card d-b0a0c856): a 30-day re-measure of 957 autopilot subagents found Bash output at 55% of tool output, led by cat/sed file reads (38%) that compaction would only cut; rtk-addressable test output plus git diff is about 12% (11% in June) and the harness already caps one output at about 30k characters.
 
 - BL-0211 partly done: `scripts/p7-watcher-data.test.js` now turns off the 24h recent-activity guard (`AUTOPILOT_RESIDUE_RECENT_HOURS=0`, as `hooks/tests/lib.sh` does for shell suites) because its residue fixtures are brand-new worktrees, and `implementation-campaign-state.test.sh` uses `copilot` as its still-blind-incompatible qc seat now that `opencode` is packet tier (BL-0204); test-only, no shipped code change. Three more checks already red on develop are fixed in the same lane: `qualification-prices.test.sh` uses `u:p@example.com` so test-identity-guard accepts its userinfo case (BL-0024), `mission-retire-on-integration.test.sh` asserts its embedded node block and calls `finalize_test` (BL-0062), and three stale `dispatch-hetero.sh` entries left by the `--gc` removal (BL-0115) are dropped from `scripts/tmp-residue-allowlist.json`.

@@ -7,7 +7,11 @@ export type ScrollModel = { key: string; offset: number; max: number; room: numb
 export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0, room: 0, framed: false })
 // The ONE test for whether the mod, not the engine, takes a ui.scroll: only while the last draw was a frame. Drawn as a plain tree (no Button, no bodyColumns, no band, another tab) the
 // engine scrolls it, so the hook must hand the event to `next`.
-export const takesScroll = (m: ScrollModel, e: { bodyRows: number; offset?: number }): boolean => m.framed && e.bodyRows > 0 && !(typeof e.offset === 'number' && e.offset > 0)
+// `e.offset` is the TARGET the engine would move its window to (the row it shows now plus `by`, clamped to the tree; host types, UiScrollInput.offset), not where the window stands. So a
+// move down from 0 always has offset > 0 and says nothing about the window. The engine window stood off 0 only when the target minus the move is still above 0 and the target was not
+// clamped at the top (offset 0 tells nothing): `offset > 0 && offset - by > 0`. Then the engine brings it home; every other framed event is the mod's, up or down.
+export const takesScroll = (m: ScrollModel, e: { bodyRows: number; by?: number; offset?: number }): boolean =>
+  m.framed && e.bodyRows > 0 && !(typeof e.offset === 'number' && e.offset > 0 && e.offset - (e.by ?? 0) > 0)
 // the whole `ui.scroll` hook of a window, one body for the viewer and the live decide tab: the mod's own window moves its offset and asks for a redraw; anything else is the engine's
 export function scrollHook<E extends { by: number; contentRows: number; bodyRows: number; offset?: number }, R>(model: ScrollModel, e: E, next: (e: E) => R, redraw: () => void): R | Record<string, never> {
   if (!takesScroll(model, e)) return next(e)

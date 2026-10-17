@@ -76,6 +76,7 @@ export function registerViewer(on: Parameters<Register>[0]): void {
       toChat: () => { void sendToChat($, t) },
       toggle: () => toggleAi($),
     }
+    viewerScroll.redraw = () => { void $.ui.invalidate('ui.render') } // a click on the track moves the offset and asks for a draw
     return Viewer($.ui.resolve(e), c.shown, c.title, t, (start: number) => {
       if (c.shown.kind !== 'file' || c.text === null || currentView() !== c) return
       const view = fileView(c.shown.view.path, c.text, start, null)

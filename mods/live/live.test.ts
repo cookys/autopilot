@@ -5262,9 +5262,38 @@ for (const surface of SURFACES) {
     const cells = ((small as Node).children || []) as Node[]
     expect(textOf(cells[0]), 'thumb at the top').toBe('█')
     expect(textOf(cells[cells.length - 1]), 'track at the bottom').toBe('│')
-    expect(cells[0].props?.color, 'thumb is the here colour').toBe('claude')
-    expect(cells[cells.length - 1].props?.color, 'track is the structure colour').toBe('subtle')
+    // every cell is a plain Button around the coloured Text (a click on it jumps the window); the look is the Text's
+    const glyphOf = (c: Node): Node => (c.type === 'Button' ? (c.children as Node[])[0] : c)
+    expect(cells.every(c => c.type === 'Button'), 'each track cell is pressable').toBe(true)
+    expect(glyphOf(cells[0]).props?.color, 'thumb is the here colour').toBe('claude')
+    expect(glyphOf(cells[cells.length - 1]).props?.color, 'track is the structure colour').toBe('subtle')
     expect(bar(await framed($, 90)), 'everything fits: no scrollbar').toBeUndefined()
+  })
+  test('SCROLL decide: a click on the last track cell moves the thumb to the bottom and the rows with it; a click on the first cell brings it back (' + surface + ')', async ($, on) => {
+    decideWorld(on, MANY)
+    await start($, surface)
+    const props = { ...PANE_PROPS, scroll: { offset: 0, bodyRows: 20 } }
+    const mount = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const first = await mount()
+    await first.press({ key: 'decide' })
+    await first.unmount()
+    // a press redraws the mounted pane; the test reads the next mount (as the tab tests do), which draws from the same offset
+    const clickThenRead = async (key: string | null): Promise<Node[]> => {
+      const pane = await mount()
+      if (key !== null) await pane.press({ key })
+      await pane.unmount()
+      const again = await mount()
+      const tree = (await again.drawn()) as Node
+      await again.unmount()
+      const content = fixedOf(tree).find(k => k.props?.key === 'content') as Node
+      return (((content.children || []) as Node[]).find(k => k.props?.key === 'scrollbar')?.children || []) as Node[]
+    }
+    const glyphs = (cells: Node[]) => cells.map(c => textOf(c)).join('')
+    const before = await clickThenRead(null)
+    expect(glyphs(before)).toBe('█████│││││││││')
+    expect(glyphs(await clickThenRead('sbj' + (before.length - 1))), 'the thumb now ends at the bottom cell').toBe('│││││││││█████')
+    expect(glyphs(await clickThenRead('sbj0')), 'back at the top').toBe('█████│││││││││')
+    expect(glyphs(await clickThenRead('sbj7')), 'the middle cell of 14: the thumb has moved to the middle of its travel').toBe('│││││█████││││')
   })
   test('SCROLL decide: another tab is never framed (it keeps the engine scroll) (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)

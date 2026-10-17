@@ -25,7 +25,7 @@
 // Usage:
 //   node opencode-discovery-probe.js --bin opencode --repo <repo> [--root DIR]
 //        [--skill dev-flow] [--agent autopilot-reviewer] [--timeout-ms 60000]
-//        [--env KEY=VAL ...] [--log-file F]
+//        [--env KEY=VAL ...] [--log-file F] [--pid-file F]   (pid-file: the v2 serve's pid, for tests)
 // Exit: 0 facts printed; 2 usage; 3 unknown opencode major (fail closed, JSON {error});
 //       4 the binary failed to start / answer.
 'use strict';
@@ -51,6 +51,7 @@ function parseArgs(argv) {
     else if (k === '--agent') o.agent = v();
     else if (k === '--timeout-ms') o.timeoutMs = Number(v());
     else if (k === '--log-file') o.logFile = v();
+    else if (k === '--pid-file') o.pidFile = v();
     else if (k === '--env') {
       const kv = v() || '';
       const eq = kv.indexOf('=');
@@ -124,6 +125,35 @@ function httpGetJson(port, pathname, password) {
   });
 }
 
+// ONE cleanup path for every way out (normal end, error, SIGINT/SIGTERM/SIGHUP): the serve child
+// runs detached in its own process group, so neither `timeout` nor Node's default signal handling
+// reaches it. shutdown() SIGTERMs the group, escalates to SIGKILL after a grace period, waits for
+// the child's 'exit', then removes the temp root we created.
+const state = { child: null, exited: true, tmpRoot: null, done: null };
+function killGroup(sig) { try { process.kill(-state.child.pid, sig); } catch { /* gone */ } }
+function waitExit(ms) {
+  return new Promise((resolve) => {
+    if (state.exited) return resolve();
+    const t = setTimeout(resolve, ms);
+    state.child.once('exit', () => { clearTimeout(t); resolve(); });
+  });
+}
+function shutdown() {
+  if (state.done) return state.done;
+  state.done = (async () => {
+    if (state.child && !state.exited) {
+      killGroup('SIGTERM');
+      await waitExit(3000);
+      if (!state.exited) { killGroup('SIGKILL'); await waitExit(3000); }
+    }
+    if (state.tmpRoot) fs.rmSync(state.tmpRoot, { recursive: true, force: true });
+  })();
+  return state.done;
+}
+for (const [sig, no] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) {
+  process.on(sig, () => { shutdown().finally(() => process.exit(128 + no)); });
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const leaks = (prompt) => /^\s*---\s*(\r?\n|$)/.test(String(prompt || ''));
 
@@ -135,14 +165,16 @@ async function probeV2(o, project, env, log) {
   });
   child.stdout.on('data', (d) => log.push(String(d)));
   child.stderr.on('data', (d) => log.push(String(d)));
-  let exited = false;
-  child.on('exit', () => { exited = true; });
-  const stop = () => { if (!exited) { try { process.kill(-child.pid, 'SIGTERM'); } catch { /* gone */ } } };
-  process.on('exit', stop);
+  state.child = child;
+  state.exited = false;
+  let startError = null;
+  child.on('exit', () => { state.exited = true; });
+  child.on('error', (e) => { startError = e; state.exited = true; });
+  if (o.pidFile && child.pid) fs.writeFileSync(o.pidFile, String(child.pid));
   try {
     const deadline = Date.now() + o.timeoutMs;
     let skills = null; let agent = null; let plugins = null; let settledAt = 0;
-    while (Date.now() < deadline && !exited) {
+    while (Date.now() < deadline && !state.exited) {
       const [s, a, p] = await Promise.all([
         httpGetJson(port, '/api/skill', password),
         httpGetJson(port, `/api/agent/${encodeURIComponent(o.agent)}`, password),
@@ -159,7 +191,7 @@ async function probeV2(o, project, env, log) {
       if (listsReady) { settledAt = settledAt || Date.now(); if (Date.now() - settledAt > 8000) break; }
       await sleep(500);
     }
-    if (exited && !skills) return { startFailed: true };
+    if (startError || (state.exited && !skills)) return { startFailed: true };
     const text = log.join('');
     const m = /\[autopilot\] plugin loaded, version: (\S+)/.exec(text);
     const external = (plugins || []).filter((x) => x.source && x.source.type !== 'builtin');
@@ -174,8 +206,7 @@ async function probeV2(o, project, env, log) {
       agent_frontmatter_leak: agent ? leaks(agent.system) : false,
     };
   } finally {
-    stop();
-    await sleep(200);
+    await shutdown();
   }
 }
 
@@ -223,6 +254,7 @@ async function main() {
   let tmpRoot = null;
   try {
     tmpRoot = o.root ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'oc-probe-'));
+    state.tmpRoot = tmpRoot;
     if (o.root) fs.mkdirSync(o.root, { recursive: true });
     const root = fs.realpathSync(o.root || tmpRoot);
     // `opencode --version` itself appends a "cli starting" line to <XDG_DATA_HOME>/opencode/log, so
@@ -246,6 +278,7 @@ async function main() {
     }
     process.stdout.write(`${JSON.stringify({ adaptor: adaptor.adaptor, version: adaptor.version, root, ...facts })}\n`);
   } finally {
+    await shutdown();
     if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 }

@@ -10,6 +10,16 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 0
 fi
 
+# Isolation canary: stat (read-only) the owner's real opencode log before and after the whole
+# suite; the probe must not touch it. Skipped, with the reason, when it does not exist.
+REAL_LOG="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/log/opencode.log"
+if [ -f "$REAL_LOG" ]; then
+  CANARY_BEFORE="$(stat -c '%s %Y' "$REAL_LOG")"
+else
+  CANARY_BEFORE=""
+  echo "SKIP [$TEST_NAME] isolation canary: $REAL_LOG does not exist (nothing of the owner's to protect)"
+fi
+
 PROBE="$REPO_ROOT/scripts/lib/opencode-discovery-probe.js"
 PREFLIGHT="$REPO_ROOT/scripts/preflight-portability.sh"
 
@@ -90,8 +100,53 @@ assert_contains "$J" 'refusing to guess' "red 5: unknown major names the refusal
 OUT="$(preflight_oc "$REPO_ROOT" "$BIN")"
 assert_contains "$OUT" '✗ OpenCode plugin getPluginVersion returns real version' "red 5: preflight check goes red on an unknown major"
 
+# ── signals: an interrupted probe must take its detached serve and its temp root with it ──
+# The serve runs in its own process group, so `timeout`/kill on the probe alone cannot reach it;
+# only the probe's own SIGINT/SIGTERM/SIGHUP handler can. PID comes from the probe's --pid-file.
+run_signal_case() { # <probe.js> <signal> <name> -> sets SERVE_ALIVE, TMP_LEFT, SIG_RC
+  local probe="$1" sig="$2" name="$3" tmpd="$TEST_TMP/sig-tmp-$3" pidf="$TEST_TMP/sig-$3.pid" pp i
+  mkdir -p "$tmpd"; rm -f "$pidf"
+  TMPDIR="$tmpd" node "$probe" --bin opencode --repo "$REPO_ROOT" --pid-file "$pidf" >/dev/null 2>&1 &
+  pp=$!
+  for i in $(seq 1 200); do [ -s "$pidf" ] && break; sleep 0.05; done
+  SERVE_PID="$(cat "$pidf" 2>/dev/null)"
+  kill "-$sig" "$pp" 2>/dev/null
+  wait "$pp" 2>/dev/null; SIG_RC=$?
+  sleep 0.5
+  SERVE_ALIVE=no; [ -n "$SERVE_PID" ] && [ -d "/proc/$SERVE_PID" ] && SERVE_ALIVE=yes
+  TMP_LEFT="$(find "$tmpd" -mindepth 1 -maxdepth 1 -name 'oc-probe-*' | head -1)"
+  [ "$SERVE_ALIVE" = yes ] && kill -KILL "-$SERVE_PID" 2>/dev/null   # never leave the control's serve behind
+  return 0
+}
+case "$ADAPTOR" in
+  v2)
+    for SIG in TERM INT HUP; do
+      run_signal_case "$PROBE" "$SIG" "good-$SIG"
+      assert_neq "$SERVE_PID" "" "signal $SIG: probe reported its serve pid"
+      assert_eq "$SERVE_ALIVE" "no" "signal $SIG: serve process is gone after the probe is interrupted"
+      assert_eq "$TMP_LEFT" "" "signal $SIG: temp root removed"
+      case "$SIG" in TERM) N=143 ;; INT) N=130 ;; HUP) N=129 ;; esac
+      assert_eq "$SIG_RC" "$N" "signal $SIG: probe exits 128+signo"
+    done
+    # negative control: the same probe with its signal handlers removed leaks both
+    CTL="$TEST_TMP/ctl-lib"; mkdir -p "$CTL"
+    cp "$REPO_ROOT"/scripts/lib/opencode-containment.js "$CTL/"
+    sed "s/^for (const \[sig, no\] of .*/for (const [sig, no] of []) {/" "$PROBE" > "$CTL/opencode-discovery-probe.js"
+    grep -q 'of \[\]) {' "$CTL/opencode-discovery-probe.js" || { echo "FIXTURE: handler removal did not apply"; exit 1; }
+    run_signal_case "$CTL/opencode-discovery-probe.js" TERM ctl
+    assert_eq "$SERVE_ALIVE" "yes" "control: without the signal handlers the detached serve survives (so the check above can fail)"
+    assert_neq "$TMP_LEFT" "" "control: without the signal handlers the temp root is left behind"
+    ;;
+  *) echo "NOTE [$TEST_NAME] installed opencode is not 2.x: signal cases (detached serve) not applicable" ;;
+esac
+
 # ── isolation: the probe's opencode wrote its state inside the sandbox root ──
 assert_file_exists "$TEST_TMP/root-adaptor/xdg-data/opencode" "isolation: opencode data dir lives under the probe root (XDG_DATA_HOME redirected)"
 assert_file_exists "$TEST_TMP/root-adaptor/home" "isolation: HOME is the probe root's home"
+if [ -n "$CANARY_BEFORE" ]; then
+  CANARY_AFTER="$(stat -c '%s %Y' "$REAL_LOG")"
+  assert_eq "$CANARY_AFTER" "$CANARY_BEFORE" "isolation canary: real opencode.log size+mtime unchanged across the suite"
+  echo "CANARY [$TEST_NAME] real opencode.log before='$CANARY_BEFORE' after='$CANARY_AFTER' (size mtime)"
+fi
 
 finalize_test

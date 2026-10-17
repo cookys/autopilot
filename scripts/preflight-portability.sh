@@ -224,13 +224,16 @@ check_adapter_targets_carry_invariant() {
 # negative controls in hooks/tests/opencode-discovery-probe.test.sh drive both.
 OC_PROBE_JSON=""
 OC_PROBE_RC=""
+OC_ROOT=""
+# The script's ONE EXIT trap (nothing else in this file traps EXIT): removes the probe sandbox if
+# the run is cut short between mktemp and the explicit rm below.
+trap 'rm -rf "${OC_ROOT:-}"' EXIT
 oc_probe() {
   [ -n "$OC_PROBE_RC" ] && return "$OC_PROBE_RC"
   local bin="${OPENCODE_BIN:-opencode}" repo="${PREFLIGHT_OPENCODE_REPO:-$REPO}"
-  trap 'rm -rf "${OC_ROOT:-}"' EXIT
   OC_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/preflight-oc-XXXXXX")
   OC_PROBE_JSON=$(node "$REPO/scripts/lib/opencode-discovery-probe.js" --bin "$bin" --repo "$repo" --root "$OC_ROOT" \
-    --env AUTOPILOT_INTENT_CAPTURE=false 2>&1)
+    --skill "${OC_SKILL:-dev-flow}" --env AUTOPILOT_INTENT_CAPTURE=false 2>&1)
   OC_PROBE_RC=$?
   rm -rf "$OC_ROOT"
   [ "$OC_PROBE_RC" -eq 0 ] || echo "  opencode probe failed (rc=$OC_PROBE_RC): $OC_PROBE_JSON" >&2

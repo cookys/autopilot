@@ -383,4 +383,35 @@ console.log(h.modelNoteSection({sessionId:"s7",now:Date.now(),dirs:{handoff:proc
 wait "$WPID" 2>/dev/null
 assert_not_contains "$out" "possibly incomplete" "negative control: without the stability check a growing note is not flagged (half-write test goes red)"
 
+# single read: buildHandoff opens the note once (cap does not depend on the note), and a full set of sections does not
+# cut git alone down to its floor
+node -e '
+const fs=require("fs");const path=require("path");const h=require(process.argv[1]);
+const dir=process.argv[2];fs.writeFileSync(path.join(dir,"s8.md"),"Q".repeat(12000));
+const old=Date.now()-600000;fs.utimesSync(path.join(dir,"s8.md"),old/1000,old/1000);
+let opens=0;const o=fs.openSync;fs.openSync=function(f,...r){if(String(f).endsWith("s8.md"))opens++;return o.call(fs,f,...r)};
+const big="g".repeat(80);
+h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:dir,dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+console.log(opens)' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens.txt"
+assert_eq "$(cat "$TEST_TMP/opens.txt")" "1" "single read: the note is opened once per buildHandoff"
+sed -e 's/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: BODY_CAP })); safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap }));/' "$LIB" > "$TEST_TMP/mut-twice.js"
+node -e '
+const fs=require("fs");const h=require(process.argv[1]);let opens=0;const o=fs.openSync;fs.openSync=function(f,...r){if(String(f).endsWith("s8.md"))opens++;return o.call(fs,f,...r)};
+h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{}}},machineState:"x",tail:null});console.log(opens)' "$TEST_TMP/mut-twice.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens2.txt"
+assert_eq "$(cat "$TEST_TMP/opens2.txt")" "2" "negative control: a double-read builder is counted as 2 opens (single-read test goes red)"
+node -e '
+const fs=require("fs");const h=require(process.argv[1]);
+const big="g".repeat(80);
+const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+const sec=(n)=>{const m=out.match(new RegExp("## "+n+"\\n([\\s\\S]*?)\\n\\n## "));return m?Buffer.byteLength(m[1]):0};
+console.log(sec("Project and Git State"),sec("Session Marker and Decision Ledger"))' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr.txt"
+read -r g_sz m_sz < "$TEST_TMP/shr.txt"
+if [ "$g_sz" -gt 1250 ] && [ "$m_sz" -lt 1500 ]; then assert_eq 1 1 "shrink: git ($g_sz) is not cut alone to its floor while marker ($m_sz) shrinks too"; else assert_eq "$g_sz/$m_sz" "git>1250,marker<1500" "shrink is shared"; fi
+sed -e 's/const give = slack > 0 ? .*$/const give = k === "git" ? deficit : 0;/' "$LIB" > "$TEST_TMP/mut-gitfirst.js"
+node -e '
+const h=require(process.argv[1]);const big="g".repeat(80);
+const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+const m=out.match(/## Project and Git State\n([\s\S]*?)\n\n## /);console.log(Buffer.byteLength(m[1]))' "$TEST_TMP/mut-gitfirst.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr2.txt"
+if [ "$(cat "$TEST_TMP/shr2.txt")" -lt "$g_sz" ]; then assert_eq 1 1 "negative control: git-first shrinking leaves git at $(cat "$TEST_TMP/shr2.txt") < $g_sz (shrink test goes red)"; else assert_eq "$(cat "$TEST_TMP/shr2.txt")" "<$g_sz" "git-first mutant not red"; fi
+
 finalize_test

@@ -245,7 +245,7 @@ function modelNotePath(sessionId, dirs) {
 
 // The whole section, header and cut marker included, stays within SECTION_CAPS.model bytes whatever the path
 // length: a long path is shown by its tail only.
-function modelNoteSection({ sessionId, now, dirs, cap: capOpt, sleepMs }) {
+function modelNoteSection({ sessionId, now, dirs, cap: capOpt, sleepMs, deadlineAt }) {
   if (!sessionId) return unavailable('no session id, so no handoff file path');
   let file;
   try { file = modelNotePath(sessionId, dirs); } catch (e) { return unavailable(`live-state directory: ${clip(e && e.message, 100)}`); }
@@ -275,6 +275,7 @@ function modelNoteSection({ sessionId, now, dirs, cap: capOpt, sleepMs }) {
     let unstable = false;
     for (let i = 0; i < STABLE_TRIES; i++) {
       if (now - st.mtimeMs >= STABLE_AGE_MS && i === 0) break;
+      if (Number.isFinite(deadlineAt) && deadlineAt - Date.now() < wait * 2) break; // out of time: read what is there
       try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait); } catch { /* ignore */ }
       const st2 = fs.fstatSync(fd);
       const moved = st2.size !== st.size || st2.mtimeMs !== st.mtimeMs;
@@ -336,20 +337,21 @@ function buildHandoff(opts = {}) {
   // the "tail omitted" line (~115 bytes) is reserved too, so a full body never overshoots BODY_CAP
   const fixed = (opts.tail ? 120 : 0) + Buffer.byteLength(machine) + frame(modelTitle) + frame(titles.git) + frame(titles.dispatch) + frame(titles.marker);
   const othersLen = () => Object.keys(titles).reduce((n, k) => n + Buffer.byteLength(render(k)), 0);
-  // The model section's natural size (it reads the file once, up to BODY_CAP), then its budget: at least MODEL_MIN,
-  // more when the other sections leave room.
-  const natural = safe(() => modelNoteSection({ sessionId, now, dirs, cap: BODY_CAP }));
+  // The model section's budget: at least MODEL_MIN, more when the other sections leave room. It depends only on the
+  // sizes of the other sections, so the note is read (and settled) exactly once.
   const modelCap = Math.min(BODY_CAP, Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen()));
-  let model = natural;
-  if (Buffer.byteLength(natural) > modelCap) model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap }));
-  // Shrink git / dispatch / marker (largest first) only as far as the model section needs.
-  let deficit = fixed + othersLen() + Buffer.byteLength(model) - BODY_CAP;
-  for (const k of ['git', 'marker', 'dispatch']) {
-    if (deficit <= 0) break;
-    const have = Math.min(caps[k], Buffer.byteLength(render(k)));
-    const cut = Math.min(deficit, Math.max(0, have - SECTION_FLOOR));
-    caps[k] = have - cut;
-    deficit -= cut;
+  const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));
+  // Shrink git / dispatch / marker only as far as the model section needs, the shortfall shared in proportion to how
+  // much each has above SECTION_FLOOR (so no single section is cut to its floor while another stays full).
+  const deficit = fixed + othersLen() + Buffer.byteLength(model) - BODY_CAP;
+  if (deficit > 0) {
+    const have = {};
+    let slack = 0;
+    for (const k of Object.keys(titles)) { have[k] = Math.min(caps[k], Buffer.byteLength(render(k))); slack += Math.max(0, have[k] - SECTION_FLOOR); }
+    for (const k of Object.keys(titles)) {
+      const give = slack > 0 ? Math.ceil(deficit * Math.max(0, have[k] - SECTION_FLOOR) / slack) : 0;
+      caps[k] = Math.max(SECTION_FLOOR, have[k] - give);
+    }
   }
   let out = '';
   for (const k of Object.keys(titles)) out += `## ${titles[k]}\n${render(k)}\n\n`;

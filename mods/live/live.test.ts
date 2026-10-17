@@ -5262,7 +5262,7 @@ for (const surface of SURFACES) {
     const cells = ((small as Node).children || []) as Node[]
     expect(textOf(cells[0]), 'thumb at the top').toBe('█')
     expect(textOf(cells[cells.length - 1]), 'track at the bottom').toBe('│')
-    // every cell is a plain Button around the coloured Text (a click on it jumps the window); the look is the Text's
+    // each of the five jump cells (jumpCells) is a plain Button around the coloured Text, every other cell the Text alone (a click on it jumps the window); the look is the Text's
     const glyphOf = (c: Node): Node => (c.type === 'Button' ? (c.children as Node[])[0] : c)
     const pressable = cells.map((c, i) => (c.type === 'Button' ? i : -1)).filter(i => i >= 0)
     expect(pressable, 'only the five jump cells are pressable (top, quarter, middle, three quarters, bottom); the rest stay plain text').toEqual([0, 3, 7, 10, 13])

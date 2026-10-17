@@ -1087,7 +1087,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
 // Normalised before comparing: case, a `[1m]`-style context suffix, a trailing `-YYYYMMDD`
 // snapshot date, and `-latest`. A bare family alias (opus|sonnet|haiku|fable) matches any
 // key of that family. Missing/broken JSON, a missing or empty modelUsage, or any key that is
-// not the declared model all throw (fail closed; codex stays operator-asserted).
+// not the declared model, an is_error envelope, and blank stdout all throw (fail closed; codex stays operator-asserted).
 const CLAUDE_FAMILY_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable']);
 function normalizeClaudeModelId(id) {
   return String(id).trim().toLowerCase().replace(/\[[^\]]*\]$/u, '')
@@ -1104,6 +1104,7 @@ function verifyClaudeRuntimeIdentity(stdoutText, declared) {
       || typeof envelope.result !== 'string') {
     throw new Error('claude CLI identity unverifiable: JSON envelope has no string `result`');
   }
+  if (envelope.is_error === true) throw new Error('claude CLI identity unverifiable: envelope is_error');
   const usage = envelope.modelUsage;
   const keys = usage && typeof usage === 'object' && !Array.isArray(usage) ? Object.keys(usage) : [];
   if (keys.length === 0) {
@@ -1769,7 +1770,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         }
       } else {
         text = Buffer.concat(stdout).toString('utf8');
-        if (kind === 'claude' && text.trim()) {
+        if (kind === 'claude') {
           // Fail closed: a claude run whose runtime model cannot be proven to be the
           // declared one is a transport failure, never a scored answer.
           try {

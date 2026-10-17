@@ -37,6 +37,8 @@ mutant() { # mutant <name> <sed-expr>
 }
 mutant nomatch 's/if (bad.length) {/if (false) {/'
 mutant nousage 's/if (keys.length === 0) {/if (false) {/'
+mutant iserror 's/  if (envelope.is_error === true) throw .*$//'
+mutant noblank 's/if (kind === .claude.) {/if (kind === "claude" \&\& text.trim()) {/'
 mutant nojson 's/throw new Error(.claude CLI identity unverifiable: stdout is not the --output-format json envelope.);/return { text: stdoutText, resolvedModel: null };/'
 
 # 1. match (incl. date suffix, [1m] suffix, family alias) -> accepted, args carry json format
@@ -78,5 +80,19 @@ printf '{"findings":[]}' >"$TEST_TMP/plain.json"
 run "$PROVIDER" claude-sonnet-5-5 "$TEST_TMP/plain.json" >/dev/null; assert_neq "$?" "0" "plain-text answer (no envelope): refused"
 run "$TEST_TMP/nojson/p.js" claude-sonnet-5-5 "$TEST_TMP/bad.json" >/dev/null
 assert_eq "$?" "0" "NEGATIVE CONTROL broken JSON: parse guard removed -> accepted"
+
+# 5. is_error envelope with matching modelUsage -> refused (error text must not be scored)
+printf '{"type":"result","is_error":true,"result":"API Error: overloaded","modelUsage":{"claude-sonnet-5-5":{}}}' >"$TEST_TMP/iserr.json"
+run "$PROVIDER" claude-sonnet-5-5 "$TEST_TMP/iserr.json" >/dev/null; assert_neq "$?" "0" "is_error with matching modelUsage: refused"
+assert_contains "$(cat "$TEST_TMP/err")" "envelope is_error" "is_error: named in the error"
+run "$TEST_TMP/iserror/p.js" claude-sonnet-5-5 "$TEST_TMP/iserr.json" >/dev/null
+assert_eq "$?" "0" "NEGATIVE CONTROL is_error: check removed -> accepted"
+
+# 6. exit 0 with whitespace-only stdout -> refused by the identity check itself
+printf ' \n\t\n' >"$TEST_TMP/blank.json"
+run "$PROVIDER" claude-sonnet-5-5 "$TEST_TMP/blank.json" >/dev/null; assert_neq "$?" "0" "blank stdout: refused"
+assert_contains "$(cat "$TEST_TMP/err")" "identity unverifiable" "blank stdout: refused by the identity check"
+run "$TEST_TMP/noblank/p.js" claude-sonnet-5-5 "$TEST_TMP/blank.json" >/dev/null
+assert_not_contains "$(cat "$TEST_TMP/err")" "identity unverifiable" "NEGATIVE CONTROL blank stdout: guard restored -> identity check no longer the refuser"
 
 finalize_test

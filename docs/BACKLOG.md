@@ -351,18 +351,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md
 - **Context**: v2.34.11 shipped capability-tiered scaffolding with fail-closed T2, but `references/scaffold-tiers.md` Non-goals explicitly disclaims any tier→outcome effect claim — the A/B was deferred.
 
-### Qualification CLI transport — runtime identity capture
+### Qualification CLI transport — runtime identity capture (codex and other CLIs)
 - **Id**: BL-0052
 - **Status**: open
 - **Since**: 2026-08-17
 - **Origin**: self
-- **Problem**: 資格測試若走 codex、claude 等命令列，這些工具不回報實際使用的模型，所以模型身分只能靠操作者自己聲明，萬一背後換了模型也看不出來。 (draft)
-- **Impact**: 資格紀錄的模型身分可能不準；等工具提供回報後再處理。 (draft)
-- **Trigger**: When any CLI harness (codex / claude) grows a verifiable runtime model-identity signal in headless mode, or before promoting a CLI-transport qualification to a decision where alias drift would be material.
+- **Problem**: 資格測試走 claude 命令列的路徑，現在會讀工具回報的實際模型並比對，對不上就拒收；但走 codex 等其他命令列時，工具仍不回報實際模型，身分只能靠操作者聲明。 (draft)
+- **Impact**: codex 等席位的資格紀錄，模型身分可能不準；等工具提供回報後再處理。 (draft)
+- **Trigger**: When codex (or another CLI kind) grows a verifiable runtime model-identity signal in headless mode, or before promoting a non-claude CLI-transport qualification to a decision where alias drift would be material.
 - **Effort**: S
-- **Source**: v2.34.15 pre-merge review; hardening round 2026-08-17.
+- **Source**: v2.34.15 pre-merge review; hardening round 2026-08-17; claude side shipped 2026-10-18.
 - **Pointer**: docs/backlog/qualification-cli-transport-runtime-identity-capture.md
-- **Context**: CLI transports return no model id, so administered identity is operator-asserted (pre-run probe recorded per the v2.34.15 governance rule; the HTTP path caught glm-5.2→glm-5.3 exactly via its runtime echo).
+- **Context**: claude side done (`modelUsage` checked, fail closed; see Pointer). Other CLI kinds return no model id, so identity stays operator-asserted.
 
 ### t14 long-horizon per-turn verification gate
 - **Id**: BL-0055

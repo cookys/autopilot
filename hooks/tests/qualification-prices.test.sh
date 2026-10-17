@@ -29,7 +29,7 @@ const row = (model, inp, out, extra = {}) => ({
   source_url: `https://prices.example.com/${model}`, billing: 'metered', effective_basis: 'sourced', ...extra,
 });
 const d = {
-  schema: 'model-dyno.model-prices.v1', generated_at: new Date().toISOString(), stale_after_days: 7,
+  schema: 'model-dyno.model-prices.v1', generated_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), stale_after_days: 7,
   rows: [
     row('seat-exp', 5000000, 25000000),
     row('seat-cheap', 100000, 400000),
@@ -81,6 +81,17 @@ reject "source_url backslash scheme and dot-segment" "d => { d.rows[0].source_ur
 reject "source_url userinfo" "d => { d.rows[0].source_url = 'https://u:p@prices.example.com/x'; }"
 reject "source_url query" "d => { d.rows[0].source_url = 'https://prices.example.com/x?a=1'; }"
 reject "source_url fragment" "d => { d.rows[0].source_url = 'https://prices.example.com/x#f'; }"
+reject "verified impossible day" "d => { d.rows[0].verified = '2026-02-30'; }"
+reject "effective impossible day" "d => { d.rows[0].effective = '2026-04-31'; }"
+reject "effective free text" "d => { d.rows[0].effective = 'sometime'; }"
+reject "generated_at impossible day" "d => { d.generated_at = '2026-02-30T00:00:00Z'; }"
+reject "generated_at impossible time" "d => { d.generated_at = '2026-02-20T24:00:00Z'; }"
+reject "generated_at fractional seconds" "d => { d.generated_at = '2026-02-20T00:00:00.123Z'; }"
+reject "generated_at offset" "d => { d.generated_at = '2026-02-20T00:00:00+00:00'; }"
+reject "source_url explicit port" "d => { d.rows[0].source_url = 'https://prices.example.com:443/x'; }"
+reject "source_url unicode host" "d => { d.rows[0].source_url = 'https://prices.exämple.com/x'; }"
+reject "source_url whitespace" "d => { d.rows[0].source_url = 'https://prices.example.com/a b'; }"
+reject "source_url no host" "d => { d.rows[0].source_url = 'https:///x'; }"
 reject "bad billing" "d => { d.rows[0].billing = 'free'; }"
 reject "bad basis" "d => { d.rows[0].effective_basis = 'guess'; }"
 reject "duplicate seat" "d => { d.rows.push({ ...d.rows[0] }); }"

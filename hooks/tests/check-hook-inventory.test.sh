@@ -20,8 +20,8 @@ mkdir -p "$SBX/scripts" "$SBX/hooks" "$SBX/.claude-plugin"
 cp "$REPO_ROOT/scripts/check-hook-inventory.js" "$SBX/scripts/"
 # wiring sources (the derivation inputs)
 cp "$REPO_ROOT/hooks/hooks.json"      "$SBX/hooks/hooks.json"
-# the real hooks.json registers mods/live (P1d): the sandbox needs that file so the shipped key resolves
-mkdir -p "$SBX/mods/live"; cp "$REPO_ROOT/mods/live/register.ts" "$SBX/mods/live/register.ts"
+# the real hooks.json registers the composed mods module (P1d, then the viewer mod): the sandbox needs that file so the shipped key resolves
+mkdir -p "$SBX/mods/live"; cp "$REPO_ROOT/mods/live/register.ts" "$SBX/mods/live/register.ts"; cp "$REPO_ROOT/mods/register.ts" "$SBX/mods/register.ts"
 cp "$REPO_ROOT/hooks/opt-in-manifest.json" "$SBX/hooks/opt-in-manifest.json"  # opt-in tier source (v2.26.2+)
 cp "$REPO_ROOT/settings.example.json" "$SBX/settings.example.json"
 cp "$REPO_ROOT"/hooks/*.js "$SBX/hooks/" 2>/dev/null   # top-level only; NON_HOOK filter inside the script handles -lib/.test

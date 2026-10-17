@@ -212,6 +212,7 @@ test('real tree: every suite run.sh discovers is a known suite path', () => {
 
 // BL-0001 phase 2: mods/live has its own entry (mods/live/run-tests.sh) that run.sh never runs.
 const LIVE_RUNNER = 'mods/live/run-tests.sh';
+const VIEWER_RUNNER = 'mods/viewer/run-tests.sh'; // the viewer mod shares files with the live mod: a change under either runs both
 const LIVE_FILES = ['mods/live/ui.ts', 'mods/live/band.tsx', 'mods/live/locales/en.json', 'mods/live/locales/zh-TW.json',
   'mods/live/gen-locales.js', 'mods/live/run-tests.sh', 'mods/live/ui.test.ts', 'mods/live/ui-lint.test.js'];
 
@@ -219,24 +220,34 @@ test('mods/live: every kind of file under it adds mods/live/run-tests.sh to extr
   for (const f of LIVE_FILES) {
     const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', f, '--json'], { stdio: 'pipe' }).toString());
     assert.ok(Array.isArray(out.extra_runners) && out.extra_runners.includes(LIVE_RUNNER), `${f}: extra_runners must name ${LIVE_RUNNER}`);
+    assert.ok(out.extra_runners.includes(VIEWER_RUNNER), `${f}: extra_runners must name ${VIEWER_RUNNER}`);
     assert.ok(!out.suites.includes(LIVE_RUNNER), `${f}: run.sh suites stay run.sh suites`);
   }
   const text = execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', 'mods/live/ui.ts'], { stdio: 'pipe' }).toString().trim().split('\n');
-  assert.strictEqual(text[text.length - 1], LIVE_RUNNER, 'text output ends with the runner line');
+  assert.deepStrictEqual(text.slice(-2), [LIVE_RUNNER, VIEWER_RUNNER], 'text output ends with the runner lines');
 });
 
 test('mods/live: runner is present in selective and in full mode; absent for other diffs', () => {
   const r = makeRepo({ ...LAYOUT, 'mods/live/ui.ts': 'export const a = 1;\n', 'mods/live/run-tests.sh': '#!/usr/bin/env bash\n' });
   try {
     const sel = r.select(r.change({ 'mods/live/ui.ts': 'export const a = 2;\n' }));
-    assert.deepStrictEqual(sel.extra_runners, [LIVE_RUNNER]);
+    assert.deepStrictEqual(sel.extra_runners, [LIVE_RUNNER, VIEWER_RUNNER]);
     const full = r.select(r.change({ 'mods/live/ui.ts': 'export const a = 3;\n', 'hooks/hooks.json': '{"x":1}\n' }));
     assert.strictEqual(full.mode, 'full');
-    assert.deepStrictEqual(full.extra_runners, [LIVE_RUNNER]);
+    assert.deepStrictEqual(full.extra_runners, [LIVE_RUNNER, VIEWER_RUNNER]);
   } finally { r.cleanup(); }
   const r2 = makeRepo({ ...LAYOUT, 'mods/live/ui.ts': 'export const a = 1;\n' });
   try {
     const plain = r2.select(r2.change({ 'scripts/other.js': 'console.log("c");\n' }));
     assert.deepStrictEqual(plain.extra_runners, []);
   } finally { r2.cleanup(); }
+});
+
+test('mods/viewer and mods/register.ts: a change there adds both mod runners (negative control: a script change adds neither)', () => {
+  for (const f of ['mods/viewer/show.ts', 'mods/viewer/pane.tsx', 'mods/viewer/model.test.js', 'mods/viewer/run-tests.sh', 'mods/register.ts']) {
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', f, '--json'], { stdio: 'pipe' }).toString());
+    assert.deepStrictEqual(out.extra_runners, [LIVE_RUNNER, VIEWER_RUNNER], f);
+  }
+  const none = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', 'scripts/affected-suites.js', '--json'], { stdio: 'pipe' }).toString());
+  assert.deepStrictEqual(none.extra_runners, []);
 });

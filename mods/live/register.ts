@@ -39,8 +39,10 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
+import { SHOW_PRESS, showTarget } from './ui'
 import { Band } from './band'
 import { Pane } from './pane'
+import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
@@ -460,7 +462,7 @@ async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, pr
           }
         } catch (_e) { /* no output file yet: the row shows without a tail */ }
       }
-      items.push({ kind: task.kind, label: task.label, detail: null, tail, quietMs })
+      items.push({ kind: task.kind, label: task.label, detail: null, tail, quietMs, output: task.output })
     }
     for (const path of [...tails.keys()]) if (!seen.has(path)) tails.delete(path)
   }
@@ -560,6 +562,12 @@ async function refresh($: EngineInterface): Promise<void> {
 
 // A press on the 待決 tab: `pick:<id>:<k>` chooses option k of question id (pressing the chosen one again unchooses it), `submit` sends every answered question.
 async function decidePress($: EngineInterface, id: string): Promise<void> {
+  // a pressed file path (ui.ts linkSegs, the background tail): the viewer window has to open in THIS turn, before any await (mods/viewer/show.ts openWindow)
+  if (id.startsWith(SHOW_PRESS)) {
+    const at = showTarget(id)
+    if (at !== null) await showPath($, at.path, at.line).catch(() => undefined)
+    return
+  }
   try {
     const m = /^pick:(.+):(\d+)$/.exec(id)
     if (m !== null) {
@@ -725,17 +733,19 @@ async function ringToNext($: EngineInterface): Promise<void> {
   }
 }
 
-export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    paneTab = 'now'
-    folded.clear() // a new Claude Code session opens every section
-    pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
-    decided = null
-    if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
-    await refresh($)
-    return next(e)
-  })
+// the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
+// (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
+export async function startLive($: EngineInterface): Promise<void> {
+  paneTab = 'now'
+  folded.clear() // a new Claude Code session opens every section
+  pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
+  decided = null
+  if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
+  await refresh($)
+}
 
+// every hook of the live mod except `session.start`
+export function registerLive(on: Parameters<Register>[0]): void {
   // /clear ends the session but no session.start follows and the timer survives it (S7): only a real exit stops it.
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && timer !== undefined) {
@@ -796,4 +806,12 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }))
+}
+
+export const register: Register = on => {
+  registerLive(on)
+  on('session.start', async ($, e, next) => {
+    await startLive($)
+    return next(e)
+  })
 }

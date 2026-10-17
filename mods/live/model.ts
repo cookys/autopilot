@@ -1786,7 +1786,7 @@ export function collapsedPrompt(prompt: string): string {
 // Known gap: a task that ends mid-turn keeps its row until the turn ends, because its notification waits in the input queue, not in the messages.
 export type BgKind = 'shell' | 'monitor'
 export type BgTask = { id: string; kind: BgKind; label: string; output: string | null; lastEvent: string | null }
-export type ActivityItem = { kind: BgKind | 'agent'; label: string; detail: string | null; tail: string | null; quietMs: number | null }
+export type ActivityItem = { kind: BgKind | 'agent'; label: string; detail: string | null; tail: string | null; quietMs: number | null; output?: string | null } // output: the file the command writes to (a press on its tail opens it)
 const BG_LABEL_CHARS = 200
 const BG_TAIL_CHARS = 300
 

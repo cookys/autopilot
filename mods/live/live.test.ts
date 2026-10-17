@@ -161,6 +161,7 @@ type World = {
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
+  order: string[] // 'open' / 'stat' / 'read' in the order the engine heard them (a press on a file path must open the viewer window before any read)
 }
 
 // the English table: state texts, toasts and the English-only cases
@@ -168,12 +169,13 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
   on('env.get', ($, e) => ({ value: w.env[e.name] }))
   on('fs.read', ($, e) => {
+    w.order.push('read')
     w.reads.push(e.path)
     const t = w.files[e.path]
     if (t === undefined) throw new Error('ENOENT ' + e.path)
@@ -199,6 +201,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     return { value: [...seen].map(([name, kind]) => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })) }
   })
   on('fs.stat', ($, e) => {
+    w.order.push('stat')
     if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
     return statOf(e)
   })
@@ -213,6 +216,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
+    w.order.push('open')
     w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape })
     if (w.openGate !== null) await w.openGate
     if (!w.panes.includes(e.id)) w.panes.push(e.id)
@@ -5178,6 +5182,36 @@ for (const surface of SURFACES) {
     expect(buttons.filter(k => k.startsWith('pick:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
     expect(buttons.filter(k => k.startsWith('pick:d-4290499d')).length).toBe(2)
     expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d'])
+  })
+
+  test('DECIDE mounted: pressing a file path in a card opens the viewer window FIRST (before any stat or read: the engine counts an open as the owner\'s only in the press\'s own turn) and then shows the file from that line (' + surface + ')', async ($, on) => {
+    const dq = { ...DQ1, background: '見 docs/plans/design.md:2 的第二節' }
+    const { w, files } = decideWorld(on, [dq])
+    files[CWD + '/docs/plans/design.md'] = 'l1\nl2 SECRET-LINK-MARK\nl3\n'
+    w.stats[CWD + '/docs/plans/design.md'] = { size: 30, mtimeMs: 0 }
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    expect(((await pane.findAll({ type: 'Button' })) as Drawn[]).map(n => n.props?.key)).toContain('show:docs/plans/design.md:2')
+    w.order.length = 0
+    w.opens.length = 0
+    await pane.press({ key: 'show:docs/plans/design.md:2' })
+    await pane.unmount()
+    await w.clock.advance(1)
+    expect(w.order[0], 'the window opens before the first await of the press').toBe('open')
+    expect(w.order).toContain('read')
+    expect(w.opens).toEqual([{ id: 'autopilot-viewer', title: 'docs/plans/design.md', focus: true, closeOnEscape: true }])
+    expect(w.toasts).toEqual([])
+    // a file that cannot be shown is a toast and the window it opened first is closed again
+    w.order.length = 0
+    const again = await paneOn($, surface, 'decide')
+    files[CWD + '/docs/plans/design.md'] = undefined as never
+    delete files[CWD + '/docs/plans/design.md']
+    delete w.stats[CWD + '/docs/plans/design.md']
+    await again.press({ key: 'show:docs/plans/design.md:2' })
+    await again.unmount()
+    await w.clock.advance(1)
+    expect(w.toasts.length).toBe(1)
+    expect(w.toasts[0]).toMatch(/design\.md/)
   })
 
   test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {

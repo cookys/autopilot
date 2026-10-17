@@ -88,7 +88,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   // a line that carries a `toggle` id is a Button when the surface has them (a press expands / collapses its group), the plain line otherwise
   const line = (l: PaneLine, i: number, k = '') => l.field !== undefined && l.segs !== undefined
     ? fieldLine(l, i, k)
-    : l.kind === 'choice' && l.segs !== undefined
+    : l.segs !== undefined && (l.kind === 'choice' || l.segs.some(x => x.press !== undefined))
     ? pressLine(l, i, k)
     : l.toggle !== undefined && Button !== undefined
     ? <Button key={k + 'b' + i} plain onPress={() => onToggle(l.toggle as string)}>{drawn(l)}</Button>

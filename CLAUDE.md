@@ -146,6 +146,7 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 
 ## Don't
 
+- Don't `cat` a file or diff and retype it when the user asks to see it: call the `show` tool (`mcp__autopilot__show`, `path` or `diff`). It displays to the user only and returns one line, so the text never enters context; read the file separately if you need to analyze it.
 - Don't hardcode dispatch model/mode in skill files — use `scripts/resolve-dispatch.sh`.
 - Don't write "manually check for TODO/FIXME" in a reference doc — call `scripts/completeness-scan.sh`.
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.

@@ -98,6 +98,27 @@ muse-spark on Responses. The client rules on that page also want a stable
 ALWAYS-REFUSED (2026-09-07 adversarial probe: `--agent plan` does not block
 bash), so the CLI is not a fallback for an HTTP seat.
 
+### OpenCode 2.x adaptor — verified current host (opencode v2.0.32, spike 2026-10-18)
+
+opencode 2.x removed `run --dir`, `--pure` and `--variant`, so every v1-shaped call exits rc=1. Autopilot keeps **two adaptors side by side**, chosen from the major number of `<opencode> --version` (read once per call). An unknown major refuses with a precondition failure; nothing is guessed. v1 behaviour is unchanged. One owner for argv/env/cwd: `scripts/lib/opencode-containment.js` (`buildPlan`; shell callers use its `plan` / `assert-plan` CLI).
+
+| | v1 (1.x) | v2 (2.x) |
+|---|---|---|
+| argv | `run --dir <dir> --pure -m M [--agent locked] [--variant V] --format json` | `run --standalone -m M#V --agent locked --format json` (`--dir/--pure/--variant` do not exist) |
+| working dir | `--dir` | the process cwd **and `$PWD`** (v2 resolves its project dir from `$PWD`: a `spawn(cwd:)` without `PWD` wrote a file into the caller's directory) |
+| background service | none | `--standalone` is mandatory: without it `run` talks to the background `opencode serve --service`, the caller's env is ignored and `Agent not found: "locked"` follows (spike t17) |
+| deny-all config | `OPENCODE_CONFIG_CONTENT` `{permission, agent}` | v2-native keys `{permissions:[{action,resource,effect}], agents:{locked:{mode,permissions}}}`; a v1-shaped config is also honoured but the canonical form is the v2 one |
+| project config | empty `--dir` | `OPENCODE_DISABLE_PROJECT_CONFIG=1` plus an empty cwd outside any git worktree |
+| credentials | `auth.json` copied into a clean home | credentials live in `opencode.db`: `auth export --standalone` (real env, 0600 file in the seat's temp root) then `auth import --standalone` under the clean home; the export file is deleted at once and the whole root after the call |
+| tool names in events | `bash`, ... | `read`, `shell`, `execute`, ... |
+| plugins / MCP | `--pure` | **no equivalent and no env switch found**: a global config home with an MCP server or a v2-style plugin loads (spike t14/t18). Only the clean config home keeps them out (P2). |
+| effort | `--variant V` (max clamps to xhigh) | `#V` appended to the model (same clamp); an unknown variant fails closed (`Variant "x" is not available`) |
+| write-capable implementer | `run --dir <wt> --pure ...` | `run --standalone -m M#V --format json`, cwd = worktree, `PWD` set; a plain `write` tool call completed without `--auto` in a clean home (live check 2026-10-18) |
+
+Audit (v2): a hallucinated call to a tool the locked agent does not have comes back as `tool_use` with `state.status:"error"` and `No tool named "<x>" is currently available` and `providerResult.executed:false` (spike t13). Only that exact shape is let through (nothing ran); any `completed`, `running` or other error tool event still voids the seat. v1 stays strict. Fixtures: `scripts/lib/fixtures/opencode-v2/` (trimmed real streams t6/t7/t13).
+
+Known limits: `opencode debug config|agents|models` go through the service and cannot probe a seat's env; the hostile-project-config case (spike t12) was inconclusive because the model made no tool call, so the protection rests on `OPENCODE_DISABLE_PROJECT_CONFIG=1` (verified with an AGENTS.md canary, p1) plus the empty cwd, not on the permission layer winning. Standalone runs made by the spike under the real home (not the seats) wrote sessions to the real `opencode.db`. The opt-in live test `hooks/tests/opencode-deny-all-live.test.sh` still exercises the v1 shape only.
+
 ### Headless auto-approve flags — corrections (2026-06-17 survey)
 
 The capability tier above hinges on whether a platform can run a worker non-interactively; that requires a real auto-approve flag. Two corrections from the survey, each tagged with its verification state per `[[feedback_spike-before-assert]]` — assert only what's cited or run:

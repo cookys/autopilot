@@ -2273,6 +2273,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   fs.writeFileSync(stubOpencode, `#!/usr/bin/env node
 'use strict';
 const fs = require('fs');
+if (process.argv[2] === '--version') { process.stdout.write('1.19.2\\n'); process.exit(0); }
 const stdin = fs.readFileSync(0, 'utf8');
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), stdin }));
 process.stdout.write(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'bash', state: { status: 'error' } } }) + '\\n');

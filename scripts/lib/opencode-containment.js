@@ -291,6 +291,7 @@ function assertLockedV2({ args, env, cwd, realHome }) {
     if (realDefaults.includes(v)) return `${k} is the real ${path.basename(v)} directory`;
   }
   if (!cwd) return 'cwd is missing';
+  if (!env.PWD || path.resolve(env.PWD) !== path.resolve(cwd)) return 'PWD is not the empty cwd (opencode 2.x works in $PWD)';
   let entries;
   try { entries = fs.readdirSync(cwd); } catch { return 'cwd is not a readable directory'; }
   if (entries.length !== 0) return 'cwd is not empty';
@@ -340,6 +341,7 @@ function buildPlan({ bin, model, effort, profile, root, cwd, baseEnv, versionStr
   if (profile === 'implement') {
     if (!cwd) throw new Error('implement profile needs a cwd');
     plan.args = ['run', '--standalone', '-m', variant ? `${model}#${variant}` : model, '--format', 'json'];
+    plan.env = { set: { PWD: cwd }, unset: [] };   // v2 resolves its project dir from $PWD, not getcwd() (spike 2026-10-18)
     return plan;
   }
   if (!root) throw new Error(`${profile} profile needs a root`);
@@ -348,7 +350,9 @@ function buildPlan({ bin, model, effort, profile, root, cwd, baseEnv, versionStr
   const home = prepareHomeV2(root, { bin, realEnv: base });
   plan.args = lockedArgsV2({ model, variant });
   plan.env = {
-    set: { ...home, OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_CONFIG_CONTENT: CONFIG_V2_JSON },
+    // PWD: opencode 2.x takes its working dir from $PWD, so a spawn(cwd:) without it would run
+    // (and write files) in the CALLER's directory — proven by a live write landing in the parent cwd.
+    set: { ...home, PWD: work, OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_CONFIG_CONTENT: CONFIG_V2_JSON },
     unset: ['OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR'],
   };
   plan.cwd = work;

@@ -12,6 +12,9 @@
  *
  * Tiers (defaults; override via ~/.autopilot/config.json context_budget
  * {t1,t2,step,mode} or env AUTOPILOT_CONTEXT_BUDGET_T1/T2/STEP/MODE):
+ *  - Per-model tiers (BL-0205): context_budget.per_model {"<model glob>": {t1,t2}}, matched against the live
+ *    file's model.id (most literal characters wins; no match or no id keeps the top-level tiers; env T1/T2
+ *    still beat it). See scripts/lib/config-path.js.
  *  - Defaults are ABSOLUTE (100k/150k) whatever the window: cost is turns x context, so a 1M
  *    window does not move them up. Only a window smaller than 200K scales them down.
  *  - T1 (100k): stderr nudge, exit 0 (user-visible). On a known 1M window with no auto-compact
@@ -60,7 +63,7 @@
 'use strict';
 
 const fs = require('fs');
-const { readContextBudget } = require('../scripts/lib/config-path.js');
+const { readContextBudget, applyPerModel } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
@@ -149,6 +152,21 @@ function readStaleWindow(base, sid) {
   return Number.isFinite(w) && w > 0 ? w : null;
 }
 
+// The model id of this session's status-line live file regardless of its age; null when unavailable.
+function readStaleModel(base, sid) {
+  const rec = readLive(base, sid, { kind: 'main', maxAgeMs: Number.MAX_SAFE_INTEGER });
+  if (!rec || rec.writer === WRITER_ID || !rec.model) return null;
+  return typeof rec.model.id === 'string' && rec.model.id ? rec.model.id : null;
+}
+
+// BL-0205: context_budget.per_model tiers for the model id remembered in state (live file model.id).
+// No model id or no match leaves cfg as is; new config warnings are said once per session.
+function applyModelTiers(st, cfg) {
+  const next = applyPerModel(cfg, st.knownModel);
+  if (next !== cfg) for (const w of (next.warnings || []).slice((cfg.warnings || []).length)) warnOnce(st, w);
+  return next;
+}
+
 function loadState(file) {
   try {
     const st = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -214,7 +232,7 @@ function emitT1(sid, message) {
   try {
     // default-on since v2.35.15 (was opt-in); opt out with context_budget.mode=off or
     // AUTOPILOT_CONTEXT_BUDGET_MODE=off (loadConfig).
-    const cfg = loadConfig();
+    let cfg = loadConfig();
     if (cfg.mode === 'off') process.exit(0);
 
     let payload = {};
@@ -271,6 +289,8 @@ function emitT1(sid, message) {
       // past it (contextTokens = max(transcript, live total) when the transcript
       // row predates the live file's own written_at; otherwise the transcript row
       // is at least as fresh, so it is trusted directly).
+      if (liveMain.model && typeof liveMain.model.id === 'string') st.knownModel = liveMain.model.id;
+      cfg = applyModelTiers(st, cfg);
       const liveCfg = tiersForKnownWindow(cfg, liveWindow);
       warnOnce(st, unreachableT2Warning(cfg, liveWindow));
       // v2.36.22: a session's context window never changes, so remember it. The live
@@ -280,7 +300,6 @@ function emitT1(sid, message) {
       // window from observed usage and fires a spurious T2 (2026-09-09: "threshold 150k"
       // on a 1M window at 21% used; the same shape as the 2026-09-05 note above).
       st.knownWindow = liveWindow;
-      if (liveMain.model && typeof liveMain.model.id === 'string') st.knownModel = liveMain.model.id;
       const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
       let contextTokens = liveTotal;
       if (mustParse) {
@@ -329,6 +348,11 @@ function emitT1(sid, message) {
         const staleWindow = readStaleWindow(live.base, sid);
         if (staleWindow !== null) st.knownWindow = staleWindow;
       }
+      if (typeof st.knownModel !== 'string' || !st.knownModel) {
+        const staleModel = readStaleModel(live.base, sid);
+        if (staleModel !== null) st.knownModel = staleModel;
+      }
+      cfg = applyModelTiers(st, cfg);
       const rememberedWindow = Number.isFinite(st.knownWindow) && st.knownWindow > 0
         ? st.knownWindow : null;
       if (rememberedWindow !== null) warnOnce(st, unreachableT2Warning(cfg, rememberedWindow));

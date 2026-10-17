@@ -599,11 +599,29 @@ function run() {
     }
 
     // Any source: t2 + gap must fit under window - 33000, else compaction comes before the T2 handoff reminder (with auto-compact set T2 never asks to stop). One line, no changes made.
+    // BL-0205: model ids for context_budget.per_model, in priority order: the payload's own, then the
+    // statusline live file's model.id and the context-budget hook's remembered one for this session.
+    function knownModelIds(pl) {
+      const ids = [];
+      if (typeof pl.model === 'string' && pl.model) ids.push(pl.model);
+      try {
+        const lds = require('../scripts/lib/live-state-dir.js');
+        const sid = lds.sanitizeSessionId(pl.session_id || process.env.CLAUDE_CODE_SESSION_ID || '');
+        const live = lds.resolveLiveDir();
+        const rec = sid ? lds.readLive(live.base, sid, { kind: 'main', maxAgeMs: Number.MAX_SAFE_INTEGER }) : null;
+        if (rec && rec.model && typeof rec.model.id === 'string') ids.push(rec.model.id);
+        const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
+        const st = sid ? JSON.parse(fs.readFileSync(path.join(stDir, `${sid}.json`), 'utf8')) : null;
+        if (st && typeof st.knownModel === 'string') ids.push(st.knownModel);
+      } catch { /* no live file / state: payload model or top-level tiers */ }
+      return ids;
+    }
     let budgetWarning = '';
     try {
       budgetWarning = require('../scripts/lib/compaction-handoff.js').budgetWarning({
         projectDir: process.env.CLAUDE_PROJECT_DIR || cwd,
         model: typeof payload.model === 'string' ? payload.model : undefined,
+        models: knownModelIds(payload),
       }) || '';
     } catch { budgetWarning = ''; }
     // Compact only: log where compaction really happened (calibration for the 33000 buffer constant).

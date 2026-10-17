@@ -322,7 +322,12 @@ function buildHandoff(opts = {}) {
 // second reader here would drift (it once ignored context_budget.mode=off).
 function readBudget(opts = {}) {
   const { readContextBudget } = require('./config-path.js');
-  const c = readContextBudget({ env: opts.env, home: opts.home });
+  // BL-0205: per_model tiers by the first known model id that matches a pattern (opts.models, in priority order, then opts.model).
+  const { matchPerModel } = require('./config-path.js');
+  let c = readContextBudget({ env: opts.env, home: opts.home });
+  const ids = [...(Array.isArray(opts.models) ? opts.models : []), opts.model].filter((m) => typeof m === 'string' && m);
+  const hit = ids.find((m) => matchPerModel(c.perModel, m));
+  if (hit) c = readContextBudget({ env: opts.env, home: opts.home, model: hit });
   return { t2: c.t2, gap: c.gap, mode: c.mode };
 }
 

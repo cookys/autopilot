@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- BL-0024 (price reader strictness, parity with the llm-playground gate): `scripts/lib/qualification-prices.js` now rejects impossible calendar days in `verified`/`effective`, a `generated_at` that is not a real strict UTC `YYYY-MM-DDTHH:MM:SSZ`, and a `source_url` with no host, a non-ASCII host, whitespace, or an explicit port; `effective` is a date in the published schema, so it is validated like `verified`.
 - BL-0024 (price reader semantics, reported by model-dyno): `effective_basis` (sourced|assumed) describes how a price's effective DATE was pinned, not where the price came from, so `scripts/lib/qualification-prices.js` no longer treats `assumed` as unknown; a seat is priced when its row has non-null input and output, and `effective_basis` is display-only. Extra top-level fields (`unpriced`, `content_digest`, ...) are accepted, and `status` reports `n_unpriced`.
 
 - New `viewer` mod (`mods/viewer/`, composed with `live` by `mods/register.ts`): a `show` tool (`mcp__autopilot__show`) and `/show` command that display a file or a git diff to the owner in a window without the text reaching the model (the model gets one summary line), and pressable file paths in the live panel (decision-card text, a background command's output tail) that open the same window. `scripts/affected-suites.js` runs both mod suites for a change under either.

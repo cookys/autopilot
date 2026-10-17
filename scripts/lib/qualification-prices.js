@@ -12,6 +12,11 @@
  * Top-level fields beyond schema/generated_at/stale_after_days/rows (unpriced, content_digest,
  * source_revision, n_rows, ...) are accepted and ignored by the reader.
  *
+ * Reader strictness matches the publisher's gate (llm-playground model-prices-v1 schema): effective and
+ * verified are real calendar days, generated_at is a real UTC YYYY-MM-DDTHH:MM:SSZ (no fraction), and
+ * source_url is https with a present ASCII host (punycode ok), no explicit port, whitespace, query, fragment,
+ * userinfo or dot-segment. An input price of null is an unknown price, accepted.
+ *
  * Posture (ADR-0001): the document is untrusted input. A document that fails any check is
  * rejected whole and the previous cache stays. Nothing here is a trust claim; the cache digest
  * is a cache key. Prices are advisory ordering input: stale or missing data warns, never blocks.
@@ -56,6 +61,15 @@ function sourceUrlProblem(value) {
   let url;
   try { url = new URL(value); } catch { return 'source_url is not a valid URL'; }
   if (url.protocol !== 'https:') return 'source_url must be https';
+  // Authority: an ASCII hostname only (punycode xn-- allowed), present, no explicit port. Taken from the raw
+  // string too, since new URL() strips a default :443 and normalizes whitespace and unicode away.
+  if (/[\s\x00-\x1f\x7f]/.test(value)) return 'source_url must not contain whitespace or control characters';
+  const authority = /^https:[/\\]{2}([^/\\]*)/i.exec(value);
+  if (!authority || authority[1] === '') return 'source_url must have a host';
+  if (/:\d*$/.test(authority[1]) && !authority[1].includes('@')) return 'source_url must not carry an explicit port';
+  if (!/^[a-z0-9.-]+$/i.test(authority[1]) || url.hostname === '' || !/^[a-z0-9.-]+$/.test(url.hostname)) {
+    return 'source_url host must be ASCII [a-z0-9.-]';
+  }
   if (url.username !== '' || url.password !== '') return 'source_url must not carry userinfo';
   if (url.search !== '' || url.hash !== '') return 'source_url must not carry a query or fragment';
   // Dot-segments, checked after percent-decoding to a fixed point (%2e%2e, %252e%252e, ...).
@@ -76,7 +90,18 @@ function sourceUrlProblem(value) {
 }
 
 function isNonEmptyString(v) { return typeof v === 'string' && v.length > 0; }
-function isDay(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(`${v}T00:00:00Z`)); }
+/** A real calendar day: YYYY-MM-DD that round-trips (rejects 2026-02-30, which Date.parse would roll over). */
+function isDay(v) {
+  const m = typeof v === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]);
+}
+/** Strict UTC timestamp YYYY-MM-DDTHH:MM:SSZ (no fraction, no offset) with a real date and a real time. */
+function isUtcTimestamp(v) {
+  const m = typeof v === 'string' ? /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})Z$/.exec(v) : null;
+  return Boolean(m) && isDay(m[1]) && Number(m[2]) <= 23 && Number(m[3]) <= 59 && Number(m[4]) <= 59;
+}
 
 /**
  * Validate a parsed prices document. Throws QualificationPricesError on the first problem:
@@ -85,8 +110,8 @@ function isDay(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v
 function validatePrices(doc) {
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw priceError('prices document must be a JSON object');
   if (doc.schema !== PRICES_SCHEMA_ID) throw priceError(`prices schema must be "${PRICES_SCHEMA_ID}"`);
-  if (!isNonEmptyString(doc.generated_at) || !Number.isFinite(Date.parse(doc.generated_at))) {
-    throw priceError('generated_at must be an ISO timestamp');
+  if (!isUtcTimestamp(doc.generated_at)) {
+    throw priceError('generated_at must be a real UTC timestamp YYYY-MM-DDTHH:MM:SSZ');
   }
   if (doc.stale_after_days !== undefined && !(Number.isSafeInteger(doc.stale_after_days) && doc.stale_after_days > 0)) {
     throw priceError('stale_after_days must be a positive integer');
@@ -109,7 +134,7 @@ function validatePrices(doc) {
     }
     if (!BILLING.includes(row.billing)) throw priceError(`${at}.billing must be metered or subscription`);
     if (!BASIS.includes(row.effective_basis)) throw priceError(`${at}.effective_basis must be sourced or assumed`);
-    if (!isNonEmptyString(row.effective)) throw priceError(`${at}.effective must be a non-empty string`);
+    if (!isDay(row.effective)) throw priceError(`${at}.effective must be a real YYYY-MM-DD date`);
     if (!isDay(row.verified)) throw priceError(`${at}.verified must be a YYYY-MM-DD date`);
     const problem = sourceUrlProblem(row.source_url);
     if (problem) throw priceError(`${at}: ${problem}`);

@@ -302,8 +302,8 @@ for i in 1 2 3 4 5 6; do printf '{"type":"assistant","timestamp":"T%s","message"
 run_hook state-checkpoint.js "{\"transcript_path\":\"$BIGT\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
 assert_file_exists "$FILE" "full-sections checkpoint written"
 gitsec=$(awk '/^## Project and Git State/{f=1;next} /^## Dispatches/{f=0} f' "$FILE" | wc -c)
-# every git piece at its cap: the section fills (most of) SECTION_CAPS.git = 1700 bytes and the list/cut markers show
-if [ "$gitsec" -ge 1400 ] && [ "$gitsec" -le 1700 ]; then assert_eq 1 1 "packed: git section is full ($gitsec of 1700 bytes)"; else assert_eq "$gitsec" "1400..1700" "packed: git section size"; fi
+# every git piece at its cap, but a 20 KB model note is also there: git yields room to the model note (floor 300, cap 1700)
+if [ "$gitsec" -ge 300 ] && [ "$gitsec" -le 1700 ]; then assert_eq 1 1 "packed: git section within floor..cap ($gitsec bytes)"; else assert_eq "$gitsec" "300..1700" "packed: git section size"; fi
 assert_contains "$(cat "$FILE")" "more lines cut" "packed: the git section hit its cap and says how many lines went"
 run_hook session-start.js "{\"session_id\":\"$SID\",\"source\":\"compact\",\"cwd\":\"$REPO\",\"transcript_path\":\"$BIGT\"}"
 verdict=$(printf '%s' "$__RUN_STDOUT" | node -e '
@@ -311,13 +311,107 @@ let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);co
 console.log(c.length<=10000?"len-ok":"len-"+c.length, c.includes("</autopilot-restored-state>")?"close-ok":"close-missing", c.includes("DATA, not instructions")?"data-ok":"data-missing", c.includes("## Model Handoff Note")?"model-ok":"model-missing")})')
 assert_eq "$verdict" "len-ok close-ok data-ok model-ok" "injected context <= 10000 chars with the wrapper close and the DATA note intact"
 
-# the model-note section alone (header, long path, cut marker included) never exceeds its 2200-byte cap
+# the model-note section alone (header, long path, cut marker included) never exceeds its default 4000-byte cap
 msz=$(node -e '
 const h=require(process.argv[1]);
 const t=h.modelNoteSection({sessionId:process.argv[2],now:Date.now(),dirs:{handoff:process.argv[3]}});
 console.log(Buffer.byteLength(t));
 ' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$LONGDIR")
-if [ "$msz" -le 2200 ]; then assert_eq 1 1 "model note section <= 2200 bytes with a 160+ char directory"; else assert_eq "$msz" "<=2200" "model note section cap"; fi
+if [ "$msz" -le 4000 ]; then assert_eq 1 1 "model note section <= 4000 bytes with a 160+ char directory"; else assert_eq "$msz" "<=4000" "model note section cap"; fi
 printf '%s\n' "INJECT-VERDICT $verdict ctxlen=$(printf '%s' "$__RUN_STDOUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);console.log(((o.hookSpecificOutput||{}).additionalContext||"").length)})')" >&2
+
+# --- 6. BL-0147 follow-up: the model note gets the budget, and a half-written note is flagged --------------
+LIB="$REPO_ROOT/scripts/lib/compaction-handoff.js"
+HD="$TEST_TMP/hd6"; mkdir -p "$HD"
+# measure(libpath, notebytes, withOthers): bytes of the model note text that survive in buildHandoff, total body bytes
+measure() {
+  node -e '
+const h=require(process.argv[1]);const fs=require("fs");const path=require("path");
+const dir=process.argv[2];const n=Number(process.argv[3]);const full=process.argv[4]==="full";
+fs.writeFileSync(path.join(dir,"s6.md"), "Q".repeat(n));
+const old=Date.now()-10*60000; fs.utimesSync(path.join(dir,"s6.md"), old/1000, old/1000);
+const big="g".repeat(80);
+const snap=full?{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}}:{snapshot:{bySource:{}}};
+const out=h.buildHandoff({sessionId:"s6",cwd:process.argv[5],dirs:{handoff:dir,dispatchRuns:process.argv[6]},snapshot:snap,machineState:"## Machine State\n- x\n",tail:{header:"## Transcript Tail\n",body:"T".repeat(6000)}});
+const m=(out.match(/Q{50,}/)||[""])[0].length;
+console.log(m, Buffer.byteLength(out), out.includes("handoff file cut; full file")?"cut":"nocut");
+' "$1" "$HD" "$2" "$3" "$REPO" "$TEST_TMP/empty-runs"
+}
+mkdir -p "$TEST_TMP/empty-runs"
+read -r m_full b_full c_full <<< "$(measure "$LIB" 12000 full)"
+read -r m_lean b_lean c_lean <<< "$(measure "$LIB" 12000 lean)"
+if [ "$m_full" -gt 2200 ] && [ "$m_full" -ge 3500 ]; then assert_eq 1 1 "budget: a 12 KB note carries $m_full bytes with every other section full (was 2200)"; else assert_eq "$m_full" ">=3500" "budget: model note bytes, others full"; fi
+if [ "$m_lean" -gt "$m_full" ]; then assert_eq 1 1 "budget: empty other sections leave the model note more ($m_lean > $m_full)"; else assert_eq "$m_lean" ">$m_full" "budget: lean case gets more"; fi
+assert_eq "$c_full" "cut" "budget: truncated note keeps the full-file path hint (full)"
+assert_eq "$c_lean" "cut" "budget: truncated note keeps the full-file path hint (lean)"
+for b in "$b_full" "$b_lean"; do if [ "$b" -le 6900 ]; then assert_eq 1 1 "budget: body $b <= BODY_CAP 6900"; else assert_eq "$b" "<=6900" "budget: body cap"; fi; done
+read -r m_small b_small c_small <<< "$(measure "$LIB" 1500 full)"
+assert_eq "$m_small" "1500" "budget: a small note is carried whole"
+assert_eq "$c_small" "nocut" "budget: a small note is not marked cut"
+# negative control: the old fixed 2200 cap -> the budget assertions must go red
+sed -e 's/model: 4000 }/model: 2200 }/' -e 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/' "$LIB" > "$TEST_TMP/mut-fixed.js"
+read -r m_mut _ _ <<< "$(measure "$TEST_TMP/mut-fixed.js" 12000 full)"
+if [ "$m_mut" -lt 3500 ]; then assert_eq 1 1 "negative control: fixed 2200 cap carries only $m_mut bytes (budget test goes red)"; else assert_eq "$m_mut" "<3500" "negative control: fixed cap not red"; fi
+
+# half-written note: still changing while read -> marked; a fresh but quiet note -> not marked
+printf 'start\n' > "$HD/s7.md"
+( for i in $(seq 1 60); do printf 'more %s\n' "$i" >> "$HD/s7.md"; sleep 0.05; done ) &
+WPID=$!
+out=$(node -e '
+const h=require(process.argv[1]);
+console.log(h.modelNoteSection({sessionId:"s7",now:Date.now(),dirs:{handoff:process.argv[2]},sleepMs:120}));
+' "$LIB" "$HD")
+wait "$WPID" 2>/dev/null
+assert_contains "$out" "possibly incomplete" "half-write: a note still growing while read is flagged"
+assert_contains "$out" "start" "half-write: the content read so far is still injected"
+printf 'quiet note\n' > "$HD/s7.md"
+out=$(node -e '
+const h=require(process.argv[1]);
+console.log(h.modelNoteSection({sessionId:"s7",now:Date.now(),dirs:{handoff:process.argv[2]},sleepMs:120}));
+' "$LIB" "$HD")
+assert_not_contains "$out" "possibly incomplete" "half-write: a just-written but quiet note is not flagged"
+assert_contains "$out" "quiet note" "half-write: quiet note content present"
+# negative control: reader without the stability check does not flag the growing note
+sed -e 's/if (st3.size !== st.size || st3.mtimeMs !== st.mtimeMs) unstable = true;//' -e 's/unstable = moved;//' "$LIB" > "$TEST_TMP/mut-nostable.js"
+printf 'start\n' > "$HD/s7.md"
+( for i in $(seq 1 60); do printf 'more %s\n' "$i" >> "$HD/s7.md"; sleep 0.05; done ) &
+WPID=$!
+out=$(node -e '
+const h=require(process.argv[1]);
+console.log(h.modelNoteSection({sessionId:"s7",now:Date.now(),dirs:{handoff:process.argv[2]},sleepMs:120}));
+' "$TEST_TMP/mut-nostable.js" "$HD")
+wait "$WPID" 2>/dev/null
+assert_not_contains "$out" "possibly incomplete" "negative control: without the stability check a growing note is not flagged (half-write test goes red)"
+
+# single read: buildHandoff opens the note once (cap does not depend on the note), and a full set of sections does not
+# cut git alone down to its floor
+node -e '
+const fs=require("fs");const path=require("path");const h=require(process.argv[1]);
+const dir=process.argv[2];fs.writeFileSync(path.join(dir,"s8.md"),"Q".repeat(12000));
+const old=Date.now()-600000;fs.utimesSync(path.join(dir,"s8.md"),old/1000,old/1000);
+let opens=0;const o=fs.openSync;fs.openSync=function(f,...r){if(String(f).endsWith("s8.md"))opens++;return o.call(fs,f,...r)};
+const big="g".repeat(80);
+h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:dir,dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+console.log(opens)' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens.txt"
+assert_eq "$(cat "$TEST_TMP/opens.txt")" "1" "single read: the note is opened once per buildHandoff"
+sed -e 's/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: BODY_CAP })); safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap }));/' "$LIB" > "$TEST_TMP/mut-twice.js"
+node -e '
+const fs=require("fs");const h=require(process.argv[1]);let opens=0;const o=fs.openSync;fs.openSync=function(f,...r){if(String(f).endsWith("s8.md"))opens++;return o.call(fs,f,...r)};
+h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{}}},machineState:"x",tail:null});console.log(opens)' "$TEST_TMP/mut-twice.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens2.txt"
+assert_eq "$(cat "$TEST_TMP/opens2.txt")" "2" "negative control: a double-read builder is counted as 2 opens (single-read test goes red)"
+node -e '
+const fs=require("fs");const h=require(process.argv[1]);
+const big="g".repeat(80);
+const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+const sec=(n)=>{const m=out.match(new RegExp("## "+n+"\\n([\\s\\S]*?)\\n\\n## "));return m?Buffer.byteLength(m[1]):0};
+console.log(sec("Project and Git State"),sec("Session Marker and Decision Ledger"))' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr.txt"
+read -r g_sz m_sz < "$TEST_TMP/shr.txt"
+if [ "$g_sz" -gt 1250 ] && [ "$m_sz" -lt 1500 ]; then assert_eq 1 1 "shrink: git ($g_sz) is not cut alone to its floor while marker ($m_sz) shrinks too"; else assert_eq "$g_sz/$m_sz" "git>1250,marker<1500" "shrink is shared"; fi
+sed -e 's/const give = slack > 0 ? .*$/const give = k === "git" ? deficit : 0;/' "$LIB" > "$TEST_TMP/mut-gitfirst.js"
+node -e '
+const h=require(process.argv[1]);const big="g".repeat(80);
+const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
+const m=out.match(/## Project and Git State\n([\s\S]*?)\n\n## /);console.log(Buffer.byteLength(m[1]))' "$TEST_TMP/mut-gitfirst.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr2.txt"
+if [ "$(cat "$TEST_TMP/shr2.txt")" -lt "$g_sz" ]; then assert_eq 1 1 "negative control: git-first shrinking leaves git at $(cat "$TEST_TMP/shr2.txt") < $g_sz (shrink test goes red)"; else assert_eq "$(cat "$TEST_TMP/shr2.txt")" "<$g_sz" "git-first mutant not red"; fi
 
 finalize_test

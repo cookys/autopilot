@@ -924,7 +924,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Compaction point measured 2026-10-17 (window 533000): preTokens 500826/501310/500183/499974, about window minus 33K; documented in settings-reference. Eval: quiz/grade on real transcripts, ON = handoff file, OFF = 20-turn tail.
+- **Context**: Compaction point measured 2026-10-17 (window 533000): preTokens 499974-501310, about window minus 33K. Done: model note budget 4000B+, half-write guard. Eval: quiz/grade on real transcripts, ON = handoff file, OFF = 20-turn tail.
 
 
 

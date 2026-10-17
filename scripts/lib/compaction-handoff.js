@@ -36,8 +36,19 @@ const DEFAULT_T2_TOKENS = 150_000;
 
 // Body budget (bytes) for the sections below plus the tail. SessionStart injects at most 10000
 // characters in total (base context + wrapper ~1.9k), so this stays well inside it.
-const BODY_CAP = 6000;
-const SECTION_CAPS = { git: 1700, dispatch: 1100, marker: 1500, model: 2200 };
+// The model's own handoff note is the most valuable part after a compaction, the transcript tail is auxiliary: the model
+// section gets at least MODEL_MIN bytes (SECTION_CAPS.model) and takes whatever git / dispatch / marker leave unused;
+// when it needs more than is left, those three shrink (never below SECTION_FLOOR) instead. The tail gets the remainder.
+// 6900 + the checkpoint wrapper (~2.9k) stays under SessionStart's 10000-character injection limit.
+const BODY_CAP = 6900;
+const SECTION_CAPS = { git: 1700, dispatch: 1100, marker: 1500, model: 4000 };
+const SECTION_FLOOR = 300;
+// A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
+// it with the Write tool; atomicity is not under our control, so the reader guards).
+const STABLE_AGE_MS = 2000;
+const STABLE_WAIT_MS = 300;
+const STABLE_TRIES = 3;
+const UNSTABLE_MARK = '\n[possibly incomplete: the handoff file was still being written when read]';
 const TAIL_MIN_BYTES = 400;
 const GIT_TIMEOUT_MS = 3000;
 const DISPATCH_TIMEOUT_MS = 4000;
@@ -234,12 +245,13 @@ function modelNotePath(sessionId, dirs) {
 
 // The whole section, header and cut marker included, stays within SECTION_CAPS.model bytes whatever the path
 // length: a long path is shown by its tail only.
-function modelNoteSection({ sessionId, now, dirs }) {
+function modelNoteSection({ sessionId, now, dirs, cap: capOpt, sleepMs, deadlineAt }) {
   if (!sessionId) return unavailable('no session id, so no handoff file path');
   let file;
   try { file = modelNotePath(sessionId, dirs); } catch (e) { return unavailable(`live-state directory: ${clip(e && e.message, 100)}`); }
   const shown = file.length > 80 ? `…${file.slice(-79)}` : file;
-  const cap = SECTION_CAPS.model;
+  const cap = Number.isFinite(capOpt) ? capOpt : SECTION_CAPS.model;
+  const wait = Number.isFinite(sleepMs) ? sleepMs : STABLE_WAIT_MS;
   const noFollow = fs.constants.O_NOFOLLOW || 0;
   // O_NONBLOCK: opening a FIFO with no writer would block forever (and hang PreCompact); with it open() returns
   // at once and the fstat().isFile() check below refuses the FIFO.
@@ -256,8 +268,21 @@ function modelNoteSection({ sessionId, now, dirs }) {
     return unavailable(`cannot open ${shown}: ${e && e.code}`);
   }
   try {
-    const st = fs.fstatSync(fd);
+    let st = fs.fstatSync(fd);
     if (!st.isFile()) return unavailable(`${shown} is not a regular file`);
+    // Settle: a note touched in the last 2 s is re-stat'ed after a short wait; size or mtime moving means a writer is
+    // still active, so wait and look again (STABLE_TRIES times).
+    let unstable = false;
+    for (let i = 0; i < STABLE_TRIES; i++) {
+      if (now - st.mtimeMs >= STABLE_AGE_MS && i === 0) break;
+      if (Number.isFinite(deadlineAt) && deadlineAt - Date.now() < wait * 2) break; // out of time: read what is there
+      try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait); } catch { /* ignore */ }
+      const st2 = fs.fstatSync(fd);
+      const moved = st2.size !== st.size || st2.mtimeMs !== st.mtimeMs;
+      st = st2;
+      unstable = moved;
+      if (!moved) break;
+    }
     const mins = Math.max(0, Math.round((now - st.mtimeMs) / 60000));
     const header = `written ${mins} minute${mins === 1 ? '' : 's'} ago (${shown})\n`;
     const marker = `\n[...handoff file cut; full file: ${shown}]`;
@@ -265,10 +290,14 @@ function modelNoteSection({ sessionId, now, dirs }) {
     const want = Math.min(st.size, room + 1);
     const buf = Buffer.alloc(want);
     const got = want > 0 ? fs.readSync(fd, buf, 0, want, 0) : 0;
-    const cut = st.size > room || got > room;
-    const avail = cut ? Math.max(0, room - Buffer.byteLength(marker)) : room;
+    const st3 = fs.fstatSync(fd);
+    if (st3.size !== st.size || st3.mtimeMs !== st.mtimeMs) unstable = true;
+    const tag = unstable ? UNSTABLE_MARK : '';
+    const roomT = Math.max(0, room - Buffer.byteLength(tag));
+    const cut = st.size > roomT || got > roomT;
+    const avail = cut ? Math.max(0, roomT - Buffer.byteLength(marker)) : roomT;
     const text = buf.subarray(0, Math.min(got, avail)).toString('utf8').replace(/\uFFFD+$/, '');
-    return `${header}${text.replace(/\s+$/, '')}${cut ? marker : ''}`;
+    return `${header}${text.replace(/\s+$/, '')}${cut ? marker : ''}${tag}`;
   } catch (e) {
     return unavailable(`cannot read ${shown}: ${e && e.code}`);
   } finally { try { fs.closeSync(fd); } catch { /* ignore */ } }
@@ -294,21 +323,46 @@ function buildHandoff(opts = {}) {
   if (by && by.root_run_id) roots.add(by.root_run_id);
   if (by && Array.isArray(by.campaign_roots)) for (const x of by.campaign_roots) roots.add(x);
 
-  const parts = [
-    ['Project and Git State', capLines(safe(() => gitSection(opts.cwd, opts.gitRunner, deadlineAt)), SECTION_CAPS.git)],
-    ['Dispatches', capLines(safe(() => dispatchSection({ sessionId, roots, now, dirs, statusScript: opts.statusScript, deadlineAt })), SECTION_CAPS.dispatch)],
-    ['Session Marker and Decision Ledger', capLines(safe(() => markerLedgerSection(opts.snapshot)), SECTION_CAPS.marker)],
-    ['Model Handoff Note', safe(() => modelNoteSection({ sessionId, now, dirs }))],
-  ];
+  const raw = {
+    git: safe(() => gitSection(opts.cwd, opts.gitRunner, deadlineAt)),
+    dispatch: safe(() => dispatchSection({ sessionId, roots, now, dirs, statusScript: opts.statusScript, deadlineAt })),
+    marker: safe(() => markerLedgerSection(opts.snapshot)),
+  };
+  const titles = { git: 'Project and Git State', dispatch: 'Dispatches', marker: 'Session Marker and Decision Ledger' };
+  const caps = { git: SECTION_CAPS.git, dispatch: SECTION_CAPS.dispatch, marker: SECTION_CAPS.marker };
+  const render = (k) => capLines(raw[k], caps[k]);
+  const modelTitle = 'Model Handoff Note';
+  const machine = opts.machineState ? `${opts.machineState.replace(/\s+$/, '')}\n\n` : '';
+  const frame = (t) => Buffer.byteLength(`## ${t}\n\n\n`);
+  // the "tail omitted" line (~115 bytes) is reserved too, so a full body never overshoots BODY_CAP
+  const fixed = (opts.tail ? 120 : 0) + Buffer.byteLength(machine) + frame(modelTitle) + frame(titles.git) + frame(titles.dispatch) + frame(titles.marker);
+  const othersLen = () => Object.keys(titles).reduce((n, k) => n + Buffer.byteLength(render(k)), 0);
+  // The model section's budget: at least MODEL_MIN, more when the other sections leave room. It depends only on the
+  // sizes of the other sections, so the note is read (and settled) exactly once.
+  const modelCap = Math.min(BODY_CAP, Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen()));
+  const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));
+  // Shrink git / dispatch / marker only as far as the model section needs, the shortfall shared in proportion to how
+  // much each has above SECTION_FLOOR (so no single section is cut to its floor while another stays full).
+  const deficit = fixed + othersLen() + Buffer.byteLength(model) - BODY_CAP;
+  if (deficit > 0) {
+    const have = {};
+    let slack = 0;
+    for (const k of Object.keys(titles)) { have[k] = Math.min(caps[k], Buffer.byteLength(render(k))); slack += Math.max(0, have[k] - SECTION_FLOOR); }
+    for (const k of Object.keys(titles)) {
+      const give = slack > 0 ? Math.ceil(deficit * Math.max(0, have[k] - SECTION_FLOOR) / slack) : 0;
+      caps[k] = Math.max(SECTION_FLOOR, have[k] - give);
+    }
+  }
   let out = '';
-  for (const [title, body] of parts) out += `## ${title}\n${body}\n\n`;
-  if (opts.machineState) out += `${opts.machineState.replace(/\s+$/, '')}\n\n`;
+  for (const k of Object.keys(titles)) out += `## ${titles[k]}\n${render(k)}\n\n`;
+  out += `## ${modelTitle}\n${model}\n\n`;
+  out += machine;
   const used = Buffer.byteLength(out);
   const room = BODY_CAP - used;
   if (opts.tail) {
     if (room >= TAIL_MIN_BYTES) {
       const tail = `${opts.tail.header}${opts.tail.body}`;
-      out += Buffer.byteLength(tail) <= room ? tail : `${Buffer.from(tail).subarray(0, room - 40).toString('utf8').replace(/�+$/, '')}\n[...transcript tail cut to fit the handoff cap]\n`;
+      out += Buffer.byteLength(tail) <= room ? tail : `${Buffer.from(tail).subarray(0, room - 60).toString('utf8').replace(/�+$/, '')}\n[...transcript tail cut to fit the handoff cap]\n`;
     } else {
       out += '## Transcript Tail (auxiliary reference)\nomitted: the sections above used the handoff size cap\n';
     }
@@ -455,5 +509,5 @@ function recordCompactionPoint(opts = {}) {
 module.exports = {
   buildHandoff, gitSection, dispatchSection, markerLedgerSection, modelNoteSection, modelNotePath,
   budgetWarning, readBudget, recordCompactionPoint, lastCompactBoundary, compactionPointsFile,
-  AUTOCOMPACT_BUFFER_TOKENS, DEFAULT_GAP_TOKENS, DEFAULT_T2_TOKENS, BODY_CAP, HANDOFF_DEADLINE_MS,
+  AUTOCOMPACT_BUFFER_TOKENS, DEFAULT_GAP_TOKENS, DEFAULT_T2_TOKENS, BODY_CAP, SECTION_CAPS, HANDOFF_DEADLINE_MS,
 };

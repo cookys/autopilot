@@ -9,6 +9,7 @@ import type { Locale } from '../live/i18n'
 import { MAX_FILE_BYTES, TAIL_LINES, diffView, startAbove, fileView, gitDiffArgv, nextStart, prevStart, splitLines, summaryOfDiff, summaryOfEmpty, summaryOfFile } from './model'
 import type { DiffView, FileView, ShowRequest } from './model'
 import type { Shown } from './pane'
+import { resetAssist } from './assist'
 import { makeVT } from './strings'
 
 export const PANE_ID = 'autopilot-viewer'
@@ -30,7 +31,7 @@ export const TOOL_SCHEMA = {
   },
 }
 
-export type Current = { shown: Shown; title: string; text: string | null; locale: Locale }
+export type Current = { shown: Shown; title: string; text: string | null; locale: Locale } // text: the whole file, or the whole `git diff` output (what the summary reads)
 let current: Current | null = null
 export const currentView = (): Current | null => current
 export const setCurrentView = (c: Current): void => { current = c }
@@ -104,6 +105,7 @@ export async function show($: EngineInterface, req: ShowRequest, opts: ShowOpts 
   }
   const finish = async (shown: Shown, text: string | null, locale: Locale, summary: string): Promise<ShowOutcome> => {
     current = { shown, title, text, locale }
+    resetAssist() // a new content: the previous answer and any running call go
     $.ui.invalidate('ui.render')
     const placed = await (early ?? openWindow($, title))
     return { ok: true, summary: placed ? summary : summary + ' ' + WAITING_FOR_MODEL, title, placed }
@@ -127,7 +129,7 @@ export async function show($: EngineInterface, req: ShowRequest, opts: ShowOpts 
   if (ran.exitCode !== 0) return fail('git diff failed: ' + (ran.stderr.split('\n')[0] || 'exit ' + ran.exitCode).slice(0, 200))
   const d: DiffView = diffView(ran.stdout)
   if (d.files === 0) return finish({ kind: 'empty', what: 'diff' }, null, locale, summaryOfEmpty(title))
-  return finish({ kind: 'diff', view: d }, null, locale, summaryOfDiff(req.args, d))
+  return finish({ kind: 'diff', view: d }, ran.stdout, locale, summaryOfDiff(req.args, d))
 }
 
 export function shownFile(view: FileView, end: number | null): Shown {

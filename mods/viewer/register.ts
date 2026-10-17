@@ -13,7 +13,10 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { errorOf, fileView, parseShowInput } from './model'
 import type { ShowInput, ShowRequest } from './model'
+import { aiState, cancelAi, runAi, sendToChat, toggleAi } from './assist'
+import type { Source } from './assist'
 import { Viewer } from './pane'
+import type { AiView } from './pane'
 import { PANE_ID, TOOL_DESCRIPTION, TOOL_FULL, TOOL_NAME, TOOL_SCHEMA, currentView, reopenWindow, setCurrentView, shownFile, show } from './show'
 import { makeVT } from './strings'
 import type { VT } from './strings'
@@ -61,6 +64,17 @@ export function registerViewer(on: Parameters<Register>[0]): void {
     if (cur === null) return Viewer($.ui.resolve(e), { kind: 'loading' }, '', makeVT('en'), () => {})
     const c = cur
     const t: VT = makeVT(c.locale)
+    const src = sourceOf(c)
+    const lang = c.locale === 'zh-TW' ? 'zh-TW' : 'en'
+    const ai: AiView | undefined = src === null ? undefined : {
+      state: aiState(),
+      summarize: () => { void runAi($, 'summary', null, src, lang, t) },
+      cancel: () => cancelAi($),
+      focusAsk: () => { void $.ui.focus({ requestId: PANE_ID, key: 'ask-input' }).catch(() => undefined) },
+      ask: (q: string) => { if (q.trim() === '') $.ui.toast(t('viewer.ai.emptyQuestion')); else { void runAi($, 'ask', q.trim(), src, lang, t); void $.ui.focus({ requestId: PANE_ID, key: 'ask' }).catch(() => undefined) } }, // the keyboard leaves the field, so 1 to 4 press buttons again
+      toChat: () => { void sendToChat($, t) },
+      toggle: () => toggleAi($),
+    }
     return Viewer($.ui.resolve(e), c.shown, c.title, t, (start: number) => {
       if (c.shown.kind !== 'file' || c.text === null || currentView() !== c) return
       const view = fileView(c.shown.view.path, c.text, start, null)
@@ -68,8 +82,16 @@ export function registerViewer(on: Parameters<Register>[0]): void {
       setCurrentView({ ...c, shown: shownFile(view, null) })
       void $.ui.invalidate('ui.render')
       void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
-    })
+    }, ai)
   })
+}
+
+// what the summary and the question read: the whole text of the window's file (not only the part on screen) or the whole diff
+function sourceOf(c: NonNullable<ReturnType<typeof currentView>>): Source | null {
+  if (c.text === null) return null
+  if (c.shown.kind === 'file') return { text: c.text, path: c.shown.view.path, title: c.title, isDiff: false }
+  if (c.shown.kind === 'diff') return { text: c.text, path: null, title: c.title, isDiff: true }
+  return null
 }
 
 // standalone (the viewer's own tests): the mod with its own session.start

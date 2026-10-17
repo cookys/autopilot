@@ -56,6 +56,14 @@ export function jumpOffset(i: number, trackRows: number, max: number): number {
   return Math.min(max, Math.max(0, Math.round((i / (trackRows - 1)) * max)))
 }
 
+// The track cells that can be clicked: five jump points (top, a quarter, the middle, three quarters, bottom) at round(q * (trackRows - 1)), sorted, each cell once. A track of fewer
+// than five cells has fewer distinct points, so every cell is clickable and none twice; an empty track has none.
+export function jumpCells(trackRows: number): number[] {
+  if (!(trackRows >= 1)) return []
+  const last = Math.floor(trackRows) - 1
+  return [...new Set([0, 0.25, 0.5, 0.75, 1].map(q => Math.round(q * last)))].sort((a, b) => a - b)
+}
+
 // What one `ui.scroll` does to the offset. `by` is the engine's: an arrow a row, PgUp / PgDn `bodyRows`, Home / End `contentRows` (signed), the wheel a few rows. A move as big as
 // the whole tree is Home or End; anything else is relative. Always clamped to [0, max]. Returns true when the offset changed.
 export function applyScroll(model: ScrollModel, e: { by: number; contentRows: number }): boolean {

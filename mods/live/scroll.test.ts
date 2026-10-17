@@ -1,7 +1,7 @@
 // mods/live/scroll.test.ts — the scrolling window's arithmetic (design plan §12.10): the thumb, the clamp, every ui.scroll key, the cell wrap. The drawing is tested where it is used:
 // the 待決 tab in live.test.ts ("SCROLL decide ...") and the viewer window in viewer.test.ts.
 import { test, expect } from 'claude-code/testing'
-import { applyScroll, frameOf, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
+import { applyScroll, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
 
 test('thumb: flush with the top at offset 0, in the middle halfway, flush with the bottom at the last offset', () => {
   // 100 rows through a 20-row window: the thumb is 4 cells, 16 cells of travel for 80 rows of offset
@@ -153,4 +153,15 @@ test('jumpOffset: nothing to scroll (max 0) is always 0; a one-cell track reads 
   expect(jumpOffset(0, 0, 50)).toBe(0)
   expect(jumpOffset(-4, 10, 50)).toBe(0)
   expect(jumpOffset(99, 10, 50)).toBe(50)
+})
+
+test('jumpCells: five points (top, quarter, middle, three quarters, bottom) on a long track; fewer cells give every cell once, none twice; an empty track has none', () => {
+  expect(jumpCells(37)).toEqual([0, 9, 18, 27, 36])
+  expect(jumpCells(14)).toEqual([0, 3, 7, 10, 13])
+  expect(jumpCells(5)).toEqual([0, 1, 2, 3, 4])
+  expect(jumpCells(3)).toEqual([0, 1, 2])
+  expect(jumpCells(2)).toEqual([0, 1])
+  expect(jumpCells(1)).toEqual([0])
+  expect(jumpCells(0)).toEqual([])
+  expect(jumpCells(-3)).toEqual([])
 })

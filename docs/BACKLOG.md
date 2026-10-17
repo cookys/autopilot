@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0208 -->
+<!-- next-id: BL-0209 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -964,3 +964,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: self, 2026-10-17（viewer 按鈕配色事件）
 - **Pointer**: docs/backlog/ui-lint-scans-only-mods-live-while-design-rules-claim-all-mods.md
 - **Context**: 暫時的補救是 viewer render 測試裡的 buttonFindings（35f07d836）；根治要把 ui-lint 的檔案清單擴到 mods/*，每條規則附一個負向對照；見 evidence-discipline §60。
+
+### opencode v2 adaptor follow-ups: OPENCODE_PERMISSION precedence, probe seat root, test cosmetics
+- **Id**: BL-0208
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: self
+- **Problem**: opencode v2 adaptor 審查時留下三件小事沒做：一、兩個 adaptor 都沒清掉環境裡的權限覆寫變數，要先實測它和注入設定誰優先；二、探測用的席位根目錄建法不夠穩；三、測試檔有一段兩邊都回空字串的死碼。
+- **Impact**: 第一項若環境變數優先，理論上可放寬審查員的工具權限，目前只是推論、沒有實測；二三只是加固與整潔。
+- **Trigger**: 下一次動 opencode adaptor，或有人在環境裡設 OPENCODE_PERMISSION
+- **Effort**: S
+- **Source**: oc2 審查第 1 代 aa784ab5、第 2 代 95279be8／3b543bc0／b311744d（hetero-review-loop ledger）
+- **Pointer**: docs/backlog/opencode-v2-adaptor-follow-ups.md
+- **Context**: spike 報告與 references/multi-agent-portability.md 的 OpenCode 2.x adaptor 一節。

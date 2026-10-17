@@ -918,13 +918,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: self
-- **Problem**: 交接機制已出貨。剩：T2 提示改成先寫交接檔再繼續（指引變更，要 eval 和 owner 同意）；間隔設定只有開 session 的檢查會讀；壓縮點紀錄時機未用真的 Claude Code 驗證。
+- **Problem**: 交接機制已出貨。剩：T2 提示改成先寫交接檔再繼續（指引變更，要 eval 和 owner 同意）；間隔設定只有開 session 的檢查會讀。壓縮點已有第一筆實測（約窗口減 33K，數據在 Context），還缺別台機器或別的模型的紀錄。
 - **Impact**: 交接檔要模型自己寫才有，現在的 T2 提示沒叫它寫，所以壓縮後多半只有腳本產生的那部分。
-- **Trigger**: owner 同意改 T2 文字並排 eval 時，或第一筆真實壓縮點紀錄出現時（核對 pre_tokens 是否為這次壓縮）
+- **Trigger**: owner 同意改 T2 文字並排 eval 時，或別的模型出現新壓縮點紀錄時（核對 pre_tokens 是否為這次壓縮）
 - **Effort**: M
 - **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Eval reuses the build-rehydration-bundle quiz/grade on real large transcripts: ON = model handoff file plus script sections, OFF = 20-turn tail. Window 533k, t2 450k, gap 50k.
+- **Context**: Compaction point measured 2026-10-17 (window 533000): preTokens 500826/501310/500183/499974, about window minus 33K; documented in settings-reference. Eval: quiz/grade on real transcripts, ON = handoff file, OFF = 20-turn tail.
 
 
 

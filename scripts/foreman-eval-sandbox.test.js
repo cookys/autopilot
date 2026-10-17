@@ -218,7 +218,7 @@ for (const plant of [
   // Positive control: the plant is real. From the candidate's own side git
   // honours it, so the base is cut out there (the host must not be).
   const candidateView = session.shell(`git merge-base --is-ancestor ${fixture.baseSha} HEAD`);
-  check(candidateView.exit_code !== 0, `the plant takes effect for the candidate itself: ${plant}`);
+  check(candidateView.exit_code === 1 && !/fatal/u.test(candidateView.stderr), `the plant takes effect for the candidate itself (not an ancestor, exit 1, no fatal): ${plant} -> ${candidateView.exit_code} ${candidateView.stderr.trim().slice(0, 80)}`);
   const host = session.host();
   check(host.base_is_ancestor === true, `base stays an ancestor despite: ${plant}`);
   check(host.ancestry.includes(fixture.baseSha), `host ancestry keeps the base despite: ${plant}`);

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `references/evidence-discipline.md` gains sections 59 and 60 (a moving merge-target baseline; a design rule enforced in only one mod directory), plus a foreman-exam note under 53; new backlog row BL-0207 (extend ui-lint to all `mods/*`).
 - BL-0013 and BL-0065 closed: the owner dropped the SKILL.md `tier:` frontmatter field (2026-10-18, d-8a4c6dbc); tiering stays only in `docs/skills.md`. `scripts/probe-skill-frontmatter-portability.sh` (and its codex mirror) now probes tolerance with the neutral unknown field `x-autopilot-probe` instead of `tier`, and the test pins that name.
 - BL-0024 done (implementer ladder ordered by seat unit price): the published file https://cookys.github.io/model-dyno/public-bundles/model-prices.json (generated_at 2026-10-17T10:16:04Z, llm-playground master 7b870029) was fetched live on 2026-10-17 with `node scripts/qualification-prices.js fetch`: ok, 13 rows, 14 unpriced, digest e6844ae8...; backlog entry and sidecar removed.
 - BL-0024 (price reader strictness, parity with the llm-playground gate): `scripts/lib/qualification-prices.js` now rejects impossible calendar days in `verified`/`effective`, a `generated_at` that is not a real strict UTC `YYYY-MM-DDTHH:MM:SSZ`, and a `source_url` with no host, a non-ASCII host, whitespace, or an explicit port; `effective` is a date in the published schema, so it is validated like `verified`.

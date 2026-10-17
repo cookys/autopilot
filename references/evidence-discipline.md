@@ -1276,7 +1276,7 @@ development rule 2026-10-13.
 
 ## 59. A baseline taken from the merge target compares the code to itself after the merge
 
-2026-10-17, BL-0024 prices lane. The `qualification-prices` test compared its sorted output against the
+2026-10-17, BL-0024 prices lane. The `hooks/tests/qualification-prices.test.sh` test compared its sorted output against the
 same program run from `develop:`. Once the branch merged into `develop`, the baseline was the branch
 itself and the test could never fail again.
 

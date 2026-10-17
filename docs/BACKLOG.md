@@ -963,3 +963,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: self, 2026-10-17（viewer 按鈕配色事件）
 - **Pointer**: docs/backlog/ui-lint-scans-only-mods-live-while-design-rules-claim-all-mods.md
+- **Context**: 暫時的補救是 viewer render 測試裡的 buttonFindings（35f07d836）；根治要把 ui-lint 的檔案清單擴到 mods/*，每條規則附一個負向對照；見 evidence-discipline §60。

@@ -737,15 +737,39 @@ export function chart(u: Ctx, key: string, value: Frag, caption: string | undefi
   return lines
 }
 // the stage walk `✓─✓─◐─○─○`: done nodes success, the current node `◐` claude (tagged `here`), the rest inactive
+const walkDot = (i: number, current: number): Seg =>
+  i < current ? sg(STATES.done.glyph, { color: PALETTE.done, role: 'glyph' })
+    : i === current ? sg(GLYPHS.chart.here, { color: PALETTE.here, here: true, role: 'glyph' })
+      : sg(STATES.pending.glyph, { color: PALETTE.idle, role: 'glyph' })
 export function walkValue(current: number, n: number): Frag {
   const segs: Seg[] = []
   for (let i = 0; i < n; i++) {
     if (i > 0) segs.push(dim(GLYPHS.structure.rule, { role: 'rule' }))
-    if (i < current) segs.push(sg(STATES.done.glyph, { color: PALETTE.done, role: 'glyph' }))
-    else if (i === current) segs.push(sg(GLYPHS.chart.here, { color: PALETTE.here, here: true, role: 'glyph' }))
-    else segs.push(sg(STATES.pending.glyph, { color: PALETTE.idle, role: 'glyph' }))
+    segs.push(walkDot(i, current))
   }
   return frag(segs)
+}
+// the stage walk as aligned columns: one column per stage, `labelWidth + 2` cells wide; the dot sits above the label's first cell, `─` fills up to the next dot.
+// When the columns do not fit (KEY_W + total > cols - 1) it falls back to the dot row plus a "step k/n · stage  next: stage" line.
+export function walkChart(u: Ctx, key: string, labels: readonly string[], current: number, fact: FactId): PaneLine[] {
+  const n = labels.length
+  const w = labels.map(x => displayWidth(x) + 2)
+  const total = w.reduce((a, b) => a + b, 0) - 2
+  const rule = GLYPHS.structure.rule
+  if (KEY_W + total > u.cols - 1) {
+    const next = current < n - 1 ? u.t('now.walk_next', { stage: labels[current + 1] }) : ''
+    const line = lineOf('chart', [sg(' '.repeat(KEY_W)), dim(u.t('now.walk_step', { n: current + 1, total: n }) + ' · ', { role: 'prose' }), sg(labels[current], { role: 'prose', color: PALETTE.here, here: true }), ...(next === '' ? [] : [dim(next, { role: 'prose' })])], { fact })
+    return [lineOf('chart', [dim(padCells(key, KEY_W), { role: 'key' }), ...walkValue(current, n).segs], { hang: KEY_W, fact }), line]
+  }
+  const dots: Seg[] = [dim(padCells(key, KEY_W), { role: 'key' })]
+  const names: Seg[] = [sg(' '.repeat(KEY_W))]
+  labels.forEach((x, i) => {
+    dots.push(walkDot(i, current))
+    if (i < n - 1) dots.push(dim(rule.repeat(w[i] - 1), { role: 'rule' }))
+    names.push(i === current ? sg(x, { role: 'prose', color: PALETTE.here, here: true }) : i < current ? dim(x, { role: 'prose' }) : sg(x, { role: 'prose', color: PALETTE.idle }))
+    if (i < n - 1) names.push(sg(' '.repeat(w[i] - displayWidth(x))))
+  })
+  return [lineOf('chart', dots, { hang: KEY_W, fact }), lineOf('chart', names, { fact })]
 }
 // a sparkline: one glyph per value scaled to the largest value
 export function sparkValue(values: readonly number[]): Frag {

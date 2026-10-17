@@ -35,6 +35,7 @@
     { "stem": "session-summary", "class": "invariant_effect" },
     { "stem": "session-tasks", "class": "invariant_effect" },
     { "stem": "state-checkpoint", "class": "invariant_effect" },
+    { "stem": "subagent-budget", "class": "invariant_effect" },
     { "stem": "suggest-compact", "class": "guidance", "profiles": ["guided"] },
     { "stem": "test-runner", "class": "invariant_effect" },
     { "stem": "version-drift-check", "class": "host_only" }

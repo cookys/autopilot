@@ -560,6 +560,75 @@
       "type": "boolean"
     },
     {
+      "name": "subagent_budget.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "remind",
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_MODE"
+      ],
+      "summary": "Subagent budget gate on Agent dispatch: \"remind\" (deny at a ceiling), \"warn\" (note, never deny) or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "remind",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "subagent_budget.lane_dispatch_max",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 4,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX"
+      ],
+      "summary": "Dispatches one lane may already have before the next is denied (reviewers excluded).",
+      "type": "number"
+    },
+    {
+      "name": "subagent_budget.lane_turns_max",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 300,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX"
+      ],
+      "summary": "Subagent turns one lane may already have used before the next dispatch is denied.",
+      "type": "number"
+    },
+    {
+      "name": "subagent_budget.root_turns_per_hour_max",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 400,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX"
+      ],
+      "summary": "Subagent turns of the whole session in the last 60 minutes before the next dispatch is denied.",
+      "type": "number"
+    },
+    {
       "name": "foreman_guard.advisory_every",
       "kind": "config_key",
       "audience": "user",
@@ -3519,6 +3588,79 @@
         "owner_question_guard"
       ],
       "summary": "Set to off, false, 0 or no to disable the owner-question guard."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "subagent_budget.mode"
+      ],
+      "summary": "Environment override of subagent_budget.mode."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "subagent_budget.lane_dispatch_max"
+      ],
+      "summary": "Environment override of subagent_budget.lane_dispatch_max."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "subagent_budget.lane_turns_max"
+      ],
+      "summary": "Environment override of subagent_budget.lane_turns_max."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "subagent_budget.root_turns_per_hour_max"
+      ],
+      "summary": "Environment override of subagent_budget.root_turns_per_hour_max."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_NOW_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Epoch-ms clock for hooks/subagent-budget.js; the hook suite injects it so the 60-minute window is deterministic."
     },
     {
       "name": "AUTOPILOT_DISCUSS_TIMEOUT",

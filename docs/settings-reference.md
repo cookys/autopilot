@@ -116,6 +116,10 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `orchestrator_edit_gate.mode` (config.json) | What the (opt-in) orchestrator-edit-gate does when the top-level session edits files itself: "warn", "block" or "off". | warn | `AUTOPILOT_ORCH_EDIT_GATE_MODE` |
 | `dirty_tree_reminder` (config.json) | false switches the dirty-working-tree reminder off; an object sets min_files, min_lines and interval_minutes. | on | `AUTOPILOT_DIRTY_TREE_REMINDER`: Set to false, 0, off or no to disable the dirty-tree reminder. |
 | `owner_question_guard` (config.json) | false switches off the Stop guard that blocks a reply waiting for the owner without a decision card id. | on | `AUTOPILOT_OWNER_QUESTION_GUARD`: Set to off, false, 0 or no to disable the owner-question guard. |
+| `subagent_budget.mode` (config.json) | Subagent budget gate on Agent dispatch (per-lane relay and turn ceilings): "remind" denies at a ceiling, "warn" only notes it, "off" disables. | remind | `AUTOPILOT_SUBAGENT_BUDGET_MODE` |
+| `subagent_budget.lane_dispatch_max` (config.json) | Dispatches one lane may already have before the next is denied (reviewers excluded). | `4` | `AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX` |
+| `subagent_budget.lane_turns_max` (config.json) | Subagent turns one lane may already have used before the next dispatch is denied. | `300` | `AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX` |
+| `subagent_budget.root_turns_per_hour_max` (config.json) | Subagent turns of the whole session in the last 60 minutes before the next dispatch is denied. | `400` | `AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX` |
 | `dirty_tree_reminder.min_files` (config.json) | Changed files that trigger the reminder. | `3` | `AUTOPILOT_DIRTY_TREE_MIN_FILES` |
 | `dirty_tree_reminder.min_lines` (config.json) | Changed lines that trigger the reminder. | `150` | `AUTOPILOT_DIRTY_TREE_MIN_LINES` |
 | `dirty_tree_reminder.interval_minutes` (config.json) | Minimum minutes between two reminders per repo and session; 0 reminds every turn. | `30` | `AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES` |

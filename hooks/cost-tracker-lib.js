@@ -87,7 +87,7 @@ function hasPriceRow(model) {
 }
 
 // Parse transcript JSONL text → ordered list of assistant-turn usage records.
-// Each: { model, input, output, cacheRead, cacheWrite }. Order = file order
+// Each: { model, input, output, cacheRead, cacheWrite, ts? }. Order = file order
 // (append-only), which the cursor relies on. Extra fields: sidechain, agentId.
 //
 // DEDUP: Claude Code writes ONE API response as several transcript lines (one per content
@@ -122,6 +122,9 @@ function parseAssistantTurns(raw) {
       sidechain: rec.isSidechain === true,
       agentId: typeof rec.agentId === 'string' && rec.agentId ? rec.agentId : null,
     };
+    // Additive: the record's timestamp in epoch ms, present only when it parses (hooks/subagent-budget.js windows on it).
+    const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : NaN;
+    if (Number.isFinite(ts)) t.ts = ts;
     const mid = rec.message.id;
     if (typeof mid === 'string' && mid) {
       const key = `${mid}|${typeof rec.requestId === 'string' ? rec.requestId : ''}`;

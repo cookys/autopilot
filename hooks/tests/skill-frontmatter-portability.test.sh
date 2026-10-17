@@ -16,10 +16,19 @@ CLASSIFY="$(node - "$PROBE" <<'NODE'
 const fs = require('fs'); const source = fs.readFileSync(process.argv[2], 'utf8');
 const bodies = [...source.matchAll(/const classifyAttempt = (\([\s\S]*?\n};)/g)].map((m) => m[1]);
 const classify = eval(bodies[0]); const base = { executable:true, executed:true, version:true, detailsGreen:false, challenge:false };
-console.log(`copies=${bodies.length}:${new Set(bodies).size} reject=${classify({...base,codes:[1],text:'AUTOPILOT_STEP schema 1\nunsupported frontmatter field tierAUTOPILOT_STEP schema 1\n'})} infra=${classify({...base,codes:[1],text:'AUTOPILOT_STEP load 1\nauthentication required: network timeoutAUTOPILOT_STEP load 1\n'})}`);
+console.log(`copies=${bodies.length}:${new Set(bodies).size} reject=${classify({...base,codes:[1],text:'AUTOPILOT_STEP schema 1\nunsupported frontmatter field x-autopilot-probeAUTOPILOT_STEP schema 1\n'})} infra=${classify({...base,codes:[1],text:'AUTOPILOT_STEP load 1\nauthentication required: network timeoutAUTOPILOT_STEP load 1\n'})}`);
 NODE
 )"
 assert_contains "$CLASSIFY" "copies=2:1 reject=fail infra=inconclusive" "producer and validator share truthful stage classifier"
+
+# The probe must still inject a neutral unknown frontmatter field (never a real
+# or planned one such as tier) into its disposable fixture, in both fixture copies.
+PROBE_SRC="$(cat "$PROBE")"
+assert_contains "$PROBE_SRC" $'\nx-autopilot-probe: core\n' "probe heredoc fixture carries the neutral unknown field"
+assert_contains "$PROBE_SRC" '\nx-autopilot-probe: core\n' "probe expected-fixture string carries the neutral unknown field"
+assert_contains "$PROBE_SRC" "unknown_field: 'x-autopilot-probe'" "probe receipt records the neutral unknown field"
+assert_not_contains "$PROBE_SRC" "unknown_field: 'tier'" "probe no longer names tier as its unknown field"
+assert_not_contains "$PROBE_SRC" "tier: core" "probe fixture no longer carries tier: core"
 
 # Keep the qualified real-runtime acceptance probe outside the deterministic
 # umbrella/version-bump suite. Operators opt in only when both installed
@@ -48,7 +57,7 @@ console.log([
   'attempts=' + value.attempts.length,
   'claude=' + value.attempts.find((row) => row.runtime === 'claude').outcome,
   'codex=' + value.attempts.find((row) => row.runtime === 'codex').outcome,
-  'tier=' + value.fixture.unknown_field,
+  'probe=' + value.fixture.unknown_field,
   'residue=' + value.cleanup.residue_paths.length,
 ].join('\n'));
 NODE
@@ -56,7 +65,7 @@ NODE
 assert_contains "$SUMMARY" "schema=1" "receipt schema is frozen"
 assert_contains "$SUMMARY" "type=skill_frontmatter_portability" "receipt type is frozen"
 assert_contains "$SUMMARY" "attempts=2" "receipt has exactly Claude and Codex attempts"
-assert_contains "$SUMMARY" "tier=tier" "receipt records the unknown field"
+assert_contains "$SUMMARY" "probe=x-autopilot-probe" "receipt records the unknown field"
 assert_contains "$SUMMARY" "residue=0" "receipt records no residue"
 CLASSIFICATION="$(printf '%s\n' "$SUMMARY" | sed -n 's/^classification=//p')"
 case "$CLASSIFICATION" in

@@ -1,0 +1,384 @@
+{
+ "tag": "s3-incj-r1",
+ "scenario": "s3",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "79455babcdbfd12dca50d8cbf4f0acde19225d0e",
+ "h0": "87a5630d91b7bab4437a3695448863867d92eda4",
+ "h1": "b7fee11088fa0cf99c3200a4795181ffd75d0cc9",
+ "sealed_head": "87a5630d91b7bab4437a3695448863867d92eda4",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/checkout.js",
+    "line": 7,
+    "alt_paths": [
+     {
+      "path": "src/coupon.js",
+      "line": 5
+     }
+    ],
+    "keyword": "discount|subtotal|double|twice|remaining|couponCents"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:18:52.366Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "87a5630d91b7bab4437a3695448863867d92eda4",
+    "new_head": "b7fee11088fa0cf99c3200a4795181ffd75d0cc9",
+    "incremental_binding": "46f5cbd1f24c6df463e3ef00ae4f5a5c113f29c0a7e1ad0ee9bbb1587c8db4d4",
+    "delta_diff_digest": "bb747ebc30f6bab844fde0aa5f6659f00f6a61bb4244731ebf249c45b366a5fb",
+    "carried": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "c0a312050878ad994beae754337dcc288663924b36b3a0343fd1548efbbad0c3"
+     },
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709"
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3"
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1"
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14"
+     },
+     {
+      "path": "src/tax.js",
+      "file_digest": "88bc99b81d36b5d203af6ecc07f873629c98841fa5ef15d43bb05b83b575a0c0"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/checkout.js",
+      "file_digest": "d3e8a6a797920b5808133373130be0c070fa5d20bfbcdebb7d26e314ee75776d",
+      "why": [
+       "references_changed:src/coupon.js"
+      ]
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "cd7cc22690ff05040e33304621e44dd3677cad80616c9d184e026d831a2c1100",
+      "why": [
+       "changed",
+       "open_finding:coupon-divisor-1000",
+       "open_finding:coupon-divisor-10x",
+       "open_finding:coupon-divisor"
+      ]
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a",
+      "why": [
+       "open_finding:invoice-format-summed"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 120801,
+   "shared_packet": {
+    "total": 12612,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4507,
+     "spec.md": 1926,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor-1000] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000; the discount is one tenth of the contract value and checkoutTotal at src/checkout.js:7 inherits the error (overcharging the taxable amount and tax); change the divisor to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-WWhqGk",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.20403,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor-10x] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, understating the discount 10x: couponCents(10000, 10) returns Math.round(10000*10/1000)=100 instead of 1000, and since src/checkout.js:7 computes the discount via couponCents, every checkoutTotal with pct>0 violates its contract (discount must be Math.round(subtotal*p/100), p clamped 0..100); smallest remediation is changing the divisor in src/coupon.js:5 to 100: Math.round((subtotal * p) / 100)\n🟠 [invoice-format-summed] MUST-FIX src/invoice.js:5 collapses the required \"amount+tax\" output shape into a numeric sum: the contract's quoted template substitutes the placeholders label, amount and tax joined by a literal \"+\" with both figures in integer cents, so invoiceLine(\"Widget\", 1000, 800) must return \"Widget: 1000+80\", but the code returns \"Widget: 1080\", breaking any consumer that parses the documented format; smallest remediation is `${label}: ${amount}+${taxCents(amount, rateBp)}`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-9Aw2K0",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.017403,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small and corrupting checkoutTotal; change the divisor from 1000 to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-g9yMhC",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.0261045,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 120979,
+   "shared_packet": {
+    "total": 10298,
+    "files": {
+     "MANIFEST.json": 1557,
+     "delta.diff": 675,
+     "diff.patch": 2215,
+     "spec.md": 4486,
+     "tree/src/checkout.js": 751,
+     "tree/src/coupon.js": 292,
+     "tree/src/invoice.js": 322
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-discount-inverted] MUST-FIX src/checkout.js:7 subtracts couponCents from subtotal, but couponCents at src/coupon.js:5 now returns the amount remaining after the discount (subtotal - Math.round(subtotal*p/100)), so discounted = subtotal - (subtotal - discount) = discount; checkoutTotal(10000, 10, 800, 0) taxes and returns 1080 instead of the contract value 9000 + 720 = 9720, and every pct<100 call violates the checkoutTotal contract; smallest remediation is changing src/checkout.js:7 to const discounted = couponCents(subtotal, pct); (or equivalently reverting src/coupon.js:5 to return only Math.round((subtotal * p) / 100) and keeping the subtraction in checkout)\\n🟠 [invoice-format-summed] MUST-FIX src/invoice.js:5 returns `${label}: ${amount + taxCents(amount, rateBp)}`, a single summed number, but the contract output shape is \\\"label: amount+tax\\\" with amount and tax as two separate integer-cent figures joined by a literal +; invoiceLine(\\\"Widget\\\", 1000, 800) returns \\\"Widget: 1080\\\" instead of \\\"Widget: 1000+80\\\"; smallest remediation is return `${label}: ${amount}+${taxCents(amount, rateBp)}`\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-10x\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format-summed\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-6nxsLx",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2537,
+      "rows": [
+       "- [prior:s1.coupon-divisor-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000; the discount is one tenth of the contract value and checkoutTotal at src/checkout.js:7 inherits the error (overcharging the taxable amount and tax); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-10x] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, understating the discount 10x: couponCents(10000, 10) returns Math.round(10000*10/1000)=100 instead of 1000, and since src/checkout.js:7 computes the discount via couponCents, every checkoutTotal with pct>0 violates its contract (discount must be Math.round(subtotal*p/100), p clamped 0..100); smallest remediation is changing the divisor in s",
+       "- [prior:s2.invoice-format-summed] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 collapses the required \"amount+tax\" output shape into a numeric sum: the contract's quoted template substitutes the placeholders label, amount and tax joined by a literal \"+\" with both figures in integer cents, so invoiceLine(\"Widget\", 1000, 800) must return \"Widget: 1000+80\", but the code returns \"Widget: 1080\", breaking any consumer that parses the documented format; sm",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small and corrupting checkoutTotal; change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 4486
+     },
+     "packet_bytes": 10298,
+     "arg_bytes": 6701,
+     "cost_usd": 0.19825,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-double-discount] MUST-FIX src/checkout.js:7 subtracts couponCents(subtotal, pct) from subtotal, but src/coupon.js:5 now returns the post-discount subtotal (subtotal - Math.round(subtotal*p/100)), so `discounted` collapses to the discount itself: checkoutTotal(10000, 0, 800, 0) returns 0 (contract: 0 discount, taxable 10000, tax 800, total 10800) and checkoutTotal(10000, 10, 800, 0) returns 1080 (contract: discount 1000, taxable 9000, tax 720, total 9720) — every checkoutTotal call violates its contract; smallest remediation: make src/checkout.js:7 assign `const discounted = couponCents(subtotal, pct);` (or restore couponCents at src/coupon.js:5 to return Math.round((subtotal * p) / 100) as the discount)\\n🟠 [invoice-format-summed] MUST-FIX src/invoice.js:5 the template `${label}: ${amount + taxCents(amount, rateBp)}` sums the two figures into one number, so invoiceLine('Widget', 1000, 800) returns 'Widget: 1080' instead of the contract string 'Widget: 1000+80' (label, amount, tax joined by a literal '+', both figures in integer cents), breaking any consumer that parses the documented format; smallest remediation: change the template to `${label}: ${amount}+${taxCents(amount, rateBp)}`\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-10x\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format-summed\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-snz3dT",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2537,
+      "rows": [
+       "- [prior:s1.coupon-divisor-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000; the discount is one tenth of the contract value and checkoutTotal at src/checkout.js:7 inherits the error (overcharging the taxable amount and tax); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-10x] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, understating the discount 10x: couponCents(10000, 10) returns Math.round(10000*10/1000)=100 instead of 1000, and since src/checkout.js:7 computes the discount via couponCents, every checkoutTotal with pct>0 violates its contract (discount must be Math.round(subtotal*p/100), p clamped 0..100); smallest remediation is changing the divisor in s",
+       "- [prior:s2.invoice-format-summed] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 collapses the required \"amount+tax\" output shape into a numeric sum: the contract's quoted template substitutes the placeholders label, amount and tax joined by a literal \"+\" with both figures in integer cents, so invoiceLine(\"Widget\", 1000, 800) must return \"Widget: 1000+80\", but the code returns \"Widget: 1080\", breaking any consumer that parses the documented format; sm",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small and corrupting checkoutTotal; change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 4486
+     },
+     "packet_bytes": 10298,
+     "arg_bytes": 6701,
+     "cost_usd": 0.016825,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [coupon-double-subtract] MUST-FIX src/coupon.js:5 returns the post-discount subtotal (subtotal - discount) instead of the discount itself; src/checkout.js:7 then subtracts that result from subtotal again, so `discounted` equals the raw discount amount rather than the taxable amount (e.g. subtotal=10000, pct=10 yields 1000 instead of 9000); fix by having couponCents return Math.round((subtotal*p)/100) so that checkout.js's subtraction produces the correct taxable amount\\n🟠 [invoice-format-summed] MUST-FIX src/invoice.js:5 template literal `${amount + taxCents(amount, rateBp)}` produces a single summed number; the contract requires the literal format \\\"label: amount+tax\\\" with both figures separated by a plus sign (e.g. \\\"Widget: 1000+80\\\"); change to `${label}: ${amount}+${taxCents(amount, rateBp)}`\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-10x\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format-summed\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-pcdyX2",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2537,
+      "rows": [
+       "- [prior:s1.coupon-divisor-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000; the discount is one tenth of the contract value and checkoutTotal at src/checkout.js:7 inherits the error (overcharging the taxable amount and tax); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-10x] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, understating the discount 10x: couponCents(10000, 10) returns Math.round(10000*10/1000)=100 instead of 1000, and since src/checkout.js:7 computes the discount via couponCents, every checkoutTotal with pct>0 violates its contract (discount must be Math.round(subtotal*p/100), p clamped 0..100); smallest remediation is changing the divisor in s",
+       "- [prior:s2.invoice-format-summed] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 collapses the required \"amount+tax\" output shape into a numeric sum: the contract's quoted template substitutes the placeholders label, amount and tax joined by a literal \"+\" with both figures in integer cents, so invoiceLine(\"Widget\", 1000, 800) must return \"Widget: 1000+80\", but the code returns \"Widget: 1080\", breaking any consumer that parses the documented format; sm",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small and corrupting checkoutTotal; change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 4486
+     },
+     "packet_bytes": 10298,
+     "arg_bytes": 6701,
+     "cost_usd": 0.0252375,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:22:56.569Z",
+ "total_cost_usd": 0.48785
+}

@@ -1,0 +1,323 @@
+{
+ "tag": "s5-incraw-r1",
+ "scenario": "s5",
+ "arm": "inc",
+ "spec_variant": "raw",
+ "base": "edf36402c355683153a27042effced0900e51ab3",
+ "h0": "70f8e673783b663e07b9f84b892737cf187ddbd9",
+ "h1": "340dc320f925f76de1116cb3e40c90edf268d401",
+ "sealed_head": "70f8e673783b663e07b9f84b892737cf187ddbd9",
+ "delta_files": [
+  "src/coupon.js",
+  "src/ship.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_unfixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_fixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "N1",
+    "kind": "new_next_to_old",
+    "path": "src/coupon.js",
+    "line": 4,
+    "keyword": "clamp|0|zero|min|max|1"
+   },
+   {
+    "id": "N2",
+    "kind": "new_next_to_old",
+    "path": "src/ship.js",
+    "line": 4,
+    "keyword": "zero|0|weight|<\\s*0|<="
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:53:48.638Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "full",
+   "incremental": null,
+   "incremental_fallback_reason": "finding_unmapped"
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 80573,
+   "shared_packet": {
+    "total": 12396,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4508,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 344,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX couponCents divides by 1000 instead of 100, so a 10% coupon on 10000 cents yields 100 instead of 1000 and checkoutTotal inherits the wrong discount; change the divisor in src/coupon.js to 100\n🟠 [ship-started-block] MUST-FIX shippingCents uses Math.floor for extra weight, so 1001 g returns 500 instead of 600, violating \"each started additional 500 g\" and propagating into checkoutTotal; use Math.ceil(extra / 500) in src/ship.js\n🔵 [clamp-nan] CUT/FOLLOW-UP clampQty(NaN) returns NaN rather than a clamped value; the contract does not specify non-numeric input, so excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-lCLtKW",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12396,
+     "arg_bytes": 6216,
+     "cost_usd": 0.20349,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-div-1000] MUST-FIX couponCents divides by 1000 instead of 100, so every discount is 10x too small (couponCents(10000, 10) returns 100 instead of the spec's 1000), and the error propagates into checkoutTotal's discount and taxable base; smallest remediation is changing `/ 1000` to `/ 100` in src/coupon.js\n🟠 [ship-floor-vs-ceil] MUST-FIX shippingCents uses Math.floor(extra / 500), counting completed rather than started additional 500 g blocks, so shippingCents(1001) returns 500 instead of 600 and undercharges for any weight whose excess over 1000 g is not an exact multiple of 500 (also propagates into checkoutTotal); smallest remediation is Math.ceil(extra / 500) (equivalently floor((extra - 1) / 500) + 1 for extra > 0), which still yields 600 at exactly 1500 g and 500 for weight <= 1000\n🔵 [fp-percent-exactness] CUT/FOLLOW-UP bulkCents and cardFeeCents use floating-point multipliers (gross * 0.9, amount * 0.029) instead of integer-exact forms like Math.round(gross * 9 / 10); for all realistic cent amounts they match the spec's Math.round formulas, so this is optional hardening excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-lKVLNc",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12396,
+     "arg_bytes": 6216,
+     "cost_usd": 0.017349,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX couponCents divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount 10× too small; change the divisor to 100 to match the spec formula `Math.round(subtotal * pct / 100)`. This also corrupts checkoutTotal which delegates to couponCents.\n🟠 [ship-ceil] MUST-FIX shippingCents uses `Math.floor(extra / 500)` but the spec requires 100 cents \"for each started additional 500 g\", i.e. ceiling; e.g. 1001 g yields 500 instead of the correct 600. Replace `Math.floor` with `Math.ceil`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-tCmTkC",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12396,
+     "arg_bytes": 6216,
+     "cost_usd": 0.0260235,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 60548,
+   "shared_packet": {
+    "total": 12390,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 342,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-pct-floor] MUST-FIX couponCents clamps pct to 1..100 instead of 0..100, so pct=0 yields a 1 percent discount (couponCents(1000, 0) returns 10 instead of 0) and checkoutTotal with no coupon is undercharged; change Math.max(1, pct) to Math.max(0, pct) in src/coupon.js\n🟠 [ship-zero-weight] MUST-FIX shippingCents(0) returns 500 because the early return only fires for weightG < 0, violating \"returns 0 for weight 0\" and overcharging checkoutTotal for weightless orders; change the guard to weightG <= 0 in src/ship.js",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-VPcUOg",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.20348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-clamp-min-zero] MUST-FIX couponCents clamps pct with Math.max(1, pct), i.e. to 1..100, but the contract limits pct to 0..100; concrete failure: couponCents(1000, 0) returns 10 instead of 0, and checkoutTotal(subtotal, 0, ...) inherits a phantom 1% discount; smallest remediation: change the clamp to Math.min(100, Math.max(0, pct))\n🟠 [ship-weight-zero-returns-500] MUST-FIX shippingCents returns 500 for weight 0 because the guard is `weightG < 0` (false for 0), so extra = max(0, -1000) = 0 and the function returns 500 + 0; the contract requires 0 for weight 0, and checkoutTotal(..., weightG = 0) overcharges by 500 cents; smallest remediation: change the guard to `if (weightG <= 0) return 0;`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-7L3560",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.017348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-pct-floor] MUST-FIX couponCents clamps pct with Math.max(1, pct) but the spec says \"pct is limited to 0..100\"; a pct of 0 should yield a 0 discount, but the code yields a 1% discount. Fix: change Math.max(1, pct) to Math.max(0, pct).\n🟠 [ship-zero-weight] MUST-FIX shippingCents returns 500 for weightG === 0 because the guard is `if (weightG < 0) return 0` which misses the zero case; the spec requires 0 for weight 0. Fix: change the condition to `if (weightG <= 0) return 0`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-RbEeYl",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.026022,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:56:11.732Z",
+ "total_cost_usd": 0.4937125
+}

@@ -1,0 +1,338 @@
+{
+ "tag": "s1-incj-r2",
+ "scenario": "s1",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "d1d7518f3f2c73941d3401629ff02787487360fd",
+ "h0": "aab41054cc590308b1252adfaea7630a61dbef23",
+ "h1": "3d51dc96e26ce63ec72143cfbecb6763b905fd60",
+ "sealed_head": "aab41054cc590308b1252adfaea7630a61dbef23",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:23:18.449Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "blocked",
+  "phase": "full_diff_review",
+  "code": null,
+  "reason": "final_panel_seat_transport_failed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "REVIEWING",
+  "disclosure": null
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60580,
+   "shared_packet": {
+    "total": 12744,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4506,
+     "spec.md": 2060,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line with qty exactly 10 gets no discount although the contract says \"10 or more\"; change the comparison to `qty >= 10`\n🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted value and checkoutTotal (which calls couponCents) overcharges customers; change the divisor to 100\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0; the spec does not define behavior for n=0, so this is optional hardening excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-4QZAAG",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.20436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract applies the 10% discount when qty is 10 or more; bulkCents(10, 100) returns 1000 instead of Math.round(1000 * 0.9) = 900, so 10-item lines are overcharged by the full discount; smallest fix is changing the condition to `qty >= 10`.\n🟠 [coupon-div-by-1000] MUST-FIX src/coupon.js:5 computes Math.round((subtotal * p) / 1000) but the contract specifies Math.round(subtotal * pct / 100); the discount is 10x too small (couponCents(10000, 10) returns 100 instead of 1000), and the error propagates through src/checkout.js:7 so every couponed checkout total is overstated; smallest fix is dividing by 100 instead of 1000.\n🔵 [clamp-nan-guard] CUT/FOLLOW-UP src/clamp.js:4 non-numeric input would clamp to NaN, but the spec only defines truncation and clamping of numeric quantities, so defensive input guards are optional hardening excluded from this version.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-nZLulk",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.017436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold] MUST-FIX src/bulk.js:4 — the condition `qty > 10` excludes qty=10 from the discount, but the spec requires the 10% discount when qty is 10 or more; change to `qty >= 10`\n🟠 [coupon-divisor] MUST-FIX src/coupon.js:4 — the expression divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount one-tenth of the spec's `Math.round(subtotal * pct / 100)`; change divisor to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Kh0S3D",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.026154,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 40640,
+   "shared_packet": {
+    "total": 12795,
+    "files": {
+     "MANIFEST.json": 1900,
+     "delta.diff": 543,
+     "diff.patch": 3087,
+     "spec.md": 5297,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/split.js": 364
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 still uses `qty > 10`, so bulkCents(10, 100) returns 1000 instead of the contracted Math.round(1000 * 0.9) = 900; a 10-item line gets no discount although the contract says 10 or more; change the comparison to `qty >= 10`\\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0 (yields Infinity/NaN); the spec does not define n=0, so this is optional hardening excluded from this version\\n🔵 [clamp-nan-guard] CUT/FOLLOW-UP src/clamp.js:4 non-numeric input yields NaN; the spec only defines numeric truncation and clamping, so defensive input guards are excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-by-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.clamp-nan-guard\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-jL3mcr",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3214,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line with qty exactly 10 gets no discount although the contract says \"10 or more\"; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted value and checkoutTotal (which calls couponCents) overcharges customers; change the divisor to 100",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0; the spec does not define behavior for n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract applies the 10% discount when qty is 10 or more; bulkCents(10, 100) returns 1000 instead of Math.round(1000 * 0.9) = 900, so 10-item lines are overcharged by the full discount; smallest fix is changing the condition to `qty >= 10`.",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 computes Math.round((subtotal * p) / 1000) but the contract specifies Math.round(subtotal * pct / 100); the discount is 10x too small (couponCents(10000, 10) returns 100 instead of 1000), and the error propagates through src/checkout.js:7 so every couponed checkout total is overstated; smallest fix is dividing by 100 instead of 1000.",
+       "- [prior:s2.clamp-nan-guard] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 non-numeric input would clamp to NaN, but the spec only defines truncation and clamping of numeric quantities, so defensive input guards are optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 — the condition `qty > 10` excludes qty=10 from the discount, but the spec requires the 10% discount when qty is 10 or more; change to `qty >= 10`",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 — the expression divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount one-tenth of the spec's `Math.round(subtotal * pct / 100)`; change divisor to 100"
+      ],
+      "spec_bytes": 5297
+     },
+     "packet_bytes": 12795,
+     "arg_bytes": 8384,
+     "cost_usd": 0.20449,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": null,
+     "verdict": null,
+     "findings": null,
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": null,
+     "error": null,
+     "parse_error": "review output JSON has unknown field: format_reject",
+     "exit_status": 1,
+     "addendum": {
+      "bytes": 3214,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line with qty exactly 10 gets no discount although the contract says \"10 or more\"; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted value and checkoutTotal (which calls couponCents) overcharges customers; change the divisor to 100",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0; the spec does not define behavior for n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract applies the 10% discount when qty is 10 or more; bulkCents(10, 100) returns 1000 instead of Math.round(1000 * 0.9) = 900, so 10-item lines are overcharged by the full discount; smallest fix is changing the condition to `qty >= 10`.",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 computes Math.round((subtotal * p) / 1000) but the contract specifies Math.round(subtotal * pct / 100); the discount is 10x too small (couponCents(10000, 10) returns 100 instead of 1000), and the error propagates through src/checkout.js:7 so every couponed checkout total is overstated; smallest fix is dividing by 100 instead of 1000.",
+       "- [prior:s2.clamp-nan-guard] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 non-numeric input would clamp to NaN, but the spec only defines truncation and clamping of numeric quantities, so defensive input guards are optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 — the condition `qty > 10` excludes qty=10 from the discount, but the spec requires the 10% discount when qty is 10 or more; change to `qty >= 10`",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 — the expression divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount one-tenth of the spec's `Math.round(subtotal * pct / 100)`; change divisor to 100"
+      ],
+      "spec_bytes": 5297
+     },
+     "packet_bytes": 12795,
+     "arg_bytes": 8384,
+     "cost_usd": 0.017449,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract requires the 10% discount when qty is 10 or more; bulkCents(10, 100) returns 1000 instead of 900, overcharging 10-item lines; change the comparison to `qty >= 10`\\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0; the spec does not define behavior for n=0, so this is optional hardening excluded from this version\\n🔵 [clamp-nan-guard] CUT/FOLLOW-UP src/clamp.js:4 non-numeric input would produce NaN; the spec only defines truncation and clamping of numeric quantities, so defensive input guards are optional hardening excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-by-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.clamp-nan-guard\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-II15ud",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3214,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line with qty exactly 10 gets no discount although the contract says \"10 or more\"; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted value and checkoutTotal (which calls couponCents) overcharges customers; change the divisor to 100",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 divides by n with no guard for n=0; the spec does not define behavior for n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract applies the 10% discount when qty is 10 or more; bulkCents(10, 100) returns 1000 instead of Math.round(1000 * 0.9) = 900, so 10-item lines are overcharged by the full discount; smallest fix is changing the condition to `qty >= 10`.",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 computes Math.round((subtotal * p) / 1000) but the contract specifies Math.round(subtotal * pct / 100); the discount is 10x too small (couponCents(10000, 10) returns 100 instead of 1000), and the error propagates through src/checkout.js:7 so every couponed checkout total is overstated; smallest fix is dividing by 100 instead of 1000.",
+       "- [prior:s2.clamp-nan-guard] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 non-numeric input would clamp to NaN, but the spec only defines truncation and clamping of numeric quantities, so defensive input guards are optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 — the condition `qty > 10` excludes qty=10 from the discount, but the spec requires the 10% discount when qty is 10 or more; change to `qty >= 10`",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 — the expression divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount one-tenth of the spec's `Math.round(subtotal * pct / 100)`; change divisor to 100"
+      ],
+      "spec_bytes": 5297
+     },
+     "packet_bytes": 12795,
+     "arg_bytes": 8384,
+     "cost_usd": 0.0261735,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:25:01.994Z",
+ "total_cost_usd": 0.4960625
+}

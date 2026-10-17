@@ -1,0 +1,7 @@
+{
+  "_comment": "USD per million tokens. claude-fable-5-1 is the Anthropic list price (claude-api skill table cached 2026-10-06; cache read 0.25). GLM-5.3 and Qwen3.8-Max are subscription or plan seats whose per-token price is not published to this host: the values are ASSUMED placeholders, flagged assumption, chosen on the high side so the budget guard is conservative. The reported cost for those seats is an estimate, not a bill.",
+  "claude-fable-5-1": { "in": 10, "out": 50, "cache_read": 0.25 },
+  "GLM-5.3": { "in": 1, "out": 4, "cache_read": 0.2 },
+  "Qwen3.8-Max": { "in": 1.5, "out": 6, "cache_read": 0.3 },
+  "_default": { "in": 3, "out": 12, "cache_read": 0.3 }
+}

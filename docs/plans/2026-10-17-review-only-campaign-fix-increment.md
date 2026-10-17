@@ -1,6 +1,6 @@
 # Plan — BL-0146 a returned review-only campaign reviews the fix, not the whole range again
 
-> Status: draft for owner (2026-10-17), plan only, no code. Backlog: BL-0146 (follow-up of BL-0090 / `docs/backlog/review-candidate-follow-ups.md`). Operator doc: `docs/review-candidate.md`.
+> Status: D1-D5 landed (2026-10-17), default `adoption.return_review` stays `full`; D5 evidence in `evidence/2026-10-17-review-only-increment/README.md`; flipping the default is the owner's call. (Was: draft for owner, plan only, no code.) Backlog: BL-0146 (follow-up of BL-0090 / `docs/backlog/review-candidate-follow-ups.md`). Operator doc: `docs/review-candidate.md`.
 > Placement: INDEX row `active`. Per the backlog entry the plan comes first: new reuse key, touched-files re-check, cumulative context packet.
 
 ## 0. Problem
@@ -84,7 +84,7 @@ A seat has only a diff file and a spec file. So the earlier round is **written i
 
 ```
 == Prior round (machine generated from the stored seat artifacts of round N-1) ==
-Reviewed head: H0   New head: H1   Delta: H0..H1 (file `delta.diff`); changed files in full: `recheck.diff`
+Reviewed head: H0   New head: H1   Delta: H0..H1 (file `delta.diff`); re-check set: cumulative diff in `diff.patch`, complete files in `tree/`
 Open findings from round N-1 (id, severity, path:line, claim, one line). Treat each as an unverified
 claim: decide from the code at H1 whether it is resolved, still present, or invalid.
 Carried paths (reviewed clean at H0, byte-identical at H1): <list, no verdict text>.
@@ -127,7 +127,7 @@ Rules:
 | D2 | Incremental binding and seat store station: per-seat reuse with re-derivation, tuple and digest checks, gate-journal key | `src/engine/final-panel-seat-store.js`, `src/engine/campaign-composition.js:2084` region | reuse hit on identical binding; miss on each changed component |
 | D3 | Context packet and explicit closure: spec addendum generator, `resolutions[]` in the seat schema and normalizer, blind-evidence check | `src/engine/autopilot-engine.js` (packet build near `:5846`), `src/engine/product-review-normalizer.js`, `scripts/check-blind-evidence.sh` tests | silence never closes; addendum contains no verdict or author text Addendum open since 2026-10-17 (d-3cf4dc4c): generator `buildPriorRoundAddendum`, incremental path only. |
 | D4 | Wiring and contract field: `returnedHead` branch, receipt disclosure, schema and checker, operator doc | `src/engine/autopilot-engine.js:7778` region, `src/engine/campaign-intake.js`, schema, checker, `docs/review-candidate.md` | end-to-end return in a temp repo with stub dispatcher, both modes |
-| D5 | Evidence: A/B on planted returns, cost measurement, default decision input; BACKLOG BL-0146 removed with its sidecar line, CHANGELOG `Unreleased` line | `docs/plans/evidence/2026-10-17-review-only-increment/`, `docs/BACKLOG.md`, `docs/backlog/review-candidate-follow-ups.md` | table of cost and misses; owner reads it before any default flip |
+| D5 | Evidence: A/B on planted returns, cost measurement, default decision input; BACKLOG BL-0146 removed with its sidecar line, CHANGELOG `Unreleased` line | `docs/plans/evidence/2026-10-17-review-only-increment/`, `docs/BACKLOG.md`, `docs/backlog/review-candidate-follow-ups.md` | table of cost and misses; owner reads it before any default flip. **Done 2026-10-17**: [`evidence/2026-10-17-review-only-increment/README.md`](evidence/2026-10-17-review-only-increment/README.md) (default stays `full`; follow-ups BL-0201 to BL-0204) |
 
 Order, serial: D1, then D2, then D3 (D3 edits `autopilot-engine.js` and builds on D2's binding), then D4, then D5. At D1 start, re-verify every `file:line` in section 0 against the then-current tree and fix the cites in this plan. D1-D4 are mechanism for an opt-in mode, no change to the default requirement list.
 

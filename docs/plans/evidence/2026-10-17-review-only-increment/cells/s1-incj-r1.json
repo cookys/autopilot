@@ -1,0 +1,404 @@
+{
+ "tag": "s1-incj-r1",
+ "scenario": "s1",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "79455babcdbfd12dca50d8cbf4f0acde19225d0e",
+ "h0": "43c075d2aa15651eaf1f2dc719482691c3f3cc8b",
+ "h1": "a5302a509cb563771cf8bbfecfb58fc2cc84be9e",
+ "sealed_head": "43c075d2aa15651eaf1f2dc719482691c3f3cc8b",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:18:52.372Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "43c075d2aa15651eaf1f2dc719482691c3f3cc8b",
+    "new_head": "a5302a509cb563771cf8bbfecfb58fc2cc84be9e",
+    "incremental_binding": "76562e37228b6eb85e237d91d6880f63787d589772c7bd2fd8c2e532091ac938",
+    "delta_diff_digest": "3c43f57c3350f43b255c9a7b00dc8319d26a06cab2e498206a315d438d06f153",
+    "carried": [
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709"
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3"
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a"
+     },
+     {
+      "path": "src/tax.js",
+      "file_digest": "88bc99b81d36b5d203af6ecc07f873629c98841fa5ef15d43bb05b83b575a0c0"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "73c99349be631ab5159c1338ffce1fb486ec5ffe0794f5105c60fcedb6124048",
+      "why": [
+       "open_finding:bulk-threshold-off-by-one"
+      ]
+     },
+     {
+      "path": "src/checkout.js",
+      "file_digest": "d3e8a6a797920b5808133373130be0c070fa5d20bfbcdebb7d26e314ee75776d",
+      "why": [
+       "references_changed:src/coupon.js"
+      ]
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "a9fb71f78ecaf8b126e39987f73020ee1e47d460f4eac7127c3cf8633bef6974",
+      "why": [
+       "changed",
+       "open_finding:coupon-wrong-divisor",
+       "open_finding:coupon-div-by-1000"
+      ]
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1",
+      "why": [
+       "open_finding:ship-negative-weight"
+      ]
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14",
+      "why": [
+       "open_finding:split-n-guard"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60575,
+   "shared_packet": {
+    "total": 12744,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4506,
+     "spec.md": 2060,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses qty > 10 so a quantity of exactly 10 gets no discount, violating the contract that 10 or more is 10 percent cheaper; change the condition to qty >= 10\n🟠 [coupon-wrong-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is one tenth of the contracted Math.round(subtotal * pct / 100) and checkoutTotal inherits the wrong discount; change the divisor to 100\n🔵 [split-n-guard] CUT/FOLLOW-UP src/split.js:4 does not guard n <= 0 or non-integer n; the spec does not define that input, so no contract is violated and this is excluded as optional hardening",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-jkaTP4",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.20436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 the condition `qty > 10` skips the 10% discount at exactly qty = 10, but the contract applies it \"when qty is 10 or more\"; a 10-unit line at 100 cents/unit is charged 1000 instead of the required 900; change the test to `qty >= 10` (preferably computing `Math.round(gross * 9 / 10)` to keep the arithmetic exact)\n🟠 [coupon-div-by-1000] MUST-FIX src/coupon.js:5 the discount is divided by 1000 instead of 100, so every coupon returns one tenth of the contract amount (e.g. subtotal 1000, pct 10 → 10 cents instead of 100), and the error propagates into checkoutTotal's discount and taxable amount via src/checkout.js:6; change the divisor to 100\n🔵 [ship-negative-weight] CUT/FOLLOW-UP src/ship.js:5 `weightG <= 0` returning 0 for negative weights is outside the stated contract (which only defines weight 0) and the chosen behavior is defensible; excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-v2Awzn",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.017436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (i.e. `qty >= 10`); a 10-unit order is not discounted, producing an incorrect line total. Fix: change `qty > 10` to `qty >= 10`.\n🟠 [coupon-wrong-divisor] MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, yielding a discount one-tenth of the specified value (e.g. 10% coupon on 1000 cents returns 10 instead of 100). This also corrupts checkoutTotal which delegates to couponCents. Fix: change `/ 1000` to `/ 100`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-uc9imG",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12744,
+     "arg_bytes": 6566,
+     "cost_usd": 0.026154,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 100802,
+   "shared_packet": {
+    "total": 13166,
+    "files": {
+     "MANIFEST.json": 1899,
+     "delta.diff": 543,
+     "diff.patch": 3200,
+     "spec.md": 5440,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/coupon.js": 311,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 the condition `qty > 10` skips the 10% discount at exactly qty = 10, but the contract applies it when qty is 10 or more; 10 units at 100 cents returns 1000 instead of 900; change the test to `qty >= 10`\\n🔵 [split-n-guard] CUT/FOLLOW-UP src/split.js:4 no guard for n <= 0 or non-integer n; the contract does not define that input, so this is optional hardening excluded from this version\\n🔵 [ship-negative-weight] CUT/FOLLOW-UP src/ship.js:5 `weightG <= 0` returning 0 for negative weights is outside the stated contract (only weight 0 is defined) and is a defensible choice; excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.split-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-by-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.ship-negative-weight\", \"status\": \"still_present\", \"evidence\": \"src/ship.js:5\"}, {\"finding_id\": \"prior:s3.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-KtG4C6",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3357,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so a quantity of exactly 10 gets no discount, violating the contract that 10 or more is 10 percent cheaper; change the condition to qty >= 10",
+       "- [prior:s1.coupon-wrong-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is one tenth of the contracted Math.round(subtotal * pct / 100) and checkoutTotal inherits the wrong discount; change the divisor to 100",
+       "- [prior:s1.split-n-guard] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 does not guard n <= 0 or non-integer n; the spec does not define that input, so no contract is violated and this is excluded as optional hardening",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` skips the 10% discount at exactly qty = 10, but the contract applies it \"when qty is 10 or more\"; a 10-unit line at 100 cents/unit is charged 1000 instead of the required 900; change the test to `qty >= 10` (preferably computing `Math.round(gross * 9 / 10)` to keep the arithmetic exact)",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 the discount is divided by 1000 instead of 100, so every coupon returns one tenth of the contract amount (e.g. subtotal 1000, pct 10 → 10 cents instead of 100), and the error propagates into checkoutTotal's discount and taxable amount via src/checkout.js:6; change the divisor to 100",
+       "- [prior:s2.ship-negative-weight] | suggestion | src/ship.js:5 | CUT/FOLLOW-UP src/ship.js:5 `weightG <= 0` returning 0 for negative weights is outside the stated contract (which only defines weight 0) and the chosen behavior is defensible; excluded from this version",
+       "- [prior:s3.bulk-threshold-off-by-one] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (i.e. `qty >= 10`); a 10-unit order is not discounted, producing an incorrect line total. Fix: change `qty > 10` to `qty >= 10`.",
+       "- [prior:s3.coupon-wrong-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, yielding a discount one-tenth of the specified value (e.g. 10% coupon on 1000 cents returns 10 instead of 100). This also corrupts checkoutTotal which delegates to couponCents. Fix: change `/ 1000` to `/ 100`."
+      ],
+      "spec_bytes": 5440
+     },
+     "packet_bytes": 13166,
+     "arg_bytes": 8640,
+     "cost_usd": 0.20542,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line of exactly 10 units gets no discount, violating the contract that the 10 percent discount applies when qty is 10 or more; e.g. 10 units at 100 cents is charged 1000 instead of the required Math.round(1000 * 0.9) = 900; smallest remediation is changing the test to `qty >= 10`\\n🔵 [bulk-exact-arith] CUT/FOLLOW-UP src/bulk.js:5 expressing the discount as Math.round(gross * 9 / 10) would keep the arithmetic in exact integers instead of the float product gross * 0.9; observed results still match Math.round semantics for realistic cent values (fl(0.9) > 0.9 keeps half-cases rounding up), so this is optional hardening excluded from this version\\n🔵 [split-n-guard] CUT/FOLLOW-UP src/split.js:4 still does not guard n <= 0 or non-integer n (n = 0 yields a base of NaN and an empty array); the spec does not define that input, so no contract is violated and the guard is excluded as optional hardening\\n🔵 [ship-negative-weight] CUT/FOLLOW-UP src/ship.js:4 returns 0 for negative weight via `weightG <= 0`; the contract only defines weight 0 and this choice is defensible, so it is excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.split-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-by-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.ship-negative-weight\", \"status\": \"still_present\", \"evidence\": \"src/ship.js:4\"}, {\"finding_id\": \"prior:s3.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-hhpvN4",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3357,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so a quantity of exactly 10 gets no discount, violating the contract that 10 or more is 10 percent cheaper; change the condition to qty >= 10",
+       "- [prior:s1.coupon-wrong-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is one tenth of the contracted Math.round(subtotal * pct / 100) and checkoutTotal inherits the wrong discount; change the divisor to 100",
+       "- [prior:s1.split-n-guard] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 does not guard n <= 0 or non-integer n; the spec does not define that input, so no contract is violated and this is excluded as optional hardening",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` skips the 10% discount at exactly qty = 10, but the contract applies it \"when qty is 10 or more\"; a 10-unit line at 100 cents/unit is charged 1000 instead of the required 900; change the test to `qty >= 10` (preferably computing `Math.round(gross * 9 / 10)` to keep the arithmetic exact)",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 the discount is divided by 1000 instead of 100, so every coupon returns one tenth of the contract amount (e.g. subtotal 1000, pct 10 → 10 cents instead of 100), and the error propagates into checkoutTotal's discount and taxable amount via src/checkout.js:6; change the divisor to 100",
+       "- [prior:s2.ship-negative-weight] | suggestion | src/ship.js:5 | CUT/FOLLOW-UP src/ship.js:5 `weightG <= 0` returning 0 for negative weights is outside the stated contract (which only defines weight 0) and the chosen behavior is defensible; excluded from this version",
+       "- [prior:s3.bulk-threshold-off-by-one] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (i.e. `qty >= 10`); a 10-unit order is not discounted, producing an incorrect line total. Fix: change `qty > 10` to `qty >= 10`.",
+       "- [prior:s3.coupon-wrong-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, yielding a discount one-tenth of the specified value (e.g. 10% coupon on 1000 cents returns 10 instead of 100). This also corrupts checkoutTotal which delegates to couponCents. Fix: change `/ 1000` to `/ 100`."
+      ],
+      "spec_bytes": 5440
+     },
+     "packet_bytes": 13166,
+     "arg_bytes": 8640,
+     "cost_usd": 0.017542,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract requires the 10% discount when qty is 10 or more (`qty >= 10`); a 10-unit order at 100 c/unit is charged 1000 instead of 900; change the condition to `qty >= 10`\\n🔵 [split-n-guard] CUT/FOLLOW-UP src/split.js:4 does not guard n <= 0 or non-integer n; the spec does not define that input so no contract is violated; excluded as optional hardening\\n🔵 [ship-negative-weight] CUT/FOLLOW-UP src/ship.js:4 returns 0 for negative weights which is outside the stated contract (only weight 0 is defined); the chosen behavior is defensible; excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.split-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-by-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.ship-negative-weight\", \"status\": \"still_present\", \"evidence\": \"src/ship.js:4\"}, {\"finding_id\": \"prior:s3.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-wrong-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Y99cZK",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3357,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so a quantity of exactly 10 gets no discount, violating the contract that 10 or more is 10 percent cheaper; change the condition to qty >= 10",
+       "- [prior:s1.coupon-wrong-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is one tenth of the contracted Math.round(subtotal * pct / 100) and checkoutTotal inherits the wrong discount; change the divisor to 100",
+       "- [prior:s1.split-n-guard] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 does not guard n <= 0 or non-integer n; the spec does not define that input, so no contract is violated and this is excluded as optional hardening",
+       "- [prior:s2.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` skips the 10% discount at exactly qty = 10, but the contract applies it \"when qty is 10 or more\"; a 10-unit line at 100 cents/unit is charged 1000 instead of the required 900; change the test to `qty >= 10` (preferably computing `Math.round(gross * 9 / 10)` to keep the arithmetic exact)",
+       "- [prior:s2.coupon-div-by-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 the discount is divided by 1000 instead of 100, so every coupon returns one tenth of the contract amount (e.g. subtotal 1000, pct 10 → 10 cents instead of 100), and the error propagates into checkoutTotal's discount and taxable amount via src/checkout.js:6; change the divisor to 100",
+       "- [prior:s2.ship-negative-weight] | suggestion | src/ship.js:5 | CUT/FOLLOW-UP src/ship.js:5 `weightG <= 0` returning 0 for negative weights is outside the stated contract (which only defines weight 0) and the chosen behavior is defensible; excluded from this version",
+       "- [prior:s3.bulk-threshold-off-by-one] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (i.e. `qty >= 10`); a 10-unit order is not discounted, producing an incorrect line total. Fix: change `qty > 10` to `qty >= 10`.",
+       "- [prior:s3.coupon-wrong-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, yielding a discount one-tenth of the specified value (e.g. 10% coupon on 1000 cents returns 10 instead of 100). This also corrupts checkoutTotal which delegates to couponCents. Fix: change `/ 1000` to `/ 100`."
+      ],
+      "spec_bytes": 5440
+     },
+     "packet_bytes": 13166,
+     "arg_bytes": 8640,
+     "cost_usd": 0.026313,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:21:36.241Z",
+ "total_cost_usd": 0.49722500000000003
+}

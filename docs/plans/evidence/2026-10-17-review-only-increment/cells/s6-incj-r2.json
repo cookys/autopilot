@@ -1,0 +1,511 @@
+{
+ "tag": "s6-incj-r2",
+ "scenario": "s6",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "008dbbf56d7798bd32e0d546f1de303e95cda32c",
+ "h0": "28e8b560bd3305dd345158c1b34a78e554c09f7c",
+ "h1": "acea57cf6d9494539b8660e352e09c7a384329a6",
+ "sealed_head": "28e8b560bd3305dd345158c1b34a78e554c09f7c",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/avg.js",
+  "src/bulk.js",
+  "src/cap.js",
+  "src/checkout.js",
+  "src/chunk.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/dates.js",
+  "src/email.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/loyalty.js",
+  "src/median.js",
+  "src/minorder.js",
+  "src/pad.js",
+  "src/pct.js",
+  "src/range.js",
+  "src/refund.js",
+  "src/ship.js",
+  "src/sku.js",
+  "src/slug.js",
+  "src/split.js",
+  "src/sum.js",
+  "src/tax.js",
+  "src/uniq.js",
+  "src/vatid.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10",
+    "describe": "qty\\s*>\\s*10|>=\\s*10|10 or more|exactly 10|threshold|boundary"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10",
+    "describe": "qty\\s*>\\s*10|>=\\s*10|10 or more|exactly 10|threshold|boundary"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:32:03.047Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "28e8b560bd3305dd345158c1b34a78e554c09f7c",
+    "new_head": "acea57cf6d9494539b8660e352e09c7a384329a6",
+    "incremental_binding": "0406f5d0841ea755e492d364ed2445ae6dfec949d2d3b2aceaaebfd5268b1662",
+    "delta_diff_digest": "3c43f57c3350f43b255c9a7b00dc8319d26a06cab2e498206a315d438d06f153",
+    "carried": [
+     {
+      "path": "src/avg.js",
+      "file_digest": "fcacd18a087e963754bd2339a2e07c63e45c80af181f21f053cf241770692f53"
+     },
+     {
+      "path": "src/cap.js",
+      "file_digest": "dcd17cbb922418c8c466e8c50895ecb33c569e1df2ab46700122106abbf1aee7"
+     },
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709"
+     },
+     {
+      "path": "src/dates.js",
+      "file_digest": "5592c89e95d240fd0a9cf01200baf976aadb3efa34b7042d4944cadc5ee8cfb2"
+     },
+     {
+      "path": "src/email.js",
+      "file_digest": "a5ad33f86443ba93a1bd619824c5e847fb5706f0c0068c9ec406024d58336a48"
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3"
+     },
+     {
+      "path": "src/loyalty.js",
+      "file_digest": "8cbd03b15a736dd082964e3265e38a4779d7c9fd352c29e7a671d9b78dd05598"
+     },
+     {
+      "path": "src/median.js",
+      "file_digest": "f24088a39d7d025fecca751df734e8d0b1ecc85c426c8c5efa4a2c1cf5458875"
+     },
+     {
+      "path": "src/minorder.js",
+      "file_digest": "7f9933667db84332b9c502ed59832e138677e3baa4a6ba471c942b448ed7ef20"
+     },
+     {
+      "path": "src/pad.js",
+      "file_digest": "a7a6db5a03d4e619d75dd3543e0bfe5491e03a571a902b3ccb8b7e8d716c63ce"
+     },
+     {
+      "path": "src/pct.js",
+      "file_digest": "cac38a0569a5de694f79058f63ce574291fdd9ef7a6c65402f45c69ac359d0c7"
+     },
+     {
+      "path": "src/range.js",
+      "file_digest": "2cd45393c4aad0c9ab1225eb689bdcfbb7306ac5d2dcde166f5f8ab12501a967"
+     },
+     {
+      "path": "src/refund.js",
+      "file_digest": "bbd0029ed11f265600286d08315add07fab9a2f2e88f4a86005c5be883bee14f"
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1"
+     },
+     {
+      "path": "src/sku.js",
+      "file_digest": "d882694b678bbb7ecb80de66f4a0a5efeff25717c7cdbc102bd261daaed42511"
+     },
+     {
+      "path": "src/slug.js",
+      "file_digest": "606f2b2b929842c2c6e36b2a647b4f255d3c6f4f17e804e5e8c82dddfd75192f"
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14"
+     },
+     {
+      "path": "src/sum.js",
+      "file_digest": "003448000da2af8a01ffaf7348d440508db1163bcee7668512a427592947ca94"
+     },
+     {
+      "path": "src/tax.js",
+      "file_digest": "88bc99b81d36b5d203af6ecc07f873629c98841fa5ef15d43bb05b83b575a0c0"
+     },
+     {
+      "path": "src/uniq.js",
+      "file_digest": "904ffd88b1f097e9b469a444995051f63b4d7302f784d796561126c423b9852c"
+     },
+     {
+      "path": "src/vatid.js",
+      "file_digest": "b80588fb57f97ca739594fcdb5c827399c91d4bb141fcfd8fcd3511071c941a1"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "73c99349be631ab5159c1338ffce1fb486ec5ffe0794f5105c60fcedb6124048",
+      "why": [
+       "open_finding:bulk-threshold-off-by-one",
+       "open_finding:bulk-gte-10",
+       "open_finding:bulk-threshold"
+      ]
+     },
+     {
+      "path": "src/checkout.js",
+      "file_digest": "d3e8a6a797920b5808133373130be0c070fa5d20bfbcdebb7d26e314ee75776d",
+      "why": [
+       "references_changed:src/coupon.js"
+      ]
+     },
+     {
+      "path": "src/chunk.js",
+      "file_digest": "0fce7de5ed611857f984442916cff99baf57b28a74594babcda22dd33d280344",
+      "why": [
+       "open_finding:chunk-n-guard"
+      ]
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "a9fb71f78ecaf8b126e39987f73020ee1e47d460f4eac7127c3cf8633bef6974",
+      "why": [
+       "changed",
+       "open_finding:coupon-divisor-wrong",
+       "open_finding:coupon-div-1000",
+       "open_finding:coupon-divisor"
+      ]
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a",
+      "why": [
+       "open_finding:invoice-format"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 100748,
+   "shared_packet": {
+    "total": 29258,
+    "files": {
+     "MANIFEST.json": 5696,
+     "diff.patch": 11586,
+     "spec.md": 3957,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/avg.js": 265,
+     "tree/src/bulk.js": 315,
+     "tree/src/cap.js": 279,
+     "tree/src/checkout.js": 751,
+     "tree/src/chunk.js": 278,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/dates.js": 325,
+     "tree/src/email.js": 393,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/loyalty.js": 232,
+     "tree/src/median.js": 347,
+     "tree/src/minorder.js": 176,
+     "tree/src/pad.js": 237,
+     "tree/src/pct.js": 271,
+     "tree/src/range.js": 278,
+     "tree/src/refund.js": 320,
+     "tree/src/ship.js": 343,
+     "tree/src/sku.js": 237,
+     "tree/src/slug.js": 281,
+     "tree/src/split.js": 364,
+     "tree/src/sum.js": 187,
+     "tree/src/tax.js": 257,
+     "tree/src/uniq.js": 295,
+     "tree/src/vatid.js": 201
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says the discount applies when qty is 10 or more; change the comparison to `qty >= 10`\n🟠 [coupon-divisor-wrong] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted Math.round(subtotal * pct / 100), and src/checkout.js:7 inherits the wrong total through couponCents; change the divisor to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-U6DF0p",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29258,
+     "arg_bytes": 15543,
+     "cost_usd": 0.24565,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [coupon-div-1000] MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract requires Math.round(subtotal * pct / 100), so every coupon discount is 10x too small (e.g. pct=10, subtotal=2000 returns 20 instead of 200) and src/checkout.js:7 inherits the error through couponCents, undercharging/mis-totalling every checkout with a coupon; change the divisor to 100.\n🟠 [bulk-gte-10] MUST-FIX src/bulk.js:5 the condition `qty > 10` applies the 10% bulk discount only from qty 11, but the contract grants it \"when qty is 10 or more\", so a 10-unit line is overcharged (e.g. 10 × 100 returns 1000 instead of 900); change the test to `qty >= 10`.\n🔵 [chunk-n-guard] CUT/FOLLOW-UP src/chunk.js:5 chunkArray loops without terminating if n <= 0, but the contract never defines n=0 and no caller passes it; adding a guard is optional hardening excluded from this version.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-xtLDMr",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29258,
+     "arg_bytes": 15543,
+     "cost_usd": 0.021565,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold] MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more\"; qty=10 incorrectly gets no discount. Change to `qty >= 10`.\n🟠 [coupon-divisor] MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, producing a discount one-tenth of the specified value. Change `/ 1000` to `/ 100`. This also corrupts checkoutTotal which delegates to couponCents.\n🟠 [invoice-format] MUST-FIX src/invoice.js:5 returns the numeric sum `amount + tax` but the spec says the format is \"label: amount+tax\" (both values shown, e.g. \"Widget: 1000+200\"). Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-gcW2wl",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29258,
+     "arg_bytes": 15543,
+     "cost_usd": 0.0323475,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 80708,
+   "shared_packet": {
+    "total": 14794,
+    "files": {
+     "MANIFEST.json": 1902,
+     "delta.diff": 543,
+     "diff.patch": 3127,
+     "spec.md": 7245,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/chunk.js": 278,
+     "tree/src/coupon.js": 311,
+     "tree/src/invoice.js": 322
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-gte] MUST-FIX src/bulk.js:5 still uses `qty > 10`, so a line of exactly 10 units gets no bulk discount although the contract grants it when qty is 10 or more (10 x 100 returns 1000 instead of 900); change the comparison to `qty >= 10`\\n🟠 [invoice-literal-format] MUST-FIX src/invoice.js:5 interpolates the numeric sum `amount + taxCents(...)` so the output is e.g. \\\"Widget: 1200\\\", but the contract format is \\\"label: amount+tax\\\" with both amounts shown (\\\"Widget: 1000+200\\\"); change the template to `${label}: ${amount}+${taxCents(amount, rateBp)}`\\n🔵 [chunk-n-guard] CUT/FOLLOW-UP src/chunk.js:5 chunkArray never terminates for n <= 0, but the contract does not define that input and no module passes it; optional hardening excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-divisor-wrong\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.bulk-gte-10\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.chunk-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/chunk.js:5\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-NqfET5",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3265,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says the discount applies when qty is 10 or more; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor-wrong] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted Math.round(subtotal * pct / 100), and src/checkout.js:7 inherits the wrong total through couponCents; change the divisor to 100",
+       "- [prior:s2.coupon-div-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract requires Math.round(subtotal * pct / 100), so every coupon discount is 10x too small (e.g. pct=10, subtotal=2000 returns 20 instead of 200) and src/checkout.js:7 inherits the error through couponCents, undercharging/mis-totalling every checkout with a coupon; change the divisor to 100.",
+       "- [prior:s2.bulk-gte-10] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` applies the 10% bulk discount only from qty 11, but the contract grants it \"when qty is 10 or more\", so a 10-unit line is overcharged (e.g. 10 × 100 returns 1000 instead of 900); change the test to `qty >= 10`.",
+       "- [prior:s2.chunk-n-guard] | suggestion | src/chunk.js:5 | CUT/FOLLOW-UP src/chunk.js:5 chunkArray loops without terminating if n <= 0, but the contract never defines n=0 and no caller passes it; adding a guard is optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more\"; qty=10 incorrectly gets no discount. Change to `qty >= 10`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, producing a discount one-tenth of the specified value. Change `/ 1000` to `/ 100`. This also corrupts checkoutTotal which delegates to couponCents.",
+       "- [prior:s3.invoice-format] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 returns the numeric sum `amount + tax` but the spec says the format is \"label: amount+tax\" (both values shown, e.g. \"Widget: 1000+200\"). Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``."
+      ],
+      "spec_bytes": 7245
+     },
+     "packet_bytes": 14794,
+     "arg_bytes": 10372,
+     "cost_usd": 0.20949,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-ge10] MUST-FIX src/bulk.js:5 uses qty > 10 so a quantity of exactly 10 gets no discount (bulkCents(10, 100) returns 1000 instead of 900, while the contract grants the 10 percent discount at 10 or more); change the comparison to qty >= 10\\n🟠 [invoice-label-format] MUST-FIX src/invoice.js:5 returns the numeric sum instead of the contracted label: amount+tax format (invoiceLine('Widget', 1000, 2000) returns 'Widget: 1200' instead of 'Widget: 1000+200'); change the return to label + ': ' + amount + '+' + taxCents(amount, rateBp)\\n🔵 [chunk-n-guard] CUT/FOLLOW-UP src/chunk.js:5 chunkArray never terminates when n <= 0, but the contract does not define n = 0 and no caller passes it; a guard is optional hardening excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-divisor-wrong\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.bulk-gte-10\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.chunk-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/chunk.js:5\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-1tJ4IW",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3265,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says the discount applies when qty is 10 or more; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor-wrong] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted Math.round(subtotal * pct / 100), and src/checkout.js:7 inherits the wrong total through couponCents; change the divisor to 100",
+       "- [prior:s2.coupon-div-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract requires Math.round(subtotal * pct / 100), so every coupon discount is 10x too small (e.g. pct=10, subtotal=2000 returns 20 instead of 200) and src/checkout.js:7 inherits the error through couponCents, undercharging/mis-totalling every checkout with a coupon; change the divisor to 100.",
+       "- [prior:s2.bulk-gte-10] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` applies the 10% bulk discount only from qty 11, but the contract grants it \"when qty is 10 or more\", so a 10-unit line is overcharged (e.g. 10 × 100 returns 1000 instead of 900); change the test to `qty >= 10`.",
+       "- [prior:s2.chunk-n-guard] | suggestion | src/chunk.js:5 | CUT/FOLLOW-UP src/chunk.js:5 chunkArray loops without terminating if n <= 0, but the contract never defines n=0 and no caller passes it; adding a guard is optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more\"; qty=10 incorrectly gets no discount. Change to `qty >= 10`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, producing a discount one-tenth of the specified value. Change `/ 1000` to `/ 100`. This also corrupts checkoutTotal which delegates to couponCents.",
+       "- [prior:s3.invoice-format] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 returns the numeric sum `amount + tax` but the spec says the format is \"label: amount+tax\" (both values shown, e.g. \"Widget: 1000+200\"). Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``."
+      ],
+      "spec_bytes": 7245
+     },
+     "packet_bytes": 14794,
+     "arg_bytes": 10372,
+     "cost_usd": 0.017949,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10` but the contract grants the 10% discount when qty is 10 or more; qty=10 is incorrectly excluded (e.g. 10×100 returns 1000 instead of 900). Change to `qty >= 10`.\\n🟠 [invoice-format-sum] MUST-FIX src/invoice.js:6 returns `${label}: ${amount + taxCents(amount, rateBp)}` which displays the numeric sum, but the contract requires the literal format \\\"label: amount+tax\\\" showing both values (e.g. \\\"Widget: 1000+200\\\"). Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``.\\n🔵 [chunk-n-guard] CUT/FOLLOW-UP src/chunk.js:5 loops without terminating if n <= 0, but the contract never defines n=0 and no caller passes it; adding a guard is optional hardening excluded from this version.\", \"resolutions\": [{\"finding_id\": \"prior:s1.bulk-threshold-off-by-one\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.coupon-divisor-wrong\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.bulk-gte-10\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.chunk-n-guard\", \"status\": \"still_present\", \"evidence\": \"src/chunk.js:5\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"still_present\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:6\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-BNF1As",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3265,
+      "rows": [
+       "- [prior:s1.bulk-threshold-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10`, so a quantity of exactly 10 gets no discount although the contract says the discount applies when qty is 10 or more; change the comparison to `qty >= 10`",
+       "- [prior:s1.coupon-divisor-wrong] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so every coupon discount is one tenth of the contracted Math.round(subtotal * pct / 100), and src/checkout.js:7 inherits the wrong total through couponCents; change the divisor to 100",
+       "- [prior:s2.coupon-div-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract requires Math.round(subtotal * pct / 100), so every coupon discount is 10x too small (e.g. pct=10, subtotal=2000 returns 20 instead of 200) and src/checkout.js:7 inherits the error through couponCents, undercharging/mis-totalling every checkout with a coupon; change the divisor to 100.",
+       "- [prior:s2.bulk-gte-10] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 the condition `qty > 10` applies the 10% bulk discount only from qty 11, but the contract grants it \"when qty is 10 or more\", so a 10-unit line is overcharged (e.g. 10 × 100 returns 1000 instead of 900); change the test to `qty >= 10`.",
+       "- [prior:s2.chunk-n-guard] | suggestion | src/chunk.js:5 | CUT/FOLLOW-UP src/chunk.js:5 chunkArray loops without terminating if n <= 0, but the contract never defines n=0 and no caller passes it; adding a guard is optional hardening excluded from this version.",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but the spec says \"when qty is 10 or more\"; qty=10 incorrectly gets no discount. Change to `qty >= 10`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:4 | MUST-FIX src/coupon.js:4 divides by 1000 instead of 100, producing a discount one-tenth of the specified value. Change `/ 1000` to `/ 100`. This also corrupts checkoutTotal which delegates to couponCents.",
+       "- [prior:s3.invoice-format] | major | src/invoice.js:5 | MUST-FIX src/invoice.js:5 returns the numeric sum `amount + tax` but the spec says the format is \"label: amount+tax\" (both values shown, e.g. \"Widget: 1000+200\"). Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``."
+      ],
+      "spec_bytes": 7245
+     },
+     "packet_bytes": 14794,
+     "arg_bytes": 10372,
+     "cost_usd": 0.0269235,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:35:07.137Z",
+ "total_cost_usd": 0.553925
+}

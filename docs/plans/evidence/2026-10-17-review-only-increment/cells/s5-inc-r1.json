@@ -1,0 +1,353 @@
+{
+ "tag": "s5-inc-r1",
+ "scenario": "s5",
+ "arm": "inc",
+ "spec_variant": "loc",
+ "base": "a909bb3fdfc510ccdd3e32c2bfff6e7334a1da1e",
+ "h0": "9f2ba80b705b1a078ad6cc054bc816c4239b0b66",
+ "h1": "939ce20b6a3a7db1551171bd64431af84d2cc8fe",
+ "sealed_head": "9f2ba80b705b1a078ad6cc054bc816c4239b0b66",
+ "delta_files": [
+  "src/coupon.js",
+  "src/ship.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_unfixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_fixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "N1",
+    "kind": "new_next_to_old",
+    "path": "src/coupon.js",
+    "line": 4,
+    "keyword": "clamp|0|zero|min|max|1"
+   },
+   {
+    "id": "N2",
+    "kind": "new_next_to_old",
+    "path": "src/ship.js",
+    "line": 4,
+    "keyword": "zero|0|weight|<\\s*0|<="
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:49:20.640Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "blocked",
+  "phase": "full_diff_review",
+  "code": null,
+  "reason": "final_panel_families_below_minimum",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "REVIEWING",
+  "disclosure": null
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60498,
+   "shared_packet": {
+    "total": 12554,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4508,
+     "spec.md": 1866,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 344,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100 and every discount is ten times too small; this also corrupts checkoutTotal via src/checkout.js:7. Change `/ 1000` to `/ 100`.\n🟠 [ship-started-block] MUST-FIX src/ship.js:6 uses Math.floor for the additional 500 g blocks, but the contract charges 100 cents per started block, so shippingCents(1001) returns 500 instead of 600 and shippingCents(1500) returns 600 (correct) while 1501 returns 600 instead of 700; this also under-charges checkoutTotal. Change Math.floor to Math.ceil.\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 returns [] for n=0 instead of throwing; the contract does not define n=0, so this is optional hardening excluded from this version.\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:5 propagates NaN for non-numeric input; the contract does not define that input, so excluded from this version.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-UZes1j",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12554,
+     "arg_bytes": 6374,
+     "cost_usd": 0.20389,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [coupon-divisor-1000] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), so every discount is 10x too small (e.g. couponCents(1000, 50) returns 50 instead of 500); this also corrupts checkoutTotal in src/checkout.js:6, which consumes couponCents for the taxable base, so tax and total are wrong too; smallest remediation: change the divisor to 100 to match the contract Math.round(subtotal * pct / 100)\n🟠 [ship-started-segment-floor] MUST-FIX src/ship.js:6 uses Math.floor(extra / 500), which charges nothing for a partially started additional segment — weight 1001 g yields 500 cents instead of the contracted 600, since \"each started additional 500 g\" means ceil (any gram past 1000 starts a segment); exact multiples of 500 (1000, 1500, ...) are unaffected; smallest remediation: replace Math.floor with Math.ceil",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-kNmnMA",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12554,
+     "arg_bytes": 6374,
+     "cost_usd": 0.017389,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small (e.g. subtotal=10000, pct=10 yields 10 instead of 100); change `/ 1000` to `/ 100`\n🟠 [shipping-ceil] MUST-FIX src/ship.js:6 uses Math.floor for \"each started additional 500 g\", undercharging any partial block (e.g. 1001 g yields 500 instead of 600); replace Math.floor with Math.ceil on `extra / 500`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-AThjjV",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12554,
+     "arg_bytes": 6374,
+     "cost_usd": 0.0260835,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 60821,
+   "shared_packet": {
+    "total": 13545,
+    "files": {
+     "MANIFEST.json": 1901,
+     "delta.diff": 1219,
+     "diff.patch": 3101,
+     "spec.md": 5329,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/ship.js": 342,
+     "tree/src/split.js": 364
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🔴 [coupon-pct-floor-one] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct) so the lower bound is 1 instead of the contracted 0; couponCents(1000, 0) returns 10 instead of 0, and checkoutTotal(subtotal, 0, rateBp, weightG) via src/checkout.js:7 subtracts a phantom 1 percent discount and under-taxes; smallest remediation: change Math.max(1, pct) to Math.max(0, pct)\\n🔴 [ship-zero-weight] MUST-FIX src/ship.js:4 guards only weightG < 0, so weight 0 falls through to line 6 and shippingCents(0) returns 500 instead of the contracted 0; checkoutTotal with weightG 0 is 500 cents too high via src/checkout.js:8; smallest remediation: change `weightG < 0` to `weightG <= 0`\\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:6 returns [] for n=0 (base is Infinity, rem is NaN, length 0); contract does not define n=0, excluded from this version\\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:5 propagates NaN for non-numeric input since Math.max(1, NaN) is NaN; contract does not define that input, excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.ship-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.ship-started-segment-floor\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.shipping-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-JEq46U",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3440,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100 and every discount is ten times too small; this also corrupts checkoutTotal via src/checkout.js:7. Change `/ 1000` to `/ 100`.",
+       "- [prior:s1.ship-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the additional 500 g blocks, but the contract charges 100 cents per started block, so shippingCents(1001) returns 500 instead of 600 and shippingCents(1500) returns 600 (correct) while 1501 returns 600 instead of 700; this also under-charges checkoutTotal. Change Math.floor to Math.ceil.",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 returns [] for n=0 instead of throwing; the contract does not define n=0, so this is optional hardening excluded from this version.",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:5 | CUT/FOLLOW-UP src/clamp.js:5 propagates NaN for non-numeric input; the contract does not define that input, so excluded from this version.",
+       "- [prior:s2.coupon-divisor-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), so every discount is 10x too small (e.g. couponCents(1000, 50) returns 50 instead of 500); this also corrupts checkoutTotal in src/checkout.js:6, which consumes couponCents for the taxable base, so tax and total are wrong too; smallest remediation: change the divisor to 100 to match the contract Math.rou",
+       "- [prior:s2.ship-started-segment-floor] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor(extra / 500), which charges nothing for a partially started additional segment — weight 1001 g yields 500 cents instead of the contracted 600, since \"each started additional 500 g\" means ceil (any gram past 1000 starts a segment); exact multiples of 500 (1000, 1500, ...) are unaffected; smallest remediation: replace Math.floor with Math.ceil",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small (e.g. subtotal=10000, pct=10 yields 10 instead of 100); change `/ 1000` to `/ 100`",
+       "- [prior:s3.shipping-ceil] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for \"each started additional 500 g\", undercharging any partial block (e.g. 1001 g yields 500 instead of 600); replace Math.floor with Math.ceil on `extra / 500`"
+      ],
+      "spec_bytes": 5329
+     },
+     "packet_bytes": 13545,
+     "arg_bytes": 8430,
+     "cost_usd": 0.20636,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [coupon-pct-lower-clamp] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct) instead of Math.max(0, pct), so the limit is 1..100 rather than the contracted 0..100: couponCents(10000, 0) returns 100 instead of 0 (any pct < 1 is inflated to 1), and src/checkout.js:7 consumes this for the taxable base, so tax and total are also wrong whenever pct=0; smallest remediation: change Math.max(1, pct) to Math.max(0, pct).\n🟠 [ship-zero-weight-flat-charge] MUST-FIX src/ship.js:4 guards only weightG < 0, so for weight 0 the function falls through to line 6 and returns 500 + Math.ceil(0/500)*100 = 500 instead of the contracted 0, and src/checkout.js:8 adds this phantom 500 cents to checkoutTotal for zero-weight orders; smallest remediation: change the guard to `if (weightG <= 0) return 0;`.\n🔵 [split-n-zero-and-nan-inputs] CUT/FOLLOW-UP src/split.js:4 returns [] for n=0 and src/clamp.js:4 propagates NaN for non-numeric input; neither input is defined by the contracts, so this hardening is excluded from the current version and does not block.\n{\"findings\": \"🔴 [coupon-pct-lower-clamp] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct) instead of Math.max(0, pct), so couponCents(10000, 0) returns 100 instead of 0 and checkoutTotal at src/checkout.js:7 inherits the wrong taxable base; change Math.max(1, pct) to Math.max(0, pct)\\n🟠 [ship-zero-weight-flat-charge] MUST-FIX src/ship.js:4 guards only weightG < 0, so shippingCents(0) returns 500 instead of the contracted 0 and checkoutTotal at src/checkout.js:8 adds a phantom 500 cents; change the guard to weightG <= 0\\n🔵 [split-n-zero-and-nan-inputs] CUT/FOLLOW-UP src/split.js:4 ([] for n=0) and src/clamp.js:4 (NaN passthrough) are undefined-input hardening, excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.ship-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s2.ship-started-segment-floor\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.shipping-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-FCNn3t",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3440,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100 and every discount is ten times too small; this also corrupts checkoutTotal via src/checkout.js:7. Change `/ 1000` to `/ 100`.",
+       "- [prior:s1.ship-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the additional 500 g blocks, but the contract charges 100 cents per started block, so shippingCents(1001) returns 500 instead of 600 and shippingCents(1500) returns 600 (correct) while 1501 returns 600 instead of 700; this also under-charges checkoutTotal. Change Math.floor to Math.ceil.",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 returns [] for n=0 instead of throwing; the contract does not define n=0, so this is optional hardening excluded from this version.",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:5 | CUT/FOLLOW-UP src/clamp.js:5 propagates NaN for non-numeric input; the contract does not define that input, so excluded from this version.",
+       "- [prior:s2.coupon-divisor-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), so every discount is 10x too small (e.g. couponCents(1000, 50) returns 50 instead of 500); this also corrupts checkoutTotal in src/checkout.js:6, which consumes couponCents for the taxable base, so tax and total are wrong too; smallest remediation: change the divisor to 100 to match the contract Math.rou",
+       "- [prior:s2.ship-started-segment-floor] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor(extra / 500), which charges nothing for a partially started additional segment — weight 1001 g yields 500 cents instead of the contracted 600, since \"each started additional 500 g\" means ceil (any gram past 1000 starts a segment); exact multiples of 500 (1000, 1500, ...) are unaffected; smallest remediation: replace Math.floor with Math.ceil",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small (e.g. subtotal=10000, pct=10 yields 10 instead of 100); change `/ 1000` to `/ 100`",
+       "- [prior:s3.shipping-ceil] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for \"each started additional 500 g\", undercharging any partial block (e.g. 1001 g yields 500 instead of 600); replace Math.floor with Math.ceil on `extra / 500`"
+      ],
+      "spec_bytes": 5329
+     },
+     "packet_bytes": 13545,
+     "arg_bytes": 8430,
+     "cost_usd": 0.017636,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-pct-floor-1] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct) but the contract says pct is limited to 0..100, so pct=0 must yield a zero discount; couponCents(1000, 0) currently returns 10 instead of 0 and this propagates into checkoutTotal; change Math.max(1, pct) to Math.max(0, pct)\n🟠 [ship-zero-weight] MUST-FIX src/ship.js:4 guards only weightG < 0, so shippingCents(0) falls through and returns 500 instead of the contracted 0; change the guard to weightG <= 0\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 division by zero when n=0 is undefined by the contract; excluded from this version\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 propagates NaN for non-numeric input; contract does not define that input, excluded from this version\n{\"findings\": \"🟠 [coupon-pct-floor-1] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct) but the contract says pct is limited to 0..100, so pct=0 must yield a zero discount; couponCents(1000, 0) currently returns 10 instead of 0 and this propagates into checkoutTotal; change Math.max(1, pct) to Math.max(0, pct)\\n🟠 [ship-zero-weight] MUST-FIX src/ship.js:4 guards only weightG < 0, so shippingCents(0) falls through and returns 500 instead of the contracted 0; change the guard to weightG <= 0\\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 division by zero when n=0 is undefined by the contract; excluded from this version\\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 propagates NaN for non-numeric input; contract does not define that input, excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.ship-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.ship-started-segment-floor\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.shipping-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-lUagKf",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 3440,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100 and every discount is ten times too small; this also corrupts checkoutTotal via src/checkout.js:7. Change `/ 1000` to `/ 100`.",
+       "- [prior:s1.ship-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the additional 500 g blocks, but the contract charges 100 cents per started block, so shippingCents(1001) returns 500 instead of 600 and shippingCents(1500) returns 600 (correct) while 1501 returns 600 instead of 700; this also under-charges checkoutTotal. Change Math.floor to Math.ceil.",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 returns [] for n=0 instead of throwing; the contract does not define n=0, so this is optional hardening excluded from this version.",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:5 | CUT/FOLLOW-UP src/clamp.js:5 propagates NaN for non-numeric input; the contract does not define that input, so excluded from this version.",
+       "- [prior:s2.coupon-divisor-1000] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), so every discount is 10x too small (e.g. couponCents(1000, 50) returns 50 instead of 500); this also corrupts checkoutTotal in src/checkout.js:6, which consumes couponCents for the taxable base, so tax and total are wrong too; smallest remediation: change the divisor to 100 to match the contract Math.rou",
+       "- [prior:s2.ship-started-segment-floor] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor(extra / 500), which charges nothing for a partially started additional segment — weight 1001 g yields 500 cents instead of the contracted 600, since \"each started additional 500 g\" means ceil (any gram past 1000 starts a segment); exact multiples of 500 (1000, 1500, ...) are unaffected; smallest remediation: replace Math.floor with Math.ceil",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small (e.g. subtotal=10000, pct=10 yields 10 instead of 100); change `/ 1000` to `/ 100`",
+       "- [prior:s3.shipping-ceil] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for \"each started additional 500 g\", undercharging any partial block (e.g. 1001 g yields 500 instead of 600); replace Math.floor with Math.ceil on `extra / 500`"
+      ],
+      "spec_bytes": 5329
+     },
+     "packet_bytes": 13545,
+     "arg_bytes": 8430,
+     "cost_usd": 0.026454,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:51:23.741Z",
+ "total_cost_usd": 0.4978125
+}

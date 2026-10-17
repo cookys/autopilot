@@ -1,0 +1,389 @@
+{
+ "tag": "s3-incj-r2",
+ "scenario": "s3",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "a9f4446a757cb7d0a42f484aa971f320e26fd347",
+ "h0": "40a09b183e3875f58f1ab7205ea0e3e4c5b431ff",
+ "h1": "42efe0be4f87d2b79bd11c2fd748120d77edd831",
+ "sealed_head": "40a09b183e3875f58f1ab7205ea0e3e4c5b431ff",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/checkout.js",
+    "line": 7,
+    "alt_paths": [
+     {
+      "path": "src/coupon.js",
+      "line": 5
+     }
+    ],
+    "keyword": "discount|subtotal|double|twice|remaining|couponCents"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:25:02.970Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "40a09b183e3875f58f1ab7205ea0e3e4c5b431ff",
+    "new_head": "42efe0be4f87d2b79bd11c2fd748120d77edd831",
+    "incremental_binding": "ec4b2c62d98437b0ea7f960a45222d24dde770a8c173212c4da10f951b06f3c8",
+    "delta_diff_digest": "bb747ebc30f6bab844fde0aa5f6659f00f6a61bb4244731ebf249c45b366a5fb",
+    "carried": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "c0a312050878ad994beae754337dcc288663924b36b3a0343fd1548efbbad0c3"
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3"
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1"
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14"
+     },
+     {
+      "path": "src/tax.js",
+      "file_digest": "88bc99b81d36b5d203af6ecc07f873629c98841fa5ef15d43bb05b83b575a0c0"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/checkout.js",
+      "file_digest": "d3e8a6a797920b5808133373130be0c070fa5d20bfbcdebb7d26e314ee75776d",
+      "why": [
+       "references_changed:src/coupon.js"
+      ]
+     },
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709",
+      "why": [
+       "open_finding:clamp-nan"
+      ]
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "cd7cc22690ff05040e33304621e44dd3677cad80616c9d184e026d831a2c1100",
+      "why": [
+       "changed",
+       "open_finding:coupon-divisor"
+      ]
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a",
+      "why": [
+       "open_finding:invoice-format"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 100688,
+   "shared_packet": {
+    "total": 12612,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4507,
+     "spec.md": 1926,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000 and every discount is one tenth of the contracted value; this also makes checkoutTotal (src/checkout.js:6) violate its discount contract Math.round(subtotal * p / 100); change the divisor to 100\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) propagates NaN rather than clamping; the contract does not define non-numeric input, so this is optional hardening excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-gO1trX",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.20403,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract (and the module's own comment on line 2) requires Math.round(subtotal * p / 100), so every discount is 10x too small (subtotal=10000, pct=10 gives 100 instead of 1000); this propagates to src/checkout.js:5-6, making checkoutTotal overcharge on any discounted order. Smallest remediation: change the divisor from 1000 to 100 in src/coupon.js:5.\n🔵 [invoice-format] CUT/FOLLOW-UP src/invoice.js:5 the contract wording \"label: amount+tax\" is ambiguous between showing the sum (\"Widget: 108\") and showing both values (\"Widget: 100+8\"); the implemented sum reading matches the arithmetic-expression interpretation and no other module consumes this string, so confirming with a golden test is deferred, not blocking.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-WrlWw7",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.017403,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 — the discount formula divides by 1000 instead of 100; spec requires Math.round(subtotal * p / 100) but code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); this also corrupts checkoutTotal which delegates to couponCents. Fix: change the divisor from 1000 to 100.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-cyqiYH",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12612,
+     "arg_bytes": 6433,
+     "cost_usd": 0.0261045,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 80738,
+   "shared_packet": {
+    "total": 11443,
+    "files": {
+     "MANIFEST.json": 1730,
+     "delta.diff": 675,
+     "diff.patch": 2653,
+     "spec.md": 4793,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 292,
+     "tree/src/invoice.js": 322
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-discount-inverted] MUST-FIX src/checkout.js:7 couponCents now returns the subtotal remaining after the discount (src/coupon.js:5 returns subtotal - Math.round(subtotal * p / 100)), but checkout still subtracts that value from subtotal, so discounted equals the discount itself rather than the taxable amount; checkoutTotal(10000, 10, 800, 0) yields 1000 + 80 = 1080 instead of the contracted 9000 + 720 = 9720, and with pct=0 it yields 0 + 0 + shipping, charging nothing for undiscounted orders; smallest remediation: change src/checkout.js:7 to const discounted = couponCents(subtotal, pct); (or alternatively make couponCents return only Math.round((subtotal * p) / 100) and keep checkout unchanged)\\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) still propagates NaN through Math.trunc/Math.max/Math.min; the contract does not define non-numeric input, so this remains optional hardening excluded from this version\\n🔵 [invoice-format] CUT/FOLLOW-UP src/invoice.js:5 the sum reading of \\\"label: amount+tax\\\" is implemented and no other module consumes the string; a golden test to confirm the intended reading is deferred, not blocking\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s2.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-f4izGr",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2844,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000 and every discount is one tenth of the contracted value; this also makes checkoutTotal (src/checkout.js:6) violate its discount contract Math.round(subtotal * p / 100); change the divisor to 100",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) propagates NaN rather than clamping; the contract does not define non-numeric input, so this is optional hardening excluded from this version",
+       "- [prior:s2.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract (and the module's own comment on line 2) requires Math.round(subtotal * p / 100), so every discount is 10x too small (subtotal=10000, pct=10 gives 100 instead of 1000); this propagates to src/checkout.js:5-6, making checkoutTotal overcharge on any discounted order. Smallest remediation: change the divi",
+       "- [prior:s2.invoice-format] | suggestion | src/invoice.js:5 | CUT/FOLLOW-UP src/invoice.js:5 the contract wording \"label: amount+tax\" is ambiguous between showing the sum (\"Widget: 108\") and showing both values (\"Widget: 100+8\"); the implemented sum reading matches the arithmetic-expression interpretation and no other module consumes this string, so confirming with a golden test is deferred, not blocking.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 — the discount formula divides by 1000 instead of 100; spec requires Math.round(subtotal * p / 100) but code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); this also corrupts checkoutTotal which delegates to couponCents. Fix: change the divisor from 1000 to 100."
+      ],
+      "spec_bytes": 4793
+     },
+     "packet_bytes": 11443,
+     "arg_bytes": 7446,
+     "cost_usd": 0.20111,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-double-discount] MUST-FIX src/checkout.js:7 computes `const discounted = subtotal - couponCents(subtotal, pct)`, but couponCents at src/coupon.js:5 was changed to return the post-discount subtotal (subtotal - Math.round(subtotal * p / 100)), not the discount itself, so the discount is subtracted twice: checkoutTotal(1000, 10, 0, 0) returns 100 instead of the contracted 900 (discount 100, taxable 900), and any pct=0 order returns 0 + shipping; every coupon order undercharges and computes tax on the wrong base, violating the checkoutTotal contract. Smallest remediation: use the couponCents return directly in src/checkout.js:7 (`const discounted = couponCents(subtotal, pct);`) or restore couponCents to return Math.round((subtotal * p) / 100) with checkout unchanged.\\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) still propagates NaN (Math.trunc(NaN) = NaN and Math.min/max keep it); the contract does not define non-numeric input, so this hardening is optional and excluded from this version.\\n🔵 [invoice-format] CUT/FOLLOW-UP src/invoice.js:5 invoiceLine still renders the sum interpretation of the ambiguous contract wording 'label: amount+tax' (e.g. Widget: 108) and no other module consumes this string, so golden-test confirmation remains deferred and non-blocking.\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s2.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-MoGpdV",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2844,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000 and every discount is one tenth of the contracted value; this also makes checkoutTotal (src/checkout.js:6) violate its discount contract Math.round(subtotal * p / 100); change the divisor to 100",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) propagates NaN rather than clamping; the contract does not define non-numeric input, so this is optional hardening excluded from this version",
+       "- [prior:s2.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract (and the module's own comment on line 2) requires Math.round(subtotal * p / 100), so every discount is 10x too small (subtotal=10000, pct=10 gives 100 instead of 1000); this propagates to src/checkout.js:5-6, making checkoutTotal overcharge on any discounted order. Smallest remediation: change the divi",
+       "- [prior:s2.invoice-format] | suggestion | src/invoice.js:5 | CUT/FOLLOW-UP src/invoice.js:5 the contract wording \"label: amount+tax\" is ambiguous between showing the sum (\"Widget: 108\") and showing both values (\"Widget: 100+8\"); the implemented sum reading matches the arithmetic-expression interpretation and no other module consumes this string, so confirming with a golden test is deferred, not blocking.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 — the discount formula divides by 1000 instead of 100; spec requires Math.round(subtotal * p / 100) but code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); this also corrupts checkoutTotal which delegates to couponCents. Fix: change the divisor from 1000 to 100."
+      ],
+      "spec_bytes": 4793
+     },
+     "packet_bytes": 11443,
+     "arg_bytes": 7446,
+     "cost_usd": 0.017111,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-double-subtract] MUST-FIX src/checkout.js:7 — couponCents (src/coupon.js:5) now returns the post-discount subtotal (subtotal − discount), but checkoutTotal computes `subtotal - couponCents(subtotal, pct)`, which yields only the discount amount instead of the taxable amount; e.g. subtotal=1000, pct=10 gives discounted=100 instead of 900, corrupting every discounted checkoutTotal. Smallest fix: change line 7 to `const discounted = couponCents(subtotal, pct);`\\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 — clampQty(NaN) still propagates NaN (Math.trunc/max/min all pass NaN through); the contract does not define non-numeric input, so this remains optional hardening excluded from this version\\n🔵 [invoice-format-ambiguity] CUT/FOLLOW-UP src/invoice.js:5 — the contract string \\\"label: amount+tax\\\" is ambiguous between showing the arithmetic sum and showing both parts; the implemented sum reading is reasonable and no other module consumes this string, so no golden test is required to ship\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.clamp-nan\", \"status\": \"still_present\", \"evidence\": \"src/clamp.js:4\"}, {\"finding_id\": \"prior:s2.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-w9hCDj",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2844,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(10000, 10) returns 100 instead of 1000 and every discount is one tenth of the contracted value; this also makes checkoutTotal (src/checkout.js:6) violate its discount contract Math.round(subtotal * p / 100); change the divisor to 100",
+       "- [prior:s1.clamp-nan] | suggestion | src/clamp.js:4 | CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) propagates NaN rather than clamping; the contract does not define non-numeric input, so this is optional hardening excluded from this version",
+       "- [prior:s2.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 couponCents computes Math.round((subtotal * p) / 1000) but the contract (and the module's own comment on line 2) requires Math.round(subtotal * p / 100), so every discount is 10x too small (subtotal=10000, pct=10 gives 100 instead of 1000); this propagates to src/checkout.js:5-6, making checkoutTotal overcharge on any discounted order. Smallest remediation: change the divi",
+       "- [prior:s2.invoice-format] | suggestion | src/invoice.js:5 | CUT/FOLLOW-UP src/invoice.js:5 the contract wording \"label: amount+tax\" is ambiguous between showing the sum (\"Widget: 108\") and showing both values (\"Widget: 100+8\"); the implemented sum reading matches the arithmetic-expression interpretation and no other module consumes this string, so confirming with a golden test is deferred, not blocking.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 — the discount formula divides by 1000 instead of 100; spec requires Math.round(subtotal * p / 100) but code computes Math.round((subtotal * p) / 1000), producing a discount 10× too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); this also corrupts checkoutTotal which delegates to couponCents. Fix: change the divisor from 1000 to 100."
+      ],
+      "spec_bytes": 4793
+     },
+     "packet_bytes": 11443,
+     "arg_bytes": 7446,
+     "cost_usd": 0.0256665,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:28:06.988Z",
+ "total_cost_usd": 0.491425
+}

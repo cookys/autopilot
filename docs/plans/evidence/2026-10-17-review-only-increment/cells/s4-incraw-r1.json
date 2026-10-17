@@ -1,0 +1,310 @@
+{
+ "tag": "s4-incraw-r1",
+ "scenario": "s4",
+ "arm": "inc",
+ "spec_variant": "raw",
+ "base": "7484b5c1913d40e4921ffc5408b137acca7f7c55",
+ "h0": "2f54a97ddcf50198627992bfdbdb88e26aa8a4b6",
+ "h1": "d1e8e8730f2f0120e0f1eea44e77b2caf05bb33a",
+ "sealed_head": "2f54a97ddcf50198627992bfdbdb88e26aa8a4b6",
+ "delta_files": [
+  "src/checkout.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "alt_paths": [
+     {
+      "path": "src/vat.js",
+      "line": 4
+     }
+    ],
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/invoice.js",
+    "line": 3,
+    "keyword": "tax|require|module|missing|vat|not found|cannot find|stale|rename"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:51:24.587Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "full",
+   "incremental": null,
+   "incremental_fallback_reason": "finding_unmapped"
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60523,
+   "shared_packet": {
+    "total": 12390,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 256
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-divisor] MUST-FIX src/tax.js divides by 1000 instead of 10000, so taxCents returns 10x the spec value (e.g. taxCents(10000, 825) gives 8250 not 825), which also corrupts checkoutTotal and invoiceLine since both delegate to it; change the divisor to 10000\n🔵 [clamp-nan] CUT/FOLLOW-UP clampQty(NaN) propagates NaN rather than clamping; spec defines no non-numeric behavior, so excluded from this version\n🔵 [split-zero-n] CUT/FOLLOW-UP splitCents with n=0 returns [] without error; spec does not define n=0, so excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-pN4EoV",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.20348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-divisor-10000] MUST-FIX taxCents computes Math.round(amount * rateBp / 1000) instead of /10000, so tax is 10× too large (e.g. amount=1000, rateBp=850 → 850 cents instead of 85); this also corrupts the dependents checkoutTotal and invoiceLine, which call taxCents; smallest remediation is changing the divisor to 10000 in src/tax.js",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-ddp2BJ",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.017348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-divisor] MUST-FIX src/tax.js divides by 1000 instead of the spec-mandated 10000 (`Math.round((amount * rateBp) / 1000)` should be `/ 10000`); every tax computation is 10× too large, corrupting taxCents, checkoutTotal, and invoiceLine; change the divisor to 10000",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-FWWHPo",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.026022,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 80644,
+   "shared_packet": {
+    "total": 12749,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4863,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/vat.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-module-deleted] MUST-FIX src/tax.js is deleted while src/invoice.js still does require('./tax') and destructures taxCents, so loading invoice.js throws \"Cannot find module './tax'\" and invoiceLine is unusable; the spec also still requires taxCents(amount, rateBp) as a contract. Restore src/tax.js exporting taxCents implemented as Math.round((amount * rateBp) / 10000).\n🔵 [vat-duplicate] CUT/FOLLOW-UP once tax.js is restored, src/vat.js duplicates the same formula under a different name and checkout.js could simply require taxCents instead; consolidating is optional cleanup and does not block.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-UWLaW7",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12749,
+     "arg_bytes": 6571,
+     "cost_usd": 0.20437,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-module-deleted] MUST-FIX src/tax.js is deleted while src/invoice.js still does require('./tax'), so loading invoice (or anything importing it) throws MODULE_NOT_FOUND and the spec's taxCents(amount, rateBp) contract is no longer provided anywhere (vat.js exports only vatCents); restore src/tax.js exporting taxCents = Math.round(amount*rateBp/10000) and point invoice.js at it (checkout.js works but may keep vat or use taxCents)",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-qtT3EI",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12749,
+     "arg_bytes": 6571,
+     "cost_usd": 0.017437,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-module-deleted] MUST-FIX src/invoice.js requires './tax' and destructures taxCents, but src/tax.js is deleted in this diff and replaced by src/vat.js exporting vatCents; requiring invoice.js will throw MODULE_NOT_FOUND at runtime, making the module unusable. Smallest remediation: either keep src/tax.js exporting taxCents (delegating to the same formula), or update invoice.js to require('./vat') and destructure vatCents (adjusting the call accordingly).",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Oo70On",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12749,
+     "arg_bytes": 6571,
+     "cost_usd": 0.0261555,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:53:47.741Z",
+ "total_cost_usd": 0.4948125
+}

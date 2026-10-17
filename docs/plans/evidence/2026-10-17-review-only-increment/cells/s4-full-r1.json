@@ -1,0 +1,187 @@
+{
+ "tag": "s4-full-r1",
+ "scenario": "s4",
+ "arm": "full",
+ "spec_variant": "loc",
+ "base": "9d4730de6f3bf831b752ab09775056bdda8bcabb",
+ "h0": "7e53f2d8fe9042dcabe791fc2524ef3d91c19b14",
+ "h1": "32d75a3f56eab253ed4997b08b7c43a7bcba933e",
+ "sealed_head": "32d75a3f56eab253ed4997b08b7c43a7bcba933e",
+ "delta_files": [
+  "src/checkout.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "alt_paths": [
+     {
+      "path": "src/vat.js",
+      "line": 4
+     }
+    ],
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/invoice.js",
+    "line": 3,
+    "keyword": "tax|require|module|missing|vat|not found|cannot find|stale|rename"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:48:40.919Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1
+ },
+ "return": null,
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 40442,
+   "shared_packet": {
+    "total": 12907,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4863,
+     "spec.md": 1866,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/vat.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-module-deleted] MUST-FIX src/invoice.js:3 requires './tax' but the diff deletes src/tax.js (only src/vat.js with vatCents is added), so require('./invoice') throws MODULE_NOT_FOUND and invoiceLine is unusable; also the spec-contracted taxCents(amount, rateBp) export no longer exists anywhere; smallest fix: restore src/tax.js exporting taxCents(amount, rateBp) { return Math.round((amount * rateBp) / 10000); } (or have src/tax.js re-export vatCents as taxCents) so invoice.js resolves and the taxCents contract is met\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 clampQty(NaN) returns NaN rather than a value in 1..99; the spec does not define non-numeric input, so excluded from this version\n🔵 [split-zero-n] CUT/FOLLOW-UP src/split.js:4 splitCents(total, 0) yields [] silently losing the total; n=0 is unspecified, excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-ipJ7Ji",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12907,
+     "arg_bytes": 6729,
+     "cost_usd": 0.20477,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-module-deleted-breaks-invoice] MUST-FIX src/invoice.js:3 requires './tax', but this diff deletes src/tax.js (replaced by src/vat.js exporting vatCents), so requiring invoice.js throws MODULE_NOT_FOUND at load time and invoiceLine — a spec-required helper — is left unusable by a module that requires it; the spec contract also names taxCents(amount, rateBp) as a required helper and no module exports it anymore. Smallest remediation: restore src/tax.js exporting taxCents (same Math.round(amount * rateBp / 10000) body) — or at minimum re-point invoice.js at a surviving export while keeping a spec-named taxCents helper.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-6Rk3E4",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12907,
+     "arg_bytes": 6729,
+     "cost_usd": 0.017477,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [invoice-requires-deleted-tax] MUST-FIX src/invoice.js:4 requires './tax' but src/tax.js is deleted in this diff; the module will throw MODULE_NOT_FOUND at load time, making invoiceLine unusable. Smallest remediation: change the require to './vat' and destructure { vatCents }, then call vatCents(amount, rateBp) in place of taxCents(amount, rateBp) (the formula is identical).",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-MlyVVT",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12907,
+     "arg_bytes": 6729,
+     "cost_usd": 0.0262155,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:49:22.228Z",
+ "total_cost_usd": 0.2484625
+}

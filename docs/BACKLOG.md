@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0201 -->
+<!-- next-id: BL-0205 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -887,18 +887,57 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
-### a returned review-only campaign re-reviews the whole range instead of only the fix
-- **Id**: BL-0146
+### 增量帶回重審在真實席位下用不了
+- **Id**: BL-0201
 - **Status**: open
-- **Since**: 2026-10-14
+- **Since**: 2026-10-17
 - **Origin**: self
-- **Problem**: 外部作者修好審查挑出的問題、把新版本帶回同一個審查時，每個審查席位都會把整段變更從頭再審一次，不會只看新改的部分。
-- **Impact**: 每帶回一次就付一整輪審查費。正確性不受影響。回報者（cuda）提過第二輪花費會卡住他們。
-- **Trigger**: 外部呼叫方回報帶回重審的費用過高，或同一個 campaign 經常帶回兩次以上
+- **Problem**: 帶回重審的增量模式遇到真實審查席位時多半無法運作：審查協定沒要求意見開頭寫檔案與行號，沒寫就退回完整審查；席位照要求答覆時又把意見寫兩份、或漏掉識別碼前綴，整輪被擋下。
+- **Impact**: 增量模式在真實席位下要嘛退回完整審查、要嘛整輪失敗，省不到錢也不能設為預設。
+- **Trigger**: 決定把增量設為預設之前，或有人在真實席位組合上開啟增量帶回
 - **Effort**: M
-- **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
-- **Pointer**: docs/plans/2026-10-17-review-only-campaign-fix-increment.md
-- **Context**: Plan 2026-10-17. D1-D4 landed (opt-in `return_review: incremental`, default full). 附錄已開 (owner 2026-10-17 d-3cf4dc4c: 給清單); 沉默仍不關閉; 混合席位走 full. 剩 D5 實測 (A/B、成本、預設值).
+- **Source**: BL-0146 D5 實測 2026-10-17
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 實測 9 輪中 9 輪被擋 (主組)；加一句 spec 文字後 12 輪中 4 輪被擋。修法選項在 README 第 5 節。
+
+### 附錄把同一個舊問題按席位重複列出
+- **Id**: BL-0202
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: self
+- **Problem**: 三個席位各報一次同一個舊問題，上一輪留下的問題清單就列三行，而且每個席位都收到全部行；清單約占增量輸入的四分之一。
+- **Impact**: 範圍小的帶回，清單比省下的檔案還大，增量反而多花輸入。
+- **Trigger**: 增量帶回要設為預設，或帶回範圍不大但席位數增加
+- **Effort**: S
+- **Source**: BL-0146 D5 實測 2026-10-17，審查 finding 0ad19dc1
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 每個舊問題 3.0 至 3.1 行；去重後約少三分之二的清單位元組，未實測。
+
+### 帶回修正刪掉或改名的檔案時，舊問題清單會誤導席位
+- **Id**: BL-0203
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: self
+- **Problem**: 修正把某個檔案刪掉或改名後，上一輪留下的問題清單仍指向舊路徑，席位去答覆那一行，說問題還在，卻沒發現另一個檔案還引用已不存在的模組。
+- **Impact**: 增量模式漏掉改名造成的壞引用，並對作者回報不存在的問題。
+- **Trigger**: 增量帶回要設為預設，或有人回報帶回重審漏掉改名造成的壞引用
+- **Effort**: M
+- **Source**: BL-0146 D5 實測 2026-10-17
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 改名情境 4 個增量格中 1 格整組席位都漏，其餘只有 1 席說對；完整審查 6 席全說對。
+
+### review-only campaign 拒收審查設定裡的第四席 opencode
+- **Id**: BL-0204
+- **Status**: open
+- **Since**: 2026-10-17
+- **Origin**: owner
+- **Problem**: 審查設定列的四席 qc_panel 裡，第四席 opencode 在 review-only campaign 一開始就被拒收，整個 campaign 起不來；但 opencode 已有完整的無工具封鎖，一般 hetero 審查迴圈四席都能正常跑。
+- **Impact**: 照目前設定開 review-only campaign 會被擋，只能先手動換掉這一席。
+- **Trigger**: 下一次用現行 qc_panel 開 review-only campaign，或決定讓 opencode 通過盲審 admission
+- **Effort**: S
+- **Source**: BL-0146 D5 實測 2026-10-17；owner 追問
+- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
+- **Context**: 拒收碼 final_panel_seat_blind_incompatible，名單在 final-panel-qualification.js，dispatch-review.sh 註明是否納入名單是另案決定。
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147

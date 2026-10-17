@@ -1,0 +1,307 @@
+{
+ "tag": "s3-incraw-r1",
+ "scenario": "s3",
+ "arm": "inc",
+ "spec_variant": "raw",
+ "base": "5752085b63aa6cb38afadab7db45a7bff867c6ff",
+ "h0": "93870d7546313b4a3cf866c86066dbfc6f1304a8",
+ "h1": "554e8d9bcf7986c83c350270e5cc9a5e8e9d0c1b",
+ "sealed_head": "93870d7546313b4a3cf866c86066dbfc6f1304a8",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/checkout.js",
+    "line": 7,
+    "alt_paths": [
+     {
+      "path": "src/coupon.js",
+      "line": 5
+     }
+    ],
+    "keyword": "discount|subtotal|double|twice|remaining|couponCents"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:51:22.635Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "full",
+   "incremental": null,
+   "incremental_fallback_reason": "finding_unmapped"
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60548,
+   "shared_packet": {
+    "total": 12260,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4507,
+     "spec.md": 1574,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [coupon-divisor] MUST-FIX couponCents divides by 1000 instead of 100, so the discount is one tenth of the specified Math.round(subtotal * p / 100); checkoutTotal therefore overcharges every discounted order (e.g. subtotal 10000, pct 10 yields discount 100 instead of 1000); change the divisor in src/coupon.js to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-X1DKYm",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12260,
+     "arg_bytes": 6081,
+     "cost_usd": 0.20315,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor-1000] MUST-FIX src/coupon.js computes the discount as Math.round((subtotal * p) / 1000) instead of /100, undercharging the discount by 10× (e.g. subtotal=2000, pct=50 yields 100¢ instead of the contracted 1000¢); this also propagates into checkoutTotal, whose contract requires discount = Math.round(subtotal * p / 100), corrupting both the discount and the tax base (subtotal=2000, pct=50, rateBp=1000 gives 2090¢ instead of 1100¢); smallest remediation: change the divisor 1000 → 100 in src/coupon.js, which repairs both couponCents and checkoutTotal with no other edits",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-bfyu0b",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12260,
+     "arg_bytes": 6081,
+     "cost_usd": 0.017315,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX couponCents divides by 1000 instead of 100 (`Math.round((subtotal * p) / 1000)`), producing a discount 10× smaller than the spec requires (`Math.round(subtotal * p / 100)`); this propagates into checkoutTotal and makes every discounted checkout total wrong. Fix: change the divisor from 1000 to 100 in src/coupon.js.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-3UUye2",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12260,
+     "arg_bytes": 6081,
+     "cost_usd": 0.0259725,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 100721,
+   "shared_packet": {
+    "total": 12356,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4623,
+     "spec.md": 1574,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 292,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [checkout-double-subtract] MUST-FIX coupon.js now returns the remaining subtotal (subtotal minus discount) but checkout.js still does `subtotal - couponCents(subtotal, pct)`, so `discounted` becomes the discount amount itself; checkoutTotal(10000, 10, 800, 0) returns 1000+80=1080 instead of 9000+720=9720, violating the checkoutTotal contract and inverting every discounted total; smallest fix: in checkout.js set `const discounted = couponCents(subtotal, pct);` (or revert coupon.js to return the discount amount and keep the subtraction, matching its original header comment)\n🔵 [clamp-nan] CUT/FOLLOW-UP clampQty(NaN) returns NaN rather than a value in 1..99; spec does not define non-numeric input, so excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-PCnFGa",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12356,
+     "arg_bytes": 6197,
+     "cost_usd": 0.20339,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [checkout-double-discount] MUST-FIX in src/checkout.js `discounted = subtotal - couponCents(subtotal, pct)` double-applies the coupon: couponCents was changed to return the post-discount subtotal (subtotal - round(subtotal*p/100)), so `subtotal - couponCents(...)` yields the DISCOUNT, not the taxable amount, and the function returns discount + tax(discount) + shipping; e.g. checkoutTotal(10000, 10, 1000, 0) returns 1100 instead of 9900, and pct=0 returns just shipping (0 for weight 0 instead of 11000), so every input is wrong; smallest fix: `const discounted = couponCents(subtotal, pct);` (or revert couponCents to return the discount per its original contract)",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-c1Lo2a",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12356,
+     "arg_bytes": 6197,
+     "cost_usd": 0.017339,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [checkout-double-subtract] MUST-FIX In src/checkout.js, `const discounted = subtotal - couponCents(subtotal, pct)` computes the discount amount rather than the taxable amount, because couponCents already returns `subtotal - Math.round(subtotal*p/100)`. The subsequent `discounted + taxCents(discounted, rateBp) + shippingCents(weightG)` therefore taxes and sums the discount instead of the post-discount subtotal, producing incorrect totals (e.g. subtotal=1000, pct=10, rateBp=500, weightG=0 returns 100+5+0=105 instead of 900+45+0=945). Smallest fix: change to `const discounted = couponCents(subtotal, pct);` (remove the `subtotal - `).",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Cc5E9G",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12356,
+     "arg_bytes": 6197,
+     "cost_usd": 0.0260085,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:54:05.950Z",
+ "total_cost_usd": 0.493175
+}

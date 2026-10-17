@@ -1,0 +1,200 @@
+{
+ "tag": "s5-full-r2",
+ "scenario": "s5",
+ "arm": "full",
+ "spec_variant": "loc",
+ "base": "a4c1cb11abf4b0be5e60004cb485f5ee2efa1d03",
+ "h0": "472d2c41ffe3e9c8b60cfe71b13a4ce52aad975b",
+ "h1": "538cc1358d574fbcf2ec9a9716507050a206005d",
+ "sealed_head": "538cc1358d574fbcf2ec9a9716507050a206005d",
+ "delta_files": [
+  "src/coupon.js",
+  "src/ship.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_unfixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_fixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "N1",
+    "kind": "new_next_to_old",
+    "path": "src/coupon.js",
+    "line": 4,
+    "keyword": "clamp|0|zero|min|max|1"
+   },
+   {
+    "id": "N2",
+    "kind": "new_next_to_old",
+    "path": "src/ship.js",
+    "line": 4,
+    "keyword": "zero|0|weight|<\\s*0|<="
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:59:35.579Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1
+ },
+ "return": null,
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 100694,
+   "shared_packet": {
+    "total": 12548,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 1866,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 342,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-pct-lower-bound] MUST-FIX src/coupon.js:4 clamps pct with Math.max(1, pct), but the contract limits pct to 0..100; pct=0 becomes 1, so couponCents(subtotal, 0) returns Math.round(subtotal/100) instead of 0, and checkoutTotal inherits the spurious discount; change Math.max(1, pct) to Math.max(0, pct)\n🟠 [ship-zero-weight] MUST-FIX src/ship.js:4 only returns 0 for weightG < 0, so shippingCents(0) falls through to 500 + 0 = 500 while the contract requires 0 for weight 0; checkoutTotal(…, 0) is therefore 500 cents too high; change the guard to weightG <= 0",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-rrQs8B",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.20387,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-pct-floor-one] MUST-FIX src/coupon.js:4 — the clamp `Math.max(1, pct)` uses lower bound 1, but the contract limits pct to 0..100, so a valid pct=0 returns Math.round(subtotal/100) instead of 0 (e.g. couponCents(1000,0) → 10), and src/checkout.js:6 inherits the wrong discount through `couponCents(subtotal, pct)`; smallest remediation: change to `Math.max(0, pct)`.\n🟠 [ship-weight-zero-500] MUST-FIX src/ship.js:4 — the guard is `weightG < 0`, so weightG=0 falls through to `500 + Math.ceil(0/500)*100` = 500, but the contract requires shippingCents(0) === 0; src/checkout.js:8 inherits the bug (weight-0 orders overcharged 500 cents); smallest remediation: `if (weightG <= 0) return 0;`.\n🔵 [split-n-domain-guard] CUT/FOLLOW-UP src/split.js:4 — splitCents with n<=0 produces [] or relies on division by zero; that input is outside the stated contract, so an explicit guard/throw is optional hardening excluded from this version.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Cf4Dx2",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.017387,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-lower-bound] MUST-FIX src/coupon.js:4 — the spec requires pct limited to 0..100, but the code clamps the lower bound to 1 (`Math.max(1, pct)`), so a 0% coupon incorrectly produces a 1% discount. Replace `Math.max(1, pct)` with `Math.max(0, pct)`.\n🟠 [ship-zero-weight] MUST-FIX src/ship.js:4 — the spec requires shippingCents to return 0 for weight 0, but the guard is `weightG < 0` so weight 0 falls through and returns 500. Change the condition to `weightG <= 0` (or `weightG === 0`) to return 0 as specified.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-t0gzXJ",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.0260805,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:01:17.396Z",
+ "total_cost_usd": 0.2473375
+}

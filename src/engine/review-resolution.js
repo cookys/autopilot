@@ -99,7 +99,7 @@ function buildPriorRoundAddendum(rows, heads) {
   return [
     '',
     '== Prior round (machine generated from the stored seat artifacts of round N-1) ==',
-    `Reviewed head: ${heads.priorHead}   New head: ${heads.newHead}   Delta: ${heads.priorHead}..${heads.newHead} (file \`delta.diff\`); changed files in full: \`recheck.diff\``,
+    `Reviewed head: ${heads.priorHead}   New head: ${heads.newHead}   Delta: ${heads.priorHead}..${heads.newHead} (file \`delta.diff\`); re-check set: cumulative diff in \`diff.patch\`, complete files in \`tree/\``,
     'Open findings from round N-1 (id, severity, path:line, claim, one line). Treat each as an unverified',
     'claim: decide from the code at the new head whether it is resolved, still present, or invalid.',
     ...lines,

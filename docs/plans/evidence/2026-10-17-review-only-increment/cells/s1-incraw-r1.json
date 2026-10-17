@@ -1,0 +1,307 @@
+{
+ "tag": "s1-incraw-r1",
+ "scenario": "s1",
+ "arm": "inc",
+ "base": "4a923fb435847da351eb53fdfc4ac0599c4fd44b",
+ "h0": "b76aacb3ff35b7f0f0dfa1e6c01e555c7dd4236a",
+ "h1": "11b6928919c05d1393186b39c93cdcbd10bcd3bf",
+ "sealed_head": "b76aacb3ff35b7f0f0dfa1e6c01e555c7dd4236a",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:39:29.073Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "full",
+   "incremental": null,
+   "incremental_fallback_reason": "finding_unmapped"
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60513,
+   "shared_packet": {
+    "total": 12392,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4506,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX bulkCents uses `qty > 10`, so qty exactly 10 gets no discount although the spec says 10 or more is 10 percent cheaper; change the comparison to `qty >= 10`\n🟠 [coupon-divisor-wrong] MUST-FIX couponCents divides by 1000 instead of 100, so every discount is one tenth of the specified Math.round(subtotal * pct / 100), and checkoutTotal inherits the wrong taxable amount; change the divisor to 100\n🔵 [clamp-nan-input] CUT/FOLLOW-UP clampQty returns NaN for non-numeric input; the spec defines only numeric input, so this is optional hardening excluded from this version\n🔵 [split-n-zero] CUT/FOLLOW-UP splitCents with n of 0 returns an empty array that cannot sum to total; the spec does not define n of 0, so this is excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-3AWu9Y",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12392,
+     "arg_bytes": 6214,
+     "cost_usd": 0.20348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX bulkCents uses `qty > 10` but the contract grants the 10% discount when \"qty is 10 or more\"; at qty=10 (e.g., unitCents=100) it returns 1000 instead of Math.round(1000*0.9)=900, undercharging/overcharging every 10-unit line; smallest fix: change the condition to `qty >= 10` in src/bulk.js\n🟠 [coupon-divides-by-1000] MUST-FIX couponCents computes Math.round(subtotal * p / 1000) instead of / 100, making discounts 10x too small (subtotal=10000, pct=10 → 100 instead of 1000); since checkoutTotal delegates to couponCents, checkout totals are also wrong (taxable amount barely reduced); smallest fix: change the divisor to 100 in src/coupon.js, which repairs both couponCents and checkoutTotal",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-HOTb46",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12392,
+     "arg_bytes": 6214,
+     "cost_usd": 0.017348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX bulkCents uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (qty >= 10); a qty of exactly 10 incorrectly receives no discount; change the comparison to `qty >= 10`\n🟠 [coupon-divisor-wrong] MUST-FIX couponCents divides by 1000 instead of 100, producing a discount ten times too small (e.g. 10% of 5000 returns 50 instead of 500); this also corrupts checkoutTotal which delegates to couponCents; change `/1000` to `/100`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-T5C4ou",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12392,
+     "arg_bytes": 6214,
+     "cost_usd": 0.026022,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 60640,
+   "shared_packet": {
+    "total": 12390,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 1708,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 315,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10`, so a line with qty exactly 10 gets no bulk discount although the contract says \"10 or more\"; change the comparison to `qty >= 10`\n🔵 [split-zero-shares] CUT/FOLLOW-UP splitCents(total, 0) divides by zero and returns an empty array; the spec does not define n = 0, so this is optional hardening excluded from this version\n🔵 [clamp-nan-input] CUT/FOLLOW-UP clampQty(NaN) returns NaN because Math.max/min propagate NaN; the spec does not define non-numeric input, so excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-KlWR6Z",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.20348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX bulkCents applies the 10 percent discount only when qty > 10, but the contract grants it \"when qty is 10 or more\", so bulkCents(10, 100) returns 1000 instead of the required 900 and every 10-item line is overcharged; smallest remediation is changing the guard in src/bulk.js to `qty >= 10 ? Math.round(gross * 0.9) : gross`\n🔵 [split-invalid-n] CUT/FOLLOW-UP splitCents(n <= 0) returns [] or throws RangeError, but the contract only defines behavior for a positive split count and no caller in this diff passes invalid n, so guarding it is optional hardening excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-8yzWbj",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.017348,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold-off-by-one] MUST-FIX bulkCents uses `qty > 10` but the spec requires the 10% discount when qty is 10 or more (>=10); at qty=10 the discount is silently omitted, producing an incorrect line total. Fix: change `qty > 10` to `qty >= 10`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-nTJlxb",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12390,
+     "arg_bytes": 6213,
+     "cost_usd": 0.026022,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:41:32.167Z",
+ "total_cost_usd": 0.49369999999999997
+}

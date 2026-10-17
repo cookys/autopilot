@@ -1,0 +1,354 @@
+{
+ "tag": "s2-full-r1",
+ "scenario": "s2",
+ "arm": "full",
+ "spec_variant": "loc",
+ "base": "c351f02961e296a6b7e15a4b67548bed17138069",
+ "h0": "42e5cad1b7a71f1770110c15f2cac126874b0a42",
+ "h1": "7d199497d55aeec7d3008f1b4d3c8bef29d8ea5a",
+ "sealed_head": "7d199497d55aeec7d3008f1b4d3c8bef29d8ea5a",
+ "delta_files": [
+  "src/bulk.js",
+  "src/cap.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/loyalty.js",
+  "src/refund.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "range_files": [
+  "src/avg.js",
+  "src/bulk.js",
+  "src/cap.js",
+  "src/checkout.js",
+  "src/chunk.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/dates.js",
+  "src/email.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/loyalty.js",
+  "src/median.js",
+  "src/minorder.js",
+  "src/pad.js",
+  "src/pct.js",
+  "src/range.js",
+  "src/refund.js",
+  "src/ship.js",
+  "src/sku.js",
+  "src/slug.js",
+  "src/split.js",
+  "src/sum.js",
+  "src/tax.js",
+  "src/uniq.js",
+  "src/vatid.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "O4",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   },
+   {
+    "id": "O5",
+    "kind": "old_unfixed",
+    "path": "src/clamp.js",
+    "line": 5,
+    "keyword": "clamp|98|99"
+   },
+   {
+    "id": "O6",
+    "kind": "old_unfixed",
+    "path": "src/loyalty.js",
+    "line": 4,
+    "keyword": "loyal|point|round|floor"
+   },
+   {
+    "id": "O7",
+    "kind": "old_unfixed",
+    "path": "src/refund.js",
+    "line": 4,
+    "keyword": "refund|fee|restock|min|max"
+   },
+   {
+    "id": "O8",
+    "kind": "old_unfixed",
+    "path": "src/fee.js",
+    "line": 4,
+    "keyword": "fee|card|30|\\b3\\b"
+   },
+   {
+    "id": "O9",
+    "kind": "old_unfixed",
+    "path": "src/split.js",
+    "line": 6,
+    "keyword": "split|<=|remainder|share"
+   },
+   {
+    "id": "O10",
+    "kind": "old_unfixed",
+    "path": "src/cap.js",
+    "line": 4,
+    "keyword": "cap|ceil|floor|50"
+   },
+   {
+    "id": "O11",
+    "kind": "old_unfixed",
+    "path": "src/minorder.js",
+    "line": 4,
+    "keyword": "minimum|1000|>=|>\\s*1000"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "O3",
+    "kind": "old_fixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "O4",
+    "kind": "old_fixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   },
+   {
+    "id": "O5",
+    "kind": "old_fixed",
+    "path": "src/clamp.js",
+    "line": 5,
+    "keyword": "clamp|98|99"
+   },
+   {
+    "id": "O6",
+    "kind": "old_fixed",
+    "path": "src/loyalty.js",
+    "line": 4,
+    "keyword": "loyal|point|round|floor"
+   },
+   {
+    "id": "O7",
+    "kind": "old_fixed",
+    "path": "src/refund.js",
+    "line": 4,
+    "keyword": "refund|fee|restock|min|max"
+   },
+   {
+    "id": "O8",
+    "kind": "old_fixed",
+    "path": "src/fee.js",
+    "line": 4,
+    "keyword": "fee|card|30|\\b3\\b"
+   },
+   {
+    "id": "O9",
+    "kind": "old_fixed",
+    "path": "src/split.js",
+    "line": 6,
+    "keyword": "split|<=|remainder|share"
+   },
+   {
+    "id": "O10",
+    "kind": "old_fixed",
+    "path": "src/cap.js",
+    "line": 4,
+    "keyword": "cap|ceil|floor|50"
+   },
+   {
+    "id": "O11",
+    "kind": "old_unfixed",
+    "path": "src/minorder.js",
+    "line": 4,
+    "keyword": "minimum|1000|>=|>\\s*1000"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:45:55.341Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1
+ },
+ "return": null,
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60568,
+   "shared_packet": {
+    "total": 29062,
+    "files": {
+     "MANIFEST.json": 5696,
+     "diff.patch": 11585,
+     "spec.md": 3763,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/avg.js": 265,
+     "tree/src/bulk.js": 316,
+     "tree/src/cap.js": 279,
+     "tree/src/checkout.js": 751,
+     "tree/src/chunk.js": 278,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/dates.js": 325,
+     "tree/src/email.js": 393,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/loyalty.js": 232,
+     "tree/src/median.js": 347,
+     "tree/src/minorder.js": 175,
+     "tree/src/pad.js": 237,
+     "tree/src/pct.js": 271,
+     "tree/src/range.js": 278,
+     "tree/src/refund.js": 320,
+     "tree/src/ship.js": 343,
+     "tree/src/sku.js": 237,
+     "tree/src/slug.js": 281,
+     "tree/src/split.js": 364,
+     "tree/src/sum.js": 187,
+     "tree/src/tax.js": 257,
+     "tree/src/uniq.js": 295,
+     "tree/src/vatid.js": 201
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [minorder-off-by-one] MUST-FIX src/minorder.js:4 meetsMinimum uses `cents > 1000`, so an order of exactly 1000 cents is rejected although the contract says \"at least 1000 cents\"; change the comparison to `cents >= 1000`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-tIjik0",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29062,
+     "arg_bytes": 15348,
+     "cost_usd": 0.24516,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [minorder-off-by-one] MUST-FIX src/minorder.js:4 `return cents > 1000;` rejects an order of exactly 1000 cents, but the contract says meetsMinimum is true when the order is at least 1000 cents, so a valid minimum-size order fails the check; smallest remediation is `return cents >= 1000;`\n🔵 [chunk-zero-guard] CUT/FOLLOW-UP src/chunk.js:5 chunkArray(xs, n) with n <= 0 loops forever (i += n never advances); the spec only defines behavior for positive chunk lengths, so this is out-of-scope hardening for a later version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-VYXEhG",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29062,
+     "arg_bytes": 15348,
+     "cost_usd": 0.021516,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [minorder-off-by-one] MUST-FIX src/minorder.js:5 uses `cents > 1000` but the spec says \"at least 1000 cents\", meaning `>= 1000`; an order of exactly 1000 cents incorrectly returns false. Smallest fix: change `>` to `>=`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-cYH1aS",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29062,
+     "arg_bytes": 15348,
+     "cost_usd": 0.032274,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:46:56.988Z",
+ "total_cost_usd": 0.29894999999999994
+}

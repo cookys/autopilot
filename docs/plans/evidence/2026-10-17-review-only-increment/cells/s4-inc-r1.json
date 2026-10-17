@@ -1,0 +1,328 @@
+{
+ "tag": "s4-inc-r1",
+ "scenario": "s4",
+ "arm": "inc",
+ "spec_variant": "loc",
+ "base": "5f398a66a23135f68fd13d88a470cc55e5d2c08e",
+ "h0": "46df2f6c1b421f567396f454c4b53d6305610099",
+ "h1": "3c19ccc7b25afc12120743266e1fbd2e9ea075eb",
+ "sealed_head": "46df2f6c1b421f567396f454c4b53d6305610099",
+ "delta_files": [
+  "src/checkout.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "alt_paths": [
+     {
+      "path": "src/vat.js",
+      "line": 4
+     }
+    ],
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/invoice.js",
+    "line": 3,
+    "keyword": "tax|require|module|missing|vat|not found|cannot find|stale|rename"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:48:38.688Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "blocked",
+  "phase": "full_diff_review",
+  "code": null,
+  "reason": "final_panel_families_below_minimum",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "REVIEWING",
+  "disclosure": null
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 60522,
+   "shared_packet": {
+    "total": 12548,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 1866,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 256
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-divisor] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) yields 8250 instead of 825), which also corrupts checkoutTotal and invoiceLine via their taxCents dependency; change the divisor to 10000\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 n=0 yields an empty array that cannot sum to a nonzero total; the spec does not define n=0, so this is optional hardening excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-q5N0p2",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.20387,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-basis-point-divisor] MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000 (Math.round((amount * rateBp) / 1000)), returning 10× the contracted tax for every rate; this breaks the taxCents contract and propagates to every consumer — checkoutTotal (src/checkout.js:7, tax component 10× too high) and invoiceLine (src/invoice.js:5, printed total overstated); smallest remediation is changing the divisor to 10000 in src/tax.js, after which all three contracts compute per spec",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-x4hny2",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.017387,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-divisor] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; basis-point rate 500 (5%) on 10000 cents yields 500 instead of the correct 50, a 10× overcharge propagating through checkoutTotal and invoiceLine; change `/1000` to `/10000`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-uazBiP",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12548,
+     "arg_bytes": 6371,
+     "cost_usd": 0.0260805,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 100692,
+   "shared_packet": {
+    "total": 13232,
+    "files": {
+     "MANIFEST.json": 1900,
+     "delta.diff": 2001,
+     "diff.patch": 3162,
+     "spec.md": 4132,
+     "tree/src/checkout.js": 751,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/vat.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "no_verdict",
+     "verdict": null,
+     "findings": "",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-mB8kir",
+     "error": "no derived BEGIN frame found in response",
+     "parse_error": null,
+     "exit_status": 1,
+     "addendum": {
+      "bytes": 2243,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) yields 8250 instead of 825), which also corrupts checkoutTotal and invoiceLine via their taxCents dependency; change the divisor to 10000",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 n=0 yields an empty array that cannot sum to a nonzero total; the spec does not define n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.tax-basis-point-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000 (Math.round((amount * rateBp) / 1000)), returning 10× the contracted tax for every rate; this breaks the taxCents contract and propagates to every consumer — checkoutTotal (src/checkout.js:7, tax component 10× too high) and invoiceLine (src/invoice.js:5, printed total overstated); smallest remediation is changing the divisor to 10000 ",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; basis-point rate 500 (5%) on 10000 cents yields 500 instead of the correct 50, a 10× overcharge propagating through checkoutTotal and invoiceLine; change `/1000` to `/10000`"
+      ],
+      "spec_bytes": 4132
+     },
+     "packet_bytes": 13232,
+     "arg_bytes": 7294,
+     "cost_usd": 0.20558,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-divisor-1000] MUST-FIX src/tax.js:4 still divides by 1000 instead of 10000 (this delta does not touch src/tax.js), and src/invoice.js:4-5 now actually consumes taxCents, so invoiceLine(label, amount, rateBp) returns \"label: amount + 10x the contracted tax\" (e.g. amount 10000, rateBp 825 adds 8250 instead of 825), violating the invoiceLine contract via its taxCents dependency; smallest remediation: change the divisor at src/tax.js:4 to 10000 (or point src/invoice.js:4 at a helper computing Math.round(amount * rateBp / 10000, e.g. src/vat.js:4)\n🔵 [vat-duplicate] CUT/FOLLOW-UP src/vat.js:3-5 duplicates the tax formula in parallel to src/tax.js instead of the broken helper being fixed and reused; consolidating src/checkout.js:4 and src/invoice.js:4 on one corrected tax module is optional hardening excluded from this version, since checkoutTotal at src/checkout.js:6-8 is numerically conformant via vatCents (Math.round(amount * rateBp / 10000), discount via couponCents, shipping via shippingCents)\n{\"findings\": \"🟠 [tax-divisor-1000] MUST-FIX src/tax.js:4 still divides by 1000 instead of 10000 (untouched by this delta) and src/invoice.js:4-5 now consumes taxCents, so invoiceLine overstates tax 10x (10000 @ 825bp -> +8250 not +825); change the divisor to 10000 or import a correct helper\\n🔵 [vat-duplicate] CUT/FOLLOW-UP src/vat.js:3-5 duplicates the tax formula while src/tax.js stays broken; consolidating call sites on one corrected helper is optional hardening excluded from this version (checkoutTotal is numerically conformant via vatCents)\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.tax-basis-point-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-DfzmPs",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2243,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) yields 8250 instead of 825), which also corrupts checkoutTotal and invoiceLine via their taxCents dependency; change the divisor to 10000",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 n=0 yields an empty array that cannot sum to a nonzero total; the spec does not define n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.tax-basis-point-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000 (Math.round((amount * rateBp) / 1000)), returning 10× the contracted tax for every rate; this breaks the taxCents contract and propagates to every consumer — checkoutTotal (src/checkout.js:7, tax component 10× too high) and invoiceLine (src/invoice.js:5, printed total overstated); smallest remediation is changing the divisor to 10000 ",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; basis-point rate 500 (5%) on 10000 cents yields 500 instead of the correct 50, a 10× overcharge propagating through checkoutTotal and invoiceLine; change `/1000` to `/10000`"
+      ],
+      "spec_bytes": 4132
+     },
+     "packet_bytes": 13232,
+     "arg_bytes": 7294,
+     "cost_usd": 0.017558,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [invoice-tax-divisor] MUST-FIX src/invoice.js:3 imports taxCents from ./tax which still divides by 1000 instead of 10000 (src/tax.js is not modified in this diff), so invoiceLine returns 10× the correct tax (e.g. invoiceLine(\"Widget\",10000,825) prints \"Widget: 18250\" instead of \"Widget: 10825\"); smallest fix: change the require to `const { vatCents: taxCents } = require('./vat');` or fix src/tax.js:4 divisor to 10000\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 n=0 produces division-by-zero (Math.floor(total/0)=Infinity) and an empty array; the spec does not define n=0 so this is optional hardening excluded from this version\n{\"findings\": \"🟠 [invoice-tax-divisor] MUST-FIX src/invoice.js:3 imports taxCents from ./tax which still divides by 1000 instead of 10000 (src/tax.js is not modified in this diff), so invoiceLine returns 10× the correct tax (e.g. invoiceLine(\\\"Widget\\\",10000,825) prints \\\"Widget: 18250\\\" instead of \\\"Widget: 10825\\\"); smallest fix: change the require to `const { vatCents: taxCents } = require('./vat');` or fix src/tax.js:4 divisor to 10000\\n🔵 [split-n-zero] CUT/FOLLOW-UP src/split.js:4 n=0 produces division-by-zero (Math.floor(total/0)=Infinity) and an empty array; the spec does not define n=0 so this is optional hardening excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:3\"}, {\"finding_id\": \"prior:s1.split-n-zero\", \"status\": \"still_present\", \"evidence\": \"src/split.js:4\"}, {\"finding_id\": \"prior:s2.tax-basis-point-divisor\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:3\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:3\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-3w8DMF",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2243,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) yields 8250 instead of 825), which also corrupts checkoutTotal and invoiceLine via their taxCents dependency; change the divisor to 10000",
+       "- [prior:s1.split-n-zero] | suggestion | src/split.js:4 | CUT/FOLLOW-UP src/split.js:4 n=0 yields an empty array that cannot sum to a nonzero total; the spec does not define n=0, so this is optional hardening excluded from this version",
+       "- [prior:s2.tax-basis-point-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000 (Math.round((amount * rateBp) / 1000)), returning 10× the contracted tax for every rate; this breaks the taxCents contract and propagates to every consumer — checkoutTotal (src/checkout.js:7, tax component 10× too high) and invoiceLine (src/invoice.js:5, printed total overstated); smallest remediation is changing the divisor to 10000 ",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; basis-point rate 500 (5%) on 10000 cents yields 500 instead of the correct 50, a 10× overcharge propagating through checkoutTotal and invoiceLine; change `/1000` to `/10000`"
+      ],
+      "spec_bytes": 4132
+     },
+     "packet_bytes": 13232,
+     "arg_bytes": 7294,
+     "cost_usd": 0.026337,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:51:21.843Z",
+ "total_cost_usd": 0.4968125
+}

@@ -1,0 +1,184 @@
+{
+ "tag": "s3-full-r1",
+ "scenario": "s3",
+ "arm": "full",
+ "spec_variant": "loc",
+ "base": "0bb730ac2bf8654fe49ebf6b1d177c4303a5393d",
+ "h0": "f53025e4c5541c88118df110225d6b916988eb39",
+ "h1": "57ac7fa526d726a40bca12b32165648162471c56",
+ "sealed_head": "57ac7fa526d726a40bca12b32165648162471c56",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/checkout.js",
+    "line": 7,
+    "alt_paths": [
+     {
+      "path": "src/coupon.js",
+      "line": 5
+     }
+    ],
+    "keyword": "discount|subtotal|double|twice|remaining|couponCents"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:46:57.881Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1
+ },
+ "return": null,
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 140797,
+   "shared_packet": {
+    "total": 12514,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4623,
+     "spec.md": 1732,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 292,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [checkout-double-subtract] MUST-FIX src/checkout.js:7 subtracts couponCents from subtotal, but src/coupon.js:5 now returns the remaining amount after the discount rather than the discount itself, so discounted equals the discount (e.g. subtotal 1000, pct 10 gives 100 instead of 900) and checkoutTotal returns discount + tax(discount) + shipping, violating the contract; smallest fix is `const discounted = couponCents(subtotal, pct);` in src/checkout.js:7 (or revert src/coupon.js:5 to return the discount `Math.round((subtotal * p) / 100)` and keep the subtraction)\n🔵 [clamp-nan] CUT/FOLLOW-UP src/clamp.js:4 passes NaN through (Math.trunc(NaN) stays NaN after min/max); the spec only defines numeric input, so excluded from this version\n🔵 [split-nonpositive-n] CUT/FOLLOW-UP src/split.js:4 yields an empty or invalid array for n <= 0; the spec gives no contract for that input, so excluded from this version",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-L7i9Sq",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12514,
+     "arg_bytes": 6355,
+     "cost_usd": 0.20379,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [checkout-double-discount] MUST-FIX src/checkout.js:7 couponCents was redefined in this same diff (src/coupon.js:5) to return the subtotal after the discount (subtotal - Math.round(subtotal*p/100)), but checkoutTotal subtracts it again — `subtotal - couponCents(subtotal, pct)` evaluates to the discount itself, so tax and the total are computed on the discount instead of the taxable amount: checkoutTotal(1000, 0, 1000, 0) returns 0 instead of 1100, and checkoutTotal(1000, 10, 1000, 0) returns 110 instead of 990. Smallest remediation: change line 7 to `const discounted = couponCents(subtotal, pct);` (equivalently, restore couponCents to return the discount per its pre-change contract and keep line 7 as-is); with the one-line fix, discount clamping, tax, and shipping compose exactly per the contract.\n🔵 [invoice-format-reading] CUT/FOLLOW-UP src/invoice.js:5 the spec's return string \"label: amount+tax\" is ambiguous between the numeric sum and a literal \"amount+tax\" rendering; the change implements the sum (`amount + taxCents(amount, rateBp)`), which matches the natural reading of \"both in integer cents\" and is self-consistent with taxCents, so no change is required in this version — worth a spec clarification or expectation test in a later iteration, excluded now because it is a reading preference, not a demonstrable in-scope failure.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-ZWc83Z",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12514,
+     "arg_bytes": 6355,
+     "cost_usd": 0.017379,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [checkout-discount-inversion] MUST-FIX src/checkout.js:7 — couponCents already returns the post-discount (taxable) amount (subtotal − Math.round(subtotal*p/100)), but checkoutTotal computes `subtotal - couponCents(...)`, yielding the discount instead of the taxable amount. For subtotal=1000, pct=10, rateBp=1000, weightG=0 the function returns 110 instead of the spec-required 990. Smallest fix: replace line 7 with `const discounted = couponCents(subtotal, pct);` (drop the outer subtraction).",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-2sgEQZ",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12514,
+     "arg_bytes": 6355,
+     "cost_usd": 0.0260685,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:49:19.705Z",
+ "total_cost_usd": 0.2472375
+}

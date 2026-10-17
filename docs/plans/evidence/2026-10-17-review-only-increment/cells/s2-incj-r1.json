@@ -1,0 +1,778 @@
+{
+ "tag": "s2-incj-r1",
+ "scenario": "s2",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "b190908ef96d80eec0a82fd33bb5fdd32ef759b2",
+ "h0": "b4d4476df482558abd2ccb73799d9372c8c527d3",
+ "h1": "6abc3d721bda0b3debde28b38d081b4095235e63",
+ "sealed_head": "b4d4476df482558abd2ccb73799d9372c8c527d3",
+ "delta_files": [
+  "src/bulk.js",
+  "src/cap.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/loyalty.js",
+  "src/refund.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "range_files": [
+  "src/avg.js",
+  "src/bulk.js",
+  "src/cap.js",
+  "src/checkout.js",
+  "src/chunk.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/dates.js",
+  "src/email.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/loyalty.js",
+  "src/median.js",
+  "src/minorder.js",
+  "src/pad.js",
+  "src/pct.js",
+  "src/range.js",
+  "src/refund.js",
+  "src/ship.js",
+  "src/sku.js",
+  "src/slug.js",
+  "src/split.js",
+  "src/sum.js",
+  "src/tax.js",
+  "src/uniq.js",
+  "src/vatid.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "O3",
+    "kind": "old_unfixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "O4",
+    "kind": "old_unfixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   },
+   {
+    "id": "O5",
+    "kind": "old_unfixed",
+    "path": "src/clamp.js",
+    "line": 5,
+    "keyword": "clamp|98|99"
+   },
+   {
+    "id": "O6",
+    "kind": "old_unfixed",
+    "path": "src/loyalty.js",
+    "line": 4,
+    "keyword": "loyal|point|round|floor"
+   },
+   {
+    "id": "O7",
+    "kind": "old_unfixed",
+    "path": "src/refund.js",
+    "line": 4,
+    "keyword": "refund|fee|restock|min|max"
+   },
+   {
+    "id": "O8",
+    "kind": "old_unfixed",
+    "path": "src/fee.js",
+    "line": 4,
+    "keyword": "fee|card|30|\\b3\\b"
+   },
+   {
+    "id": "O9",
+    "kind": "old_unfixed",
+    "path": "src/split.js",
+    "line": 6,
+    "keyword": "split|<=|remainder|share"
+   },
+   {
+    "id": "O10",
+    "kind": "old_unfixed",
+    "path": "src/cap.js",
+    "line": 4,
+    "keyword": "cap|ceil|floor|50"
+   },
+   {
+    "id": "O11",
+    "kind": "old_unfixed",
+    "path": "src/minorder.js",
+    "line": 4,
+    "keyword": "minimum|1000|>=|>\\s*1000"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "O2",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "O3",
+    "kind": "old_fixed",
+    "path": "src/ship.js",
+    "line": 6,
+    "keyword": "ship|ceil|floor|started|500"
+   },
+   {
+    "id": "O4",
+    "kind": "old_fixed",
+    "path": "src/bulk.js",
+    "line": 5,
+    "keyword": "bulk|qty|>=|10"
+   },
+   {
+    "id": "O5",
+    "kind": "old_fixed",
+    "path": "src/clamp.js",
+    "line": 5,
+    "keyword": "clamp|98|99"
+   },
+   {
+    "id": "O6",
+    "kind": "old_fixed",
+    "path": "src/loyalty.js",
+    "line": 4,
+    "keyword": "loyal|point|round|floor"
+   },
+   {
+    "id": "O7",
+    "kind": "old_fixed",
+    "path": "src/refund.js",
+    "line": 4,
+    "keyword": "refund|fee|restock|min|max"
+   },
+   {
+    "id": "O8",
+    "kind": "old_fixed",
+    "path": "src/fee.js",
+    "line": 4,
+    "keyword": "fee|card|30|\\b3\\b"
+   },
+   {
+    "id": "O9",
+    "kind": "old_fixed",
+    "path": "src/split.js",
+    "line": 6,
+    "keyword": "split|<=|remainder|share"
+   },
+   {
+    "id": "O10",
+    "kind": "old_fixed",
+    "path": "src/cap.js",
+    "line": 4,
+    "keyword": "cap|ceil|floor|50"
+   },
+   {
+    "id": "O11",
+    "kind": "old_unfixed",
+    "path": "src/minorder.js",
+    "line": 4,
+    "keyword": "minimum|1000|>=|>\\s*1000"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:18:52.363Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "b4d4476df482558abd2ccb73799d9372c8c527d3",
+    "new_head": "6abc3d721bda0b3debde28b38d081b4095235e63",
+    "incremental_binding": "64ea3fb5888b2086e3ae82fb15208b5d9c9643f19a6dbc9a0485225810a0a88b",
+    "delta_diff_digest": "0fc48c4dde34df94a2ce7c4581b10ee001627f81c53c158da44161b683572719",
+    "carried": [
+     {
+      "path": "src/avg.js",
+      "file_digest": "fcacd18a087e963754bd2339a2e07c63e45c80af181f21f053cf241770692f53"
+     },
+     {
+      "path": "src/chunk.js",
+      "file_digest": "0fce7de5ed611857f984442916cff99baf57b28a74594babcda22dd33d280344"
+     },
+     {
+      "path": "src/dates.js",
+      "file_digest": "5592c89e95d240fd0a9cf01200baf976aadb3efa34b7042d4944cadc5ee8cfb2"
+     },
+     {
+      "path": "src/email.js",
+      "file_digest": "a5ad33f86443ba93a1bd619824c5e847fb5706f0c0068c9ec406024d58336a48"
+     },
+     {
+      "path": "src/median.js",
+      "file_digest": "f24088a39d7d025fecca751df734e8d0b1ecc85c426c8c5efa4a2c1cf5458875"
+     },
+     {
+      "path": "src/pad.js",
+      "file_digest": "a7a6db5a03d4e619d75dd3543e0bfe5491e03a571a902b3ccb8b7e8d716c63ce"
+     },
+     {
+      "path": "src/pct.js",
+      "file_digest": "cac38a0569a5de694f79058f63ce574291fdd9ef7a6c65402f45c69ac359d0c7"
+     },
+     {
+      "path": "src/range.js",
+      "file_digest": "2cd45393c4aad0c9ab1225eb689bdcfbb7306ac5d2dcde166f5f8ab12501a967"
+     },
+     {
+      "path": "src/sku.js",
+      "file_digest": "d882694b678bbb7ecb80de66f4a0a5efeff25717c7cdbc102bd261daaed42511"
+     },
+     {
+      "path": "src/slug.js",
+      "file_digest": "606f2b2b929842c2c6e36b2a647b4f255d3c6f4f17e804e5e8c82dddfd75192f"
+     },
+     {
+      "path": "src/sum.js",
+      "file_digest": "003448000da2af8a01ffaf7348d440508db1163bcee7668512a427592947ca94"
+     },
+     {
+      "path": "src/uniq.js",
+      "file_digest": "904ffd88b1f097e9b469a444995051f63b4d7302f784d796561126c423b9852c"
+     },
+     {
+      "path": "src/vatid.js",
+      "file_digest": "b80588fb57f97ca739594fcdb5c827399c91d4bb141fcfd8fcd3511071c941a1"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "c0a312050878ad994beae754337dcc288663924b36b3a0343fd1548efbbad0c3",
+      "why": [
+       "changed",
+       "open_finding:bulk-threshold",
+       "open_finding:bulk-off-by-one"
+      ]
+     },
+     {
+      "path": "src/cap.js",
+      "file_digest": "dcd17cbb922418c8c466e8c50895ecb33c569e1df2ab46700122106abbf1aee7",
+      "why": [
+       "changed",
+       "open_finding:cap-floor",
+       "open_finding:cap-wrong-limit",
+       "open_finding:cap-formula"
+      ]
+     },
+     {
+      "path": "src/checkout.js",
+      "file_digest": "d3e8a6a797920b5808133373130be0c070fa5d20bfbcdebb7d26e314ee75776d",
+      "why": [
+       "references_changed:src/coupon.js",
+       "references_changed:src/ship.js"
+      ]
+     },
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709",
+      "why": [
+       "changed",
+       "open_finding:clamp-max",
+       "open_finding:clamp-max-98",
+       "open_finding:clamp-upper"
+      ]
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "a9fb71f78ecaf8b126e39987f73020ee1e47d460f4eac7127c3cf8633bef6974",
+      "why": [
+       "changed",
+       "open_finding:coupon-divisor",
+       "open_finding:coupon-div-1000"
+      ]
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3",
+      "why": [
+       "changed",
+       "open_finding:fee-fixed",
+       "open_finding:fee-fixed-3"
+      ]
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a",
+      "why": [
+       "open_finding:invoice-format"
+      ]
+     },
+     {
+      "path": "src/loyalty.js",
+      "file_digest": "8cbd03b15a736dd082964e3265e38a4779d7c9fd352c29e7a671d9b78dd05598",
+      "why": [
+       "changed",
+       "open_finding:points-floor",
+       "open_finding:loyalty-rounds-up",
+       "open_finding:loyalty-round"
+      ]
+     },
+     {
+      "path": "src/minorder.js",
+      "file_digest": "f05881b43e1536dc6c4462f04e8da36ab55e5507d1e10dda5d5b63748ed01d9a",
+      "why": [
+       "open_finding:min-inclusive",
+       "open_finding:minorder-strict",
+       "open_finding:minorder-boundary"
+      ]
+     },
+     {
+      "path": "src/refund.js",
+      "file_digest": "bbd0029ed11f265600286d08315add07fab9a2f2e88f4a86005c5be883bee14f",
+      "why": [
+       "changed",
+       "open_finding:refund-fee-min",
+       "open_finding:refund-min-max-swapped",
+       "open_finding:refund-logic"
+      ]
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1",
+      "why": [
+       "changed",
+       "open_finding:ship-started",
+       "open_finding:ship-undercounts-started-block",
+       "open_finding:ship-ceil"
+      ]
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14",
+      "why": [
+       "changed",
+       "open_finding:split-remainder",
+       "open_finding:split-extra-cent",
+       "open_finding:split-off-by-one"
+      ]
+     },
+     {
+      "path": "src/tax.js",
+      "file_digest": "88bc99b81d36b5d203af6ecc07f873629c98841fa5ef15d43bb05b83b575a0c0",
+      "why": [
+       "changed",
+       "open_finding:tax-divisor",
+       "open_finding:tax-div-1000"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 100767,
+   "shared_packet": {
+    "total": 29262,
+    "files": {
+     "MANIFEST.json": 5696,
+     "diff.patch": 11588,
+     "spec.md": 3957,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/avg.js": 265,
+     "tree/src/bulk.js": 315,
+     "tree/src/cap.js": 282,
+     "tree/src/checkout.js": 751,
+     "tree/src/chunk.js": 278,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/dates.js": 325,
+     "tree/src/email.js": 393,
+     "tree/src/fee.js": 232,
+     "tree/src/invoice.js": 322,
+     "tree/src/loyalty.js": 232,
+     "tree/src/median.js": 347,
+     "tree/src/minorder.js": 175,
+     "tree/src/pad.js": 237,
+     "tree/src/pct.js": 271,
+     "tree/src/range.js": 278,
+     "tree/src/refund.js": 320,
+     "tree/src/ship.js": 344,
+     "tree/src/sku.js": 237,
+     "tree/src/slug.js": 281,
+     "tree/src/split.js": 365,
+     "tree/src/sum.js": 187,
+     "tree/src/tax.js": 256,
+     "tree/src/uniq.js": 295,
+     "tree/src/vatid.js": 201
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-divisor] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so tax is 10x too large and checkoutTotal/invoiceLine inherit the error; change the divisor to 10000\n🔴 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is 10x too small and checkoutTotal inherits the error; change the divisor to 100\n🟠 [bulk-threshold] MUST-FIX src/bulk.js:5 uses qty > 10 so qty exactly 10 gets no bulk discount; use qty >= 10\n🟠 [cap-floor] MUST-FIX src/cap.js:4 caps at Math.ceil(subtotal / 2) + 1 instead of 50 percent rounded down, allowing discounts above the cap; use Math.min(discount, Math.floor(subtotal / 2))\n🟠 [clamp-max] MUST-FIX src/clamp.js:5 clamps to 98 instead of 99, so qty 99 becomes 98; use Math.min(99, ...)\n🟠 [fee-fixed] MUST-FIX src/fee.js:4 adds 3 cents instead of the fixed 30 cents; change + 3 to + 30\n🟠 [points-floor] MUST-FIX src/loyalty.js:4 uses Math.round so 150 cents yields 2 points instead of 1 full-100 point; use Math.floor\n🟠 [min-inclusive] MUST-FIX src/minorder.js:4 uses cents > 1000 so an order of exactly 1000 cents fails the minimum; use cents >= 1000\n🟠 [refund-fee-min] MUST-FIX src/refund.js:4 uses Math.min(100, ...) which caps the fee at 100 instead of enforcing at least 100; use Math.max(100, Math.round(paidCents * 0.05))\n🟠 [ship-started] MUST-FIX src/ship.js:6 uses Math.floor for the extra 500 g blocks so a started block is not charged (e.g. 1200 g gives 500 instead of 600); use Math.ceil(extra / 500)\n🟠 [split-remainder] MUST-FIX src/split.js:6 uses i <= rem so rem+1 shares get the extra cent and the array sums to total+1 when rem < n; use i < rem\n🟡 [invoice-format] MUST-FIX src/invoice.js:5 renders the sum amount+tax as one number, but the contract \"label: amount+tax ... both in integer cents\" specifies both values shown; return `${label}: ${amount}+${taxCents(amount, rateBp)}`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-tPlGMF",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29262,
+     "arg_bytes": 15545,
+     "cost_usd": 0.24566,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-off-by-one] MUST-FIX src/bulk.js:5 uses `qty > 10` so a line of exactly 10 units gets no discount, violating the \"10 or more\" contract; change to `qty >= 10`\n🟠 [cap-wrong-limit] MUST-FIX src/cap.js:4 caps at `Math.ceil(subtotal / 2) + 1` (e.g. 502 for subtotal 1001, 501 for 1000) instead of at most 50% rounded down; replace with `Math.min(discount, Math.floor(subtotal / 2))`\n🟠 [clamp-max-98] MUST-FIX src/clamp.js:4 clamps to `Math.min(98, ...)` so clampQty(99) returns 98, outside the required 1..99 range; change 98 to 99\n🟠 [coupon-div-1000] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, making every discount 10x too small (couponCents(1000, 50) = 50 instead of 500) and propagating wrong totals into src/checkout.js:7; change the divisor to 100\n🟠 [tax-div-1000] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, making tax 10x too large (taxCents(1000, 1000) = 1000 instead of 100) and corrupting checkoutTotal and invoiceLine; change the divisor to 10000\n🟠 [fee-fixed-3] MUST-FIX src/fee.js:4 adds a fixed 3 cents instead of the contracted 30; change `+ 3` to `+ 30`\n🟠 [loyalty-rounds-up] MUST-FIX src/loyalty.js:4 uses Math.round instead of rounding down, so pointsFor(150) returns 2 instead of 1 point per full 100 cents; use `Math.floor(cents / 100)` inside the Math.max(0, ...)\n🟠 [minorder-strict] MUST-FIX src/minorder.js:4 uses `cents > 1000` so a 1000-cent order fails the \"at least 1000 cents\" minimum; change to `cents >= 1000`\n🟠 [refund-min-max-swapped] MUST-FIX src/refund.js:4 computes the fee as `Math.min(100, Math.round(paidCents * 0.05))`, capping it at 100 instead of flooring it at 100 (refundCents(10000) = 9900 instead of 9500; refundCents(100) = 95 instead of 0); use `Math.max(100, Math.round(paidCents * 0.05))`\n🟠 [ship-undercounts-started-block] MUST-FIX src/ship.js:6 uses `Math.floor(extra / 500)`, which misses a started 500 g block (shippingCents(1001) = 500 instead of 600, same through 1499); use `Math.ceil(extra / 500)` for the extra-block count\n🟠 [split-extra-cent] MUST-FIX src/split.js:6 uses `i <= rem` so rem+1 shares get an extra cent and the array sums to total + 1 (splitCents(10, 3) = [4,4,3] summing 11, and even rem = 0 adds a cent to the first share); change the condition to `i < rem`",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-kUZpIC",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29262,
+     "arg_bytes": 15545,
+     "cost_usd": 0.021566,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [bulk-threshold] MUST-FIX src/bulk.js:4 uses `qty > 10` but spec says \"10 or more\"; qty=10 misses the discount. Change to `qty >= 10`.\n🟠 [cap-formula] MUST-FIX src/cap.js:4 uses `Math.ceil(subtotal / 2) + 1` instead of `Math.floor(subtotal / 2)`; over-caps every subtotal. Replace with `Math.floor(subtotal / 2)`.\n🟠 [clamp-upper] MUST-FIX src/clamp.js:5 caps at 98 instead of 99; spec says range 1..99 inclusive. Change `Math.min(98,` to `Math.min(99,`.\n🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small. Change `/1000` to `/100`.\n🟠 [fee-fixed] MUST-FIX src/fee.js:4 adds 3 instead of 30 for the fixed component. Change `+ 3` to `+ 30`.\n🟠 [loyalty-round] MUST-FIX src/loyalty.js:4 uses `Math.round` but spec requires round-down (floor). Change to `Math.floor`.\n🟠 [minorder-boundary] MUST-FIX src/minorder.js:4 uses `> 1000` but spec says \"at least 1000\". Change to `>= 1000`.\n🟠 [refund-logic] MUST-FIX src/refund.js:4-5 caps the fee at 100 instead of flooring the refund at 100; spec says refund = paid − round(5%) but at least 100 cents, never below 0. Rewrite as `const fee = Math.round(paidCents * 0.05); return Math.max(0, Math.max(100, paidCents - fee));`.\n🟠 [ship-ceil] MUST-FIX src/ship.js:5 uses `Math.floor(extra / 500)` but \"each started additional 500 g\" requires ceiling; e.g. 1001 g must cost 600 not 500. Change to `Math.ceil(extra / 500)`.\n🟠 [split-off-by-one] MUST-FIX src/split.js:5 condition `i <= rem` assigns one extra share; sum exceeds total by 1. Change to `i < rem`.\n🟠 [tax-divisor] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000 (basis points), inflating tax 10×. Change `/1000` to `/10000`.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Jdsgz9",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 29262,
+     "arg_bytes": 15545,
+     "cost_usd": 0.032349,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 161094,
+   "shared_packet": {
+    "total": 31379,
+    "files": {
+     "MANIFEST.json": 3287,
+     "delta.diff": 5006,
+     "diff.patch": 6981,
+     "spec.md": 11975,
+     "tree/src/bulk.js": 316,
+     "tree/src/cap.js": 279,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/loyalty.js": 232,
+     "tree/src/minorder.js": 175,
+     "tree/src/refund.js": 320,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [minorder-strict-gt] MUST-FIX src/minorder.js:4 uses `cents > 1000` so an order of exactly 1000 cents returns false although the contract says at least 1000 cents; change to `cents >= 1000`\\n🟡 [invoice-sum-rendered] MUST-FIX src/invoice.js:5 renders the single number amount+tax, but the contract \\\"label: amount+tax ... both in integer cents\\\" requires both values shown; return `${label}: ${amount}+${taxCents(amount, rateBp)}`\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.cap-floor\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s1.clamp-max\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s1.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s1.points-floor\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s1.min-inclusive\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s1.refund-fee-min\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s1.ship-started\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-remainder\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s1.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s2.bulk-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.cap-wrong-limit\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s2.clamp-max-98\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.tax-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s2.fee-fixed-3\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s2.loyalty-rounds-up\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s2.minorder-strict\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s2.refund-min-max-swapped\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s2.ship-undercounts-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s2.split-extra-cent\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.cap-formula\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s3.clamp-upper\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s3.loyalty-round\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s3.minorder-boundary\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s3.refund-logic\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s3.ship-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.split-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-npjPf3",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 7995,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so tax is 10x too large and checkoutTotal/invoiceLine inherit the error; change the divisor to 10000",
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is 10x too small and checkoutTotal inherits the error; change the divisor to 100",
+       "- [prior:s1.bulk-threshold] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so qty exactly 10 gets no bulk discount; use qty >= 10",
+       "- [prior:s1.cap-floor] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at Math.ceil(subtotal / 2) + 1 instead of 50 percent rounded down, allowing discounts above the cap; use Math.min(discount, Math.floor(subtotal / 2))",
+       "- [prior:s1.clamp-max] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 clamps to 98 instead of 99, so qty 99 becomes 98; use Math.min(99, ...)",
+       "- [prior:s1.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 cents instead of the fixed 30 cents; change + 3 to + 30",
+       "- [prior:s1.points-floor] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round so 150 cents yields 2 points instead of 1 full-100 point; use Math.floor",
+       "- [prior:s1.min-inclusive] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses cents > 1000 so an order of exactly 1000 cents fails the minimum; use cents >= 1000",
+       "- [prior:s1.refund-fee-min] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 uses Math.min(100, ...) which caps the fee at 100 instead of enforcing at least 100; use Math.max(100, Math.round(paidCents * 0.05))",
+       "- [prior:s1.ship-started] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the extra 500 g blocks so a started block is not charged (e.g. 1200 g gives 500 instead of 600); use Math.ceil(extra / 500)",
+       "- [prior:s1.split-remainder] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses i <= rem so rem+1 shares get the extra cent and the array sums to total+1 when rem < n; use i < rem",
+       "- [prior:s1.invoice-format] | minor | src/invoice.js:5 | MUST-FIX src/invoice.js:5 renders the sum amount+tax as one number, but the contract \"label: amount+tax ... both in integer cents\" specifies both values shown; return `${label}: ${amount}+${taxCents(amount, rateBp)}`",
+       "- [prior:s2.bulk-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` so a line of exactly 10 units gets no discount, violating the \"10 or more\" contract; change to `qty >= 10`",
+       "- [prior:s2.cap-wrong-limit] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at `Math.ceil(subtotal / 2) + 1` (e.g. 502 for subtotal 1001, 501 for 1000) instead of at most 50% rounded down; replace with `Math.min(discount, Math.floor(subtotal / 2))`",
+       "- [prior:s2.clamp-max-98] | major | src/clamp.js:4 | MUST-FIX src/clamp.js:4 clamps to `Math.min(98, ...)` so clampQty(99) returns 98, outside the required 1..99 range; change 98 to 99",
+       "- [prior:s2.coupon-div-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, making every discount 10x too small (couponCents(1000, 50) = 50 instead of 500) and propagating wrong totals into src/checkout.js:7; change the divisor to 100",
+       "- [prior:s2.tax-div-1000] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, making tax 10x too large (taxCents(1000, 1000) = 1000 instead of 100) and corrupting checkoutTotal and invoiceLine; change the divisor to 10000",
+       "- [prior:s2.fee-fixed-3] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds a fixed 3 cents instead of the contracted 30; change `+ 3` to `+ 30`",
+       "- [prior:s2.loyalty-rounds-up] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round instead of rounding down, so pointsFor(150) returns 2 instead of 1 point per full 100 cents; use `Math.floor(cents / 100)` inside the Math.max(0, ...)",
+       "- [prior:s2.minorder-strict] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `cents > 1000` so a 1000-cent order fails the \"at least 1000 cents\" minimum; change to `cents >= 1000`",
+       "- [prior:s2.refund-min-max-swapped] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 computes the fee as `Math.min(100, Math.round(paidCents * 0.05))`, capping it at 100 instead of flooring it at 100 (refundCents(10000) = 9900 instead of 9500; refundCents(100) = 95 instead of 0); use `Math.max(100, Math.round(paidCents * 0.05))`",
+       "- [prior:s2.ship-undercounts-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses `Math.floor(extra / 500)`, which misses a started 500 g block (shippingCents(1001) = 500 instead of 600, same through 1499); use `Math.ceil(extra / 500)` for the extra-block count",
+       "- [prior:s2.split-extra-cent] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses `i <= rem` so rem+1 shares get an extra cent and the array sums to total + 1 (splitCents(10, 3) = [4,4,3] summing 11, and even rem = 0 adds a cent to the first share); change the condition to `i < rem`",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but spec says \"10 or more\"; qty=10 misses the discount. Change to `qty >= 10`.",
+       "- [prior:s3.cap-formula] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 uses `Math.ceil(subtotal / 2) + 1` instead of `Math.floor(subtotal / 2)`; over-caps every subtotal. Replace with `Math.floor(subtotal / 2)`.",
+       "- [prior:s3.clamp-upper] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 caps at 98 instead of 99; spec says range 1..99 inclusive. Change `Math.min(98,` to `Math.min(99,`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small. Change `/1000` to `/100`.",
+       "- [prior:s3.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 instead of 30 for the fixed component. Change `+ 3` to `+ 30`.",
+       "- [prior:s3.loyalty-round] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses `Math.round` but spec requires round-down (floor). Change to `Math.floor`.",
+       "- [prior:s3.minorder-boundary] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `> 1000` but spec says \"at least 1000\". Change to `>= 1000`.",
+       "- [prior:s3.refund-logic] | major | src/refund.js:4 | MUST-FIX src/refund.js:4-5 caps the fee at 100 instead of flooring the refund at 100; spec says refund = paid − round(5%) but at least 100 cents, never below 0. Rewrite as `const fee = Math.round(paidCents * 0.05); return Math.max(0, Math.max(100, paidCents - fee));`.",
+       "- [prior:s3.ship-ceil] | major | src/ship.js:5 | MUST-FIX src/ship.js:5 uses `Math.floor(extra / 500)` but \"each started additional 500 g\" requires ceiling; e.g. 1001 g must cost 600 not 500. Change to `Math.ceil(extra / 500)`.",
+       "- [prior:s3.split-off-by-one] | major | src/split.js:5 | MUST-FIX src/split.js:5 condition `i <= rem` assigns one extra share; sum exceeds total by 1. Change to `i < rem`.",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000 (basis points), inflating tax 10×. Change `/1000` to `/10000`."
+      ],
+      "spec_bytes": 11975
+     },
+     "packet_bytes": 31379,
+     "arg_bytes": 18956,
+     "cost_usd": 0.25095,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [minorder-at-least-1000] MUST-FIX src/minorder.js:4 uses `cents > 1000`, so an order of exactly 1000 cents fails the contract's 'at least 1000 cents' minimum (meetsMinimum(1000) === false); smallest remediation: change the comparison to `cents >= 1000`\\n🟡 [invoice-amount-plus-tax] MUST-FIX src/invoice.js:5 renders the numeric sum `amount + taxCents(amount, rateBp)` as a single value (invoiceLine('foo', 1000, 1000) returns 'foo: 1100'), but the contract 'label: amount+tax ... both in integer cents' requires both the amount and the tax to appear; smallest remediation: return `${label}: ${amount}+${taxCents(amount, rateBp)}`\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s1.cap-floor\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s1.clamp-max\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s1.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s1.points-floor\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s1.min-inclusive\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s1.refund-fee-min\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s1.ship-started\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-remainder\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s1.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s2.bulk-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s2.cap-wrong-limit\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s2.clamp-max-98\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.tax-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s2.fee-fixed-3\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s2.loyalty-rounds-up\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s2.minorder-strict\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s2.refund-min-max-swapped\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s2.ship-undercounts-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s2.split-extra-cent\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:5\"}, {\"finding_id\": \"prior:s3.cap-formula\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s3.clamp-upper\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s3.loyalty-round\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s3.minorder-boundary\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s3.refund-logic\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s3.ship-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.split-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-HSHTSs",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 7995,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so tax is 10x too large and checkoutTotal/invoiceLine inherit the error; change the divisor to 10000",
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is 10x too small and checkoutTotal inherits the error; change the divisor to 100",
+       "- [prior:s1.bulk-threshold] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so qty exactly 10 gets no bulk discount; use qty >= 10",
+       "- [prior:s1.cap-floor] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at Math.ceil(subtotal / 2) + 1 instead of 50 percent rounded down, allowing discounts above the cap; use Math.min(discount, Math.floor(subtotal / 2))",
+       "- [prior:s1.clamp-max] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 clamps to 98 instead of 99, so qty 99 becomes 98; use Math.min(99, ...)",
+       "- [prior:s1.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 cents instead of the fixed 30 cents; change + 3 to + 30",
+       "- [prior:s1.points-floor] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round so 150 cents yields 2 points instead of 1 full-100 point; use Math.floor",
+       "- [prior:s1.min-inclusive] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses cents > 1000 so an order of exactly 1000 cents fails the minimum; use cents >= 1000",
+       "- [prior:s1.refund-fee-min] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 uses Math.min(100, ...) which caps the fee at 100 instead of enforcing at least 100; use Math.max(100, Math.round(paidCents * 0.05))",
+       "- [prior:s1.ship-started] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the extra 500 g blocks so a started block is not charged (e.g. 1200 g gives 500 instead of 600); use Math.ceil(extra / 500)",
+       "- [prior:s1.split-remainder] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses i <= rem so rem+1 shares get the extra cent and the array sums to total+1 when rem < n; use i < rem",
+       "- [prior:s1.invoice-format] | minor | src/invoice.js:5 | MUST-FIX src/invoice.js:5 renders the sum amount+tax as one number, but the contract \"label: amount+tax ... both in integer cents\" specifies both values shown; return `${label}: ${amount}+${taxCents(amount, rateBp)}`",
+       "- [prior:s2.bulk-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` so a line of exactly 10 units gets no discount, violating the \"10 or more\" contract; change to `qty >= 10`",
+       "- [prior:s2.cap-wrong-limit] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at `Math.ceil(subtotal / 2) + 1` (e.g. 502 for subtotal 1001, 501 for 1000) instead of at most 50% rounded down; replace with `Math.min(discount, Math.floor(subtotal / 2))`",
+       "- [prior:s2.clamp-max-98] | major | src/clamp.js:4 | MUST-FIX src/clamp.js:4 clamps to `Math.min(98, ...)` so clampQty(99) returns 98, outside the required 1..99 range; change 98 to 99",
+       "- [prior:s2.coupon-div-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, making every discount 10x too small (couponCents(1000, 50) = 50 instead of 500) and propagating wrong totals into src/checkout.js:7; change the divisor to 100",
+       "- [prior:s2.tax-div-1000] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, making tax 10x too large (taxCents(1000, 1000) = 1000 instead of 100) and corrupting checkoutTotal and invoiceLine; change the divisor to 10000",
+       "- [prior:s2.fee-fixed-3] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds a fixed 3 cents instead of the contracted 30; change `+ 3` to `+ 30`",
+       "- [prior:s2.loyalty-rounds-up] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round instead of rounding down, so pointsFor(150) returns 2 instead of 1 point per full 100 cents; use `Math.floor(cents / 100)` inside the Math.max(0, ...)",
+       "- [prior:s2.minorder-strict] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `cents > 1000` so a 1000-cent order fails the \"at least 1000 cents\" minimum; change to `cents >= 1000`",
+       "- [prior:s2.refund-min-max-swapped] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 computes the fee as `Math.min(100, Math.round(paidCents * 0.05))`, capping it at 100 instead of flooring it at 100 (refundCents(10000) = 9900 instead of 9500; refundCents(100) = 95 instead of 0); use `Math.max(100, Math.round(paidCents * 0.05))`",
+       "- [prior:s2.ship-undercounts-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses `Math.floor(extra / 500)`, which misses a started 500 g block (shippingCents(1001) = 500 instead of 600, same through 1499); use `Math.ceil(extra / 500)` for the extra-block count",
+       "- [prior:s2.split-extra-cent] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses `i <= rem` so rem+1 shares get an extra cent and the array sums to total + 1 (splitCents(10, 3) = [4,4,3] summing 11, and even rem = 0 adds a cent to the first share); change the condition to `i < rem`",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but spec says \"10 or more\"; qty=10 misses the discount. Change to `qty >= 10`.",
+       "- [prior:s3.cap-formula] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 uses `Math.ceil(subtotal / 2) + 1` instead of `Math.floor(subtotal / 2)`; over-caps every subtotal. Replace with `Math.floor(subtotal / 2)`.",
+       "- [prior:s3.clamp-upper] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 caps at 98 instead of 99; spec says range 1..99 inclusive. Change `Math.min(98,` to `Math.min(99,`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small. Change `/1000` to `/100`.",
+       "- [prior:s3.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 instead of 30 for the fixed component. Change `+ 3` to `+ 30`.",
+       "- [prior:s3.loyalty-round] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses `Math.round` but spec requires round-down (floor). Change to `Math.floor`.",
+       "- [prior:s3.minorder-boundary] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `> 1000` but spec says \"at least 1000\". Change to `>= 1000`.",
+       "- [prior:s3.refund-logic] | major | src/refund.js:4 | MUST-FIX src/refund.js:4-5 caps the fee at 100 instead of flooring the refund at 100; spec says refund = paid − round(5%) but at least 100 cents, never below 0. Rewrite as `const fee = Math.round(paidCents * 0.05); return Math.max(0, Math.max(100, paidCents - fee));`.",
+       "- [prior:s3.ship-ceil] | major | src/ship.js:5 | MUST-FIX src/ship.js:5 uses `Math.floor(extra / 500)` but \"each started additional 500 g\" requires ceiling; e.g. 1001 g must cost 600 not 500. Change to `Math.ceil(extra / 500)`.",
+       "- [prior:s3.split-off-by-one] | major | src/split.js:5 | MUST-FIX src/split.js:5 condition `i <= rem` assigns one extra share; sum exceeds total by 1. Change to `i < rem`.",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000 (basis points), inflating tax 10×. Change `/1000` to `/10000`."
+      ],
+      "spec_bytes": 11975
+     },
+     "packet_bytes": 31379,
+     "arg_bytes": 18956,
+     "cost_usd": 0.022095,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [minorder-boundary] MUST-FIX src/minorder.js:4 uses `cents > 1000` but spec requires \\\"at least 1000 cents\\\" (inclusive); an order of exactly 1000 cents incorrectly fails. Change to `cents >= 1000`.\\n🟠 [invoice-format] MUST-FIX src/invoice.js:5 renders `amount + taxCents(...)` as a single summed number, but the contract format \\\"label: amount+tax … both in integer cents\\\" requires both values shown separately. Change to `` `${label}: ${amount}+${taxCents(amount, rateBp)}` ``.\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s1.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:4\"}, {\"finding_id\": \"prior:s1.cap-floor\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s1.clamp-max\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s1.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s1.points-floor\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s1.min-inclusive\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s1.refund-fee-min\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s1.ship-started\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s1.split-remainder\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s1.invoice-format\", \"status\": \"still_present\", \"evidence\": \"src/invoice.js:5\"}, {\"finding_id\": \"prior:s2.bulk-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:4\"}, {\"finding_id\": \"prior:s2.cap-wrong-limit\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s2.clamp-max-98\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s2.coupon-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.tax-div-1000\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s2.fee-fixed-3\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s2.loyalty-rounds-up\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s2.minorder-strict\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s2.refund-min-max-swapped\", \"status\": \"resolved\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s2.ship-undercounts-started-block\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s2.split-extra-cent\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.bulk-threshold\", \"status\": \"resolved\", \"evidence\": \"src/bulk.js:4\"}, {\"finding_id\": \"prior:s3.cap-formula\", \"status\": \"resolved\", \"evidence\": \"src/cap.js:4\"}, {\"finding_id\": \"prior:s3.clamp-upper\", \"status\": \"resolved\", \"evidence\": \"src/clamp.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.fee-fixed\", \"status\": \"resolved\", \"evidence\": \"src/fee.js:4\"}, {\"finding_id\": \"prior:s3.loyalty-round\", \"status\": \"resolved\", \"evidence\": \"src/loyalty.js:4\"}, {\"finding_id\": \"prior:s3.minorder-boundary\", \"status\": \"still_present\", \"evidence\": \"src/minorder.js:4\"}, {\"finding_id\": \"prior:s3.refund-logic\", \"status\": \"invalid\", \"evidence\": \"src/refund.js:4\"}, {\"finding_id\": \"prior:s3.ship-ceil\", \"status\": \"resolved\", \"evidence\": \"src/ship.js:6\"}, {\"finding_id\": \"prior:s3.split-off-by-one\", \"status\": \"resolved\", \"evidence\": \"src/split.js:6\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"resolved\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-fL3D5S",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 7995,
+      "rows": [
+       "- [prior:s1.tax-divisor] | critical | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, so tax is 10x too large and checkoutTotal/invoiceLine inherit the error; change the divisor to 10000",
+       "- [prior:s1.coupon-divisor] | critical | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so the discount is 10x too small and checkoutTotal inherits the error; change the divisor to 100",
+       "- [prior:s1.bulk-threshold] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses qty > 10 so qty exactly 10 gets no bulk discount; use qty >= 10",
+       "- [prior:s1.cap-floor] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at Math.ceil(subtotal / 2) + 1 instead of 50 percent rounded down, allowing discounts above the cap; use Math.min(discount, Math.floor(subtotal / 2))",
+       "- [prior:s1.clamp-max] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 clamps to 98 instead of 99, so qty 99 becomes 98; use Math.min(99, ...)",
+       "- [prior:s1.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 cents instead of the fixed 30 cents; change + 3 to + 30",
+       "- [prior:s1.points-floor] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round so 150 cents yields 2 points instead of 1 full-100 point; use Math.floor",
+       "- [prior:s1.min-inclusive] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses cents > 1000 so an order of exactly 1000 cents fails the minimum; use cents >= 1000",
+       "- [prior:s1.refund-fee-min] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 uses Math.min(100, ...) which caps the fee at 100 instead of enforcing at least 100; use Math.max(100, Math.round(paidCents * 0.05))",
+       "- [prior:s1.ship-started] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses Math.floor for the extra 500 g blocks so a started block is not charged (e.g. 1200 g gives 500 instead of 600); use Math.ceil(extra / 500)",
+       "- [prior:s1.split-remainder] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses i <= rem so rem+1 shares get the extra cent and the array sums to total+1 when rem < n; use i < rem",
+       "- [prior:s1.invoice-format] | minor | src/invoice.js:5 | MUST-FIX src/invoice.js:5 renders the sum amount+tax as one number, but the contract \"label: amount+tax ... both in integer cents\" specifies both values shown; return `${label}: ${amount}+${taxCents(amount, rateBp)}`",
+       "- [prior:s2.bulk-off-by-one] | major | src/bulk.js:5 | MUST-FIX src/bulk.js:5 uses `qty > 10` so a line of exactly 10 units gets no discount, violating the \"10 or more\" contract; change to `qty >= 10`",
+       "- [prior:s2.cap-wrong-limit] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 caps at `Math.ceil(subtotal / 2) + 1` (e.g. 502 for subtotal 1001, 501 for 1000) instead of at most 50% rounded down; replace with `Math.min(discount, Math.floor(subtotal / 2))`",
+       "- [prior:s2.clamp-max-98] | major | src/clamp.js:4 | MUST-FIX src/clamp.js:4 clamps to `Math.min(98, ...)` so clampQty(99) returns 98, outside the required 1..99 range; change 98 to 99",
+       "- [prior:s2.coupon-div-1000] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, making every discount 10x too small (couponCents(1000, 50) = 50 instead of 500) and propagating wrong totals into src/checkout.js:7; change the divisor to 100",
+       "- [prior:s2.tax-div-1000] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000, making tax 10x too large (taxCents(1000, 1000) = 1000 instead of 100) and corrupting checkoutTotal and invoiceLine; change the divisor to 10000",
+       "- [prior:s2.fee-fixed-3] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds a fixed 3 cents instead of the contracted 30; change `+ 3` to `+ 30`",
+       "- [prior:s2.loyalty-rounds-up] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses Math.round instead of rounding down, so pointsFor(150) returns 2 instead of 1 point per full 100 cents; use `Math.floor(cents / 100)` inside the Math.max(0, ...)",
+       "- [prior:s2.minorder-strict] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `cents > 1000` so a 1000-cent order fails the \"at least 1000 cents\" minimum; change to `cents >= 1000`",
+       "- [prior:s2.refund-min-max-swapped] | major | src/refund.js:4 | MUST-FIX src/refund.js:4 computes the fee as `Math.min(100, Math.round(paidCents * 0.05))`, capping it at 100 instead of flooring it at 100 (refundCents(10000) = 9900 instead of 9500; refundCents(100) = 95 instead of 0); use `Math.max(100, Math.round(paidCents * 0.05))`",
+       "- [prior:s2.ship-undercounts-started-block] | major | src/ship.js:6 | MUST-FIX src/ship.js:6 uses `Math.floor(extra / 500)`, which misses a started 500 g block (shippingCents(1001) = 500 instead of 600, same through 1499); use `Math.ceil(extra / 500)` for the extra-block count",
+       "- [prior:s2.split-extra-cent] | major | src/split.js:6 | MUST-FIX src/split.js:6 uses `i <= rem` so rem+1 shares get an extra cent and the array sums to total + 1 (splitCents(10, 3) = [4,4,3] summing 11, and even rem = 0 adds a cent to the first share); change the condition to `i < rem`",
+       "- [prior:s3.bulk-threshold] | major | src/bulk.js:4 | MUST-FIX src/bulk.js:4 uses `qty > 10` but spec says \"10 or more\"; qty=10 misses the discount. Change to `qty >= 10`.",
+       "- [prior:s3.cap-formula] | major | src/cap.js:4 | MUST-FIX src/cap.js:4 uses `Math.ceil(subtotal / 2) + 1` instead of `Math.floor(subtotal / 2)`; over-caps every subtotal. Replace with `Math.floor(subtotal / 2)`.",
+       "- [prior:s3.clamp-upper] | major | src/clamp.js:5 | MUST-FIX src/clamp.js:5 caps at 98 instead of 99; spec says range 1..99 inclusive. Change `Math.min(98,` to `Math.min(99,`.",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, producing a discount 10× too small. Change `/1000` to `/100`.",
+       "- [prior:s3.fee-fixed] | major | src/fee.js:4 | MUST-FIX src/fee.js:4 adds 3 instead of 30 for the fixed component. Change `+ 3` to `+ 30`.",
+       "- [prior:s3.loyalty-round] | major | src/loyalty.js:4 | MUST-FIX src/loyalty.js:4 uses `Math.round` but spec requires round-down (floor). Change to `Math.floor`.",
+       "- [prior:s3.minorder-boundary] | major | src/minorder.js:4 | MUST-FIX src/minorder.js:4 uses `> 1000` but spec says \"at least 1000\". Change to `>= 1000`.",
+       "- [prior:s3.refund-logic] | major | src/refund.js:4 | MUST-FIX src/refund.js:4-5 caps the fee at 100 instead of flooring the refund at 100; spec says refund = paid − round(5%) but at least 100 cents, never below 0. Rewrite as `const fee = Math.round(paidCents * 0.05); return Math.max(0, Math.max(100, paidCents - fee));`.",
+       "- [prior:s3.ship-ceil] | major | src/ship.js:5 | MUST-FIX src/ship.js:5 uses `Math.floor(extra / 500)` but \"each started additional 500 g\" requires ceiling; e.g. 1001 g must cost 600 not 500. Change to `Math.ceil(extra / 500)`.",
+       "- [prior:s3.split-off-by-one] | major | src/split.js:5 | MUST-FIX src/split.js:5 condition `i <= rem` assigns one extra share; sum exceeds total by 1. Change to `i < rem`.",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000 (basis points), inflating tax 10×. Change `/1000` to `/10000`."
+      ],
+      "spec_bytes": 11975
+     },
+     "packet_bytes": 31379,
+     "arg_bytes": 18956,
+     "cost_usd": 0.0331425,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:23:17.449Z",
+ "total_cost_usd": 0.6057625
+}

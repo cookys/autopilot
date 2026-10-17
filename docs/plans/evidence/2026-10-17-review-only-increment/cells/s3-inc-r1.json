@@ -1,0 +1,319 @@
+{
+ "tag": "s3-inc-r1",
+ "scenario": "s3",
+ "arm": "inc",
+ "spec_variant": "loc",
+ "base": "2fea20f5250fe8916905d8b14b4da24bcf7e3c1f",
+ "h0": "9c86d28535ca9c4e6197b9b7683eee564ef1813b",
+ "h1": "5b9e69bf155d7c4cc892606a879a8e4b4f330cba",
+ "sealed_head": "9c86d28535ca9c4e6197b9b7683eee564ef1813b",
+ "delta_files": [
+  "src/coupon.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/coupon.js",
+    "line": 5,
+    "keyword": "coupon|discount|1000|pct|percent"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/checkout.js",
+    "line": 7,
+    "alt_paths": [
+     {
+      "path": "src/coupon.js",
+      "line": 5
+     }
+    ],
+    "keyword": "discount|subtotal|double|twice|remaining|couponCents"
+   }
+  ]
+ },
+ "started_at": "2026-10-16T23:46:16.906Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "blocked",
+  "phase": "full_diff_review",
+  "code": null,
+  "reason": "final_panel_families_below_minimum",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "REVIEWING",
+  "disclosure": null
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 80676,
+   "shared_packet": {
+    "total": 12418,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4507,
+     "spec.md": 1732,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 312,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100; this makes checkoutTotal under-discount by 10x and breaks its contract (discount must be Math.round(subtotal * p / 100)); change the divisor to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-ixb4ga",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12418,
+     "arg_bytes": 6239,
+     "cost_usd": 0.20355,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor-1000] MUST-FIX src/coupon.js:6 computes Math.round((subtotal * p) / 1000) but the contract (and the comment above it) requires Math.round(subtotal * p / 100), so every discount is 10× too small (e.g. subtotal=10000, pct=10 returns 100 instead of 1000); this also breaks checkoutTotal at src/checkout.js:6, which consumes couponCents and therefore computes the wrong taxable amount, tax, and total; smallest remediation: change the divisor from 1000 to 100 in src/coupon.js:6 (one character), which fixes both couponCents and checkoutTotal since the rest of the composition (tax on discounted amount plus shippingCents) already matches the contract.",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-63eQiA",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12418,
+     "arg_bytes": 6239,
+     "cost_usd": 0.017355,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-divisor] MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount ten times too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); change the divisor from 1000 to 100",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-YK1vcC",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12418,
+     "arg_bytes": 6239,
+     "cost_usd": 0.0260325,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 60581,
+   "shared_packet": {
+    "total": 8572,
+    "files": {
+     "MANIFEST.json": 1382,
+     "delta.diff": 675,
+     "diff.patch": 1648,
+     "spec.md": 3824,
+     "tree/src/checkout.js": 751,
+     "tree/src/coupon.js": 292
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [checkout-coupon-sign-mismatch] MUST-FIX src/checkout.js:7 computes subtotal - couponCents(subtotal, pct), but src/coupon.js:5 now returns the subtotal remaining after discount (subtotal - round(subtotal*p/100)), so `discounted` equals the discount itself rather than the taxable amount (subtotal=10000, pct=10: couponCents returns 9000, discounted becomes 1000 instead of 9000), and checkoutTotal then taxes and totals the wrong base, violating the contract that the taxable amount is subtotal minus the discount; smallest fix: change src/checkout.js:7 to `const discounted = couponCents(subtotal, pct);` (or alternatively revert src/coupon.js:5 to return only Math.round((subtotal * p) / 100) and restore its comment, but do one of the two consistently)\\n🔵 [coupon-comment-name] CUT/FOLLOW-UP src/coupon.js:2 the helper is named couponCents yet documented as returning the remaining subtotal; naming/comment consistency is polish once the sign mismatch above is resolved and does not block this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-iH9hx3",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2069,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100; this makes checkoutTotal under-discount by 10x and breaks its contract (discount must be Math.round(subtotal * p / 100)); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-1000] | major | src/coupon.js:6 | MUST-FIX src/coupon.js:6 computes Math.round((subtotal * p) / 1000) but the contract (and the comment above it) requires Math.round(subtotal * p / 100), so every discount is 10× too small (e.g. subtotal=10000, pct=10 returns 100 instead of 1000); this also breaks checkoutTotal at src/checkout.js:6, which consumes couponCents and therefore computes the wrong taxable amount, tax, and total; smallest",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount ten times too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 3824
+     },
+     "packet_bytes": 8572,
+     "arg_bytes": 5472,
+     "cost_usd": 0.19393,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [checkout-taxable-amount] MUST-FIX src/checkout.js:7 couponCents (src/coupon.js:5) now returns the post-discount subtotal (subtotal - Math.round(subtotal * p / 100)), so `subtotal - couponCents(subtotal, pct)` yields the discount D itself, not the taxable amount subtotal - D, and tax is computed on D too; checkoutTotal(10000, 10, 1000, 500) returns 1600 (D=1000 + tax 100 + shipping 500) instead of the contracted 10400 (taxable 9000 + tax 900 + shipping 500); smallest remediation: change src/checkout.js:7 to `const discounted = couponCents(subtotal, pct);` (or, equivalently, have couponCents return the discount and keep the subtraction) — a one-line change either way\n{\"findings\": \"🟠 [checkout-taxable-amount] MUST-FIX src/checkout.js:7 couponCents (src/coupon.js:5) returns the post-discount subtotal, so subtotal - couponCents(...) yields the discount, not the taxable amount, and tax is computed on the wrong base; checkoutTotal(10000, 10, 1000, 500) returns 1600 instead of the contracted 10400; smallest fix: use couponCents(subtotal, pct) directly as the taxable amount (or return the discount from couponCents)\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-O2aXtB",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2069,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100; this makes checkoutTotal under-discount by 10x and breaks its contract (discount must be Math.round(subtotal * p / 100)); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-1000] | major | src/coupon.js:6 | MUST-FIX src/coupon.js:6 computes Math.round((subtotal * p) / 1000) but the contract (and the comment above it) requires Math.round(subtotal * p / 100), so every discount is 10× too small (e.g. subtotal=10000, pct=10 returns 100 instead of 1000); this also breaks checkoutTotal at src/checkout.js:6, which consumes couponCents and therefore computes the wrong taxable amount, tax, and total; smallest",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount ten times too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 3824
+     },
+     "packet_bytes": 8572,
+     "arg_bytes": 5472,
+     "cost_usd": 0.016393,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [coupon-double-subtract] MUST-FIX src/checkout.js:7 computes `subtotal - couponCents(subtotal, pct)` but couponCents (src/coupon.js:5) already returns `subtotal - Math.round((subtotal * p) / 100)` (the post-discount remainder), so `discounted` ends up equal to the discount amount rather than the taxable amount (e.g. subtotal=10000, pct=10 yields discounted=1000 instead of 9000); fix by either using `const discounted = couponCents(subtotal, pct);` in checkout.js or changing couponCents to return only `Math.round((subtotal * p) / 100)` (the discount)\n{\"findings\": \"🟠 [coupon-double-subtract] MUST-FIX src/checkout.js:7 computes `subtotal - couponCents(subtotal, pct)` but couponCents (src/coupon.js:5) already returns `subtotal - Math.round((subtotal * p) / 100)` (the post-discount remainder), so `discounted` ends up equal to the discount amount rather than the taxable amount (e.g. subtotal=10000, pct=10 yields discounted=1000 instead of 9000); fix by either using `const discounted = couponCents(subtotal, pct);` in checkout.js or changing couponCents to return only `Math.round((subtotal * p) / 100)` (the discount)\", \"resolutions\": [{\"finding_id\": \"prior:s1.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s2.coupon-divisor-1000\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}, {\"finding_id\": \"prior:s3.coupon-divisor\", \"status\": \"resolved\", \"evidence\": \"src/coupon.js:5\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-9jHLjy",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 2069,
+      "rows": [
+       "- [prior:s1.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100, so couponCents(1000, 10) returns 10 instead of 100; this makes checkoutTotal under-discount by 10x and breaks its contract (discount must be Math.round(subtotal * p / 100)); change the divisor to 100",
+       "- [prior:s2.coupon-divisor-1000] | major | src/coupon.js:6 | MUST-FIX src/coupon.js:6 computes Math.round((subtotal * p) / 1000) but the contract (and the comment above it) requires Math.round(subtotal * p / 100), so every discount is 10× too small (e.g. subtotal=10000, pct=10 returns 100 instead of 1000); this also breaks checkoutTotal at src/checkout.js:6, which consumes couponCents and therefore computes the wrong taxable amount, tax, and total; smallest",
+       "- [prior:s3.coupon-divisor] | major | src/coupon.js:5 | MUST-FIX src/coupon.js:5 divides by 1000 instead of 100; the spec requires Math.round(subtotal * p / 100) but the code computes Math.round((subtotal * p) / 1000), producing a discount ten times too small (e.g. subtotal=1000, pct=10 yields 10 instead of 100); change the divisor from 1000 to 100"
+      ],
+      "spec_bytes": 3824
+     },
+     "packet_bytes": 8572,
+     "arg_bytes": 5472,
+     "cost_usd": 0.0245895,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-16T23:48:40.103Z",
+ "total_cost_usd": 0.48185
+}

@@ -1,0 +1,385 @@
+{
+ "tag": "s4-incj-r1",
+ "scenario": "s4",
+ "arm": "inc",
+ "spec_variant": "locjson",
+ "base": "761b7516b1fbb1646d4c60fc5981a0cc7b298af8",
+ "h0": "738bc5829888f4fc678165569a92b98c10f796f1",
+ "h1": "8da72d054571c77f2753e2b93fcb96e79594c09b",
+ "sealed_head": "738bc5829888f4fc678165569a92b98c10f796f1",
+ "delta_files": [
+  "src/checkout.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "range_files": [
+  "src/bulk.js",
+  "src/checkout.js",
+  "src/clamp.js",
+  "src/coupon.js",
+  "src/fee.js",
+  "src/invoice.js",
+  "src/ship.js",
+  "src/split.js",
+  "src/tax.js",
+  "src/vat.js"
+ ],
+ "truth": {
+  "h0": [
+   {
+    "id": "O1",
+    "kind": "old_unfixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "keyword": "tax|1000|basis|rate"
+   }
+  ],
+  "h1": [
+   {
+    "id": "O1",
+    "kind": "old_fixed",
+    "path": "src/tax.js",
+    "line": 4,
+    "alt_paths": [
+     {
+      "path": "src/vat.js",
+      "line": 4
+     }
+    ],
+    "keyword": "tax|1000|basis|rate"
+   },
+   {
+    "id": "R1",
+    "kind": "regression",
+    "path": "src/invoice.js",
+    "line": 3,
+    "keyword": "tax|require|module|missing|vat|not found|cannot find|stale|rename"
+   }
+  ]
+ },
+ "started_at": "2026-10-17T00:21:37.322Z",
+ "round1": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "batches_so_far": 1,
+  "parked": true
+ },
+ "return": {
+  "status": "awaiting_disposition",
+  "phase": "awaiting_disposition",
+  "code": null,
+  "reason": "acceptance-bound policy requires explicit depth-0 authority for every non-exact finding",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": null,
+  "model_calls": null,
+  "keys": [
+   "status",
+   "phase",
+   "reason",
+   "rounds",
+   "verdict",
+   "roster",
+   "resolveResult",
+   "base",
+   "implementation",
+   "review",
+   "implementationChain",
+   "reviewChain",
+   "campaign_receipt",
+   "controller",
+   "durable_wait",
+   "resumable",
+   "ledger",
+   "wall_seconds_remaining",
+   "repair_round_estimate_seconds",
+   "repair_round_fits",
+   "campaign_control",
+   "verify_cmd_provided",
+   "convergence_reason",
+   "ratchet_reverted_rounds",
+   "advisory_findings",
+   "commit"
+  ],
+  "thrown": null,
+  "phase_after": "AWAITING_DISPOSITION",
+  "disclosure": {
+   "review_scope": "incremental",
+   "incremental": {
+    "prior_head": "738bc5829888f4fc678165569a92b98c10f796f1",
+    "new_head": "8da72d054571c77f2753e2b93fcb96e79594c09b",
+    "incremental_binding": "eb4d95620df85fd7af0451f10dfb7cd93d5393a0b1ec3481e20a3eeddbe19f05",
+    "delta_diff_digest": "658b83b11dbb788c52331e0e03fc2a45e082a363c5700f9813bc4e4bb57b51a6",
+    "carried": [
+     {
+      "path": "src/bulk.js",
+      "file_digest": "c0a312050878ad994beae754337dcc288663924b36b3a0343fd1548efbbad0c3"
+     },
+     {
+      "path": "src/clamp.js",
+      "file_digest": "08a7b1ef49122dea868d5f287fd9e4d573b66a51ac892e551df2b5656a371709"
+     },
+     {
+      "path": "src/coupon.js",
+      "file_digest": "a9fb71f78ecaf8b126e39987f73020ee1e47d460f4eac7127c3cf8633bef6974"
+     },
+     {
+      "path": "src/fee.js",
+      "file_digest": "74fa3ac89aa1cebd96f9cbc10af8c2176dddbdb1b28aa6d27c5a1d31ced303b3"
+     },
+     {
+      "path": "src/split.js",
+      "file_digest": "83b92e914dec6bca2cd6b05f7df72a82768e1c90a79dbccce3e682f6a42adb14"
+     }
+    ],
+    "recheck": [
+     {
+      "path": "src/checkout.js",
+      "file_digest": "036370bc0ed41ac4963a1fd1d4f0316a52d2cf615a01d476864e0f90b55ef8fa",
+      "why": [
+       "changed"
+      ]
+     },
+     {
+      "path": "src/invoice.js",
+      "file_digest": "d4cdb13b7b0a1b2576fbab18779e3b9196d0c24fedd7395b8b456d8bed4f3d3a",
+      "why": [
+       "references_removed_symbol:taxCents@src/tax.js"
+      ]
+     },
+     {
+      "path": "src/ship.js",
+      "file_digest": "042f6a0a411d041e603b41e2774c5ee3ee5fb54ee68810aedc9932583f1be1e1",
+      "why": [
+       "referenced_by_changed:src/checkout.js:shippingCents"
+      ]
+     },
+     {
+      "path": "src/vat.js",
+      "file_digest": "f957ba547f0ed71dc5167d9297bab75b128dd1fcf97e0a0e199b572b71f041f5",
+      "why": [
+       "changed"
+      ]
+     }
+    ]
+   },
+   "incremental_fallback_reason": null
+  }
+ },
+ "round1_disclosure": null,
+ "thrown": null,
+ "batches": [
+  {
+   "round": "r1",
+   "wall_ms": 40523,
+   "shared_packet": {
+    "total": 12742,
+    "files": {
+     "MANIFEST.json": 2761,
+     "diff.patch": 4505,
+     "spec.md": 2060,
+     "tree/.gitignore": 9,
+     "tree/check.js": 284,
+     "tree/src/bulk.js": 316,
+     "tree/src/checkout.js": 751,
+     "tree/src/clamp.js": 227,
+     "tree/src/coupon.js": 311,
+     "tree/src/fee.js": 233,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/split.js": 364,
+     "tree/src/tax.js": 256
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🔴 [tax-divisor-wrong] MUST-FIX src/tax.js:5 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) gives 8250 instead of 825); this also corrupts checkoutTotal (src/checkout.js:8) and invoiceLine (src/invoice.js:6) which call it; change the divisor to 10000",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-GTjKZG",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12742,
+     "arg_bytes": 6565,
+     "cost_usd": 0.20436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-wrong-divisor] MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000, returning 10× the specified tax (e.g. 1000 cents at 850 bp yields 850 instead of 85); this also corrupts checkoutTotal (src/checkout.js:7) and invoiceLine (src/invoice.js:6), which consume taxCents; smallest remediation: change the divisor to 10000",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-Cnu0eo",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12742,
+     "arg_bytes": 6565,
+     "cost_usd": 0.017436,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "🟠 [tax-divisor] MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; the spec requires Math.round(amount * rateBp / 10000) for basis-point conversion, so every tax calculation (and downstream checkoutTotal, invoiceLine) returns 10× the correct value; change the divisor from 1000 to 10000",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-BzhK3n",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": null,
+     "packet_bytes": 12742,
+     "arg_bytes": 6565,
+     "cost_usd": 0.026154,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  },
+  {
+   "round": "return",
+   "wall_ms": 100766,
+   "shared_packet": {
+    "total": 12048,
+    "files": {
+     "MANIFEST.json": 1727,
+     "delta.diff": 2001,
+     "diff.patch": 2580,
+     "spec.md": 4067,
+     "tree/src/checkout.js": 751,
+     "tree/src/invoice.js": 322,
+     "tree/src/ship.js": 343,
+     "tree/src/vat.js": 257
+    }
+   },
+   "seats": [
+    {
+     "runner": "claude-native",
+     "model": "claude-fable-5-1",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [tax-divisor-still-1000] MUST-FIX src/tax.js:4 is untouched by delta 738bc5829888f4fc678165569a92b98c10f796f1..8da72d054571c77f2753e2b93fcb96e79594c09b, so taxCents still divides by 1000 and returns 10x the contracted tax; src/invoice.js:5 now requires ./tax and sums amount + taxCents(amount, rateBp), so invoiceLine(\\\"x\\\", 10000, 825) yields \\\"x: 18250\\\" instead of \\\"x: 10825\\\"; smallest remediation: change the divisor in src/tax.js:4 from 1000 to 10000\\n🔵 [vat-shadow-helper] CUT/FOLLOW-UP src/vat.js:3 introduces vatCents as a correct duplicate of taxCents (divisor 10000) and src/checkout.js:4 routes around the broken tax.js instead of fixing it; checkoutTotal now meets its contract, so this is optional dedup once tax.js is fixed, excluded from this version\\n🔵 [ship-negative-guard] CUT/FOLLOW-UP src/ship.js:4 returns 0 for negative weights, slightly broader than the spec's weight-0 case; harmless and excluded from this version\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor-wrong\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s2.tax-wrong-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-7Vi0HA",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 1984,
+      "rows": [
+       "- [prior:s1.tax-divisor-wrong] | critical | src/tax.js:5 | MUST-FIX src/tax.js:5 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) gives 8250 instead of 825); this also corrupts checkoutTotal (src/checkout.js:8) and invoiceLine (src/invoice.js:6) which call it; change the divisor to 10000",
+       "- [prior:s2.tax-wrong-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000, returning 10× the specified tax (e.g. 1000 cents at 850 bp yields 850 instead of 85); this also corrupts checkoutTotal (src/checkout.js:7) and invoiceLine (src/invoice.js:6), which consume taxCents; smallest remediation: change the divisor to 10000",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; the spec requires Math.round(amount * rateBp / 10000) for basis-point conversion, so every tax calculation (and downstream checkoutTotal, invoiceLine) returns 10× the correct value; change the divisor from 1000 to 10000"
+      ],
+      "spec_bytes": 4067
+     },
+     "packet_bytes": 12048,
+     "arg_bytes": 6647,
+     "cost_usd": 0.20262,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "cc-shim",
+     "model": "GLM-5.3",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [tax-divisor-1000] MUST-FIX src/tax.js:4 taxCents still divides by 1000 instead of 10000 (this delta does not touch src/tax.js), returning 10x the contracted tax (taxCents(10000, 825) = 8250, not 825); src/invoice.js:3 requires './tax' and src/invoice.js:5 adds taxCents(amount, rateBp) to amount, so every invoiceLine is inflated (invoiceLine('x', 10000, 825) yields 'x: 18250' instead of 'x: 10825'), violating the invoiceLine contract; smallest remediation: change the divisor in src/tax.js to 10000 (equivalently, point src/invoice.js:3 at vatCents from './vat'), which also restores the standalone taxCents contract\\n🔵 [dup-bp-helpers] CUT/FOLLOW-UP src/vat.js:3 adds a second basis-point helper alongside src/tax.js; consolidating on one function would prevent future divergence, but checkoutTotal is already contract-correct through vatCents, so this consolidation refactor is excluded from the current version\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor-wrong\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:5\"}, {\"finding_id\": \"prior:s2.tax-wrong-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-WgPrix",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 1984,
+      "rows": [
+       "- [prior:s1.tax-divisor-wrong] | critical | src/tax.js:5 | MUST-FIX src/tax.js:5 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) gives 8250 instead of 825); this also corrupts checkoutTotal (src/checkout.js:8) and invoiceLine (src/invoice.js:6) which call it; change the divisor to 10000",
+       "- [prior:s2.tax-wrong-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000, returning 10× the specified tax (e.g. 1000 cents at 850 bp yields 850 instead of 85); this also corrupts checkoutTotal (src/checkout.js:7) and invoiceLine (src/invoice.js:6), which consume taxCents; smallest remediation: change the divisor to 10000",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; the spec requires Math.round(amount * rateBp / 10000) for basis-point conversion, so every tax calculation (and downstream checkoutTotal, invoiceLine) returns 10× the correct value; change the divisor from 1000 to 10000"
+      ],
+      "spec_bytes": 4067
+     },
+     "packet_bytes": 12048,
+     "arg_bytes": 6647,
+     "cost_usd": 0.017262,
+     "cost_basis": "estimated_from_bytes"
+    },
+    {
+     "runner": "qoderclicn",
+     "model": "Qwen3.8-Max",
+     "status": "reviewed",
+     "verdict": "FIX-THEN-SHIP",
+     "findings": "{\"findings\": \"🟠 [tax-divisor-still-wrong] MUST-FIX src/tax.js:4 (unchanged, not in diff) still divides by 1000 instead of 10000; src/invoice.js:3 imports taxCents from './tax' so invoiceLine returns 10× the correct tax, violating the invoiceLine contract; smallest remediation: change the divisor in src/tax.js from 1000 to 10000\", \"resolutions\": [{\"finding_id\": \"prior:s1.tax-divisor-wrong\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:5\"}, {\"finding_id\": \"prior:s2.tax-wrong-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}, {\"finding_id\": \"prior:s3.tax-divisor\", \"status\": \"still_present\", \"evidence\": \"src/tax.js:4\"}]}",
+     "no_finding_proof": null,
+     "usage": null,
+     "raw_log": "/tmp/dispatch-review-log-LDIwUA",
+     "error": null,
+     "parse_error": null,
+     "exit_status": 0,
+     "addendum": {
+      "bytes": 1984,
+      "rows": [
+       "- [prior:s1.tax-divisor-wrong] | critical | src/tax.js:5 | MUST-FIX src/tax.js:5 divides by 1000 instead of 10000, so taxCents returns 10x the contracted tax (e.g. taxCents(10000, 825) gives 8250 instead of 825); this also corrupts checkoutTotal (src/checkout.js:8) and invoiceLine (src/invoice.js:6) which call it; change the divisor to 10000",
+       "- [prior:s2.tax-wrong-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 taxCents divides by 1000 instead of 10000, returning 10× the specified tax (e.g. 1000 cents at 850 bp yields 850 instead of 85); this also corrupts checkoutTotal (src/checkout.js:7) and invoiceLine (src/invoice.js:6), which consume taxCents; smallest remediation: change the divisor to 10000",
+       "- [prior:s3.tax-divisor] | major | src/tax.js:4 | MUST-FIX src/tax.js:4 divides by 1000 instead of 10000; the spec requires Math.round(amount * rateBp / 10000) for basis-point conversion, so every tax calculation (and downstream checkoutTotal, invoiceLine) returns 10× the correct value; change the divisor from 1000 to 10000"
+      ],
+      "spec_bytes": 4067
+     },
+     "packet_bytes": 12048,
+     "arg_bytes": 6647,
+     "cost_usd": 0.025893,
+     "cost_basis": "estimated_from_bytes"
+    }
+   ]
+  }
+ ],
+ "finished_at": "2026-10-17T00:24:01.128Z",
+ "total_cost_usd": 0.493725
+}

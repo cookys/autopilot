@@ -40,6 +40,19 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 - Once auto-compact is configured and on, T2 is a reminder to write a handoff (`autopilot:handoff`) so the compaction restores cleanly, not a request to stop and `/clear`. Without an `autoCompactWindow`, a 1M-window model compacts only near 1M, so T2 asks you to stop and `/clear` at 150,000: set the window if you would rather keep working.
 - If you raise T2, raise the window with it. For example `t2` 450,000 with the default gap needs a window of at least 533,000.
 - Set it with `/autocompact` or `"autoCompactWindow": 250000` in Claude Code's `settings.json`, or `CLAUDE_CODE_AUTO_COMPACT_WINDOW`. The environment variable is clamped to 100,000-1,000,000 and beats every settings file. A change takes effect on the next session start.
+- Per-model windows: put `modelSettings` in `~/.claude/settings.json`, keyed by the full model id (the statusline `model.id`, without `[1m]`); the value is an integer 100000-1000000 or `"auto"`, and within one file the per-model value beats the top-level `autoCompactWindow`. Example values only; derive yours from the measured compaction point below.
+
+  ```json
+  "modelSettings": {
+    "claude-fable-5-1":  { "autoCompactWindow": 250000 },
+    "claude-opus-5-5":   { "autoCompactWindow": 250000 },
+    "claude-sonnet-5-5": { "autoCompactWindow": 300000 }
+  }
+  ```
+
+  `/autocompact <value>` writes to `modelSettings` from Claude Code v2.1.288 (earlier versions wrote the top level). A later-read settings file that has a top-level value discards the per-model values of earlier files (contract in the header of `scripts/lib/autocompact-window.js`, which the T2 check uses to resolve the window from the model id). **Do not set `CLAUDE_CODE_AUTO_COMPACT_WINDOW`** when you use this: it beats commands, flags, settings and subagent frontmatter, so it overrides every per-model value.
+- Measured compaction point (first record, 2026-10-17, local session a6cb3442, top-level window 533,000): the `compact_boundary` `preTokens` were 500,826, 501,310, 500,183 and 499,974, i.e. compaction fires at about the window minus 33K (matches `AUTOCOMPACT_BUFFER_TOKENS` in `scripts/lib/compaction-handoff.js`). To compact near N tokens, set the window to about N + 33,000.
+- Custom subagents may set `autoCompactWindow` in their frontmatter (Claude Code v2.1.296+): a plain integer, only lower than the inherited value (`200k` is read as 200 and ignored). Whether the built-in general-purpose agent with an Agent `model:` parameter uses the `modelSettings` value is not documented; untested. Official docs: https://code.claude.com/docs/en/model-config#set-the-auto-compact-window , https://code.claude.com/docs/en/sub-agents#subagent-auto-compact-window , https://code.claude.com/docs/en/settings-reference#modelsettings , https://code.claude.com/docs/en/env-vars
 - Keep `t1` below `t2`: nothing checks it, and a T1 at or above T2 is never shown because T2 takes precedence.
 - Compaction is off when `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT` is truthy, or `autoCompactEnabled` is false. Then the window check is skipped and T2 is the only reset prompt.
 - Subagents have their own context ceiling: the foreman guard applies `t2` (scaled to the subagent's window) to a foreman's own context, independent of auto-compact.

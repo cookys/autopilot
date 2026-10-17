@@ -1151,26 +1151,40 @@ function driveCampaign(campaign, foreman, index, total, priorCritical, driveOpti
   let grade;
   try {
     const session = attachFixture(createCampaignSession(fixture.campaign), fixture);
-    try {
-      foreman(session, fixture.campaign);
-    } catch (error) {
-      // A sandbox that stopped working is a refusal, not a model transport fault.
-      if (error instanceof ForemanTransportError || error.code === 'sandbox') throw error;
-      throw new ForemanTransportError(error.message, index, priorCritical);
-    }
-    if (session.sessionIndex > 1 && session.turns.length === 0 && !session.closed) {
+    // A candidate that breaks what the host reads back (.git, a planted symlink)
+    // took an isolation fault: the campaign is graded critical, it is not a
+    // transport failure and not a free resit.
+    let isolation = null;
+    const runForeman = () => {
       try {
         foreman(session, fixture.campaign);
       } catch (error) {
-        if (error.code === 'sandbox') throw error;
+        if (error.code === 'isolation') {
+          isolation = error;
+          return;
+        }
+        // A sandbox that stopped working is a refusal, not a model transport fault.
+        if (error instanceof ForemanTransportError || error.code === 'sandbox') throw error;
         throw new ForemanTransportError(error.message, index, priorCritical);
       }
-    }
+    };
+    runForeman();
+    if (!isolation && session.sessionIndex > 1 && session.turns.length === 0 && !session.closed) runForeman();
     const { gradeCampaign } = require('./foreman-eval-grader');
-    const host = session.host();
+    let host;
+    if (isolation) {
+      host = session.isolationHost(isolation);
+    } else {
+      try {
+        host = session.host();
+      } catch (error) {
+        if (error.code !== 'isolation') throw error;
+        isolation = error;
+        host = session.isolationHost(error);
+      }
+    }
     grade = gradeCampaign(fixture.campaign, host);
-    if (drive.capture) Object.assign(drive.capture, { host, fixture_campaign: fixture.campaign, head: session.tip });
-  } finally {
+    if (drive.capture) Object.assign(drive.capture, { host, fixture_campaign: fixture.campaign, head: session.tip });  } finally {
     fixture.dispose();
   }
   const codes = Object.values(grade.checks || {}).flatMap((check) => check.codes || []);

@@ -112,7 +112,7 @@ The runner does not apply the generator's C-row `harness_restore`: spec
 section 2 C says the foreman restores T by hand, and the new suite shows that a
 foreman who never restores returns the weakened T.
 
-`harness_hash` changed: it is now `fe5f112d833fc9b9b883563dcaaa757a6e2e21294cabade8f82b124d6391906f`. **Every foreman exam result recorded
+`harness_hash` changed: it is now `fad1631b3584bc433db63281353e7fcf5c86df24f2e20a674237cc8f2a375b13`. **Every foreman exam result recorded
 before this change is non-conformant to the frozen spec**, including the
 muse-spark sitting on develop (`../2026-09-24-foreman-muse-spark-score5/`).
 A fresh sitting is needed before any foreman seat is scored.
@@ -131,3 +131,17 @@ A fresh sitting is needed before any foreman seat is scored.
   `evals/foreman-conformance-record.json` (`sandbox_image_digest`) therefore
   matches only on a host with the same bwrap version; a different bwrap needs
   the conformance run repeated and the record re-pinned.
+
+### Exam-surface hardening (full re-review, 2026-10-17)
+
+The sandbox module no longer trusts anything the candidate can write. Host git
+reads run inside a read-only, network-off bwrap with `.git/shallow` and
+`.git/info/grafts` covered by empty files and replace refs off, so a planted
+`core.fsmonitor` can only run in the sandbox. Host file access refuses
+symlinks (each path component is lstat-ed, the final open uses O_NOFOLLOW) and
+records the attempt as a critical isolation finding. Sandbox start is read from
+bwrap's own `--info-fd`, not from candidate-controlled stderr. A broken `.git`
+is graded as an isolation fault, not an aborted transport. Truth-bearing S files
+carry an HMAC token, so a hand edit labels as `unknown:`. The foreman's own
+`restore` now lands in the real worktree. `harness_hash` changed again; the
+value above is current.

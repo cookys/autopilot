@@ -126,6 +126,7 @@ system signal; L/XL-effort or urgent (`!`/`急`) rows, `board`-tagged, and `hard
 ask-first and are NEVER auto-picked) and appends the pick + record to the
 decision ledger for the round-end report. Interactive `/next` keeps this skill's
 judgment flow — the script is the autonomous path's deterministic subset.
+A row's `age_days` comes from its `Since` date (`parse --today YYYY-MM-DD` fixes the reference day).
 
 Backlog `Effort` values are `XS`–`XL` with an optional `!`/`急` urgent suffix; the retired values `Fix`/`H` are rejected. Migrate a backlog with `node scripts/migrate-backlog-entries.js --rename-effort --apply`.
 

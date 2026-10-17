@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0212 -->
+<!-- next-id: BL-0213 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -975,3 +975,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: self，2026-10-18（oc2 與 budget 工線收尾時在 35f07d836 重跑確認）
 - **Pointer**: docs/backlog/three-suites-red-on-develop-2026-10-18.md
+
+### Autonomous next-pick never checks a row's Trigger, so deliberately parked rows rank first
+- **Id**: BL-0212
+- **Status**: open
+- **Since**: 2026-10-18
+- **Origin**: self
+- **Problem**: 自動選題只看大小和存在天數，不檢查 Trigger 是否已發生；刻意擱著等觸發的條目最舊，所以永遠排第一。2026-10-18 選到 BL-0071，量測後發現觸發並未發生。
+- **Impact**: 自動挑選會浪費一輪在量測，再提議關閉。
+- **Trigger**: 下一次自動選到觸發未發生的條目，或要在 /next 自動路徑加入觸發檢查時
+- **Effort**: S
+- **Source**: 本 session，2026-10-18
+- **Pointer**: docs/backlog/next-pick-ignores-trigger.md
+- **Context**: 70 條 Trigger 皆為自由文字，機械判斷不了，需一道判斷步驟；屬指引層改動，須先有 eval 證據。另 `preferences.class_weights` 檔不存在，KR6 目前沒作用。

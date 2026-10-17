@@ -254,4 +254,47 @@ assert_exit_code "$?" "1" "explicit --ledger append failure keeps exit 1"
 # negative control: the real ledger and real marker dir were never touched
 assert_eq "$IMP_REAL_BEFORE" "$(HOME="$IMP_REAL_HOME" imp_real_snapshot)" "real repo ledger and ~/.autopilot/session-mode untouched"
 
+# ── parse: age_days comes from each entry's Since date (was hard-wired null) ──
+AGE_BL="$TEST_TMP/age-backlog.md"
+cat > "$AGE_BL" <<'MD'
+# fixture BACKLOG
+
+### Newer small row
+- **Id**: BL-9001
+- **Since**: 2026-10-10
+- **Effort**: S
+- **Source**: t
+
+### Older small row
+- **Id**: BL-9002
+- **Since**: 2026-09-18
+- **Effort**: S
+- **Source**: t
+
+### Row without Since
+- **Id**: BL-9003
+- **Effort**: S
+- **Source**: t
+
+### Row from the future
+- **Id**: BL-9004
+- **Since**: 2026-12-01
+- **Effort**: S
+- **Source**: t
+MD
+age_of() { node -e "const r=JSON.parse(require('fs').readFileSync(0,'utf8')).rows.find(x=>x.title===process.argv[1]);console.log(r.age_days)" "$1"; }
+AGE_OUT="$(node "$SCRIPT" parse --backlog "$AGE_BL" --today 2026-10-18)"
+assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Newer small row')" "8" "age_days: whole days from Since to --today"
+assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Older small row')" "30" "age_days: older row has more days"
+assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Row without Since')" "null" "age_days: missing Since stays null"
+assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Row from the future')" "0" "age_days: future Since clamps to 0, never negative"
+node "$SCRIPT" parse --backlog "$AGE_BL" --today 2026-13-45 >/dev/null 2>&1
+assert_exit_code "$?" "2" "--today malformed is a usage error (exit 2)"
+node "$SCRIPT" parse --backlog "$AGE_BL" --today 18/10/2026 >/dev/null 2>&1
+assert_exit_code "$?" "2" "--today in another format is a usage error (exit 2)"
+# end to end: parse output feeds pick; among same-size rows the older one ranks first
+printf '%s' "$AGE_OUT" | node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync(0,'utf8')).rows))" > "$TEST_TMP/age-cands.json"
+E2E_PICK="$(node "$SCRIPT" pick --candidates "$TEST_TMP/age-cands.json" --preferences "$TEST_TMP/prefs.json" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).pick.title)")"
+assert_eq "$E2E_PICK" "Older small row" "parse -> pick: the older same-size entry is picked first"
+
 finalize_test

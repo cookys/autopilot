@@ -58,9 +58,16 @@ Objective: no lane can silently exceed its relay or turn ceiling, in any session
 - Counts are re-derived from `<dirname(transcript_path)>/<session_id>/subagents/agent-*.jsonl` on every call;
   the only persisted state is a parse cache keyed by (path, size, mtimeMs) and the card pointer, both under the
   live-state dir (`scripts/lib/live-state-dir.js`), never under `/tmp`.
-- Lane key: the `Lane: <slug>` line within the first 5 lines of the brief; absent ⇒ the Agent tool's
-  `description`, trimmed and lower-cased. A subagent transcript's lane is read the same way from its first user
-  message, falling back to `description` in `agent-<id>.meta.json`.
+- Lane totals (dispatches, turns) use every transcript of the session whatever its age; only the root-hour total
+  filters, by turn timestamp, and may skip files whose mtime is older than 60 minutes.
+- Clock: one `now` sampled at hook entry (tests inject `AUTOPILOT_SUBAGENT_BUDGET_NOW_MS`). A turn counts toward
+  the root hour when `now - 3600000 < ts <= now`; a `ts` later than `now` counts (skew errs toward the ceiling);
+  a missing or unparseable `ts` counts toward lane totals but not toward the hour.
+- Lane key: the first line among the brief's first 5 that matches `^Lane:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]*$`;
+  no match (absent, empty or malformed `Lane:` line) ⇒ the Agent tool's `description`, first line only, trimmed
+  and lower-cased; empty description ⇒ no lane (the dispatch counts only toward the root total). A subagent
+  transcript's lane is read by the same rule from its first user message, falling back to `description` in
+  `agent-<id>.meta.json`. Only the first 5 lines are read, so a `Lane:` quoted later in a brief never matches.
 - A brief whose first 5 lines hold `Role: reviewer` is excluded from the lane relay count; its turns still count
   toward the lane and root turn totals.
 - Defaults: `lane_dispatch_max: 4` (the 5th is denied), `lane_turns_max: 300`, `root_turns_per_hour_max: 400`,
@@ -127,6 +134,14 @@ Negative controls (each shown red before green):
 4. Remove the pointer dedup — a second deny opens a second card ⇒ red.
 5. Gate counting on the marker being present — the no-marker KR1 case passes ⇒ red.
 6. Count turns from `costs.jsonl` instead of transcripts — the in-flight background agent case is not counted ⇒ red.
+7. Age-filter lane totals (skip files older than 24 h) — the fixture with four old dispatches and 300 old turns
+   is allowed ⇒ red.
+8. Remove the lane-turn ceiling, then separately the root-hour ceiling — the 300-turn and 400-turn cases each pass ⇒ red.
+9. Make the hour window inclusive at `now - 3600000` — the boundary case (a turn exactly 60 minutes old) counts ⇒ red.
+10. Lower the reason minimum to 7 — a 7-character `Budget-Ack:` passes ⇒ red.
+11. Drop the context line — the allowed-dispatch case finds no `additionalContext` ⇒ red.
+12. Deny (or print to stdout) on a corrupt transcript — the fail-open cases see a deny or output ⇒ red.
+13. Inject a 400 ms sleep per call — the latency test exceeds 300 ms p95 ⇒ red.
 
 Human-gated: one live dispatch in this repo after merge (hook prints the context line on a real Agent call).
 Replay of cuda's real transcripts is offered to cuda (they hold them); not a merge gate.
@@ -136,8 +151,8 @@ Replay of cuda's real transcripts is offered to cuda (they hold them); not a mer
 What guarantees failure:
 - The hook blocks legitimate work with no way through ⇒ `Budget-Ack:` always passes and is logged; `mode: warn`.
 - Lane keys drift (description wording) ⇒ `Lane:` line documented in the brief recipe; fallback is best effort.
-- Latency grows with long sessions ⇒ parse cache by (path, size, mtimeMs) and only files with mtime in the
-  last 24 h are parsed for the lane totals; KR7.
+- Latency grows with long sessions ⇒ parse cache by (path, size, mtimeMs): an unchanged file is never re-parsed,
+  and only the root-hour total may skip files by mtime; KR7.
 - The hook crashes and takes dispatch with it ⇒ fail-open on every error path; it is its own process, separate
   from dispatch-model-guard.
 - Counting ignores in-flight background agents ⇒ transcripts are read directly, not `costs.jsonl` (negative
@@ -161,3 +176,7 @@ None; the owner settled lane key, escalation and thresholds on d-bdd886cb.
 ## Review log
 
 - R0: authored 2026-10-18 by depth-0 from the research of the two read-only reports and the cuda incident data.
+  Manifest `docs/plans/2026-10-18-subagent-budget-gate.plan-review-manifest.json`, rubric `.rubric.md` beside it.
+- G1 (sol_chair STOP, minimax_deep CONDITIONAL; verdict CONDITIONAL): four findings, all accepted and folded —
+  dadf2c6d (R1, lane totals no longer age-filtered), 271d9846 (R2, clock and window defined), b057b148 (R11,
+  controls 7–13), ad1bb97b (R4, slug grammar and lane-key failure modes).

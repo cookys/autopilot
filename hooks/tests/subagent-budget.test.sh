@@ -8,6 +8,7 @@
 FIX="$HOOKS_DIR/tests/lib/subagent-budget-fixture.js"
 NOW=1790000000000
 export AUTOPILOT_SUBAGENT_BUDGET_NOW_MS=$NOW
+export AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1
 unset AUTOPILOT_SUBAGENT_BUDGET_MODE AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 
@@ -199,6 +200,109 @@ before=$(cksum <"$PROJ/s11/subagents/agent-w1.jsonl")
 fire s11 'Engine: sonnet\nLane: warm\ngo'
 assert_eq "$before" "$(cksum <"$PROJ/s11/subagents/agent-w1.jsonl")" "hook never writes a transcript"
 assert_file_absent "$HOOK_HOME/.claude/metrics/costs.jsonl" "hook never writes costs.jsonl"
+
+# ---- BL-0209: nested dispatch (flat subagents dir, meta.json parentAgentId/spawnDepth), clock override ----------------
+# payload_x <session> <prompt> <transcript-path> [agent_id]: like payload, plus an explicit transcript path and agent_id.
+payload_x() {
+  node -e '
+    const [sid,prompt,tp,aid]=process.argv.slice(1);
+    const p={tool_name:"Agent",session_id:sid,cwd:process.argv[5],transcript_path:tp,tool_input:{prompt:prompt.replace(/\\n/g,"\n"),model:"sonnet"}};
+    if(aid) p.agent_id=aid;
+    console.log(JSON.stringify(p));
+  ' "$1" "$2" "$3" "${4:-}" "$REPO"
+}
+fire_x() { run_hook "$HOOK" "$(payload_x "$@")"; }
+sub_tp() { echo "$PROJ/$1/subagents/agent-$2.jsonl"; }   # a subagent's own transcript path
+
+# nested dispatch is counted whichever transcript_path the harness sends: main transcript, or the foreman's own file
+mk n1 '[{"id":"a0","brief":["Lane: nl"],"depth":1},{"id":"a1","brief":["Lane: nl"],"depth":1},{"id":"a2","brief":["Lane: nl"],"depth":1},{"id":"a3","brief":["Lane: nl"],"depth":1}]'
+fire_x n1 'Engine: sonnet\nLane: nl\ngo' "$PROJ/n1.jsonl"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 depth-0 transcript_path counts the flat dir"
+fire_x n1 'Engine: sonnet\nLane: nl\ngo' "$(sub_tp n1 a0)" a0
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 foreman's own transcript_path + agent_id counts"
+fire_x n1 'Engine: sonnet\nLane: nl\ngo' "$(sub_tp n1 a0)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 foreman's own transcript_path without agent_id counts"
+fire_x n1 'Engine: sonnet\nLane: nl\ngo' "$PROJ/n1.jsonl" a0
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 agent_id with the main transcript_path counts"
+mk n1b '[{"id":"a0","brief":["Lane: nl"],"depth":1},{"id":"a1","brief":["Lane: nl"],"depth":1}]'
+fire_x n1b 'Engine: sonnet\nLane: nl\ngo' "$(sub_tp n1b a0)" a0
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 under the ceiling from a foreman path is allowed"
+assert_contains "$__RUN_STDOUT" "additionalContext" "BL0209 under the ceiling from a foreman path gets a context line"
+# neither candidate dir exists => fail-open
+fire_x n-none 'Engine: sonnet\nLane: nl\ngo' "$PROJ/elsewhere/agent-x.jsonl" x
+expect_silent "BL0209 no candidate dir"
+
+# depth-2 transcripts without Lane: bill their turns to the depth-1 ancestor's lane
+mk n2 '[{"id":"f1","brief":["Lane: tl"],"depth":1,"turns":1},{"id":"c1","parent":"f1","depth":2,"description":"loaderef independent code review","turns":299}]'
+expect_deny n2 'Engine: sonnet\nLane: tl\ngo' "" "BL0209 depth-2 turns reach the ancestor lane (1 + 299 = 300)"
+assert_contains "$__RUN_STDOUT" "lane_turns_max 300" "BL0209 ancestry denial names lane_turns_max"
+mk n2b '[{"id":"f1","brief":["Lane: tl2"],"depth":1,"turns":1},{"id":"c1","parent":"f1","depth":2,"turns":298}]'
+expect_allow n2b 'Engine: sonnet\nLane: tl2\ngo' "" "BL0209 299 turns across the chain still allowed"
+# grandchild: two hops up
+mk n2c '[{"id":"f1","brief":["Lane: tl3"],"depth":1,"turns":1},{"id":"c1","parent":"f1","depth":2,"turns":1},{"id":"g1","parent":"c1","depth":3,"turns":298}]'
+expect_deny n2c 'Engine: sonnet\nLane: tl3\ngo' "" "BL0209 grandchild turns reach the root ancestor lane"
+# the nearest ancestor with a Lane: wins over a farther one
+mk n2d '[{"id":"f1","brief":["Lane: far"],"depth":1},{"id":"c1","brief":["Lane: near"],"parent":"f1","depth":2},{"id":"g1","parent":"c1","depth":3,"turns":300}]'
+expect_deny n2d 'Engine: sonnet\nLane: near\ngo' "" "BL0209 nearest ancestor Lane: wins"
+expect_allow n2d 'Engine: sonnet\nLane: far\ngo' "" "BL0209 a farther ancestor does not get the turns"
+
+# a foreman (agent_id) dispatching without Lane: joins the foreman's lane
+expect_allow n2 'Engine: sonnet\ngo' "" "BL0209 depth-0 dispatch without Lane: has no lane"
+fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" f1
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 foreman (agent_id) dispatch without Lane: lands in the foreman's lane"
+assert_contains "$__RUN_STDOUT" "lane 'tl'" "BL0209 the denial names the foreman's lane"
+fire_x n2 'Engine: sonnet\ngo' "$(sub_tp n2 f1)"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 foreman path without agent_id also lands in the foreman's lane"
+fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" c1
+assert_contains "$__RUN_STDOUT" "lane 'tl'" "BL0209 a depth-2 dispatcher inherits the ancestor lane"
+fire_x n2 'Engine: sonnet\nLane: other\ngo' "$PROJ/n2.jsonl" f1
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 an explicit Lane: beats the dispatcher's lane"
+fire_x n2 'Engine: sonnet\ngo' "$PROJ/n2.jsonl" no-such-agent
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 unknown agent_id => no lane, no crash"
+
+# parentAgentId cycle / missing file: no crash, falls back to the description
+mk n3 '[{"id":"c1","parent":"c2","depth":1,"description":"cyc"},{"id":"c2","parent":"c1","depth":1,"description":"cyc"},{"id":"c3","parent":"ghost","depth":1,"description":"cyc"},{"id":"c4","parent":"c4","depth":1,"description":"cyc"}]'
+expect_deny n3 'Engine: sonnet\ngo' "cyc" "BL0209 cycle / ghost parent fall back to description (4 dispatches)"
+fire_x n3 'Engine: sonnet\ngo' "$PROJ/n3.jsonl" c1
+expect_silent_or_allow() { assert_eq 0 "$__RUN_EXIT" "$1: exit 0"; }
+expect_silent_or_allow "BL0209 cyclic dispatcher does not crash"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 cyclic dispatcher without lane is allowed"
+mk n3b '[{"id":"z1","parent":"z2","depth":2,"turns":400},{"id":"z2","parent":"z3","depth":2},{"id":"z3","parent":"z1","depth":2}]'
+fire_x n3b 'Engine: sonnet\nLane: q\ngo' "$PROJ/n3b.jsonl" z1
+assert_eq 0 "$__RUN_EXIT" "BL0209 3-cycle no crash"
+# the ancestor walk stops after 8 hops: h8 reaches h0, h9 does not
+chain() { node -e 'const t=+process.argv[1];const a=[{id:"h0",brief:["Lane: deep"],depth:1}];for(let i=1;i<=10;i++)a.push({id:"h"+i,parent:"h"+(i-1),depth:i+1,turns:i===t?300:0});console.log(JSON.stringify(a))' "$1"; }
+mk n3c "$(chain 8)"
+expect_deny n3c 'Engine: sonnet\nLane: deep\ngo' "" "BL0209 8 hops up still reaches the ancestor lane"
+mk n3d "$(chain 9)"
+expect_allow n3d 'Engine: sonnet\nLane: deep\ngo' "" "BL0209 9 hops up is not attributed"
+
+# dispatch slots: depth >= 2 transcripts take none by default; the switch counts them
+mk n4 '[{"id":"d0","brief":["Lane: dl"],"depth":1},{"id":"d1","brief":["Lane: dl"],"depth":1},{"id":"d2","brief":["Lane: dl"]},{"id":"d3","parent":"d0","depth":2},{"id":"d4","parent":"d0","depth":2}]'
+expect_allow n4 'Engine: sonnet\nLane: dl\ngo' "" "BL0209 default: 3 depth<=1 + 2 depth-2 => 3 dispatch slots, allowed"
+nested_count() {
+  node -e '
+    const h=require(process.argv[1]);
+    const p={tool_name:"Agent",session_id:process.argv[2],transcript_path:process.argv[3]};
+    const e=h.withLanes(h.collect(p));
+    console.log(h.tally(e,"dl",1790000000000,process.argv[4]==="true").laneDispatches);
+  ' "$HOOKS_DIR/$HOOK" n4 "$PROJ/n4.jsonl" "$1"
+}
+assert_eq 3 "$(nested_count false)" "BL0209 tally countNested=false => 3"
+assert_eq 5 "$(nested_count true)" "BL0209 tally countNested=true => 5"
+assert_eq 3 "$(node -e 'const h=require(process.argv[1]);const p={tool_name:"Agent",session_id:"n4",transcript_path:process.argv[2]};console.log(h.tally(h.withLanes(h.collect(p)),"dl",1790000000000).laneDispatches)' "$HOOKS_DIR/$HOOK" "$PROJ/n4.jsonl")" "BL0209 tally default excludes nested"
+# a nested transcript's turns count either way
+mk n4b '[{"id":"d0","brief":["Lane: dl2"],"depth":1},{"id":"d3","parent":"d0","depth":2,"turns":300}]'
+expect_deny n4b 'Engine: sonnet\nLane: dl2\ngo' "" "BL0209 nested turns count although nested dispatches do not"
+
+# clock override: ignored without the explicit test flag
+mk n5 "$(root_spread 400 60000)"
+expect_deny n5 'Engine: sonnet\nLane: fresh\ngo' "" "BL0209 override honoured with the test flag"
+AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK= fire n5 'Engine: sonnet\nLane: fresh\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 override ignored without the test flag (real clock: old turns)"
+assert_contains "$__RUN_STDOUT" "last 60 min 0 subagent turns" "BL0209 production clock sees 0 turns in the last hour"
+AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=0 fire n5 'Engine: sonnet\nLane: fresh\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "BL0209 flag value other than 1 does not enable the override"
 
 # ---- KR7: latency, 200 transcripts x 300 turns, second call warm ---------------------------------------------------------
 mk s12 "$(node -e 'const a=[];for(let i=0;i<200;i++)a.push({id:"p"+i,brief:["Lane: lat"+i],turns:300,ageMs:4800000});console.log(JSON.stringify(a))')"

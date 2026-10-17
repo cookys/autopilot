@@ -3660,7 +3660,22 @@
       ],
       "doc": null,
       "relates": [],
-      "note": "Epoch-ms clock for hooks/subagent-budget.js; the hook suite injects it so the 60-minute window is deterministic."
+      "note": "Epoch-ms clock for hooks/subagent-budget.js; the hook suite injects it so the 60-minute window is deterministic. Honoured only when AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1 is also set."
+    },
+    {
+      "name": "AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_NOW_MS"
+      ],
+      "note": "Set to 1 to let hooks/subagent-budget.js honour AUTOPILOT_SUBAGENT_BUDGET_NOW_MS; any other value (or unset) keeps the real clock."
     },
     {
       "name": "AUTOPILOT_DISCUSS_TIMEOUT",

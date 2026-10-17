@@ -22,6 +22,10 @@ const { sumTodayTierSpend, createTierSpendReader, loadCostFuseConfig } = require
 const { validateJsonSchema } = require('./validate-json-schema.js');
 const schemaOf = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', n), 'utf8'));
 
+// repo-residue-sweep keeps a worktree with activity in the last 24h out of every removal path (33b4a07a3); the residue fixtures here are all
+// brand new, so the guard is off for this file (hooks/tests/lib.sh does the same for the shell suites; residue-recent-activity.test.sh tests the guard).
+process.env.AUTOPILOT_RESIDUE_RECENT_HOURS = '0';
+
 const REPO_ROOT = path.join(__dirname, '..');
 const NOW = Date.now();
 const iso = (ms) => new Date(ms).toISOString();

@@ -154,21 +154,6 @@
       "reason": "Bare mktemp -d; removed by cleanup() (EXIT trap) and explicitly after use."
     },
     {
-      "file": "scripts/dispatch-hetero.sh",
-      "match": "${ORPHAN_LOG}.tmp.",
-      "reason": "Template beside the orphan log in the state directory, not under the temp root; mv-consumed."
-    },
-    {
-      "file": "scripts/dispatch-hetero.sh",
-      "match": "${ORPHAN_LOG}.worktrees.",
-      "reason": "Template beside the orphan log in the state directory, not under the temp root; removed after the scan."
-    },
-    {
-      "file": "scripts/dispatch-hetero.sh",
-      "match": "${ORPHAN_LOG}.worktrees-err.",
-      "reason": "Template beside the orphan log in the state directory, not under the temp root; removed after the scan."
-    },
-    {
       "file": "scripts/lib/worktree-intent.sh",
       "match": "$dir/${run}.XXXXXX.tmp",
       "reason": "Template inside the git common dir's creation-ledger directory, not under the temp root."

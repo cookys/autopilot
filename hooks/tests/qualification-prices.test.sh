@@ -78,7 +78,7 @@ reject "source_url encoded dot-segment" "d => { d.rows[0].source_url = 'https://
 reject "source_url double-encoded dot-segment" "d => { d.rows[0].source_url = 'https://prices.example.com/a/%252e%252e/x'; }"
 reject "source_url backslash-ending authority" "d => { d.rows[0].source_url = 'https://prices.example.com\\\\..\\\\x'; }"
 reject "source_url backslash scheme and dot-segment" "d => { d.rows[0].source_url = 'https:\\\\\\\\prices.example.com\\\\a\\\\..\\\\x'; }"
-reject "source_url userinfo" "d => { d.rows[0].source_url = 'https://u:p@prices.example.com/x'; }"
+reject "source_url userinfo" "d => { d.rows[0].source_url = 'https://u:p@example.com/x'; }"
 reject "source_url query" "d => { d.rows[0].source_url = 'https://prices.example.com/x?a=1'; }"
 reject "source_url fragment" "d => { d.rows[0].source_url = 'https://prices.example.com/x#f'; }"
 reject "verified impossible day" "d => { d.rows[0].verified = '2026-02-30'; }"

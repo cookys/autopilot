@@ -5591,9 +5591,12 @@ const cursorSeat = {
 const nativeSeat = {
   role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic',
 };
-// Phase 4 (final-panel isolation): kimi is cleanroom tier now (covered by
-// final-panel-kimi-agy-intake.test.sh); opencode takes its place as a still-`none` runner here.
+// Phase 4 (final-panel isolation): kimi is cleanroom tier (covered by final-panel-kimi-agy-intake.test.sh)
+// and opencode joined the packet tier in d78630000 (BL-0204), so the still-`none` runner here is copilot.
 const kimiSeat = {
+  role: 'qc', runner: 'copilot', model: 'copilot/fixture', effort: 'high', endpoint: null, family: 'copilot',
+};
+const opencodeSeat = {
   role: 'qc', runner: 'opencode', model: 'opencode/fixture', effort: 'high', endpoint: null, family: 'opencode',
 };
 const codexSeat = {
@@ -5701,6 +5704,7 @@ function assertAdmitted(seat) {
 
 assertAdmitted(ccSeat);
 assertAdmitted(nativeSeat);
+assertAdmitted(opencodeSeat);
 
 const sProbe = spies();
 sProbe.adapters.cleanroomProbe = () => ({

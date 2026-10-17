@@ -179,3 +179,15 @@ test('integration: per-Stop deltas reproduce the one-shot total — token fields
   // double-count. Assert within tolerance, not exact equality.
   assert.ok(Math.abs(acc.cost - oneShot.cost) < 1e-5, `cost drift ${Math.abs(acc.cost - oneShot.cost)}`);
 });
+
+test('parseAssistantTurns: adds ts (epoch ms) only when the record timestamp parses', () => {
+  const mk = (extra) => JSON.stringify({ type: 'assistant', ...extra, message: { model: 'claude-opus-4-8', usage: { input_tokens: 1, output_tokens: 1 } } });
+  const turns = parseAssistantTurns([
+    mk({ timestamp: '2026-10-18T00:00:00.000Z' }),
+    mk({ timestamp: 'not a date' }),
+    mk({}),
+  ].join('\n'));
+  assert.equal(turns[0].ts, Date.parse('2026-10-18T00:00:00.000Z'));
+  assert.equal('ts' in turns[1], false);
+  assert.equal('ts' in turns[2], false);
+});

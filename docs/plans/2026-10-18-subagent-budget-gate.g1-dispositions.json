@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "subagent-budget-gate-2026-10-18",
+  "generation": 1,
+  "findings": [
+    {"fingerprint": "dadf2c6d55b22688369915b1e3bb8c1783584afebdf3f2ca1edda477ea0cb32e", "candidate_blocker": true, "disposition": "accepted_blocker",
+     "rationale": "Correct: an mtime age filter on lane totals lets aged dispatches and turns drop out. Folded: §2.5 now states lane totals use every transcript of the session whatever its age, only the root-hour total filters (by turn ts, optionally skipping files older than 60 min by mtime); §6 latency relies on the (path,size,mtimeMs) parse cache instead; §5 control 7 plants four old dispatches and 300 old turns."},
+    {"fingerprint": "271d9846c8a74a122659814e2405b925f80e654f33c1fc295747c298ceb6e589", "candidate_blocker": true, "disposition": "accepted_blocker",
+     "rationale": "Correct: the window lacked a clock and boundary. Folded: §2.5 Clock line — one now sampled at hook entry, injectable via AUTOPILOT_SUBAGENT_BUDGET_NOW_MS; interval now-3600000 < ts <= now; future ts counts; missing/unparseable ts counts for lane totals only. §5 control 9 tests the 60-minute boundary."},
+    {"fingerprint": "b057b148f12146a8f297502fe489f09b52fdb37508fffca099aef2730fbb3484", "candidate_blocker": true, "disposition": "accepted_blocker",
+     "rationale": "Correct: six controls left checks uncovered. Folded: §5 controls 7-13 cover age filtering, each turn ceiling separately, the hour boundary, a 7-character reason, the dropped context line, fail-open on a corrupt transcript, and an injected latency over the bound."},
+    {"fingerprint": "ad1bb97b78a0121d7a54de62653ce40418889dac54cc9ad6f569f154b618b38a", "candidate_blocker": false, "disposition": "accepted_nonblocking",
+     "rationale": "Folded now rather than later: §2.5 binds the slug to ^Lane:[ \\t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \\t]*$ applied identically to briefs and subagent transcripts, and names the fallbacks: malformed or empty Lane line -> description first line; empty description -> no lane (root total only); only the first 5 lines are read, so a quoted Lane: later in a brief never matches."}
+  ]
+}

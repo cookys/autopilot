@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "budget-gate-g1",
+  "logical_plan_id": "subagent-budget-gate-2026-10-18",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "febb227edd03c72bddf7ff76751b17d71c508bc157e8141c35929d1a1afd2754",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "de10a1a039fb658d891237a048b9cb63b8a547786359e7423eb06adc528a018b",
+  "manifest_sha256": "b00f5a713ce3ae904e4780f4870ab188a542c5f327396946a5e1515b24407271",
+  "plan_sha256": "c1223d208e70c921f046752e12a4745cc181c6b092a0e9ad71a04bab47ee9de4",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "54177a65a37d8a2aad5ba1677cb68a53607f2bfc8a0c7bf3c1e31ccb37a09601"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9cbf95e3eb7ed0225d22333310c957811ef50e0713adf4681e32573617b621e0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-ycs8UV/stdout",
+          "digest": "9cbf95e3eb7ed0225d22333310c957811ef50e0713adf4681e32573617b621e0"
+        },
+        "receipt_digest": "a343afbd09656f26a8ecb91af178f8c040e400222901bdec374242559580f8f2"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "597c00a1650739170ef96f2625121a9b21894da32d07bc59bb266d23907901ac"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "3c15a6ea88ae2fbbaeabd308468e9922c10dd5b239ce2e59361812c9e0455ae5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ME0O1i",
+          "digest": "3c15a6ea88ae2fbbaeabd308468e9922c10dd5b239ce2e59361812c9e0455ae5"
+        },
+        "receipt_digest": "0dcc9ffceb3912541cacf9bdd6ef02e545915c9373a25b080c4c54c2e9cad8ac"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §6 transcript retention filter and §2.5 lane accounting",
+      "claim": "The 24-hour mtime filter permits a lane to regain its dispatch or turn budget during a long session.",
+      "evidence": "Section 6 says only files with mtime in the last 24 hours are parsed for lane totals. Section 2 requires the fifth dispatch to deny and the lane ceiling to include its existing transcripts without an age limit. Four completed dispatches can age out, allowing a fifth; older turns can likewise disappear from the 300-turn total.",
+      "evidence_reference": "Plan §2 KR1–KR2; §2.5 transcript-derived counts; §6 latency risk",
+      "repair": "Remove age filtering from lifetime lane accounting. Inspect every transcript on each call, reuse unchanged cached parses, and apply timestamp filtering only to the root-hour aggregate. Add fixtures with four dispatches and 300 lane turns whose files have mtimes older than 24 hours.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dadf2c6d55b22688369915b1e3bb8c1783584afebdf3f2ca1edda477ea0cb32e"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §2.5 root-hour window contract",
+      "claim": "The plan identifies turn timestamps but does not define the reference clock or exact window used for the 400-turn ceiling.",
+      "evidence": "Section 2.6 adds the record timestamp as ts, while KR2 refers to the last 60 minutes. Neither specifies what supplies now, whether the boundary is inclusive, or how invalid and future timestamps affect counting.",
+      "evidence_reference": "Plan §2 KR2; §2.5 root_turns_per_hour_max; §2.6 additive ts field",
+      "repair": "Define one wall-clock sample at hook entry, the exact timestamp interval counted, and handling of invalid or future timestamps. Inject the clock in tests and cover the 60-minute boundary alongside 399/400 turns.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "271d9846c8a74a122659814e2405b925f80e654f33c1fc295747c298ceb6e589"
+    },
+    {
+      "rubric_id": "R11",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §5 negative-control acceptance requirements",
+      "claim": "The named negative controls do not cover every new check.",
+      "evidence": "The six controls cover Lane extraction, reviewer exclusion, empty acknowledgments, pointer deduplication, marker independence and transcript sourcing. None independently disables the lane-turn ceiling, root-hour ceiling, short-reason rejection, allowed-dispatch context, fail-open behavior or latency bound to demonstrate that its acceptance check fails.",
+      "evidence_reference": "Frozen rubric R11; plan §2 KR2–KR7; §5 negative controls 1–6",
+      "repair": "Add a named mutation and expected failing assertion for each uncovered check, including independent removal of each turn ceiling, acceptance of a seven-character reason, omission of context, denial or stdout on transcript errors, and an injected delay exceeding the latency bound. Require each control to be shown red before green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b057b148f12146a8f297502fe489f09b52fdb37508fffca099aef2730fbb3484"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "lane key rule / hooks/subagent-budget.js lane-key extractor",
+      "claim": "The plan states the lane key rule (Lane: <slug> in first 5 lines else description, trimmed+lowercased) but the slug syntax is left as an undefined placeholder and the failure modes of that rule are only partially named (only 'drift' in the risks section).",
+      "evidence": "Plan §2.5: 'Lane key: the Lane: <slug> line within the first 5 lines of the brief; absent => the Agent tool's description, trimmed and lower-cased. A subagent transcript's lane is read the same way from its first user message, falling back to description in agent-<id>.meta.json.' The <slug> placeholder is never bound to a character class. §6 names only 'Lane keys drift (description wording)' as a failure mode; malformed Lane: lines (no slug after colon), empty description, multi-line description, and Lane: inside a quoted block are not enumerated.",
+      "evidence_reference": "docs/plans/2026-10-18-subagent-budget-gate.md §2.5, §6",
+      "repair": "Bind <slug> to an explicit character class (e.g. ^[A-Za-z0-9][A-Za-z0-9._-]*$) on a single token after 'Lane: ' so the same rule applies to the brief parser and the subagent-transcript parser; enumerate the remaining failure modes (malformed Lane: line, empty description, multi-line description, Lane: inside a quoted block) with the chosen fallback for each. No current change to the rule's intent; follow-up only before the hook lands.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad1bb97b78a0121d7a54de62653ce40418889dac54cc9ad6f569f154b618b38a"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "ad1bb97b78a0121d7a54de62653ce40418889dac54cc9ad6f569f154b618b38a",
+      "rubric_id": "R4",
+      "affected_surface": "lane key rule / hooks/subagent-budget.js lane-key extractor",
+      "claim": "The plan states the lane key rule (Lane: <slug> in first 5 lines else description, trimmed+lowercased) but the slug syntax is left as an undefined placeholder and the failure modes of that rule are only partially named (only 'drift' in the risks section).",
+      "evidence_reference": "docs/plans/2026-10-18-subagent-budget-gate.md §2.5, §6",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-17T18:13:47.689Z"
+}

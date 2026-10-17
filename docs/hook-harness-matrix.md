@@ -32,6 +32,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `session-start` | SessionStart<br>未驗證 | — | — | — |
 | `session-tasks` | PostToolUse, TaskCompleted, TaskCreated<br>未驗證 | — | — | — |
 | `state-checkpoint` | PostCompact, PreCompact<br>未驗證 | — | — | — |
+| `subagent-budget` | PreToolUse<br>未驗證 | — | — | — |
 | `suggest-compact` | PostToolUse<br>未驗證 | — | — | — |
 | `version-drift-check` | SessionStart<br>未驗證 | — | — | — |
 

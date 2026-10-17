@@ -40,19 +40,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
-### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
-- **Id**: BL-0011
-- **Status**: open
-- **Since**: 2026-09-25
-- **Origin**: self
-- **Problem**: 工頭防護機制目前只依單一代理的上下文大小攔阻，沒有依累計快取讀取量或存活時間限制成本，也沒涵蓋標記為閒置的複製工頭。等到有可讀的累計用量資料才適合做。 (draft)
-- **Impact**: 工頭可能在長時間運作下累積大量成本而不被攔住；目前上下文限制已擋掉最嚴重的情況。 (draft)
-- **Trigger**: a hook-readable cumulative per-agent token feed exists, or a clone-based foreman is measured running away
-- **Effort**: M
-- **Source**: plan §7
-- **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
-- **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
-
 ### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
 - **Id**: BL-0012
 - **Status**: open

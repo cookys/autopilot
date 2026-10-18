@@ -613,4 +613,13 @@ rmdir "$d/docs/backlog"
 o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
 assert_eq "$(json_has_code "$o" sidecar_orphan)" "no" "no docs/backlog dir: nothing to check"
 
+# boundary: a row naming prefix-note.md must not excuse an orphan note.md
+d="$(sidecar_fixture sc-boundary docs/backlog/kept-note.md)"
+printf 'n\n' > "$d/docs/backlog/kept-note.md"
+printf 'n\n' > "$d/docs/backlog/note.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "note.md is an orphan though kept-note.md is mentioned"
+assert_contains "$o" "docs/backlog/note.md" "the orphan reported is note.md"
+assert_not_contains "$o" "docs/backlog/kept-note.md is" "kept-note.md is not reported"
+
 finalize_test

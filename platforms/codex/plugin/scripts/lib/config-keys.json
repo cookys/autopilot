@@ -2100,6 +2100,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_MERGE_CRASH_AFTER_EDGE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/merge/cli.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Test-only fault seam for merge crash simulation, honoured only when AUTOPILOT_TEST_SEAMS=1."
+    },
+    {
       "name": "AUTOPILOT_MISSION_BLOCK_FIXTURE",
       "kind": "env",
       "audience": "internal",
@@ -3048,6 +3061,19 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "AUTOPILOT_TEST_SEAMS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/merge/cli.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Master switch for all test-only seams."
     },
     {
       "name": "AUTOPILOT_TEST_TIMEOUT_MS",

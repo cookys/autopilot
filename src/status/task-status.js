@@ -263,6 +263,31 @@ function isCanonicalTimestamp(value) {
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
+function hasMergeExecutionKeys(value) {
+  const base = [
+    'schema_version', 'artifact_type', 'manifest_seal', 'root_run_id',
+    'status', 'halt_reason', 'halt_edge', 'edges', 'receipt_digest',
+  ];
+  if (!isPlainObject(value)) return false;
+  const allowed = new Set(base);
+  if (Object.prototype.hasOwnProperty.call(value, 'state')) allowed.add('state');
+  if (Object.prototype.hasOwnProperty.call(value, 'intent_edges')) allowed.add('intent_edges');
+  const actual = Object.keys(value);
+  if (actual.length !== allowed.size) return false;
+  for (const key of actual) {
+    if (!allowed.has(key)) return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'state')
+      && !['in_progress', 'completed', 'halted'].includes(value.state)) {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'intent_edges')
+      && !Array.isArray(value.intent_edges)) {
+    return false;
+  }
+  return true;
+}
+
 function hasExactKeySet(value, keys) {
   if (!isPlainObject(value)) return false;
   const expected = new Set(keys);
@@ -1780,10 +1805,7 @@ function validateMergeExecution(value, rootRunId, preflight) {
   });
   if (value === null) return unknown('merge_execution_unknown');
   if (!isPlainObject(value)
-      || !hasExactKeySet(value, [
-        'schema_version', 'artifact_type', 'manifest_seal', 'root_run_id',
-        'status', 'halt_reason', 'halt_edge', 'edges', 'receipt_digest',
-      ])
+      || !hasMergeExecutionKeys(value)
       || value.schema_version !== 1
       || value.artifact_type !== 'merge_execution_receipt'
       || !isSha256(value.receipt_digest)

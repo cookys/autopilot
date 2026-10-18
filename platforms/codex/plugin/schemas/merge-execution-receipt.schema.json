@@ -30,7 +30,8 @@
         { "type": "null" }
       ]
     },
-    "status": { "type": "string", "enum": ["complete", "halted"] },
+    "status": { "type": "string", "enum": ["complete", "halted", "in_progress"] },
+    "state": { "type": "string", "enum": ["in_progress", "completed", "halted"] },
     "halt_reason": {
       "oneOf": [
         { "type": "string", "minLength": 1 },
@@ -46,6 +47,10 @@
     "edges": {
       "type": "array",
       "items": { "$ref": "#/$defs/edgeReceipt" }
+    },
+    "intent_edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/intentEdge" }
     },
     "receipt_digest": { "$ref": "#/$defs/sha256" }
   },
@@ -103,6 +108,43 @@
         "action": { "type": "string", "enum": ["none", "path_snapshot_restore"] },
         "restored": { "type": "boolean" },
         "verification": { "type": "string", "enum": ["exact", "failed"] }
+      }
+    },
+    "intentEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "source_ref",
+        "source_worktree",
+        "source_sha",
+        "target_ref",
+        "target_worktree",
+        "target_sha",
+        "target_from_edge",
+        "mode"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "source_ref": { "type": "string", "pattern": "^refs/" },
+        "source_worktree": { "type": "string", "minLength": 1 },
+        "source_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "target_ref": { "type": "string", "pattern": "^refs/" },
+        "target_worktree": { "type": "string", "minLength": 1 },
+        "target_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "target_from_edge": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "mode": { "type": "string", "enum": ["no-ff", "ff-only"] }
       }
     },
     "edgeReceipt": {

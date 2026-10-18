@@ -1,7 +1,7 @@
 # BL-0060 check-test-integrity 回放裁定
 
 ## 方法
-- 回放：`scripts/replay-test-integrity.js --count 60`（hand commit 0feda69d8 的版本），範圍為 develop 最近 60 個 first-parent merge（最新為 a007fa65e），使用該版本的 `check-test-integrity.sh`（mode=warn）。原始輸出：`replay.json`。
+- 回放：`scripts/replay-test-integrity.js --count 60`（hand commit 0feda69d8 的版本），範圍為 develop 最近 60 個 first-parent merge（最新為 a007fa65e），使用該版本的 `check-test-integrity.sh`（mode=warn）。原始輸出：`replay.json.gz` (gunzip first)。
 - 母體：60 個 range 中 40 個有 violation；1101 筆紀錄（`deleted_line` 1078、`surface_touch` 23）；無 errors。
 - 母體超過 150 筆，故抽樣：以固定 seed 20261019 的線性同餘亂數（`s = s*1664525+1013904223 mod 2^32`）對紀錄索引做 Fisher-Yates 洗牌，取前 150 筆（腳本 `sample.js`，清單 `sample.txt`、`sample.idx.json`）。樣本含 147 筆 `deleted_line`、3 筆 `surface_touch`。
 - 裁定方式：逐筆對照 `git diff <merge>^1 <merge> -- <file>`。樣本聚成少數 (merge, file) 群組，同一群組的理由相同，故以群組列出，列出涵蓋的樣本編號（#n，見 sample.txt）。

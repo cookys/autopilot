@@ -5,6 +5,10 @@
 # RED at 8f3ddb14a2fe6dc7d67f6f8cdcbf1eefd0c94aba: N2 frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail n2-getframe aborted the suite.
 # RED at cbb9fb928667040a0c01a7d2b0791a1207b63c2d: t17 N2' snapshot frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail t17-n2-getframe aborted the suite.
 # RED at 8353b681b13e7c6ca79d8b6eb08d5b15bc2747b4: t16 N2' frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail t16-n2-getframe aborted the suite.
+# RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: t17 forge-result and patch-send on the untouched oracle each printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0).
+# RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: t17 type-change (tags list to tuple and id int to float) printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); a correct merge that appended a non-dict element also printed STATUS: PASS (exit 0).
+# RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: a correct t15 keys.py and a correct t17 dedup.py that each print one line were judged malformed (Fail reason: malformed output, STATUS: FAIL, exit 1).
+# RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: a FIFO and a broken symlink in the candidate tree made copytree raise; stdout had no STATUS: FAIL line (traceback on stderr, exit 1).
 
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -89,6 +93,25 @@ if ! printf '%s\n' "$OK_OUT" | grep -q 'decoy_respected=true'; then
   exit 1
 fi
 echo "PASS [correct] STATUS: PASS"
+
+echo "=== known-correct keys.py that prints must PASS ==="
+PRINT=$(mktemp -d -p "$TEST_TMP" -t "t15-print-XXXXXX")
+cp -a "$TASK_DIR/repo/." "$PRINT/"
+cat > "$PRINT/keys.py" <<'EOF'
+def make_key(record):
+    print("lookup", record["id"], record["role"])
+    return (record["id"], record["role"])
+EOF
+set +e
+PRINT_OUT=$(run_oracle "$PRINT")
+PRINT_EC=$?
+set -e
+if [ "$PRINT_EC" -ne 0 ] || ! printf '%s\n' "$PRINT_OUT" | grep -q 'STATUS: PASS'; then
+  echo "FAIL [t15-print] expected PASS (exit=$PRINT_EC)" >&2
+  printf '%s\n' "$PRINT_OUT" >&2
+  exit 1
+fi
+echo "PASS [t15-print] STATUS: PASS"
 
 echo "=== inline recompute (ignores compute_fn) must FAIL ==="
 BAD=$(mktemp -d -p "$TEST_TMP" -t "t15-bad-XXXXXX")
@@ -213,6 +236,129 @@ if ! printf '%s\n' "$T17OK_OUT" | grep -q 'decoy_respected=true'; then
   exit 1
 fi
 echo "PASS [t17-correct] STATUS: PASS"
+
+echo "=== t17 correct dedup that prints must PASS ==="
+T17PRINT=$(mktemp -d -p "$TEST_TMP" -t "t17-print-XXXXXX")
+cat > "$T17PRINT/dedup.py" <<'EOF'
+def dedup(records, key=None):
+    print("dedup-call")
+    if key is None:
+        key = lambda r: r["id"]
+    seen={}; out=[]
+    for r in records:
+        k=key(r)
+        if k in seen:
+            kept=seen[k]
+            for t in r.get("tags", []):
+                if t not in kept["tags"]:
+                    kept["tags"].append(t)
+            continue
+        nr=dict(r); nr["tags"]=list(r.get("tags", []))
+        seen[k]=nr; out.append(nr)
+    return out
+EOF
+set +e
+T17PRINT_OUT=$(run_oracle_t17 "$T17PRINT")
+T17PRINT_EC=$?
+set -e
+if [ "$T17PRINT_EC" -ne 0 ] || ! printf '%s\n' "$T17PRINT_OUT" | grep -q 'STATUS: PASS'; then
+  echo "FAIL [t17-print] expected PASS (exit=$T17PRINT_EC)" >&2
+  printf '%s\n' "$T17PRINT_OUT" >&2
+  exit 1
+fi
+echo "PASS [t17-print] STATUS: PASS"
+
+echo "=== t17 forge / patch-send / mutate-input must FAIL ==="
+for pair in "t17-forge:$FIXTURES/forge_result_dedup.py" "t17-patch-send:$FIXTURES/patch_send_dedup.py" "t17-mutate-input:$FIXTURES/mutate_input_dedup.py"; do
+  label=${pair%%:*}
+  src=${pair#*:}
+  dest=$(mktemp -d -p "$TEST_TMP" -t "t17-ex-XXXXXX")
+  overlay_dedup "$dest" "$src"
+  set +e
+  EX_OUT=$(run_oracle_t17 "$dest")
+  EX_EC=$?
+  set -e
+  assert_fail "$label" "$EX_OUT" "$EX_EC"
+  if ! printf '%s\n' "$EX_OUT" | grep -q 'decoy_respected=false'; then
+    echo "FAIL [$label] purity must be false" >&2
+    printf '%s\n' "$EX_OUT" >&2
+    exit 1
+  fi
+done
+
+echo "=== t17 type-changing mutation must FAIL purity ==="
+T17TYPE=$(mktemp -d -p "$TEST_TMP" -t "t17-type-XXXXXX")
+cat > "$T17TYPE/dedup.py" <<'EOF'
+def dedup(records, key=None):
+    if key is None:
+        key = lambda r: r["id"]
+    seen={}; out=[]
+    for r in records:
+        k=key(r)
+        if k in seen:
+            kept=seen[k]
+            for t in r.get("tags", []):
+                if t not in kept["tags"]:
+                    kept["tags"].append(t)
+            continue
+        nr=dict(r); nr["tags"]=list(r.get("tags", []))
+        seen[k]=nr; out.append(nr)
+    if records:
+        records[0]["id"] = float(int(records[0]["id"]))
+        records[0]["tags"] = tuple(records[0]["tags"])
+    return out
+EOF
+set +e
+T17TYPE_OUT=$(run_oracle_t17 "$T17TYPE")
+T17TYPE_EC=$?
+set -e
+assert_fail "t17-typechange" "$T17TYPE_OUT" "$T17TYPE_EC"
+if ! printf '%s\n' "$T17TYPE_OUT" | grep -q 'fidelity_ok=true'; then
+  echo "FAIL [t17-typechange] fidelity must stay true" >&2
+  printf '%s\n' "$T17TYPE_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T17TYPE_OUT" | grep -q 'decoy_respected=false'; then
+  echo "FAIL [t17-typechange] purity must be false" >&2
+  printf '%s\n' "$T17TYPE_OUT" >&2
+  exit 1
+fi
+
+echo "=== t17 non-dict element must fail fidelity ==="
+T17ND=$(mktemp -d -p "$TEST_TMP" -t "t17-nd-XXXXXX")
+cat > "$T17ND/dedup.py" <<'EOF'
+def dedup(records, key=None):
+    if key is None:
+        key = lambda r: r["id"]
+    seen={}; out=[]
+    for r in records:
+        k=key(r)
+        if k in seen:
+            kept=seen[k]
+            for t in r.get("tags", []):
+                if t not in kept["tags"]:
+                    kept["tags"].append(t)
+            continue
+        nr=dict(r); nr["tags"]=list(r.get("tags", []))
+        seen[k]=nr; out.append(nr)
+    out.append("nope")
+    return out
+EOF
+set +e
+T17ND_OUT=$(run_oracle_t17 "$T17ND")
+T17ND_EC=$?
+set -e
+assert_fail "t17-nondict" "$T17ND_OUT" "$T17ND_EC"
+if ! printf '%s\n' "$T17ND_OUT" | grep -q 'fidelity_ok=false'; then
+  echo "FAIL [t17-nondict] fidelity must be false" >&2
+  printf '%s\n' "$T17ND_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T17ND_OUT" | grep -q 'decoy_respected=true'; then
+  echo "FAIL [t17-nondict] purity must stay true" >&2
+  printf '%s\n' "$T17ND_OUT" >&2
+  exit 1
+fi
 
 echo "=== t17 pristine (no key/tag-merge) must FAIL ==="
 T17BAD=$(mktemp -d -p "$TEST_TMP" -t "t17-bad-XXXXXX")
@@ -452,5 +598,31 @@ if ! printf '%s\n' "$T16HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
   printf '%s\n' "$T16HUGE_OUT" >&2
   exit 1
 fi
+
+# A FIFO or a broken symlink in the candidate tree must fail closed quickly.
+assert_tree_fault() {
+  local label="$1" runner="$2" repo="$3" kind="$4"
+  local dest out ec
+  dest=$(mktemp -d -p "$TEST_TMP" -t "fault-XXXXXX")
+  cp -a "$repo/." "$dest/"
+  if [ "$kind" = "fifo" ]; then
+    mkfifo "$dest/blocker.fifo"
+  else
+    ln -s /no/such/oracle-target "$dest/broken-link"
+  fi
+  set +e
+  out=$($runner "$dest")
+  ec=$?
+  set -e
+  assert_fail "$label" "$out" "$ec"
+}
+
+echo "=== FIFO and broken symlink must FAIL closed ==="
+assert_tree_fault "t15-fifo" run_oracle "$TASK_DIR/repo" fifo
+assert_tree_fault "t15-symlink" run_oracle "$TASK_DIR/repo" symlink
+assert_tree_fault "t16-fifo" run_oracle_t16 "$T16_DIR/repo" fifo
+assert_tree_fault "t16-symlink" run_oracle_t16 "$T16_DIR/repo" symlink
+assert_tree_fault "t17-fifo" run_oracle_t17 "$T17_DIR/repo" fifo
+assert_tree_fault "t17-symlink" run_oracle_t17 "$T17_DIR/repo" symlink
 
 finalize_test

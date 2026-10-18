@@ -11,6 +11,7 @@ import secrets
 import select
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,9 @@ import json
 import os
 import sys
 
+# Protocol bytes go to the saved stdout. A candidate print must not land there.
+_real_out = sys.stdout
+sys.stdout = sys.stderr
 sys.path = [p for p in sys.path if p not in ("", ".", os.getcwd())]
 _cwd = os.getcwd()
 sys.path.insert(0, _cwd)
@@ -44,8 +48,8 @@ _next = 0
 
 
 def _send(obj):
-    sys.stdout.write(json.dumps(obj) + "\n")
-    sys.stdout.flush()
+    _real_out.write(json.dumps(obj) + "\n")
+    _real_out.flush()
 
 
 def _recv():
@@ -154,7 +158,7 @@ def main():
     child_path = None
     proc = None
     try:
-        shutil.copytree(src, copy_dir, dirs_exist_ok=True)
+        _copy_needed(src, copy_dir, ["service.py", "store.py", "keys.py"])
         fd, child_path = tempfile.mkstemp(prefix="t15-child-", suffix=".py")
         with os.fdopen(fd, "w") as fh:
             fh.write(CHILD_SRC)
@@ -180,6 +184,12 @@ def main():
     except CandidateError:
         _kill(proc)
         return emit_grade(False, False, None)
+    except _CopyFail as err:
+        _kill(proc)
+        return emit_grade(False, False, "copy failed: %s" % err)
+    except Exception:
+        _kill(proc)
+        return emit_grade(False, False, "internal error")
     finally:
         _kill(proc)
         if child_path:
@@ -193,6 +203,42 @@ def main():
 class _Infra(Exception):
     def __init__(self, reason):
         self.reason = reason
+
+
+class _CopyFail(Exception):
+    pass
+
+
+def _reject_special(path):
+    try:
+        st = os.lstat(path)
+    except OSError as err:
+        raise _CopyFail(str(err))
+    mode = st.st_mode
+    if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        raise _CopyFail("special file: %s" % os.path.basename(path))
+    if stat.S_ISLNK(mode) and not os.path.exists(path):
+        raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+
+
+def _copy_needed(src, dst, names):
+    """Copy only the modules the grade imports. Never copytree: a FIFO blocks,
+    and a broken symlink or unreadable file must become a grade line."""
+    for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
+        for name in list(dirnames) + list(filenames):
+            _reject_special(os.path.join(dirpath, name))
+    for name in names:
+        sp = os.path.join(src, name)
+        _reject_special(sp)
+        try:
+            with open(sp, "rb") as fh:
+                data = fh.read()
+            with open(os.path.join(dst, name), "wb") as fh:
+                fh.write(data)
+        except _CopyFail:
+            raise
+        except Exception as err:
+            raise _CopyFail(str(err))
 
 
 def _send(proc, obj):
@@ -373,3 +419,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except _Infra as err:
         sys.exit(emit_grade(False, False, err.reason))
+    except Exception:
+        sys.exit(emit_grade(False, False, "internal error"))

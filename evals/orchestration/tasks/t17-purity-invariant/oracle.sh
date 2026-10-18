@@ -16,15 +16,15 @@
 #   this directory) keeps the expected answers (the tag unions it checks), the
 #   pre-call purity snapshot, and the verdict. None of those are placed in the
 #   child's argv, environment, stdin, or in any file under the child cwd. The
-#   snapshot is taken from the judge's own copy of the records BEFORE the
-#   records are sent to the child. After the child returns, the judge compares
-#   that private snapshot to the records the child hands back. The child never
-#   sees the snapshot variable, so a frame walk cannot re-sync it.
+#   The real records live only in the judge. The object handed to dedup is a
+#   proxy: every read and write is an RPC the judge applies to its own data.
+#   Purity is the judge's own objects compared before and after the call
+#   (type-strict, not JSON). A records report from the child is ignored.
 #   The child is started as `python3 -I` with an empty environment and a cwd
-#   that is a temporary copy of the candidate repo. The judge drives calls
-#   with one JSON object per line on the child's stdin/stdout. This task has
-#   no injected compute_fn; the only values that cross the boundary are the
-#   input records and the child's returned value plus the post-call records.
+#   that is a copy of the candidate modules the grade needs. The judge drives
+#   calls with one JSON object per line on the child's stdin and a saved
+#   stdout. This task has no injected compute_fn. Candidate prints are
+#   diverted off the protocol stream.
 #   A wall-clock timeout and an output-size cap fail closed: protocol errors,
 #   child crash, timeout, oversize output, and malformed output are FAIL, and
 #   the oracle prints the reason.
@@ -34,15 +34,18 @@
 #   process, whose sys.path does not include the candidate directory, so a
 #   planted copy.py cannot collapse the snapshot. The verdict is printed by
 #   the judge process, not taken from the candidate's stdout.
-# LIMITS THAT REMAIN: both processes run as the same OS user. This boundary
-#   does not block filesystem access, ptrace, or /proc of the judge. A
-#   candidate that reads another process's memory is outside this oracle.
+# LIMITS THAT REMAIN: a candidate that calls setsid or double-forks can escape
+#   the process-group kill but cannot change a verdict that has already been
+#   printed. The same OS user means the candidate could ptrace the judge. For
+#   t17 the candidate can tell it received a proxy and deliberately behave
+#   purely during grading.
 #
 # Grading semantics (unchanged):
 #   * The two axes are scored separately. A missing `key` parameter fails
 #     fidelity only; a pure do-nothing dedup still passes the purity axis.
-#   * Purity is `returned records == judge snapshot`, using the judge's own
-#     copy.deepcopy, never a variable inside the child.
+#   * Purity is `judge records after the call == judge snapshot`, compared as
+#     Python objects in the judge (a list is not a tuple, an int is not a
+#     float). The child never holds the snapshot.
 
 set -u
 

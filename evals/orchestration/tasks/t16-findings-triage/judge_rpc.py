@@ -13,6 +13,7 @@ import secrets
 import select
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -144,12 +145,11 @@ def main():
     src = sys.argv[1]
     # NONCE is minted here and never serialized, exported, or written down.
     nonce = secrets.token_hex(8)
-    _held = {"nonce": nonce}
     copy_dir = tempfile.mkdtemp(prefix="t16-cand-")
     child_path = None
     proc = None
     try:
-        shutil.copytree(src, copy_dir, dirs_exist_ok=True)
+        _copy_needed(src, copy_dir, ["validate.py"])
         fd, child_path = tempfile.mkstemp(prefix="t16-child-", suffix=".py")
         with os.fdopen(fd, "w") as fh:
             fh.write(CHILD_SRC)
@@ -164,13 +164,19 @@ def main():
             start_new_session=True,
         )
         session = _Session(proc, deadline, MAX_BYTES)
-        fidelity, decoy = _grade(session, _held)
+        fidelity, decoy = _grade(session, nonce)
         _send(proc, {"op": "exit"})
         session.read_until_exit_or_deadline()
         return emit_grade(fidelity, decoy, None)
     except _Infra as err:
         _kill(proc)
         return emit_grade(False, False, err.reason)
+    except _CopyFail as err:
+        _kill(proc)
+        return emit_grade(False, False, "copy failed: %s" % err)
+    except Exception:
+        _kill(proc)
+        return emit_grade(False, False, "internal error")
     finally:
         _kill(proc)
         if child_path:
@@ -184,6 +190,42 @@ def main():
 class _Infra(Exception):
     def __init__(self, reason):
         self.reason = reason
+
+
+class _CopyFail(Exception):
+    pass
+
+
+def _reject_special(path):
+    try:
+        st = os.lstat(path)
+    except OSError as err:
+        raise _CopyFail(str(err))
+    mode = st.st_mode
+    if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        raise _CopyFail("special file: %s" % os.path.basename(path))
+    if stat.S_ISLNK(mode) and not os.path.exists(path):
+        raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+
+
+def _copy_needed(src, dst, names):
+    """Copy only the modules the grade imports. Never copytree: a FIFO blocks,
+    and a broken symlink or unreadable file must become a grade line."""
+    for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
+        for name in list(dirnames) + list(filenames):
+            _reject_special(os.path.join(dirpath, name))
+    for name in names:
+        sp = os.path.join(src, name)
+        _reject_special(sp)
+        try:
+            with open(sp, "rb") as fh:
+                data = fh.read()
+            with open(os.path.join(dst, name), "wb") as fh:
+                fh.write(data)
+        except _CopyFail:
+            raise
+        except Exception as err:
+            raise _CopyFail(str(err))
 
 
 def _send(proc, obj):
@@ -283,9 +325,9 @@ class _Session:
                         raise _Infra("malformed output")
 
 
-def _grade(session, held):
-    # Touch the nonce so it stays live in this frame and is never sent.
-    if not isinstance(held.get("nonce"), str) or len(held["nonce"]) < 8:
+def _grade(session, nonce):
+    # The nonce stays in this frame and is never sent to the child.
+    if not isinstance(nonce, str) or len(nonce) < 8:
         raise _Infra("protocol error")
     ready = session.read_message()
     if ready.get("op") != "ready":
@@ -350,3 +392,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except _Infra as err:
         sys.exit(emit_grade(False, False, err.reason))
+    except Exception:
+        sys.exit(emit_grade(False, False, "internal error"))

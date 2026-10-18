@@ -27,9 +27,11 @@
 #   on sys.path only after importing json/os, so a planted stdlib shadow does
 #   not become the child's own parser. Candidate prints are diverted off the
 #   protocol stream. The verdict is printed by the judge process.
-# LIMITS THAT REMAIN: both processes run as the same OS user. This boundary
-#   does not block filesystem access, ptrace, or /proc of the judge. A
-#   candidate that reads another process's memory is outside this oracle.
+# LIMITS THAT REMAIN: a candidate that calls setsid or double-forks can escape
+#   the process-group kill but cannot change a verdict that has already been
+#   printed. The same OS user means the candidate could ptrace the judge. For
+#   t17 the candidate can tell it received a proxy and deliberately behave
+#   purely during grading.
 #
 # Grading semantics (unchanged): an oracle-owned behavioral battery over the
 # candidate's real functions. It never trusts the candidate-visible run-tests.sh.

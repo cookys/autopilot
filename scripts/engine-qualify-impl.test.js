@@ -384,7 +384,7 @@ equal(truncRun.wall_truncated, true, 'truncated administration reports wall_trun
 equal(truncRun.truncation_cause, 'count_seam', 'seam truncation names its cause (not \'wall\')');
 equal(truncRun.started_cases, 6, 'truncation fires after exactly the seam\'s case count');
 equal(truncRun.qualified, false, 'truncated administration is NOT qualified');
-equal(truncRun.row.status, 'failed', 'a truncated administration with started cases is a failed row');
+equal(truncRun.row.status, 'no_verdict', 'a truncated all-pass administration is no_verdict until the whole corpus is administered (BL-0160)');
 check(truncRun.row.quality.corpus_pass.endsWith('/24'),
   `truncated row denominator is the full corpus (got ${truncRun.row.quality.corpus_pass})`);
 check(truncRun.row.capability_score < 1,

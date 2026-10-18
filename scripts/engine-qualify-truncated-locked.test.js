@@ -9,6 +9,17 @@
 // at scripts/engine-qualify-truncated-locked.test.js (row.status)
 // Node.js v24.16.0 exit 1
 // GREEN at faebfe59a: 32 assertions passed
+// # RED at c3c52d598 case (6):
+// AssertionError [ERR_ASSERTION]: implementer truncated undecided sitting is no_verdict
+// actual: 'failed'
+// expected: 'no_verdict'
+// operator: deepStrictEqual
+// at scripts/engine-qualify-truncated-locked.test.js (row.status)
+// Node.js v24.16.0 exit 1
+// Case (7) on c3c52d598 already returns row.status failed and qualified false
+// (every non-qualified completed implementer sitting was failed), so that
+// assertion is not a separate red failure on the unmodified kernel.
+// GREEN after the implementer no_verdict branch: 36 assertions passed
 
 // BL-0160: a sitting cut short by the wall limit (or the test-only count seam)
 // while cases remain unadministered is no_verdict, even after locked_qualify.
@@ -210,6 +221,18 @@ for (const trial of admin.trials) for (const c of trial.cases) if (c.branch === 
 if (!target) { process.stdout.write(JSON.stringify({ status: 'failure', commit: null, error: 'unknown branch' }) + '\\n'); process.exit(1); }
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 function emit(o) { process.stdout.write(JSON.stringify(o) + '\\n'); }
+const failFlag = ${JSON.stringify(path.join(tempRoot, 'impl-fail-first.txt'))};
+const failCounter = ${JSON.stringify(path.join(tempRoot, 'impl-fail-counter.txt'))};
+if (fs.existsSync(failFlag)) {
+  let n = 0;
+  try { n = Number(fs.readFileSync(failCounter, 'utf8')) || 0; } catch (e) { n = 0; }
+  n += 1;
+  fs.writeFileSync(failCounter, String(n));
+  if (n === 1) {
+    emit({ status: 'failure', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: null, files_changed: 0, worktree: null, error: 'injected non-pass' });
+    process.exit(0);
+  }
+}
 if (target.reference_solution.expect_no_op) {
   emit({ status: 'no_op', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: null, files_changed: 0, worktree: null, error: null });
   process.exit(0);
@@ -274,7 +297,7 @@ emit({ status: 'committed', runner: 'fake', model: 'fake', branch, base: 'HEAD',
   equal(implResult.wall_truncated, true, 'implementer truncation reports wall_truncated');
   equal(implResult.started_cases, 6, 'implementer seam stops after 6 started cases');
   equal(implResult.qualified, false, 'implementer truncation is not qualified');
-  check(implResult.row.status !== 'qualified', `implementer truncated row is not qualified (got ${implResult.row.status})`);
+  equal(implResult.row.status, 'no_verdict', 'implementer truncated undecided sitting is no_verdict');
   check(
     implResult.evidence == null || implResult.evidence.state !== 'qualified',
     'implementer truncation produces no promotion evidence in the qualified state',
@@ -283,6 +306,51 @@ emit({ status: 'committed', runner: 'fake', model: 'fake', branch, base: 'HEAD',
     implResult.verdict.evidence_state !== 'qualified',
     'implementer truncation verdict evidence_state is not qualified',
   );
+
+  // (7) A non-pass already administered makes passed === total unreachable, so
+  // truncation after that case stays failed.
+  fs.writeFileSync(path.join(tempRoot, 'impl-fail-counter.txt'), '0');
+  fs.writeFileSync(path.join(tempRoot, 'impl-fail-first.txt'), '1');
+  process.env.AUTOPILOT_QUALIFY_SEED = 'impl-trunc-seed';
+  const failStore = fs.mkdtempSync(path.join(tempRoot, 'impl-fail-store-'));
+  let failResult;
+  try {
+    failResult = runImplQualification({
+      role: 'implementer',
+      trials: 2,
+      expiresDays: 90,
+      emitRow: false,
+      store: failStore,
+      taskClasses: ['bounded_implementation'],
+      domains: ['repository'],
+      languages: ['en'],
+      tools: ['git_commit'],
+      engine: 'fake-impl-engine',
+      model: 'fake-impl-model',
+      modelVersion: '2026-08-22',
+      versionSource: 'operator-asserted',
+      runner: 'grok',
+      runnerVersion: '1.0.5',
+      family: 'test-family',
+      harnessVersion: 'impl-harness-v1',
+      effort: 'high',
+      promptConfigHash: digestI('a'),
+      semanticFingerprint: digestI('b'),
+      containmentFingerprint: digestI('c'),
+      dispatchBin: wrapper,
+      panelReadOnlyBinds: [],
+      panelEnvironment: [],
+      providerEnvironment: [],
+      testTruncateAfterCases: 6,
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+    fs.rmSync(path.join(tempRoot, 'impl-fail-first.txt'), { force: true });
+  }
+  equal(failResult.wall_truncated, true, 'implementer decided-failure truncation reports wall_truncated');
+  equal(failResult.started_cases, 6, 'implementer decided-failure seam stops after 6 started cases');
+  equal(failResult.qualified, false, 'implementer decided-failure truncation is not qualified');
+  equal(failResult.row.status, 'failed', 'a decided implementer failure truncated after the miss stays failed');
 }
 
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -221,7 +221,15 @@ def _mode_special(mode):
     return stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
 
 
-def _reject_special(path):
+def _realpath_under(path, root):
+    real = os.path.realpath(path)
+    root_real = os.path.realpath(root)
+    if real == root_real:
+        return True
+    return real.startswith(root_real + os.sep)
+
+
+def _reject_special(path, root):
     try:
         st = os.lstat(path)
     except OSError as err:
@@ -230,19 +238,24 @@ def _reject_special(path):
     if _mode_special(mode):
         raise _CopyFail("special file: %s" % os.path.basename(path))
     if stat.S_ISLNK(mode):
+        # Special targets stay "special file" (a FIFO or /dev/zero). A symlink
+        # that resolves to a regular file or directory must still stay inside
+        # the candidate repo, so /proc/self/environ cannot be copied in.
         try:
             tst = os.stat(path)
         except OSError:
             raise _CopyFail("broken symlink: %s" % os.path.basename(path))
         if not stat.S_ISREG(tst.st_mode) and not stat.S_ISDIR(tst.st_mode):
             raise _CopyFail("special file: %s" % os.path.basename(path))
+        if not _realpath_under(path, root):
+            raise _CopyFail("symlink outside repo: %s" % os.path.basename(path))
     elif not stat.S_ISREG(mode) and not stat.S_ISDIR(mode):
         raise _CopyFail("special file: %s" % os.path.basename(path))
 
 
-def _read_regular(path):
+def _read_regular(path, root):
     """Open, require a regular file on the fd, and cap the read."""
-    _reject_special(path)
+    _reject_special(path, root)
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError as err:
@@ -271,12 +284,12 @@ def _copy_needed(src, dst, names):
     and a broken symlink or unreadable file must become a grade line."""
     for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
         for name in list(dirnames) + list(filenames):
-            _reject_special(os.path.join(dirpath, name))
+            _reject_special(os.path.join(dirpath, name), src)
     for name in names:
         sp = os.path.join(src, name)
-        _reject_special(sp)
+        _reject_special(sp, src)
         try:
-            data = _read_regular(sp)
+            data = _read_regular(sp, src)
             with open(os.path.join(dst, name), "wb") as fh:
                 fh.write(data)
         except _CopyFail:

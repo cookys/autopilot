@@ -733,6 +733,90 @@ for rel in mods:
 print("PASS [reason-strip]")
 PY
 
+echo "=== t17 in-place nested mutations must FAIL purity ==="
+# RED at 4bd06634321eadcbd67854eab64fca83ddd2033c: mutate_iadd, mutate_imul, and mutate_ior each printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0).
+for pair in \
+  "t17-iadd:$FIXTURES/mutate_iadd_dedup.py" \
+  "t17-imul:$FIXTURES/mutate_imul_dedup.py" \
+  "t17-ior:$FIXTURES/mutate_ior_dedup.py"
+do
+  label=${pair%%:*}
+  src=${pair#*:}
+  dest=$(mktemp -d -p "$TEST_TMP" -t "t17-mut-XXXXXX")
+  overlay_dedup "$dest" "$src"
+  set +e
+  MUT_OUT=$(run_oracle_t17 "$dest")
+  MUT_EC=$?
+  set -e
+  assert_fail "$label" "$MUT_OUT" "$MUT_EC"
+  if ! printf '%s\n' "$MUT_OUT" | grep -q 'fidelity_ok=true'; then
+    echo "FAIL [$label] fidelity must stay true" >&2
+    printf '%s\n' "$MUT_OUT" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$MUT_OUT" | grep -q 'decoy_respected=false'; then
+    echo "FAIL [$label] purity must be false" >&2
+    printf '%s\n' "$MUT_OUT" >&2
+    exit 1
+  fi
+done
+
+assert_outside_symlink() {
+  local label="$1" runner="$2" repo="$3" module="$4" payload="$5"
+  local dest out ec
+  dest=$(mktemp -d -p "$TEST_TMP" -t "outlink-XXXXXX")
+  cp -a "$repo/." "$dest/"
+  rm -f "$dest/$module"
+  ln -s "$payload" "$dest/$module"
+  set +e
+  out=$($runner "$dest")
+  ec=$?
+  set -e
+  assert_fail "$label" "$out" "$ec"
+  if ! printf '%s\n' "$out" | grep -q 'symlink outside repo'; then
+    echo "FAIL [$label] expected symlink outside repo" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+}
+
+echo "=== symlink to a regular file outside the candidate repo must FAIL ==="
+# RED at 4bd06634321eadcbd67854eab64fca83ddd2033c: t16 validate.py and t17 dedup.py symlinked at a correct module outside the candidate directory each printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0). t15 did the same once keys.py was the correct in-repo module and service.py was the symlink. A t17 symlink to /proc/self/environ was copied and judged Fail reason: child crash (STATUS: FAIL), with no "symlink outside repo" line.
+dest15=$(mktemp -d -p "$TEST_TMP" -t "outlink-XXXXXX")
+cp -a "$TASK_DIR/repo/." "$dest15/"
+cat > "$dest15/keys.py" <<'EOF'
+def make_key(record):
+    return (record["id"], record["role"])
+EOF
+rm -f "$dest15/service.py"
+ln -s "$FIXTURES/outside_service.py" "$dest15/service.py"
+set +e
+T15OUT_OUT=$(run_oracle "$dest15")
+T15OUT_EC=$?
+set -e
+assert_fail "t15-symlink-outside" "$T15OUT_OUT" "$T15OUT_EC"
+if ! printf '%s\n' "$T15OUT_OUT" | grep -q 'symlink outside repo'; then
+  echo "FAIL [t15-symlink-outside] expected symlink outside repo" >&2
+  printf '%s\n' "$T15OUT_OUT" >&2
+  exit 1
+fi
+assert_outside_symlink "t16-symlink-outside" run_oracle_t16 "$T16_DIR/repo" validate.py "$FIXTURES/outside_validate.py"
+assert_outside_symlink "t17-symlink-outside" run_oracle_t17 "$T17_DIR/repo" dedup.py "$FIXTURES/outside_dedup.py"
+OUTENV=$(mktemp -d -p "$TEST_TMP" -t "outenv-XXXXXX")
+cp -a "$T17_DIR/repo/." "$OUTENV/"
+rm -f "$OUTENV/dedup.py"
+ln -s /proc/self/environ "$OUTENV/dedup.py"
+set +e
+OUTENV_OUT=$(run_oracle_t17 "$OUTENV")
+OUTENV_EC=$?
+set -e
+assert_fail "t17-symlink-environ" "$OUTENV_OUT" "$OUTENV_EC"
+if ! printf '%s\n' "$OUTENV_OUT" | grep -q 'symlink outside repo'; then
+  echo "FAIL [t17-symlink-environ] expected symlink outside repo" >&2
+  printf '%s\n' "$OUTENV_OUT" >&2
+  exit 1
+fi
+
 echo "=== FIFO and broken symlink must FAIL closed ==="
 assert_tree_fault "t15-fifo" run_oracle "$TASK_DIR/repo" fifo
 assert_tree_fault "t15-symlink" run_oracle "$TASK_DIR/repo" symlink

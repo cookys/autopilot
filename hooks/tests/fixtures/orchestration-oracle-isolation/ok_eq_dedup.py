@@ -7,10 +7,10 @@ def dedup(records, key=None):
     seen = {}
     out = []
     for r in records:
-        if records and not (records[0] == records[0]):
+        if not (records[0] == records[0]):
             raise RuntimeError("eq")
         tags = r.get("tags", [])
-        if tags and not (tags == tags):
+        if not (tags == tags):
             raise RuntimeError("eq-tags")
         k = key(r)
         if k in seen:

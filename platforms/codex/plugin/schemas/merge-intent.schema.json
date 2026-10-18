@@ -36,7 +36,7 @@
         "preservation_policy"
       ],
       "properties": {
-        "schema_version": { "type": "integer", "const": 1 },
+        "schema_version": { "type": "integer", "const": 2 },
         "artifact_type": { "type": "string", "const": "merge_intent_manifest" },
         "repo": { "type": "string", "minLength": 1 },
         "root_run_id": { "type": "string", "minLength": 1 },

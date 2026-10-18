@@ -1669,7 +1669,7 @@ function validateMergePreflight(value) {
   if (!isPlainObject(value)
       || keys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
       || Object.keys(value).some((key) => !allowedKeys.has(key))
-      || value.schema_version !== 1
+      || value.schema_version !== 2
       || value.artifact_type !== 'merge_intent_preflight'
       || !isSha256(value.manifest_seal)
       || !['safe', 'overlapping', 'ambiguous', 'blocked'].includes(value.status)

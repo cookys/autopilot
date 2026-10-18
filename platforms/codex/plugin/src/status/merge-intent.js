@@ -5,12 +5,13 @@
 // Git command is an observation (`rev-parse`, `diff`, `status`-equivalent
 // inventory); execution belongs to LSM P3 and must require this artifact's seal.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { canonicalDigest } = require('../engine/implementation-campaign');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const ARTIFACT_TYPE = 'merge_intent_manifest';
 const ALLOWED_MODES = new Set(['no-ff', 'ff-only']);
 const REQUIRED_RESULT = 'source-contained';
@@ -280,9 +281,111 @@ function buildMergeIntent(input, adapters = {}) {
 function verifyMergeIntentSeal(value) {
   return isPlainObject(value)
     && isPlainObject(value.manifest)
+    && value.manifest.schema_version === SCHEMA_VERSION
     && typeof value.seal === 'string'
     && /^[0-9a-f]{64}$/.test(value.seal)
     && canonicalDigest(value.manifest) === value.seal;
+}
+
+function digestBuffer(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function snapshotGit(cwd, args, { allowFailure = false, input = null, encoding = 'utf8' } = {}) {
+  const result = spawnSync('git', ['-C', cwd, ...args], {
+    encoding,
+    input,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (!allowFailure && (result.error || result.signal || result.status !== 0)) {
+    const detail = String(result.stderr || result.error || result.signal || '').trim();
+    throw new Error(`git ${args[0]} failed${detail ? `: ${detail}` : ''}`);
+  }
+  return result;
+}
+
+function snapshotPath(worktree, relativePath) {
+  const absolute = path.resolve(worktree, relativePath);
+  if (absolute !== worktree && !absolute.startsWith(`${worktree}${path.sep}`)) {
+    throw new Error(`unsafe preservation path: ${relativePath}`);
+  }
+  const indexRaw = snapshotGit(worktree, [
+    'ls-files', '--stage', '-z', '--', relativePath,
+  ]).stdout;
+  const indexLine = indexRaw.split('\0').find(Boolean) || null;
+  let index = null;
+  if (indexLine) {
+    const match = /^([0-7]{6}) ([0-9a-f]+) ([0-3])\t/.exec(indexLine);
+    if (!match || match[3] !== '0') {
+      throw new Error(`cannot preserve non-stage-0 index entry: ${relativePath}`);
+    }
+    const content = snapshotGit(worktree, ['show', `:${relativePath}`], {
+      encoding: null,
+    }).stdout;
+    index = {
+      mode: match[1],
+      content,
+      digest: digestBuffer(content),
+    };
+  }
+  let worktreeEntry = null;
+  try {
+    const stat = fs.lstatSync(absolute);
+    if (stat.isSymbolicLink()) {
+      worktreeEntry = {
+        type: 'symlink',
+        content: Buffer.from(fs.readlinkSync(absolute)),
+        mode: stat.mode,
+      };
+    } else if (stat.isFile()) {
+      worktreeEntry = {
+        type: 'file',
+        content: fs.readFileSync(absolute),
+        mode: stat.mode,
+      };
+    } else {
+      throw new Error(`preservation path is not a file or symlink: ${relativePath}`);
+    }
+    worktreeEntry.digest = digestBuffer(worktreeEntry.content);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  return { path: relativePath, absolute, index, worktree: worktreeEntry };
+}
+
+function dirtyProof(worktree, dirty) {
+  const paths = [...new Set([
+    ...dirty.staged,
+    ...dirty.unstaged,
+    ...dirty.untracked,
+    ...dirty.ambiguous,
+  ])].sort();
+  return paths.map((relativePath) => {
+    const snapshot = snapshotPath(worktree, relativePath);
+    return {
+      path: relativePath,
+      index: snapshot.index
+        ? { mode: snapshot.index.mode, digest: snapshot.index.digest }
+        : null,
+      worktree: snapshot.worktree
+        ? {
+          type: snapshot.worktree.type,
+          mode: snapshot.worktree.mode,
+          digest: snapshot.worktree.digest,
+        }
+        : null,
+    };
+  });
+}
+
+function withDirtyProof(report, worktree, dirty) {
+  if (typeof worktree !== 'string' || !path.isAbsolute(worktree)) return report;
+  try {
+    if (!fs.existsSync(worktree)) return report;
+    return { ...report, dirty_proof: dirtyProof(worktree, dirty) };
+  } catch (_error) {
+    return report;
+  }
 }
 
 function parseNul(output) {
@@ -543,7 +646,7 @@ function preflightCanonicalMergeIntent(sealed, adapters = {}) {
     if (outside.length > 0) status = 'blocked';
     else if (dirty.ambiguous.length > 0 || incoming.ambiguous) status = 'ambiguous';
     else if (overlapping.length > 0) status = 'overlapping';
-    edgeReports.push({
+    edgeReports.push(withDirtyProof({
       sequence: edge.sequence,
       source_ref: edge.source_ref,
       source_from_edge: edge.source_from_edge,
@@ -555,7 +658,7 @@ function preflightCanonicalMergeIntent(sealed, adapters = {}) {
       incoming_paths: incoming.paths,
       overlapping_paths: overlapping,
       preservation_proposal: status === 'overlapping' ? overlapping : [],
-    });
+    }, edge.target_worktree, dirty));
   }
 
   let status = 'safe';
@@ -764,7 +867,7 @@ function preflightFlatMergeIntent(sealed, adapters) {
     }
     if (dirty.ambiguous.length > 0) hasAmbiguity = true;
     if (overlapping.length > 0) hasOverlap = true;
-    reports.push({
+    reports.push(withDirtyProof({
       ...edge,
       status: outside.length > 0
         ? 'blocked'
@@ -773,7 +876,7 @@ function preflightFlatMergeIntent(sealed, adapters) {
       incoming_paths: incoming,
       overlapping_paths: overlapping,
       preservation_proposal: overlapping.filter((item) => allowed.has(item)),
-    });
+    }, edge.target_worktree, dirty));
   }
   let status = 'safe';
   if (blockers.length > 0) status = 'blocked';
@@ -803,7 +906,9 @@ module.exports = {
   MergeIntentError,
   SCHEMA_VERSION,
   buildMergeIntent,
+  dirtyProof,
   preflightMergeIntent,
   sealMergeIntent,
+  snapshotPath,
   verifyMergeIntentSeal,
 };

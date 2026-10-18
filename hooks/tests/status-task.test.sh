@@ -584,7 +584,7 @@ function makeAdapters(overrides = {}) {
 
 function mergePreflightFixture(overrides = {}) {
   const body = {
-    schema_version: 1,
+    schema_version: 2,
     artifact_type: 'merge_intent_preflight',
     manifest_seal: mission.sha256('lsm-p2-manifest'),
     status: 'safe',

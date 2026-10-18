@@ -3,10 +3,18 @@
 // affected-suites.js — select the test files a diff can affect (BL-0001: the quality gate's test step runs it first).
 //
 // Usage:
-//   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json]
-//   node scripts/affected-suites.js --files a.js b.sh [--json]        (paths relative to --root)
+//   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run]
+//   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
+//
+// --run executes the selection in the foreground, one entry at a time, the same way
+// hooks/tests/run.sh runs that kind of file: a .sh with bash, a .test.js with node --test.
+// Selective mode runs suites then extra_runners, prints each rc, and exits non-zero if any rc
+// is non-zero only after every entry has run. An empty selective list exits 0 only when every
+// changed file is documentation. Full mode never executes hooks/tests/run.sh: it prints
+// full_reasons and "whole suite deferred to the pre-merge run (CLAUDE.md Mission graph
+// verification)", then runs only always_run plus extra_runners.
 //
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
@@ -35,7 +43,7 @@
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -267,6 +275,39 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
 
 function allSuites(tree) { return tree.files.filter(isSuite).sort(); }
 
+// Same invocation run.sh uses for that kind of file: bash for a .sh, node --test for a .test.js.
+function runEntry(root, rel) {
+  const abs = path.join(root, rel);
+  let cmd, args;
+  if (rel.endsWith('.test.js')) { cmd = 'node'; args = ['--test', abs]; }
+  else if (rel.endsWith('.sh')) { cmd = 'bash'; args = [abs]; }
+  else {
+    process.stderr.write(`affected-suites: no runner for ${rel} (run.sh runs .sh with bash and .test.js with node --test)\n`);
+    process.stdout.write(`rc=1 ${rel}\n`);
+    return 1;
+  }
+  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
+  const rc = r.status == null ? 1 : r.status;
+  process.stdout.write(`rc=${rc} ${rel}\n`);
+  return rc;
+}
+
+function runSelected(root, doc, alwaysRun) {
+  if (doc.mode === 'full') {
+    for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
+    process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
+  }
+  const entries = doc.mode === 'full' ? [...alwaysRun, ...doc.extra_runners] : [...doc.suites, ...doc.extra_runners];
+  let failed = 0;
+  for (const rel of entries) if (runEntry(root, rel) !== 0) failed++;
+  if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
+    process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
+    failed++;
+  }
+  process.stdout.write(`summary: ${entries.length} run, ${failed} failed\n`);
+  return failed === 0 ? 0 : 1;
+}
+
 function parseArgs(argv) {
   const a = { files: [], json: false };
   for (let i = 0; i < argv.length; i++) {
@@ -277,6 +318,7 @@ function parseArgs(argv) {
     else if (x === '--json') a.json = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
+    else if (x === '--run') a.run = true;
     else if (x === '--files') { while (argv[i + 1] && !argv[i + 1].startsWith('--')) a.files.push(argv[++i]); a.useFiles = true; }
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown argument: ${x}`);
@@ -288,7 +330,9 @@ function main(argv) {
   let a;
   try { a = parseArgs(argv); } catch (e) { process.stderr.write(e.message + '\n'); return 2; }
   if (a.help) {
-    process.stdout.write(fs.readFileSync(__filename, 'utf8').split('\n').slice(2, 21).map((l) => l.replace(/^\/\/ ?/, '')).join('\n') + '\n');
+    const lines = fs.readFileSync(__filename, 'utf8').split('\n');
+    const end = lines.findIndex((l, i) => i > 2 && l.startsWith('// Exit:'));
+    process.stdout.write(lines.slice(2, end + 1).map((l) => l.replace(/^\/\/ ?/, '')).join('\n') + '\n');
     return 0;
   }
   const root = path.resolve(a.root || path.join(__dirname, '..'));
@@ -315,6 +359,7 @@ function main(argv) {
       suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
       chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
     };
+    if (a.run) return runSelected(root, doc, full ? r.alwaysRun : doc.always_run);
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')) + extra);
     return 0;

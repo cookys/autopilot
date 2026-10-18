@@ -195,4 +195,55 @@ MUT=$(cd "$R" && node "$GRAPH_CHECK" --graph "docs/mission-$PLAN_STEM-execution-
 assert_neq "$RC" "0" "mutation: dropping the mirror output paths makes the checker fail"
 assert_contains "$MUT" "codex mirror" "mutation fails on the mirror rule itself"
 
+# RED at 8c6ebb6de: default command absent from graph; --no-affected-suites unknown flag exit 1; empty change paths had no hint. Duplicate-default case was already green (command present once because nothing was appended).
+# 11. Default affected-suites verify command when change paths are given.
+AFFECTED_ONE='node scripts/affected-suites.js --run --files src/thing.js'
+AFFECTED_TWO='node scripts/affected-suites.js --run --files src/thing.js scripts/new-tool.js'
+R4="$TEST_TMP/repo4"
+make_repo "$R4"
+register_plan "$R4"
+OUT=$(gen "$R4" --authority-out "$TEST_TMP/authority4.json" --required-change-path src/thing.js --required-change-path scripts/new-tool.js 2>&1); RC=$?
+assert_exit_code "$RC" "0" "default affected-suites append exits 0 ($OUT)"
+G4=$(cat "$R4/docs/mission-$PLAN_STEM-execution-graph.json")
+assert_contains "$G4" "$AFFECTED_TWO" "default command lists the change paths"
+python3 - "$R4/docs/mission-$PLAN_STEM-execution-graph.json" "$AFFECTED_TWO" <<'PY'
+import json, sys
+g = json.load(open(sys.argv[1]))
+cmds = g["nodes"][0]["verification_commands"]
+assert cmds[-1] == sys.argv[2], cmds
+assert cmds.count(sys.argv[2]) == 1
+PY
+
+# 12. --no-affected-suites leaves the user commands alone.
+R5="$TEST_TMP/repo5"
+make_repo "$R5"
+register_plan "$R5"
+OUT=$(gen "$R5" --authority-out "$TEST_TMP/authority5.json" --required-change-path src/thing.js --no-affected-suites 2>&1); RC=$?
+assert_exit_code "$RC" "0" "--no-affected-suites exits 0 ($OUT)"
+G5=$(cat "$R5/docs/mission-$PLAN_STEM-execution-graph.json")
+assert_not_contains "$G5" "affected-suites" "--no-affected-suites appends nothing"
+
+# 13. A user command identical to the default is not appended twice.
+R6="$TEST_TMP/repo6"
+make_repo "$R6"
+register_plan "$R6"
+OUT=$(gen "$R6" --authority-out "$TEST_TMP/authority6.json" --required-change-path src/thing.js --verify-cmd "$AFFECTED_ONE" 2>&1); RC=$?
+assert_exit_code "$RC" "0" "duplicate default is not refused ($OUT)"
+python3 - "$R6/docs/mission-$PLAN_STEM-execution-graph.json" "$AFFECTED_ONE" <<'PY'
+import json, sys
+cmds = json.load(open(sys.argv[1]))["nodes"][0]["verification_commands"]
+assert cmds.count(sys.argv[2]) == 1, cmds
+PY
+
+# 14. Empty change paths append nothing and the output says why.
+R7="$TEST_TMP/repo7"
+make_repo "$R7"
+register_plan "$R7"
+OUT=$(gen "$R7" --authority-out "$TEST_TMP/authority7.json" 2>&1); RC=$?
+assert_exit_code "$RC" "0" "empty change paths exits 0 ($OUT)"
+assert_contains "$OUT" "affected-suites" "empty change paths names affected-suites in the hint"
+assert_contains "$OUT" "required-change-path" "hint says change paths were empty"
+G7=$(cat "$R7/docs/mission-$PLAN_STEM-execution-graph.json")
+assert_not_contains "$G7" "affected-suites" "empty change paths appends no command"
+
 finalize_test

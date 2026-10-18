@@ -51,7 +51,7 @@ quota and skill-transport state is what the roster is reporting.
 Execution control and ledger behavior remain as in `/l5` and the front-door.
 The `/l5` verify-first wiring rule applies unchanged: when roster resolution
 emits `verify_first: true`, pass dispatcher-authored `--verify-cmd` for the
-unit objective check. Treat `verify_first_signal_unused: true` as a protocol
+unit objective check. `scaffold-mission` appends `node scripts/affected-suites.js --run --files` for the node's `--required-change-path` entries by default; `--no-affected-suites` turns that off. Treat `verify_first_signal_unused: true` as a protocol
 deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 
 ## Per-unit pipeline (authoritative flow)

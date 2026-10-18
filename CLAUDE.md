@@ -121,7 +121,7 @@ Autopilot is standalone-capable. When `superpowers` is installed, orchestrators 
 
 ## Mission graph verification (campaign convention)
 
-In a Mission graph, each node's `verification_commands` hold only fast, fixed checks — never `bash hooks/tests/run.sh`. The whole suite runs once, alone, on this host before a campaign merges into `develop`; red means no merge. The suite blocks neither a node nor campaign close, only the merge. Sealed graphs keep their existing chain (editing one breaks its pinned digest); details in `docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md`.
+In a Mission graph, each node's `verification_commands` hold only fast, fixed checks — never `bash hooks/tests/run.sh`. `scaffold-mission` appends `node scripts/affected-suites.js --run --files` for the node's `--required-change-path` entries by default, and `--no-affected-suites` turns that default off. The whole suite runs once, alone, on this host before a campaign merges into `develop`; red means no merge. The suite blocks neither a node nor campaign close, only the merge. Sealed graphs keep their existing chain (editing one breaks its pinned digest); details in `docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md`.
 
 ## Where context lives
 

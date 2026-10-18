@@ -8,3 +8,5 @@ this one types the wait condition a hand reports so the foreman can wake on it).
 
 Re-open when: a foreman wait loop has to distinguish "hand parked on a question" from "hand still working"
 without reading the transcript — see the plan's §2 for the condition vocabulary.
+
+Owner 2026-10-18: keep — the point is saving tokens and avoiding spurious wakeups; unbuilt and untested is not evidence it is unneeded.

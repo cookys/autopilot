@@ -13,3 +13,5 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: S (a `references/` row in `learn` may already be enough; a new skill is not justified at n=1)
 - **Source**: knowledge-routing fix set, foreman first-pass review (2026-08-24)
 
+
+Owner 2026-10-18: keep open. This is project knowledge, a separate matter from peer reports; it relates to the codeforge / mnemos ecosystem (codeforge is the first Mnemos source, a memory daemon), and the route likely belongs with the codeforge/mnemos project-knowledge flow.

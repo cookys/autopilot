@@ -45,13 +45,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-20
 - **Origin**: self
-- **Problem**: 規劃過「工頭與最上層代理之間，用結構化的工作狀態互相溝通」的設計，但從未實作，計畫已被擱置。條目標示為有觸發條件才重啟。 (draft)
-- **Impact**: 沒有影響現有功能；可考慮直接結案不做。 (draft)
+- **Problem**: 工頭目前分不出「手下卡在等回答」和「手下還在工作」，只能去讀對話紀錄或憑猜測喚醒。規劃過的「結構化 worker_condition」就是要讓手下直接回報這個狀態，但這個設計從未實作，也從未測試。
+- **Impact**: 工頭現在要讀對話紀錄或憑猜測喚醒才能判斷，白花 token 也可能亂喚醒；設計能省這些，但還沒做、沒測。
 - **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript
 - **Effort**: M
 - **Source**: 2026-09-20 orphan-plan triage (plan frozen into a mission graph, zero identifiers in history)
 - **Pointer**: docs/backlog/foreman-depth0-typed-worker-condition.md
-- **Context**: plan archived as dropped-never-built; the mission graph that sealed it is terminal.
+- **Context**: The plan was archived unbuilt, but the owner kept the need on 2026-10-18 (token saving, no spurious wakeups); the plan stays the design source (the sidecar names it). The mission graph that sealed it is terminal.
 
 ### Host Conformance tool — authorized by the 2026-08-23 consolidation decision, never built
 - **Id**: BL-0014
@@ -548,13 +548,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-25
 - **Origin**: self
-- **Problem**: 在其他專案使用 autopilot 學到的經驗，沒有路徑可以回灌到 autopilot 本身：學習技能只寫到該專案，提煉技能又排除 autopilot 自己。 (draft)
-- **Impact**: 外部使用心得會流失，其他專案學到的教訓回不到本專案；目前案例少。 (draft)
-- **Trigger**: A second instance of a lesson learned while *using* autopilot on another project that
+- **Problem**: 在其他專案使用 autopilot 學到、屬於 autopilot 的專案知識，沒有路徑回灌：學習技能只寫到該專案，提煉技能又排除 autopilot。同儕回報的流程（先回覆、再登 BACKLOG）不涵蓋這類知識。
+- **Impact**: 其他專案學到的教訓會流失，autopilot 本身讀不到；目前只有一個案例（n=1），所以只是登記，還沒動工。
+- **Trigger**: A second instance of a lesson learned while using autopilot on another project that belongs in autopilot's own skills/references and has nowhere to go.
 - **Effort**: S
 - **Source**: knowledge-routing fix set, foreman first-pass review (2026-08-24)
 - **Pointer**: docs/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md
-- **Context**: `learn` records facts/gotchas into `.claude/knowledge/`; `distill` produces reusable
+- **Context**: Owner 2026-10-18: project knowledge, separate from peer reports; tied to the codeforge/mnemos ecosystem (codeforge is the first Mnemos source, a memory daemon). The route likely belongs with its project-knowledge flow.
 
 ### `peer-coordination` skill — ruled in, blocked on a spike sweep
 - **Id**: BL-0086

@@ -1780,6 +1780,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_GITCONFIG_CONTAINMENT_SH",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/gitconfig-containment.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_GROK_AB_BASE_SHA",
       "kind": "env",
       "audience": "internal",

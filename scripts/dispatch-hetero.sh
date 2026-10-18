@@ -288,6 +288,8 @@ IDENTITY_DRIFT=0      # 1 iff worker mutated consuming-repo user.name/email via 
 IDENTITY_PRE_NAME=""  # snapshot of consuming-repo user.name before runner
 IDENTITY_PRE_EMAIL="" # snapshot of consuming-repo user.email before runner
 IDENTITY_REPO_ROOT="" # host repo root captured at pre-snapshot (for explicit git -C restore)
+GITCONFIG_SNAPSHOT_FILE="" # denylist snapshot (lib/gitconfig-containment.sh)
+GITCONFIG_DRIFT_KEYS=""    # newline-separated keys the restore put back
 SKILL_MODE="off"
 SKILLS=()
 EFFECTIVE_SKILL_MODE="off"
@@ -462,6 +464,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"
+# shellcheck source=lib/gitconfig-containment.sh
+. "$SELF_DIR/lib/gitconfig-containment.sh"
 # shellcheck source=lib/dispatch-branch-ledger.sh
 . "$SELF_DIR/lib/dispatch-branch-ledger.sh"
 # shellcheck source=lib/worktree-intent.sh
@@ -713,6 +717,26 @@ emit() { # status commit files ins del worktree error
       fi
       echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
     fi
+    # Denylist rail (hooksPath, credential.*, remote urls, …). Same shared .git/config.
+    # Re-source so a detached child, which serializes emit but not every helper, still has it.
+    # shellcheck source=lib/gitconfig-containment.sh
+    [ -r "$SELF_DIR/lib/gitconfig-containment.sh" ] && . "$SELF_DIR/lib/gitconfig-containment.sh"
+    if [ -n "${GITCONFIG_SNAPSHOT_FILE:-}" ] && [ -f "${GITCONFIG_SNAPSHOT_FILE:-}" ]; then
+      local gc_keys="" gc_oneline="" gc_rc=0
+      gc_keys="$(gitconfig_containment_restore "$IDENTITY_REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE")" || gc_rc=$?
+      rm -f -- "$GITCONFIG_SNAPSHOT_FILE"
+      GITCONFIG_SNAPSHOT_FILE=""
+      if [ "$gc_rc" -ne 0 ]; then
+        GITCONFIG_RESTORE_FAILED=1
+      fi
+      if [ -n "$gc_keys" ]; then
+        GITCONFIG_DRIFT_KEYS="$gc_keys"
+        if [ "$gc_rc" -eq 0 ]; then
+          gc_oneline="${gc_keys//$'\n'/ }"
+          echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+        fi
+      fi
+    fi
   fi
   local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
   local provider_session_json="null" provider_reused_json="false" worktree_reused_json="false"
@@ -832,6 +856,18 @@ emit() { # status commit files ins del worktree error
   local identity_fields=""
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
+  fi
+  if [ -n "${GITCONFIG_DRIFT_KEYS:-}" ]; then
+    local gc_json="" gc_line="" gc_first=1
+    while IFS= read -r gc_line; do
+      [ -n "$gc_line" ] || continue
+      if [ "$gc_first" -eq 1 ]; then gc_first=0; else gc_json="$gc_json, "; fi
+      gc_json="$gc_json\"$(json_escape "$gc_line")\""
+    done <<< "${GITCONFIG_DRIFT_KEYS}"
+    identity_fields="${identity_fields}, \"gitconfig_drift\": [${gc_json}]"
+  fi
+  if [ "${GITCONFIG_RESTORE_FAILED:-0}" -eq 1 ]; then
+    identity_fields="${identity_fields}, \"gitconfig_restore_failed\": true"
   fi
   local timeout_fields=""
   local emit_timeout_secs=""
@@ -3114,6 +3150,7 @@ if [ -n "$IDENTITY_REPO_ROOT" ]; then
   # --local only: effective-scope reads would materialize a global identity as local on restore.
   IDENTITY_PRE_NAME="$(git -C "$IDENTITY_REPO_ROOT" config --local user.name 2>/dev/null || true)"
   IDENTITY_PRE_EMAIL="$(git -C "$IDENTITY_REPO_ROOT" config --local user.email 2>/dev/null || true)"
+  gitconfig_containment_snapshot "$IDENTITY_REPO_ROOT" || true
 fi
 
 # --- worker containment (BEST-EFFORT teardown — NOT a malicious-worker boundary) ---
@@ -4835,7 +4872,7 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

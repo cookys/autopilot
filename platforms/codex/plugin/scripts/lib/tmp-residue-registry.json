@@ -725,6 +725,13 @@
       "owner": "external",
       "retention_days": null,
       "reason": "external: Chromium singleton dirs from headless browsers run by other tools; not created by autopilot; never pruned"
+    },
+    {
+      "pattern": "gitconfig-containment.*",
+      "kind": "scratch",
+      "owner": "scripts/lib/gitconfig-containment.sh",
+      "retention_days": null,
+      "reason": "denylist projection scratch from mktemp -t gitconfig-containment.XXXXXX; helper rm -f on every return path; the snapshot file is removed by the dispatch caller after restore; registry backstop prunes after retention"
     }
   ]
 }

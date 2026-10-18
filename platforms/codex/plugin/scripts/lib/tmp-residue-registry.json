@@ -136,6 +136,13 @@
       "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
     },
     {
+      "pattern": "replay-test-integrity-*",
+      "kind": "scratch",
+      "owner": "scripts/replay-test-integrity.js",
+      "retention_days": null,
+      "reason": "temporary detached worktree for the replay, removed in finally and on SIGINT/SIGTERM"
+    },
+    {
       "pattern": "qual-scope.*",
       "kind": "scratch",
       "owner": "scripts/resolve-review-loop.sh",

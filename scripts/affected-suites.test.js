@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const SEL = process.env.AFFECTED_SUITES_BIN || path.join(__dirname, 'affected-suites.js'); // env: negative control runs the pre-fix selector
 
@@ -250,4 +250,81 @@ test('mods/viewer and mods/register.ts: a change there adds both mod runners (ne
   }
   const none = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', 'scripts/affected-suites.js', '--json'], { stdio: 'pipe' }).toString());
   assert.deepStrictEqual(none.extra_runners, []);
+});
+
+// RED at 8c6ebb6de: --run unknown (exit 2); selective ENOENT order; full mode order ''; docs-only 2 !== 0.
+function runCli(dir, args) {
+  return spawnSync('node', [SEL, '--root', dir, ...args], { encoding: 'utf8' });
+}
+
+test('--run selective: suites then extra_runners, every entry runs after a failure, .test.js uses node --test, .sh uses bash', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/bad.test.sh': '#!/usr/bin/env bash\nprintf bad >> order\nexit 3\n',
+    'hooks/tests/ok.test.sh': '#!/usr/bin/env bash\nprintf ok >> order\nexit 0\n',
+    'hooks/tests/mentions.test.sh': '#!/usr/bin/env bash\necho mods/live/x.js\nexit 0\n',
+    'scripts/unit.test.js': "const fs = require('fs');\nfs.appendFileSync('order', 'js:' + process.execArgv.join(' ') + '\\n');\nconst test = require('node:test');\nconst assert = require('node:assert');\ntest('no', () => assert.strictEqual(1, 2));\n",
+    'mods/live/x.js': 'module.exports = 1;\n',
+    'mods/live/run-tests.sh': '#!/usr/bin/env bash\nprintf live >> order\nexit 0\n',
+    'mods/viewer/run-tests.sh': '#!/usr/bin/env bash\nprintf view >> order\nexit 0\n',
+  });
+  try {
+    const ran = runCli(r.dir, ['--run', '--files', 'hooks/tests/bad.test.sh', 'hooks/tests/ok.test.sh', 'scripts/unit.test.js', 'mods/live/x.js']);
+    assert.notStrictEqual(ran.status, 0);
+    const order = fs.readFileSync(path.join(r.dir, 'order'), 'utf8');
+    assert.match(order, /bad/);
+    assert.match(order, /ok/);
+    assert.match(order, /js:--test/);
+    assert.match(order, /live/);
+    assert.match(order, /view/);
+    assert.ok(order.indexOf('bad') < order.indexOf('ok'));
+    assert.ok(order.indexOf('ok') < order.indexOf('js:'));
+    assert.ok(order.indexOf('js:') < order.indexOf('live'));
+    assert.ok(order.indexOf('live') < order.indexOf('view'));
+    assert.match(ran.stdout, /rc=3 hooks\/tests\/bad\.test\.sh/);
+    assert.match(ran.stdout, /rc=0 hooks\/tests\/ok\.test\.sh/);
+    assert.match(ran.stdout, /rc=0 mods\/live\/run-tests\.sh/);
+    assert.match(ran.stdout, /rc=0 mods\/viewer\/run-tests\.sh/);
+    assert.match(ran.stdout, /summary:/);
+  } finally { r.cleanup(); }
+});
+
+test('--run full mode never executes hooks/tests/run.sh; it prints full_reasons and the defer line and runs always_run plus extra_runners', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/run.sh': '#!/usr/bin/env bash\nprintf UMBRELLA >> order\n',
+    'hooks/tests/ok.test.sh': '#!/usr/bin/env bash\nprintf SUITE >> order\n',
+    'hooks/tests/check-js-syntax.test.sh': '#!/usr/bin/env bash\nprintf ALWAYS >> order\nexit 0\n',
+    'hooks/hooks.json': '{}\n',
+    'mods/live/x.js': 'module.exports = 1;\n',
+    'mods/live/run-tests.sh': '#!/usr/bin/env bash\nprintf LIVE >> order\nexit 0\n',
+    'mods/viewer/run-tests.sh': '#!/usr/bin/env bash\nprintf VIEW >> order\nexit 0\n',
+  });
+  try {
+    const head = r.change({ 'hooks/hooks.json': '{"a":1}\n', 'mods/live/x.js': 'module.exports = 2;\n' });
+    const ran = runCli(r.dir, ['--run', '--base', r.base, '--head', head]);
+    const order = fs.existsSync(path.join(r.dir, 'order')) ? fs.readFileSync(path.join(r.dir, 'order'), 'utf8') : '';
+    assert.ok(!order.includes('UMBRELLA'), order);
+    assert.ok(!order.includes('SUITE'), order);
+    assert.match(order, /ALWAYS/);
+    assert.match(order, /LIVE/);
+    assert.match(order, /VIEW/);
+    assert.match(ran.stdout, /unjudgeable change: hooks\/hooks\.json/);
+    assert.match(ran.stdout, /whole suite deferred to the pre-merge run \(CLAUDE\.md Mission graph verification\)/);
+    assert.strictEqual(ran.status, 0);
+  } finally { r.cleanup(); }
+});
+
+test('--run empty suites: docs-only exits 0; a non-doc empty selection exits non-zero', () => {
+  const docs = makeRepo(LAYOUT);
+  try {
+    const ran = runCli(docs.dir, ['--run', '--files', 'docs/note.md']);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+  } finally { docs.cleanup(); }
+  const mirror = makeRepo({ ...LAYOUT, 'platforms/codex/plugin/only.js': 'module.exports = 1;\n' });
+  try {
+    const ran = runCli(mirror.dir, ['--run', '--files', 'platforms/codex/plugin/only.js']);
+    assert.notStrictEqual(ran.status, 0, ran.stdout);
+    assert.match(ran.stdout + ran.stderr, /not every changed file is documentation|empty suites/);
+  } finally { mirror.cleanup(); }
 });

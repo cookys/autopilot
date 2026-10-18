@@ -125,7 +125,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
 0. **Generator** (steps 1-3 and 5 mechanical parts): once the plan is written and committed,
    `node scripts/scaffold-mission.js --plan docs/plans/<stem>.md --output-path <p>... [--create <p>...]
    --verify-cmd <cmd>...` writes the rubric (when absent), sources manifest, one-node graph (codex
-   mirrors added, verify commands pre-checked for the intake argv shape) and the repo-bound
+   mirrors added, verify commands pre-checked for the intake argv shape; when `--required-change-path`
+   is set, `node scripts/affected-suites.js --run --files` for those paths is appended unless
+   `--no-affected-suites` is passed or the same command is already a `--verify-cmd`) and the repo-bound
    task-authority envelope under `<git-common-dir>/autopilot-scaffold/`, then self-checks them with
    `mission-execution-graph-check.js`. It prints the INDEX row, routing-config edit, legacy-reconcile,
    `prepare` and `grant` commands as `next_steps` and runs none of them; running the verify commands

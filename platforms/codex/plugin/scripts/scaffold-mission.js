@@ -37,7 +37,7 @@ const SINGLE = new Map([
   ['--baseline-churn', 'baselineChurn'], ['--max-repair-generations', 'maxRepair'],
   ['--max-wall-seconds', 'maxWall'], ['--languages', 'languages'],
 ]);
-const BOOLEAN = new Map([['--check', 'check'], ['--force', 'force']]);
+const BOOLEAN = new Map([['--check', 'check'], ['--force', 'force'], ['--no-affected-suites', 'noAffectedSuites']]);
 
 function usage() {
   return [
@@ -54,6 +54,7 @@ function usage() {
     '            --out-dir --authority-out --profile --max-changed-files --baseline-churn',
     '            --max-repair-generations --max-wall-seconds --languages',
     'Flags:      --check (validate only, write nothing)  --force (overwrite existing outputs)',
+    '            --no-affected-suites (do not append the default affected-suites --run command)',
   ].join('\n');
 }
 
@@ -114,6 +115,14 @@ function prefixOf(p, mirror) {
   return p.split('/')[0];
 }
 
+function shellToken(s) {
+  return /^[A-Za-z0-9_./:@%+=,-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+function affectedSuitesCommand(paths) {
+  return ['node', 'scripts/affected-suites.js', '--run', '--files', ...paths].map(shellToken).join(' ');
+}
+
 function relPath(label, p) {
   if (typeof p !== 'string' || p.length === 0 || p.startsWith('/') || p.includes('\\')
       || path.posix.normalize(p) !== p || p.split('/').some((s) => s === '..' || s === '.')) {
@@ -138,6 +147,18 @@ function build(o) {
   const creates0 = o.repeat.creates.map((p) => relPath('--create', p));
   if (outputs0.length === 0 && creates0.length === 0) throw new Refusal('at least one --output-path is required', 1);
   if (o.repeat.verifyCmds.length === 0) throw new Refusal('at least one --verify-cmd is required', 1);
+
+  // Mission nodes must not run the whole suite. When the caller names the paths this node
+  // touches, append the selector that runs only those suites (unless it is already listed).
+  let affectedHint = null;
+  if (o.noAffectedSuites) {
+    affectedHint = null;
+  } else if (o.repeat.changePaths.length === 0) {
+    affectedHint = 'no affected-suites --run command appended: --required-change-path was empty';
+  } else {
+    const cmd = affectedSuitesCommand(o.repeat.changePaths);
+    if (!o.repeat.verifyCmds.includes(cmd)) o.repeat.verifyCmds.push(cmd);
+  }
 
   // Pre-check 1: verify commands in the shape campaign intake admits (BACKLOG: pipe/quote burned an attempt).
   for (const cmd of o.repeat.verifyCmds) {
@@ -231,6 +252,7 @@ function build(o) {
     governancePath, authorityOut, common, outputList, requiredList, created: unique([...created]), prefixes,
     maxChanged, baselineChurn, maxRepair, maxWall, profile, specSection, planText,
     verifyCmds: o.repeat.verifyCmds, changePaths: o.repeat.changePaths, acceptanceIds: o.repeat.acceptanceIds,
+    affectedHint,
     objective: o.objective, languages: (o.languages || 'javascript').split(',').filter(Boolean),
   };
 }
@@ -474,6 +496,7 @@ function main() {
     output_paths: b.outputList,
     required_paths: b.requiredList,
     next_steps: nextSteps(b, g),
+    ...(b.affectedHint ? { hints: [b.affectedHint] } : {}),
   };
   fs.writeSync(1, `${JSON.stringify(out, null, 2)}\n`);
   return 0;

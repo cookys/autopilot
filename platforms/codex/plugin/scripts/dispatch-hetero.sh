@@ -4598,8 +4598,9 @@ _emit_question_waiting_event() {
   [ "$latest_cond" = "waiting" ] && return 0
   reason=""
   if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
-    # LOG is the worker log. Last non-empty line, controls stripped, 200 chars.
-    reason="$(awk 'NF { line=$0 } END { print line }' "$LOG" | tr -d '[:cntrl:]' | head -c 200)" || reason=""
+    # LOG is the worker log. Last non-empty worker line (skip the rail's own
+    # [dispatch-hetero: ...] footer), controls stripped, first 200 characters.
+    reason="$(awk 'NF && $0 !~ /^\[dispatch-hetero:/ { line=$0 } END { print line }' "$LOG" | tr -d '[:cntrl:]' | jq -Rr '.[:200]')" || reason=""
   fi
   if ! err="$(bash "$SELF_DIR/run-ledger.sh" stage-event \
       --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \

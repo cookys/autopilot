@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # BL-0012: question_suspected emits a waiting worker_event the watcher can read.
 # RED at 2efd32b23: waiting worker_event count was 0 (expected 1) and watch-foreman printed no CONDITION line containing waiting.
+# RED at ad7ba935c: waiting reason was the agy non-zero footer, not the stub line; chinese reason was byte-cut to 67 characters and ended in U+FFFD (expected 200 characters of the stub line).
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
@@ -73,6 +74,19 @@ waiting_rows() {
   ' "$3"
 }
 
+waiting_reason() {
+  jq -s -r --arg rid "$1" --arg stg "$2" '
+    [ .[] | select(.kind=="worker_event" and .run_id==$rid and .stage==$stg and .condition=="waiting") ]
+    | if length==0 then "" else .[-1].reason end
+  ' "$3"
+}
+
+# Same transform the rail applies to the worker-log tail: drop controls, then
+# the first 200 characters (codepoints), not 200 bytes.
+expect_reason() {
+  printf '%s' "$1" | tr -d '[:cntrl:]' | jq -Rr '.[0:200]'
+}
+
 # --- 1. question_suspected writes waiting, and the watcher prints it ----------
 LEDGER="$TEST_TMP/q.jsonl"
 bash "$RL" init --ledger "$LEDGER" >/dev/null
@@ -86,6 +100,8 @@ assert_eq "$EC" "1" "question_suspected exits 1"
 assert_contains "$OUT" '"status": "question_suspected"' "question_suspected status"
 ROWS="$(waiting_rows qrun implement "$LEDGER")"
 assert_eq "$ROWS" "1" "ledger has one waiting worker_event for qrun/implement"
+REASON="$(waiting_reason qrun implement "$LEDGER")"
+assert_eq "$REASON" "$(expect_reason "Which file should I edit?")" "waiting reason is the stub last line, controls stripped, 200 characters"
 WATCH="$(node "$WF" --ledger "$LEDGER" --runs-dir "$TEST_TMP/empty-runs" --once 2>&1)"
 assert_contains "$WATCH" "CONDITION run=qrun implement waiting" "watcher prints waiting for qrun"
 
@@ -112,5 +128,33 @@ assert_eq "$EC" "1" "ledger-less question_suspected still exits 1"
 assert_contains "$OUT" '"status": "question_suspected"' "ledger-less status unchanged"
 assert_not_contains "$ERR2" "stage-event" "ledger-less dispatch prints no event error"
 assert_not_contains "$ERR2" "waiting condition" "ledger-less dispatch prints no waiting warning"
+
+# --- 4. a Chinese question longer than 200 bytes is cut on a character boundary
+# 250 CJK characters (750 bytes) then a fullwidth question mark. The stored
+# reason must be the first 200 characters and valid UTF-8. Grok's log is the
+# stub's own output, so that line is the worker-log tail.
+ZH_BODY="$(python3 -c 'print("问"*250 + "？")')"
+STUB_ZH="$TEST_TMP/grok-zh"
+cat > "$STUB_ZH" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' '$ZH_BODY'
+exit 124
+EOF
+chmod +x "$STUB_ZH"
+LEDGER_ZH="$TEST_TMP/zh.jsonl"
+bash "$RL" init --ledger "$LEDGER_ZH" >/dev/null
+bash "$RL" stage-acquire --ledger "$LEDGER_ZH" --run-id zhrun --stage implement --pid "$$" >/dev/null
+OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_GROK_EFFORT_PROBE=0 \
+  "$SCRIPT" --runner grok --model grok-4.7 --branch hands/bl0012/zh --prompt-file "$PROMPT" \
+  --grok-bin "$STUB_ZH" --ledger "$LEDGER_ZH" --run-id zhrun --stage implement 2>/dev/null)"
+EC=$?
+assert_eq "$EC" "1" "chinese question_suspected exits 1"
+assert_contains "$OUT" '"status": "question_suspected"' "chinese question_suspected status"
+REASON="$(waiting_reason zhrun implement "$LEDGER_ZH")"
+assert_eq "$REASON" "$(expect_reason "$ZH_BODY")" "chinese reason is 200 characters of the stub line"
+CHARLEN="$(node -e 'process.stdout.write(String([...process.argv[1]].length))' "$REASON")"
+assert_eq "$CHARLEN" "200" "chinese reason is exactly 200 characters"
+printf '%s' "$REASON" | iconv -f UTF-8 -t UTF-8 >/dev/null
+assert_eq "$?" "0" "chinese reason is valid UTF-8"
 
 finalize_test

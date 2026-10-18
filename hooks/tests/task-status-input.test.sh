@@ -24,7 +24,9 @@ PRODUCER="$REPO_ROOT/scripts/write-task-status-input.js"
 CLI="$REPO_ROOT/bin/autopilot.js"
 
 FX="$TEST_TMP/fx.json"
-node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" <<'NODE' || fail "fixture build failed"
+# A failed fixture build must exit before any git -C "$REPO": fail() does not
+# exit, and an empty REPO makes git operate on the current directory.
+if ! node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" >"$TEST_TMP/fx.build.out" 2>"$TEST_TMP/fx.build.err" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -47,6 +49,10 @@ fs.writeFileSync(out, JSON.stringify({
   terminalDigest: f.terminal.receipt_digest, candidate: f.candidate,
 }));
 NODE
+then
+  echo "fixture build failed: $(tr '\n' ' ' < "$TEST_TMP/fx.build.err")" >&2
+  exit 1
+fi
 fx() { node -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(f[process.argv[2]]))' "$FX" "$1"; }
 REPO="$(fx repo)"
 TERMINAL_FILE="$(fx terminalFile)"
@@ -133,10 +139,14 @@ assert_eq "valid" "$(field "$(cat "$TEST_TMP/prior.json")" 'r.evidence.campaigns
 cp "$WO_BAK" "$WO"
 
 # 5. after the merge, a refresh re-derives product_merged from git (nothing is asserted by the caller)
+# require_under_test_tmp refuses an empty or out-of-tmp REPO so git cannot
+# reset the current directory.
+require_under_test_tmp "$REPO"
 git -C "$REPO" merge -q --ff-only feat/tsi || fail "fixture merge"
 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node "$PRODUCER" --repo "$REPO" --root-run-id "$ROOT_RUN_ID" >/dev/null 2>&1
 status_task "$ROOT_RUN_ID"
 assert_eq "true" "$(field "$__OUT" 'r.product_merged')" "post-merge refresh: product_merged true from git"
+require_under_test_tmp "$REPO"
 git -C "$REPO" reset -q --hard "$(git -C "$REPO" rev-parse HEAD~1)" || fail "fixture reset"
 
 # 6. a receipt the ledger does not pin never binds (tampered body, intact digest)

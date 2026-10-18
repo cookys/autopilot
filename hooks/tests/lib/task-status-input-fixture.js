@@ -289,6 +289,9 @@ function buildFixture({ root, scratch, rootRunId }) {
     minPanelSize: 1,
     lifecycleReceiptRef: lifecycleRef,
   }, {
+    // BL-0077: the default admits only with a full work-order fence. This
+    // fixture's intent is a TERMINAL_READY campaign, not effect admission.
+    preEffectAdmit: () => ({ ok: true }),
     preflight: () => ({ passed: true }),
     implement: () => ({ ...candidateRef, committed: true }),
     scopeCheck: () => ({ passed: true }),
@@ -315,7 +318,9 @@ function buildFixture({ root, scratch, rootRunId }) {
       final_panel_seat_receipts: [seat],
     }),
   });
-  if (terminal.status !== 'ready') throw new Error(`composition ended ${terminal.status}`);
+  if (terminal.status !== 'ready') {
+    throw new Error(`composition ended ${terminal.status}: ${terminal.reason || terminal.phase || ''}`);
+  }
 
   let control = opened.control;
   const append = (input) => {

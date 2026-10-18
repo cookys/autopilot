@@ -24,11 +24,8 @@ PRODUCER="$REPO_ROOT/scripts/write-task-status-input.js"
 CLI="$REPO_ROOT/bin/autopilot.js"
 
 FX="$TEST_TMP/fx.json"
-# Known product failure (develop @ composition resource_debt): buildFixture's
-# runCampaignComposition blocks with "effect admission requires gitCwd/repo or
-# an explicit preEffectAdmit adapter", so the fixture never reaches
-# TERMINAL_READY. The race assertions later in this file then saw an empty
-# REPO. They are unchanged. A failed build exits now, before any git -C "$REPO".
+# A failed fixture build must exit before any git -C "$REPO": fail() does not
+# exit, and an empty REPO makes git operate on the current directory.
 if ! node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" >"$TEST_TMP/fx.build.out" 2>"$TEST_TMP/fx.build.err" <<'NODE'
 'use strict';
 const fs = require('fs');
@@ -54,7 +51,6 @@ fs.writeFileSync(out, JSON.stringify({
 NODE
 then
   echo "fixture build failed: $(tr '\n' ' ' < "$TEST_TMP/fx.build.err")" >&2
-  echo "known failure: product campaign composition blocks at resource_debt (effect admission requires gitCwd/repo or an explicit preEffectAdmit adapter); fixture cannot reach TERMINAL_READY" >&2
   exit 1
 fi
 fx() { node -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(f[process.argv[2]]))' "$FX" "$1"; }
@@ -143,9 +139,8 @@ assert_eq "valid" "$(field "$(cat "$TEST_TMP/prior.json")" 'r.evidence.campaigns
 cp "$WO_BAK" "$WO"
 
 # 5. after the merge, a refresh re-derives product_merged from git (nothing is asserted by the caller)
-# known failure (product resource_debt, see fixture build): these assertions stay;
-# they only run when the fixture repo exists. require_under_test_tmp refuses an
-# empty REPO so git cannot reset the current directory.
+# require_under_test_tmp refuses an empty or out-of-tmp REPO so git cannot
+# reset the current directory.
 require_under_test_tmp "$REPO"
 git -C "$REPO" merge -q --ff-only feat/tsi || fail "fixture merge"
 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node "$PRODUCER" --repo "$REPO" --root-run-id "$ROOT_RUN_ID" >/dev/null 2>&1

@@ -1118,7 +1118,10 @@ function mentionsBasename(text, name) {
   return new RegExp(`(?:^|[^A-Za-z0-9._-])${esc}(?![A-Za-z0-9_-])`).test(text);
 }
 
-function fixBacklog(backlogPath, violations, repoRoot) {
+// repoRoot is optional: when omitted it is derived from the backlog file's git toplevel (falling
+// back to the backlog's own directory), so the note path is never computed from undefined.
+function fixBacklog(backlogPath, violations, repoRootArg) {
+  const root = repoRootArg || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
   const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done', 'backlog_title_closed_status_open']);
   const doomed = violations.filter((v) => v.kind === 'backlog_row' && rowCodes.has(v.code));
   if (!doomed.length) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
@@ -1141,9 +1144,12 @@ function fixBacklog(backlogPath, violations, repoRoot) {
     // A deleted row's note in the `backlog/` dir beside the backlog goes with it, unless a
     // remaining row still names it. Failures are reported, never swallowed.
     const dir = path.join(path.dirname(backlogPath), 'backlog');
-    // Only the notes dir beside the backlog counts, named by its repo-root-relative path.
-    const relDir = path.relative(repoRoot, dir).split(path.sep).join('/');
-    const noteRe = new RegExp(`(?:^|[^A-Za-z0-9._/-])${relDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/([A-Za-z0-9._-]+\\.md)`, 'g');
+    // Only the notes dir beside the backlog counts, spelled repo-root-relative (docs/backlog/x.md)
+    // or backlog-dir-relative (backlog/x.md), either with a leading ./ . Nothing path-like may
+    // precede, so other/backlog/x.md and ../docs/backlog/x.md are different files.
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const relDir = path.relative(root, dir).split(path.sep).join('/');
+    const noteRe = new RegExp(`(?:^|[^A-Za-z0-9._/-])(?:\\./)?(?:${esc(relDir)}|${esc(path.basename(dir))})/([A-Za-z0-9._-]+\\.md)`, 'g');
     const sidecars = new Set();
     for (const row of rows) {
       if (!doomedTitles.has(row.title) || !row.text) continue;
@@ -1157,7 +1163,7 @@ function fixBacklog(backlogPath, violations, repoRoot) {
       if (!fs.existsSync(abs)) continue;
       try {
         fs.rmSync(abs);
-        sidecarsRemoved.push(path.relative(repoRoot, abs).split(path.sep).join('/'));
+        sidecarsRemoved.push(path.relative(root, abs).split(path.sep).join('/'));
       } catch (e) {
         sidecarErrors.push(`${abs}: ${e.message}`);
       }

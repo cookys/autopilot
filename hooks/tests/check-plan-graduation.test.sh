@@ -1360,4 +1360,18 @@ git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 node "$GATE" --repo-root "$d" --fix --json >/dev/null
 assert_file_exists "$d/docs/backlog/x.md" "a row naming other/backlog/x.md does not delete docs/backlog/x.md"
 
+# relative-link spellings: backlog/x.md and ./backlog/x.md, ./docs/backlog/y.md name the notes beside the backlog
+d="$(fixture_repo fix-sidecar-rel)"
+mkdir -p "$d/docs/backlog"
+for n in x y z; do printf 'n\n' > "$d/docs/backlog/$n.md"; done
+backlog_row "$d/docs/BACKLOG.md" "Done rel row" "shipped v1.0.0 2020-01-01" "backlog/x.md"
+backlog_row "$d/docs/BACKLOG.md" "Done dot row" "shipped v1.0.0 2020-01-01" "./docs/backlog/y.md"
+backlog_row "$d/docs/BACKLOG.md" "Done dotrel row" "shipped v1.0.0 2020-01-01" "./backlog/z.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_absent "$d/docs/backlog/x.md" "backlog/x.md spelling deletes the note"
+assert_file_absent "$d/docs/backlog/y.md" "./docs/backlog/y.md spelling deletes the note"
+assert_file_absent "$d/docs/backlog/z.md" "./backlog/z.md spelling deletes the note"
+
 finalize_test

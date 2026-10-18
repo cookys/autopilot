@@ -20,6 +20,11 @@
  * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
  * the Id high-water mark: every BL- Id must be below it and unique.
  *
+ * sidecar_orphan (block, working-tree mode only): a `.md` under `docs/backlog/` (beside the
+ * backlog, resolved from the repo root) whose basename no part of the backlog text mentions.
+ * A note lives only while a row points at it; delete it with its row
+ * (`check-plan-graduation.js --fix` does both). Absent dir = no check; not run by --range.
+ *
  * Usage:
  *   node scripts/check-backlog-entries.js --backlog <file>
  *     [--config <file>] [--allowlist <file>] [--mode warn|block]
@@ -926,6 +931,22 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
   return { entries, violations };
 }
 
+function checkSidecarOrphans(text, repoRoot) {
+  const dir = path.join(repoRoot, 'docs', 'backlog');
+  let names;
+  try {
+    names = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  return names.sort().filter((n) => !text.includes(n)).map((n) => ({
+    code: 'sidecar_orphan',
+    title: n,
+    field: 'Pointer',
+    detail: `docs/backlog/${n} is mentioned by no backlog row; delete it with its row`,
+  }));
+}
+
 function loadAllowlist(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
     return { schema: 1, entries: [] };
@@ -1004,6 +1025,7 @@ function runCheck(opts, at) {
   const now = Date.now();
   const style = cfg.style || 'heading';
   const { entries, violations } = collectViolations(text, cfg, repoRoot, now, at && at.existsFn);
+  if (!at) violations.push(...checkSidecarOrphans(text, repoRoot));
   const annotated = violations.map((v) => {
     const fp = fingerprint(style, v.title);
     const allowed = allowedPairs.has(`${fp}\0${v.code}`);

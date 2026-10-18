@@ -1305,4 +1305,19 @@ assert_contains "$out" '"code":"frozen_marker_deleted","kind":"frozen_base"' \
 assert_not_contains "$out" '"path":".frozen-evidence"' "BL-0191: no invented marker path for a bad ref"
 
 
+# --- --fix removes a deleted row's docs/backlog sidecar, unless another row still mentions it ---
+d="$(fixture_repo fix-sidecar)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/solo-note.md"
+printf 'n\n' > "$d/docs/backlog/shared-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Solo done row" "shipped v1.0.0 2020-01-01" "docs/backlog/solo-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Shared done row" "shipped v1.0.0 2020-01-01" "docs/backlog/shared-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Surviving row" "open" "docs/backlog/shared-note.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_absent "$d/docs/backlog/solo-note.md" "--fix deletes the sidecar of a deleted row"
+assert_file_exists "$d/docs/backlog/shared-note.md" "--fix keeps a sidecar a surviving row still mentions"
+assert_contains "$(cat "$d/docs/BACKLOG.md")" "Surviving row" "surviving row kept"
+
 finalize_test

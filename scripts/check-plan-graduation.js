@@ -51,7 +51,8 @@
  *                                 writing pass rewrites the evidence it froze (BL-0191)
  *
  * --fix deletes the offending BACKLOG rows (backlog_row_has_plan, backlog_row_done,
- * backlog_title_closed_status_open) and git mv's released plans — plus their
+ * backlog_title_closed_status_open) — plus any `docs/backlog/<x>.md` note a deleted row
+ * mentioned that no remaining BACKLOG text still names — and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
  * into docs/plans/_archive/, preserving names. A stem's move is all-or-nothing: every
  * destination is checked for a pre-existing file BEFORE any move for that stem starts: on
@@ -1110,7 +1111,7 @@ function run(opts) {
 
 // --- --fix ---
 
-function fixBacklog(backlogPath, violations) {
+function fixBacklog(backlogPath, violations, repoRoot) {
   const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done', 'backlog_title_closed_status_open']);
   const doomed = violations.filter((v) => v.kind === 'backlog_row' && rowCodes.has(v.code));
   if (!doomed.length) return { changed: false, removed: [] };
@@ -1130,6 +1131,19 @@ function fixBacklog(backlogPath, violations) {
   }
   if (out !== text) {
     fs.writeFileSync(backlogPath, out);
+    // A deleted row's docs/backlog note goes with it, unless a remaining row still names it.
+    const sidecars = new Set();
+    for (const row of rows) {
+      if (!doomedTitles.has(row.title) || !row.text) continue;
+      for (const m of row.text.matchAll(/docs\/backlog\/([A-Za-z0-9._-]+\.md)/g)) sidecars.add(m[1]);
+    }
+    for (const name of sidecars) {
+      if (out.includes(name)) continue;
+      const abs = path.join(repoRoot, 'docs', 'backlog', name);
+      if (fs.existsSync(abs)) {
+        try { fs.rmSync(abs); } catch { /* best effort */ }
+      }
+    }
     return { changed: true, removed };
   }
   return { changed: false, removed: [] };
@@ -1676,7 +1690,7 @@ function main() {
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
   let finalResult = preFix;
   if (opts.fix) {
-    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations);
+    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations, preFix.repoRoot);
     plansFix = fixPlans(
       preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems,
       preFix.changelogPath

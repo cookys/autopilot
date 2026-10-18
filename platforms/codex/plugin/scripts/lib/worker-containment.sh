@@ -11,8 +11,15 @@
 # reap_container — reaps SCOPE_UNIT (systemctl --user kill SIGKILL, stop, verify
 # the cgroup is empty → CONTAINED=1) or, when no scope is set, the WORKER_SID
 # session. Callers keep the name reap_container (dispatch-hetero.sh exports it
-# with declare -f). The session branch calls _self_pgid, which the caller defines.
+# with declare -f). The session branch calls _self_pgid, defined here when the
+# caller has not defined it yet (dispatch-hetero.sh replaces it after sourcing).
 # Header comment is the contract.
+
+if ! declare -F _self_pgid >/dev/null 2>&1; then
+  _self_pgid() {
+    ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
+  }
+fi
 
 worker_containment_detect() {
   HAVE_CGROUP=0
@@ -41,7 +48,9 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
     # Group/session kill only (negative sid). Never the dispatcher pid or our
     # own pgid — including the detached child's session on IN_DETACHED_CHILD=1.
     local selfpg=""
-    selfpg="$(_self_pgid)" || selfpg=""
+    if declare -F _self_pgid >/dev/null 2>&1; then
+      selfpg="$(_self_pgid)" || selfpg=""
+    fi
     if [ "$WORKER_SID" = "$$" ] || { [ -n "$selfpg" ] && [ "$WORKER_SID" = "$selfpg" ]; }; then
       return 0
     fi

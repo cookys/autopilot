@@ -3127,6 +3127,9 @@ fi
 #   setsid  — own session, reaped by session-pgroup kill (catches ordinary children,
 #             not a deliberate inner setsid). CONTAINMENT=setsid.
 #   plain   — no container available. CONTAINMENT=plain.
+# WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 (scripts/lib/worker-containment.sh) forces
+# HAVE_CGROUP=0. Hetero honors that switch so the setsid fallback can be tested
+# without removing systemd.
 # IMPORTANT — NOT malicious-proof: a same-user worker can `systemd-run --user --scope`
 # a SIBLING cgroup OUTSIDE this scope (gpt-5.5 review 2026-06-26 verified the sibling
 # survives our reap), so `contained:true` is teardown hygiene, NOT a security

@@ -104,6 +104,60 @@ function evidenceInPacket(evidence, packetPaths) {
   return cut > 0 && packetPaths.has(evidence.slice(0, cut));
 }
 
+// A seat that drops the leading "prior:" still names one carried id when the remainder is unique.
+// Suffix is the part after the last "prior:sN." prefix (review-increment-wiring carried ids).
+function restorePriorFindingId(rawId, known) {
+  if (typeof rawId !== 'string' || rawId.includes('prior:')) return null;
+  const prefixed = [];
+  const bySuffix = [];
+  for (const id of known) {
+    if (id === `prior:${rawId}`) prefixed.push(id);
+    const matches = id.matchAll(/prior:s\d+\./g);
+    let last = null;
+    for (const match of matches) last = match;
+    if (last && id.slice(last.index + last[0].length) === rawId) bySuffix.push(id);
+  }
+  if (prefixed.length === 1) return prefixed[0];
+  if (prefixed.length > 1) return null;
+  if (bySuffix.length === 1) return bySuffix[0];
+  return null;
+}
+
+// Lines before or after a JSON object: take the first balanced object. Never eval.
+function extractBalancedJsonObject(text) {
+  const source = String(text);
+  for (let start = 0; start < source.length; start += 1) {
+    if (source[start] !== '{') continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let end = start; end < source.length; end += 1) {
+      const ch = source[end];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') { inString = true; continue; }
+      if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            const value = JSON.parse(source.slice(start, end + 1));
+            if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+          } catch (_error) {
+            // keep scanning later braces
+          }
+          break;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function normalizeResolutions(value, priorFindingIds, packetPaths) {
   if (!Array.isArray(value)) return { error: 'resolutions must be an array' };
   const known = new Set(priorFindingIds);
@@ -118,7 +172,9 @@ function normalizeResolutions(value, priorFindingIds, packetPaths) {
       return { error: 'resolution entry is malformed' };
     }
     if (!known.has(entry.finding_id)) {
-      return { error: `resolution names unknown finding ${entry.finding_id}` };
+      const restored = restorePriorFindingId(entry.finding_id, known);
+      if (!restored) return { error: `resolution names unknown finding ${entry.finding_id}` };
+      entry.finding_id = restored;
     }
     if (seen.has(entry.finding_id)) {
       return { error: `duplicate resolution for ${entry.finding_id}` };
@@ -144,6 +200,9 @@ function normalizeSeatReview(raw, options = {}) {
   let parsed = null;
   if (typeof raw === 'string') {
     try { parsed = JSON.parse(raw.trim()); } catch (_error) { parsed = null; }
+    // Incremental seats often write finding lines and then the object. A full round
+    // (priorFindingIds null) keeps the exact parse-the-whole-string behaviour.
+    if (parsed === null && priorFindingIds !== null) parsed = extractBalancedJsonObject(raw);
   }
   const objectForm = Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed);
   if (!objectForm) return withResolutions(normalizeProductReviewFindings(raw), []);

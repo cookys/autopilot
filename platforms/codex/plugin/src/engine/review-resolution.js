@@ -105,6 +105,8 @@ function buildPriorRoundAddendum(rows, heads) {
     ...lines,
     'Required output for each open finding, inside FINDINGS: one JSON object',
     '{"findings": "<your own finding lines separated by \\n, or none>", "resolutions": [{"finding_id": "<id above>", "status": "resolved|still_present|invalid", "evidence": "path:line"}]}',
+    'Put the whole answer in FINDINGS as the single JSON object and do not also write the findings as separate lines.',
+    'Every finding and every evidence must carry path:line.',
     'resolved and invalid need evidence path:line in a file of this packet; an entry without it counts as not answered.',
     '== end prior round ==',
     '',

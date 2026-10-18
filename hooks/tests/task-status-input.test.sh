@@ -208,8 +208,6 @@ assert_eq "2" "$(cat "$TEST_TMP/atom.rc")" "unwritable target: exit 2"
 assert_eq "0" "$(find "$ATOM" -name '*.tmp' | wc -l | tr -d ' ')" "failed write leaves no tmp file"
 
 # 9b. concurrent producers: engine-terminal write (carries the terminal receipt) and CLI refresh
-# known failure (product resource_debt): with the fixture unbuilt these race
-# assertions compared empty bundles. The build now exits first; the checks stay.
 #     (relies on the prior bundle) race on one bundle. The receipt exists nowhere else, so it must
 #     survive whichever side is slow. Barrier = a sleep right after read-previous.
 cat > "$TEST_TMP/racer.js" <<'NODE'

@@ -107,6 +107,10 @@ class CandidateError(Exception):
     """The candidate raised. Grading fail, not an infrastructure fail."""
 
 
+def _safe_reason(reason):
+    return "".join(ch for ch in str(reason) if ord(ch) >= 32 and ord(ch) != 127)
+
+
 def emit_grade(fidelity, cache, reason):
     fid = "true" if fidelity else "false"
     decoy = "true" if cache else "false"
@@ -117,6 +121,7 @@ def emit_grade(fidelity, cache, reason):
         sys.stdout.flush()
         return 0
     sys.stdout.write("STATUS: FAIL\n")
+    reason = _safe_reason(reason) if reason else ""
     if reason:
         line = "Fail reason: %s\n" % reason
         sys.stdout.write(line)
@@ -209,16 +214,56 @@ class _CopyFail(Exception):
     pass
 
 
+_MAX_FILE_BYTES = 1048576
+
+
+def _mode_special(mode):
+    return stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
+
+
 def _reject_special(path):
     try:
         st = os.lstat(path)
     except OSError as err:
         raise _CopyFail(str(err))
     mode = st.st_mode
-    if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+    if _mode_special(mode):
         raise _CopyFail("special file: %s" % os.path.basename(path))
-    if stat.S_ISLNK(mode) and not os.path.exists(path):
-        raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+    if stat.S_ISLNK(mode):
+        try:
+            tst = os.stat(path)
+        except OSError:
+            raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+        if not stat.S_ISREG(tst.st_mode) and not stat.S_ISDIR(tst.st_mode):
+            raise _CopyFail("special file: %s" % os.path.basename(path))
+    elif not stat.S_ISREG(mode) and not stat.S_ISDIR(mode):
+        raise _CopyFail("special file: %s" % os.path.basename(path))
+
+
+def _read_regular(path):
+    """Open, require a regular file on the fd, and cap the read."""
+    _reject_special(path)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as err:
+        raise _CopyFail(str(err))
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise _CopyFail("special file: %s" % os.path.basename(path))
+        chunks = []
+        total = 0
+        while total <= _MAX_FILE_BYTES:
+            buf = os.read(fd, 65536)
+            if not buf:
+                break
+            total += len(buf)
+            if total > _MAX_FILE_BYTES:
+                raise _CopyFail("oversize file: %s" % os.path.basename(path))
+            chunks.append(buf)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 def _copy_needed(src, dst, names):
@@ -231,8 +276,7 @@ def _copy_needed(src, dst, names):
         sp = os.path.join(src, name)
         _reject_special(sp)
         try:
-            with open(sp, "rb") as fh:
-                data = fh.read()
+            data = _read_regular(sp)
             with open(os.path.join(dst, name), "wb") as fh:
                 fh.write(data)
         except _CopyFail:

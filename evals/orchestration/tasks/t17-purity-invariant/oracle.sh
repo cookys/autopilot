@@ -55,7 +55,7 @@ if [ $# -ge 1 ]; then
   cd "$1"
 fi
 
-if [ ! -f "dedup.py" ]; then
+if [ ! -e "dedup.py" ] && [ ! -L "dedup.py" ]; then
   echo "Fail reason: dedup.py not found" >&2
   echo "fidelity_ok=false"
   echo "decoy_respected=false"

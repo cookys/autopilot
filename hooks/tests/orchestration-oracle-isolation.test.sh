@@ -9,6 +9,9 @@
 # RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: t17 type-change (tags list to tuple and id int to float) printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); a correct merge that appended a non-dict element also printed STATUS: PASS (exit 0).
 # RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: a correct t15 keys.py and a correct t17 dedup.py that each print one line were judged malformed (Fail reason: malformed output, STATUS: FAIL, exit 1).
 # RED at 62b1ffc5a06d06682301238902aeb2dd1ae5636c: a FIFO and a broken symlink in the candidate tree made copytree raise; stdout had no STATUS: FAIL line (traceback on stderr, exit 1).
+# RED at 0100f4700627864638aac56adeecd21996c51a79: shallow copy then append (dict(record) then kept["tags"].append) printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0).
+# RED at 0100f4700627864638aac56adeecd21996c51a79: correct slice, dict.copy, list.copy, index/count, +, ==, and caught KeyError/IndexError/ValueError each printed STATUS: FAIL (exit 1). Slice died as "Fail reason: child crash" (SystemExit in _encode(slice)); the others printed fidelity_ok=false decoy_respected=false with no PASS.
+# RED at 0100f4700627864638aac56adeecd21996c51a79: judge_rpc.py on a graded module that is a symlink to a FIFO, and the same for /dev/zero, hung until timeout (exit 124, empty stdout) for t15, t16, and t17. oracle.sh hid that behind "Fail reason: <file> not found" because [ -f ] is false for those targets.
 
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -616,6 +619,119 @@ assert_tree_fault() {
   set -e
   assert_fail "$label" "$out" "$ec"
 }
+
+assert_pass() {
+  local label="$1" out="$2" ec="$3"
+  if [ "$ec" -ne 0 ] || ! printf '%s\n' "$out" | grep -q 'STATUS: PASS'; then
+    echo "FAIL [$label] expected PASS (exit=$ec)" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$out" | grep -q 'fidelity_ok=true'; then
+    echo "FAIL [$label] fidelity_ok" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$out" | grep -q 'decoy_respected=true'; then
+    echo "FAIL [$label] decoy_respected" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  echo "PASS [$label] STATUS: PASS"
+}
+
+echo "=== t17 shallow copy then nested append must FAIL purity ==="
+T17SH=$(mktemp -d -p "$TEST_TMP" -t "t17-shallow-XXXXXX")
+overlay_dedup "$T17SH" "$FIXTURES/shallow_append_dedup.py"
+set +e
+T17SH_OUT=$(run_oracle_t17 "$T17SH")
+T17SH_EC=$?
+set -e
+assert_fail "t17-shallow-append" "$T17SH_OUT" "$T17SH_EC"
+if ! printf '%s\n' "$T17SH_OUT" | grep -q 'fidelity_ok=true'; then
+  echo "FAIL [t17-shallow-append] fidelity must stay true" >&2
+  printf '%s\n' "$T17SH_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T17SH_OUT" | grep -q 'decoy_respected=false'; then
+  echo "FAIL [t17-shallow-append] purity must be false" >&2
+  printf '%s\n' "$T17SH_OUT" >&2
+  exit 1
+fi
+
+echo "=== t17 correct proxy operations must PASS ==="
+for pair in \
+  "t17-slice:$FIXTURES/ok_slice_dedup.py" \
+  "t17-dict-copy:$FIXTURES/ok_dict_copy_dedup.py" \
+  "t17-list-copy:$FIXTURES/ok_list_copy_dedup.py" \
+  "t17-index-count:$FIXTURES/ok_index_count_dedup.py" \
+  "t17-plus:$FIXTURES/ok_plus_dedup.py" \
+  "t17-eq:$FIXTURES/ok_eq_dedup.py" \
+  "t17-except:$FIXTURES/ok_except_dedup.py"
+do
+  label=${pair%%:*}
+  src=${pair#*:}
+  dest=$(mktemp -d -p "$TEST_TMP" -t "t17-op-XXXXXX")
+  overlay_dedup "$dest" "$src"
+  set +e
+  OP_OUT=$(run_oracle_t17 "$dest")
+  OP_EC=$?
+  set -e
+  assert_pass "$label" "$OP_OUT" "$OP_EC"
+done
+
+assert_special_link() {
+  local label="$1" runner="$2" repo="$3" module="$4" kind="$5"
+  local dest out ec target
+  dest=$(mktemp -d -p "$TEST_TMP" -t "splink-XXXXXX")
+  cp -a "$repo/." "$dest/"
+  if [ "$kind" = "fifo" ]; then
+    target=$(mktemp -u -p "$TEST_TMP" -t "fifo-XXXXXX")
+    mkfifo "$target"
+  else
+    target="/dev/zero"
+  fi
+  rm -f "$dest/$module"
+  ln -s "$target" "$dest/$module"
+  set +e
+  out=$($runner "$dest")
+  ec=$?
+  set -e
+  assert_fail "$label" "$out" "$ec"
+  if ! printf '%s\n' "$out" | grep -q 'special file'; then
+    echo "FAIL [$label] expected special-file rejection" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+}
+
+echo "=== symlink to FIFO or /dev/zero must FAIL closed ==="
+assert_special_link "t15-symlink-fifo" run_oracle "$TASK_DIR/repo" service.py fifo
+assert_special_link "t15-symlink-zero" run_oracle "$TASK_DIR/repo" service.py zero
+assert_special_link "t16-symlink-fifo" run_oracle_t16 "$T16_DIR/repo" validate.py fifo
+assert_special_link "t16-symlink-zero" run_oracle_t16 "$T16_DIR/repo" validate.py zero
+assert_special_link "t17-symlink-fifo" run_oracle_t17 "$T17_DIR/repo" dedup.py fifo
+assert_special_link "t17-symlink-zero" run_oracle_t17 "$T17_DIR/repo" dedup.py zero
+
+echo "=== emit_grade strips control characters from the reason ==="
+REPO_ROOT="$REPO_ROOT" python3 - <<'PY'
+import importlib.util
+import os
+mods = [
+    "evals/orchestration/tasks/t15-cache-invalidation/judge_rpc.py",
+    "evals/orchestration/tasks/t16-findings-triage/judge_rpc.py",
+    "evals/orchestration/tasks/t17-purity-invariant/judge_rpc.py",
+]
+root = os.environ["REPO_ROOT"]
+for rel in mods:
+    spec = importlib.util.spec_from_file_location("judge_mod", os.path.join(root, rel))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    text = mod._safe_reason("bad\nreason\x00\x1b tail")
+    if text != "badreason tail" or any(ord(ch) < 32 for ch in text):
+        raise SystemExit("control strip failed for %s: %r" % (rel, text))
+print("PASS [reason-strip]")
+PY
 
 echo "=== FIFO and broken symlink must FAIL closed ==="
 assert_tree_fault "t15-fifo" run_oracle "$TASK_DIR/repo" fifo

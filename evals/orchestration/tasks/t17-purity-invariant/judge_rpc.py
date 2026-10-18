@@ -31,11 +31,9 @@ MAX_BYTES = 65536
 CHILD_SRC = r"""
 import builtins
 import json
-import opcode
 import os
 import sys
 
-_DICT_UPDATE = opcode.opmap["DICT_UPDATE"]
 _real_dict = builtins.dict
 _real_list = list
 _real_out = sys.stdout
@@ -46,6 +44,7 @@ sys.path.insert(0, _cwd)
 
 _seq = 0
 _cid = None
+_EXC = {"KeyError": KeyError, "IndexError": IndexError, "ValueError": ValueError, "TypeError": TypeError}
 
 
 def _send(obj):
@@ -60,8 +59,12 @@ def _recv():
     return json.loads(line)
 
 
+def _is_proxy(obj):
+    return isinstance(obj, (_DictProxy, _ListProxy))
+
+
 def _encode(obj):
-    if isinstance(obj, _Proxy):
+    if _is_proxy(obj):
         return {"k": "proxy", "v": obj.oid, "t": obj.kind}
     if obj is None:
         return {"k": "none"}
@@ -73,9 +76,11 @@ def _encode(obj):
         return {"k": "float", "v": obj}
     if isinstance(obj, str):
         return {"k": "str", "v": obj}
+    if isinstance(obj, slice):
+        return {"k": "slice", "v": [_encode(obj.start), _encode(obj.stop), _encode(obj.step)]}
     if isinstance(obj, tuple):
         return {"k": "tuple", "v": [_encode(x) for x in obj]}
-    if isinstance(obj, list):
+    if isinstance(obj, _real_list):
         return {"k": "list", "v": [_encode(x) for x in obj]}
     if isinstance(obj, _real_dict):
         return {"k": "dict", "v": [[_encode(k), _encode(v)] for k, v in obj.items()]}
@@ -85,7 +90,7 @@ def _encode(obj):
 def _decode(node):
     k = node["k"]
     if k == "proxy":
-        return _Proxy(node["v"], node["t"])
+        return _make_proxy(node["v"], node["t"])
     if k == "none":
         return None
     if k == "bool":
@@ -96,6 +101,13 @@ def _decode(node):
         return float(node["v"])
     if k == "str":
         return node["v"]
+    if k == "slice":
+        parts = [_decode(x) for x in node["v"]]
+        return slice(parts[0], parts[1], parts[2])
+    if k == "shallow_list":
+        return [_decode(x) for x in node["v"]]
+    if k == "shallow_dict":
+        return _real_dict((_decode(pair[0]), _decode(pair[1])) for pair in node["v"])
     if k == "list":
         return [_decode(x) for x in node["v"]]
     if k == "tuple":
@@ -114,43 +126,14 @@ def _rpc(method, oid, args):
     if not isinstance(msg, dict) or msg.get("op") != "proxy_result" or msg.get("n") != n:
         raise SystemExit(3)
     if msg.get("err"):
-        raise TypeError(msg["err"])
+        exc = _EXC.get(msg["err"], TypeError)
+        raise exc(msg.get("msg"))
     return _decode(msg["v"])
 
 
-class _Proxy:
-    def __init__(self, oid, kind):
-        self.oid = oid
-        self.kind = kind
-
-    def _item(self, key, plain):
-        method = "getitem_plain" if plain else "getitem"
-        return _rpc(method, self.oid, [key])
-
+class _ProxyOps:
     def __getitem__(self, key):
-        plain = False
-        try:
-            fr = sys._getframe(1)
-            if fr.f_code.co_code[fr.f_lasti] == _DICT_UPDATE:
-                plain = True
-        except Exception:
-            plain = False
-        return self._item(key, plain)
-
-    def get(self, key, default=None):
-        found = _rpc("get", self.oid, [key])
-        if isinstance(found, tuple) and found and found[0] == "missing":
-            return default
-        return found
-
-    def keys(self):
-        return _rpc("keys", self.oid, [])
-
-    def items(self):
-        return _rpc("items", self.oid, [])
-
-    def values(self):
-        return _rpc("values", self.oid, [])
+        return _rpc("getitem", self.oid, [key])
 
     def __iter__(self):
         for item in _rpc("iter", self.oid, []):
@@ -168,6 +151,57 @@ class _Proxy:
     def __delitem__(self, key):
         _rpc("delitem", self.oid, [key])
 
+    def __eq__(self, other):
+        if other is self:
+            return True
+        return _rpc("eq", self.oid, [other])
+
+    def __add__(self, other):
+        return _rpc("add", self.oid, [other])
+
+    def __radd__(self, other):
+        return _rpc("radd", self.oid, [other])
+
+    def __copy__(self):
+        return _rpc("materialize", self.oid, [])
+
+    def __deepcopy__(self, memo):
+        cloned = _rpc("deepcopy", self.oid, [])
+        memo[id(self)] = cloned
+        return cloned
+
+    def copy(self):
+        return _rpc("materialize", self.oid, [])
+
+    def _materialize(self):
+        return _rpc("materialize", self.oid, [])
+
+
+class _DictProxy(_ProxyOps, dict):
+    def __init__(self, oid):
+        dict.__init__(self)
+        self.oid = oid
+        self.kind = "dict"
+
+    @property
+    def __class__(self):
+        return dict
+
+    def get(self, key, default=None):
+        found = _rpc("get", self.oid, [key])
+        if isinstance(found, tuple) and found and found[0] == "missing":
+            return default
+        return found
+
+    def keys(self):
+        return _rpc("keys", self.oid, [])
+
+    def items(self):
+        return _rpc("items", self.oid, [])
+
+    def values(self):
+        return _rpc("values", self.oid, [])
+
     def pop(self, *args):
         found = _rpc("pop", self.oid, list(args))
         if isinstance(found, tuple) and found and found[0] == "missing":
@@ -178,9 +212,9 @@ class _Proxy:
 
     def update(self, *args, **kwargs):
         for src in args:
-            if isinstance(src, _Proxy):
+            if _is_proxy(src):
                 for k in src.keys():
-                    self[k] = src._item(k, True)
+                    self[k] = src[k]
             elif isinstance(src, _real_dict):
                 for k, v in src.items():
                     self[k] = v
@@ -190,11 +224,31 @@ class _Proxy:
         for k, v in kwargs.items():
             self[k] = v
 
+    def setdefault(self, key, default=None):
+        return _rpc("setdefault", self.oid, [key, default])
+
+    def popitem(self):
+        return _rpc("popitem", self.oid, [])
+
+    def clear(self):
+        _rpc("clear", self.oid, [])
+
+
+class _ListProxy(_ProxyOps, list):
+    def __init__(self, oid):
+        list.__init__(self)
+        self.oid = oid
+        self.kind = "list"
+
+    @property
+    def __class__(self):
+        return list
+
     def append(self, value):
         _rpc("append", self.oid, [value])
 
     def extend(self, values):
-        if isinstance(values, _Proxy):
+        if _is_proxy(values):
             values = values._materialize()
         _rpc("extend", self.oid, [_real_list(values)])
 
@@ -219,36 +273,34 @@ class _Proxy:
     def reverse(self):
         _rpc("reverse", self.oid, [])
 
-    def setdefault(self, key, default=None):
-        return _rpc("setdefault", self.oid, [key, default])
+    def index(self, *args):
+        return _rpc("index", self.oid, list(args))
 
-    def popitem(self):
-        return _rpc("popitem", self.oid, [])
+    def count(self, value):
+        return _rpc("count", self.oid, [value])
 
-    def _materialize(self):
-        return _rpc("materialize", self.oid, [])
+    def pop(self, *args):
+        return _rpc("pop", self.oid, list(args))
 
-    def __copy__(self):
-        return self._materialize()
 
-    def __deepcopy__(self, memo):
-        cloned = self._materialize()
-        memo[id(self)] = cloned
-        return cloned
+def _make_proxy(oid, kind):
+    if kind == "list":
+        return _ListProxy(oid)
+    return _DictProxy(oid)
 
 
 def _dict(*args, **kwargs):
-    if len(args) == 1 and not kwargs and isinstance(args[0], _Proxy):
+    if len(args) == 1 and not kwargs and _is_proxy(args[0]):
         return args[0]._materialize()
     return _real_dict(*args, **kwargs)
 
 
 def _plainify(obj):
-    if isinstance(obj, _Proxy):
-        return obj._materialize()
+    if _is_proxy(obj):
+        return _plainify(_rpc("deepcopy", obj.oid, []))
     if isinstance(obj, tuple):
         return tuple(_plainify(x) for x in obj)
-    if isinstance(obj, list):
+    if isinstance(obj, _real_list):
         return [_plainify(x) for x in obj]
     if isinstance(obj, _real_dict):
         return _real_dict((_plainify(k), _plainify(v)) for k, v in obj.items())
@@ -283,7 +335,7 @@ def main():
             raise SystemExit(3)
         key = _key(msg.get("key"))
         _cid = msg["id"]
-        records = _Proxy(msg["root"], msg.get("root_t") or "list")
+        records = _make_proxy(msg["root"], msg.get("root_t") or "list")
         try:
             if key is None:
                 value = dedup(records)
@@ -313,6 +365,10 @@ class CandidateError(Exception):
     """The candidate raised. That call fails its axis, not the infrastructure."""
 
 
+def _safe_reason(reason):
+    return "".join(ch for ch in str(reason) if ord(ch) >= 32 and ord(ch) != 127)
+
+
 def emit_grade(fidelity, pure, reason):
     fid = "true" if fidelity else "false"
     decoy = "true" if pure else "false"
@@ -323,6 +379,7 @@ def emit_grade(fidelity, pure, reason):
         sys.stdout.flush()
         return 0
     sys.stdout.write("STATUS: FAIL\n")
+    reason = _safe_reason(reason) if reason else ""
     if reason:
         line = "Fail reason: %s\n" % reason
         sys.stdout.write(line)
@@ -361,16 +418,56 @@ class _CopyFail(Exception):
     pass
 
 
+_MAX_FILE_BYTES = 1048576
+
+
+def _mode_special(mode):
+    return stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
+
+
 def _reject_special(path):
     try:
         st = os.lstat(path)
     except OSError as err:
         raise _CopyFail(str(err))
     mode = st.st_mode
-    if stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+    if _mode_special(mode):
         raise _CopyFail("special file: %s" % os.path.basename(path))
-    if stat.S_ISLNK(mode) and not os.path.exists(path):
-        raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+    if stat.S_ISLNK(mode):
+        try:
+            tst = os.stat(path)
+        except OSError:
+            raise _CopyFail("broken symlink: %s" % os.path.basename(path))
+        if not stat.S_ISREG(tst.st_mode) and not stat.S_ISDIR(tst.st_mode):
+            raise _CopyFail("special file: %s" % os.path.basename(path))
+    elif not stat.S_ISREG(mode) and not stat.S_ISDIR(mode):
+        raise _CopyFail("special file: %s" % os.path.basename(path))
+
+
+def _read_regular(path):
+    """Open, require a regular file on the fd, and cap the read."""
+    _reject_special(path)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as err:
+        raise _CopyFail(str(err))
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise _CopyFail("special file: %s" % os.path.basename(path))
+        chunks = []
+        total = 0
+        while total <= _MAX_FILE_BYTES:
+            buf = os.read(fd, 65536)
+            if not buf:
+                break
+            total += len(buf)
+            if total > _MAX_FILE_BYTES:
+                raise _CopyFail("oversize file: %s" % os.path.basename(path))
+            chunks.append(buf)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 def _copy_needed(src, dst, names):
@@ -383,8 +480,7 @@ def _copy_needed(src, dst, names):
         sp = os.path.join(src, name)
         _reject_special(sp)
         try:
-            with open(sp, "rb") as fh:
-                data = fh.read()
+            data = _read_regular(sp)
             with open(os.path.join(dst, name), "wb") as fh:
                 fh.write(data)
         except _CopyFail:
@@ -558,10 +654,17 @@ def _plain(obj):
 
 def _as_proxy(obj, live):
     if isinstance(obj, (dict, list)):
-        live.objs[id(obj)] = obj
         kind = "dict" if isinstance(obj, dict) else "list"
-        return {"k": "proxy", "v": id(obj), "t": kind}
+        return {"k": "proxy", "v": live.intern(obj), "t": kind}
     return _plain(obj)
+
+
+def _shallow(obj, live):
+    if isinstance(obj, dict):
+        return {"k": "shallow_dict", "v": [[_plain(k), _as_proxy(v, live)] for k, v in obj.items()]}
+    if isinstance(obj, list):
+        return {"k": "shallow_list", "v": [_as_proxy(v, live) for v in obj]}
+    return _as_proxy(obj, live)
 
 
 def _unplain(node, live):
@@ -581,6 +684,9 @@ def _unplain(node, live):
         return float(node["v"])
     if k == "str":
         return node["v"]
+    if k == "slice":
+        parts = [_unplain(x, live) for x in node["v"]]
+        return slice(parts[0], parts[1], parts[2])
     if k == "list":
         return [_unplain(x, live) for x in node["v"]]
     if k == "tuple":
@@ -593,9 +699,18 @@ def _unplain(node, live):
 class _Live:
     def __init__(self, root):
         self.root = root
-        self.objs = {id(root): root}
-        self.root_id = id(root)
+        self.objs = {}
+        self._seq = 0
+        self.root_id = self.intern(root)
         self.snap = copy.deepcopy(root)
+
+    def intern(self, obj):
+        for oid, cur in self.objs.items():
+            if cur is obj:
+                return oid
+        self._seq += 1
+        self.objs[self._seq] = obj
+        return self._seq
 
 
 def _proxy_reply(live, msg):
@@ -611,16 +726,36 @@ def _proxy_reply(live, msg):
     except _Infra:
         raise
     except Exception as err:
-        return {"op": "proxy_result", "n": n, "err": str(err), "v": {"k": "none"}}
+        name = type(err).__name__
+        if name not in ("KeyError", "IndexError", "ValueError"):
+            name = "TypeError"
+        arg = err.args[0] if err.args else ""
+        if isinstance(arg, bool) or not isinstance(arg, (str, int, float)):
+            arg = str(err)
+        return {"op": "proxy_result", "n": n, "err": name, "msg": arg, "v": {"k": "none"}}
 
 
 def _apply(live, obj, method, args):
     if method == "getitem":
-        return _as_proxy(obj[args[0]], live)
-    if method == "getitem_plain":
-        return _plain(copy.deepcopy(obj[args[0]]))
+        key = args[0]
+        val = obj[key]
+        if isinstance(key, slice):
+            return _shallow(val, live)
+        return _as_proxy(val, live)
     if method == "materialize":
+        return _shallow(obj, live)
+    if method == "deepcopy":
         return _plain(copy.deepcopy(obj))
+    if method == "eq":
+        return _plain(obj == args[0])
+    if method == "add":
+        return _shallow(list(obj) + list(args[0]), live)
+    if method == "radd":
+        return _shallow(list(args[0]) + list(obj), live)
+    if method == "index":
+        return _plain(obj.index(*args))
+    if method == "count":
+        return _plain(obj.count(args[0]))
     if method == "get":
         if args[0] in obj:
             return _as_proxy(obj[args[0]], live)

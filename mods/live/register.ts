@@ -298,8 +298,6 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const autopilotHome = typeof parsed.value.autopilot_home === 'string' && parsed.value.autopilot_home ? parsed.value.autopilot_home.replace(/\/+$/, '') : home + '/.autopilot'
 
   const sid = await $.session.id()
-  // a null or undefined id is unread, the same as session.id() throwing: abort the tick and keep the previous snapshot
-  if (sid === null || sid === undefined) throw new Error('session id unread')
   const scope = await resolveScope($, autopilotHome, liveBase, sid, nowMs)
   if (scope === null) {
     const wt = await orphanResidueCount($)

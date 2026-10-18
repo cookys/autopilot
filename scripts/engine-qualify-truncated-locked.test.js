@@ -8,7 +8,7 @@
 // operator: deepStrictEqual
 // at scripts/engine-qualify-truncated-locked.test.js (row.status)
 // Node.js v24.16.0 exit 1
-// GREEN at 3cd1461d4+fix: 32 assertions passed
+// GREEN at faebfe59a: 32 assertions passed
 
 // BL-0160: a sitting cut short by the wall limit (or the test-only count seam)
 // while cases remain unadministered is no_verdict, even after locked_qualify.
@@ -181,6 +181,7 @@ const FULL_N = 60;
 // Proved against runImplQualification. foldAdministration requires a complete
 // corpus before folded.qualified, and the row status is that flag. The brain
 // kernel does not set wallTruncated (token-cap stop is a different path).
+// Case (6) is skipped when /usr/bin/bwrap is missing.
 if (!fs.existsSync('/usr/bin/bwrap')) {
   process.stderr.write('SKIP implementer truncation case: /usr/bin/bwrap not present\n');
 } else {

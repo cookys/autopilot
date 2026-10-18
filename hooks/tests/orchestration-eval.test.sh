@@ -72,6 +72,48 @@ EOF
 )
 rm -rf "$T1_TEMP"
 
+# --- T15 Pristine, Fixed, and Wrong Self-Test (added; existing cases unchanged) ---
+echo "Testing T15 oracle..."
+T15_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t15-test-XXXXXX")
+cp -a "$EVAL_DIR/tasks/t15-cache-invalidation/." "$T15_TEMP/"
+T15_WORK=$(mktemp -d -p "$TEST_TMP" -t "t15-work-XXXXXX")
+cp -a "$T15_TEMP/repo/." "$T15_WORK/"
+
+echo "Pristine T15 run (should fail)..."
+if bash "$T15_TEMP/oracle.sh" "$T15_WORK" >/dev/null 2>&1; then
+  echo "ERROR: Pristine T15 oracle unexpectedly passed!" >&2
+  exit 1
+fi
+
+cat > "$T15_WORK/keys.py" << 'EOF'
+def make_key(record):
+    return (record["id"], record["role"])
+EOF
+
+echo "Fixed T15 run (should pass)..."
+if ! bash "$T15_TEMP/oracle.sh" "$T15_WORK" >/dev/null 2>&1; then
+  echo "ERROR: Fixed T15 oracle failed!" >&2
+  exit 1
+fi
+
+# Plainly wrong: ignore the injected compute_fn and recompute inline.
+cat > "$T15_WORK/service.py" << 'EOF'
+from store import MemoStore
+_store = MemoStore()
+_P = {"viewer":["read"],"editor":["read","write"],"admin":["read","write","delete"]}
+def default_compute(record):
+    return {"role":record["role"],"perms":list(_P.get(record["role"],[]))}
+def get_permissions(record, compute_fn=default_compute):
+    return default_compute(record)
+EOF
+
+echo "Wrong T15 run (should fail)..."
+if bash "$T15_TEMP/oracle.sh" "$T15_WORK" >/dev/null 2>&1; then
+  echo "ERROR: Wrong T15 oracle unexpectedly passed!" >&2
+  exit 1
+fi
+rm -rf "$T15_TEMP" "$T15_WORK"
+
 # --- T2 Pristine and Fixed Self-Test ---
 echo "Testing T2 oracle..."
 T2_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t2-test-XXXXXX")

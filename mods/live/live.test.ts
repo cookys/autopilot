@@ -145,7 +145,7 @@ function base(): Tree {
 
 type World = {
   files: Tree
-  sid: { value: string }
+  sid: { value: string; throw?: boolean; null?: boolean }
   cwdReal: { value: string }
   stats: Record<string, { size: number; mtimeMs: number }> // $.fs.stat of a file (a background command's output); any other path stats as a directory
   toasts: string[]
@@ -208,7 +208,11 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
   })
-  on('session.id', () => ({ value: w.sid.value }))
+  on('session.id', () => {
+    if (w.sid.throw) throw new Error('no session id')
+    if (w.sid.null) return { value: null }
+    return { value: w.sid.value }
+  })
   on('session.cwd', () => ({ value: CWD }))
   on('session.root', () => ({ value: '/work/repo' }))
   on('session.start', () => ({ cwd: CWD }))
@@ -4492,6 +4496,48 @@ test('activity: a failed transcript read keeps the shell row when the session id
   const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
   expect(await body()).toContain('full suite')
   messagesThrow = true
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
+// A null or undefined session id is an unread id (the same as session.id throwing). Kept shell rows stay.
+// # RED at 088b72f7f: case (b) session id returns null and session.messages throws failed — expect(received).toContain("full suite") received ""; case (a) session id throws passed.
+test('activity: a failed transcript read keeps the shell row when the session id call throws', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  w.sid.throw = true
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
+test('activity: a failed transcript read keeps the shell row when the session id call returns null', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  w.sid.null = true
   await w.clock.advance(5000)
   const b = await body()
   expect(b).toContain('full suite')

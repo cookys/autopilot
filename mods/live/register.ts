@@ -76,6 +76,7 @@ const recentTracker = makeRecentTracker()
 let recent: RecentGroup[] | null = null // survives ticks: the snapshot is rebuilt each time, a failed read keeps the last value
 let recentSid: string | null = null // group ids are transcript indexes, so a new session id (/clear) drops every opened group
 let activity: ActivityItem[] | null = null // survives ticks like `recent`: a failed read keeps the last value
+let activitySid: string | null = null // the session id those rows belong to; a failed transcript keeps them only while this id still matches
 const tails = new Map<string, { size: number; mtimeMs: number; tail: string | null }>() // a background command's last output line, re-read only when its file changed
 const MAX_TAIL_BYTES = 1024 * 1024 // a bigger output file shows its quiet time, not its last line ($.fs.read takes the whole file)
 const LIVE_AGENT = new Set(['pending', 'running', 'waiting'])
@@ -516,18 +517,30 @@ async function refresh($: EngineInterface): Promise<void> {
     await readAccountQuota($, nowMs)
     const built = await buildSnapshot($, nowMs, tr)
     let msgs: unknown = null
+    let sid: string | null = null
+    let sidOk = false
     try {
-      const sid = await $.session.id()
+      sid = (await $.session.id()) ?? null
+      sidOk = true
       msgs = await $.session.messages()
       if (recentSid !== null && sid !== recentSid) expanded.clear()
-      recentSid = sid ?? null
+      recentSid = sid
       if (Array.isArray(msgs)) recent = recentTracker.update(sid ?? '', msgs as never)
     } catch (_e) {
-      // the transcript is optional garnish: keep the previous value
+      // the transcript is optional garnish: keep the previous value. `sid` stays set when only messages() threw.
+    }
+    // kept shell and watch rows carry no session id. Drop them when the id was read, the transcript is not an array,
+    // and the id is not the one those rows belong to (/clear or resume while messages() keeps failing). An unread id keeps them.
+    if (sidOk && !Array.isArray(msgs) && sid !== activitySid) {
+      activity = null
+      activitySid = sid
     }
     try {
       const next = await readActivity($, msgs, nowMs, activity)
-      if (next !== null) activity = next
+      if (next !== null) {
+        activity = next
+        if (Array.isArray(msgs) && sidOk) activitySid = sid // the rows just built belong to this session
+      }
     } catch (_e) {
       // garnish too: keep the previous rows
     }

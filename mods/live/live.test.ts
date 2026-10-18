@@ -4455,6 +4455,49 @@ test('activity: an output file over 1 MiB shows no tail; an unread transcript ke
   expect(b.split('審查 ***').length - 1).toBe(1) // the agent row is replaced, not kept beside the new one
 })
 
+// A failed transcript read keeps the previous shell and watch rows. Those rows carry no session id, and the id is
+// recorded only after the messages read succeeds, so a later tick whose session id changed (a /clear or a resume)
+// would otherwise keep painting the old session's background rows.
+// # RED at f52bca36: case 1 (session id changed, session.messages throws) failed — expect(received).not.toContain("full suite") still received "full suite · 背景指令"; case 2 (session id unchanged) passed.
+test('activity: a failed transcript read drops the kept shell row when the session id changed', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  w.sid.value = SID_B
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).not.toContain('full suite')
+  expect(b).toContain('審查 phase 1') // the agent list still answers: only the kept shell is dropped
+})
+
+test('activity: a failed transcript read keeps the shell row when the session id is unchanged', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
 // ---- account and quota: the logged-in Claude account (~/.claude.json oauthAccount) and the rate-limit windows ($.session.usage) ----
 const RESET_5H = '2026-10-04T12:30:30.000Z' // NOW_FRESH + 2h30m
 const USAGE = { startedAt: '2026-10-04T09:00:00.000Z', context: null, rateLimits: [{ kind: 'seven_day', percentUsed: 18.4 }, { kind: 'five_hour', percentUsed: 42, resetsAt: RESET_5H }] }

@@ -622,4 +622,27 @@ assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "note.md is an orphan tho
 assert_contains "$o" "docs/backlog/note.md" "the orphan reported is note.md"
 assert_not_contains "$o" "docs/backlog/kept-note.md is" "kept-note.md is not reported"
 
+# Trigger-Type (BL-0212). Required once a file uses the field; value and calendar date are separate codes.
+# RED at 604b9ff14: 116 passed, 5 failed — missing_field/bad_trigger_type/bad_trigger_date absent (got 'no'), valid ready+date exited 1.
+tt_row() { # <title> [trigger-type line or empty]
+  printf '%s\n' "### $1" '- **Status**: open' '- **Trigger**: when tests run' ${2:+"$2"} '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md'
+}
+d="$(repo tt-missing)"
+{ tt_row 'Has type' '- **Trigger-Type**: event'; printf '\n'; tt_row 'Lacks type'; } > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" missing_field)" "yes" "Trigger-Type missing once the file uses the field"
+assert_contains "$o" "Lacks type" "missing Trigger-Type names the entry"
+d="$(repo tt-bad)"
+tt_row 'Bad type' '- **Trigger-Type**: soon' > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" bad_trigger_type)" "yes" "Trigger-Type rejects a value outside the set"
+d="$(repo tt-baddate)"
+tt_row 'Bad date' '- **Trigger-Type**: date:2026-02-31' > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" bad_trigger_date)" "yes" "date: Trigger-Type must be a real calendar date"
+d="$(repo tt-ok)"
+{ tt_row 'Ready row' '- **Trigger-Type**: ready'; printf '\n'; tt_row 'Dated row' '- **Trigger-Type**: date:2026-01-31'; } > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_exit "$o")" "0" "ready and a real date: Trigger-Type pass"
+
 finalize_test

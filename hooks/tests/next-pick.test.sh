@@ -297,4 +297,38 @@ printf '%s' "$AGE_OUT" | node -e "console.log(JSON.stringify(JSON.parse(require(
 E2E_PICK="$(node "$SCRIPT" pick --candidates "$TEST_TMP/age-cands.json" --preferences "$TEST_TMP/prefs.json" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).pick.title)")"
 assert_eq "$E2E_PICK" "Older small row" "parse -> pick: the older same-size entry is picked first"
 
+# Trigger-Type demotion (BL-0212). Unfired owner/event/peer/future date leave the auto-eligible set.
+# RED at 604b9ff14: 70 passed, 8 failed — pick stayed Event wait; no trigger_type owner/event/peer/date:2026-12-01 reasons; parse had no trigger_type.
+cat > "$TEST_TMP/trigger-types.json" <<'JSON'
+[
+ {"title":"Future date","effort":"S","tags":[],"class":"standard-impl","age_days":100,"source":"s","trigger_type":"date:2026-12-01"},
+ {"title":"Past date","effort":"S","tags":[],"class":"standard-impl","age_days":10,"source":"s","trigger_type":"date:2026-01-01"},
+ {"title":"Ready younger","effort":"S","tags":[],"class":"standard-impl","age_days":1,"source":"s","trigger_type":"ready"},
+ {"title":"Owner wait","effort":"XS","tags":[],"class":"standard-impl","age_days":200,"source":"s","trigger_type":"owner"},
+ {"title":"Event wait","effort":"XS","tags":[],"class":"standard-impl","age_days":200,"source":"s","trigger_type":"event"},
+ {"title":"Peer wait","effort":"XS","tags":[],"class":"standard-impl","age_days":200,"source":"s","trigger_type":"peer"},
+ {"title":"Legacy oldest","effort":"S","tags":[],"class":"standard-impl","age_days":50,"source":"s"}
+]
+JSON
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/trigger-types.json" --preferences "$TEST_TMP/prefs.json" --today 2026-10-19)"
+PICKED="$(printf '%s' "$OUT" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).pick.title))")"
+assert_eq "Legacy oldest" "$PICKED" "missing Trigger-Type stays eligible and age still wins"
+assert_contains "$OUT" "trigger_type owner" "owner exclusion reason named"
+assert_contains "$OUT" "trigger_type event" "event exclusion reason named"
+assert_contains "$OUT" "trigger_type peer" "peer exclusion reason named"
+assert_contains "$OUT" "date:2026-12-01" "future date exclusion reason named"
+printf '%s\n' '[{"title":"Past date","effort":"S","tags":[],"class":"standard-impl","age_days":10,"source":"s","trigger_type":"date:2026-01-01"},{"title":"Ready younger","effort":"S","tags":[],"class":"standard-impl","age_days":1,"source":"s","trigger_type":"ready"}]' > "$TEST_TMP/trigger-order.json"
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/trigger-order.json" --preferences "$TEST_TMP/prefs.json" --today 2026-10-19)"
+PICKED="$(printf '%s' "$OUT" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).pick.title))")"
+assert_eq "Past date" "$PICKED" "past date and ready keep age ordering"
+cat > "$TEST_TMP/trigger-bl.md" <<'EOF'
+### Parked
+- **Trigger**: later
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: s
+EOF
+P="$(node "$SCRIPT" parse --backlog "$TEST_TMP/trigger-bl.md" --today 2026-10-19)"
+assert_contains "$P" '"trigger_type": "event"' "parse exposes trigger_type"
+
 finalize_test

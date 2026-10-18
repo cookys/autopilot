@@ -742,6 +742,11 @@ const m=require("./scripts/migrate-backlog-entries.js");
 const r=m.renderEntry("T",{Id:"BL-0001",Status:"open",Origin:"peer",Reporter:"a",Report:"b",Reply:"c",Trigger:"t",Effort:"S",Source:"s",Pointer:"none"});
 process.stdout.write(/Id\*\*: BL-0001[\s\S]*Reporter\*\*: a[\s\S]*Reply\*\*: c/.test(r)?"kept":"dropped");')"
 assert_eq "$nm" "kept" "renderEntry keeps Id/Reporter/Report/Reply"
+nm="$(cd "$REPO_ROOT" && node -e '
+const m=require("./scripts/migrate-backlog-entries.js");
+const r=m.renderEntry("T",{Status:"open",Trigger:"t","Trigger-Type":"event",Effort:"S",Source:"s",Pointer:"none"});
+process.stdout.write(/Trigger\*\*: t\n- \*\*Trigger-Type\*\*: event\n- \*\*Effort\*\*: S/.test(r)?"kept":"dropped");')"
+assert_eq "$nm" "kept" "renderEntry keeps Trigger-Type directly under Trigger"
 
 
 # -- end to end: the sidecar migration keeps a row's reporter fields, and an over-cap Problem

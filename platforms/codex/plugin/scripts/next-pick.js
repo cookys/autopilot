@@ -195,6 +195,7 @@ function parseBacklog(opts) {
     const tokenMatch = effortText.match(new RegExp(`(?<![A-Za-z])(${sizeAlt})(!|急)?(?![A-Za-z])`, 'u'));
     const sinceMatch = section.match(/^- \*\*Since\*\*:\s*(\S+)/mu);
     const sinceMs = sinceMatch ? parseUtcDay(sinceMatch[1]) : null;
+    const typeMatch = section.match(/\*\*Trigger-Type\*\*:\s*([^\n]*)/u);
     // Whole UTC days since the entry's Since date; a future Since clamps to 0, a missing or malformed one stays null.
     const ageDays = sinceMs === null ? null : Math.max(0, Math.round((todayMs - sinceMs) / 86400000));
     const tags = [];
@@ -207,6 +208,7 @@ function parseBacklog(opts) {
       class: 'standard-impl',
       age_days: ageDays,
       source: sourceMatch ? sourceMatch[1].trim() : '',
+      trigger_type: typeMatch && typeMatch[1].trim() ? typeMatch[1].trim() : null,
     });
   }
   process.stdout.write(`${JSON.stringify({
@@ -214,6 +216,27 @@ function parseBacklog(opts) {
     artifact_type: 'next_pick_parse_result',
     rows,
   }, null, 1)}\n`);
+}
+
+// Ask-first is the existing not-auto-eligible bucket. A trigger that has not fired
+// joins it, with the exclusion reason in `reason`. A missing trigger_type stays
+// eligible: parse already tolerates missing fields, so legacy rows rank as before.
+function triggerWaitReason(row, todayMs) {
+  const raw = row.trigger_type;
+  if (raw == null || String(raw).trim() === '') return null;
+  const v = String(raw).trim();
+  if (v === 'ready') return null;
+  if (v === 'owner') return 'trigger_type owner waits for an owner decision';
+  if (v === 'event') return 'trigger_type event has not fired';
+  if (v === 'peer') return 'trigger_type peer waits for an external reporter or host release';
+  const dated = /^date:(\d{4}-\d{2}-\d{2})$/u.exec(v);
+  if (dated) {
+    const ms = parseUtcDay(dated[1]);
+    if (ms == null) return 'trigger_type event has not fired';
+    if (ms > todayMs) return `trigger_type date:${dated[1]} is after today`;
+    return null;
+  }
+  return 'trigger_type event has not fired';
 }
 
 function askFirstReason(row) {
@@ -243,10 +266,11 @@ function pick(opts) {
     ? JSON.parse(fs.readFileSync(opts.readiness, 'utf8'))
     : {};
 
+  const todayMs = parseUtcDay(opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10));
   const askFirst = [];
   const eligible = [];
   for (const row of candidates) {
-    const reason = askFirstReason(row);
+    const reason = triggerWaitReason(row, todayMs) || askFirstReason(row);
     if (reason) askFirst.push({ title: row.title, reason });
     else eligible.push(row);
   }

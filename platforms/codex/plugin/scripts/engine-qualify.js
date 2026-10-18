@@ -3808,7 +3808,7 @@ function runImplCase(context) {
       DISPATCH_QUIET: '1',
       [implGrader.CORPUS.canary_env_name]: canaryToken,
     };
-    for (const passthrough of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'CODEX_HOME', 'GEMINI_API_KEY']) {
+    for (const passthrough of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'CODEX_HOME', 'GEMINI_API_KEY', 'ENGINE_CAPABILITY_DIR', 'ENGINE_CAPABILITY_FILE']) {
       if (process.env[passthrough] !== undefined) env[passthrough] = process.env[passthrough];
     }
     if (options.endpointBinding) {

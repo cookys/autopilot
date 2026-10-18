@@ -2,8 +2,8 @@
 # sync-all.sh — one entry point for the repo's scattered sync/check rituals.
 #
 # The rituals (5 generators + membership/parity checks) used to be hand-copied into
-# FOUR consumers (.githooks/pre-commit, .github/workflows/test.yml,
-# preflight-portability.sh, preflight-release.sh). This driver reads them from the
+# THREE consumers (.githooks/pre-commit, preflight-portability.sh,
+# preflight-release.sh). This driver reads them from the
 # single manifest scripts/sync-manifest.json so a new ritual is wired in ONE place.
 #
 # Usage:

@@ -5,7 +5,7 @@ so the full suite never ran and 32 L2 + 2 L1 tests broke unseen. The repair (mer
 work into four clusters (dispatch / qualify / reviewloop / mission); each agent root-caused its tests and
 listed design doubts it deliberately did NOT act on. Those are recorded here; the BACKLOG rows point here.
 
-## 1. CI runs only on version bumps
+## 1. CI runs only on version bumps — Done (BL-0094: owner 2026-10-18 removed GitHub CI; affected suites per merge, whole suite locally before release)
 `.github/workflows/test.yml` triggers on `push` to develop/main **only** when `.claude-plugin/plugin.json`
 changes (release-gated, deliberate per its header comment). Ordinary pushes never run the suite, so 34
 tests rotted between releases. The same repair made later steps `if: !cancelled()` so a red smoke no

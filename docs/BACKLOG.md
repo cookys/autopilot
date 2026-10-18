@@ -601,22 +601,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
 
-### CI runs only on version bumps — ordinary develop pushes never execute the suite, so regressions pile up unseen
-- **Id**: BL-0094
-- **Status**: open
-- **Since**: 2026-09-23
-- **Origin**: self
-- **Problem**: 自動測試只在版本號變動時才會跑，平常推到 develop 的修改完全沒人測。上次修 CI 時發現，兩次發版之間已經悄悄壞掉 34 個測試，等到發版才一次爆出來。 (draft)
-- **Impact**: 問題會累積到發版當下才被發現。擁有者 2026-10-13 否決用 GitHub CI 在每次推送時跑（推送頻繁，額度很快用完）。
-- **Trigger**: a way to run checks between releases that does not use GitHub CI is proposed, or a release lands red again for reasons older than that release
-- **Effort**: S
-- **Source**: 2026-09-23 PEACE-side CI repair (34 tests had rotted between releases; `.github/workflows/test.yml` path filter = `.claude-plugin/plugin.json` only)
-- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
-- **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
-
-
-
-
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
 - **Status**: open

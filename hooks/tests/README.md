@@ -33,7 +33,7 @@ node --test hooks/*.test.js
 bash hooks/tests/state-checkpoint-empty-stdin.test.sh
 ```
 
-CI runs the same `bash hooks/tests/run.sh` (see `.github/workflows/test.yml`).
+The suite runs locally, not on GitHub: ordinary merges run the affected suites picked by `scripts/affected-suites.js`, and the whole `bash hooks/tests/run.sh` runs once before a release.
 
 ## Layout
 

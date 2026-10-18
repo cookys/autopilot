@@ -3127,6 +3127,9 @@ fi
 #   setsid  — own session, reaped by session-pgroup kill (catches ordinary children,
 #             not a deliberate inner setsid). CONTAINMENT=setsid.
 #   plain   — no container available. CONTAINMENT=plain.
+# WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 (scripts/lib/worker-containment.sh) forces
+# HAVE_CGROUP=0. Hetero honors that switch so the setsid fallback can be tested
+# without removing systemd.
 # IMPORTANT — NOT malicious-proof: a same-user worker can `systemd-run --user --scope`
 # a SIBLING cgroup OUTSIDE this scope (gpt-5.5 review 2026-06-26 verified the sibling
 # survives our reap), so `contained:true` is teardown hygiene, NOT a security
@@ -3134,41 +3137,11 @@ fi
 # that needs a real isolation boundary (separate UID / sandbox / no user systemd bus).
 # See BACKLOG "dispatch-hetero descendant-containment".
 SCOPE_UNIT=""; WORKER_SID=""; WORKER_FALLBACK_PGID=""
-HAVE_CGROUP=0
-if command -v systemd-run >/dev/null 2>&1 \
-   && systemd-run --user --scope --quiet -- true >/dev/null 2>&1; then
-  HAVE_CGROUP=1
-fi
+# shellcheck source=lib/worker-containment.sh
+source "$SELF_DIR/lib/worker-containment.sh"
+worker_containment_detect
 HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && grep -q -- --wait < <(setsid --help 2>&1) && HAVE_SETSID=1
-
-reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
-  if [ -n "$SCOPE_UNIT" ]; then
-    systemctl --user kill "$SCOPE_UNIT" --signal=SIGKILL >/dev/null 2>&1 || true
-    systemctl --user stop "$SCOPE_UNIT" >/dev/null 2>&1 || true
-    # verify the cgroup is gone/empty — the genuine setsid-proof containment proof
-    local i cg
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-      systemctl --user is-active "$SCOPE_UNIT" >/dev/null 2>&1 || { CONTAINED=1; break; }
-      sleep 0.3
-    done
-    cg="$(systemctl --user show "$SCOPE_UNIT" -p ControlGroup --value 2>/dev/null)"
-    if [ -n "$cg" ] && [ -s "/sys/fs/cgroup${cg}/cgroup.procs" ]; then CONTAINED=0; fi
-  elif [ -n "$WORKER_SID" ]; then
-    # Group/session kill only (negative sid). Never the dispatcher pid or our
-    # own pgid — including the detached child's session on IN_DETACHED_CHILD=1.
-    local selfpg=""
-    selfpg="$(_self_pgid)" || selfpg=""
-    if [ "$WORKER_SID" = "$$" ] || { [ -n "$selfpg" ] && [ "$WORKER_SID" = "$selfpg" ]; }; then
-      return 0
-    fi
-    kill -TERM "-$WORKER_SID" 2>/dev/null || true
-    local i
-    for i in 1 2 3 4 5; do kill -0 "-$WORKER_SID" 2>/dev/null || break; sleep 0.3; done
-    kill -KILL "-$WORKER_SID" 2>/dev/null || true
-    sleep 0.2
-    kill -0 "-$WORKER_SID" 2>/dev/null || CONTAINED=1   # session empty
-  fi
-}
+# reap_container is defined by worker-containment.sh (name kept for declare -f).
 
 # Managed aborts must preserve exact branch evidence before any removal. The
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.

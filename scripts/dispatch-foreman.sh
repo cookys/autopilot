@@ -59,9 +59,17 @@
 #     every child kimi spawns). Anything else — endpoint tokens, cloud credentials — is not
 #     in the foreman's environment; a nested rail that needs them reads its own files.
 #     Network egress is NOT bounded (kimi has MCP http/sse) → egress_policy "unbounded".
-#   5 containment — kimi is its own setsid session; the cap/deadline kill targets its
-#     process group. Hands dispatched with ledger coords are their own sessions by the
-#     detach contract and SURVIVE the foreman's death — reported, never killed.
+#   5 containment — when systemd-run --user --scope works, kimi is launched inside a
+#     transient user scope (still via setsid, so the pid-as-pgid kill stays a fallback)
+#     and cap, deadline, normal exit, SIGTERM, and SIGINT reap that scope, which also
+#     kills descendants that called setsid themselves. A scope counts only after the
+#     unit is active (or has an ActiveEnterTimestamp). If systemd-run fails to start,
+#     that turn is rerun with the plain setsid launch and reported as setsid. Without
+#     a usable user scope the rail keeps the setsid session kill. JSON containment is
+#     cgroup only after every turn's scope verifies empty, otherwise setsid.
+#     WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 forces the fallback.
+#     Hands dispatched with ledger coords are their own sessions by the detach contract
+#     and SURVIVE the foreman's death — reported, never killed.
 #   6 worktree budget — AUTOPILOT_WORKTREE_ROOT_RUN_ID / AUTOPILOT_ROOT_RUN_ID forwarded
 #     unchanged; AUTOPILOT_DISPATCH_DEPTH=1 so hands land at depth 2.
 #
@@ -99,6 +107,8 @@ source "$SELF_DIR/lib/dispatch-branch-ledger.sh"
 source "$SELF_DIR/lib/worktree-intent.sh"
 # shellcheck source=lib/dispatch-detach.sh
 source "$SELF_DIR/lib/dispatch-detach.sh"
+# shellcheck source=lib/worker-containment.sh
+source "$SELF_DIR/lib/worker-containment.sh"
 
 BRIEF_FILE=""; PLAN_FILE=""; MODEL="kimi-code/k3"; BASE_REF=""; RUN_ID=""; RUN_DIR=""
 LEDGER=""; TOOL_CAP=""; TIMEOUT_SECS=3600; HANDOFF_TIMEOUT=300; POLL=1
@@ -140,6 +150,9 @@ done
 # ---------------------------------------------------------------- result plumbing
 STATUS=""; ERROR=""; WT=""; BRANCH=""; BASE_SHA=""; FOREMAN_HEAD=""; FOREMAN_COMMITS=0
 SESSION_ID=""; STREAM_LOG=""; TOOL_CALLS=0; CONTAINMENT="setsid"; ELAPSED=0
+# Run-level containment stays setsid whenever any single turn failed to be contained.
+# Deliberately conservative: one unverified turn downgrades the whole run's field.
+FOREMAN_CONTAINMENT_VERIFIED=1
 MAIN_CHECKOUT_BOUNDARY="not-measured"; HANDS_JSON="[]"
 START_TS="$(date +%s)"
 
@@ -169,6 +182,8 @@ case "$HANDOFF_TIMEOUT" in ''|*[!0-9]*) die_precondition "--handoff-timeout must
 case "$POLL" in ''|*[!0-9.]*) die_precondition "--poll must be a number" ;; esac
 command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 command -v setsid >/dev/null 2>&1 || die_precondition "setsid is required for process-group containment"
+worker_containment_detect
+SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""; FOREMAN_TURN_SCOPE=""
 command -v node >/dev/null 2>&1 || die_precondition "node is required (stream parsing, content gate)"
 [ -f "$SELF_DIR/check-hands-commit.js" ] || die_precondition "scripts/check-hands-commit.js missing beside this rail"
 [ -f "$SELF_DIR/lib/main-checkout-boundary.sh" ] || die_precondition "scripts/lib/main-checkout-boundary.sh missing beside this rail"
@@ -412,12 +427,122 @@ count_bash_calls() { # <stream file> → prints "<count> <session_id>"
 }
 
 # run_turn <stream> <cap> <deadline_secs> <kimi args...> → sets TURN_EXIT, TURN_STOP (""|cap|deadline)
+# A unit counts as created only after it is active or has entered the active state.
+_foreman_scope_started() {
+  local ts
+  systemctl --user is-active "$1" >/dev/null 2>&1 && return 0
+  ts="$(systemctl --user show "$1" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
+  [ -n "$ts" ] && [ "$ts" != "n/a" ]
+}
+
+# Reap the turn's scope when one was really created; otherwise the setsid session.
+# cgroup is recorded only for a verified scope. FOREMAN_CONTAINMENT_VERIFIED stays
+# 0 for the rest of the run after any turn that was not scope-contained, so the
+# run-level field remains setsid (deliberately conservative).
+_foreman_reap_turn() {
+  local used_scope=0
+  [ -n "${SCOPE_UNIT:-}" ] && used_scope=1
+  [ -n "${SCOPE_UNIT:-}" ] || [ -n "${WORKER_SID:-}" ] || return 0
+  CONTAINED=0
+  reap_container
+  if [ "$used_scope" -eq 1 ] && [ "${CONTAINED:-0}" = 1 ]; then
+    [ "${FOREMAN_CONTAINMENT_VERIFIED:-1}" = 1 ] && CONTAINMENT="cgroup"
+  else
+    FOREMAN_CONTAINMENT_VERIFIED=0
+    CONTAINMENT="setsid"
+  fi
+  SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_SCOPE=""; FOREMAN_TURN_PID=""
+}
+
+# --keep-stderr appends to the stream stderr so a failed scope start's message
+# survives the setsid rerun (a plain redirect would wipe it).
+_foreman_launch_setsid() {
+  local stream="$1"; shift
+  local keep_stderr=0
+  if [ "${1:-}" = "--keep-stderr" ]; then keep_stderr=1; shift; fi
+  FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""
+  if [ "$keep_stderr" -eq 1 ]; then
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>>"$stream.stderr" &
+  else
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  fi
+  FOREMAN_TURN_PID=$!
+  WORKER_SID="$FOREMAN_TURN_PID"
+}
+
+# SIGTERM/SIGINT reap the current turn's scope (if it was created) or its session.
+_foreman_signal_reap() {
+  if [ -n "${FOREMAN_TURN_PID:-}" ]; then
+    kill -TERM -- "-$FOREMAN_TURN_PID" 2>/dev/null || kill -TERM "$FOREMAN_TURN_PID" 2>/dev/null || true
+    kill -KILL -- "-$FOREMAN_TURN_PID" 2>/dev/null || true
+  fi
+  if [ -n "${FOREMAN_TURN_SCOPE:-}" ] && _foreman_scope_started "$FOREMAN_TURN_SCOPE"; then
+    SCOPE_UNIT="$FOREMAN_TURN_SCOPE"
+  else
+    SCOPE_UNIT=""
+    [ -n "${FOREMAN_TURN_PID:-}" ] && WORKER_SID="$FOREMAN_TURN_PID"
+  fi
+  CONTAINED=0
+  reap_container || true
+  exit 130
+}
+trap _foreman_signal_reap TERM INT
+
 run_turn() {
   local stream="$1" cap="$2" deadline="$3"; shift 3
   TURN_EXIT=""; TURN_STOP=""
-  local pid t0 now cnt
-  ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
-  pid=$!
+  local pid t0 now cnt spins launched_scope candidate launch_rc entered
+  SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""; FOREMAN_TURN_SCOPE=""
+  # setsid stays the session leader (its pid is the pgid) so the group kill remains
+  # the fallback. systemd-run puts that session's command in a user scope when one
+  # is available, which also catches descendants that call setsid themselves.
+  if [ "${HAVE_CGROUP:-0}" -eq 1 ]; then
+    FOREMAN_TURN_N=$(( ${FOREMAN_TURN_N:-0} + 1 ))
+    candidate="foreman-${RUN_ID//[^A-Za-z0-9]/_}-${FOREMAN_TURN_N}-$$.scope"
+    FOREMAN_TURN_SCOPE="$candidate"
+    ( cd "$WT" && exec setsid systemd-run --user --scope --quiet --unit="$candidate" -- env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+    pid=$!
+    FOREMAN_TURN_PID=$pid
+    WORKER_SID=$pid
+    launched_scope=0
+    spins=0
+    while [ "$spins" -lt 40 ]; do
+      if _foreman_scope_started "$candidate"; then launched_scope=1; break; fi
+      if ! kill -0 "$pid" 2>/dev/null; then break; fi
+      sleep 0.05
+      spins=$((spins+1))
+    done
+    if [ "$launched_scope" -eq 1 ]; then
+      SCOPE_UNIT="$candidate"
+    elif kill -0 "$pid" 2>/dev/null; then
+      # The probe window ended but systemd-run has not exited. A slow user
+      # manager is not a failed start: keep this pid as the monitored turn so
+      # cap and deadline still apply, and do not launch the turn again.
+      SCOPE_UNIT=""
+      WORKER_SID=$pid
+      FOREMAN_CONTAINMENT_VERIFIED=0
+    else
+      # Definite failure: the launcher already exited non-zero and the scope
+      # never became active. Check ActiveEnterTimestamp once more after the exit.
+      launch_rc=0
+      wait "$pid" 2>/dev/null || launch_rc=$?
+      entered="$(systemctl --user show "$candidate" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
+      if [ "$launch_rc" -ne 0 ] && { [ -z "$entered" ] || [ "$entered" = "n/a" ]; }; then
+        FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""
+        _foreman_launch_setsid "$stream" --keep-stderr "$@"
+        pid="$FOREMAN_TURN_PID"
+      elif [ -n "$entered" ] && [ "$entered" != "n/a" ]; then
+        SCOPE_UNIT="$candidate"
+      else
+        SCOPE_UNIT=""
+        WORKER_SID=$pid
+        FOREMAN_CONTAINMENT_VERIFIED=0
+      fi
+    fi
+  else
+    _foreman_launch_setsid "$stream" "$@"
+    pid="$FOREMAN_TURN_PID"
+  fi
   t0="$(date +%s)"
   while kill -0 "$pid" 2>/dev/null; do
     cnt="$(count_bash_calls "$stream")"; cnt="${cnt%% *}"
@@ -427,7 +552,7 @@ run_turn() {
     elif [ $(( now - t0 )) -ge "$deadline" ]; then TURN_STOP="deadline"
     fi
     if [ -n "$TURN_STOP" ]; then
-      # The setsid'd kimi is its own session leader: its pid is the pgid. Kill the group.
+      # The setsid'd leader's pid is the pgid. Kill the group, then the scope.
       kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
       sleep 1
       kill -KILL -- "-$pid" 2>/dev/null || true
@@ -436,6 +561,7 @@ run_turn() {
     sleep "$POLL"
   done
   wait "$pid" 2>/dev/null; TURN_EXIT=$?
+  _foreman_reap_turn
   cnt="$(count_bash_calls "$stream")"; TOOL_CALLS="${cnt%% *}"
   [ -n "${cnt#* }" ] && SESSION_ID="${cnt#* }"
   return 0

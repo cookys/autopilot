@@ -4178,6 +4178,30 @@ test('recent: the pane lists the section after a tick, and a throwing $.session.
   expect((await rows()).slice(-3).length).toBe(3)
 })
 
+// # RED at bf1782849: recent null-id update failed — expect(received).toEqual() wanted "synthetic question two" and received only "◦ You: synthetic question one ▸" under Recent conversation.
+// A null session id is unread for kept activity rows, but the transcript is still read and recent groups still update.
+// The null tick builds a no-project snapshot (no Recent section on screen). The next tick restores the id and makes
+// messages() throw, so the pane shows whatever the null tick stored.
+test('recent: a null session id still updates the recent groups from a successful transcript read', async ($, on) => {
+  let messagesThrow = false
+  let messages: SessionMsg[] = [U('synthetic question one'), A('synthetic answer one')]
+  const w = worldEn(on, base())
+  on('session.messages', () => { if (messagesThrow) throw new Error('transcript unavailable'); return { value: messages } })
+  await start($, 'terminal')
+  await openRecent($)
+  const rows = async () => (await paneParts($, 'terminal', 'now')).texts
+  let r = await rows()
+  expect([r.slice(-2)[0], squash(r[r.length - 1])]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸'])
+  w.sid.null = true
+  messages = [...messages, U('synthetic question two'), A('synthetic answer two')]
+  await w.clock.advance(5000) // null id, messages succeed: recent must take the new question
+  w.sid.null = false
+  messagesThrow = true
+  await w.clock.advance(5000) // id is readable again, transcript throws: the pane keeps the null tick's groups
+  r = await rows()
+  expect([r.slice(-3)[0], ...r.slice(-2).map(squash)]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸', '◦ You: synthetic question two ▸'])
+})
+
 test('recent: pressing a group Button expands it, pressing again collapses it', async ($, on) => {
   const w = worldEn(on, base())
   on('session.messages', () => ({ value: [U('synthetic question one'), A('synthetic answer one')] }))

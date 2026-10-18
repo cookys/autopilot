@@ -521,10 +521,9 @@ async function refresh($: EngineInterface): Promise<void> {
     let sidOk = false
     try {
       const rawSid = await $.session.id()
-      // null or undefined is an unread id, the same as session.id throwing: keep the previous rows
-      if (rawSid === null || rawSid === undefined) throw new Error('session id unread')
-      sid = rawSid
-      sidOk = true
+      // unread only for the kept-row decision below: a null id still reads the transcript and updates recent
+      sid = rawSid ?? null
+      sidOk = rawSid !== null && rawSid !== undefined
       msgs = await $.session.messages()
       if (recentSid !== null && sid !== recentSid) expanded.clear()
       recentSid = sid

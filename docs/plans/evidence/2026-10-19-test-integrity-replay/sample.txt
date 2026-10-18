@@ -1,0 +1,323 @@
+#0 i=1 deleted_line platforms/codex/plugin/scripts/affected-suites.test.js:9 m=16a406dc added=no nadd=78
+   - const { execFileSync } = require('child_process');
+#1 i=3 deleted_line platforms/codex/plugin/scripts/engine-qualify-impl.test.js:387 m=36abe7bd added=SIM nadd=1
+   - equal(truncRun.row.status, 'failed', 'a truncated administration with started cases is a failed row');
+   + equal(truncRun.row.status, 'no_verdict', 'a truncated all-pass administration is no_verdict until the whole corpus is administered (BL-0160)');
+#2 i=7 deleted_line hooks/tests/review-increment.test.sh:201 m=6c592943 added=SIM nadd=7
+   - && fullWith(m, input(F.deleted, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js' }] }) } }), 'finding_unmapped');
+   + && fullWith(m, input(F.deleted, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js' }] }) } }), 'prior_path_removed');
+#3 i=11 deleted_line hooks/tests/review-increment.test.sh:205 m=6c592943 added=no nadd=7
+   - return r.mode === 'incremental' && r.findings[0].path === 'src/gmoved.js' && paths(r).includes('src/gmoved.js');
+#4 i=15 surface_touch hooks/tests/fixtures/review-increment-real-seat/missing-prior-prefix.txt:null m=6c592943 added=no nadd=1
+   - hooks/tests/fixtures/review-increment-real-seat/missing-prior-prefix.txt
+#5 i=16 deleted_line mods/live/live.test.ts:148 m=b3693669 added=no nadd=142
+   - sid: { value: string }
+#6 i=27 surface_touch evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js:null m=a8dac5e6 added=no nadd=11
+   - evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js
+#7 i=34 deleted_line hooks/tests/check-l1-cache-key-parity.test.sh:6 m=6fcfed4b added=no nadd=0
+   - node "$REPO_ROOT/scripts/check-l1-cache-key-parity.js"; assert_exit_code "$?" 0 "repo is in parity"
+#8 i=40 deleted_line hooks/tests/check-l1-cache-key-parity.test.sh:12 m=6fcfed4b added=no nadd=0
+   - 
+#9 i=48 deleted_line hooks/tests/check-l1-cache-key-parity.test.sh:20 m=6fcfed4b added=no nadd=0
+   - # test file keeps the original pins
+#10 i=57 deleted_line hooks/tests/check-l1-cache-key-parity.test.sh:29 m=6fcfed4b added=no nadd=0
+   - assert_exit_code "$rc_json_red" 1 "json flag exit 1 on red repo"
+#11 i=65 deleted_line hooks/tests/dispatch-review-c.test.sh:774 m=6ed65d18 added=no nadd=21
+   - # now fails closed BEFORE spend with the cause and remedies. --context-window off isolates
+#12 i=68 deleted_line hooks/tests/dispatch-review-c.test.sh:780 m=6ed65d18 added=no nadd=21
+   - assert_eq "$EXIT" "2" "kimi: oversized prompt is a precondition failure (exit 2), never an rc=126 death"
+#13 i=79 deleted_line hooks/tests/opencode-discovery-probe.test.sh:19 m=48a66b5b added=no nadd=33
+   - CANARY_BEFORE=""
+#14 i=82 deleted_line hooks/tests/opencode-discovery-probe.test.sh:147 m=48a66b5b added=no nadd=33
+   - CANARY_AFTER="$(stat -c '%s %Y' "$REAL_LOG")"
+#15 i=84 deleted_line hooks/tests/opencode-discovery-probe.test.sh:149 m=48a66b5b added=SIM nadd=33
+   - echo "CANARY [$TEST_NAME] real opencode.log before='$CANARY_BEFORE' after='$CANARY_AFTER' (size mtime)"
+   + echo "CANARY [$TEST_NAME] real opencode.log offset=$CANARY_OFFSET now=$(stat -c %s "$REAL_LOG") ports_seen=$(wc -l < "$PORTS_FILE")"
+#16 i=90 deleted_line mods/live/live.test.ts:5266 m=1456a232 added=no nadd=34
+   - expect(cells[cells.length - 1].props?.color, 'track is the structure colour').toBe('subtle')
+#17 i=93 deleted_line mods/live/scroll.test.ts:108 m=62d54529 added=SIM nadd=19
+   - const ev = { by: 1, contentRows: 31, bodyRows: 30, offset: 0 }
+   + const ev = { by: 1, contentRows: 31, bodyRows: 30, offset: 1 } // the engine's target from a window at 0
+#18 i=96 deleted_line hooks/tests/opencode-v2-plugin.test.sh:18 m=375a1601 added=no nadd=48
+   - # so the opencode2-era serve + basic-auth + /api/session integration this test used no longer
+#19 i=117 deleted_line hooks/tests/opencode-v2-plugin.test.sh:41 m=375a1601 added=no nadd=48
+   - INTENT_FILE="$(find "$HOOK_HOME/.autopilot/intent" -type f -name '*.json' -print -quit 2>/dev/null)"
+#20 i=126 deleted_line hooks/tests/implementation-campaign-state.test.sh:5594 m=a593878c added=SIM nadd=6
+   - // Phase 4 (final-panel isolation): kimi is cleanroom tier now (covered by
+   + // Phase 4 (final-panel isolation): kimi is cleanroom tier (covered by final-panel-kimi-agy-intake.test.sh)
+#21 i=129 deleted_line hooks/tests/mission-retire-on-integration.test.sh:161 m=a593878c added=no nadd=8
+   - exit $?
+#22 i=146 deleted_line mods/live/ui-lint.test.js:159 m=48965f54 added=SIM nadd=126
+   - test('L8: no theme-key literal in the viewer mod either (its quiet lines are dim, its code colours are the engine\'s)', () => {
+   + test('L8: no theme-key literal outside the PALETTE table (every source file under every mod in mods/)', () => {
+#23 i=151 deleted_line mods/live/ui-lint.test.js:164 m=48965f54 added=no nadd=126
+   - // control: a planted literal in pane.tsx is reported (the pane draws no colour of its own: its quiet lines are dim)
+#24 i=152 deleted_line mods/live/ui-lint.test.js:165 m=48965f54 added=no nadd=126
+   - const pane = fs.readFileSync(path.join(dir, 'pane.tsx'), 'utf8')
+#25 i=154 deleted_line mods/live/ui-lint.test.js:170 m=48965f54 added=no nadd=126
+   - test('L9/L1: the viewer mod sets no bold, no background and no inverse', () => {
+#26 i=155 deleted_line mods/live/ui-lint.test.js:171 m=48965f54 added=no nadd=126
+   - const dir = path.join(__dirname, '..', 'viewer')
+#27 i=167 deleted_line hooks/tests/skill-frontmatter-portability.test.sh:19 m=b6e11294 added=SIM nadd=12
+   - console.log(`copies=${bodies.length}:${new Set(bodies).size} reject=${classify({...base,codes:[1],text:'AUTOPILOT_STEP schema 1\nunsupported frontmatter field t
+   + console.log(`copies=${bodies.length}:${new Set(bodies).size} reject=${classify({...base,codes:[1],text:'AUTOPILOT_STEP schema 1\nunsupported frontmatter field x
+#28 i=172 deleted_line hooks/tests/child-parent-record.test.sh:298 m=9883b639 added=SIM nadd=8
+   - scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --runner "$runner" --model m "$binflag" "$USTUB" --branch "feat/$id" --prompt-fi
+   + scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --runner "$runner" --model m "$binflag" "$stub" --branch "feat/$id" --prompt-fil
+#29 i=188 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:173 m=9883b639 added=no nadd=280
+   - ls -A "$(pwd)" > "${argvFile}.ls"
+#30 i=189 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:174 m=9883b639 added=SIM nadd=280
+   - cat >/dev/null
+   + const SHIP = `cat >/dev/null\nprintf '%s\\n' '{"type":"text","part":{"text":"VERDICT: SHIP-AS-IS\\n"}}'`;
+#31 i=196 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:182 m=9883b639 added=SIM nadd=280
+   - eq(argv[argv.indexOf('--agent') + 1], 'locked', 'dispatch-review: --agent locked');
+   + eq(argv[argv.indexOf('--agent') + 1], 'locked', 'dispatch-review v1: --agent locked');
+#32 i=198 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:184 m=9883b639 added=SIM nadd=280
+   - eq(JSON.parse(fs.readFileSync(`${argvFile}.env`, 'utf8')), oc.CONFIG, 'dispatch-review: canonical env');
+   + eq(JSON.parse(fs.readFileSync(`${st}.env`, 'utf8')), oc.CONFIG, 'dispatch-review v1: canonical env');
+#33 i=206 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:194 m=9883b639 added=no nadd=280
+   - fs.writeFileSync(envStub, `#!/usr/bin/env bash
+#34 i=213 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:201 m=9883b639 added=no nadd=280
+   - const r = spawnSync('bash', [path.join(__dirname, '..', 'dispatch-review.sh'), '--runner', 'opencode', '--model', 'opencode-go/x', '--diff-file', d3, '--bin', e
+#35 i=217 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:209 m=9883b639 added=no nadd=280
+   - const toolStub = path.join(tmp, 'sh-tool-opencode');
+#36 i=218 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:210 m=9883b639 added=no nadd=280
+   - fs.writeFileSync(toolStub, `#!/usr/bin/env bash
+#37 i=233 deleted_line platforms/codex/plugin/scripts/lib/opencode-containment.test.js:229 m=9883b639 added=SIM nadd=280
+   - fs.writeFileSync(path.join(sdir, 'dispatch-review.sh'), sh, { mode: 0o755 });
+   + refuse('non-empty cwd', () => { fs.writeFileSync(path.join(work, 'f'), 'x'); }, /not empty/);
+#38 i=244 deleted_line scripts/lib/opencode-containment.test.js:122 m=9883b639 added=SIM nadd=280
+   - PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
+   + PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, PWD: process.cwd(), QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
+#39 i=251 deleted_line scripts/lib/opencode-containment.test.js:172 m=9883b639 added=no nadd=280
+   - pwd > "${argvFile}.cwd"
+#40 i=253 deleted_line scripts/lib/opencode-containment.test.js:174 m=9883b639 added=SIM nadd=280
+   - cat >/dev/null
+   + const SHIP = `cat >/dev/null\nprintf '%s\\n' '{"type":"text","part":{"text":"VERDICT: SHIP-AS-IS\\n"}}'`;
+#41 i=255 deleted_line scripts/lib/opencode-containment.test.js:177 m=9883b639 added=EXACT nadd=280
+   - const diff = path.join(tmp, 'd.diff');
+#42 i=259 deleted_line scripts/lib/opencode-containment.test.js:181 m=9883b639 added=SIM nadd=280
+   - const argv = fs.readFileSync(argvFile, 'utf8').split('\n');
+   + const argv = fs.readFileSync(`${st}.argv`, 'utf8').split('\n');
+#43 i=262 deleted_line scripts/lib/opencode-containment.test.js:184 m=9883b639 added=SIM nadd=280
+   - eq(JSON.parse(fs.readFileSync(`${argvFile}.env`, 'utf8')), oc.CONFIG, 'dispatch-review: canonical env');
+   + eq(JSON.parse(fs.readFileSync(`${st}.env`, 'utf8')), oc.CONFIG, 'dispatch-review v1: canonical env');
+#44 i=269 deleted_line scripts/lib/opencode-containment.test.js:193 m=9883b639 added=no nadd=280
+   - const envOut = path.join(tmp, 'sh-env-out');
+#45 i=275 deleted_line scripts/lib/opencode-containment.test.js:199 m=9883b639 added=no nadd=280
+   - const d3 = path.join(tmp, 'd3.diff');
+#46 i=278 deleted_line scripts/lib/opencode-containment.test.js:203 m=9883b639 added=no nadd=280
+   - eq(fs.readFileSync(envOut, 'utf8').trim(), 'C=UNSET|D=UNSET', 'spawned opencode env has neither OPENCODE_CONFIG nor OPENCODE_CONFIG_DIR');
+#47 i=279 deleted_line scripts/lib/opencode-containment.test.js:206 m=9883b639 added=SIM nadd=280
+   - // dispatch-review: tool_use event -> no_verdict naming the breach (answer discarded)
+   + // dispatch-review: tool_use event -> no_verdict naming the breach (answer discarded); v2 audit rules
+#48 i=293 deleted_line scripts/lib/opencode-containment.test.js:221 m=9883b639 added=SIM nadd=280
+   - // tampered copies of the script/lib: assert must refuse BEFORE spawn (precondition_failed, binary never run)
+   + // tampered copies of the lib: dispatch-review must refuse BEFORE spawn (precondition_failed, `run`
+#49 i=298 deleted_line scripts/lib/opencode-containment.test.js:230 m=9883b639 added=no nadd=280
+   - const ran = path.join(root, 'binary-ran');
+#50 i=308 deleted_line mods/live/live.test.ts:319 m=35f07d83 added=SIM nadd=63
+   - const allRows = (tree: Node): string[] => ((tree.children || []) as Node[]).slice(1).map(k => textOf(k))
+   + const allRows = (tree: Node): string[] => ((flat(tree).children || []) as Node[]).slice(1).map(k => textOf(k))
+#51 i=327 deleted_line platforms/codex/plugin/scripts/affected-suites.test.js:225 m=2f8d1da3 added=no nadd=14
+   - assert.strictEqual(text[text.length - 1], LIVE_RUNNER, 'text output ends with the runner line');
+#52 i=342 deleted_line hooks/tests/final-panel-kimi-agy-intake.test.sh:182 m=48985afc added=SIM nadd=12
+   - for M in green_admits refusals unknown no_bypass none_tier; do
+   + for M in green_admits refusals unknown no_bypass none_tier opencode_packet; do
+#53 i=345 surface_touch hooks/tests/fixtures/dispatch-discuss-single-turn-empty-taken.golden.txt:null m=2f5ba118 added=no nadd=81
+   - hooks/tests/fixtures/dispatch-discuss-single-turn-empty-taken.golden.txt
+#54 i=364 deleted_line hooks/tests/review-resolution-closure.test.sh:144 m=6e92b769 added=no nadd=41
+   - claim: decide from the code at H1 whether it is resolved, still present, or invalid.
+#55 i=372 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:2 m=16dd391e added=no nadd=0
+   - # Tests for dispatch-hetero.sh --gc (stale worktree reaper)
+#56 i=377 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:7 m=16dd391e added=no nadd=0
+   - # seat strikes through engine-capability-state.js. Without this the writes land in
+#57 i=381 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:11 m=16dd391e added=no nadd=0
+   - mkdir -p "$GC_CAP_ISOLATION_DIR"
+#58 i=385 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:15 m=16dd391e added=no nadd=0
+   - [ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_BEFORE=$(wc -c < "$REAL_CAP_STRIKES")
+#59 i=386 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:16 m=16dd391e added=no nadd=0
+   - 
+#60 i=402 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:32 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#61 i=404 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:34 m=16dd391e added=no nadd=0
+   - local scratch="$TEST_TMP/repo-disabled"
+#62 i=412 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:42 m=16dd391e added=no nadd=0
+   - # config: since 5c53201f this one dogfoods the reaper at 14, and the
+#63 i=445 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:75 m=16dd391e added=no nadd=0
+   - local wt_path="$scratch/wt-aged"
+#64 i=450 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:80 m=16dd391e added=no nadd=0
+   - local now=$(date +%s)
+#65 i=458 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:88 m=16dd391e added=no nadd=0
+   - cd "$scratch"
+#66 i=459 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:89 m=16dd391e added=no nadd=0
+   - local output
+#67 i=460 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:90 m=16dd391e added=no nadd=0
+   - output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+#68 i=461 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:91 m=16dd391e added=no nadd=0
+   - cd - > /dev/null
+#69 i=463 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:93 m=16dd391e added=no nadd=0
+   - # Should be reaped
+#70 i=474 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:104 m=16dd391e added=no nadd=0
+   - fail "branch should still exist after reaping"
+#71 i=478 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:108 m=16dd391e added=no nadd=0
+   - test_reap_aged_marked
+#72 i=486 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:116 m=16dd391e added=no nadd=0
+   - git init -q "$scratch"
+#73 i=493 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:123 m=16dd391e added=no nadd=0
+   - 
+#74 i=511 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:141 m=16dd391e added=no nadd=0
+   - ) &
+#75 i=521 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:151 m=16dd391e added=no nadd=0
+   - output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+#76 i=525 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:155 m=16dd391e added=no nadd=0
+   - wait $lock_pid 2>/dev/null || true
+#77 i=546 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:176 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.name "Test User"
+#78 i=547 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:177 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#79 i=560 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:190 m=16dd391e added=no nadd=0
+   - cd - > /dev/null
+#80 i=566 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:196 m=16dd391e added=no nadd=0
+   - fail "unmarked worktree should not be reaped"
+#81 i=569 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:199 m=16dd391e added=no nadd=0
+   - 
+#82 i=587 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:217 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#83 i=592 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:222 m=16dd391e added=no nadd=0
+   - local wt_path="$scratch/wt-fresh"
+#84 i=595 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:225 m=16dd391e added=no nadd=0
+   - 
+#85 i=597 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:227 m=16dd391e added=no nadd=0
+   - local now=$(date +%s)
+#86 i=605 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:235 m=16dd391e added=no nadd=0
+   - local output
+#87 i=642 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:272 m=16dd391e added=no nadd=0
+   - schema=1
+#88 i=653 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:283 m=16dd391e added=no nadd=0
+   - for _ in $(seq 1 50); do
+#89 i=662 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:292 m=16dd391e added=no nadd=0
+   - cd - > /dev/null
+#90 i=665 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:295 m=16dd391e added=no nadd=0
+   - wait $lock_pid 2>/dev/null || true
+#91 i=667 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:297 m=16dd391e added=no nadd=0
+   - assert_eq 0 $exit_code "concurrent gc exit code"
+#92 i=676 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:306 m=16dd391e added=no nadd=0
+   - test_concurrent_gc
+#93 i=680 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:310 m=16dd391e added=no nadd=0
+   - export TMPDIR="$TEST_TMP/tmp"
+#94 i=681 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:311 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#95 i=684 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:314 m=16dd391e added=no nadd=0
+   - git init -q "$scratch"
+#96 i=717 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:347 m=16dd391e added=no nadd=0
+   - 
+#97 i=723 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:353 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#98 i=729 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:359 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#99 i=739 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:369 m=16dd391e added=no nadd=0
+   - 
+#100 i=744 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:374 m=16dd391e added=no nadd=0
+   - test_reap_unmarked_requires_yes
+#101 i=746 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:376 m=16dd391e added=no nadd=0
+   - # Test 9: Marker files should be excluded from git status (regression test)
+#102 i=771 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:401 m=16dd391e added=no nadd=0
+   - # COMMON git dir — git reads info/exclude from the common dir for linked
+#103 i=773 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:403 m=16dd391e added=no nadd=0
+   - git_dir=$(git -C "$wt_path" rev-parse --path-format=absolute --git-common-dir)
+#104 i=795 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:425 m=16dd391e added=no nadd=0
+   - git init -q "$scratch"
+#105 i=798 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:428 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#106 i=802 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:432 m=16dd391e added=no nadd=0
+   - 
+#107 i=805 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:435 m=16dd391e added=no nadd=0
+   - orphan_log="$orphan_dir/autopilot-orphan-worktrees.log"
+#108 i=812 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:442 m=16dd391e added=no nadd=0
+   - cd "$scratch"
+#109 i=827 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:457 m=16dd391e added=no nadd=0
+   - test_orphan_log_hygiene_retries_registered_worktree
+#110 i=831 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:461 m=16dd391e added=no nadd=0
+   - test_orphan_log_hygiene_absent_and_retry_failure() {
+#111 i=833 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:463 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#112 i=846 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:476 m=16dd391e added=no nadd=0
+   - output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+#113 i=854 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:484 m=16dd391e added=no nadd=0
+   - printf '%s\n' "$wt_path" > "$orphan_log"
+#114 i=855 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:485 m=16dd391e added=no nadd=0
+   - 
+#115 i=865 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:495 m=16dd391e added=no nadd=0
+   - fi
+#116 i=866 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:496 m=16dd391e added=no nadd=0
+   - exec "$real_git" "\$@"
+#117 i=878 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:508 m=16dd391e added=no nadd=0
+   - fail "failed registered-worktree retry must keep the worktree"
+#118 i=912 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:542 m=16dd391e added=no nadd=0
+   - [ -d "$wt_path" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "orphan retry must preserve a lifetime-locked registered worktree"
+#119 i=921 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:551 m=16dd391e added=no nadd=0
+   - 
+#120 i=922 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:552 m=16dd391e added=no nadd=0
+   - test_orphan_log_rewrite_failures_and_concurrent_append() {
+#121 i=929 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:559 m=16dd391e added=no nadd=0
+   - set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+#122 i=930 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:560 m=16dd391e added=no nadd=0
+   - assert_eq "$rc" 2 "non-regular orphan log fails closed"
+#123 i=935 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:565 m=16dd391e added=no nadd=0
+   - fake="$TEST_TMP/fail-mv-bin"; mkdir -p "$fake"
+#124 i=941 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:571 m=16dd391e added=no nadd=0
+   - rm -rf "$TMPDIR/keep-path"; printf '%s\n' "$TMPDIR/gone" > "$log"
+#125 i=942 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:572 m=16dd391e added=no nadd=0
+   - appended="$TMPDIR/concurrent-entry"; done="$TEST_TMP/append-done"; hook="$TEST_TMP/orphan-append-hook.sh"
+#126 i=949 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:579 m=16dd391e added=no nadd=0
+   - AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK="$hook" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1
+#127 i=953 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:583 m=16dd391e added=no nadd=0
+   - }
+#128 i=966 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:596 m=16dd391e added=no nadd=0
+   - printf '%s\n' "$TMPDIR/gone" > "$log"
+#129 i=967 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:597 m=16dd391e added=no nadd=0
+   - ln -s "$victim" "${log}.lock"
+#130 i=968 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:598 m=16dd391e added=no nadd=0
+   - set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+#131 i=978 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:608 m=16dd391e added=no nadd=0
+   - printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+#132 i=981 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:611 m=16dd391e added=no nadd=0
+   - now=$(date +%s); aged_ts=$((now - 200000))
+#133 i=992 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:622 m=16dd391e added=no nadd=0
+   - test_orphan_state_dir_is_private_and_rejects_symlink() {
+#134 i=999 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:629 m=16dd391e added=no nadd=0
+   - assert_eq "$mode" 700 "orphan state directory is owner-only"
+#135 i=1006 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:636 m=16dd391e added=no nadd=0
+   - assert_eq "$rc" 2 "symlink orphan state directory fails closed"
+#136 i=1010 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:640 m=16dd391e added=no nadd=0
+   - test_orphan_state_dir_is_private_and_rejects_symlink
+#137 i=1011 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:641 m=16dd391e added=no nadd=0
+   - 
+#138 i=1014 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:644 m=16dd391e added=no nadd=0
+   - assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+#139 i=1029 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:51 m=16dd391e added=no nadd=6
+   - age=$(resolve_unconfigured --field stale_reaper_age_days)
+#140 i=1046 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:88 m=16dd391e added=no nadd=6
+   - # Test 6: Override field query
+#141 i=1050 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:92 m=16dd391e added=no nadd=6
+   - 
+#142 i=1052 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:94 m=16dd391e added=no nadd=6
+   - age=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field stale_reaper_age_days)
+#143 i=1056 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:104 m=16dd391e added=SIM nadd=6
+   - parsed=$(echo "$output" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).stale_reaper_age_days)' 2>/dev/null)
+   + parsed=$(echo "$output" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).max_leaf_worktrees_per_root)' 2>/dev/null)
+#144 i=1058 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:123 m=16dd391e added=no nadd=6
+   - test_field_age
+#145 i=1071 deleted_line hooks/tests/review-resolution-closure.test.sh:92 m=2210b470 added=SIM nadd=22
+   - full_round: [(s) => s.replace('if (priorFindingIds === null) {', 'if (false) {'), 'full_round_rejects_object_form'],
+   + full_round: [(s) => s.replace('if (priorFindingIds === null) {', 'if (false) {').replace(/if \(packetPaths === null \|\|[\s\S]*?\n  \}\n/, ''), 'full_round_reje
+#146 i=1077 deleted_line hooks/tests/profile-context-isolation.test.sh:285 m=a9a508c6 added=SIM nadd=3
+   - assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "693" \
+   + assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "645" \
+#147 i=1081 deleted_line platforms/codex/plugin/scripts/qualification-consult-discuss-transport.test.js:197 m=09c5eeb6 added=no nadd=4
+   - format: 'unified_diff',
+#148 i=1088 deleted_line platforms/codex/plugin/scripts/qualification-review-provider.test.js:703 m=09c5eeb6 added=no nadd=5
+   - payload: { format: 'unified_diff', content },
+#149 i=1095 deleted_line scripts/qualification-consult-discuss-transport.test.js:359 m=09c5eeb6 added=no nadd=4
+   - payload: { format: 'unified_diff', content: JSON.stringify({ bundle: {} }) },

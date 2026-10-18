@@ -1701,6 +1701,41 @@ function validateMergePreflight(value) {
       },
     };
   }
+  const preflightEdgeKeys = new Set([
+    'sequence',
+    'source_ref',
+    'source_sha',
+    'source_worktree',
+    'source_from_edge',
+    'target_ref',
+    'target_sha',
+    'target_worktree',
+    'target_from_edge',
+    'mode',
+    'required_result',
+    'status',
+    'dirty',
+    'incoming_paths',
+    'overlapping_paths',
+    'preservation_proposal',
+    'dirty_proof',
+    'reason',
+    'blockers',
+  ]);
+  if (!value.edges.every((edge) => isPlainObject(edge)
+      && Array.isArray(edge.dirty_proof)
+      && Object.keys(edge).every((key) => preflightEdgeKeys.has(key)))) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'invalid',
+        reason: 'merge_preflight_shape_invalid',
+        manifest_seal: value.manifest_seal,
+        preflight_status: value.status,
+      },
+    };
+  }
   const safe = value.status === 'safe'
     && value.can_merge === true
     && value.edges.length > 0

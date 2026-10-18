@@ -291,6 +291,8 @@ function digestBuffer(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+// git() is utf-8 only and fails through fail(). Snapshot reads need binary
+// stdout, stdin, and a thrown Error, so this helper stays separate.
 function snapshotGit(cwd, args, { allowFailure = false, input = null, encoding = 'utf8' } = {}) {
   const result = spawnSync('git', ['-C', cwd, ...args], {
     encoding,
@@ -378,14 +380,41 @@ function dirtyProof(worktree, dirty) {
   });
 }
 
-function withDirtyProof(report, worktree, dirty) {
+function withDirtyProof(report, worktree, dirty, blockers) {
+  // Adapter-driven callers pass a worktree that is not an existing absolute path.
+  // Only that case skips the proof. Every other failure blocks the edge.
   if (typeof worktree !== 'string' || !path.isAbsolute(worktree)) return report;
+  let exists = false;
   try {
-    if (!fs.existsSync(worktree)) return report;
-    return { ...report, dirty_proof: dirtyProof(worktree, dirty) };
-  } catch (_error) {
-    return report;
+    exists = fs.existsSync(worktree);
+  } catch (error) {
+    return blockDirtyProof(report, blockers, error);
   }
+  if (!exists) return report;
+  try {
+    return { ...report, dirty_proof: dirtyProof(worktree, dirty) };
+  } catch (error) {
+    return blockDirtyProof(report, blockers, error);
+  }
+}
+
+function blockDirtyProof(report, blockers, error) {
+  const detail = error && error.message ? error.message : 'dirty proof failed';
+  const reason = `dirty_proof_failed: ${detail}`;
+  if (Array.isArray(blockers)) {
+    blockers.push({
+      edge_sequence: report.sequence,
+      reason,
+      paths: [],
+    });
+  }
+  return {
+    ...report,
+    status: 'blocked',
+    reason,
+    blockers: [{ reason, paths: [] }],
+    dirty_proof: [],
+  };
 }
 
 function parseNul(output) {
@@ -658,7 +687,7 @@ function preflightCanonicalMergeIntent(sealed, adapters = {}) {
       incoming_paths: incoming.paths,
       overlapping_paths: overlapping,
       preservation_proposal: status === 'overlapping' ? overlapping : [],
-    }, edge.target_worktree, dirty));
+    }, edge.target_worktree, dirty, blockers));
   }
 
   let status = 'safe';
@@ -876,10 +905,10 @@ function preflightFlatMergeIntent(sealed, adapters) {
       incoming_paths: incoming,
       overlapping_paths: overlapping,
       preservation_proposal: overlapping.filter((item) => allowed.has(item)),
-    }, edge.target_worktree, dirty));
+    }, edge.target_worktree, dirty, blockers));
   }
   let status = 'safe';
-  if (blockers.length > 0) status = 'blocked';
+  if (blockers.length > 0 || reports.some((edge) => edge.status === 'blocked')) status = 'blocked';
   else if (hasAmbiguity) status = 'ambiguous';
   else if (hasOverlap) status = 'overlapping';
   return sealPreflight({

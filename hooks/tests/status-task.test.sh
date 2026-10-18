@@ -599,6 +599,7 @@ function mergePreflightFixture(overrides = {}) {
       incoming_paths: ['src/status/merge-intent.js'],
       overlapping_paths: [],
       preservation_proposal: [],
+      dirty_proof: [],
     }],
     blockers: [],
     ...overrides,
@@ -895,6 +896,7 @@ group('p2-merge-preflight', () => {
       incoming_paths: ['src/status/merge-intent.js'],
       overlapping_paths: ['src/status/merge-intent.js'],
       preservation_proposal: ['src/status/merge-intent.js'],
+      dirty_proof: [],
     }],
   });
   const overlapReceipt = buildTaskStatus(

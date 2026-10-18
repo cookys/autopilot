@@ -2,15 +2,139 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autopilot.local/schemas/merge-intent.schema.json",
   "title": "sealed-merge-intent",
-  "description": "LSM P2 ordered merge intent. The seal binds exact refs, worktrees, pinned SHAs, modes, reverse prohibitions, and path-scoped preservation policy.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["manifest", "seal"],
-  "properties": {
-    "manifest": { "$ref": "#/$defs/manifest" },
-    "seal": { "$ref": "#/$defs/sha256" }
-  },
+  "oneOf": [
+    { "$ref": "#/$defs/sealedIntent" },
+    { "$ref": "#/$defs/preflightReceipt" }
+  ],
   "$defs": {
+    "sealedIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "seal"],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/manifest" },
+        "seal": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "preflightReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "manifest_seal",
+        "status",
+        "can_merge",
+        "edges",
+        "blockers",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 2 },
+        "artifact_type": { "type": "string", "const": "merge_intent_preflight" },
+        "manifest_seal": { "$ref": "#/$defs/sha256" },
+        "status": { "type": "string", "enum": ["safe", "overlapping", "ambiguous", "blocked"] },
+        "can_merge": { "type": "boolean" },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/preflightEdge" }
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/preflightBlocker" }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" },
+        "proposed_preservation_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dirty_inventory": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dirtyInventoryEntry" }
+        }
+      }
+    },
+    "preflightEdge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["dirty_proof"],
+      "properties": {
+        "dirty_proof": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dirtyProofEntry" }
+        }
+      }
+    },
+    "dirtyProofEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "index", "worktree"],
+      "properties": {
+        "path": { "type": "string" },
+        "index": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/dirtyProofIndex" }
+          ]
+        },
+        "worktree": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/dirtyProofWorktree" }
+          ]
+        }
+      }
+    },
+    "dirtyProofIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "digest"],
+      "properties": {
+        "mode": { "type": "string", "pattern": "^[0-7]{6}$" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dirtyProofWorktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "mode", "digest"],
+      "properties": {
+        "type": { "type": "string", "enum": ["file", "symlink"] },
+        "mode": { "type": "integer" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "preflightBlocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "paths"],
+      "properties": {
+        "edge_sequence": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer" }
+          ]
+        },
+        "reason": { "type": "string" },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "dirtyInventoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge_sequence", "staged", "unstaged", "untracked", "ambiguous"],
+      "properties": {
+        "edge_sequence": { "type": "integer" },
+        "target_ref": { "type": "string" },
+        "staged": { "type": "array", "items": { "type": "string" } },
+        "unstaged": { "type": "array", "items": { "type": "string" } },
+        "untracked": { "type": "array", "items": { "type": "string" } },
+        "ambiguous": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"

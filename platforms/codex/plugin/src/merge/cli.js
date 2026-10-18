@@ -272,6 +272,27 @@ function receiptDirProblem(dir) {
   } catch (_error) {
     return `receipt_dir is missing or not writable: ${dir}`;
   }
+  // access(W_OK) is true for root even when the mode has no write bit.
+  if ((stat.mode & 0o222) === 0) {
+    return `receipt_dir is missing or not writable: ${dir}`;
+  }
+  const probe = path.join(
+    dir,
+    `.receipt-write-probe.${process.pid}.${crypto.randomBytes(6).toString('hex')}`,
+  );
+  let probeFd = null;
+  try {
+    probeFd = fs.openSync(probe, 'wx', 0o600);
+    fs.closeSync(probeFd);
+    probeFd = null;
+    fs.unlinkSync(probe);
+  } catch (_error) {
+    if (probeFd !== null) {
+      try { fs.closeSync(probeFd); } catch (_closeError) { /* ignore */ }
+    }
+    try { fs.unlinkSync(probe); } catch (_unlinkError) { /* ignore */ }
+    return `receipt_dir is missing or not writable: ${dir}`;
+  }
   return null;
 }
 
@@ -340,6 +361,7 @@ function durableFromReceipt(receipt, intentEdges, override = null) {
 }
 
 function maybeCrashAfterEdge(sequence) {
+  if (process.env.AUTOPILOT_TEST_SEAMS !== '1') return;
   const raw = process.env.AUTOPILOT_MERGE_CRASH_AFTER_EDGE;
   if (typeof raw !== 'string' || !/^[1-9][0-9]*$/.test(raw)) return;
   if (Number(raw) !== sequence) return;
@@ -571,6 +593,43 @@ function executeMergeIntent(request) {
         : [],
     };
   }
+  const receiptDir = isPlainObject(request)
+    && Object.prototype.hasOwnProperty.call(request, 'receipt_dir')
+    ? request.receipt_dir
+    : null;
+  let intentEdges = [];
+  let progressSeal = null;
+  let progressRun = null;
+  if (receiptDir !== null) {
+    const receiptFile = path.join(path.resolve(receiptDir), 'merge-execution-receipt.json');
+    const writeDurable = (receipt, override = null) => {
+      try {
+        atomicWriteJson(receiptFile, durableFromReceipt(receipt, intentEdges, override));
+      } catch (error) {
+        const wrapped = new Error(
+          `receipt_dir is missing or not writable: ${receiptDir} (${error.message})`,
+        );
+        wrapped.code = 'RECEIPT_DIR';
+        throw wrapped;
+      }
+    };
+    durableSink = (receipt) => writeDurable(receipt);
+    writeProgress = (edges) => writeDurable({
+      manifest_seal: progressSeal,
+      root_run_id: progressRun,
+      status: 'in_progress',
+      halt_reason: null,
+      halt_edge: null,
+      edges,
+    }, {
+      status: 'in_progress',
+      state: 'in_progress',
+      haltReason: null,
+      haltEdge: null,
+      edges,
+    });
+  }
+  try {
   if (!isPlainObject(request)
       || !isPlainObject(request.sealed_manifest)
       || !isPlainObject(request.sealed_manifest.manifest)) {
@@ -581,6 +640,7 @@ function executeMergeIntent(request) {
   if (!isPlainObject(manifest) || manifest.schema_version !== INTENT_SCHEMA_VERSION) {
     return halted(sealed.seal, manifest && manifest.root_run_id, [], 'manifest_schema_version_unsupported');
   }
+  if (Array.isArray(manifest.edges)) intentEdges = intentEdgesFromManifest(manifest);
   if (!verifyMergeIntentSeal(sealed)) {
     return halted(sealed.seal, manifest.root_run_id, [], 'manifest_seal_invalid');
   }
@@ -617,60 +677,11 @@ function executeMergeIntent(request) {
   }
 
   const receipts = [];
-  const receiptDir = Object.prototype.hasOwnProperty.call(request, 'receipt_dir')
-    ? request.receipt_dir
-    : null;
-  if (receiptDir !== null) {
-    const intentEdges = intentEdgesFromManifest(manifest);
-    const receiptFile = path.join(path.resolve(receiptDir), 'merge-execution-receipt.json');
-    const writeDurable = (receipt, override = null) => {
-      try {
-        atomicWriteJson(receiptFile, durableFromReceipt(receipt, intentEdges, override));
-      } catch (error) {
-        const wrapped = new Error(
-          `receipt_dir is missing or not writable: ${receiptDir} (${error.message})`,
-        );
-        wrapped.code = 'RECEIPT_DIR';
-        throw wrapped;
-      }
-    };
-    durableSink = (receipt) => writeDurable(receipt);
-    writeProgress = (edges) => writeDurable({
-      manifest_seal: sealed.seal,
-      root_run_id: manifest.root_run_id,
-      status: 'in_progress',
-      halt_reason: null,
-      halt_edge: null,
-      edges,
-    }, {
-      status: 'in_progress',
-      state: 'in_progress',
-      haltReason: null,
-      haltEdge: null,
-      edges,
-    });
-    try {
-      writeDurable({
-        manifest_seal: sealed.seal,
-        root_run_id: manifest.root_run_id,
-        status: 'in_progress',
-        halt_reason: null,
-        halt_edge: null,
-        edges: [],
-      }, {
-        status: 'in_progress',
-        state: 'in_progress',
-        haltReason: null,
-        haltEdge: null,
-        edges: [],
-      });
-    } catch (error) {
-      durableSink = null;
-      writeProgress = null;
-      throw error;
-    }
+  if (writeProgress) {
+    progressSeal = sealed.seal;
+    progressRun = manifest.root_run_id;
+    writeProgress([]);
   }
-  try {
   for (const edge of manifest.edges) {
     for (const side of ['source', 'target']) {
       if (!validateWorktreeBinding(manifest.repo, edge[`${side}_worktree`])) {
@@ -994,9 +1005,9 @@ function inspectMergeReceipt(file) {
     return { code: 2, error: `cannot read merge receipt: ${error.message}` };
   }
   if (!verifyMergeExecutionReceipt(receipt)
-      || receipt.state !== 'in_progress'
+      || !['in_progress', 'completed', 'halted'].includes(receipt.state)
       || !Array.isArray(receipt.intent_edges)) {
-    return { code: 2, error: 'merge receipt is not an in-progress execution receipt' };
+    return { code: 2, error: 'merge receipt is not an execution receipt' };
   }
   const done = new Map();
   for (const edge of receipt.edges) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # BL-0075 — optional write-ahead merge receipt. Default stays off.
-# RED at a937b9b3d: FAIL 17 passed, 15 failed — no receipt file, --receipt-dir/--inspect-receipt rejected (unknown option) before any merge, target ref unchanged, stderr had no receipt_dir reason.
+# RED at 3021f434d: FAIL 35 passed, 13 failed — crash var without AUTOPILOT_TEST_SEAMS killed the process (exit 137, in_progress receipt with only edge 1); inspect rejected the completed receipt (not an in-progress execution receipt); preflight halt wrote no receipt so inspect could not classify edges.
 . "$(dirname "$0")/lib.sh"
 
 SBX="$TEST_TMP/repo"
@@ -88,9 +88,10 @@ PORCELAIN="$(git -C "$SBX" status --porcelain=v1 --untracked-files=all)"
 VISIBLE_BEFORE="$(visible_files)"
 
 # (a) crash after edge 1 leaves an in_progress receipt; inspect is read-only.
+# The seam is inert unless AUTOPILOT_TEST_SEAMS=1 is also set.
 CRASH_DIR="$TEST_TMP/crash-receipts"
 mkdir -p "$CRASH_DIR"
-AUTOPILOT_MERGE_CRASH_AFTER_EDGE=1 \
+AUTOPILOT_TEST_SEAMS=1 AUTOPILOT_MERGE_CRASH_AFTER_EDGE=1 \
   node "$REPO_ROOT/bin/autopilot.js" merge execute \
     --request "$REQUEST" --receipt-dir "$CRASH_DIR" --json \
     >"$TEST_TMP/crash.out" 2>"$TEST_TMP/crash.err" || CRASH_RC=$?
@@ -130,6 +131,11 @@ DONE_RECEIPT="$DONE_DIR/merge-execution-receipt.json"
 assert_file_exists "$DONE_RECEIPT" "terminal receipt exists"
 DONE_STATE="$(node -e 'const r=require(process.argv[1]); if(!r.receipt_digest) process.exit(2); console.log([r.state,r.status,r.edges.length,r.edges.every(e=>e.status==="executed")].join("\t"));' "$DONE_RECEIPT")"
 assert_eq "$DONE_STATE" "completed	complete	2	true" "terminal receipt is completed with both edges"
+DONE_INSPECT="$(node "$REPO_ROOT/bin/autopilot.js" merge execute --inspect-receipt "$DONE_RECEIPT" 2>"$TEST_TMP/done-inspect.err")"
+assert_eq "$?" "0" "inspect of a completed receipt exits 0"
+assert_contains "$DONE_INSPECT" "edge 1 merged" "completed inspect marks edge 1 merged"
+assert_contains "$DONE_INSPECT" "edge 2 merged" "completed inspect marks edge 2 merged"
+assert_eq "$(cat "$TEST_TMP/done-inspect.err")" "" "completed inspect writes nothing to stderr"
 node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/merge-execution-receipt.schema.json" \
   --document "$DONE_RECEIPT"
@@ -223,6 +229,96 @@ assert_eq "$(git -C "$FRESH" for-each-ref --format='%(refname) %(objectname)')" 
   "unwritable receipt_dir leaves refs unchanged"
 assert_eq "$(find "$LOCKED" -type f | wc -l | tr -d ' ')" "0" "unwritable receipt_dir creates no receipt file"
 
+# Halt at preflight, before any edge: a terminal halted receipt distinguishes
+# "rejected" from "never started". Repo stays put. Inspect classifies edges.
+HALT_REQ="$TEST_TMP/halt-request.json"
+node - "$FRESH_REQUEST" "$HALT_REQ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const request = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+delete request.preflight.receipt_digest;
+fs.writeFileSync(process.argv[3], `${JSON.stringify(request)}\n`);
+NODE
+HALT_DIR="$TEST_TMP/halt-receipts"
+mkdir -p "$HALT_DIR"
+node "$REPO_ROOT/bin/autopilot.js" merge execute \
+  --request "$HALT_REQ" --receipt-dir "$HALT_DIR" --json \
+  >"$TEST_TMP/halt.out" 2>"$TEST_TMP/halt.err" || HALT_RC=$?
+HALT_RC="${HALT_RC:-0}"
+assert_neq "$HALT_RC" "0" "preflight halt exits nonzero"
+HALT_RECEIPT="$HALT_DIR/merge-execution-receipt.json"
+assert_file_exists "$HALT_RECEIPT" "preflight halt writes a terminal receipt"
+HALT_STATE="$(node -e 'const r=require(process.argv[1]); console.log([r.state,r.status,r.halt_reason,r.edges.length].join("\t"));' "$HALT_RECEIPT")"
+assert_eq "$HALT_STATE" "halted	halted	preflight_missing	0" "preflight halt receipt is halted with no edges"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/merge-execution-receipt.schema.json" \
+  --document "$HALT_RECEIPT"
+assert_eq "$?" "0" "halted validation receipt validates against the schema"
+assert_eq "$(git -C "$FRESH" rev-parse refs/heads/target)" "$FRESH_TARGET" "preflight halt does not move target"
+HALT_INSPECT="$(node "$REPO_ROOT/bin/autopilot.js" merge execute --inspect-receipt "$HALT_RECEIPT" 2>"$TEST_TMP/halt-inspect.err")"
+assert_eq "$?" "0" "inspect of a halted receipt exits 0"
+assert_contains "$HALT_INSPECT" "edge 1 not_merged" "halted inspect marks edge 1 not merged"
+assert_contains "$HALT_INSPECT" "edge 2 not_merged" "halted inspect marks edge 2 not merged"
+assert_eq "$(cat "$TEST_TMP/halt-inspect.err")" "" "halted inspect writes nothing to stderr"
+
+# Crash variable alone must not kill a production run.
+NOSEAM_DIR="$TEST_TMP/noseam-receipts"
+mkdir -p "$NOSEAM_DIR"
+unset AUTOPILOT_TEST_SEAMS || true
+AUTOPILOT_MERGE_CRASH_AFTER_EDGE=1 \
+  node "$REPO_ROOT/bin/autopilot.js" merge execute \
+    --request "$FRESH_REQUEST" --receipt-dir "$NOSEAM_DIR" --json \
+    >"$TEST_TMP/noseam.out" 2>"$TEST_TMP/noseam.err"
+assert_eq "$?" "0" "crash variable without the test switch still exits 0"
+NOSEAM_STATE="$(node -e 'const r=require(process.argv[1]); console.log([r.state,r.status,r.edges.length].join("\t"));' "$NOSEAM_DIR/merge-execution-receipt.json")"
+assert_eq "$NOSEAM_STATE" "completed	complete	2" "crash variable without the test switch writes a completed receipt"
+
+# Null request follows the same path as base a007fa65e (kind + message).
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const root = process.argv[2];
+const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'bl0075-base-'));
+const src = path.join(shim, 'src');
+fs.mkdirSync(path.join(src, 'merge'), { recursive: true });
+for (const name of fs.readdirSync(path.join(root, 'src'))) {
+  if (name === 'merge') continue;
+  fs.symlinkSync(path.join(root, 'src', name), path.join(src, name));
+}
+fs.writeFileSync(
+  path.join(src, 'merge', 'cli.js'),
+  execFileSync('git', ['-C', root, 'show', 'a007fa65e:src/merge/cli.js']),
+);
+const base = require(path.join(src, 'merge', 'cli.js'));
+const current = require(path.join(root, 'src', 'merge', 'cli.js'));
+function summarize(fn) {
+  try {
+    const receipt = fn(null);
+    return {
+      kind: 'return',
+      message: receipt && receipt.halt_reason ? String(receipt.halt_reason) : '',
+      status: receipt && receipt.status ? String(receipt.status) : '',
+    };
+  } catch (error) {
+    return {
+      kind: 'throw',
+      message: error && error.message ? String(error.message) : '',
+      status: '',
+    };
+  }
+}
+const left = summarize(base.executeMergeIntent);
+const right = summarize(current.executeMergeIntent);
+if (left.kind !== right.kind || left.message !== right.message || left.status !== right.status) {
+  console.error(JSON.stringify({ left, right }));
+  process.exit(1);
+}
+NODE
+assert_eq "$?" "0" "null request matches base a007fa65e by kind and message"
+
 # (d) without receipt_dir the merge still runs and creates no receipt file.
 NEG="$TEST_TMP/neg"
 git init -q -b target "$NEG"
@@ -280,7 +376,7 @@ NODE
 node "$REPO_ROOT/bin/autopilot.js" merge execute --request "$NEG_REQUEST" --json \
   >"$TEST_TMP/neg.out" 2>"$TEST_TMP/neg.err"
 assert_eq "$?" "0" "merge without receipt_dir still exits 0"
-assert_eq "$(find "$TEST_TMP" -name 'merge-execution-receipt.json' -printf '%p\n' | grep -v -e crash-receipts -e done-receipts | wc -l | tr -d ' ')" "0" \
+assert_eq "$(find "$TEST_TMP" -name 'merge-execution-receipt.json' -printf '%p\n' | grep -v -e crash-receipts -e done-receipts -e halt-receipts -e noseam-receipts | wc -l | tr -d ' ')" "0" \
   "without receipt_dir no receipt file is created"
 node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(Object.prototype.hasOwnProperty.call(r,"state")||Object.prototype.hasOwnProperty.call(r,"intent_edges")) process.exit(1);' "$TEST_TMP/neg.out"
 assert_eq "$?" "0" "without receipt_dir the stdout receipt has no durable fields"

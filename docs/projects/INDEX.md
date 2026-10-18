@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-19 | [BL-0055: t14 per-turn verification gate experiment (gate vs control, n=30 each, preregistered thresholds)](../plans/2026-10-19-t14-per-turn-gate-experiment.md) | active | — | [plan](../plans/2026-10-19-t14-per-turn-gate-experiment.md) |
 | 2026-10-19 | [BL-0050: outcome-shaped quality gate, pre-push re-derives that tests ran green against this diff (opt-in)](../plans/2026-10-19-outcome-quality-gate.md) | active | — | [plan](../plans/2026-10-19-outcome-quality-gate.md) |
 | 2026-10-18 | [subagent budget gate: per-lane relay and turn ceilings on Agent dispatch](../plans/2026-10-18-subagent-budget-gate.md) | active | — | [plan](../plans/2026-10-18-subagent-budget-gate.md) |
 | 2026-10-17 | [BL-0146: a returned review-only campaign reviews the fix, not the whole range again](../plans/2026-10-17-review-only-campaign-fix-increment.md) | active | — | [plan](../plans/2026-10-17-review-only-campaign-fix-increment.md) |

@@ -454,10 +454,18 @@ _foreman_reap_turn() {
   SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_SCOPE=""; FOREMAN_TURN_PID=""
 }
 
+# --keep-stderr appends to the stream stderr so a failed scope start's message
+# survives the setsid rerun (a plain redirect would wipe it).
 _foreman_launch_setsid() {
   local stream="$1"; shift
+  local keep_stderr=0
+  if [ "${1:-}" = "--keep-stderr" ]; then keep_stderr=1; shift; fi
   FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""
-  ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  if [ "$keep_stderr" -eq 1 ]; then
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>>"$stream.stderr" &
+  else
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  fi
   FOREMAN_TURN_PID=$!
   WORKER_SID="$FOREMAN_TURN_PID"
 }
@@ -483,7 +491,7 @@ trap _foreman_signal_reap TERM INT
 run_turn() {
   local stream="$1" cap="$2" deadline="$3"; shift 3
   TURN_EXIT=""; TURN_STOP=""
-  local pid t0 now cnt spins launched_scope candidate
+  local pid t0 now cnt spins launched_scope candidate launch_rc entered
   SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""; FOREMAN_TURN_SCOPE=""
   # setsid stays the session leader (its pid is the pgid) so the group kill remains
   # the fallback. systemd-run puts that session's command in a user scope when one
@@ -506,13 +514,30 @@ run_turn() {
     done
     if [ "$launched_scope" -eq 1 ]; then
       SCOPE_UNIT="$candidate"
+    elif kill -0 "$pid" 2>/dev/null; then
+      # The probe window ended but systemd-run has not exited. A slow user
+      # manager is not a failed start: keep this pid as the monitored turn so
+      # cap and deadline still apply, and do not launch the turn again.
+      SCOPE_UNIT=""
+      WORKER_SID=$pid
+      FOREMAN_CONTAINMENT_VERIFIED=0
     else
-      # systemd-run exited without creating a scope. Do not treat the absent unit
-      # as contained. Rerun this turn with the plain setsid launch.
-      wait "$pid" 2>/dev/null || true
-      FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""
-      _foreman_launch_setsid "$stream" "$@"
-      pid="$FOREMAN_TURN_PID"
+      # Definite failure: the launcher already exited non-zero and the scope
+      # never became active. Check ActiveEnterTimestamp once more after the exit.
+      wait "$pid" 2>/dev/null
+      launch_rc=$?
+      entered="$(systemctl --user show "$candidate" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
+      if [ "$launch_rc" -ne 0 ] && { [ -z "$entered" ] || [ "$entered" = "n/a" ]; }; then
+        FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""
+        _foreman_launch_setsid "$stream" --keep-stderr "$@"
+        pid="$FOREMAN_TURN_PID"
+      elif [ -n "$entered" ] && [ "$entered" != "n/a" ]; then
+        SCOPE_UNIT="$candidate"
+      else
+        SCOPE_UNIT=""
+        WORKER_SID=$pid
+        FOREMAN_CONTAINMENT_VERIFIED=0
+      fi
     fi
   else
     _foreman_launch_setsid "$stream" "$@"

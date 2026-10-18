@@ -2,6 +2,7 @@
 # RED at 027f7d863: FAIL [dispatch-foreman-cgroup] 1 passed, 2 failed — containment expected 'cgroup' got 'setsid'; setsid grandchild still alive after cap teardown
 # RED at 26bffb06b: (pid file never written) FAIL [dispatch-foreman-cgroup] 1: gc.pid is non-empty before teardown — got empty
 # RED at 26bffb06b: (systemd-run launch exits 1) FAIL [dispatch-foreman-cgroup] 3: failed scope launch reports setsid: expected 'setsid', got 'cgroup'
+# RED at 6200e3ed4: FAIL [dispatch-foreman-cgroup] 4: tool-call cap did not stop the turn; 4: foreman turn started once (slow scope must not relaunch): expected '1', got '2'; 4: tool-call cap still stops the turn: expected 'tool_cap_reached', got '' — 7 passed, 3 failed
 # Foreman rail cgroup containment: a setsid grandchild must die on cap teardown
 # when a systemd user scope is usable, and containment must fall back to setsid
 # when WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 or systemd-run fails to start the scope.
@@ -48,6 +49,11 @@ spawn_child() {
   # Hold tool output so the test can observe the live pid before cap teardown.
   sleep 0.8
 }
+if [ -n "${KIMI_STUB_PIDFILE:-}" ]; then printf '%s\n' "$$" > "$KIMI_STUB_PIDFILE"; fi
+# Count only the initial turn. The handoff resume (-c) is a different turn.
+if [ "$cont" -eq 0 ] && [ -n "${KIMI_STUB_START_LOG:-}" ]; then
+  printf 'start\n' >> "$KIMI_STUB_START_LOG"
+fi
 if [ "$cont" -eq 0 ] && [ "${KIMI_STUB_SPAWN_GC:-}" = "1" ]; then
   spawn_child "${KIMI_STUB_GC_MODE:-setsid}" "$KIMI_STUB_GC_PID"
 fi
@@ -90,9 +96,14 @@ assert_grandchild_alive_before_teardown() {
 }
 
 wait_grandchild_dead() {
+  # An empty pid is not "already dead" — the assertion must fail.
+  if [ -z "${GC_PID:-}" ]; then
+    printf 'empty'
+    return 1
+  fi
   local i=0 alive=1
   while [ "$i" -lt 20 ]; do
-    if [ -z "${GC_PID:-}" ] || ! kill -0 "$GC_PID" 2>/dev/null; then alive=0; break; fi
+    if ! kill -0 "$GC_PID" 2>/dev/null; then alive=0; break; fi
     sleep 0.25
     i=$((i+1))
   done
@@ -167,6 +178,86 @@ FAKE
   assert_eq "$(field "$OUT3" containment)" "setsid" "3: failed scope launch reports setsid"
   assert_eq "$(wait_grandchild_dead)" "0" "3: in-session grandchild is reaped after setsid fallback (pid ${GC_PID:-missing})"
   if [ -n "${GC_PID:-}" ]; then kill -KILL "$GC_PID" 2>/dev/null || true; GC_PID=""; fi
+fi
+
+# --- case 4: scope becomes active 3s late; the live worker is the turn (once) ---
+# A user manager slower than the 2s probe must not drop cap monitoring and must
+# not start the same turn a second time.
+if ! systemd-run --user --scope --quiet -- true >/dev/null 2>&1; then
+  echo "SKIP: systemd-run --user --scope is unusable on this host (case 4)"
+else
+  SLOWBIN="$TEST_TMP/slowbin"
+  mkdir -p "$SLOWBIN"
+  SLOW_UNIT_FILE="$TEST_TMP/slow.unit"
+  SLOW_WORKER_PID="$TEST_TMP/slow.worker.pid"
+  SLOW_STARTS="$TEST_TMP/slow.starts"
+  rm -f "$SLOW_UNIT_FILE" "$SLOW_WORKER_PID" "$SLOW_STARTS"
+  cat > "$SLOWBIN/systemd-run" << 'FAKE'
+#!/usr/bin/env bash
+# Detection probe (`-- true`) succeeds so HAVE_CGROUP=1.
+# A worker launch stays alive immediately and makes the named scope active
+# only after 3 seconds, via the real systemd-run outside this process group.
+last=""
+unit=""
+for a in "$@"; do
+  case "$a" in
+    --unit=*) unit="${a#--unit=}" ;;
+  esac
+  last="$a"
+done
+if [ "$last" = "true" ]; then
+  exit 0
+fi
+args=()
+seen=0
+for a in "$@"; do
+  if [ "$seen" -eq 1 ]; then args+=("$a"); continue; fi
+  [ "$a" = "--" ] && seen=1
+done
+if [ -n "${SLOW_SCOPE_UNIT_FILE:-}" ] && [ -n "$unit" ]; then
+  printf '%s\n' "$unit" > "$SLOW_SCOPE_UNIT_FILE"
+fi
+if [ -n "$unit" ]; then
+  # setsid so the delayed scope is not killed with the worker's process group
+  # before the 3s mark. The worker itself is exec'd below and stays alive.
+  setsid /bin/bash -c 'sleep 3; exec /usr/bin/systemd-run --user --scope --quiet --unit="$1" -- /bin/sleep 120' bash "$unit" >/dev/null 2>&1 &
+fi
+exec "${args[@]}"
+FAKE
+  chmod +x "$SLOWBIN/systemd-run"
+  RD4="$TEST_TMP/runs/slow"
+  OUTF4="$TEST_TMP/slow.out"
+  ( cd "$SBX" && PATH="$SLOWBIN:$STUBDIR:$PATH" \
+    SLOW_SCOPE_UNIT_FILE="$SLOW_UNIT_FILE" \
+    KIMI_STUB_START_LOG="$SLOW_STARTS" KIMI_STUB_PIDFILE="$SLOW_WORKER_PID" \
+    bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" \
+      --run-id cg4 --run-dir "$RD4" --tool-cap 1 --timeout 30 --handoff-timeout 5 --poll 0.2 \
+      --kimi-bin "$STUBDIR/kimi" >"$OUTF4" 2>"$TEST_TMP/slow.err" ) &
+  RAIL4=$!
+  i=0
+  while kill -0 "$RAIL4" 2>/dev/null && [ "$i" -lt 40 ]; do
+    sleep 0.5
+    i=$((i+1))
+  done
+  if kill -0 "$RAIL4" 2>/dev/null; then
+    kill -TERM "$RAIL4" 2>/dev/null || true
+    sleep 0.5
+    kill -KILL "$RAIL4" 2>/dev/null || true
+    fail "4: tool-call cap did not stop the turn"
+  fi
+  wait "$RAIL4" 2>/dev/null || true
+  if [ -s "$SLOW_WORKER_PID" ]; then
+    kill -KILL "$(cat "$SLOW_WORKER_PID")" 2>/dev/null || true
+  fi
+  if [ -s "$SLOW_UNIT_FILE" ]; then
+    systemctl --user kill "$(cat "$SLOW_UNIT_FILE")" --signal=SIGKILL >/dev/null 2>&1 || true
+    systemctl --user stop "$(cat "$SLOW_UNIT_FILE")" >/dev/null 2>&1 || true
+  fi
+  OUT4="$(cat "$OUTF4" 2>/dev/null || true)"
+  START_LINES=0
+  if [ -f "$SLOW_STARTS" ]; then START_LINES="$(grep -c . "$SLOW_STARTS" || true)"; fi
+  assert_eq "$START_LINES" "1" "4: foreman turn started once (slow scope must not relaunch)"
+  assert_eq "$(field "$OUT4" status)" "tool_cap_reached" "4: tool-call cap still stops the turn"
 fi
 
 finalize_test

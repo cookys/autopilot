@@ -1669,7 +1669,7 @@ function validateMergePreflight(value) {
   if (!isPlainObject(value)
       || keys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
       || Object.keys(value).some((key) => !allowedKeys.has(key))
-      || value.schema_version !== 1
+      || value.schema_version !== 2
       || value.artifact_type !== 'merge_intent_preflight'
       || !isSha256(value.manifest_seal)
       || !['safe', 'overlapping', 'ambiguous', 'blocked'].includes(value.status)
@@ -1696,6 +1696,41 @@ function validateMergePreflight(value) {
       evidence: {
         status: 'invalid',
         reason: 'merge_preflight_digest_invalid',
+        manifest_seal: value.manifest_seal,
+        preflight_status: value.status,
+      },
+    };
+  }
+  const preflightEdgeKeys = new Set([
+    'sequence',
+    'source_ref',
+    'source_sha',
+    'source_worktree',
+    'source_from_edge',
+    'target_ref',
+    'target_sha',
+    'target_worktree',
+    'target_from_edge',
+    'mode',
+    'required_result',
+    'status',
+    'dirty',
+    'incoming_paths',
+    'overlapping_paths',
+    'preservation_proposal',
+    'dirty_proof',
+    'reason',
+    'blockers',
+  ]);
+  if (!value.edges.every((edge) => isPlainObject(edge)
+      && Array.isArray(edge.dirty_proof)
+      && Object.keys(edge).every((key) => preflightEdgeKeys.has(key)))) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'invalid',
+        reason: 'merge_preflight_shape_invalid',
         manifest_seal: value.manifest_seal,
         preflight_status: value.status,
       },

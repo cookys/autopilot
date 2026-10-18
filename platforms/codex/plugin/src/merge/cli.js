@@ -5,12 +5,16 @@
 // overlaps. It deliberately has no push, ref deletion, worktree deletion, or
 // stash operations.
 
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { canonicalDigest } = require('../engine/implementation-campaign');
-const { verifyMergeIntentSeal } = require('../status/merge-intent');
+const {
+  SCHEMA_VERSION: INTENT_SCHEMA_VERSION,
+  dirtyProof,
+  snapshotPath,
+  verifyMergeIntentSeal,
+} = require('../status/merge-intent');
 
 const SCHEMA_VERSION = 1;
 const ARTIFACT_TYPE = 'merge_execution_receipt';
@@ -162,59 +166,6 @@ function isAncestor(repo, ancestor, descendant) {
   ], { allowFailure: true }).status === 0;
 }
 
-function digestBuffer(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function snapshotPath(worktree, relativePath) {
-  const absolute = path.resolve(worktree, relativePath);
-  if (absolute !== worktree && !absolute.startsWith(`${worktree}${path.sep}`)) {
-    throw new Error(`unsafe preservation path: ${relativePath}`);
-  }
-  const indexRaw = git(worktree, [
-    'ls-files', '--stage', '-z', '--', relativePath,
-  ]).stdout;
-  const indexLine = indexRaw.split('\0').find(Boolean) || null;
-  let index = null;
-  if (indexLine) {
-    const match = /^([0-7]{6}) ([0-9a-f]+) ([0-3])\t/.exec(indexLine);
-    if (!match || match[3] !== '0') {
-      throw new Error(`cannot preserve non-stage-0 index entry: ${relativePath}`);
-    }
-    const content = git(worktree, ['show', `:${relativePath}`], {
-      encoding: null,
-    }).stdout;
-    index = {
-      mode: match[1],
-      content,
-      digest: digestBuffer(content),
-    };
-  }
-  let worktreeEntry = null;
-  try {
-    const stat = fs.lstatSync(absolute);
-    if (stat.isSymbolicLink()) {
-      worktreeEntry = {
-        type: 'symlink',
-        content: Buffer.from(fs.readlinkSync(absolute)),
-        mode: stat.mode,
-      };
-    } else if (stat.isFile()) {
-      worktreeEntry = {
-        type: 'file',
-        content: fs.readFileSync(absolute),
-        mode: stat.mode,
-      };
-    } else {
-      throw new Error(`preservation path is not a file or symlink: ${relativePath}`);
-    }
-    worktreeEntry.digest = digestBuffer(worktreeEntry.content);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  return { path: relativePath, absolute, index, worktree: worktreeEntry };
-}
-
 function removeExactPath(absolute) {
   try {
     const stat = fs.lstatSync(absolute);
@@ -293,31 +244,6 @@ function verifySnapshot(worktree, snapshot) {
   return Boolean(indexMatches && worktreeMatches);
 }
 
-function dirtyProof(worktree, dirty) {
-  const paths = [...new Set([
-    ...dirty.staged,
-    ...dirty.unstaged,
-    ...dirty.untracked,
-    ...dirty.ambiguous,
-  ])].sort();
-  return paths.map((relativePath) => {
-    const snapshot = snapshotPath(worktree, relativePath);
-    return {
-      path: relativePath,
-      index: snapshot.index
-        ? { mode: snapshot.index.mode, digest: snapshot.index.digest }
-        : null,
-      worktree: snapshot.worktree
-        ? {
-          type: snapshot.worktree.type,
-          mode: snapshot.worktree.mode,
-          digest: snapshot.worktree.digest,
-        }
-        : null,
-    };
-  });
-}
-
 function sealReceipt(body) {
   return { ...body, receipt_digest: canonicalDigest(body) };
 }
@@ -349,6 +275,12 @@ function halted(manifestSeal, rootRunId, edges, reason, haltEdge = null) {
 function validatePreflight(preflight, manifestSeal, manifest) {
   if (!isPlainObject(preflight) || typeof preflight.receipt_digest !== 'string') {
     return 'preflight_missing';
+  }
+  if (preflight.schema_version !== INTENT_SCHEMA_VERSION) {
+    return 'preflight_schema_version_unsupported';
+  }
+  if (preflight.artifact_type !== 'merge_intent_preflight') {
+    return 'preflight_artifact_type_invalid';
   }
   const { receipt_digest: digest, ...body } = preflight;
   if (canonicalDigest(body) !== digest) return 'preflight_receipt_drift';
@@ -487,6 +419,13 @@ function validateInitialState(manifest, preflight) {
     if (!report || !sameInventory(inventoryDirty(edge.target_worktree), report.dirty)) {
       return { reason: 'initial_dirty_inventory_drift', edge: edge.sequence };
     }
+    if (!Array.isArray(report.dirty_proof)) {
+      return { reason: 'preflight_dirty_proof_missing', edge: edge.sequence };
+    }
+    const freshProof = dirtyProof(edge.target_worktree, inventoryDirty(edge.target_worktree));
+    if (canonicalDigest(freshProof) !== canonicalDigest(report.dirty_proof)) {
+      return { reason: 'dirty_content_or_index_drift', edge: edge.sequence };
+    }
   }
   return null;
 }
@@ -531,6 +470,9 @@ function executeMergeIntent(request) {
   }
   const sealed = request.sealed_manifest;
   const manifest = sealed.manifest;
+  if (!isPlainObject(manifest) || manifest.schema_version !== INTENT_SCHEMA_VERSION) {
+    return halted(sealed.seal, manifest && manifest.root_run_id, [], 'manifest_schema_version_unsupported');
+  }
   if (!verifyMergeIntentSeal(sealed)) {
     return halted(sealed.seal, manifest.root_run_id, [], 'manifest_seal_invalid');
   }

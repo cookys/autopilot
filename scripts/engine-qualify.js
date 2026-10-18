@@ -3485,6 +3485,21 @@ function runImplQualification(options) {
   }
 
   const folded = implGrader.foldAdministration(scoredTrials);
+  // A truncated sitting is incomplete unless the verdict is a decided failure;
+  // qualified requires the whole corpus administered (owner ruling 2026-10-19,
+  // BL-0160). foldAdministration qualifies only when the corpus is complete,
+  // passed === total, and every count is within its max. Any non-pass already
+  // administered makes passed === total unreachable: later passes raise passed
+  // and total together. A count already over its own max is likewise decided.
+  const implThresholds = implGrader.CORPUS.thresholds;
+  const decidedFailure = folded.passed < folded.total
+    || folded.counts.integrity_violations > implThresholds.max_integrity_violations
+    || folded.counts.fabricated_changes > implThresholds.max_fabricated_changes
+    || folded.counts.contract_violations > implThresholds.max_contract_violations
+    || folded.counts.oracle_misses > implThresholds.max_oracle_misses;
+  const truncationBlocksQualification = wallTruncated
+    && folded.complete === false
+    && !decidedFailure;
   const state = folded.qualified ? 'qualified' : 'degraded';
   const scope = {
     task_classes: options.taskClasses,
@@ -3549,28 +3564,34 @@ function runImplQualification(options) {
     },
     basis: null,
   };
-  const evidence = compileCapabilityEvidence({
-    schema_version: 1,
-    source: 'internal_eval',
-    source_ref: 'engine-qualify:implementer-v1',
-    state,
-    role: 'implementer',
-    scope,
-    identity,
-    issued_at: issuedAt,
-    observed_at: issuedAt,
-    expires_at: expiresAt,
-    methodology,
-    trials,
-    revocation: null,
-    supersedes: null,
-  });
-  const storeConfig = resolveEvidenceStore(options.store);
-  let evidenceStoreRecord;
-  try {
-    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
-  } catch (error) {
-    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  // A wall-truncated sitting that is not yet a decided failure must not emit
+  // promotion evidence. Same shape as the consult/discuss truncation branch:
+  // evidence stays null and every evidence consumer below is null-safe.
+  let evidence = null;
+  let evidenceStoreRecord = null;
+  if (!truncationBlocksQualification) {
+    evidence = compileCapabilityEvidence({
+      schema_version: 1,
+      source: 'internal_eval',
+      source_ref: 'engine-qualify:implementer-v1',
+      state,
+      role: 'implementer',
+      scope,
+      identity,
+      issued_at: issuedAt,
+      observed_at: issuedAt,
+      expires_at: expiresAt,
+      methodology,
+      trials,
+      revocation: null,
+      supersedes: null,
+    });
+    const storeConfig = resolveEvidenceStore(options.store);
+    try {
+      evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+    } catch (error) {
+      throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+    }
   }
 
   if (options.rawDir) {
@@ -3606,7 +3627,7 @@ function runImplQualification(options) {
     );
   }
 
-  const qualified = folded.qualified;
+  const qualified = folded.qualified === true && !truncationBlocksQualification;
   // The implementer plan is fixed, so a truncated or aborted administration is detectable: the
   // block says how many cases were planned (BL-0168). Adaptive-stop roles pass nothing.
   const plannedCases = administration.trials.reduce((n, trial) => n + trial.cases.length, 0);
@@ -3646,14 +3667,18 @@ function runImplQualification(options) {
     cost: usageFin.cost,
     usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
-    status: qualified ? 'qualified' : 'failed',
+    status: truncationBlocksQualification
+      ? 'no_verdict'
+      : (qualified ? 'qualified' : 'failed'),
     qualified_at: issuedAt.slice(0, 10),
     expires: expiresAt.slice(0, 10),
-    evidence_store: {
-      event_id: evidenceStoreRecord.event_id,
-      producer: evidenceStoreRecord.producer,
-      transcript_hash: evidenceStoreRecord.transcript_hash,
-    },
+    evidence_store: evidenceStoreRecord
+      ? {
+        event_id: evidenceStoreRecord.event_id,
+        producer: evidenceStoreRecord.producer,
+        transcript_hash: evidenceStoreRecord.transcript_hash,
+      }
+      : null,
     evidence,
   };
   if (options.endpointBinding) {
@@ -3675,18 +3700,21 @@ function runImplQualification(options) {
       }
     }
   }
+  if (wallTruncated) failures.push(`administration wall-truncated after ${startedCases} started cases`);
   const verdict = {
     ...baseVerdict,
     administration_outcome: 'completed',
     corpus_pass: folded.corpus_pass,
     qualified,
-    evidence_id: evidence.evidence_id,
-    evidence_state: evidence.state,
-    scope_hash: evidence.scope_hash,
-    identity_hash: evidence.identity_hash,
-    trial_set_hash: evidence.trial_set_hash,
-    evidence_store_event_id: evidenceStoreRecord.event_id,
-    evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+    evidence_id: evidence ? evidence.evidence_id : null,
+    evidence_state: evidence ? evidence.state : null,
+    scope_hash: evidence ? evidence.scope_hash : null,
+    identity_hash: evidence ? evidence.identity_hash : null,
+    trial_set_hash: evidence ? evidence.trial_set_hash : null,
+    evidence_store_event_id: evidenceStoreRecord ? evidenceStoreRecord.event_id : null,
+    evidence_store_transcript_hash: evidenceStoreRecord
+      ? evidenceStoreRecord.transcript_hash
+      : null,
     reason: qualified ? 'passed' : failures.join('; '),
   };
   return deepFreeze({
@@ -4187,12 +4215,15 @@ function foldPooledVerdict(input) {
   // in full, so no rule below ends the sitting early. `stop_reason` records
   // which rule DECIDED the verdict (tier1 | locked_fail | locked_qualify |
   // complete = the plain full-pool threshold) and `tier1_terminated` is
-  // always false: nothing is terminated any more. The verdict itself is
-  // unchanged versus the old fail-fast rules for the same answers (a lock is
-  // only declared when the full-N Wilson bound can no longer change sides),
-  // with one deliberate exception: Tier-1 is STICKY across the whole sitting,
-  // so a Tier-1 case observed AFTER a locked_qualify point now fails the
-  // sitting (the old rule stopped before observing it).
+  // always false: nothing is terminated any more. For the same administered
+  // answers this fold matches the old fail-fast rules (a lock is only
+  // declared when the full-N Wilson bound can no longer change sides), with
+  // one deliberate exception: Tier-1 is STICKY across the whole sitting, so a
+  // Tier-1 case observed AFTER a locked_qualify point now fails the sitting
+  // (the old rule stopped before observing it). The sitting record is a
+  // separate step: a wall-truncated sitting is no_verdict unless this fold is
+  // already a decided failure (owner ruling 2026-10-19, BL-0160). Qualified
+  // requires the whole pool administered; this fold still reports the pool rule.
   const build = (stopReason, qualified) => {
     const wilson = wilsonLower(passes, fullN, VERDICT_Z);
     return {
@@ -4843,7 +4874,23 @@ function runConsultDiscussQualification(options) {
   // must never enter qualified-promotion evidence (plan §2.5 fail-closed:
   // a harness-excluded administration contributes nothing).
   let trials = cleanScoredTrials.map(buildTrialEvidence);
-  const qualified = pooledVerdict.qualified === true;
+  // A truncated sitting is incomplete unless the verdict is a decided failure;
+  // qualified requires the whole pool administered (owner ruling 2026-10-19).
+  //
+  // stop_reason 'complete' and wallTruncated cannot both be true in this
+  // kernel, so the block does not need a separate "cases remain" comparison.
+  // wallTruncated is assigned only in the attempt-loop header and the
+  // case-loop header, both BEFORE the next case is started. The attempt loop
+  // exits on `cleanAdministrationCount >= administrationCap` BEFORE that
+  // header's truncation check. Completing the last case of the last required
+  // administration therefore leaves wallTruncated false: a true flag always
+  // means at least one planned case was never started.
+  const decidedFailure = pooledVerdict.stop_reason === 'tier1'
+    || pooledVerdict.stop_reason === 'locked_fail';
+  const truncationBlocksQualification = wallTruncated
+    && !decidedFailure
+    && pooledVerdict.qualified === true;
+  const qualified = pooledVerdict.qualified === true && !truncationBlocksQualification;
   if (qualified) {
     trials = trials.filter((trial) => (
       trial.cases_total === casesPerTrial
@@ -4913,29 +4960,36 @@ function runConsultDiscussQualification(options) {
     evidenceState = promotionShapeOk ? 'qualified' : 'degraded';
   }
 
-  const evidence = compileCapabilityEvidence({
-    schema_version: 1,
-    source: 'internal_eval',
-    source_ref: `engine-qualify:${role}-v1`,
-    state: evidenceState,
-    role,
-    scope,
-    identity,
-    issued_at: issuedAt,
-    observed_at: issuedAt,
-    expires_at: expiresAt,
-    methodology,
-    trials,
-    revocation: null,
-    supersedes: null,
-  });
-  qualificationAssetSeals.assertSealedEvidenceBinding(role, evidence);
-  const storeConfig = resolveEvidenceStore(options.store);
-  let evidenceStoreRecord;
-  try {
-    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
-  } catch (error) {
-    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  // A truncated locked_qualify (or complete) pool must not emit promotion
+  // evidence. Other no_verdict shapes (nothing started) already return
+  // evidence: null; an undecided truncated pool still records a degraded
+  // receipt, matching the pre-BL-0160 continue path.
+  let evidence = null;
+  let evidenceStoreRecord = null;
+  if (!truncationBlocksQualification) {
+    evidence = compileCapabilityEvidence({
+      schema_version: 1,
+      source: 'internal_eval',
+      source_ref: `engine-qualify:${role}-v1`,
+      state: evidenceState,
+      role,
+      scope,
+      identity,
+      issued_at: issuedAt,
+      observed_at: issuedAt,
+      expires_at: expiresAt,
+      methodology,
+      trials,
+      revocation: null,
+      supersedes: null,
+    });
+    qualificationAssetSeals.assertSealedEvidenceBinding(role, evidence);
+    const storeConfig = resolveEvidenceStore(options.store);
+    try {
+      evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+    } catch (error) {
+      throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+    }
   }
 
   const pooledPasses = pooledVerdict.pooled.passes;
@@ -5002,8 +5056,12 @@ function runConsultDiscussQualification(options) {
       repeated_trials: options.trials,
     };
 
-  // Only an undecided pool is incomplete; a tier1 / lock already decided the verdict and a later wall truncation must not erase the failed record.
-  const terminalIncomplete = pooledVerdict.stop_reason === 'continue';
+  // A truncated sitting is incomplete unless the verdict is a decided failure;
+  // qualified requires the whole pool administered. tier1 / locked_fail stay
+  // failed when the wall cuts the sitting short. An undecided pool
+  // (stop_reason continue) stays no_verdict whether or not it was truncated.
+  const terminalIncomplete = truncationBlocksQualification
+    || pooledVerdict.stop_reason === 'continue';
   const rowStatus = qualified
     ? 'qualified'
     : (terminalIncomplete ? 'no_verdict' : 'failed');
@@ -5031,11 +5089,13 @@ function runConsultDiscussQualification(options) {
     status: rowStatus,
     qualified_at: issuedAt.slice(0, 10),
     expires: expiresAt.slice(0, 10),
-    evidence_store: {
-      event_id: evidenceStoreRecord.event_id,
-      producer: evidenceStoreRecord.producer,
-      transcript_hash: evidenceStoreRecord.transcript_hash,
-    },
+    evidence_store: evidenceStoreRecord
+      ? {
+        event_id: evidenceStoreRecord.event_id,
+        producer: evidenceStoreRecord.producer,
+        transcript_hash: evidenceStoreRecord.transcript_hash,
+      }
+      : null,
     evidence,
     // Additive pooled-verdict fields (schema/validator work is D5).
     administrations: administrationRows.map((admin) => ({
@@ -5077,13 +5137,15 @@ function runConsultDiscussQualification(options) {
   const verdict = {
     ...baseVerdict,
     qualified,
-    evidence_id: evidence.evidence_id,
-    evidence_state: evidence.state,
-    scope_hash: evidence.scope_hash,
-    identity_hash: evidence.identity_hash,
-    trial_set_hash: evidence.trial_set_hash,
-    evidence_store_event_id: evidenceStoreRecord.event_id,
-    evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+    evidence_id: evidence ? evidence.evidence_id : null,
+    evidence_state: evidence ? evidence.state : null,
+    scope_hash: evidence ? evidence.scope_hash : null,
+    identity_hash: evidence ? evidence.identity_hash : null,
+    trial_set_hash: evidence ? evidence.trial_set_hash : null,
+    evidence_store_event_id: evidenceStoreRecord ? evidenceStoreRecord.event_id : null,
+    evidence_store_transcript_hash: evidenceStoreRecord
+      ? evidenceStoreRecord.transcript_hash
+      : null,
     stop_reason: pooledVerdict.stop_reason,
     tier1_terminated: pooledVerdict.tier1_terminated,
     reason: qualified ? 'passed' : failures.join('; '),

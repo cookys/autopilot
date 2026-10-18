@@ -1112,13 +1112,13 @@ function run(opts) {
 // --- --fix ---
 
 // True when `text` names `name` as a whole file name: not glued to a longer name on either side
-// (`prefix-x.md` does not mention `x.md`). Same logic lives in check-plan-graduation.js.
+// (`prefix-x.md` does not mention `x.md`). Same logic lives in check-backlog-entries.js.
 function mentionsBasename(text, name) {
   const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:^|[^A-Za-z0-9._-])${esc}(?![A-Za-z0-9_-])`).test(text);
 }
 
-function fixBacklog(backlogPath, violations) {
+function fixBacklog(backlogPath, violations, repoRoot) {
   const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done', 'backlog_title_closed_status_open']);
   const doomed = violations.filter((v) => v.kind === 'backlog_row' && rowCodes.has(v.code));
   if (!doomed.length) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
@@ -1141,10 +1141,13 @@ function fixBacklog(backlogPath, violations) {
     // A deleted row's note in the `backlog/` dir beside the backlog goes with it, unless a
     // remaining row still names it. Failures are reported, never swallowed.
     const dir = path.join(path.dirname(backlogPath), 'backlog');
+    // Only the notes dir beside the backlog counts, named by its repo-root-relative path.
+    const relDir = path.relative(repoRoot, dir).split(path.sep).join('/');
+    const noteRe = new RegExp(`(?:^|[^A-Za-z0-9._/-])${relDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/([A-Za-z0-9._-]+\\.md)`, 'g');
     const sidecars = new Set();
     for (const row of rows) {
       if (!doomedTitles.has(row.title) || !row.text) continue;
-      for (const m of row.text.matchAll(/(?:^|[^A-Za-z0-9._-])backlog\/([A-Za-z0-9._-]+\.md)/g)) sidecars.add(m[1]);
+      for (const m of row.text.matchAll(noteRe)) sidecars.add(m[1]);
     }
     const sidecarsRemoved = [];
     const sidecarErrors = [];
@@ -1154,7 +1157,7 @@ function fixBacklog(backlogPath, violations) {
       if (!fs.existsSync(abs)) continue;
       try {
         fs.rmSync(abs);
-        sidecarsRemoved.push(path.relative(path.dirname(path.dirname(backlogPath)), abs).split(path.sep).join('/'));
+        sidecarsRemoved.push(path.relative(repoRoot, abs).split(path.sep).join('/'));
       } catch (e) {
         sidecarErrors.push(`${abs}: ${e.message}`);
       }
@@ -1705,7 +1708,7 @@ function main() {
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
   let finalResult = preFix;
   if (opts.fix) {
-    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations);
+    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations, preFix.repoRoot);
     plansFix = fixPlans(
       preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems,
       preFix.changelogPath

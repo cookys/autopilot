@@ -1350,4 +1350,14 @@ if [ "$(id -u)" != "0" ]; then
   assert_eq "$(json_exit "$out")" "1" "a sidecar delete failure makes --fix exit 1"
 fi
 
+# only the notes dir beside the backlog counts: other/backlog/x.md names a different file
+d="$(fixture_repo fix-sidecar-otherdir)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/x.md"
+backlog_row "$d/docs/BACKLOG.md" "Done other row" "shipped v1.0.0 2020-01-01" "other/backlog/x.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_exists "$d/docs/backlog/x.md" "a row naming other/backlog/x.md does not delete docs/backlog/x.md"
+
 finalize_test

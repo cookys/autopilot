@@ -281,19 +281,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
 
-### Outcome-shaped quality-gate enforcer (opt-in) — replaces the rejected invocation check
-- **Id**: BL-0050
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 我們想做一個檢查，確保品質檢查流程真的有跑過，但原本以「有沒有呼叫」為準的做法被否決；新做法需要品質流程先產生可驗證的執行收據，目前還沒有。 (draft)
-- **Impact**: 目前沒有機制保證品質檢查一定被執行，只能靠流程自律。 (draft)
-- **Trigger**: When an enforcer for the quality gate is wanted again, OR when `quality-pipeline` grows a SHA-bound "this ran" receipt that a gate could re-derive from. Not before: the current design has nothing to verify against.
-- **Effort**: M
-- **Source**: think-tank 5-role panel 2026-08-18（collision insights…
-- **Pointer**: docs/plans/2026-10-19-outcome-quality-gate.md
-- **Context**: Plan done in 57c4093f1 (owner ruled 2026-10-19: plan first); whether to start, and the full-mode policy, wait on panel card d-f9a231b7.
-
 ### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
 - **Id**: BL-0051
 - **Status**: open

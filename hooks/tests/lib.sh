@@ -414,6 +414,31 @@ fail() {
   __TEST_FAIL_MSGS+=("$*")
 }
 
+# require_under_test_tmp <path>
+# Stop a later `git -C "$path"` from falling through to the current directory
+# when setup failed and left the path empty. Exits the process (a subshell
+# call must not continue). Does not run git.
+require_under_test_tmp() {
+  local path="${1-}" real base
+  if [ -z "$path" ]; then
+    echo "require_under_test_tmp: path is empty" >&2
+    exit 1
+  fi
+  if [ ! -d "$path" ]; then
+    echo "require_under_test_tmp: path is not an existing directory: $path" >&2
+    exit 1
+  fi
+  real="$(realpath "$path")" || { echo "require_under_test_tmp: realpath failed for $path" >&2; exit 1; }
+  base="$(realpath "$TEST_TMP")" || { echo "require_under_test_tmp: realpath failed for TEST_TMP" >&2; exit 1; }
+  case "$real" in
+    "$base"/*) ;;
+    *)
+      echo "require_under_test_tmp: realpath $real is not strictly under TEST_TMP ($base)" >&2
+      exit 1
+      ;;
+  esac
+}
+
 assert_eq() {
   # assert_eq <actual> <expected> <msg>
   if [ "$1" = "$2" ]; then

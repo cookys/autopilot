@@ -4580,6 +4580,36 @@ seat_strike_capture() {
   ) || true
 }
 
+# _emit_question_waiting_event — side effect only. When classify_outcome has
+# settled on question_suspected, record condition=waiting on the live stage so
+# watch-foreman can print it. The stage-transition that closes a committed
+# lease happens later; this must run first, while the latest stage row is
+# still that lease. A write failure warns and never touches OUTCOME_* or exit.
+# No resumed-run hook already knows the worker left the question, so a later
+# working event is left to the existing heartbeat path.
+_emit_question_waiting_event() {
+  [ "${OUTCOME_STATUS:-}" = "question_suspected" ] || return 0
+  [ -n "${LEDGER:-}" ] && [ -n "${RUN_ID:-}" ] && [ -n "${STAGE:-}" ] || return 0
+  local latest_cond="" reason="" err=""
+  latest_cond="$(jq -s -r --arg rid "$RUN_ID" --arg stg "$STAGE" '
+    [ .[] | select(.kind=="worker_event" and .run_id==$rid and .stage==$stg) ]
+    | if length==0 then "" else (.[-1].condition // "") end
+  ' "$LEDGER" 2>/dev/null)" || latest_cond=""
+  [ "$latest_cond" = "waiting" ] && return 0
+  reason=""
+  if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
+    # LOG is the worker log. Last non-empty worker line (skip the rail's own
+    # [dispatch-hetero: ...] footer), controls stripped, first 200 characters.
+    reason="$(awk 'NF && $0 !~ /^\[dispatch-hetero:/ { line=$0 } END { print line }' "$LOG" | tr -d '[:cntrl:]' | jq -Rr '.[:200]')" || reason=""
+  fi
+  if ! err="$(bash "$SELF_DIR/run-ledger.sh" stage-event \
+      --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+      --condition waiting --reason "$reason" 2>&1 >/dev/null)"; then
+    printf 'dispatch-hetero: warning: waiting condition event was not recorded (%s)\n' "${err:-stage-event failed}" >&2
+  fi
+  return 0
+}
+
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
 # inline path (→ emit to stdout + exit) and the detached child (→ write-result + ledger). It
 # sets OUTCOME_* and performs the outcome-specific side effects (passive_capture; worktree
@@ -4750,6 +4780,9 @@ classify_outcome() {
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
   fi
+  # After engine_unavailable and wall-timeout overrides, so only a run that
+  # stays question_suspected emits. Still before any terminal stage-transition.
+  _emit_question_waiting_event || true
   # R1 retention record: every path that leaves the worktree on disk stamps its marker with
   # why and until when (residue.lease_hours, default 72 h) — repo-residue-sweep.js reap --auto
   # is the reaper that reads it. Still inside the lifetime flock (the lock fd is held for the
@@ -4902,7 +4935,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
+      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

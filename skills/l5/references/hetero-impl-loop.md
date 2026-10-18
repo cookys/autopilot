@@ -61,6 +61,7 @@ report-only discipline: front-door § "Live sensing". Foreman wait on leaves is
 notification-only — see `/l5` Hard rules and `scripts/check-foreman-polling.js`,
 and pair every background wait with a dead-man timer (task notifications drop).
 
+The rail emits a waiting condition event when a hand stops with question_suspected.
 When a CONDITION line disagrees with what you expect, get the on-disk picture
 before acting: `node scripts/agent-liveness-check.js --repo-root <repo>` reports
 base head + age, per-worktree dirty/ahead/behind, newest write, lock holders and

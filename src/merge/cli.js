@@ -5,6 +5,7 @@
 // overlaps. It deliberately has no push, ref deletion, worktree deletion, or
 // stash operations.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -248,6 +249,103 @@ function sealReceipt(body) {
   return { ...body, receipt_digest: canonicalDigest(body) };
 }
 
+// Armed only while a caller asked for a write-ahead receipt. Unset means the
+// in-memory receipt is the whole story and halted() stays a pure function.
+let durableSink = null;
+let writeProgress = null;
+
+function receiptDirProblem(dir) {
+  if (typeof dir !== 'string' || dir.trim() === '') {
+    return 'receipt_dir must be a non-empty path';
+  }
+  let stat;
+  try {
+    stat = fs.statSync(dir);
+  } catch (_error) {
+    return `receipt_dir is missing or not writable: ${dir}`;
+  }
+  if (!stat.isDirectory()) {
+    return `receipt_dir is missing or not writable: ${dir}`;
+  }
+  try {
+    fs.accessSync(dir, fs.constants.W_OK);
+  } catch (_error) {
+    return `receipt_dir is missing or not writable: ${dir}`;
+  }
+  return null;
+}
+
+function atomicWriteJson(file, value) {
+  const target = path.resolve(file);
+  const dir = path.dirname(target);
+  const temp = path.join(
+    dir,
+    `.${path.basename(target)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`,
+  );
+  const bytes = `${JSON.stringify(value, null, 2)}\n`;
+  let fd = null;
+  try {
+    fd = fs.openSync(temp, 'wx', 0o644);
+    fs.writeFileSync(fd, bytes, 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+    fs.renameSync(temp, target);
+    try {
+      const parent = fs.openSync(dir, 'r');
+      try { fs.fsyncSync(parent); } finally { fs.closeSync(parent); }
+    } catch (_error) {
+      // Some filesystems do not permit directory fsync.
+    }
+  } catch (error) {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_closeError) { /* ignore */ }
+    }
+    try { fs.unlinkSync(temp); } catch (_unlinkError) { /* ignore */ }
+    throw error;
+  }
+}
+
+function intentEdgesFromManifest(manifest) {
+  return manifest.edges.map((edge) => ({
+    sequence: edge.sequence,
+    source_ref: edge.source_ref,
+    source_worktree: edge.source_worktree,
+    source_sha: edge.source_sha,
+    target_ref: edge.target_ref,
+    target_worktree: edge.target_worktree,
+    target_sha: edge.target_sha,
+    target_from_edge: edge.target_from_edge,
+    mode: edge.mode,
+  }));
+}
+
+function durableFromReceipt(receipt, intentEdges, override = null) {
+  const status = override ? override.status : receipt.status;
+  const state = override
+    ? override.state
+    : (receipt.status === 'complete' ? 'completed' : 'halted');
+  return sealReceipt({
+    schema_version: SCHEMA_VERSION,
+    artifact_type: ARTIFACT_TYPE,
+    manifest_seal: receipt.manifest_seal,
+    root_run_id: receipt.root_run_id,
+    status,
+    state,
+    halt_reason: override ? override.haltReason : receipt.halt_reason,
+    halt_edge: override ? override.haltEdge : receipt.halt_edge,
+    edges: override ? override.edges : receipt.edges,
+    intent_edges: intentEdges,
+  });
+}
+
+function maybeCrashAfterEdge(sequence) {
+  const raw = process.env.AUTOPILOT_MERGE_CRASH_AFTER_EDGE;
+  if (typeof raw !== 'string' || !/^[1-9][0-9]*$/.test(raw)) return;
+  if (Number(raw) !== sequence) return;
+  process.kill(process.pid, 'SIGKILL');
+}
+
 function verifyMergeExecutionReceipt(receipt) {
   if (!isPlainObject(receipt)
       || receipt.schema_version !== SCHEMA_VERSION
@@ -260,7 +358,7 @@ function verifyMergeExecutionReceipt(receipt) {
 }
 
 function halted(manifestSeal, rootRunId, edges, reason, haltEdge = null) {
-  return sealReceipt({
+  const receipt = sealReceipt({
     schema_version: SCHEMA_VERSION,
     artifact_type: ARTIFACT_TYPE,
     manifest_seal: typeof manifestSeal === 'string' ? manifestSeal : null,
@@ -270,6 +368,8 @@ function halted(manifestSeal, rootRunId, edges, reason, haltEdge = null) {
     halt_edge: haltEdge,
     edges,
   });
+  if (durableSink) durableSink(receipt);
+  return receipt;
 }
 
 function validatePreflight(preflight, manifestSeal, manifest) {
@@ -445,6 +545,14 @@ function collidingPaths(incoming, dirty, ignored) {
 }
 
 function executeMergeIntent(request) {
+  if (isPlainObject(request) && Object.prototype.hasOwnProperty.call(request, 'receipt_dir')) {
+    const problem = receiptDirProblem(request.receipt_dir);
+    if (problem) {
+      const error = new Error(problem);
+      error.code = 'RECEIPT_DIR';
+      throw error;
+    }
+  }
   if (isPlainObject(request)
       && isPlainObject(request.sealed)
       && !Object.prototype.hasOwnProperty.call(request, 'sealed_manifest')) {
@@ -509,6 +617,60 @@ function executeMergeIntent(request) {
   }
 
   const receipts = [];
+  const receiptDir = Object.prototype.hasOwnProperty.call(request, 'receipt_dir')
+    ? request.receipt_dir
+    : null;
+  if (receiptDir !== null) {
+    const intentEdges = intentEdgesFromManifest(manifest);
+    const receiptFile = path.join(path.resolve(receiptDir), 'merge-execution-receipt.json');
+    const writeDurable = (receipt, override = null) => {
+      try {
+        atomicWriteJson(receiptFile, durableFromReceipt(receipt, intentEdges, override));
+      } catch (error) {
+        const wrapped = new Error(
+          `receipt_dir is missing or not writable: ${receiptDir} (${error.message})`,
+        );
+        wrapped.code = 'RECEIPT_DIR';
+        throw wrapped;
+      }
+    };
+    durableSink = (receipt) => writeDurable(receipt);
+    writeProgress = (edges) => writeDurable({
+      manifest_seal: sealed.seal,
+      root_run_id: manifest.root_run_id,
+      status: 'in_progress',
+      halt_reason: null,
+      halt_edge: null,
+      edges,
+    }, {
+      status: 'in_progress',
+      state: 'in_progress',
+      haltReason: null,
+      haltEdge: null,
+      edges,
+    });
+    try {
+      writeDurable({
+        manifest_seal: sealed.seal,
+        root_run_id: manifest.root_run_id,
+        status: 'in_progress',
+        halt_reason: null,
+        halt_edge: null,
+        edges: [],
+      }, {
+        status: 'in_progress',
+        state: 'in_progress',
+        haltReason: null,
+        haltEdge: null,
+        edges: [],
+      });
+    } catch (error) {
+      durableSink = null;
+      writeProgress = null;
+      throw error;
+    }
+  }
+  try {
   for (const edge of manifest.edges) {
     for (const side of ['source', 'target']) {
       if (!validateWorktreeBinding(manifest.repo, edge[`${side}_worktree`])) {
@@ -773,8 +935,12 @@ function executeMergeIntent(request) {
           : 'merge_result_verification_failed');
       return halted(sealed.seal, manifest.root_run_id, receipts, reason, edge.sequence);
     }
+    if (writeProgress) {
+      writeProgress(receipts);
+      maybeCrashAfterEdge(edge.sequence);
+    }
   }
-  return sealReceipt({
+  const done = sealReceipt({
     schema_version: SCHEMA_VERSION,
     artifact_type: ARTIFACT_TYPE,
     manifest_seal: request.manifest_seal,
@@ -784,24 +950,106 @@ function executeMergeIntent(request) {
     halt_edge: null,
     edges: receipts,
   });
+  if (durableSink) durableSink(done);
+  return done;
+  } finally {
+    durableSink = null;
+    writeProgress = null;
+  }
+}
+
+function classifyReceiptEdge(edge, recorded, done) {
+  let actual = null;
+  try {
+    actual = resolveRef(edge.target_worktree, edge.target_ref);
+  } catch (_error) {
+    actual = null;
+  }
+  if (!actual) return 'uncertain';
+  if (recorded && recorded.status === 'executed'
+      && (actual === recorded.after_sha
+        || isAncestor(edge.target_worktree, recorded.after_sha, actual))) {
+    return 'merged';
+  }
+  if (recorded && recorded.status === 'halted'
+      && (actual === recorded.before_sha || actual === edge.target_sha)) {
+    return 'not_merged';
+  }
+  if (!recorded) {
+    const producer = edge.target_from_edge == null ? null : done.get(edge.target_from_edge);
+    if (producer && producer.status !== 'executed') return 'uncertain';
+    const expected = producer && producer.status === 'executed'
+      ? producer.after_sha
+      : edge.target_sha;
+    if (actual === expected) return 'not_merged';
+  }
+  return 'uncertain';
+}
+
+function inspectMergeReceipt(file) {
+  let receipt;
+  try {
+    receipt = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+  } catch (error) {
+    return { code: 2, error: `cannot read merge receipt: ${error.message}` };
+  }
+  if (!verifyMergeExecutionReceipt(receipt)
+      || receipt.state !== 'in_progress'
+      || !Array.isArray(receipt.intent_edges)) {
+    return { code: 2, error: 'merge receipt is not an in-progress execution receipt' };
+  }
+  const done = new Map();
+  for (const edge of receipt.edges) {
+    if (isPlainObject(edge)) done.set(edge.sequence, edge);
+  }
+  const lines = receipt.intent_edges.map((edge) => {
+    const verdict = classifyReceiptEdge(edge, done.get(edge.sequence), done);
+    return `edge ${edge.sequence} ${verdict}`;
+  });
+  return { code: 0, text: `${lines.join('\n')}\n` };
 }
 
 function runMergeCli(args, io = {}) {
   const stdout = io.stdout || process.stdout;
   const stderr = io.stderr || process.stderr;
+  const usage = 'Usage: autopilot merge execute --request <file> [--json] [--receipt-dir <dir>]\n'
+    + '       autopilot merge execute --inspect-receipt <file>\n';
   if (args[0] !== 'execute') {
-    stderr.write('Usage: autopilot merge execute --request <file> [--json]\n');
+    stderr.write(usage);
     return 2;
   }
   let requestFile = null;
+  let receiptDir = null;
+  let inspectFile = null;
+  let sawReceiptDir = false;
   for (let index = 1; index < args.length; index += 1) {
     if (args[index] === '--request' && args[index + 1]) {
       requestFile = args[index + 1];
+      index += 1;
+    } else if (args[index] === '--receipt-dir' && args[index + 1]) {
+      receiptDir = args[index + 1];
+      sawReceiptDir = true;
+      index += 1;
+    } else if (args[index] === '--inspect-receipt' && args[index + 1]) {
+      inspectFile = args[index + 1];
       index += 1;
     } else if (args[index] !== '--json') {
       stderr.write(`ERROR: unknown merge execute option: ${args[index]}\n`);
       return 2;
     }
+  }
+  if (inspectFile) {
+    if (requestFile || sawReceiptDir) {
+      stderr.write('ERROR: --inspect-receipt reads one receipt and takes no other options\n');
+      return 2;
+    }
+    const inspected = inspectMergeReceipt(inspectFile);
+    if (inspected.error) {
+      stderr.write(`ERROR: ${inspected.error}\n`);
+      return inspected.code;
+    }
+    stdout.write(inspected.text);
+    return 0;
   }
   if (!requestFile) {
     stderr.write('ERROR: merge execute requires --request <file>\n');
@@ -814,7 +1062,23 @@ function runMergeCli(args, io = {}) {
     stderr.write(`ERROR: cannot read merge execution request: ${error.message}\n`);
     return 2;
   }
-  const receipt = executeMergeIntent(request);
+  if (sawReceiptDir) {
+    if (!isPlainObject(request)) {
+      stderr.write('ERROR: merge execution request must be a JSON object\n');
+      return 2;
+    }
+    request.receipt_dir = receiptDir;
+  }
+  let receipt;
+  try {
+    receipt = executeMergeIntent(request);
+  } catch (error) {
+    if (error && error.code === 'RECEIPT_DIR') {
+      stderr.write(`ERROR: ${error.message}\n`);
+      return 1;
+    }
+    throw error;
+  }
   stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
   return receipt.status === 'complete' ? 0 : 1;
 }

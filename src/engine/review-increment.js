@@ -19,6 +19,7 @@ const REASONS = Object.freeze([
   'opt_in_off',
   'no_carriable_seat',
   'prior_round_incremental',
+  'prior_path_removed',
   'finding_unmapped',
   'base_changed',
   'roster_changed',
@@ -249,6 +250,15 @@ function normalizeFindingPath(p) {
   return clean;
 }
 
+function blobExists(repo, rev, filePath) {
+  try {
+    git(repo, ['cat-file', '-e', `${rev}:${filePath}`]);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function renameMap(repo, from, to) {
   const raw = git(repo, ['diff', '-M', '--ignore-submodules=none', '--name-status', '-z', from, to]).toString('utf8').split('\0');
   const map = new Map();
@@ -303,12 +313,15 @@ function evaluateReturnIncrement(input) {
   const renames = renameMap(repo, priorHead, newHead);
   const findings = [];
   let unmapped = false;
+  let priorPathRemoved = false;
   for (const seat of carriableSeats) {
     if (!Array.isArray(seat.findings)) unmapped = true; // a malformed findings list is never "no findings"
     for (const f of Array.isArray(seat.findings) ? seat.findings : []) {
       const p = normalizeFindingPath(f && f.path);
       let mapped = null;
       if (p !== null) {
+        // Git, not a stored flag: the path is a rename source in priorHead..newHead, or a blob at priorHead that is gone at newHead.
+        if (renames.has(p) || (blobExists(repo, priorHead, p) && !blobExists(repo, newHead, p))) priorPathRemoved = true;
         if (digests1.has(p)) mapped = p;
         else if (renames.has(p) && digests1.has(renames.get(p))) mapped = renames.get(p);
       }
@@ -316,6 +329,7 @@ function evaluateReturnIncrement(input) {
       findings.push({ seat_id: seat.seatId, id: f && f.id, path: mapped });
     }
   }
+  if ((priorPathRemoved)) return full('prior_path_removed'); // guard:prior_path_removed
   if ((unmapped)) return full('finding_unmapped'); // guard:finding_unmapped
 
   // 5. the question did not change

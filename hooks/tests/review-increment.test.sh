@@ -157,9 +157,11 @@ function checks(m) {
     return e && e.why.some((w) => w.startsWith('references_changed:src/alphamod.js'));
   });
   t('a_deleted_not_in_recheck', () => {
-    const r = inc(m, input(F.del, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/feat04.js' }] }) } }));
+    const r = inc(m, input(F.del));
+    const withFinding = inc(m, input(F.del, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/feat04.js' }] }) } }));
     return r.mode === 'incremental' && r.changed.includes('src/feat04.js') && !paths(r).includes('src/feat04.js')
-      && !r.recheck_files.some((f) => f.path === 'src/feat04.js');
+      && !r.recheck_files.some((f) => f.path === 'src/feat04.js')
+      && withFinding.mode === 'full' && withFinding.reason === 'prior_path_removed';
   });
   t('a_submodule_pointer_change', () => {
     // A user-level diff.ignoreSubmodules=all and GIT_DIFF_OPTS must not hide a gitlink change.
@@ -198,12 +200,9 @@ function checks(m) {
     return fullWith(m, f(undefined), 'finding_unmapped')            // no path
       && fullWith(m, f('src/u01.js:1'), 'finding_unmapped')         // path never changed since base
       && fullWith(m, f('../etc/passwd'), 'finding_unmapped')
-      && fullWith(m, input(F.deleted, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js' }] }) } }), 'finding_unmapped');
+      && fullWith(m, input(F.deleted, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js' }] }) } }), 'prior_path_removed');
   });
-  t('a14_rename_followed', () => {
-    const r = inc(m, input(F.renamed, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js:4' }] }) } }));
-    return r.mode === 'incremental' && r.findings[0].path === 'src/gmoved.js' && paths(r).includes('src/gmoved.js');
-  });
+  t('a14_rename_followed', () => fullWith(m, input(F.renamed, { prior: { seats: seats({ findings: [{ id: 'F1', path: 'src/gnew.js:4' }] }) } }), 'prior_path_removed'));
   t('f_base_changed', () => fullWith(m, input(b, { prior: { baseSha: 'f'.repeat(40) } }), 'base_changed'));
   t('f_roster_changed', () => fullWith(m, input(b, { current: { rosterDigest: 'r2' } }), 'roster_changed'));
   t('f_spec_changed', () => fullWith(m, input(b, { current: { specDigest: 's2' } }), 'spec_changed'));
@@ -319,7 +318,7 @@ const green = checks(real);
 for (const k of Object.keys(green)) console.log(`${k}=${green[k]}`);
 // Every guard reason in the plan has a guard line, and the list in the module is the plan's list.
 const src = fs.readFileSync(SRC, 'utf8');
-console.log(`reasons_listed=${real.REASONS.every((r) => src.includes(`// guard:${r}`)) && real.REASONS.length === 14}`);
+console.log(`reasons_listed=${real.REASONS.every((r) => src.includes(`// guard:${r}`)) && real.REASONS.length === 15}`);
 for (const [name, expect, mutate] of CONTROLS) {
   const bad = failing(checks(mutated(name, mutate)));
   console.log(`neg_${name}=${expect.every((e) => bad.includes(e))}`);

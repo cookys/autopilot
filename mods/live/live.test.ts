@@ -145,7 +145,7 @@ function base(): Tree {
 
 type World = {
   files: Tree
-  sid: { value: string }
+  sid: { value: string; throw?: boolean; null?: boolean }
   cwdReal: { value: string }
   stats: Record<string, { size: number; mtimeMs: number }> // $.fs.stat of a file (a background command's output); any other path stats as a directory
   toasts: string[]
@@ -208,7 +208,11 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
   })
-  on('session.id', () => ({ value: w.sid.value }))
+  on('session.id', () => {
+    if (w.sid.throw) throw new Error('no session id')
+    if (w.sid.null) return { value: null }
+    return { value: w.sid.value }
+  })
   on('session.cwd', () => ({ value: CWD }))
   on('session.root', () => ({ value: '/work/repo' }))
   on('session.start', () => ({ cwd: CWD }))
@@ -4174,6 +4178,30 @@ test('recent: the pane lists the section after a tick, and a throwing $.session.
   expect((await rows()).slice(-3).length).toBe(3)
 })
 
+// # RED at bf1782849: recent null-id update failed — expect(received).toEqual() wanted "synthetic question two" and received only "◦ You: synthetic question one ▸" under Recent conversation.
+// A null session id is unread for kept activity rows, but the transcript is still read and recent groups still update.
+// The null tick builds a no-project snapshot (no Recent section on screen). The next tick restores the id and makes
+// messages() throw, so the pane shows whatever the null tick stored.
+test('recent: a null session id still updates the recent groups from a successful transcript read', async ($, on) => {
+  let messagesThrow = false
+  let messages: SessionMsg[] = [U('synthetic question one'), A('synthetic answer one')]
+  const w = worldEn(on, base())
+  on('session.messages', () => { if (messagesThrow) throw new Error('transcript unavailable'); return { value: messages } })
+  await start($, 'terminal')
+  await openRecent($)
+  const rows = async () => (await paneParts($, 'terminal', 'now')).texts
+  let r = await rows()
+  expect([r.slice(-2)[0], squash(r[r.length - 1])]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸'])
+  w.sid.null = true
+  messages = [...messages, U('synthetic question two'), A('synthetic answer two')]
+  await w.clock.advance(5000) // null id, messages succeed: recent must take the new question
+  w.sid.null = false
+  messagesThrow = true
+  await w.clock.advance(5000) // id is readable again, transcript throws: the pane keeps the null tick's groups
+  r = await rows()
+  expect([r.slice(-3)[0], ...r.slice(-2).map(squash)]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸', '◦ You: synthetic question two ▸'])
+})
+
 test('recent: pressing a group Button expands it, pressing again collapses it', async ($, on) => {
   const w = worldEn(on, base())
   on('session.messages', () => ({ value: [U('synthetic question one'), A('synthetic answer one')] }))
@@ -4453,6 +4481,118 @@ test('activity: an output file over 1 MiB shows no tail; an unread transcript ke
   expect(b).toContain('full suite')
   expect(b).not.toContain(t('bg.quiet', { age: '5s' })) // a kept row's age would freeze: it shows none
   expect(b.split('審查 ***').length - 1).toBe(1) // the agent row is replaced, not kept beside the new one
+})
+
+// A failed transcript read keeps the previous shell and watch rows. Those rows carry no session id, and the id is
+// recorded only after the messages read succeeds, so a later tick whose session id changed (a /clear or a resume)
+// would otherwise keep painting the old session's background rows.
+// # RED at f52bca36: case 1 (session id changed, session.messages throws) failed — expect(received).not.toContain("full suite") still received "full suite · 背景指令"; case 2 (session id unchanged) passed.
+test('activity: a failed transcript read drops the kept shell row when the session id changed', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  w.sid.value = SID_B
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).not.toContain('full suite')
+  expect(b).toContain('審查 phase 1') // the agent list still answers: only the kept shell is dropped
+})
+
+test('activity: a failed transcript read keeps the shell row when the session id is unchanged', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
+// A null or undefined session id is an unread id (the same as session.id throwing). Kept shell rows stay.
+// A null id also builds the no-project snapshot, which never draws the rows, so the keep is checked on the next tick
+// that reads the same session id again while messages() still throws.
+test('activity: a failed transcript read keeps the shell row when the session id call throws', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite')
+  messagesThrow = true
+  w.sid.throw = true
+  await w.clock.advance(5000)
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
+// # RED at 088b72f7f: tick-3 keep (session id S again after a null id, messages still throwing) failed — expect(received).toContain("full suite") received a pane with "審查 phase 1" and no "full suite"; the S2 control passed.
+test('activity: a failed transcript read keeps the shell row when the session id call returns null', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite') // tick 1: session id S, messages succeed
+  messagesThrow = true
+  w.sid.null = true
+  await w.clock.advance(5000) // tick 2: null id and messages throw; the no-project snapshot hides the rows, so nothing is asserted here
+  w.sid.null = false
+  await w.clock.advance(5000) // tick 3: session id S again, messages still throw
+  const b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 phase 1')
+})
+
+test('activity: a failed transcript read drops the kept shell row when the session id changes after a null id tick', async ($, on) => {
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'line\n' })
+  w.stats[BG_OUT] = { size: 10, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(await body()).toContain('full suite') // tick 1: session id S, messages succeed
+  messagesThrow = true
+  w.sid.null = true
+  await w.clock.advance(5000) // tick 2: null id and messages throw; no pane assertion
+  w.sid.null = false
+  w.sid.value = SID_B
+  await w.clock.advance(5000) // tick 3: session id S2, messages still throw
+  const b = await body()
+  expect(b).not.toContain('full suite')
+  expect(b).toContain('審查 phase 1')
 })
 
 // ---- account and quota: the logged-in Claude account (~/.claude.json oauthAccount) and the rate-limit windows ($.session.usage) ----

@@ -59,9 +59,14 @@
 #     every child kimi spawns). Anything else — endpoint tokens, cloud credentials — is not
 #     in the foreman's environment; a nested rail that needs them reads its own files.
 #     Network egress is NOT bounded (kimi has MCP http/sse) → egress_policy "unbounded".
-#   5 containment — kimi is its own setsid session; the cap/deadline kill targets its
-#     process group. Hands dispatched with ledger coords are their own sessions by the
-#     detach contract and SURVIVE the foreman's death — reported, never killed.
+#   5 containment — when systemd-run --user --scope works, kimi is launched inside a
+#     transient user scope (still via setsid, so the pid-as-pgid kill stays a fallback)
+#     and cap, deadline, and normal exit reap that scope, which also kills descendants
+#     that called setsid themselves. Without a usable user scope the rail keeps the
+#     setsid session kill. JSON containment is cgroup only after the scope verifies
+#     empty, otherwise setsid. WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 forces the fallback.
+#     Hands dispatched with ledger coords are their own sessions by the detach contract
+#     and SURVIVE the foreman's death — reported, never killed.
 #   6 worktree budget — AUTOPILOT_WORKTREE_ROOT_RUN_ID / AUTOPILOT_ROOT_RUN_ID forwarded
 #     unchanged; AUTOPILOT_DISPATCH_DEPTH=1 so hands land at depth 2.
 #
@@ -99,6 +104,8 @@ source "$SELF_DIR/lib/dispatch-branch-ledger.sh"
 source "$SELF_DIR/lib/worktree-intent.sh"
 # shellcheck source=lib/dispatch-detach.sh
 source "$SELF_DIR/lib/dispatch-detach.sh"
+# shellcheck source=lib/worker-containment.sh
+source "$SELF_DIR/lib/worker-containment.sh"
 
 BRIEF_FILE=""; PLAN_FILE=""; MODEL="kimi-code/k3"; BASE_REF=""; RUN_ID=""; RUN_DIR=""
 LEDGER=""; TOOL_CAP=""; TIMEOUT_SECS=3600; HANDOFF_TIMEOUT=300; POLL=1
@@ -169,6 +176,8 @@ case "$HANDOFF_TIMEOUT" in ''|*[!0-9]*) die_precondition "--handoff-timeout must
 case "$POLL" in ''|*[!0-9.]*) die_precondition "--poll must be a number" ;; esac
 command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 command -v setsid >/dev/null 2>&1 || die_precondition "setsid is required for process-group containment"
+worker_containment_detect
+SCOPE_UNIT=""; WORKER_SID=""
 command -v node >/dev/null 2>&1 || die_precondition "node is required (stream parsing, content gate)"
 [ -f "$SELF_DIR/check-hands-commit.js" ] || die_precondition "scripts/check-hands-commit.js missing beside this rail"
 [ -f "$SELF_DIR/lib/main-checkout-boundary.sh" ] || die_precondition "scripts/lib/main-checkout-boundary.sh missing beside this rail"
@@ -412,11 +421,35 @@ count_bash_calls() { # <stream file> → prints "<count> <session_id>"
 }
 
 # run_turn <stream> <cap> <deadline_secs> <kimi args...> → sets TURN_EXIT, TURN_STOP (""|cap|deadline)
+# Reap the turn's scope (if any) and record containment only when the cgroup verified empty.
+_foreman_reap_turn() {
+  [ -n "${SCOPE_UNIT:-}" ] || return 0
+  CONTAINED=0
+  reap_container
+  if [ "${CONTAINED:-0}" = 1 ]; then
+    [ "${FOREMAN_CONTAINMENT_VERIFIED:-1}" = 1 ] && CONTAINMENT="cgroup"
+  else
+    FOREMAN_CONTAINMENT_VERIFIED=0
+    CONTAINMENT="setsid"
+  fi
+  SCOPE_UNIT=""
+}
+
 run_turn() {
   local stream="$1" cap="$2" deadline="$3"; shift 3
   TURN_EXIT=""; TURN_STOP=""
   local pid t0 now cnt
-  ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  SCOPE_UNIT=""
+  # setsid stays the session leader (its pid is the pgid) so the group kill remains
+  # the fallback. systemd-run puts that session's command in a user scope when one
+  # is available, which also catches descendants that call setsid themselves.
+  if [ "${HAVE_CGROUP:-0}" -eq 1 ]; then
+    FOREMAN_TURN_N=$(( ${FOREMAN_TURN_N:-0} + 1 ))
+    SCOPE_UNIT="foreman-${RUN_ID//[^A-Za-z0-9]/_}-${FOREMAN_TURN_N}-$$.scope"
+    ( cd "$WT" && exec setsid systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  else
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+  fi
   pid=$!
   t0="$(date +%s)"
   while kill -0 "$pid" 2>/dev/null; do
@@ -427,7 +460,7 @@ run_turn() {
     elif [ $(( now - t0 )) -ge "$deadline" ]; then TURN_STOP="deadline"
     fi
     if [ -n "$TURN_STOP" ]; then
-      # The setsid'd kimi is its own session leader: its pid is the pgid. Kill the group.
+      # The setsid'd leader's pid is the pgid. Kill the group, then the scope.
       kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
       sleep 1
       kill -KILL -- "-$pid" 2>/dev/null || true
@@ -436,6 +469,7 @@ run_turn() {
     sleep "$POLL"
   done
   wait "$pid" 2>/dev/null; TURN_EXIT=$?
+  _foreman_reap_turn
   cnt="$(count_bash_calls "$stream")"; TOOL_CALLS="${cnt%% *}"
   [ -n "${cnt#* }" ] && SESSION_ID="${cnt#* }"
   return 0

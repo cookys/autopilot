@@ -103,9 +103,7 @@ function nowMs() {
 
 // ---- brief parsing -------------------------------------------------------------------------------------------------
 
-function headLines(text, n) {
-  return String(text || '').replace(/\r\n/g, '\n').split('\n').slice(0, n);
-}
+const { headLines } = require('./lib/brief-head.js');
 
 function laneFromBrief(text) {
   for (const line of headLines(text, 5)) {

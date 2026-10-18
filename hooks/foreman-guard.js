@@ -24,7 +24,12 @@
  * RULES (a deny names the rule and the sanctioned alternative):
  *   - Bash cap: per (session, agent_id) call counter; call N > bash_cap (default 40)
  *     is denied with the lifecycle directive: write the handoff, end the turn
- *     (一刀一命 — skills/l4|l5|l6/SKILL.md).
+ *     (一刀一命 — skills/l4|l5|l6/SKILL.md). A "Bash-Cap: <n>" line in the first 10
+ *     lines of the brief (n an integer of plain digits, 1..200) replaces the setting
+ *     and the role cap for that agent. A missing line changes nothing. A malformed or
+ *     out-of-range line is ignored and the bash-cap deny says so in one sentence.
+ *     The same deny appends whether `git diff --stat` of the payload cwd is empty,
+ *     omitted when git cannot be run.
  *   - Polling: a FOREGROUND Bash whose command is a wait loop or a liveness poll is
  *     denied. `run_in_background: true` is the sanctioned wait (one notification).
  *   - Monitor from a subagent is denied (ironlaw #6: foremen must not hold a Monitor).
@@ -59,6 +64,8 @@ const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/
 // Sleep / while-wait rules + the executable-text lexer live in one shared module so the depth-0
 // advisory (depth0-delegate-gate.js) and this hook can never drift apart.
 const { executableText, isAffirmative, SLEEP_RE, WHILE_WAIT_RE } = require('../scripts/lib/bash-wait-rules.js');
+const { headLines } = require('./lib/brief-head.js');
+const { execFileSync } = require('child_process');
 
 const DEFAULT_BASH_CAP = 40;
 const DEFAULT_ADVISORY_EVERY = 40;
@@ -69,6 +76,12 @@ const GC_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const GC_MAX_ENTRIES = 500;
 const FIRST_LINE_MAX = 64 * 1024;
 const ROLE_LINE_RE = /^Role: (foreman|worker|reviewer)$/;
+// Same line-anchored header read as Budget-Ack: in subagent-budget.js (headLines + ^...$).
+const BASH_CAP_LINE_RE = /^Bash-Cap:[ \t]*(.*)$/;
+const BASH_CAP_HEAD_LINES = 10;
+const BASH_CAP_MIN = 1;
+const BASH_CAP_MAX = 200;
+const GIT_DIFF_TIMEOUT_MS = 3000;
 const ROLE_KEYS = ['foreman', 'worker', 'reviewer'];
 const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
 
@@ -302,6 +315,57 @@ function readFirstUserMessageContent(payload) {
   }
 }
 
+// First Bash-Cap line in the first 10 brief lines. { cap } wins over settings and role
+// caps. { ignored, why } keeps the normal cap and is named on the bash-cap deny.
+// null: no line in the window (a later line is not a declaration).
+function bashCapFromBrief(text) {
+  if (typeof text !== 'string') return null;
+  for (const line of headLines(text, BASH_CAP_HEAD_LINES)) {
+    const m = BASH_CAP_LINE_RE.exec(line);
+    if (!m) continue;
+    const raw = m[1].trim();
+    if (!/^\d+$/.test(raw)) {
+      return { ignored: true, why: 'it is not an integer written as plain digits' };
+    }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < BASH_CAP_MIN || n > BASH_CAP_MAX) {
+      return { ignored: true, why: `it is outside the range ${BASH_CAP_MIN} to ${BASH_CAP_MAX}` };
+    }
+    return { cap: n };
+  }
+  return null;
+}
+
+function resolveBriefBashCap(payload) {
+  try {
+    const content = readFirstUserMessageContent(payload);
+    if (typeof content !== 'string') return null;
+    return bashCapFromBrief(content);
+  } catch {
+    return null;
+  }
+}
+
+// One sentence for the bash-cap deny. Fail-open: missing cwd, a non-repo, a timeout,
+// or any throw omits the sentence. No shell.
+function gitDiffStatHint(cwd) {
+  try {
+    if (typeof cwd !== 'string' || cwd === '') return '';
+    const out = execFileSync('git', ['diff', '--stat'], {
+      cwd,
+      timeout: GIT_DIFF_TIMEOUT_MS,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (String(out).trim() === '') {
+      return ' git diff --stat of your working directory is empty: nothing is written yet.';
+    }
+    return ' git diff --stat of your working directory is not empty: uncommitted work exists, commit it before ending.';
+  } catch {
+    return '';
+  }
+}
+
 function isAutopilotDispatched(content) {
   if (typeof content !== 'string') return false;
   const nl = content.indexOf('\n');
@@ -483,7 +547,7 @@ function emitAllowContext(text) {
   })}\n`);
 }
 
-function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
+function decide(payload, cfg, st, ceiling = {}, role = 'foreman', briefCap = null) {
   const tool = payload.tool_name || '';
   const input = payload.tool_input || {};
   if (tool === 'Monitor') {
@@ -491,7 +555,8 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
       'foreman-guard: Monitor is depth-0 only (ironlaw #6). A foreman waits with run_in_background + a paired dead-man `sleep <deadline>; echo WAKE`, then ENDS ITS TURN.' };
   }
   if (tool !== 'Bash') return { deny: false, diagnostic: ceiling.diagnostic };
-  const cap = cfg.roleCaps && Number.isInteger(cfg.roleCaps[role]) ? cfg.roleCaps[role] : cfg.bashCap;
+  let cap = cfg.roleCaps && Number.isInteger(cfg.roleCaps[role]) ? cfg.roleCaps[role] : cfg.bashCap;
+  if (briefCap && Number.isInteger(briefCap.cap)) cap = briefCap.cap;
   const cmd = typeof input.command === 'string' ? input.command : '';
   const background = isAffirmative(input.run_in_background);
   // Every Bash ATTEMPT is reserved against the cap before any rule runs — a denied
@@ -505,9 +570,12 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
     return { deny: true, rule: 'context-ceiling', count: n, reason: ceiling.reason, diagnostic: ceiling.diagnostic };
   }
   if (n > cap) {
-    return { deny: true, rule: 'bash-cap', count: n, reason:
-      `foreman-guard: Bash call ${n} exceeds the ${role} cap of ${cap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`,
-      diagnostic: ceiling.diagnostic };
+    let reason = `foreman-guard: Bash call ${n} exceeds the ${role} cap of ${cap} (ironlaw #6, 一刀一命). Write your handoff (autopilot:handoff) NOW and end the turn; depth-0 spawns the next foreman for the next deliverable. Resident foremen are forbidden.`;
+    if (briefCap && briefCap.ignored) {
+      reason += ` The Bash-Cap line was ignored because ${briefCap.why}.`;
+    }
+    reason += gitDiffStatHint(payload && payload.cwd);
+    return { deny: true, rule: 'bash-cap', count: n, reason, diagnostic: ceiling.diagnostic };
   }
   if (!background) {
     const text = executableText(cmd);
@@ -581,11 +649,12 @@ function decide(payload, cfg, st, ceiling = {}, role = 'foreman') {
     // has no business holding the per-agent lock).
     const ceiling = payload.tool_name === 'Bash' ? checkContextCeiling(payload) : {};
     const role = payload.tool_name === 'Bash' ? resolveRole(payload) : 'foreman';
+    const briefCap = payload.tool_name === 'Bash' ? resolveBriefBashCap(payload) : null;
     const file = stateFile(sessionId, payload.agent_id);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const d = withLock(file, () => {
       const st = loadState(file);
-      const r = decide(payload, cfg, st, ceiling, role);
+      const r = decide(payload, cfg, st, ceiling, role, briefCap);
       if (Number.isInteger(r.count)) st.bash_calls = r.count; // every Bash attempt is counted
       if (r.deny) { st.denied += 1; st.last_denied_rule = r.rule; }
       // v2.36.2: the ambiguous-rows diagnostic is printed once per agent per distinct text

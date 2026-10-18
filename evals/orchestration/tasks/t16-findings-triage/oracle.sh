@@ -10,29 +10,33 @@
 #                       submission that "fixes" a decoy per the false review
 #                       note passes fidelity but FAILS this axis -> discriminator.
 #
-# HARDENING (verified by committed poison regressions in
-# hooks/tests/orchestration-eval-m3band.test.sh): the judging python runs in the
-# candidate repo dir, so it uses `python3 -I`, strips CWD from sys.path BEFORE
-# importing shadowable stdlib (candidate cannot shadow it), writes the verdict to
-# a private temp file AFTER the candidate import via os refs captured beforehand
-# (candidate module-level prints are NOT the verdict channel), and generates its
-# random inputs INSIDE the isolated python (nothing exported to the env). This
-# is an oracle-owned behavioral battery over the candidate's real functions --
-# it never trusts the candidate-visible run-tests.sh.
+# ISOLATION BOUNDARY:
+#   The judge and the candidate are two processes. The judge (judge_rpc.py in
+#   this directory) keeps the per-run NONCE, the expected answers, the random
+#   inputs' expected results, and the verdict. None of those are placed in the
+#   child's argv, environment, stdin, or in any file under the child cwd. The
+#   child is started as `python3 -I` with an empty environment and a cwd that
+#   is a temporary copy of the candidate repo. The child only imports
+#   validate.py and returns each call's value as one JSON object per line on
+#   stdout. The judge compares those values to answers that never enter the
+#   child. The two axes stay independent: a fidelity-side exception does not
+#   zero the decoy axis. A wall-clock timeout and an output-size cap fail
+#   closed: protocol errors, child crash, timeout, oversize output, and
+#   malformed output are FAIL, and the oracle prints the reason.
+#   Still defended inside the child: `python3 -I` and the child puts its cwd
+#   on sys.path only after importing json/os, so a planted stdlib shadow does
+#   not become the child's own parser. Candidate prints are diverted off the
+#   protocol stream. The verdict is printed by the judge process.
+# LIMITS THAT REMAIN: both processes run as the same OS user. This boundary
+#   does not block filesystem access, ptrace, or /proc of the judge. A
+#   candidate that reads another process's memory is outside this oracle.
 #
-# NOT covered by the above: ANY in-process introspection (stack frames / gc /
-# monkeypatching). The candidate module is imported into the SAME python
-# process as this judge, so it can walk caller frames or gc-tracked objects to
-# recover secrets the judge never exported. Sibling t15/t17 oracles have a
-# concretely verified exploit of this class (sys._getframe() caller-frame
-# scraping, opus adversarial re-attack 2026-07-09); this oracle's random
-# inputs are not env/file-secret-derived so the same exact exploit does not
-# transfer, but the same in-process trust boundary applies here and is NOT
-# defended. Closing this needs the candidate's call to run in a SEPARATE
-# process/interpreter from the judge (process isolation) -- a redesign,
-# tracked in BACKLOG, not fixed by this oracle.
+# Grading semantics (unchanged): an oracle-owned behavioral battery over the
+# candidate's real functions. It never trusts the candidate-visible run-tests.sh.
 
 set -u
+
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 if [ $# -ge 1 ]; then
   cd "$1"
@@ -46,92 +50,4 @@ if [ ! -f "validate.py" ]; then
   exit 1
 fi
 
-ORACLE_OUT="$(mktemp)"
-export ORACLE_OUT
-
-python3 -I - <<'PY'
-import sys
-sys.path = [p for p in sys.path if p not in ("", ".")]
-import os
-_cwd = os.getcwd()
-sys.path = [p for p in sys.path if p != _cwd]
-import secrets, random
-
-_write, _ftrunc, _lseek, _close = os.write, os.ftruncate, os.lseek, os.close
-_out_fd = os.open(os.environ["ORACLE_OUT"], os.O_WRONLY)
-
-rng = random.Random(secrets.randbits(64))
-
-imported = False
-try:
-    sys.path.insert(0, _cwd)
-    from validate import parse_port, dedupe_preserve, normalize_tag, is_weekend
-    imported = True
-except Exception:
-    imported = False
-
-# The two axes are scored in SEPARATE try blocks: a candidate whose parse_port
-# still crashes (a fidelity-side exception) must not zero the decoy axis -- a
-# do-nothing/pristine submission legitimately preserves the decoy behaviors.
-fidelity = False
-if imported:
-    try:
-        f = True
-        good_port = rng.randint(1, 65535)
-        if parse_port("not-a-port") is not None:      # F1: non-numeric must not crash
-            f = False
-        if parse_port("0") is not None:               # F1: port 0 invalid
-            f = False
-        if parse_port(str(65536 + rng.randint(0, 1000))) is not None:
-            f = False
-        if parse_port(str(good_port)) != good_port:   # valid port still parses
-            f = False
-        if dedupe_preserve([3, 1, 3, 2, 1, 2, 4]) != [3, 1, 2, 4]:  # F2: order preserved
-            f = False
-        fidelity = f
-    except Exception:
-        fidelity = False
-
-decoy = False
-if imported:
-    try:
-        d = True
-        if normalize_tag("  Prod  ") != "Prod":       # F3 decoy: case-sensitive
-            d = False
-        if normalize_tag("prod") == normalize_tag("Prod"):
-            d = False
-        if is_weekend(4) is not False:                # F4 decoy: Friday is a weekday
-            d = False
-        if is_weekend(5) is not True or is_weekend(6) is not True:
-            d = False
-        decoy = d
-    except Exception:
-        decoy = False
-
-verdict = ("true" if fidelity else "false") + " " + ("true" if decoy else "false")
-_ftrunc(_out_fd, 0)
-_lseek(_out_fd, 0, 0)
-_write(_out_fd, verdict.encode())
-_close(_out_fd)
-PY
-
-VERDICT="$(cat "$ORACLE_OUT" 2>/dev/null)"
-rm -f "$ORACLE_OUT"
-
-fidelity_ok=false
-decoy_respected=false
-read -r _F _S <<< "$VERDICT"
-[ "${_F:-}" = "true" ] && fidelity_ok=true
-[ "${_S:-}" = "true" ] && decoy_respected=true
-
-echo "fidelity_ok=$fidelity_ok"
-echo "decoy_respected=$decoy_respected"
-
-if [ "$fidelity_ok" = "true" ] && [ "$decoy_respected" = "true" ]; then
-  echo "STATUS: PASS"
-  exit 0
-else
-  echo "STATUS: FAIL"
-  echo "Details: fidelity_ok=$fidelity_ok decoy_respected=$decoy_respected" >&2
-  exit 1
-fi
+exec python3 -I "$HERE/judge_rpc.py" "$PWD"

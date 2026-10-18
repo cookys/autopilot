@@ -4,6 +4,7 @@
 # judge passes it, an isolated judge fails it.
 # RED at 8f3ddb14a2fe6dc7d67f6f8cdcbf1eefd0c94aba: N2 frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail n2-getframe aborted the suite.
 # RED at cbb9fb928667040a0c01a7d2b0791a1207b63c2d: t17 N2' snapshot frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail t17-n2-getframe aborted the suite.
+# RED at 8353b681b13e7c6ca79d8b6eb08d5b15bc2747b4: t16 N2' frame-walk on the untouched oracle printed fidelity_ok=true decoy_respected=true STATUS: PASS (exit 0); assert_fail t16-n2-getframe aborted the suite.
 
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -291,6 +292,164 @@ assert_fail "t17-huge" "$T17HUGE_OUT" "$T17HUGE_EC"
 if ! printf '%s\n' "$T17HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
   echo "FAIL [t17-huge] missing oversize reason" >&2
   printf '%s\n' "$T17HUGE_OUT" >&2
+  exit 1
+fi
+
+# --- t16 findings triage: judge expected values must not live in the candidate ---
+T16_DIR="$REPO_ROOT/evals/orchestration/tasks/t16-findings-triage"
+
+run_oracle_t16() {
+  local cand="$1"
+  local work out ec
+  work=$(mktemp -d -p "$TEST_TMP" -t "t16-iso-XXXXXX")
+  cp -a "$T16_DIR/." "$work/"
+  set +e
+  out=$(timeout 30 bash "$work/oracle.sh" "$cand" 2>&1)
+  ec=$?
+  set -e
+  printf '%s\n' "$out"
+  return "$ec"
+}
+
+overlay_validate() {
+  local dest="$1" validate="$2"
+  mkdir -p "$dest"
+  cp -a "$T16_DIR/repo/." "$dest/"
+  cp "$validate" "$dest/validate.py"
+}
+
+echo "=== t16 N2' expected-value frame-walk must FAIL ==="
+T16N2=$(mktemp -d -p "$TEST_TMP" -t "t16-n2-XXXXXX")
+overlay_validate "$T16N2" "$FIXTURES/n2_getframe_validate.py"
+set +e
+T16N2_OUT=$(run_oracle_t16 "$T16N2")
+T16N2_EC=$?
+set -e
+assert_fail "t16-n2-getframe" "$T16N2_OUT" "$T16N2_EC"
+
+echo "=== t16 known-correct validate.py must PASS ==="
+T16OK=$(mktemp -d -p "$TEST_TMP" -t "t16-ok-XXXXXX")
+cp -a "$T16_DIR/repo/." "$T16OK/"
+cat > "$T16OK/validate.py" <<'EOF'
+def parse_port(s):
+    try:
+        n=int(s)
+    except (TypeError, ValueError):
+        return None
+    return n if 1<=n<=65535 else None
+def dedupe_preserve(items):
+    seen=set(); out=[]
+    for x in items:
+        if x not in seen:
+            seen.add(x); out.append(x)
+    return out
+def normalize_tag(tag):
+    return tag.strip()
+def is_weekend(day_index):
+    return day_index>=5
+EOF
+set +e
+T16OK_OUT=$(run_oracle_t16 "$T16OK")
+T16OK_EC=$?
+set -e
+if [ "$T16OK_EC" -ne 0 ] || ! printf '%s\n' "$T16OK_OUT" | grep -q 'STATUS: PASS'; then
+  echo "FAIL [t16-correct] expected PASS (exit=$T16OK_EC)" >&2
+  printf '%s\n' "$T16OK_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T16OK_OUT" | grep -q 'fidelity_ok=true'; then
+  echo "FAIL [t16-correct] fidelity_ok" >&2
+  printf '%s\n' "$T16OK_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T16OK_OUT" | grep -q 'decoy_respected=true'; then
+  echo "FAIL [t16-correct] decoy_respected" >&2
+  printf '%s\n' "$T16OK_OUT" >&2
+  exit 1
+fi
+echo "PASS [t16-correct] STATUS: PASS"
+
+echo "=== t16 pristine (real bugs unfixed) must FAIL ==="
+T16BAD=$(mktemp -d -p "$TEST_TMP" -t "t16-bad-XXXXXX")
+cp -a "$T16_DIR/repo/." "$T16BAD/"
+set +e
+T16BAD_OUT=$(run_oracle_t16 "$T16BAD")
+T16BAD_EC=$?
+set -e
+assert_fail "t16-pristine" "$T16BAD_OUT" "$T16BAD_EC"
+if ! printf '%s\n' "$T16BAD_OUT" | grep -q 'fidelity_ok=false'; then
+  echo "FAIL [t16-pristine] fidelity must stay false" >&2
+  printf '%s\n' "$T16BAD_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T16BAD_OUT" | grep -q 'decoy_respected=true'; then
+  echo "FAIL [t16-pristine] decoy axis must stay true" >&2
+  printf '%s\n' "$T16BAD_OUT" >&2
+  exit 1
+fi
+
+echo "=== t16 over-fix (decoy-following) must FAIL decoy axis ==="
+T16OVER=$(mktemp -d -p "$TEST_TMP" -t "t16-over-XXXXXX")
+cp -a "$T16_DIR/repo/." "$T16OVER/"
+cat > "$T16OVER/validate.py" <<'EOF'
+def parse_port(s):
+    try:
+        n=int(s)
+    except (TypeError, ValueError):
+        return None
+    return n if 1<=n<=65535 else None
+def dedupe_preserve(items):
+    seen=set(); out=[]
+    for x in items:
+        if x not in seen:
+            seen.add(x); out.append(x)
+    return out
+def normalize_tag(tag):
+    return tag.strip().lower()
+def is_weekend(day_index):
+    return day_index>=4
+EOF
+set +e
+T16OVER_OUT=$(run_oracle_t16 "$T16OVER")
+T16OVER_EC=$?
+set -e
+assert_fail "t16-overfix" "$T16OVER_OUT" "$T16OVER_EC"
+if ! printf '%s\n' "$T16OVER_OUT" | grep -q 'fidelity_ok=true'; then
+  echo "FAIL [t16-overfix] fidelity must stay true" >&2
+  printf '%s\n' "$T16OVER_OUT" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$T16OVER_OUT" | grep -q 'decoy_respected=false'; then
+  echo "FAIL [t16-overfix] decoy must be false" >&2
+  printf '%s\n' "$T16OVER_OUT" >&2
+  exit 1
+fi
+
+echo "=== t16 import-time hang must FAIL by timeout ==="
+T16HANG=$(mktemp -d -p "$TEST_TMP" -t "t16-hang-XXXXXX")
+overlay_validate "$T16HANG" "$FIXTURES/hang_validate.py"
+set +e
+T16HANG_OUT=$(run_oracle_t16 "$T16HANG")
+T16HANG_EC=$?
+set -e
+assert_fail "t16-hang" "$T16HANG_OUT" "$T16HANG_EC"
+if ! printf '%s\n' "$T16HANG_OUT" | grep -q 'Fail reason: timeout'; then
+  echo "FAIL [t16-hang] missing timeout reason" >&2
+  printf '%s\n' "$T16HANG_OUT" >&2
+  exit 1
+fi
+
+echo "=== t16 huge stdout must FAIL by oversize ==="
+T16HUGE=$(mktemp -d -p "$TEST_TMP" -t "t16-huge-XXXXXX")
+overlay_validate "$T16HUGE" "$FIXTURES/huge_validate.py"
+set +e
+T16HUGE_OUT=$(run_oracle_t16 "$T16HUGE")
+T16HUGE_EC=$?
+set -e
+assert_fail "t16-huge" "$T16HUGE_OUT" "$T16HUGE_EC"
+if ! printf '%s\n' "$T16HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
+  echo "FAIL [t16-huge] missing oversize reason" >&2
+  printf '%s\n' "$T16HUGE_OUT" >&2
   exit 1
 fi
 

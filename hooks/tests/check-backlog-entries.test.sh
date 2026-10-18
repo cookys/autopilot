@@ -588,4 +588,38 @@ m="$(mutate tc-peer "s/(PEER_FIELDS.includes(f) \&\& req.includes('Origin'))/fal
 gate_run "$m" "$TC_ORIGIN_PEER_DIR" --config "$TC_ORIGIN_PEER_DIR/.claude/backlog-config.md"
 assert_contains "$(codes_of "$GATE_OUT")" "peer_field_missing:Reporter:" "table peer mutation: Origin alone without Reporter/Report/Reply reads as a peer row missing them (the suite can tell)"
 
+# --- sidecar_orphan: a docs/backlog/*.md note no BACKLOG text mentions ---
+sidecar_fixture() {
+  local d; d="$(repo "$1")"
+  printf '%s\n' '### Sidecar row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' "- **Pointer**: $2" > "$d/docs/BACKLOG.md"
+  echo "$d"
+}
+d="$(sidecar_fixture sc-orphan docs/plans/ok.md)"
+printf 'note\n' > "$d/docs/backlog/lonely-note.md"
+printf '{}\n' > "$d/docs/backlog/data.json"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "sidecar_orphan fires for an unmentioned docs/backlog note"
+assert_eq "$(json_exit "$o")" "1" "sidecar_orphan blocks (exit 1)"
+assert_contains "$o" "docs/backlog/lonely-note.md" "sidecar_orphan detail carries the path"
+assert_not_contains "$o" "data.json" "non-.md files in docs/backlog are not checked"
+
+d="$(sidecar_fixture sc-mentioned docs/backlog/kept-note.md)"
+printf 'note\n' > "$d/docs/backlog/kept-note.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "no" "a note a row mentions is not an orphan"
+
+d="$(sidecar_fixture sc-nodir docs/plans/ok.md)"
+rmdir "$d/docs/backlog"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "no" "no docs/backlog dir: nothing to check"
+
+# boundary: a row naming prefix-note.md must not excuse an orphan note.md
+d="$(sidecar_fixture sc-boundary docs/backlog/kept-note.md)"
+printf 'n\n' > "$d/docs/backlog/kept-note.md"
+printf 'n\n' > "$d/docs/backlog/note.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "note.md is an orphan though kept-note.md is mentioned"
+assert_contains "$o" "docs/backlog/note.md" "the orphan reported is note.md"
+assert_not_contains "$o" "docs/backlog/kept-note.md is" "kept-note.md is not reported"
+
 finalize_test

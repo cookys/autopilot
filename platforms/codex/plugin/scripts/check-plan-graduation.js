@@ -51,7 +51,8 @@
  *                                 writing pass rewrites the evidence it froze (BL-0191)
  *
  * --fix deletes the offending BACKLOG rows (backlog_row_has_plan, backlog_row_done,
- * backlog_title_closed_status_open) and git mv's released plans — plus their
+ * backlog_title_closed_status_open) — plus any `docs/backlog/<x>.md` note a deleted row
+ * mentioned that no remaining BACKLOG text still names — and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
  * into docs/plans/_archive/, preserving names. A stem's move is all-or-nothing: every
  * destination is checked for a pre-existing file BEFORE any move for that stem starts: on
@@ -1110,12 +1111,22 @@ function run(opts) {
 
 // --- --fix ---
 
-function fixBacklog(backlogPath, violations) {
+// True when `text` names `name` as a whole file name: not glued to a longer name on either side
+// (`prefix-x.md` does not mention `x.md`). Same logic lives in check-backlog-entries.js.
+function mentionsBasename(text, name) {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^A-Za-z0-9._-])${esc}(?![A-Za-z0-9_-])`).test(text);
+}
+
+// repoRoot is optional: when omitted it is derived from the backlog file's git toplevel (falling
+// back to the backlog's own directory), so the note path is never computed from undefined.
+function fixBacklog(backlogPath, violations, repoRootArg) {
+  const root = repoRootArg || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
   const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done', 'backlog_title_closed_status_open']);
   const doomed = violations.filter((v) => v.kind === 'backlog_row' && rowCodes.has(v.code));
-  if (!doomed.length) return { changed: false, removed: [] };
+  if (!doomed.length) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
   const { text, rows } = collectBacklogRows(backlogPath);
-  if (text == null) return { changed: false, removed: [] };
+  if (text == null) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
   const doomedTitles = new Set(doomed.map((v) => v.title));
   // Belt and braces: a title run() flagged peer_row_unanswered is never deleted, whatever else it hit.
   for (const v of violations) if (v.code === 'peer_row_unanswered') doomedTitles.delete(v.title);
@@ -1130,9 +1141,36 @@ function fixBacklog(backlogPath, violations) {
   }
   if (out !== text) {
     fs.writeFileSync(backlogPath, out);
-    return { changed: true, removed };
+    // A deleted row's note in the `backlog/` dir beside the backlog goes with it, unless a
+    // remaining row still names it. Failures are reported, never swallowed.
+    const dir = path.join(path.dirname(backlogPath), 'backlog');
+    // Only the notes dir beside the backlog counts, spelled repo-root-relative (docs/backlog/x.md)
+    // or backlog-dir-relative (backlog/x.md), either with a leading ./ . Nothing path-like may
+    // precede, so other/backlog/x.md and ../docs/backlog/x.md are different files.
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const relDir = path.relative(root, dir).split(path.sep).join('/');
+    const noteRe = new RegExp(`(?:^|[^A-Za-z0-9._/-])(?:\\./)?(?:${esc(relDir)}|${esc(path.basename(dir))})/([A-Za-z0-9._-]+\\.md)`, 'g');
+    const sidecars = new Set();
+    for (const row of rows) {
+      if (!doomedTitles.has(row.title) || !row.text) continue;
+      for (const m of row.text.matchAll(noteRe)) sidecars.add(m[1]);
+    }
+    const sidecarsRemoved = [];
+    const sidecarErrors = [];
+    for (const name of sidecars) {
+      if (mentionsBasename(out, name)) continue;
+      const abs = path.join(dir, name);
+      if (!fs.existsSync(abs)) continue;
+      try {
+        fs.rmSync(abs);
+        sidecarsRemoved.push(path.relative(root, abs).split(path.sep).join('/'));
+      } catch (e) {
+        sidecarErrors.push(`${abs}: ${e.message}`);
+      }
+    }
+    return { changed: true, removed, sidecars_removed: sidecarsRemoved, sidecar_errors: sidecarErrors };
   }
-  return { changed: false, removed: [] };
+  return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
 }
 
 // gitMv NEVER clobbers an existing destination (🟠 fix: a plain fs.renameSync fallback
@@ -1672,11 +1710,11 @@ function main() {
   }
 
   const preFix = run(opts);
-  let backlogFix = { changed: false, removed: [] };
+  let backlogFix = { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
   let finalResult = preFix;
   if (opts.fix) {
-    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations);
+    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations, preFix.repoRoot);
     plansFix = fixPlans(
       preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems,
       preFix.changelogPath
@@ -1696,7 +1734,7 @@ function main() {
   for (const code of CODES) byCode[code] = 0;
   for (const v of finalResult.violations) byCode[v.code] = (byCode[v.code] || 0) + 1;
 
-  const exitCode = blocking.length ? 1 : 0;
+  const exitCode = blocking.length || backlogFix.sidecar_errors.length ? 1 : 0;
   const payload = {
     ok: exitCode === 0,
     exit: exitCode,
@@ -1705,6 +1743,8 @@ function main() {
     counts: byCode,
     fix: opts.fix ? {
       backlog_rows_removed: backlogFix.removed,
+      backlog_sidecars_removed: backlogFix.sidecars_removed,
+      backlog_sidecar_errors: backlogFix.sidecar_errors,
       plans_moved: plansFix.moved,
       references_rewritten: plansFix.referencesRewritten,
     } : undefined,
@@ -1730,6 +1770,8 @@ function main() {
         process.stdout.write(`--fix: removed ${backlogFix.removed.length} BACKLOG row(s):\n`);
         for (const t of backlogFix.removed) process.stdout.write(`  - ${t}\n`);
       }
+      for (const f of backlogFix.sidecars_removed) process.stdout.write(`--fix: deleted note ${f}\n`);
+      for (const e of backlogFix.sidecar_errors) process.stderr.write(`--fix: could not delete note ${e}\n`);
       if (plansFix.moved.length) {
         process.stdout.write(`--fix: moved ${plansFix.moved.length} plan file(s) into _archive:\n`);
         for (const m of plansFix.moved) process.stdout.write(`  - ${m.from} -> ${m.to}\n`);

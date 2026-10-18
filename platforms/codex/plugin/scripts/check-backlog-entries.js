@@ -20,6 +20,11 @@
  * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
  * the Id high-water mark: every BL- Id must be below it and unique.
  *
+ * sidecar_orphan (block, working-tree mode only): a `.md` under `docs/backlog/` (the `backlog/`
+ * directory beside the backlog file) whose basename no part of the backlog text mentions.
+ * A note lives only while a row points at it; delete it with its row
+ * (`check-plan-graduation.js --fix` does both). Absent dir = no check; not run by --range.
+ *
  * Usage:
  *   node scripts/check-backlog-entries.js --backlog <file>
  *     [--config <file>] [--allowlist <file>] [--mode warn|block]
@@ -926,6 +931,29 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
   return { entries, violations };
 }
 
+// True when `text` names `name` as a whole file name: not glued to a longer name on either side
+// (`prefix-x.md` does not mention `x.md`). Same logic lives in check-plan-graduation.js.
+function mentionsBasename(text, name) {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^A-Za-z0-9._-])${esc}(?![A-Za-z0-9_-])`).test(text);
+}
+
+function checkSidecarOrphans(text, backlogPath) {
+  const dir = path.join(path.dirname(backlogPath), 'backlog');
+  let names;
+  try {
+    names = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  return names.sort().filter((n) => !mentionsBasename(text, n)).map((n) => ({
+    code: 'sidecar_orphan',
+    title: n,
+    field: 'Pointer',
+    detail: `docs/backlog/${n} is mentioned by no backlog row; delete it with its row`,
+  }));
+}
+
 function loadAllowlist(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
     return { schema: 1, entries: [] };
@@ -1004,6 +1032,7 @@ function runCheck(opts, at) {
   const now = Date.now();
   const style = cfg.style || 'heading';
   const { entries, violations } = collectViolations(text, cfg, repoRoot, now, at && at.existsFn);
+  if (!at) violations.push(...checkSidecarOrphans(text, backlogPath));
   const annotated = violations.map((v) => {
     const fp = fingerprint(style, v.title);
     const allowed = allowedPairs.has(`${fp}\0${v.code}`);

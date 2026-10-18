@@ -1305,4 +1305,73 @@ assert_contains "$out" '"code":"frozen_marker_deleted","kind":"frozen_base"' \
 assert_not_contains "$out" '"path":".frozen-evidence"' "BL-0191: no invented marker path for a bad ref"
 
 
+# --- --fix removes a deleted row's docs/backlog sidecar, unless another row still mentions it ---
+d="$(fixture_repo fix-sidecar)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/solo-note.md"
+printf 'n\n' > "$d/docs/backlog/shared-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Solo done row" "shipped v1.0.0 2020-01-01" "docs/backlog/solo-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Shared done row" "shipped v1.0.0 2020-01-01" "docs/backlog/shared-note.md"
+backlog_row "$d/docs/BACKLOG.md" "Surviving row" "open" "docs/backlog/shared-note.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_absent "$d/docs/backlog/solo-note.md" "--fix deletes the sidecar of a deleted row"
+assert_file_exists "$d/docs/backlog/shared-note.md" "--fix keeps a sidecar a surviving row still mentions"
+assert_contains "$(cat "$d/docs/BACKLOG.md")" "Surviving row" "surviving row kept"
+
+# boundary + result field: surviving row names only prefix-x.md, so x.md is still deleted
+d="$(fixture_repo fix-sidecar-boundary)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/x.md"
+printf 'n\n' > "$d/docs/backlog/prefix-x.md"
+backlog_row "$d/docs/BACKLOG.md" "Done x row" "shipped v1.0.0 2020-01-01" "docs/backlog/x.md"
+backlog_row "$d/docs/BACKLOG.md" "Prefix row" "open" "docs/backlog/prefix-x.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_file_absent "$d/docs/backlog/x.md" "x.md deleted although prefix-x.md is still mentioned"
+assert_file_exists "$d/docs/backlog/prefix-x.md" "prefix-x.md kept"
+assert_contains "$out" '"backlog_sidecars_removed":["docs/backlog/x.md"]' "--json fix result lists the deleted note"
+assert_contains "$out" '"backlog_sidecar_errors":[]' "--json fix result has an empty error list"
+
+# a note that cannot be deleted is reported, not swallowed
+d="$(fixture_repo fix-sidecar-error)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/stuck.md"
+backlog_row "$d/docs/BACKLOG.md" "Done stuck row" "shipped v1.0.0 2020-01-01" "docs/backlog/stuck.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+chmod a-w "$d/docs/backlog"
+out="$(node "$GATE" --repo-root "$d" --fix --json 2>/dev/null)"
+chmod u+w "$d/docs/backlog"
+if [ "$(id -u)" != "0" ]; then
+  assert_contains "$out" '"backlog_sidecar_errors":["' "undeletable note is reported in backlog_sidecar_errors"
+  assert_eq "$(json_exit "$out")" "1" "a sidecar delete failure makes --fix exit 1"
+fi
+
+# only the notes dir beside the backlog counts: other/backlog/x.md names a different file
+d="$(fixture_repo fix-sidecar-otherdir)"
+mkdir -p "$d/docs/backlog"
+printf 'n\n' > "$d/docs/backlog/x.md"
+backlog_row "$d/docs/BACKLOG.md" "Done other row" "shipped v1.0.0 2020-01-01" "other/backlog/x.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_exists "$d/docs/backlog/x.md" "a row naming other/backlog/x.md does not delete docs/backlog/x.md"
+
+# relative-link spellings: backlog/x.md and ./backlog/x.md, ./docs/backlog/y.md name the notes beside the backlog
+d="$(fixture_repo fix-sidecar-rel)"
+mkdir -p "$d/docs/backlog"
+for n in x y z; do printf 'n\n' > "$d/docs/backlog/$n.md"; done
+backlog_row "$d/docs/BACKLOG.md" "Done rel row" "shipped v1.0.0 2020-01-01" "backlog/x.md"
+backlog_row "$d/docs/BACKLOG.md" "Done dot row" "shipped v1.0.0 2020-01-01" "./docs/backlog/y.md"
+backlog_row "$d/docs/BACKLOG.md" "Done dotrel row" "shipped v1.0.0 2020-01-01" "./backlog/z.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+node "$GATE" --repo-root "$d" --fix --json >/dev/null
+assert_file_absent "$d/docs/backlog/x.md" "backlog/x.md spelling deletes the note"
+assert_file_absent "$d/docs/backlog/y.md" "./docs/backlog/y.md spelling deletes the note"
+assert_file_absent "$d/docs/backlog/z.md" "./backlog/z.md spelling deletes the note"
+
 finalize_test

@@ -2681,7 +2681,7 @@ const boundedLineageEngine = new AutopilotEngine({
           }],
         });
         // 620ef6ed (BACKLOG "repair scope is derived from the reviewer's claim
-        // text", docs/backlog/managed-rail-repair-scope-pathless-finding.md): a
+        // text", backlog note managed-rail-repair-scope-pathless-finding, deleted 2026-10-18, see git history): a
         // path-less finding no longer terminalizes pre-dispatch; it falls back to
         // disposition.task_surface, then to the round's changed files, and only
         // PARKS when neither yields a path. Here the initial round changed

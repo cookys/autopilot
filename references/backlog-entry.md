@@ -79,7 +79,7 @@ A peer report is not closed until the reporter has an answer.
 
 ## Done handling
 
-BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0), and a row whose Pointer resolves to an existing `docs/plans/*.md` is redundant once the plan exists. The fix is **deleting the row** (history stays in git and at the pointer); `check-plan-graduation.js --fix` does it mechanically, subject to the peer rule above.
+BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0), and a row whose Pointer resolves to an existing `docs/plans/*.md` is redundant once the plan exists. The fix is **deleting the row** (history stays in git and at the pointer). If its Pointer names `docs/backlog/<slug>.md` and no remaining row mentions that file, delete the sidecar in the same change; `check-plan-graduation.js --fix` does both mechanically (subject to the peer rule above), and `check-backlog-entries.js` blocks an orphan sidecar (`sidecar_orphan`).
 
 ## Frozen evidence — `.frozen-evidence`
 

@@ -25,6 +25,8 @@ scripts/check-test-integrity.sh validate --range <base>..<head> [--repo <dir>] [
 3. Runs the L0 checks above.
 4. Exit: `0` clean (or warn/off) · `1` block-violation · `2` usage/internal error (non-overridable).
 
+`scripts/replay-test-integrity.js` replays the checker over recent merged ranges to measure its false-positive rate before a warn-to-block change.
+
 ## L1 — Executed-Set Invariance (v2.25.7, additive)
 
 L0 reads diff text only, so it misses gaming that is additions-only or happens outside test files. **L1 RUNS the test collector on base vs head and fails (`executed_set_shrink`) if the set of tests that *actually execute* shrinks** — catching `test.only`/`fit`, module `pytestmark=skip`, `collect_ignore`, runner-config exclusions (`testPathIgnorePatterns`), go build-tag drops, and fixture changes that skip tests. Per-runner: **pytest / jest / vitest / go**.

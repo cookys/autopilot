@@ -7,3 +7,5 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: S(重現+定位)/ 上游依賴。
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 
+
+Closed 2026-10-18: re-sit gemini-3.8-flash-medium on agy 1.4.2, 24/24 with every envelope valid (scorecard event 326, docs/plans/evidence/2026-10-18-gemini-3.8-flash-agy-1.4.0-implementer/). Pro not re-tested.

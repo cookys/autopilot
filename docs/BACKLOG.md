@@ -230,19 +230,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
 - **Context**: 2026-10-16 landed fixtures, TTL and --trials tests; open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling. Detail in the sidecar.
 
-### agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)
-- **Id**: BL-0038
-- **Status**: open
-- **Since**: 2026-08-22
-- **Origin**: self
-- **Problem**: agy 在「新建檔案」類回應時輸出格式不合法，過去導致 agy 實作者無法通過考核。現在已改成當作遙測遺失並改看產物判斷，但上游問題與重新考核尚未完成。 (draft)
-- **Impact**: agy 作為實作者的資格仍卡著；比較像需要重考的任務，不是程式錯誤。 (draft)
-- **Trigger**: 下一次要考 agy 家族 implementer 時（v2.35.13 起信封無效只是遙測遺失、狀態看 artifact，且 log 會留信封原文——重考就能同時拿到 row 與重現樣本）;或 agy 更新後 changelog/實測顯示…
-- **Effort**: S
-- **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
-- **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
-- **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
-
 ### Brain-seat sittings in the shipped qualification defaults (v2 artifact)
 - **Id**: BL-0041
 - **Status**: open

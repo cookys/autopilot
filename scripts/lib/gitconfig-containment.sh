@@ -99,7 +99,7 @@ gitconfig_key_on_denylist() {
 
 _gc_write_projection() {
   local root="$1" dest="$2" rec key raw
-  raw="$(mktemp -t gitconfig-containment-raw.XXXXXX)"
+  raw="$(mktemp -t gitconfig-containment.XXXXXX)"
   if ! git -C "$root" config --local --list --null >"$raw" 2>/dev/null; then
     rm -f -- "$raw"
     return 1
@@ -145,8 +145,8 @@ _gc_diff_keys() {
   local -a changed=()
   while IFS= read -r key; do
     [ -n "$key" ] || continue
-    blob_s="$(mktemp -t gitconfig-containment-s.XXXXXX)"
-    blob_c="$(mktemp -t gitconfig-containment-c.XXXXXX)"
+    blob_s="$(mktemp -t gitconfig-containment.XXXXXX)"
+    blob_c="$(mktemp -t gitconfig-containment.XXXXXX)"
     _gc_values_blob "$snap" "$key" > "$blob_s"
     _gc_values_blob "$cur" "$key" > "$blob_c"
     if ! cmp -s "$blob_s" "$blob_c"; then
@@ -162,7 +162,7 @@ _gc_diff_keys() {
 gitconfig_containment_restore() {
   local root="$1" snap="$2" cur after key rec val keys_now
   [ -n "${root:-}" ] && [ -n "${snap:-}" ] && [ -f "$snap" ] || return 0
-  cur="$(mktemp -t gitconfig-containment-cur.XXXXXX)"
+  cur="$(mktemp -t gitconfig-containment.XXXXXX)"
   if ! _gc_write_projection "$root" "$cur"; then
     rm -f -- "$cur"
     echo "WARNING: git config restore FAILED" >&2
@@ -185,7 +185,7 @@ gitconfig_containment_restore() {
     if [ "$rec" = "$key" ]; then val=""; else val="${rec#*$'\n'}"; fi
     git -C "$root" config --local --add -- "$key" "$val" >/dev/null 2>&1 || true
   done < "$snap"
-  after="$(mktemp -t gitconfig-containment-after.XXXXXX)"
+  after="$(mktemp -t gitconfig-containment.XXXXXX)"
   if ! _gc_write_projection "$root" "$after"; then
     rm -f -- "$cur" "$after"
     echo "WARNING: git config restore FAILED" >&2

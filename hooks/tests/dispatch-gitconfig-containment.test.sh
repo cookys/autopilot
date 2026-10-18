@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 0ae19923b: check-tmp-residue-registry.js exit 1, 6 findings in scripts/lib/gitconfig-containment.sh (unregistered_prefix gitconfig-containment-raw. gitconfig-containment. gitconfig-containment-s. gitconfig-containment-c. gitconfig-containment-cur. gitconfig-containment-after.)
 # RED at fea2b7615: helper_exists — scripts/lib/gitconfig-containment.sh does not exist
 # RED at fea2b7615: core.hooksPath missing from helper; also already present in dispatch-hetero.sh (comment)
 # RED at fea2b7615: drift_dispatch_rc expected 0 got 1; gitconfig_drift absent; no WARNING
@@ -414,6 +415,14 @@ author_json="$(extract_json "$AUTHOR_OUT")" || fail "No JSON object found in aut
 assert_contains "$(json_get "$author_json" "gitconfig_drift")" "core.hookspath" "author_gitconfig_drift"
 if git -C "$AUTHOR_REPO" config --local --get core.hookspath >/dev/null 2>&1; then
   fail "author rail left core.hookspath in place"
+fi
+
+# The tmp-residue gate must accept the helper's single registered mktemp prefix.
+reg_rc=0
+reg_out="$(node "$REPO_ROOT/scripts/check-tmp-residue-registry.js" 2>&1)" || reg_rc=$?
+assert_exit_code "$reg_rc" 0 "tmp_residue_registry_check"
+if [ "$reg_rc" != 0 ]; then
+  printf '%s\n' "$reg_out" >&2
 fi
 
 finalize_test

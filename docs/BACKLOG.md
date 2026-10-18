@@ -19,13 +19,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-12
 - **Origin**: self
-- **Problem**: mods 的 Now 分頁上，如果 session 中途離開再 resume，原本的背景工作已經不在、也不會再有完成通知，那一列可能永遠掛著；對話紀錄裡沒有 resume 的標記可判斷。subagent 與 headless 那種不會有通知的背景指令已修好。
+- **Problem**: mods 的 Now 分頁上，session 離開再 resume 後，原本的背景工作不會再送完成通知，那一列可能永遠掛著；對話紀錄裡也沒有 resume 標記可判斷。
 - **Impact**: 最壞是畫面上殘留一列已不存在的背景工作，屬於顯示問題；先實測再決定要不要修。 (draft)
 - **Trigger**: a stale 背景指令 or 監看 row is seen, or a session is resumed after quitting with background work running
 - **Effort**: S
 - **Source**: feat/mods-activity review, 2026-10-12 (UNVERIFIED live behavior)
 - **Pointer**: docs/backlog/mods-activity-row-never-ends.md
-- **Context**: scanBackground (mods/live/model.ts) ends rows on a task-notification status, TaskStop, or for flagged Bash results the next real prompt. Resume: probe quitting mid `sleep 600`, find a transcript signal first.
+- **Context**: Half fixed in b36936691: a retained background row is dropped when the transcript is unreadable and the session id changed. Left: resume; probe quitting mid `sleep 600`, find a transcript signal.
 
 ### Cross-repo dispatch has no worktree or handoff rule
 - **Id**: BL-0004
@@ -71,12 +71,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-13
 - **Origin**: self
-- **Problem**: 工頭 rail 出貨時，審查接受並記下幾個已知殘留風險：例如以 setsid 啟動的 kimi 只能整組終止、對外網路沒有限制。這些都是刻意接受而非遺漏。 (draft)
+- **Problem**: 工頭 rail 出貨時，審查接受並記下幾個已知殘留風險。cgroup 已處理；剩下對外網路沒有限制、Write 和 Edit 不算進工具上限、hand 以 inline 派工會隨工頭一起死掉。
 - **Impact**: 只有在真實工頭運行時出現逃脫或連外問題才需處理；目前列為觀察項。 (draft)
 - **Trigger**: **NOT FIRED — recorded at ship time, 2026-09-13.** Fires when a real foreman run trips one of them.
 - **Effort**: M
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 - **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
+- **Context**: cgroup item fixed in 64259622f (each foreman worker turn in a systemd user scope, shared scripts/lib/worker-containment.sh). Open: egress, Write/Edit uncounted, inline hands die with the foreman.
 
 ### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
 - **Id**: BL-0018
@@ -109,22 +110,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; `scripts/lib/agy-argv-ceiling.sh`, callers at…
 - **Pointer**: docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
 - **Context**: a peer host (twgs-revival, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and…
-
-### Reconnaissance and implementation share one leaf bash budget, so a leaf can exhaust it before touching code
-- **Id**: BL-0022
-- **Status**: open
-- **Since**: 2026-09-13
-- **Origin**: peer
-- **Reporter**: 308-db
-- **Report**: 2026-09-13 session
-- **Reply**: 2026-09-12 session d1423f91:5171
-- **Problem**: 308-db 回報：工頭派給葉節點的指令預算，偵察與實作共用一份，葉節點可能還沒動到程式就把預算用完。目前沒有區分，只能手動拆成兩個葉節點。 (draft)
-- **Impact**: 大任務容易中途被預算截斷而空轉；已知繞法是拆成兩段。 (draft)
-- **Trigger**: **NOT FIRED — peer observation, 2026-09-13.** Fires when a leaf under this rail is measured hitting its command cap with zero diff.
-- **Effort**: S
-- **Source**: `308-db` via the local session mesh, 2026-09-13.
-- **Pointer**: docs/backlog/reconnaissance-and-implementation-share-one-leaf-bash-budget-so-a-leaf-can-exhau.md
-- **Context**: `308-db` ran six Agent-worktree leaves on 2026-09-13; three hit the 40-command bash ceiling **after reconnaissance was complete and before a single line changed**.
 
 ### Main-checkout boundary: accepted residuals of an accident guard that is not a sandbox
 - **Id**: BL-0023
@@ -222,13 +207,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-22
 - **Origin**: self
-- **Problem**: 實作者考核套件在合併前審查，提出一批加固項目被砍到之後處理，例如惡意 git 設定、被替換的參照、拖延不動的實作者等測試情境。這些測試至今沒有補。 (draft)
+- **Problem**: 實作者考核套件的加固項目，測試已補了大半；剩下 Stage-0 機械化、真實 rail 冒煙測試、消費端矩陣、設定標示這幾項還沒做。
 - **Impact**: 考核套件對惡意或異常情況較不堅固；目前沒有實際出事，屬加固性質。 (draft)
 - **Trigger**: 第三場實作者正式施測之前（Stage-0 機械化與 live-rail smoke 應先落），或 reviewer 再報同類；config labelling 要改 grader 並重封資產，屬 owner 決定。
 - **Effort**: M
 - **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`docs/plans/2026-08-22-implementer-qualification-suite.md` §6-§8。
 - **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
-- **Context**: 2026-10-16 landed fixtures, TTL and --trials tests; open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling. Detail in the sidecar.
+- **Context**: 2026-10-16 and 2026-10-19 landed fixtures, TTL, --trials tests and the implementer-exam hardening tests (969c46043); open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling.
 
 ### Brain-seat sittings in the shipped qualification defaults (v2 artifact)
 - **Id**: BL-0041
@@ -296,19 +281,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
 
-### Outcome-shaped quality-gate enforcer (opt-in) — replaces the rejected invocation check
-- **Id**: BL-0050
-- **Status**: open
-- **Since**: 2026-08-18
-- **Origin**: self
-- **Problem**: 我們想做一個檢查，確保品質檢查流程真的有跑過，但原本以「有沒有呼叫」為準的做法被否決；新做法需要品質流程先產生可驗證的執行收據，目前還沒有。 (draft)
-- **Impact**: 目前沒有機制保證品質檢查一定被執行，只能靠流程自律。 (draft)
-- **Trigger**: When an enforcer for the quality gate is wanted again, OR when `quality-pipeline` grows a SHA-bound "this ran" receipt that a gate could re-derive from. Not before: the current design has nothing to verify against.
-- **Effort**: M
-- **Source**: think-tank 5-role panel 2026-08-18（collision insights…
-- **Pointer**: docs/backlog/outcome-shaped-quality-gate-enforcer-opt-in-replaces-the-rejected-invocation-che.md
-- **Context**: P7 ruled out the obvious enforcer.
-
 ### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
 - **Id**: BL-0051
 - **Status**: open
@@ -346,7 +318,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: `docs/projects/_archive/2026-07-08-t14-reinject/report.md` § Follow-up.
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: Per-turn re-injection moved vocabulary but did not produce a statistically conclusive behavior lift.
+- **Context**: Per-turn re-injection moved vocabulary, no conclusive behavior lift. Owner 2026-10-19 (d-8bc3d286): open the experiment; not started.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -379,13 +351,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-23
 - **Origin**: self
-- **Problem**: 測試完整性檢查目前只警告不擋，因為它對每一行都做判斷，準確度未知。要累積足夠真實案例、確認不會誤擋，才改成強制。 (draft)
+- **Problem**: 測試完整性檢查目前只警告不擋。回放最近 60 個 merge 的違規，固定 seed 抽 150 筆，真陽性為 0，誤報太多，所以維持警告。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
-- **Trigger**: 累積夠多真實 range 的 violation 輸出,足以判斷「違規流是否準確到可以擋」時;或有人主動
+- **Trigger**: Fix the rules first (whole-file delete with its target, net assertion-line drop only, new file not surface_touch), add a planted-violation control, re-replay; block only below 5% false positives (d-133c23da)
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
-- **Context**: v2.34.38 刻意停在 `warn`。原因不是保守,是 L0 的判準粒度:它對 match 到的測試檔**每一行
+- **Context**: Replay (scripts/replay-test-integrity.js, merge edd7d687f): last 60 develop merges, 40 ranges, 1101 violations, 150 sampled with a fixed seed, 0 true positives. Evidence: docs/plans/evidence/2026-10-19-test-integrity-replay/.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -452,19 +424,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md
 - **Context**: Phase L shipped `/l4` homogeneous (Claude) batch fan-out.
 
-### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
-- **Id**: BL-0072
-- **Status**: open
-- **Since**: 2026-07-09
-- **Origin**: self
-- **Problem**: 部分評測題的判分程式與被評測的程式碼跑在同一個程序，對抗性的模型可以偷看判分器的密鑰作弊。評測題若給不可信的實作者使用，需改成分開的程序。 (draft)
-- **Impact**: 只有拿這些題測不可信模型時才會被騙過，一般使用無影響。 (draft)
-- **Trigger**: 下次把 `evals/orchestration/tasks/t15-cache-invalidation`、`t16-findings-triage`、`t17-purity-invariant` 用於對抗性 implementer 情境（`/l5`、`/l6` hetero 派遣、或任何候選碼不可信的場合）。
-- **Effort**: L
-- **Source**: opus 對抗性重攻，2026-07-09。`docs/projects/_archive/2026-07-09-m3-band-tasks/report.md` § "Residual: in-process introspection"。
-- **Pointer**: docs/backlog/m3-band-fixtures-t15-t17-implementer-process-isolation.md
-- **Context**: 這三個 oracle 的判分 python 與候選碼在**同一個 process** 內執行，候選模組 import 時可用 `sys._getframe()` 走訪呼叫端 frame 的 globals/locals，撈出判分器從未匯出的密鑰。opus 2026-07-09…
-
 ### First local runner capability semantics（availability/load，不是 quota）
 - **Id**: BL-0073
 - **Status**: open
@@ -477,45 +436,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-07-14 status CLI design + 2026-07-31 code audit。
 - **Pointer**: docs/backlog/first-local-runner-capability-semantics-availability-load-quota.md
 - **Context**: named endpoint identity 與獨立的 local-deployment availability/load observation schema 已實作；剩餘工作縮為第一個真實 local runner 的 observation→capability-state producer bridge。不得把現有 metered quota…
-
-### broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）
-- **Id**: BL-0074
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: 現在只保護 git 設定裡的使用者名稱與信箱，派出去的工作者若亂改 .git/config 其他設定，倉庫會被污染。要靠每個工作樹各自隔離設定。 (draft)
-- **Impact**: 工作者誤改共用設定會影響其他工作，屬清理問題而非惡意防護。 (draft)
-- **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
-- **Effort**: L
-- **Source**: 2026-07-17 U1b panel findings remediation on identity-containment port.
-- **Pointer**: docs/backlog/broader-shared-config-containment-per-worktree-isolation-2026-07-17-follow-up.md
-- **Context**: v2.32.51 identity rail contains ONLY `user.name`/`user.email` (local scope).
-
-### Durable merge execution crash recovery
-- **Id**: BL-0075
-- **Status**: open
-- **Since**: 2026-07-28
-- **Origin**: self
-- **Problem**: 合併過程若在中途當機，記憶體裡的合併紀錄會遺失，因為目前沒有統一的持久化收據位置可寫入。要等收據目錄與恢復權責標準化。 (draft)
-- **Impact**: 合併當機後得人工判斷做到哪一步；發生機率低。 (draft)
-- **Trigger**: When a caller-owned durable merge receipt directory and recovery authority are standardized.
-- **Effort**: S
-- **Source**: depth-0; p3-risk
-- **Pointer**: docs/backlog/durable-merge-execution-crash-recovery.md
-- **Context**: A process crash after one ordered merge edge can lose the in-memory aggregate receipt; P3 intentionally omitted a WAL because its frozen contract supplied no storage-path authority.
-
-### Bind dirty content continuity from preflight to execution
-- **Id**: BL-0076
-- **Status**: open
-- **Since**: 2026-07-28
-- **Origin**: self
-- **Problem**: 合併預檢與實際執行之間，無法證明被保留的未提交內容沒變過，因為預檢收據只記路徑類別、沒記內容指紋。等預檢格式升級再做。 (draft)
-- **Impact**: 極少數情況下，未提交的修改可能在預檢後被悄悄改動而沒被發現。 (draft)
-- **Trigger**: When merge preflight schema v2 is designed or a consumer requires cross-phase content-continuity proof.
-- **Effort**: S
-- **Source**: depth-0; p3-risk
-- **Pointer**: docs/backlog/bind-dirty-content-continuity-from-preflight-to-execution.md
-- **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
 
 ### HETO task-return detection can miss completed work
 - **Id**: BL-0084
@@ -559,20 +479,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### Sealed campaign `verify_cmd` runs the whole suite — green since 2026-10-13, but about 56 min; owner chose option C
-- **Id**: BL-0087
-- **Status**: open
-- **Since**: 2026-08-30
-- **Origin**: self
-- **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
-- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。方案 C 已於 2026-10-13 寫進 CLAUDE.md；剩方案 B，見 Trigger。
-- **Trigger**: BL-0001 landed 2026-10-16 (quality gate runs affected-suites first) and is shown not to miss suites (then add option B on top of C)
-- **Effort**: M
-- **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
-- **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
-- **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
-
-
 ### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
 - **Id**: BL-0093
 - **Status**: open
@@ -587,6 +493,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
+- **Context**: Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0117; guidance text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
 
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
@@ -603,19 +510,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
-
-### mods P1a known follow-ups (hardening)
-- **Id**: BL-0109
-- **Status**: open
-- **Since**: 2026-10-04
-- **Origin**: self
-- **Problem**: mods P1a 審查留下的強化事項，只剩 watcher 記錄要監看的專案根目錄那份清單沒有上限，其餘已在 P1b 修完。
-- **Impact**: 長時間跑、追蹤很多專案時集合會一直長大；目前沒有實際問題。
-- **Trigger**: P3 start
-- **Effort**: M
-- **Source**: mods P1a row and combined reviews, 2026-10-04
-- **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
-- **Context**: 2026-10-17: everything fixed except the watcher roots-set bound (P3 owns it; see sidecar).
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110
@@ -645,7 +539,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: packet-guidance owner ruling, 2026-10-11
 - **Pointer**: none
-- **Context**: Gate blocks: hetero-review SKILL.md and code-loop.md are outside prereg guidance.files; hetero-loops.md hash differs from v10. Write a prereg revision adding both files (as P5 did), freeze v11, then run it.
+- **Context**: Gate blocks: two guidance files outside prereg. Revise prereg, freeze v11. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0117/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
 
 ### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
 - **Id**: BL-0117
@@ -661,22 +555,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
 - **Pointer**: none
-- **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
+- **Context**: Foreground polling now only warns; this wording waits on eval. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
 
 
-
-### Find what rewrites the committed t7-config-rename fixture outside the suite
-- **Id**: BL-0122
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 已提交的評測範例檔 config.json 曾被改寫成壓縮格式。測試套件內已確認都只寫暫存副本，並加了斷言：套件內再寫到範例檔會直接點名是哪個檔。真正的寫入者還沒抓到，最可能是有人在原位執行該題自己的測試。
-- **Impact**: 低。範例檔被無聲改動，容易誤提交；套件內的回歸已有斷言擋住。
-- **Trigger**: config.json 再次在 git status 出現改動時，當下查是哪個流程在原位跑了 t7
-- **Effort**: S
-- **Source**: discuss-exam-fix full suite 2026-10-12; narrowed by BL-0122 lane 2026-10-14
-- **Pointer**: none
-- **Context**: Not recurring as of 2026-10-16 (no fixture change in git status or commits since 10-12). Known writer: t7 tests/tool.test.js run in place.
 
 ### mods/live recent conversation: groups expand by mouse only
 - **Id**: BL-0123
@@ -726,19 +607,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
-### 增量帶回重審在真實席位下用不了
-- **Id**: BL-0201
-- **Status**: open
-- **Since**: 2026-10-17
-- **Origin**: self
-- **Problem**: 帶回重審的增量模式遇到真實審查席位時多半無法運作：審查協定沒要求意見開頭寫檔案與行號，沒寫就退回完整審查；席位照要求答覆時又把意見寫兩份、或漏掉識別碼前綴，整輪被擋下。
-- **Impact**: 增量模式在真實席位下要嘛退回完整審查、要嘛整輪失敗，省不到錢也不能設為預設。
-- **Trigger**: 決定把增量設為預設之前，或有人在真實席位組合上開啟增量帶回
-- **Effort**: M
-- **Source**: BL-0146 D5 實測 2026-10-17
-- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
-- **Context**: 實測 9 輪中 9 輪被擋 (主組)；加一句 spec 文字後 12 輪中 4 輪被擋。修法選項在 README 第 5 節。
-
 ### 附錄把同一個舊問題按席位重複列出
 - **Id**: BL-0202
 - **Status**: open
@@ -751,19 +619,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0146 D5 實測 2026-10-17，審查 finding 0ad19dc1
 - **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
 - **Context**: 每個舊問題 3.0 至 3.1 行；去重後約少三分之二的清單位元組，未實測。
-
-### 帶回修正刪掉或改名的檔案時，舊問題清單會誤導席位
-- **Id**: BL-0203
-- **Status**: open
-- **Since**: 2026-10-17
-- **Origin**: self
-- **Problem**: 修正把某個檔案刪掉或改名後，上一輪留下的問題清單仍指向舊路徑，席位去答覆那一行，說問題還在，卻沒發現另一個檔案還引用已不存在的模組。
-- **Impact**: 增量模式漏掉改名造成的壞引用，並對作者回報不存在的問題。
-- **Trigger**: 增量帶回要設為預設，或有人回報帶回重審漏掉改名造成的壞引用
-- **Effort**: M
-- **Source**: BL-0146 D5 實測 2026-10-17
-- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
-- **Context**: 改名情境 4 個增量格中 1 格整組席位都漏，其餘只有 1 席說對；完整審查 6 席全說對。
 
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
@@ -782,20 +637,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-
-
-### Qualification wall cap and truncation rules after run-to-completion
-- **Id**: BL-0160
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 資格考改成每題考完後，總時間上限約 3 小時，平均每題超過約 3 分鐘才會撞到，先觀察重考有沒有「中途到時間」。另外已鎖定合格的場次中途到時間仍算合格，沒考到的題目可能藏著嚴重錯誤。
-- **Impact**: 中。慢模型可能一直拿不到判定；截斷時可能放過一個沒考到的嚴重錯誤。
-- **Trigger**: 重考 consult／discuss 出現 wall-truncated 紀錄，或 owner 決定截斷怎麼判
-- **Effort**: S
-- **Source**: review of 763f77de, 2026-10-14
-- **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
-- **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
 
 ### Move exam registration to llm-playground; autopilot reads one JSON
@@ -836,4 +677,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 本 session，2026-10-18
 - **Pointer**: docs/backlog/next-pick-ignores-trigger.md
-- **Context**: 70 條 Trigger 皆為自由文字，機械判斷不了，需一道判斷步驟；屬指引層改動，須先有 eval 證據。另 `preferences.class_weights` 檔不存在，KR6 目前沒作用。
+- **Context**: Owner 2026-10-19 (d-02f19ce4): add a structured trigger-type field and backfill all rows; not done yet. Triggers are free text (70 rows); guidance change needs eval first. preferences.class_weights file absent, KR6 inert.

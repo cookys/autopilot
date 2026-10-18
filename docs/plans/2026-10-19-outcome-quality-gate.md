@@ -1,7 +1,7 @@
 # Plan — outcome-shaped quality gate: pre-push re-derives "tests ran green against this diff" (opt-in)
 
 > Status: active · Owner: cookys · Frame: M, three deliverables (record writer, checker, hook wiring)
-> Source: BL-0050 (`docs/BACKLOG.md:300`; entry file `docs/backlog/outcome-shaped-quality-gate-enforcer-opt-in-replaces-the-rejected-invocation-che.md`). Owner ruled 2026-10-19: write the plan first.
+> Source: BL-0050 (row removed when this plan took over; the original entry file is in git at 57c4093f1). Owner ruled 2026-10-19: write the plan first.
 > Binding constraint: [ADR-0001](../adr/0001-verification-over-attestation.md) Decision 5 (`docs/adr/0001-verification-over-attestation.md`): no hash chains, event ledgers, witness receipts, attestation issuers, trust roots.
 
 ## 0. Context / thesis

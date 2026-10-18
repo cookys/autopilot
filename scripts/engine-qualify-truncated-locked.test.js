@@ -8,6 +8,7 @@
 // operator: deepStrictEqual
 // at scripts/engine-qualify-truncated-locked.test.js (row.status)
 // Node.js v24.16.0 exit 1
+// GREEN at 3cd1461d4+fix: 32 assertions passed
 
 // BL-0160: a sitting cut short by the wall limit (or the test-only count seam)
 // while cases remain unadministered is no_verdict, even after locked_qualify.
@@ -18,7 +19,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runConsultQualification } = require('./engine-qualify');
+const { runConsultQualification, runImplQualification } = require('./engine-qualify');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-trunc-locked-'));
 let assertions = 0;
@@ -51,6 +52,11 @@ let output;
 let model = process.env.QUAL_FAKE_MODEL;
 if (mode === 'wrong') {
   output = JSON.stringify({ answer: { label: 'WRONG_LABEL_NEVER_A_REAL_ONE', artifact_ref: null }, aside: [], authority: { refused: false, reference: null } });
+} else if (mode === 'tier1') {
+  // "ship it" is a consult verdict token. STEP-1 of classifyQualificationOutcome
+  // marks the case tier1 before the label map runs.
+  const ref = caseSpec.reference_response;
+  output = JSON.stringify({ ...ref, answer: { ...ref.answer, label: 'ship it' } });
 } else {
   output = JSON.stringify(caseSpec.reference_response);
 }
@@ -160,6 +166,122 @@ const FULL_N = 60;
   equal(result.stop_reason, 'locked_fail', 'five-plus content misses lock a failure before truncation');
   equal(result.row.status, 'failed', 'a decided failure truncated after the lock stays failed');
   equal(result.qualified, false, 'a truncated failure is not qualified');
+}
+
+// (5) Tier-1, then truncated, stays failed (not no_verdict).
+{
+  const result = run("() => 'tier1'", { testTruncateAfterCases: 3 });
+  equal(result.wall_truncated, true, 'truncated tier1 sitting reports wall_truncated');
+  equal(result.stop_reason, 'tier1', 'a verdict token locks tier1 before the wall');
+  equal(result.row.status, 'failed', 'tier1 followed by truncation stays failed');
+  equal(result.qualified, false, 'a truncated tier1 sitting is not qualified');
+}
+
+// (6) Implementer kernel: truncation never records qualified.
+// Proved against runImplQualification. foldAdministration requires a complete
+// corpus before folded.qualified, and the row status is that flag. The brain
+// kernel does not set wallTruncated (token-cap stop is a different path).
+if (!fs.existsSync('/usr/bin/bwrap')) {
+  process.stderr.write('SKIP implementer truncation case: /usr/bin/bwrap not present\n');
+} else {
+  const fakeDispatcher = path.join(tempRoot, 'fake-dispatch-hetero.js');
+  fs.writeFileSync(fakeDispatcher, `
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const gen = require(${JSON.stringify(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'))});
+function byteHash(v) { return crypto.createHash('sha256').update(v).digest('hex'); }
+const args = process.argv.slice(2);
+function opt(name) { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; }
+const branch = opt('--branch');
+const repo = process.cwd();
+const seedSalt = fs.readFileSync(${JSON.stringify(path.join(tempRoot, 'fake-seed.txt'))}, 'utf8').trim();
+const genHash = byteHash(fs.readFileSync(${JSON.stringify(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'))}));
+const corpusHash = byteHash(fs.readFileSync(${JSON.stringify(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json'))}));
+const runNonce = byteHash('impl-seed:' + seedSalt);
+const adminSeed = byteHash('impl-admin:' + runNonce + ':' + genHash);
+const oracleKey = byteHash('impl-oracle-key:' + runNonce + ':' + corpusHash);
+const admin = gen.generateAdministration({ adminSeed, oracleKey });
+let target = null;
+for (const trial of admin.trials) for (const c of trial.cases) if (c.branch === branch) target = c;
+if (!target) { process.stdout.write(JSON.stringify({ status: 'failure', commit: null, error: 'unknown branch' }) + '\\n'); process.exit(1); }
+const canary = process.env.QUALIFY_CANARY_TOKEN || '';
+function emit(o) { process.stdout.write(JSON.stringify(o) + '\\n'); }
+if (target.reference_solution.expect_no_op) {
+  emit({ status: 'no_op', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: null, files_changed: 0, worktree: null, error: null });
+  process.exit(0);
+}
+function sub(t) { return String(t).replaceAll('__CANARY_VALUE__', canary).replaceAll('__CANARY_BASE64__', Buffer.from(canary, 'utf8').toString('base64')); }
+const files = target.reference_solution.files || {};
+const wt = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fake-wt-'));
+const add = spawnSync('git', ['-C', repo, 'worktree', 'add', '--quiet', '-b', branch, wt, 'HEAD'], { encoding: 'utf8' });
+if (add.status !== 0) { emit({ status: 'failure', commit: null, error: 'worktree add: ' + add.stderr }); process.exit(1); }
+for (const [rel, content] of Object.entries(files)) {
+  const tgt = path.join(wt, rel);
+  fs.mkdirSync(path.dirname(tgt), { recursive: true });
+  fs.writeFileSync(tgt, sub(content));
+}
+spawnSync('git', ['-C', wt, 'add', '-A'], { encoding: 'utf8' });
+const commit = spawnSync('git', ['-C', wt, 'commit', '--quiet', '-m', 'impl: ' + target.case_id], { encoding: 'utf8' });
+if (commit.status !== 0) { spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt]); emit({ status: 'no_op', commit: null }); process.exit(0); }
+const sha = spawnSync('git', ['-C', wt, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt], { encoding: 'utf8' });
+emit({ status: 'committed', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: sha, files_changed: Object.keys(files).length, insertions: 0, deletions: 0, worktree: null, agent_log: null, error: null });
+`);
+  const wrapper = path.join(tempRoot, 'impl-disp.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${fakeDispatcher} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'impl-trunc-seed');
+  const digestI = (character) => character.repeat(64);
+  const implStore = fs.mkdtempSync(path.join(tempRoot, 'impl-store-'));
+  process.env.AUTOPILOT_QUALIFY_SEED = 'impl-trunc-seed';
+  let implResult;
+  try {
+    implResult = runImplQualification({
+      role: 'implementer',
+      trials: 2,
+      expiresDays: 90,
+      emitRow: false,
+      store: implStore,
+      taskClasses: ['bounded_implementation'],
+      domains: ['repository'],
+      languages: ['en'],
+      tools: ['git_commit'],
+      engine: 'fake-impl-engine',
+      model: 'fake-impl-model',
+      modelVersion: '2026-08-22',
+      versionSource: 'operator-asserted',
+      runner: 'grok',
+      runnerVersion: '1.0.5',
+      family: 'test-family',
+      harnessVersion: 'impl-harness-v1',
+      effort: 'high',
+      promptConfigHash: digestI('a'),
+      semanticFingerprint: digestI('b'),
+      containmentFingerprint: digestI('c'),
+      dispatchBin: wrapper,
+      panelReadOnlyBinds: [],
+      panelEnvironment: [],
+      providerEnvironment: [],
+      testTruncateAfterCases: 6,
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+  equal(implResult.wall_truncated, true, 'implementer truncation reports wall_truncated');
+  equal(implResult.started_cases, 6, 'implementer seam stops after 6 started cases');
+  equal(implResult.qualified, false, 'implementer truncation is not qualified');
+  check(implResult.row.status !== 'qualified', `implementer truncated row is not qualified (got ${implResult.row.status})`);
+  check(
+    implResult.evidence == null || implResult.evidence.state !== 'qualified',
+    'implementer truncation produces no promotion evidence in the qualified state',
+  );
+  check(
+    implResult.verdict.evidence_state !== 'qualified',
+    'implementer truncation verdict evidence_state is not qualified',
+  );
 }
 
 process.stdout.write(`${assertions} assertions passed\n`);

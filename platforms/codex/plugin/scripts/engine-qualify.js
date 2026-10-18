@@ -4848,6 +4848,15 @@ function runConsultDiscussQualification(options) {
   let trials = cleanScoredTrials.map(buildTrialEvidence);
   // A truncated sitting is incomplete unless the verdict is a decided failure;
   // qualified requires the whole pool administered (owner ruling 2026-10-19).
+  //
+  // stop_reason 'complete' and wallTruncated cannot both be true in this
+  // kernel, so the block does not need a separate "cases remain" comparison.
+  // wallTruncated is assigned only in the attempt-loop header and the
+  // case-loop header, both BEFORE the next case is started. The attempt loop
+  // exits on `cleanAdministrationCount >= administrationCap` BEFORE that
+  // header's truncation check. Completing the last case of the last required
+  // administration therefore leaves wallTruncated false: a true flag always
+  // means at least one planned case was never started.
   const decidedFailure = pooledVerdict.stop_reason === 'tier1'
     || pooledVerdict.stop_reason === 'locked_fail';
   const truncationBlocksQualification = wallTruncated

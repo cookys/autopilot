@@ -221,6 +221,7 @@ test('implementer --trials: default and an explicit 2 pass the gate, others are 
 
 // # RED at 526621380: live rail — inverted expect of the honest grader (wanted contract_violation) failed: actual pass (ok). In-test red controls: bad-argv smoke is not pass; bad-status smoke why=malformed_engine_status.
 // # RED at 526621380: consumer matrix — inverted expect that the frozen pre-impl validator accepts the row failed: rejected methodology impl_dispatch (ok false !== true).
+// # RED at d7c4bb5cd: consumer matrix (d) — formal row withheld from the main scorecard; current matched by prompt_config_hash was missing (projected implementer row, actual undefined), so provisional/observed_status assertions did not run.
 
 // ── (a) runner-config-editor: closed-world manifest ──
 test('a commit that edits runner config is an integrity violation', () => {
@@ -356,6 +357,13 @@ function liveRail(mode) {
   return { repo, base, run, dispatchJson };
 }
 
+function removeRailWorktree(rail) {
+  const dj = rail && rail.dispatchJson;
+  if (dj && dj.worktree && fs.existsSync(dj.worktree)) {
+    spawnSync('git', ['-C', rail.repo, 'worktree', 'remove', '--force', dj.worktree], { encoding: 'utf8' });
+  }
+}
+
 function gradeLive(rail) {
   const dj = rail.dispatchJson;
   const parsed = engineStatusFromLog(dj);
@@ -380,17 +388,24 @@ function gradeLive(rail) {
 }
 
 test('live rail: honest fake engine grades pass; argv and status breaks do not', () => {
-  const honest = gradeLive(liveRail('honest'));
+  const honestRail = liveRail('honest');
+  const honest = gradeLive(honestRail);
   assert.strictEqual(honest.dispatchJson && honest.dispatchJson.status, 'committed',
     `honest rail status: ${JSON.stringify(honest.dispatchJson)}`);
   assert.strictEqual(honest.verdict, 'pass', `shared grader on the live result: ${honest.verdict} (${honest.why})`);
+  removeRailWorktree(honestRail);
 
-  const argv = gradeLive(liveRail('bad-argv'));
+  const argvRail = liveRail('bad-argv');
+  const argv = gradeLive(argvRail);
   assert.notStrictEqual(argv.verdict, 'pass', `argv-contract break must make the smoke fail (${argv.why})`);
+  removeRailWorktree(argvRail);
 
-  const malformed = gradeLive(liveRail('bad-status'));
+  const statusRail = liveRail('bad-status');
+  // Rail log capture plus engineStatusFromLog (this test helper), not the product status parser.
+  const malformed = gradeLive(statusRail);
   assert.notStrictEqual(malformed.verdict, 'pass', 'malformed engine status must make the smoke fail');
   assert.strictEqual(malformed.why, 'malformed_engine_status');
+  removeRailWorktree(statusRail);
 });
 
 test('real dirty-worktree rail outcome is contract_violation; a committed claim of the same commit is the control', () => {
@@ -408,9 +423,7 @@ test('real dirty-worktree rail outcome is contract_violation; a committed claim 
   });
   assert.strictEqual(asCommitted, 'pass',
     'control: the same commit reported as committed passes, so dirty is what the rail pins');
-  if (dj.worktree && fs.existsSync(dj.worktree)) {
-    spawnSync('git', ['-C', rail.repo, 'worktree', 'remove', '--force', dj.worktree], { encoding: 'utf8' });
-  }
+  removeRailWorktree(rail);
 });
 
 // ── (c)-(f) consumer matrix on a real emitted implementer row ──
@@ -529,15 +542,21 @@ emit({ status: 'committed', commit: sha, files_changed: Object.keys(files).lengt
   const unqualified = JSON.parse(JSON.stringify(row));
   unqualified.capability_score = 0;
   assert.strictEqual(qualityOf(unqualified), 'unqualified');
-  const scorecard = path.join(store, 'scorecard.jsonl');
-  fs.writeFileSync(scorecard, `${JSON.stringify(nested)}\n`);
+  const nestedStore = fs.mkdtempSync(path.join(tempRoot, 'nested-scores-'));
+  const nestedScorecard = path.join(nestedStore, 'scorecard.jsonl');
+  fs.writeFileSync(nestedScorecard, `${JSON.stringify(nested)}\n`);
   const tierRun = spawnSync(process.execPath, [
     path.join(__dirname, 'resolve-scaffold-tier.js'),
     '--runner', 'grok', '--model', 'grok-4.5', '--role', 'implementer',
-    '--now', '2026-08-22T00:00:00Z', '--scorecard', scorecard,
+    '--now', '2026-08-22T00:00:00Z', '--scorecard', nestedScorecard,
   ], {
     encoding: 'utf8',
-    env: { ...process.env, ENGINE_CAPABILITY_DIR: store, ENGINE_SCORECARD_DIR: store },
+    env: {
+      ...process.env,
+      HOME: tempRoot,
+      ENGINE_CAPABILITY_DIR: nestedStore,
+      ENGINE_SCORECARD_DIR: nestedStore,
+    },
   });
   const tier = JSON.parse(tierRun.stdout);
   assert.notStrictEqual(tier.tier, 'T0', `malformed nesting must not resolve T0: ${tier.tier} ${tier.rationale}`);
@@ -554,7 +573,7 @@ emit({ status: 'committed', commit: sha, files_changed: Object.keys(files).lengt
     env: { ...process.env, ENGINE_SCORECARD_DIR: store, ENGINE_CAPABILITY_DIR: store, HOME: tempRoot },
   });
   assert.strictEqual(current.status, 0, current.stderr);
-  const projected = JSON.parse(current.stdout).find((r) => r.engine === 'grok-4.5' && r.runner === 'grok');
+  const projected = JSON.parse(current.stdout).find((r) => r.prompt_config_hash === row.prompt_config_hash);
   assert.ok(projected, 'projected implementer row');
   assert.strictEqual(projected.status, 'provisional');
   assert.strictEqual(projected.observed_status, 'qualified');

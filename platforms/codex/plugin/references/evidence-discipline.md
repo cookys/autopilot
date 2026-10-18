@@ -1037,7 +1037,7 @@ the delete had most likely destroyed real data on an assumption.
 - **Verify the writer before deleting operator data** — an instrumented clone that refuses and
   logs is cheap; a deleted row is not recoverable.
 - Preventing artifact: `AUTOPILOT_TEST_RUN_GUARD` (v2.36.99, `hooks/tests/capability-store-test-guard.test.sh`).
-- Evidence: `docs/backlog/suite-pollutes-real-capability-store.md`.
+- Evidence: the backlog note `suite-pollutes-real-capability-store.md` (deleted 2026-10-18; recover with `git log --all -- docs/backlog/suite-pollutes-real-capability-store.md`).
 
 ## 45. A capability a tool's docs claim is not a capability it has — probe with the unenumerated case
 

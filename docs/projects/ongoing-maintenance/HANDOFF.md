@@ -40,7 +40,7 @@
 2. owner 的工作環境是 ssh 進 tmux：任何「在終端裡顯示圖片」的設計都不適用，圖一律走瀏覽器 review 頁（反向代理）。
 3. BACKLOG 已觸發的列（另加一列：被拒的 `AUTOPILOT_LIVE_DIR` override 會靜默落到真的 live dir）：plan-review 席位沒有 source 存取、plan-review roster 單一家族、import-aa 測試綁死主機、Population B flake。
 4. peer 的列：review-fanout 有界並行、sealed-campaign review-station 遷移、plan-review terminal-ticket 可見性。
-5. owner 排序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。
+5. owner 排序才動：`docs/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md`（該 plan 已出貨歸檔）。
 
 ## 協作
 - fable = fleet `autopilot--claude-2`（claude-fable-5-1；起草 plan R0–R4）。

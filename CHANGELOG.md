@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Deleted the 95 orphan notes in `docs/backlog/` (no BACKLOG row mentions them; owner card d-af2d9417: a note is removed with its row, history stays in git) and documented the rule in `references/backlog-entry.md`; repointed the live references to three of them.
 - The claude CLI qualification transport now runs `claude -p --output-format json` and checks the served model (`modelUsage` keys) against the declared one, refusing the case on mismatch, missing `modelUsage`, broken JSON, an `is_error` envelope, or blank stdout (BL-0052, claude side; codex stays operator-asserted).
 
 - BL-0094 closed: GitHub CI is removed (owner decision 2026-10-18). `.github/workflows/test.yml` had been cancelled by its 15-minute timeout on every run since 2026-08-25 (the suite now takes about 70 minutes) and produced no signal; tests now run only locally, affected suites per merge and the whole suite before a release. The L1 cache-key parity gate (`check-l1-cache-key-parity.js`, its test and sync ritual) guarded only that workflow file and is retired with it.

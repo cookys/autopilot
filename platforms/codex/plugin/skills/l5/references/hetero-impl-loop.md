@@ -301,7 +301,7 @@ foreground call hits the tool timeout) paired with a background dead-man (`sleep
 and the foreman ends its turn — on any wake it checks `rc=` in the dispatch stderr, else waits once more via
 `wait-dispatch-results.js --timeout 500`; every rail call is prefixed `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID`
 so the hand's suites cannot read the depth-0 marker; `dispatch-model-guard` needs `Engine: sonnet` as the prompt's first line (then `Role: <role>` on line 2 and the required `Lane: <name>` on line 3);
-`foreman-guard`'s 40-call cap is live. The depth-0 l5 marker never applies to the clones (`repo_root` mismatch → INACTIVE), which
+`foreman-guard`'s 40-call cap is live. A brief may raise or lower that cap for one subagent with a `Bash-Cap: <n>` line in its first 10 lines, where `<n>` is an integer written as plain digits from 1 to 200. The depth-0 l5 marker never applies to the clones (`repo_root` mismatch → INACTIVE), which
 is what lets hands run without a sealed campaign — and it also means the marker cannot be cleared through the l5 receipt path;
 degrade it (`set --level l3 --entry-level l5 --fallback precondition_failed`) and clear. Engine units must add cases in NEW
 suite files (not appended to a shared suite — three EOF appends = a certain cherry-pick conflict) and the brief's Verify must

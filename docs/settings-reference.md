@@ -102,7 +102,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `hooks.<stem>` (config.json) | Per-hook switch. true enables an opt-in hook; false disables a default-on hook that honors it (residue-auto-reap). | opt-in hooks off, default-on hooks on | `AUTOPILOT_HOOK_<STEM>`: Per-hook switch from the environment; `<STEM>` is the hook file stem upper-cased with dashes as underscores (AUTOPILOT_HOOK_BRANCH_PROTECTION=1). |
 | `AUTOPILOT_HOOK_RESIDUE_AUTO_REAP` | Set to 0, false, off or no to disable the automatic residue sweep hook. | on |  |
 | `foreman_guard.mode` (config.json) | Foreman guard (Bash cap, no-polling, no-Monitor for l4-l6 subagents): "block", "warn" or "off". | block | `AUTOPILOT_FOREMAN_GUARD_MODE` |
-| `foreman_guard.bash_cap` (config.json) | Bash calls a foreman may make before it is told to hand off. | `40` | `AUTOPILOT_FOREMAN_GUARD_BASH_CAP` |
+| `foreman_guard.bash_cap` (config.json) | Bash calls a foreman may make before it is told to hand off. A brief's `Bash-Cap: <n>` line (first 10 lines, n from 1 to 200) overrides this per subagent. | `40` | `AUTOPILOT_FOREMAN_GUARD_BASH_CAP` |
 | `foreman_guard.reserve_calls` (config.json) | Calls held back after the cap for the closing handoff (git status, add, commit, ...). | `8` | `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` |
 | `foreman_guard.advisory_every` (config.json) | Repeat interval of the non-denying advisory for other Engine-header subagents. | `40` | `AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY` |
 | `foreman_guard.role_caps` (config.json) | Per-role Bash caps: an object with foreman, worker and reviewer integers (worker and reviewer default to 120). | unset | `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` |

@@ -3073,7 +3073,7 @@
       ],
       "doc": null,
       "relates": [],
-      "summary": "Test-only fault seam for merge crash simulation, honoured only when AUTOPILOT_TEST_SEAMS=1."
+      "summary": "Master switch for all test-only seams."
     },
     {
       "name": "AUTOPILOT_TEST_TIMEOUT_MS",

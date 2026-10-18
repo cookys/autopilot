@@ -640,12 +640,16 @@ function executeMergeIntent(request) {
   if (!isPlainObject(manifest) || manifest.schema_version !== INTENT_SCHEMA_VERSION) {
     return halted(sealed.seal, manifest && manifest.root_run_id, [], 'manifest_schema_version_unsupported');
   }
-  if (Array.isArray(manifest.edges)) intentEdges = intentEdgesFromManifest(manifest);
   if (!verifyMergeIntentSeal(sealed)) {
     return halted(sealed.seal, manifest.root_run_id, [], 'manifest_seal_invalid');
   }
   if (request.manifest_seal !== sealed.seal) {
     return halted(sealed.seal, manifest.root_run_id, [], 'manifest_seal_mismatch');
+  }
+  if (receiptDir !== null
+      && Array.isArray(manifest.edges)
+      && manifest.edges.every((edge) => isPlainObject(edge))) {
+    intentEdges = intentEdgesFromManifest(manifest);
   }
   const preflightError = validatePreflight(request.preflight, sealed.seal, manifest);
   if (preflightError) {

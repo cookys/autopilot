@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # BL-0075 — optional write-ahead merge receipt. Default stays off.
-# RED at 3021f434d: FAIL 35 passed, 13 failed — crash var without AUTOPILOT_TEST_SEAMS killed the process (exit 137, in_progress receipt with only edge 1); inspect rejected the completed receipt (not an in-progress execution receipt); preflight halt wrote no receipt so inspect could not classify edges.
+# RED at 3f035559d: no receipt_dir, an edge that is JSON null (no worktree object) threw TypeError: Cannot read properties of null (reading 'sequence') instead of halt reason manifest_seal_invalid.
 . "$(dirname "$0")/lib.sh"
 
 SBX="$TEST_TMP/repo"
@@ -273,51 +273,38 @@ assert_eq "$?" "0" "crash variable without the test switch still exits 0"
 NOSEAM_STATE="$(node -e 'const r=require(process.argv[1]); console.log([r.state,r.status,r.edges.length].join("\t"));' "$NOSEAM_DIR/merge-execution-receipt.json")"
 assert_eq "$NOSEAM_STATE" "completed	complete	2" "crash variable without the test switch writes a completed receipt"
 
-# Null request follows the same path as base a007fa65e (kind + message).
-node - "$REPO_ROOT" <<'NODE'
+# No receipt_dir. Expected strings are the base a007fa65e halt reasons.
+# A null request halts as execution_request_invalid.
+# An edge that is JSON null has no worktree object; the seal check halts as
+# manifest_seal_invalid before any merge work.
+COMPAT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';
-const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
-const root = process.argv[2];
-const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'bl0075-base-'));
-const src = path.join(shim, 'src');
-fs.mkdirSync(path.join(src, 'merge'), { recursive: true });
-for (const name of fs.readdirSync(path.join(root, 'src'))) {
-  if (name === 'merge') continue;
-  fs.symlinkSync(path.join(root, 'src', name), path.join(src, name));
+const { executeMergeIntent } = require(path.join(process.argv[2], 'src/merge/cli.js'));
+function line(request) {
+  const receipt = executeMergeIntent(request);
+  process.stdout.write(`${receipt.status}\t${receipt.halt_reason}\n`);
 }
-fs.writeFileSync(
-  path.join(src, 'merge', 'cli.js'),
-  execFileSync('git', ['-C', root, 'show', 'a007fa65e:src/merge/cli.js']),
-);
-const base = require(path.join(src, 'merge', 'cli.js'));
-const current = require(path.join(root, 'src', 'merge', 'cli.js'));
-function summarize(fn) {
-  try {
-    const receipt = fn(null);
-    return {
-      kind: 'return',
-      message: receipt && receipt.halt_reason ? String(receipt.halt_reason) : '',
-      status: receipt && receipt.status ? String(receipt.status) : '',
-    };
-  } catch (error) {
-    return {
-      kind: 'throw',
-      message: error && error.message ? String(error.message) : '',
-      status: '',
-    };
-  }
-}
-const left = summarize(base.executeMergeIntent);
-const right = summarize(current.executeMergeIntent);
-if (left.kind !== right.kind || left.message !== right.message || left.status !== right.status) {
-  console.error(JSON.stringify({ left, right }));
-  process.exit(1);
-}
+line(null);
+const manifest = {
+  schema_version: 2,
+  artifact_type: 'merge_intent_manifest',
+  repo: '/tmp/bl0075-malformed',
+  root_run_id: 'bl0075-malformed',
+  edges: [null],
+  forbidden_reverse_edges: [],
+  preservation_policy: { allowed_path_prefixes: [] },
+};
+line({
+  sealed_manifest: { seal: 'a'.repeat(64), manifest },
+  manifest_seal: 'a'.repeat(64),
+  preflight: null,
+  approved_preservation: [],
+});
 NODE
-assert_eq "$?" "0" "null request matches base a007fa65e by kind and message"
+)"
+assert_eq "$COMPAT" "$(printf '%s\n' 'halted	execution_request_invalid' 'halted	manifest_seal_invalid')" \
+  "no receipt_dir keeps the base halt reasons for a null request and an edge with no worktree object"
 
 # (d) without receipt_dir the merge still runs and creates no receipt file.
 NEG="$TEST_TMP/neg"

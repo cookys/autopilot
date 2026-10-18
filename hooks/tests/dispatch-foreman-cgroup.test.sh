@@ -3,16 +3,48 @@
 # RED at 26bffb06b: (pid file never written) FAIL [dispatch-foreman-cgroup] 1: gc.pid is non-empty before teardown — got empty
 # RED at 26bffb06b: (systemd-run launch exits 1) FAIL [dispatch-foreman-cgroup] 3: failed scope launch reports setsid: expected 'setsid', got 'cgroup'
 # RED at 6200e3ed4: FAIL [dispatch-foreman-cgroup] 4: tool-call cap did not stop the turn; 4: foreman turn started once (slow scope must not relaunch): expected '1', got '2'; 4: tool-call cap still stops the turn: expected 'tool_cap_reached', got '' — 7 passed, 3 failed
+# RED at 3b1813e3e: case 4 old cleanup left live user scopes (foreman-cg4-1-….scope and foreman-cg4-2-….scope still active, command /bin/sleep 120, four seconds after the suite). The setsid containment assertion already passes on this base (PROBE containment=setsid); it was missing, not failing.
 # Foreman rail cgroup containment: a setsid grandchild must die on cap teardown
 # when a systemd user scope is usable, and containment must fall back to setsid
 # when WORKER_CONTAINMENT_FORCE_NO_CGROUP=1 or systemd-run fails to start the scope.
 . "$(dirname "$0")/lib.sh"
 
 GC_PID=""
+SLOW_LAUNCHER_PID=""
+SLOW_UNIT_FILE=""
+# Kill recorded launcher pids (and their process groups), then wait until each
+# recorded scope is gone or stopped, and only then stop/kill the unit.
+cleanup_slow_scope() {
+  local p u i st
+  if [ -n "${SLOW_LAUNCHER_PID:-}" ] && [ -f "$SLOW_LAUNCHER_PID" ]; then
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      kill -KILL -- "-$p" 2>/dev/null || true
+      kill -KILL "$p" 2>/dev/null || true
+    done < "$SLOW_LAUNCHER_PID"
+  fi
+  if [ -n "${SLOW_UNIT_FILE:-}" ] && [ -f "$SLOW_UNIT_FILE" ]; then
+    while IFS= read -r u; do
+      [ -n "$u" ] || continue
+      i=0
+      while [ "$i" -lt 50 ]; do
+        st="$(systemctl --user is-active "$u" 2>/dev/null || true)"
+        if [ "$st" != "active" ] && [ "$st" != "activating" ]; then
+          break
+        fi
+        sleep 0.1
+        i=$((i+1))
+      done
+      systemctl --user kill "$u" --signal=SIGKILL >/dev/null 2>&1 || true
+      systemctl --user stop "$u" >/dev/null 2>&1 || true
+    done < "$SLOW_UNIT_FILE"
+  fi
+}
 cleanup_gc() {
   if [ -n "${GC_PID:-}" ]; then
     kill -KILL "$GC_PID" 2>/dev/null || true
   fi
+  cleanup_slow_scope
   cleanup_test_tmp
 }
 trap cleanup_gc EXIT
@@ -189,9 +221,12 @@ else
   SLOWBIN="$TEST_TMP/slowbin"
   mkdir -p "$SLOWBIN"
   SLOW_UNIT_FILE="$TEST_TMP/slow.unit"
+  SLOW_LAUNCHER_PID="$TEST_TMP/slow.launcher.pid"
   SLOW_WORKER_PID="$TEST_TMP/slow.worker.pid"
   SLOW_STARTS="$TEST_TMP/slow.starts"
-  rm -f "$SLOW_UNIT_FILE" "$SLOW_WORKER_PID" "$SLOW_STARTS"
+  # Resolve before PATH puts the fake systemd-run first.
+  SLOW_REAL_SYSTEMD_RUN="$(command -v systemd-run)"
+  rm -f "$SLOW_UNIT_FILE" "$SLOW_LAUNCHER_PID" "$SLOW_WORKER_PID" "$SLOW_STARTS"
   cat > "$SLOWBIN/systemd-run" << 'FAKE'
 #!/usr/bin/env bash
 # Detection probe (`-- true`) succeeds so HAVE_CGROUP=1.
@@ -215,12 +250,14 @@ for a in "$@"; do
   [ "$a" = "--" ] && seen=1
 done
 if [ -n "${SLOW_SCOPE_UNIT_FILE:-}" ] && [ -n "$unit" ]; then
-  printf '%s\n' "$unit" > "$SLOW_SCOPE_UNIT_FILE"
+  printf '%s\n' "$unit" >> "$SLOW_SCOPE_UNIT_FILE"
 fi
-if [ -n "$unit" ]; then
+if [ -n "$unit" ] && [ -n "${SLOW_REAL_SYSTEMD_RUN:-}" ]; then
   # setsid so the delayed scope is not killed with the worker's process group
-  # before the 3s mark. The worker itself is exec'd below and stays alive.
-  setsid /bin/bash -c 'sleep 3; exec /usr/bin/systemd-run --user --scope --quiet --unit="$1" -- /bin/sleep 120' bash "$unit" >/dev/null 2>&1 &
+  # before the 3s mark. Record the launcher pid (session leader) for cleanup.
+  # $0 is the real systemd-run path, $1 the unit, $2 the pidfile.
+  setsid /bin/bash -c 'printf "%s\n" $$ >> "$2"; sleep 3; exec "$0" --user --scope --quiet --unit="$1" -- /bin/sleep 20' \
+    "$SLOW_REAL_SYSTEMD_RUN" "$unit" "${SLOW_LAUNCHER_PIDFILE:-/dev/null}" >/dev/null 2>&1 &
 fi
 exec "${args[@]}"
 FAKE
@@ -229,6 +266,8 @@ FAKE
   OUTF4="$TEST_TMP/slow.out"
   ( cd "$SBX" && PATH="$SLOWBIN:$STUBDIR:$PATH" \
     SLOW_SCOPE_UNIT_FILE="$SLOW_UNIT_FILE" \
+    SLOW_REAL_SYSTEMD_RUN="$SLOW_REAL_SYSTEMD_RUN" \
+    SLOW_LAUNCHER_PIDFILE="$SLOW_LAUNCHER_PID" \
     KIMI_STUB_START_LOG="$SLOW_STARTS" KIMI_STUB_PIDFILE="$SLOW_WORKER_PID" \
     bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" \
       --run-id cg4 --run-dir "$RD4" --tool-cap 1 --timeout 30 --handoff-timeout 5 --poll 0.2 \
@@ -249,15 +288,34 @@ FAKE
   if [ -s "$SLOW_WORKER_PID" ]; then
     kill -KILL "$(cat "$SLOW_WORKER_PID")" 2>/dev/null || true
   fi
-  if [ -s "$SLOW_UNIT_FILE" ]; then
-    systemctl --user kill "$(cat "$SLOW_UNIT_FILE")" --signal=SIGKILL >/dev/null 2>&1 || true
-    systemctl --user stop "$(cat "$SLOW_UNIT_FILE")" >/dev/null 2>&1 || true
-  fi
+  cleanup_slow_scope
   OUT4="$(cat "$OUTF4" 2>/dev/null || true)"
   START_LINES=0
   if [ -f "$SLOW_STARTS" ]; then START_LINES="$(grep -c . "$SLOW_STARTS" || true)"; fi
   assert_eq "$START_LINES" "1" "4: foreman turn started once (slow scope must not relaunch)"
   assert_eq "$(field "$OUT4" status)" "tool_cap_reached" "4: tool-call cap still stops the turn"
+  assert_eq "$(field "$OUT4" containment)" "setsid" "4: slow scope reports containment setsid"
+  if [ ! -s "$SLOW_LAUNCHER_PID" ]; then
+    fail "4: launcher pidfile is non-empty — got empty"
+  else
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if kill -0 "$p" 2>/dev/null; then
+        fail "4: launcher pid $p is dead after cleanup"
+      fi
+    done < "$SLOW_LAUNCHER_PID"
+  fi
+  if [ ! -s "$SLOW_UNIT_FILE" ]; then
+    fail "4: scope unit file is non-empty — got empty"
+  else
+    while IFS= read -r u; do
+      [ -n "$u" ] || continue
+      st="$(systemctl --user is-active "$u" 2>/dev/null || true)"
+      if [ "$st" = "active" ] || [ "$st" = "activating" ]; then
+        fail "4: unit $u is not active after cleanup — got $st"
+      fi
+    done < "$SLOW_UNIT_FILE"
+  fi
 fi
 
 finalize_test

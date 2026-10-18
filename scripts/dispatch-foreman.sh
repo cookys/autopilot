@@ -524,8 +524,8 @@ run_turn() {
     else
       # Definite failure: the launcher already exited non-zero and the scope
       # never became active. Check ActiveEnterTimestamp once more after the exit.
-      wait "$pid" 2>/dev/null
-      launch_rc=$?
+      launch_rc=0
+      wait "$pid" 2>/dev/null || launch_rc=$?
       entered="$(systemctl --user show "$candidate" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
       if [ "$launch_rc" -ne 0 ] && { [ -z "$entered" ] || [ "$entered" = "n/a" ]; }; then
         FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""

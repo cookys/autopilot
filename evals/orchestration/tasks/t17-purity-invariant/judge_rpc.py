@@ -30,6 +30,7 @@ MAX_BYTES = 65536
 # Records never cross this boundary; the child holds a proxy and asks.
 CHILD_SRC = r"""
 import builtins
+import collections.abc as _abc
 import json
 import os
 import sys
@@ -137,14 +138,21 @@ class _ProxyOps:
     # judge. Unlisted attributes and assignments fail closed.
     __hash__ = None
 
+    def __getattribute__(self, name):
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            raise AttributeError(name) from None
+
     def __setattr__(self, name, value):
-        if name in ("oid", "kind"):
-            object.__setattr__(self, name, value)
-            return
-        raise TypeError("unsupported proxy op: %s" % name)
+        # oid and kind are set once from __init__ via object.__setattr__.
+        # A later assignment, including of those names, is rejected. AttributeError
+        # (not TypeError) so hasattr/getattr(..., default) stay fail-closed without
+        # crashing a correct solution.
+        raise AttributeError("unsupported proxy op: %s" % name)
 
     def __getattr__(self, name):
-        raise TypeError("unsupported proxy op: %s" % name)
+        raise AttributeError("unsupported proxy op: %s" % name)
 
     def __getitem__(self, key):
         return _rpc("getitem", self.oid, [key])
@@ -216,8 +224,8 @@ class _ProxyOps:
 
 class _DictProxy(_ProxyOps):
     def __init__(self, oid):
-        self.oid = oid
-        self.kind = "dict"
+        object.__setattr__(self, "oid", oid)
+        object.__setattr__(self, "kind", "dict")
 
     @property
     def __class__(self):
@@ -272,8 +280,8 @@ class _DictProxy(_ProxyOps):
 
 class _ListProxy(_ProxyOps):
     def __init__(self, oid):
-        self.oid = oid
-        self.kind = "list"
+        object.__setattr__(self, "oid", oid)
+        object.__setattr__(self, "kind", "list")
 
     @property
     def __class__(self):
@@ -322,6 +330,10 @@ def _make_proxy(oid, kind):
     if kind == "list":
         return _ListProxy(oid)
     return _DictProxy(oid)
+
+
+_abc.MutableMapping.register(_DictProxy)
+_abc.MutableSequence.register(_ListProxy)
 
 
 def _dict(*args, **kwargs):
@@ -750,7 +762,12 @@ class _Live:
         self.objs = {}
         self._seq = 0
         self.root_id = self.intern(root)
+        # Purity snapshot. Kept only on this _Live as self.snap. copy.deepcopy
+        # builds a tree that is never interned into self.objs, so an RPC oid
+        # (live.objs.get) cannot reach it. _grade compares live.root to it.
         self.snap = copy.deepcopy(root)
+        if any(cur is self.snap for cur in self.objs.values()):
+            raise _Infra("protocol error")
 
     def intern(self, obj):
         for oid, cur in self.objs.items():
@@ -808,7 +825,15 @@ def _apply(live, obj, method, args):
         obj += args[0]
         return _as_proxy(obj, live)
     if method == "imul":
-        obj *= args[0]
+        factor = args[0]
+        # Bound the stored result. A huge factor is a protocol error, not a grade of the candidate's answer.
+        if isinstance(obj, list) and isinstance(factor, int) and not isinstance(factor, bool):
+            base = len(obj)
+            if factor > 1 and base > 0 and factor > (10000 // base):
+                raise _Infra("protocol error")
+        obj *= factor
+        if isinstance(obj, list) and len(obj) > 10000:
+            raise _Infra("protocol error")
         return _as_proxy(obj, live)
     if method == "ior":
         obj |= args[0]

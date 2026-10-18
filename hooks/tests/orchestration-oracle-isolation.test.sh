@@ -680,6 +680,25 @@ do
   assert_pass "$label" "$OP_OUT" "$OP_EC"
 done
 
+echo "=== t17 hasattr and getattr default must PASS ==="
+# RED at f4aaf8092052bfa8c972df684f63ff2dd5ba4896: ok_hasattr_dedup.py printed fidelity_ok=false decoy_respected=false STATUS: FAIL (exit 1). hasattr and getattr(proxy, name, default) propagated TypeError from _ProxyOps.__getattr__.
+T17HAS=$(mktemp -d -p "$TEST_TMP" -t "t17-has-XXXXXX")
+overlay_dedup "$T17HAS" "$FIXTURES/ok_hasattr_dedup.py"
+set +e
+T17HAS_OUT=$(run_oracle_t17 "$T17HAS")
+T17HAS_EC=$?
+set -e
+assert_pass "t17-hasattr" "$T17HAS_OUT" "$T17HAS_EC"
+
+echo "=== t17 isinstance Mapping must PASS ==="
+T17MAP=$(mktemp -d -p "$TEST_TMP" -t "t17-map-XXXXXX")
+overlay_dedup "$T17MAP" "$FIXTURES/ok_mapping_dedup.py"
+set +e
+T17MAP_OUT=$(run_oracle_t17 "$T17MAP")
+T17MAP_EC=$?
+set -e
+assert_pass "t17-mapping" "$T17MAP_OUT" "$T17MAP_EC"
+
 assert_special_link() {
   local label="$1" runner="$2" repo="$3" module="$4" kind="$5"
   local dest out ec target

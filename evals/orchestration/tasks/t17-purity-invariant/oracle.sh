@@ -38,7 +38,8 @@
 #   the process-group kill but cannot change a verdict that has already been
 #   printed. The same OS user means the candidate could ptrace the judge. For
 #   t17 the candidate can tell it received a proxy and deliberately behave
-#   purely during grading.
+#   purely during grading. The proxy is not a real dict or list, so a check
+#   such as type(r) is dict makes a correct solution fail.
 #
 # Grading semantics (unchanged):
 #   * The two axes are scored separately. A missing `key` parameter fails

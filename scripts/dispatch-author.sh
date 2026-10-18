@@ -204,6 +204,8 @@ VERIFICATION_AUTHOR_FAMILY=""
 
 # shellcheck source=lib/json-emit.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
+# shellcheck source=lib/gitconfig-containment.sh
+. "$_AUTHOR_SELF_DIR/lib/gitconfig-containment.sh"
 
 read_review_loop_field() {
   local key="$1"
@@ -430,9 +432,29 @@ emit_result() {
       fi
       echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
     fi
+    if [ -n "${GITCONFIG_SNAPSHOT_FILE:-}" ] && [ -f "${GITCONFIG_SNAPSHOT_FILE:-}" ]; then
+      local gc_keys="" gc_oneline=""
+      gc_keys="$(gitconfig_containment_restore "$REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE" || true)"
+      rm -f -- "$GITCONFIG_SNAPSHOT_FILE"
+      GITCONFIG_SNAPSHOT_FILE=""
+      if [ -n "$gc_keys" ]; then
+        GITCONFIG_DRIFT_KEYS="$gc_keys"
+        gc_oneline="${gc_keys//$'\n'/ }"
+        echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+      fi
+    fi
   fi
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     extra_fields="${extra_fields}, \"identity_drift\": true"
+  fi
+  if [ -n "${GITCONFIG_DRIFT_KEYS:-}" ]; then
+    local gc_json="" gc_line="" gc_first=1
+    while IFS= read -r gc_line; do
+      [ -n "$gc_line" ] || continue
+      if [ "$gc_first" -eq 1 ]; then gc_first=0; else gc_json="$gc_json, "; fi
+      gc_json="$gc_json\"$(json_escape "$gc_line")\""
+    done <<< "${GITCONFIG_DRIFT_KEYS}"
+    extra_fields="${extra_fields}, \"gitconfig_drift\": [${gc_json}]"
   fi
   if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
     extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
@@ -1052,6 +1074,8 @@ IDENTITY_DRIFT=0
 IDENTITY_PRE_NAME=""
 IDENTITY_PRE_EMAIL=""
 IDENTITY_SNAPSHOT_TAKEN=0
+GITCONFIG_SNAPSHOT_FILE=""
+GITCONFIG_DRIFT_KEYS=""
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
@@ -1099,6 +1123,7 @@ if [ -n "$REPO_ROOT" ]; then
   IDENTITY_PRE_NAME="$(git -C "$REPO_ROOT" config --local user.name 2>/dev/null || true)"
   IDENTITY_PRE_EMAIL="$(git -C "$REPO_ROOT" config --local user.email 2>/dev/null || true)"
   IDENTITY_SNAPSHOT_TAKEN=1
+  gitconfig_containment_snapshot "$REPO_ROOT"
 fi
 
 # Non-codex: wrap the prompt with a derived nonce-keyed AUTHOR/END frame (same

@@ -722,14 +722,19 @@ emit() { # status commit files ins del worktree error
     # shellcheck source=lib/gitconfig-containment.sh
     [ -r "$SELF_DIR/lib/gitconfig-containment.sh" ] && . "$SELF_DIR/lib/gitconfig-containment.sh"
     if [ -n "${GITCONFIG_SNAPSHOT_FILE:-}" ] && [ -f "${GITCONFIG_SNAPSHOT_FILE:-}" ]; then
-      local gc_keys="" gc_oneline=""
-      gc_keys="$(gitconfig_containment_restore "$IDENTITY_REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE" || true)"
+      local gc_keys="" gc_oneline="" gc_rc=0
+      gc_keys="$(gitconfig_containment_restore "$IDENTITY_REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE")" || gc_rc=$?
       rm -f -- "$GITCONFIG_SNAPSHOT_FILE"
       GITCONFIG_SNAPSHOT_FILE=""
+      if [ "$gc_rc" -ne 0 ]; then
+        GITCONFIG_RESTORE_FAILED=1
+      fi
       if [ -n "$gc_keys" ]; then
         GITCONFIG_DRIFT_KEYS="$gc_keys"
-        gc_oneline="${gc_keys//$'\n'/ }"
-        echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+        if [ "$gc_rc" -eq 0 ]; then
+          gc_oneline="${gc_keys//$'\n'/ }"
+          echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+        fi
       fi
     fi
   fi
@@ -860,6 +865,9 @@ emit() { # status commit files ins del worktree error
       gc_json="$gc_json\"$(json_escape "$gc_line")\""
     done <<< "${GITCONFIG_DRIFT_KEYS}"
     identity_fields="${identity_fields}, \"gitconfig_drift\": [${gc_json}]"
+  fi
+  if [ "${GITCONFIG_RESTORE_FAILED:-0}" -eq 1 ]; then
+    identity_fields="${identity_fields}, \"gitconfig_restore_failed\": true"
   fi
   local timeout_fields=""
   local emit_timeout_secs=""
@@ -3041,7 +3049,7 @@ fi
 #     transports; commit, worktree add and the repo's own pre-commit hook are unaffected.
 #     Two designs were tried and rejected by measurement first: `remote.<r>.pushurl` is
 #     multivalued, so an env value is APPENDED and the push lands on the repo's own pushurl;
-#     `hooksPath` + a refusing pre-push is skipped by `--no-verify` and shadows every
+#     `core.hooksPath` + a refusing pre-push is skipped by `--no-verify` and shadows every
 #     other repo hook. Fetch is blocked too, which is correct: the worktree is pinned at
 #     BASE_SHA and hands have no business moving it. Inherited GIT_CONFIG_* entries are
 #     preserved by continuing the index. This is an accident guard, not a sandbox: a worker
@@ -3142,7 +3150,7 @@ if [ -n "$IDENTITY_REPO_ROOT" ]; then
   # --local only: effective-scope reads would materialize a global identity as local on restore.
   IDENTITY_PRE_NAME="$(git -C "$IDENTITY_REPO_ROOT" config --local user.name 2>/dev/null || true)"
   IDENTITY_PRE_EMAIL="$(git -C "$IDENTITY_REPO_ROOT" config --local user.email 2>/dev/null || true)"
-  gitconfig_containment_snapshot "$IDENTITY_REPO_ROOT"
+  gitconfig_containment_snapshot "$IDENTITY_REPO_ROOT" || true
 fi
 
 # --- worker containment (BEST-EFFORT teardown — NOT a malicious-worker boundary) ---

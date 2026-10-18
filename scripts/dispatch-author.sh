@@ -433,14 +433,19 @@ emit_result() {
       echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
     fi
     if [ -n "${GITCONFIG_SNAPSHOT_FILE:-}" ] && [ -f "${GITCONFIG_SNAPSHOT_FILE:-}" ]; then
-      local gc_keys="" gc_oneline=""
-      gc_keys="$(gitconfig_containment_restore "$REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE" || true)"
+      local gc_keys="" gc_oneline="" gc_rc=0
+      gc_keys="$(gitconfig_containment_restore "$REPO_ROOT" "$GITCONFIG_SNAPSHOT_FILE")" || gc_rc=$?
       rm -f -- "$GITCONFIG_SNAPSHOT_FILE"
       GITCONFIG_SNAPSHOT_FILE=""
+      if [ "$gc_rc" -ne 0 ]; then
+        GITCONFIG_RESTORE_FAILED=1
+      fi
       if [ -n "$gc_keys" ]; then
         GITCONFIG_DRIFT_KEYS="$gc_keys"
-        gc_oneline="${gc_keys//$'\n'/ }"
-        echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+        if [ "$gc_rc" -eq 0 ]; then
+          gc_oneline="${gc_keys//$'\n'/ }"
+          echo "WARNING: git config drift detected — worker changed: ${gc_oneline}; restored the original values" >&2
+        fi
       fi
     fi
   fi
@@ -455,6 +460,9 @@ emit_result() {
       gc_json="$gc_json\"$(json_escape "$gc_line")\""
     done <<< "${GITCONFIG_DRIFT_KEYS}"
     extra_fields="${extra_fields}, \"gitconfig_drift\": [${gc_json}]"
+  fi
+  if [ "${GITCONFIG_RESTORE_FAILED:-0}" -eq 1 ]; then
+    extra_fields="${extra_fields}, \"gitconfig_restore_failed\": true"
   fi
   if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
     extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
@@ -1123,7 +1131,7 @@ if [ -n "$REPO_ROOT" ]; then
   IDENTITY_PRE_NAME="$(git -C "$REPO_ROOT" config --local user.name 2>/dev/null || true)"
   IDENTITY_PRE_EMAIL="$(git -C "$REPO_ROOT" config --local user.email 2>/dev/null || true)"
   IDENTITY_SNAPSHOT_TAKEN=1
-  gitconfig_containment_snapshot "$REPO_ROOT"
+  gitconfig_containment_snapshot "$REPO_ROOT" || true
 fi
 
 # Non-codex: wrap the prompt with a derived nonce-keyed AUTHOR/END frame (same

@@ -68,6 +68,8 @@ function effortRank(effort) {
 
 function usage(message) {
   process.stderr.write(`next-pick: ${message}\n`);
+  process.stderr.write('usage: next-pick parse --backlog <file> [--today YYYY-MM-DD]\n');
+  process.stderr.write('       next-pick pick --candidates <file> --preferences <file>\n');
   process.exit(2);
 }
 

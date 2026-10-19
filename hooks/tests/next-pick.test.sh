@@ -288,6 +288,15 @@ assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Newer small row')" "8" "age_days: 
 assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Older small row')" "30" "age_days: older row has more days"
 assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Row without Since')" "null" "age_days: missing Since stays null"
 assert_eq "$(printf '%s' "$AGE_OUT" | age_of 'Row from the future')" "0" "age_days: future Since clamps to 0, never negative"
+# RED at e70241da: FAIL usage names parse --backlog and pick --candidates (not found). 86 passed, 2 failed. First line stayed "next-pick: mode must be parse|pick", exit 2.
+node "$SCRIPT" not-a-mode >"$TEST_TMP/usage-out" 2>"$TEST_TMP/usage-err"
+assert_exit_code "$?" "2" "unknown mode is a usage error (exit 2)"
+USAGE_ERR="$(cat "$TEST_TMP/usage-err")"
+USAGE_FIRST="$(printf '%s\n' "$USAGE_ERR" | head -n 1)"
+assert_eq "next-pick: mode must be parse|pick" "$USAGE_FIRST" "usage first stderr line unchanged"
+assert_contains "$USAGE_ERR" "--backlog" "usage names the parse --backlog example"
+assert_contains "$USAGE_ERR" "--candidates" "usage names the pick --candidates example"
+assert_eq "" "$(cat "$TEST_TMP/usage-out")" "usage writes nothing to stdout"
 node "$SCRIPT" parse --backlog "$AGE_BL" --today 2026-13-45 >/dev/null 2>&1
 assert_exit_code "$?" "2" "--today malformed is a usage error (exit 2)"
 node "$SCRIPT" parse --backlog "$AGE_BL" --today 18/10/2026 >/dev/null 2>&1

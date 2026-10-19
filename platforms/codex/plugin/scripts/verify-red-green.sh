@@ -466,6 +466,112 @@ REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO
 # path runs through a symlink (e.g. a symlinked TMPDIR) never matches "$REPO"/* below and a tracked
 # in-repo command is misclassified as external. Only the directory is resolved; a path genuinely
 # outside REPO stays outside it.
+# A test path that is a symlink in the HEAD tree is the same class of escape: the verifier
+# hashes and runs that commit, not the operator working tree. A link that exists only in
+# HEAD (absent from the working tree) must still be refused. Resolve the link with git
+# ls-tree / cat-file and pure string normalization — never readlink -f, never the filesystem.
+# Absolute targets and targets that climb above the repository root are refused. A relative
+# link that stays inside the repository is not refused. Each leading directory component is
+# checked the same way, so an intermediate symlink cannot hide an escape.
+# A symlink in the final component is followed the same way (a -> b -> ../x).
+# At most 40 symlink resolutions are attempted; a deeper chain or a cycle
+# (d -> d) is refused.
+normalize_head_symlink_target() {
+  local parent="$1" target="$2" combined seg
+  case "$target" in
+    /*)
+      printf '%s' "$target"
+      return 0
+      ;;
+  esac
+  if [[ -n "$parent" ]]; then
+    combined="${parent}/${target}"
+  else
+    combined="$target"
+  fi
+  local -a parts=() segs=()
+  local IFS=/
+  read -r -a segs <<< "$combined"
+  for seg in "${segs[@]}"; do
+    case "$seg" in
+      ""|".") ;;
+      "..")
+        if [[ ${#parts[@]} -eq 0 ]]; then
+          return 1
+        fi
+        unset 'parts[${#parts[@]}-1]'
+        ;;
+      *) parts+=("$seg") ;;
+    esac
+  done
+  local out="" p
+  for p in "${parts[@]}"; do
+    if [[ -n "$out" ]]; then
+      out="${out}/${p}"
+    else
+      out="$p"
+    fi
+  done
+  printf '%s' "$out"
+  return 0
+}
+
+refuse_test_path_escaping_repo() {
+  local rel="$1"
+  local rest="$rel" prefix="" component look line mode blob target parent norm rc
+  local hops=0
+  while [[ "$rest" == ./* ]]; do rest="${rest#./}"; done
+  rest="${rest#/}"
+  while [[ -n "$rest" ]]; do
+    component="${rest%%/*}"
+    if [[ "$rest" == */* ]]; then
+      rest="${rest#*/}"
+    else
+      rest=""
+    fi
+    [[ -z "$component" || "$component" == "." ]] && continue
+    if [[ "$component" == ".." ]]; then
+      err_usage "test path escapes repository via symlink: $rel -> $rel"
+    fi
+    if [[ -n "$prefix" ]]; then
+      look="${prefix}/${component}"
+    else
+      look="$component"
+    fi
+    line="$(git -C "$REPO" ls-tree "$HEAD_SHA" -- "$look" 2>/dev/null | head -n 1 || true)"
+    mode="${line%% *}"
+    if [[ "$mode" == "120000" ]]; then
+      hops=$((hops + 1))
+      if [[ "$hops" -gt 40 ]]; then
+        err_usage "test path symlink chain too deep or cyclic: $rel"
+      fi
+      blob="$(printf '%s\n' "$line" | awk '{print $3}')"
+      target="$(git -C "$REPO" cat-file -p "$blob" 2>/dev/null || true)"
+      target="${target%$'\n'}"
+      parent="$prefix"
+      rc=0
+      norm="$(normalize_head_symlink_target "$parent" "$target")" || rc=$?
+      if [[ "$rc" -ne 0 || "$norm" == /* ]]; then
+        err_usage "test path escapes repository via symlink: $rel -> ${norm:-$target}"
+      fi
+      if [[ -n "$rest" ]]; then
+        if [[ -n "$norm" ]]; then
+          rest="${norm}/${rest}"
+        fi
+      else
+        rest="$norm"
+      fi
+      prefix=""
+      continue
+    fi
+    if [[ -n "$prefix" ]]; then
+      prefix="${prefix}/${component}"
+    else
+      prefix="$component"
+    fi
+  done
+  return 0
+}
 if [[ "$VERIFY_CMD" == /* && -e "$VERIFY_CMD" ]]; then
   if _vc_dir="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd -P)"; then
     VERIFY_CMD="$_vc_dir/$(basename "$VERIFY_CMD")"
@@ -566,6 +672,9 @@ if [[ -z "$TEST_FILES" ]]; then
 fi
 
 mapfile -t TEST_FILE_ARRAY <<< "$TEST_FILES"
+for _test_file in "${TEST_FILE_ARRAY[@]}"; do
+  refuse_test_path_escaping_repo "$_test_file"
+done
 
 sha256_git_blob() {
   local commit="$1" path="$2"

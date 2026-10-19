@@ -951,6 +951,53 @@ GOOD_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$EXCL_PHASE" --branch work
 assert_exit_code "$GOOD_RC" "0" "case 14: canonical --min-reviewed-seats '1' is accepted and the otherwise-valid run still succeeds"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 16. Multi-seat ledger: --min-reviewed-seats equal to the reviewed-seat count is
+# accepted; a minimum above that count is refused with the script's real message.
+# GREEN-ON-BASE (coverage gap, no defect): both outcomes already hold at 2871a3c3a.
+# mutation check: flipped `reviewedCount < requiredMinSeats` to `>`; re-run went red:
+# case 16 above-count expected exit 1, got 0. Restored `<`.
+# ─────────────────────────────────────────────────────────────────────────────
+MS_PHASE="mseats"
+# Case 13 already advanced `work`; the checker requires the last chain head to be that tip.
+MS_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work)
+MS_DIFF=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD" "$MS_HEAD" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')
+write_range_json "$MS_PHASE" "1" "$GEN1_HEAD" "$MS_HEAD" "$MS_DIFF"
+MS_DISP_SHA=$(write_gen_artifacts "$MS_PHASE" "1")
+MS_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-$MS_PHASE/g1/findings.json")
+MS_SEAT_S0_SHA=$(write_seat_artifact "$MS_PHASE" "1" "s0")
+MS_SEAT_S1_SHA=$(write_seat_artifact "$MS_PHASE" "1" "s1")
+MS_CHAIN="[
+  {
+    \"generation\": 1,
+    \"base\": \"$GEN1_HEAD\",
+    \"head\": \"$MS_HEAD\",
+    \"status\": \"finalized\",
+    \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }, { \"id\": \"s1\", \"status\": \"reviewed\" }],
+    \"dispositions_sha256\": \"$MS_DISP_SHA\",
+    \"findings_sha256\": \"$MS_FINDINGS_SHA\",
+    \"seat_artifact_sha256\": { \"s0\": \"$MS_SEAT_S0_SHA\", \"s1\": \"$MS_SEAT_S1_SHA\" }
+  }
+]"
+mkdir -p "$LEDGER/review-$MS_PHASE"
+printf '%s\n' "$MS_CHAIN" > "$LEDGER/review-$MS_PHASE/chain.json"
+write_receipt_json "$MS_PHASE" "{
+  \"kind\": \"review\",
+  \"phase\": \"$MS_PHASE\",
+  \"branch\": \"work\",
+  \"phase_base_sha\": \"$GEN1_HEAD\",
+  \"chain\": $MS_CHAIN,
+  \"verdict\": \"SHIP-AS-IS\",
+  \"open_findings\": [],
+  \"resolved_from\": \"test\",
+  \"written_at\": \"2026-09-04T00:00:00Z\"
+}"
+MS_EQ_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$MS_PHASE" --branch work --phase-base "$GEN1_HEAD" --repo-root "$SCRATCH_REPO" --min-reviewed-seats "2" 2>&1); MS_EQ_RC=$?
+assert_exit_code "$MS_EQ_RC" "0" "case 16: --min-reviewed-seats equal to the reviewed seat count (2) is accepted"
+MS_HI_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase "$MS_PHASE" --branch work --phase-base "$GEN1_HEAD" --repo-root "$SCRATCH_REPO" --min-reviewed-seats "3" 2>&1); MS_HI_RC=$?
+assert_exit_code "$MS_HI_RC" "1" "case 16: --min-reviewed-seats above the reviewed seat count is refused"
+assert_contains "$MS_HI_OUT" "Generation 1 reviewed seats (2) below minimum required (3)" "case 16: refusal is the script's reviewed-seats minimum message"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Case 15 (v2.36.3, 7840hs report): an ABORTED generation followed by a finalized one is a valid
 # chain. Before the fix `status !== 'finalized'` rejected every aborted entry, so a branch that
 # moved during collection (the loop's own --help example) left the phase permanently

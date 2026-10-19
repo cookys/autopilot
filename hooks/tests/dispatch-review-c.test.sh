@@ -29,6 +29,10 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$CR_LAUNCH_LOG"
 if [ "${1:-}" = "--preflight" ] || grep -q -- '--preflight' < <(printf '%s\n' "$@"); then
   printf 'preflight\n' >> "$CR_LAUNCH_LOG"
+  if [ "${CR_PREFLIGHT_BLOCK:-0}" = "1" ]; then
+    printf 'blocked\n' >> "$CR_LAUNCH_LOG"
+    sleep 3
+  fi
   if [ "${CR_PREFLIGHT_RC:-0}" != "0" ]; then
     echo "${CR_PREFLIGHT_ERR:-preflight failed}" >&2
     exit "${CR_PREFLIGHT_RC}"
@@ -99,6 +103,62 @@ OUT="$(CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLI
 assert_eq "2" "$EXIT" "preflight failure is exit 2"
 assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "preflight stderr is named"
 assert_eq "0" "$(grep -cx launch "$CR_LAUNCH_LOG")" "failed preflight never calls launch mode"
+
+# RED at e70241da: FAIL preflight failure/success leave no cleanroom preflight temp: expected '1', got '0' (260 passed, 2 failed).
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+OUT="$(TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=2 CR_PREFLIGHT_ERR='userns blocked' \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "isolated preflight failure is exit 2"
+assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "isolated preflight stderr is named"
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "preflight failure leaves no cleanroom preflight temp"
+rm -rf "$PF_ISOLATED"
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+OUT="$(TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "isolated preflight success still reviews"
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "preflight success leaves no cleanroom preflight temp"
+rm -rf "$PF_ISOLATED"
+
+# TERM during the cleanroom preflight must reap the temp file, exit 143, and
+# return promptly. The launcher fixture sleeps a few seconds; bash must not
+# defer the signal until that child finishes.
+# RED at aa4a4e6b8: TERM during preflight exits 143: expected '143', got '0' (temp file was reaped and the deferred 3s sleep still finished within 5s)
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+SCRIPT_PID=""
+PF_T0=$SECONDS
+TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_BLOCK=1 \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" >/dev/null 2>&1 &
+SCRIPT_PID=$!
+PF_SEEN=""
+for _pf_i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | grep -q .; then
+    PF_SEEN=1
+    break
+  fi
+  sleep 0.1
+done
+assert_eq "1" "${PF_SEEN:-0}" "preflight temp exists before TERM"
+kill -TERM "$SCRIPT_PID" 2>/dev/null || true
+PF_EC=0
+wait "$SCRIPT_PID" 2>/dev/null || PF_EC=$?
+PF_DT=$((SECONDS - PF_T0))
+assert_eq "$PF_EC" "143" "TERM during preflight exits 143"
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "TERM during preflight leaves no cleanroom preflight temp"
+if [ "$PF_DT" -lt 5 ]; then PF_FAST=1; else PF_FAST=0; fi
+assert_eq "$PF_FAST" "1" "TERM during preflight finishes within 5 seconds (took ${PF_DT}s)"
+rm -rf "$PF_ISOLATED"
 
 # RED at base ceb7c81d: npm-wrapper layout was not a named gate
 CR_BADBIN="$TEST_TMP/codex-npm-wrapper"

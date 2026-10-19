@@ -387,9 +387,9 @@ function triggerKind(record) {
 
 function snapshotSection(outDir, rows) {
   const totals = {
-    "violations only": { kept: 0, lost: 0, gained: 0 },
-    "features only": { kept: 0, lost: 0, gained: 0 },
-    both: { kept: 0, lost: 0, gained: 0 }
+    "violations only": { persisted: 0, fixed: 0, introduced: 0 },
+    "features only": { persisted: 0, fixed: 0, introduced: 0 },
+    both: { persisted: 0, fixed: 0, introduced: 0 }
   };
   let verifyTurn = null;
   try {
@@ -431,18 +431,18 @@ function snapshotSection(outDir, rows) {
       const beforeSet = new Set(before);
       const afterSet = new Set(after);
       for (const item of beforeSet) {
-        if (afterSet.has(item)) totals[kind].kept++;
-        else totals[kind].lost++;
+        if (afterSet.has(item)) totals[kind].persisted++;
+        else totals[kind].fixed++;
       }
       for (const item of afterSet) {
-        if (!beforeSet.has(item)) totals[kind].gained++;
+        if (!beforeSet.has(item)) totals[kind].introduced++;
       }
     }
   }
-  const lines = ["features kept, lost and gained by retries"];
+  const lines = ["feature gaps persisted, fixed and introduced by retries"];
   for (const kind of ["violations only", "features only", "both"]) {
     const item = totals[kind];
-    lines.push(kind + ": kept=" + item.kept + " lost=" + item.lost + " gained=" + item.gained);
+    lines.push(kind + ": persisted=" + item.persisted + " fixed=" + item.fixed + " introduced=" + item.introduced);
   }
   return lines.join("\n") + "\n";
 }

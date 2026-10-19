@@ -616,12 +616,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
 - **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
-- **Trigger**: owner 回覆 d-94b98e67，加上 reconcile 報告乾淨
+- **Trigger**: reconcile 報告乾淨，加上 llm-playground repo 開好 auto-merge 和 required checks
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
-- **Context**: 2026-10-19: P1-P4a merged on both sides (feed v2 live). P4b left: reconcile report, qualification_registry key, importer --mode; bot-PR rule waits on owner d-94b98e67. See plan Progress.
+- **Context**: 2026-10-19: P1-P4a merged (feed v2 live). P4b left: reconcile, qualification_registry key, importer --mode. Decision A on d-94b98e67: auto-merge on green CI. See plan Progress.
 
 
 ### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）

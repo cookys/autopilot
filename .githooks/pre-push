@@ -89,6 +89,18 @@ PATHS_CSV="$("$RESOLVE" --field protected_paths 2>/dev/null || echo 'skills/,age
 EVIDENCE="$("$RESOLVE" --field evidence 2>/dev/null || echo trailer)"
 IFS=',' read -r -a PROTECTED <<< "$PATHS_CSV"
 
+# Outcome stage (opt-in). Resolved once; only this call shows resolver stderr
+# (hatch notice and unknown-value fallback). mode: off already returned above.
+OUTCOME="$("$RESOLVE" --field outcome || echo off)"
+OUTCOME_RERUN="$("$RESOLVE" --field outcome_rerun 2>/dev/null || echo sample)"
+OUTCOME_SAMPLE="$("$RESOLVE" --field outcome_sample 2>/dev/null || echo 20)"
+OUTCOME_BUDGET_S="$("$RESOLVE" --field outcome_budget_s 2>/dev/null || echo 600)"
+outcome_refused=0
+if [ "$OUTCOME" = "block" ] && [ "$OUTCOME_RERUN" = "none" ]; then
+  printf 'outcome gate: block needs a re-run; outcome_rerun none is warn-only. Treated as warn.\n' >&2
+  OUTCOME="warn"
+fi
+
 ZERO_RE='^0+$'   # all-zero sha = branch create (no remote sha) or delete
 violations=""
 
@@ -127,10 +139,53 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if ! has_evidence "$range"; then
       violations="${violations}  • ${local_ref:-HEAD} (${range}) touches a protected path with no QC-Verdict evidence\n"
     fi
+    if [ "$OUTCOME" != "off" ]; then
+      __oc_checker="$REPO_ROOT/scripts/check-test-outcome.js"
+      if ! command -v node >/dev/null 2>&1 || [ ! -f "$__oc_checker" ]; then
+        printf 'outcome gate: WARNING could not check (exit 127) - NOT enforced\n' >&2
+      else
+        __oc_out="$(mktemp)"
+        __oc_err="$(mktemp)"
+        env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX \
+          node "$__oc_checker" --root "$REPO_ROOT" --range "$range" --head "$local_sha" \
+          --rerun "$OUTCOME_RERUN" --sample "$OUTCOME_SAMPLE" --budget-s "$OUTCOME_BUDGET_S" \
+          >"$__oc_out" 2>"$__oc_err"
+        __oc_rc=$?
+        # A refuse always prints one JSON verdict. A crash (selector throws on load)
+        # is also exit 1 and has no verdict: that is "could not check", never a silent pass.
+        __oc_crashed=0
+        if [ "$__oc_rc" -eq 1 ] && ! grep -q '"verdict"' "$__oc_out" 2>/dev/null; then
+          __oc_crashed=1
+        fi
+        if [ "$__oc_crashed" -eq 1 ]; then
+          printf 'outcome gate: WARNING could not check (exit %s) - NOT enforced\n' "$__oc_rc" >&2
+          cat "$__oc_err" >&2
+        elif [ "$__oc_rc" -eq 0 ]; then
+          cat "$__oc_err" >&2
+        elif [ "$__oc_rc" -eq 1 ]; then
+          cat "$__oc_err" >&2
+          printf 'Deliberate bypass: AUTOPILOT_QC_OUTCOME=off for this stage, or git push --no-verify\n' >&2
+          if [ "$OUTCOME" = "block" ]; then
+            outcome_refused=1
+          else
+            printf '(outcome=warn, allowing the push)\n' >&2
+          fi
+        else
+          printf 'outcome gate: WARNING could not check (exit %s) - NOT enforced\n' "$__oc_rc" >&2
+          cat "$__oc_err" >&2
+        fi
+        rm -f "$__oc_out" "$__oc_err"
+      fi
+    fi
   fi
 done <<< "$__PUSH_STDIN"
 
-[ -z "$violations" ] && exit 0
+if [ -z "$violations" ]; then
+  if [ "$outcome_refused" -ne 0 ]; then
+    exit 1
+  fi
+  exit 0
+fi
 
 printf '\n\033[1mqc-gate: protected-path push without review evidence\033[0m\n' >&2
 printf '%b' "$violations" >&2
@@ -141,6 +196,9 @@ printf 'Deliberate bypass (logged by git): git push --no-verify\n\n' >&2
 
 if [ "$MODE" = "warn" ]; then
   printf '\033[33m(mode=warn — allowing the push)\033[0m\n\n' >&2
+  if [ "$outcome_refused" -ne 0 ]; then
+    exit 1
+  fi
   exit 0
 fi
 exit 1

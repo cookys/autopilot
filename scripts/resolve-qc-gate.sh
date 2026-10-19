@@ -14,9 +14,15 @@
 #   4. project-config-template/qc-gate-config.md  (shipped default)
 #   5. Fail-closed built-in: mode=block, protected_paths as below
 #
-# Output: JSON {mode, protected_paths, evidence, source}
+# Output: JSON {mode, protected_paths, evidence, source, outcome, outcome_rerun, outcome_sample, outcome_budget_s}
 #   mode ∈ {block, warn, off}; evidence ∈ {trailer, artifact, either}
 #   source ∈ {override, project-cwd, project-repo, template, fail-closed-default}
+#   outcome ∈ {off, warn, block}, default off. AUTOPILOT_QC_OUTCOME wins over the file.
+#   An unknown outcome value (file or env) resolves to off and names itself on stderr
+#   (opt-in fail-safe; mode still fails closed). AUTOPILOT_QC_OUTCOME=off while the file
+#   says warn or block prints one stderr line that the outcome stage is skipped.
+#   outcome_rerun ∈ {sample, all, none}, default sample (anything else → sample).
+#   outcome_sample: non-negative integer, default 20. outcome_budget_s: positive integer, default 600.
 #
 # Exit codes:
 #   0  success (JSON or --field value on stdout)
@@ -62,16 +68,56 @@ PATHS="$(printf '%s' "$PATHS" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g; s/^[[:s
 case "$MODE" in block|warn|off) ;; *) MODE="$DEF_MODE" ;; esac
 case "$EVIDENCE" in trailer|artifact|either) ;; *) EVIDENCE="$DEF_EVIDENCE" ;; esac
 
+# outcome is opt-in: unknown → off (the opposite of mode). Env wins over the file.
+FILE_OUTCOME="$(read_field "$CONFIG" outcome "")"
+OUTCOME="off"
+if [ -n "${AUTOPILOT_QC_OUTCOME+x}" ]; then
+  case "$AUTOPILOT_QC_OUTCOME" in
+    off|warn|block)
+      OUTCOME="$AUTOPILOT_QC_OUTCOME"
+      if [ "$AUTOPILOT_QC_OUTCOME" = "off" ] && { [ "$FILE_OUTCOME" = "warn" ] || [ "$FILE_OUTCOME" = "block" ]; }; then
+        printf 'resolve-qc-gate: outcome stage is skipped by AUTOPILOT_QC_OUTCOME=off\n' >&2
+      fi
+      ;;
+    *)
+      printf 'resolve-qc-gate: outcome value '\''%s'\'' is not off|warn|block; fell back to off\n' "$AUTOPILOT_QC_OUTCOME" >&2
+      OUTCOME="off"
+      ;;
+  esac
+else
+  case "$FILE_OUTCOME" in
+    ""|off) OUTCOME="off" ;;
+    warn|block) OUTCOME="$FILE_OUTCOME" ;;
+    *)
+      printf 'resolve-qc-gate: outcome value '\''%s'\'' is not off|warn|block; fell back to off\n' "$FILE_OUTCOME" >&2
+      OUTCOME="off"
+      ;;
+  esac
+fi
+
+OUTCOME_RERUN="$(read_field "$CONFIG" outcome_rerun "sample")"
+case "$OUTCOME_RERUN" in sample|all|none) ;; *) OUTCOME_RERUN="sample" ;; esac
+
+OUTCOME_SAMPLE="$(read_field "$CONFIG" outcome_sample "20")"
+[[ "$OUTCOME_SAMPLE" =~ ^[0-9]+$ ]] || OUTCOME_SAMPLE="20"
+
+OUTCOME_BUDGET_S="$(read_field "$CONFIG" outcome_budget_s "600")"
+[[ "$OUTCOME_BUDGET_S" =~ ^[1-9][0-9]*$ ]] || OUTCOME_BUDGET_S="600"
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     mode) printf '%s\n' "$MODE" ;;
     protected_paths) printf '%s\n' "$PATHS" ;;
     evidence) printf '%s\n' "$EVIDENCE" ;;
     source) printf '%s\n' "$SOURCE" ;;
+    outcome) printf '%s\n' "$OUTCOME" ;;
+    outcome_rerun) printf '%s\n' "$OUTCOME_RERUN" ;;
+    outcome_sample) printf '%s\n' "$OUTCOME_SAMPLE" ;;
+    outcome_budget_s) printf '%s\n' "$OUTCOME_BUDGET_S" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
-printf '{ "mode": "%s", "protected_paths": "%s", "evidence": "%s", "source": "%s" }\n' \
-  "$MODE" "$(json_escape "$PATHS")" "$EVIDENCE" "$SOURCE"
+printf '{ "mode": "%s", "protected_paths": "%s", "evidence": "%s", "source": "%s", "outcome": "%s", "outcome_rerun": "%s", "outcome_sample": %s, "outcome_budget_s": %s }\n' \
+  "$MODE" "$(json_escape "$PATHS")" "$EVIDENCE" "$SOURCE" "$OUTCOME" "$OUTCOME_RERUN" "$OUTCOME_SAMPLE" "$OUTCOME_BUDGET_S"

@@ -1,0 +1,49 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "bl0194-qualification-registry-2026-10-19",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "dad91e0d5fdcd7751a1734c18e1d65fa0853ea04df4906a7ebbd0116e65de818",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Folded: confirm mode uses the open-decision owner panel (one card per batch of new rows), persists confirmations.jsonl (record_id, seat, content digest, confirmed_at, card id), unconfirmed rows are unused when non-interactive, a changed content digest or new record_id needs reconfirmation, and every admission still passes the gate and the three invariants (Revision trust paragraph, sections 2 and 6 P6)."
+  },
+  {
+   "fingerprint": "ea95b06df12ee84f1c910df7f87827acd71f85248053e4239e7faf2d9bbbaeea",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Folded: P6 calls the shipped parseFeed(body, origin, bytes) in scripts/lib/qualification-feed.js (strict JSON, sha256 of the received wire bytes); the producer-advertised digest is advisory and not compared; the 30-day age check is extracted from build-qualification-defaults.js checkSnapshotAge into a shared pure function; any failure rejects the whole document, with a negative control on the real comparison (sections 2, 5, 6 P6)."
+  },
+  {
+   "fingerprint": "638f944d5248a2377c24d06d7df03de032dab692662c2cf8c9961f81879ac972",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Folded: exit-code table (0 qualified, 1 not qualified, 2 usage/precondition, 3 no_verdict or infrastructure, 4 invalid seat file, 5 emitted record fails schema/semantics; new codes only under --seat-file/--emit-record), seat-file schema schemas/qualification-seat.schema.json aligned to the strict identity tokens, record bound to validateRecord/checkRecordSemantics and recordIdV1 with its required fields, and a temp-HOME filesystem-snapshot test that fails on any write outside --store/--raw-dir including outbox enqueue (sections 4 and 6 P5)."
+  },
+  {
+   "fingerprint": "c6ce7d21d9a1142871eca6c090878fd088cb060fa8bdbeebc97e28b874c6cae0",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Folded: the unconditional hostile-document claim is removed; the plan states that under auto a compromised publisher can admit feed-only seats with fresh valid data as an accepted risk (owner can choose confirm or off), and a threat list maps forged feed, stolen producer, TLS/DNS substitution, back-dated generated_at and schema-valid-but-wrong payloads to the mechanism that bounds each (section 8)."
+  },
+  {
+   "fingerprint": "3f8774aee3d4334de2ea5346f6b6f89ad8883489a923d715aafabed44b1a51b3",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Folded: every P5 and P6 acceptance check now maps to a named negative control shown red before green, including bypassed and repeated confirmation, auto requiring adopt, off-mode feed influence (no-feed vs trust=off admitted set and ordering hash), collapsed exit codes, and a write outside the allowed directories (section 6)."
+  },
+  {
+   "fingerprint": "8b97d72223a95dab3db49b447069eef5daa861852bfa6d76bbb9bd900d67f658",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: confirm mode uses the open-decision owner panel (one card per batch of new rows), persists confirmations.jsonl (record_id, seat, content digest, confirmed_at, card id), unconfirmed rows are unused when non-interactive, a changed content digest or new record_id needs reconfirmation, and every admission still passes the gate and the three invariants (Revision trust paragraph, sections 2 and 6 P6)."
+  },
+  {
+   "fingerprint": "5b2828740228ab26d5242349bb567edb062482aae38690a3f395ba93e6b834f2",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: the unconditional hostile-document claim is removed; the plan states that under auto a compromised publisher can admit feed-only seats with fresh valid data as an accepted risk (owner can choose confirm or off), and a threat list maps forged feed, stolen producer, TLS/DNS substitution, back-dated generated_at and schema-valid-but-wrong payloads to the mechanism that bounds each (section 8)."
+  }
+ ]
+}

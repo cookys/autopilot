@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "bl0194-rev-g1",
+  "logical_plan_id": "bl0194-qualification-registry-2026-10-19",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "8fb49afc1c844fc5d1fde040b09c66c5a6f26f78a578123094be29b3cc97411c",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "fcc990786101c850d1c43d8ff0957857721aea131f9a7e88367b214ead588262",
+  "manifest_sha256": "2698c2801e6584fbfa394dda10e2341e19c89c699bc3e5a1ef93bd8036b41240",
+  "plan_sha256": "442a54ac5833d592ea2f51b206a650af3f98294cbf2440cb54dde655164d404b",
+  "growth_ratio": {
+    "numerator": 21347,
+    "denominator": 14937
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "8a458bb4f6bdfd6271610c0e6ca950f6d30ace1ad869d0fd3844ecb43ca09448"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "29f92a9741295a71609e4a31b3ad92ef482df22248574f4d67e4a4c09349e9a3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-vRGOFN/stdout",
+          "digest": "29f92a9741295a71609e4a31b3ad92ef482df22248574f4d67e4a4c09349e9a3"
+        },
+        "receipt_digest": "6a6e56291afb44219189d086eefcb00c82856f5c277241632a951a0c2cb04b71"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "73e489b26ef5c90d6d2636cb5ca2ee7c698dddac6e5fa3daa6fc779de6511192"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6d4b487dae77600098e5d633c892c7aa07fc0ea714fe3b2a0eff68c3811c48fc",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-cqFvrN",
+          "digest": "6d4b487dae77600098e5d633c892c7aa07fc0ea714fe3b2a0eff68c3811c48fc"
+        },
+        "receipt_digest": "a87eb67c504ff06bdd98f1cff87af83b2a5e7e1e9d4fd6cfe2b2646a83830553"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2 trust gate and P6 acceptance",
+      "claim": "The specified gate does not perform the promised schema validation before granting admission.",
+      "evidence": "P6 calls parseFeed for strict JSON, shape, and digest. The supplied parseFeed explicitly performs shallow validation: it accepts arbitrary numbered feed schemas and checks only that defaults, strikes, and priors are arrays. It does not validate qualification entries or the vendored schema. validateMetrics performs schema and semantic validation, but the plan does not include it in the admission gate.",
+      "evidence_reference": "Plan sections 2, 3, and 6 P6; supplied scripts/lib/qualification-feed.js parseFeed; supplied scripts/lib/qualification-metrics.js validateMetrics",
+      "repair": "Specify the exact admission document and compose the existing strict reader with its applicable schema and semantic validator before any row is used. Reject the entire document on any entry failure. Add controls for a shallow-shape-valid document containing an invalid qualification entry and an unsupported schema version.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "011d56700bc5a08e4b363e590c1463c3f49ac844ad2489cac733964bbf46e509"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 8 threat model, item 3",
+      "claim": "The plan incorrectly claims that computing a digest of received bytes limits TLS or DNS substitution.",
+      "evidence": "Threat item 3 credits the wire digest plus schema with limiting substitution. An attacker supplying a fresh, schema-valid replacement also supplies the bytes whose digest the consumer computes. parseFeed has no independent expected digest, and the plan explicitly excludes comparison with the advertised digest. The computed hash therefore cannot detect substitution during retrieval.",
+      "evidence_reference": "Plan sections 2 and 8 items 1–3; supplied scripts/lib/qualification-feed.js parseFeed digest computation",
+      "repair": "State that the wire digest detects cache changes only when checked against a previously recorded expected digest and provides no publisher authentication. Attribute transport protection to the existing HTTPS boundary, and explicitly classify successful transport substitution as the same accepted admission risk as a compromised publisher, bounded by local invariants and confirm or off.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8485569d88e9f4de306f32f778da52419b3e08431d3e264ab2dd772adc28f8cc"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2 digest gate and P6 tampered-cache negative control",
+      "claim": "The cache integrity comparison required by the acceptance test is not specified in the gate.",
+      "evidence": "The plan calls the computed wire hash an integrity check and requires a tampered byte to make the cached copy fail. However, parseFeed only returns the newly computed digest; it never compares it with an expected cache digest. The supplied metrics cache reader likewise validates cached content without comparing its hash against manifest.digest. A valid JSON edit can therefore pass the described operations.",
+      "evidence_reference": "Plan section 2 and section 6 P6 negative controls; supplied scripts/lib/qualification-feed.js parseFeed; supplied scripts/lib/qualification-metrics.js readCachedDocument",
+      "repair": "Define the expected digest as the recorded content-addressed cache identity and require equality with the hash of cached wire bytes on every admission read. Treat mismatch as whole-document rejection with a loud report. Distinguish this cache comparison from computing a new identity during initial retrieval.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d1c2557d9d9921a4a0a26fd8b99205613b57c634eb0ab46bc42927364de2fdd"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Section 6 phases table, P4b row",
+      "claim": "The P4b row in the phases table does not carry the parenthetical repo owner that the rest of the table uses, even though R7 requires every phase to state its owning repo.",
+      "evidence": "Other rows explicitly carry the owner label: 'P1 registry receives (llm-playground, M)', 'P5 headless contract (autopilot, M)', 'P6 feed trust (autopilot, S-M)', 'P7 intake qualification (llm-playground, S)'. The P4b row reads 'P4b residual pull (redefined; old switch cancelled)' with no owner; it is implicit in the prose only ('llm-playground's importer pulls that host's store and commits the record itself').",
+      "evidence_reference": "Section 6 phases table, P4b row.",
+      "repair": "Add the owner label to the P4b row, e.g. 'P4b residual pull (redefined; old switch cancelled) (llm-playground, S)' (or split autopilot-side vs llm-playground-side if two repos really share it), so every row in the table carries the same owner convention. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5f09daaa693f8da6925158be9f1e3983e684545a1c0490eddcad8fc5cd3d49ee"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Section 6 phases table, P5 and P6 negative-control cells",
+      "claim": "Several new checks in P5 and P6 have a fully described negative control but no short identifier of the form used elsewhere ('exit-codes-merged', 'write-outside-allowed-dirs', 'confirmation-bypass', 'confirm-twice', 'auto-needs-adopt', 'off-influences-result'); R10 calls for a named control per new check, so the missing names are a thinness rather than a gap.",
+      "evidence": "P5 names only 'exit-codes-merged' and 'write-outside-allowed-dirs'; the remaining items are stated in prose: 'A second import that creates another file for the same record_id is red', 'Ingesting a second record that collides on the secondary key is red', 'A record without transcript_hash, or with a record_id that is not recordIdV1, fails validation and is not imported'. P6 names 'confirmation-bypass', 'confirm-twice', 'auto-needs-adopt', 'off-influences-result'; the remaining items are stated in prose: 'A feed that would lift a local strike is rejected and the strike remains', 'A feed row does not overwrite local evidence for the same seat', 'A pin wins over the feed', 'Confirmation does not bypass those three'. The scenarios are concrete enough to implement; only the identifiers are missing.",
+      "evidence_reference": "Section 6 phases table, P5 negative-control cell and P6 negative-control cell.",
+      "repair": "Give each remaining control a short identifier consistent with the existing convention, for example 'import-duplicate-record', 'secondary-key-collision', 'record-id-mismatch', 'feed-lifts-local-strike', 'feed-overwrites-local-evidence', 'pin-wins-over-feed', 'confirmation-cannot-bypass-invariants'. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cd6eb731745aa72f3d2a1fb4a9afe78fd9b2ccd2d0fb10329108d8ab70fd0646"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "5f09daaa693f8da6925158be9f1e3983e684545a1c0490eddcad8fc5cd3d49ee",
+      "rubric_id": "R7",
+      "affected_surface": "Section 6 phases table, P4b row",
+      "claim": "The P4b row in the phases table does not carry the parenthetical repo owner that the rest of the table uses, even though R7 requires every phase to state its owning repo.",
+      "evidence_reference": "Section 6 phases table, P4b row.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cd6eb731745aa72f3d2a1fb4a9afe78fd9b2ccd2d0fb10329108d8ab70fd0646",
+      "rubric_id": "R10",
+      "affected_surface": "Section 6 phases table, P5 and P6 negative-control cells",
+      "claim": "Several new checks in P5 and P6 have a fully described negative control but no short identifier of the form used elsewhere ('exit-codes-merged', 'write-outside-allowed-dirs', 'confirmation-bypass', 'confirm-twice', 'auto-needs-adopt', 'off-influences-result'); R10 calls for a named control per new check, so the missing names are a thinness rather than a gap.",
+      "evidence_reference": "Section 6 phases table, P5 negative-control cell and P6 negative-control cell.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-19T15:54:39.153Z"
+}

@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "bl0194-rev-g1",
+  "logical_plan_id": "bl0194-qualification-registry-2026-10-19",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "8fb49afc1c844fc5d1fde040b09c66c5a6f26f78a578123094be29b3cc97411c",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "fcc990786101c850d1c43d8ff0957857721aea131f9a7e88367b214ead588262",
+  "manifest_sha256": "2698c2801e6584fbfa394dda10e2341e19c89c699bc3e5a1ef93bd8036b41240",
+  "plan_sha256": "7967338aec2a606d12a93600248918f1af1ba105c2c63494db18df108a29f4a8",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "ccd76d8013ac590777fb6e376cc8dbfbfb926ddc9b4fd88419b83c84cde11365"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "bd4d97fb58bd1e6ae4637f279602c3defdefe8ce8d53f82fafcdd964f1013753",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-QmfI6p/stdout",
+          "digest": "bd4d97fb58bd1e6ae4637f279602c3defdefe8ce8d53f82fafcdd964f1013753"
+        },
+        "receipt_digest": "d5089d289565bbbec121e32cef8ee50881583955303b09dfdef831e06d1a69f9"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "a9795d48406deee3ef95f05499df8f7f7e3bed6908af0c0c84d110da99a6a79e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "28c592d60f3cc96d9a41320081ced95ed49e8967b2aa28b61bd0b24b11d88dca",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-KSuBcV",
+          "digest": "28c592d60f3cc96d9a41320081ced95ed49e8967b2aa28b61bd0b24b11d88dca"
+        },
+        "receipt_digest": "df700771b9b1d40e57d4a1f33a85946fa606700babeab2ec8aa3ba0549df2948"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2 and P6 confirm-mode admission",
+      "claim": "Confirm mode lacks the interaction and persistence contract required to implement confirmation once.",
+      "evidence": "The plan says a new feed row prompts once but does not name the prompt surface, behavior without an interactive user, confirmation storage, or the identity that binds a confirmation to a row. It therefore leaves renewed or changed rows and repeated invocations ambiguous.",
+      "evidence_reference": "Revision trust paragraph; section 2 trust constraint; section 6 P6 acceptance",
+      "repair": "Specify where confirmation appears, noninteractive behavior, the persisted confirmation fields and storage location, and which row changes require confirmation again. Require confirmation to remain subject to the gate and local invariants on every admission.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dad91e0d5fdcd7751a1734c18e1d65fa0853ea04df4906a7ebbd0116e65de818"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P6 runtime gate and shipped P4a preflight reuse",
+      "claim": "The gate is named but its reusable implementation and digest comparison are not specified.",
+      "evidence": "The plan calls the gate the P4a preflight without identifying the shared callable or extraction boundary. The supplied feed reader explicitly distinguishes the wire-byte digest from an advertised producer-internal digest and allows them to differ. A generic bad-digest rejection could therefore reject valid published feeds or check the wrong value.",
+      "evidence_reference": "Sections 2 and 5; section 6 P6; scripts/lib/qualification-feed.js parseFeed",
+      "repair": "Identify the shipped P4a implementation to reuse or extract, name the exact bytes and expected digest source it verifies, and route runtime admission through that shared implementation. Specify whole-document rejection and a negative control for the actual comparison.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ea95b06df12ee84f1c910df7f87827acd71f85248053e4239e7faf2d9bbbaeea"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P5 headless interface consumed by P7",
+      "claim": "P5 promises a stable contract without defining its exit-code mapping, seat-file schema source, or complete emitted-record contract.",
+      "evidence": "P5 requires distinct documented exit codes but supplies no values. It introduces --seat-file without a schema reference. It names schema 2 and transcript_hash without binding emitted output to the existing record schema and its required fields. The temp-home acceptance checks scorecard and outbox effects rather than proving writes are confined to the two allowed directories.",
+      "evidence_reference": "Revision facts; section 4 primary path; section 6 P5; scripts/lib/qualification-metrics.js validateRecord and checkRecordSemantics",
+      "repair": "Define numeric exit codes including qualification failure, identify the canonical seat-file schema, reference the accepted schema-2 record schema and identity rules, and require a temp-home boundary test that detects every write outside --store and --raw-dir, including outbox enqueue.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "638f944d5248a2377c24d06d7df03de032dab692662c2cf8c9961f81879ac972"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2 auto-trust security model and section 8 risks",
+      "claim": "The plan overstates protection against hostile documents and omits the residual admission authority granted to a compromised publisher.",
+      "evidence": "Section 2 says a hostile document does not change admission, while auto mode intentionally admits from a gate-passed remote qualification. Schema, freshness and a cache-key digest cannot distinguish a fresh, well-formed fabricated qualification from a legitimate one. Section 8 discusses gate-failed feeds but not malicious feeds that pass.",
+      "evidence_reference": "Section 2 ADR-0001 and gate constraints; section 6 P6; section 8; scripts/lib/qualification-feed.js trust posture and digest comments",
+      "repair": "State explicitly that a compromised publisher can admit otherwise unqualified feed-only seats using fresh valid data. Explain that the gate bounds malformed, stale and integrity-mismatched inputs while local evidence, strikes and pins bound overrides; remove the unconditional hostile-document claim.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c6ce7d21d9a1142871eca6c090878fd088cb060fa8bdbeebc97e28b874c6cae0"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P5 and P6 acceptance-to-negative-control coverage",
+      "claim": "The listed negative controls do not cover every new P5 and P6 check.",
+      "evidence": "P6 has rejection and precedence examples but no named red control for off/no-feed byte parity, auto admission without adopt, or confirmation occurring once and being required before admission. P5 lacks named red controls for exit-code distinctions and the complete two-directory write boundary.",
+      "evidence_reference": "Section 2 negative-control constraint; section 6 P5 and P6 acceptance and negative-control columns",
+      "repair": "Map each new acceptance check to a named negative control and require observed red before green, including bypassed confirmation, repeated confirmation, disabled auto admission, off-mode feed influence, collapsed exit codes, and an injected write outside the allowed directories.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3f8774aee3d4334de2ea5346f6b6f89ad8883489a923d715aafabed44b1a51b3"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P6 acceptance cell and the trust-modes paragraph in Revision 2026-10-19; specifically the confirm-mode prompt surface and the recorded consent artifact.",
+      "claim": "The plan does not name where the confirm-mode one-time prompt appears in the autopilot surface (engine-scorecard status path, ordering lookup path, or interactive TTY during admit), nor what artifact is persisted once the user confirms — for example a per-row consent sidecar in the qualification-feeds cache, a manifest flag keyed by record_id, or a dedicated consent log. It also asserts only in narrative prose that trust=off matches no-feed admission byte-for-byte rather than naming a comparison test or harness.",
+      "evidence": "Revision 2026-10-19 trust paragraph says confirm asks the user once when a new feed row appears and uses it only after that confirmation, with no adopt command — no surface name, no recorded artifact. P6 acceptance says off matches no-feed admission byte for byte — no regression harness named; Section 5 read-side repeats the off byte-identity claim as a behavior statement without naming the test that proves it.",
+      "evidence_reference": "PLAN: Revision 2026-10-19 paragraph beginning Trust this revision sets (sections 1, 2, and 5 match it); Section 5 Read side; Section 6 P6 row Acceptance column.",
+      "repair": "Add to P6 acceptance (Section 6) and the trust paragraph in Revision 2026-10-19: (a) for confirm, name the prompt surface (e.g. engine-scorecard status output or a TTY prompt during ordering lookup) and the persisted artifact (e.g. a per-row consent entry in the qualification-feeds cache manifest sidecar or a dedicated confirmations.jsonl keyed by record_id and seat) so admission cannot use the row if the consent is lost or the sidecar is missing; (b) for off, name a regression test that runs the same admission path under no-feed and under trust=off and compares both the admitted set and the ordering hash. No current code change required; this is a plan-only addition that makes the trust modes precise enough to implement.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8b97d72223a95dab3db49b447069eef5daa861852bfa6d76bbb9bd900d67f658"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 2 constraints on gate behavior, Section 8 Risks, and Section 6 P6 row — the security-of-auto-trust argument.",
+      "claim": "Section 2 states only that a hostile or stale document does not change admission, and Section 8 names one gate-failure risk; the plan never enumerates the specific attacker or broken-publisher scenarios once trust=auto is the default — for example a forged feed qualifying an attacker-chosen seat, a stolen producer key shipping a believable v2 artifact, a DNS or TLS substitution landing the wrong bytes, or a feed lying about its own generated_at — and never maps each scenario to which of the gate, digest, 30-day freshness, or invariants actually bounds it.",
+      "evidence": "Section 2 gate paragraph says Any failure is treated as no feed and is reported loudly. A hostile or stale document does not change admission — only one vague threat mentioned. Section 8 Risks lists A gate-failed feed treated as authority (P6 negative: admission unchanged, loud report) as a single bullet; no threat enumeration, no per-mechanism bound mapping. P6 negative controls enumerate what the gate rejects, not the threat model those rejections guard against, and section 7 names leak classes without naming an attacker.",
+      "evidence_reference": "PLAN: Section 2 paragraph beginning The gate is the P4a preflight; Section 8 Risks bullet A gate-failed feed treated as authority; Section 6 P6 row Negative controls; Section 7 Disclosure gate.",
+      "repair": "Add a short threat-model subsection (in Section 2 just after the gate bullet, or in Section 8 as a numbered list) that names at least: (1) forged feed qualifying an attacker-chosen seat — bounded by local-evidence and pin invariants plus 30-day freshness preflight; (2) stolen or compromised producer key shipping a plausible v2 artifact — bounded by content-addressed digest cache key plus 30-day freshness, with the caveat that digest_basis is advisory and not a wire-byte hash; (3) TLS substitution or DNS hijack landing wrong bytes — bounded by content-addressed digest of received bytes; (4) stale published artifact with a back-dated generated_at — bounded by 30-day freshness preflight; (5) gate-bypass attempts such as schema-correct but semantically wrong payloads — bounded by strict JSON, vendor schema parity test, and the disclosure gate in Section 7. No code change required; this is a documentation addition that makes the gate, digest, and invariants map to specific threats.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5b2828740228ab26d5242349bb567edb062482aae38690a3f395ba93e6b834f2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "8b97d72223a95dab3db49b447069eef5daa861852bfa6d76bbb9bd900d67f658",
+      "rubric_id": "R2",
+      "affected_surface": "P6 acceptance cell and the trust-modes paragraph in Revision 2026-10-19; specifically the confirm-mode prompt surface and the recorded consent artifact.",
+      "claim": "The plan does not name where the confirm-mode one-time prompt appears in the autopilot surface (engine-scorecard status path, ordering lookup path, or interactive TTY during admit), nor what artifact is persisted once the user confirms — for example a per-row consent sidecar in the qualification-feeds cache, a manifest flag keyed by record_id, or a dedicated consent log. It also asserts only in narrative prose that trust=off matches no-feed admission byte-for-byte rather than naming a comparison test or harness.",
+      "evidence_reference": "PLAN: Revision 2026-10-19 paragraph beginning Trust this revision sets (sections 1, 2, and 5 match it); Section 5 Read side; Section 6 P6 row Acceptance column.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5b2828740228ab26d5242349bb567edb062482aae38690a3f395ba93e6b834f2",
+      "rubric_id": "R9",
+      "affected_surface": "Section 2 constraints on gate behavior, Section 8 Risks, and Section 6 P6 row — the security-of-auto-trust argument.",
+      "claim": "Section 2 states only that a hostile or stale document does not change admission, and Section 8 names one gate-failure risk; the plan never enumerates the specific attacker or broken-publisher scenarios once trust=auto is the default — for example a forged feed qualifying an attacker-chosen seat, a stolen producer key shipping a believable v2 artifact, a DNS or TLS substitution landing the wrong bytes, or a feed lying about its own generated_at — and never maps each scenario to which of the gate, digest, 30-day freshness, or invariants actually bounds it.",
+      "evidence_reference": "PLAN: Section 2 paragraph beginning The gate is the P4a preflight; Section 8 Risks bullet A gate-failed feed treated as authority; Section 6 P6 row Negative controls; Section 7 Disclosure gate.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-19T15:43:00.718Z"
+}

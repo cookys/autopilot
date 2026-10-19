@@ -1,0 +1,37 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "bl0194-qualification-registry-2026-10-19",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "011d56700bc5a08e4b363e590c1463c3f49ac844ad2489cac733964bbf46e509",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted at the generation cap (depth-0 adjudication) and folded: admission reads qualification-metrics.json (model-dyno.qualification-metrics.v2); before any row is used the whole document passes validateMetrics with semantics on and each record passes validateRecord; any entry failure rejects the whole document; controls well-formed-with-one-bad-qualification-entry and unsupported-schema-version (plan lines 24, 49, 110)."
+  },
+  {
+   "fingerprint": "8485569d88e9f4de306f32f778da52419b3e08431d3e264ab2dd772adc28f8cc",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted and folded: the wire digest is described as cache-alteration detection only against the recorded expected digest, with no publisher authentication; transport protection is the HTTPS boundary; a successful substitution is the same accepted auto risk as a compromised publisher, bounded by the local invariants and confirm/off (section 8 threat list, lines 115-126)."
+  },
+  {
+   "fingerprint": "8d1c2557d9d9921a4a0a26fd8b99205613b57c634eb0ab46bc42927364de2fdd",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted and folded: the expected digest is the recorded content-addressed cache identity; every admission read rehashes the cached wire bytes and compares; mismatch rejects the whole document loudly; distinguished from computing a new identity at first download; control cache-bytes-tampered-after-download (lines 49, 110, 120, 126)."
+  },
+  {
+   "fingerprint": "5f09daaa693f8da6925158be9f1e3983e684545a1c0490eddcad8fc5cd3d49ee",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Accepted and folded: the P4b row carries its owner label (line 112)."
+  },
+  {
+   "fingerprint": "cd6eb731745aa72f3d2a1fb4a9afe78fd9b2ccd2d0fb10329108d8ab70fd0646",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Accepted and folded: the remaining P5/P6 negative controls have short names (feed-lifts-local-strike, feed-overwrites-local-evidence, pin-wins-over-feed, confirmation-cannot-bypass-invariants, import-duplicate-record; lines 109-110)."
+  }
+ ]
+}

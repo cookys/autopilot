@@ -7,16 +7,24 @@
  * BACKLOG is a queue → a plan is the project for campaign work → a 🔵 review finding
  * never becomes a BACKLOG row. This gate enforces the first two mechanically:
  *
- *   backlog_row_has_plan          row Pointer resolves to ANY path whose stem belongs to a
- *                                 plan that exists — the plan file itself, a sidecar
+ *   backlog_row_has_plan          row Pointer resolves to a path whose stem belongs to a
+ *                                 SHIPPED plan — the plan file itself, a sidecar
  *                                 (`docs/plans/<stem>.<tag>.md`), or anything under its
- *                                 `docs/plans/evidence/<stem>/` dir — checked against both
- *                                 docs/plans/<stem>.md and docs/plans/_archive/<stem>.md
- *                                 ("archived or not"). The violation reports the matched stem.
+ *                                 `docs/plans/evidence/<stem>/` dir. Shipped means the plan
+ *                                 exists under docs/plans/_archive (dated or legacy, via
+ *                                 findExistingArchivedPlan), OR the plan is at top-level
+ *                                 docs/plans and its stem or slug is mentioned in a released
+ *                                 (non-Unreleased) CHANGELOG section (planMentioned, same
+ *                                 pointer variants as plan_released_not_archived). An open
+ *                                 row whose Pointer resolves only to an unshipped top-level
+ *                                 plan is that plan's tracking row: not a violation. The
+ *                                 violation carries the matched stem and the shipped evidence.
  *   backlog_row_done              row Status starts with shipped/dropped
  *   backlog_title_closed_status_open
  *                                 title contains ~~, CLOSED, SHIPPED, FIXED v, or LANDED
- *                                 but Status is still open
+ *                                 but Status is still open. Still blocking. REPORT-ONLY for
+ *                                 --fix: the row is listed and blocks the exit, and --fix
+ *                                 never deletes it.
  *   plan_released_not_archived    a docs/plans/*.md whose full stem or slug (stem minus
  *                                 leading date) is mentioned in a released (non-"Unreleased")
  *                                 `## v…` CHANGELOG.md section, bounded on both sides by a
@@ -33,11 +41,11 @@
  *                                 (a live campaign lineage with a frozen source sha) —
  *                                 implicitly excluded from plan_released_not_archived;
  *                                 moving it would invalidate the frozen sha
- *   peer_row_unanswered           a row --fix would delete (backlog_row_has_plan /
- *                                 backlog_row_done / backlog_title_closed_status_open) is
+ *   peer_row_unanswered           a row that would otherwise be backlog_row_has_plan /
+ *                                 backlog_row_done / backlog_title_closed_status_open is
  *                                 Origin: peer with a Reply of none/unknown/missing, and its
  *                                 Id is not written in the plan it points to. Reported
- *                                 INSTEAD of the deletable code, so --fix never deletes it:
+ *                                 INSTEAD of those codes, so --fix never deletes it:
  *                                 reply to the reporter first, or name the Id in the plan
  *   plan_reference_dangling       report-only, non-blocking: a tracked file (*.md, *.json,
  *                                 *.sh, *.js — excluding CHANGELOG.md and docs/BACKLOG.md,
@@ -50,8 +58,8 @@
  *                                 working tree (committed or not). Without the marker the next
  *                                 writing pass rewrites the evidence it froze (BL-0191)
  *
- * --fix deletes the offending BACKLOG rows (backlog_row_has_plan, backlog_row_done,
- * backlog_title_closed_status_open) — plus any `docs/backlog/<x>.md` note a deleted row
+ * --fix deletes the offending BACKLOG rows (backlog_row_has_plan for a shipped plan,
+ * backlog_row_done) — never backlog_title_closed_status_open — plus any `docs/backlog/<x>.md` note a deleted row
  * mentioned that no remaining BACKLOG text still names — and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
  * into docs/plans/_archive/, preserving names. A stem's move is all-or-nothing: every
@@ -73,7 +81,16 @@
  * Usage:
  *   node scripts/check-plan-graduation.js
  *     [--repo-root <dir>] [--backlog <file>] [--changelog <file>] [--plans-dir <dir>]
- *     [--allowlist <file>] [--fix] [--json]
+ *     [--allowlist <file>] [--fix] [--receipt <path>] [--json]
+ *
+ * --receipt <path>: with --fix, write the deletion receipts (and any refusals) as JSON
+ *   at <path>. Each receipt is a row --fix actually removed: Id (or null), title, rule
+ *   code, and basis (Status for backlog_row_done; plan path plus shipped evidence for
+ *   backlog_row_has_plan). A row with no basis is not deleted; it is listed under
+ *   fix.refused. The same arrays are on the stdout payload as fix.receipts and
+ *   fix.refused. When --receipt is omitted and --fix removed at least one row, the file
+ *   is os.tmpdir()/plan-graduation-fix-receipt-<timestamp>.json and its path is
+ *   fix.receipt_path.
  *
  * --allowlist <file>: a JSON file holding an array of plan stems (e.g.
  *   "2026-09-19-roundtable") to exclude from plan_released_not_archived and
@@ -113,6 +130,7 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
@@ -141,7 +159,7 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-plan-graduation.js [--repo-root <dir>] ' +
     '[--backlog <file>] [--changelog <file>] [--plans-dir <dir>] ' +
-    '[--allowlist <file>] [--frozen-base <git-ref>] [--fix] [--json]\n' +
+    '[--allowlist <file>] [--frozen-base <git-ref>] [--fix] [--receipt <path>] [--json]\n' +
     '   or: node scripts/check-plan-graduation.js --register-template <stem> [--repo-root <dir>]\n' +
     '   or: node scripts/check-plan-graduation.js --archive <stem> [--archive <stem>...] ' +
     '[--shipped-in <version-or-sha> | --shipped-in <stem>=<version-or-sha>[,<stem>=<sha>...]...] ' +
@@ -161,6 +179,7 @@ function parseArgs(argv) {
     allowlist: null,
     frozenBase: null,
     fix: false,
+    receipt: null,
     json: false,
     registerTemplate: null,
     archive: [],
@@ -184,6 +203,7 @@ function parseArgs(argv) {
       if (out.frozenBase.startsWith('-')) usage(2); // a ref, never a git option (`--output=<path>` would write a file)
     }
     else if (a === '--fix') out.fix = true;
+    else if (a === '--receipt') out.receipt = need();
     else if (a === '--json') out.json = true;
     else if (a === '--register-template') out.registerTemplate = need();
     else if (a === '--archive') out.archive.push(need());
@@ -948,6 +968,45 @@ function planReferenced(repoRoot, plansDir, backlogText, changelogText, stem, sl
   return false;
 }
 
+// Shipped plan for a BACKLOG Pointer stem. Returns the plan path plus the evidence
+// (archived path, or a released-changelog match) or null when the plan is missing or
+// only an unshipped top-level file. Same predicate as plan_released_not_archived for
+// the changelog half: planMentioned(releasedText, stem, slug, pointerVariants).
+function shippedPlanDecision(repoRoot, stem, releasedText) {
+  const plansRoot = path.join(repoRoot, 'docs', 'plans');
+  const archived = findExistingArchivedPlan(path.join(plansRoot, '_archive'), stem);
+  if (archived) {
+    const rel = path.relative(repoRoot, archived).split(path.sep).join('/');
+    return { plan_path: rel, shipped: { archived_path: rel } };
+  }
+  const basename = `${stem}.md`;
+  if (!fs.existsSync(path.join(plansRoot, basename))) return null;
+  const pointerVariants = [
+    `docs/plans/${basename}`,
+    `docs/plans/_archive/${basename}`,
+  ];
+  if (planMentioned(releasedText || '', stem, planSlug(stem), pointerVariants)) {
+    return {
+      plan_path: `docs/plans/${basename}`,
+      shipped: { released_changelog: true },
+    };
+  }
+  return null;
+}
+
+// Basis required before --fix may delete a row. No basis → refuse, do not delete.
+function deletionBasis(v) {
+  if (v.code === 'backlog_row_done') {
+    if (!v.status) return null;
+    return { status: v.status };
+  }
+  if (v.code === 'backlog_row_has_plan') {
+    if (!v.plan_path || !v.shipped) return null;
+    return { plan_path: v.plan_path, shipped: v.shipped };
+  }
+  return null;
+}
+
 // --- main check ---
 
 function run(opts) {
@@ -976,20 +1035,24 @@ function run(opts) {
         code: 'backlog_row_done',
         kind: 'backlog_row',
         title: row.title,
+        id: row.id || null,
+        status: row.status,
         detail: `Status: ${row.status}`,
       });
     } else if (row.pointer && row.pointer !== 'none') {
       const stem = planStemForPointer(row.pointer);
       if (stem) {
-        const planExists = fs.existsSync(path.join(repoRoot, 'docs', 'plans', `${stem}.md`))
-          || Boolean(findExistingArchivedPlan(path.join(repoRoot, 'docs', 'plans', '_archive'), stem));
-        if (planExists) {
+        const shipped = shippedPlanDecision(repoRoot, stem, releasedText);
+        if (shipped) {
           violations.push({
             code: 'backlog_row_has_plan',
             kind: 'backlog_row',
             title: row.title,
+            id: row.id || null,
             stem,
-            detail: `Pointer: ${row.pointer} -> plan docs/plans/${stem}.md`,
+            plan_path: shipped.plan_path,
+            shipped: shipped.shipped,
+            detail: `Pointer: ${row.pointer} -> shipped plan ${shipped.plan_path}`,
           });
         }
       }
@@ -1122,21 +1185,40 @@ function mentionsBasename(text, name) {
 // back to the backlog's own directory), so the note path is never computed from undefined.
 function fixBacklog(backlogPath, violations, repoRootArg) {
   const root = repoRootArg || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
-  const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done', 'backlog_title_closed_status_open']);
-  const doomed = violations.filter((v) => v.kind === 'backlog_row' && rowCodes.has(v.code));
-  if (!doomed.length) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
-  const { text, rows } = collectBacklogRows(backlogPath);
-  if (text == null) return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
-  const doomedTitles = new Set(doomed.map((v) => v.title));
+  const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done']);
+  const peerTitles = new Set();
   // Belt and braces: a title run() flagged peer_row_unanswered is never deleted, whatever else it hit.
-  for (const v of violations) if (v.code === 'peer_row_unanswered') doomedTitles.delete(v.title);
+  for (const v of violations) if (v.code === 'peer_row_unanswered') peerTitles.add(v.title);
+  const eligible = new Map();
+  const refused = [];
+  for (const v of violations) {
+    if (v.kind !== 'backlog_row' || !rowCodes.has(v.code)) continue;
+    if (peerTitles.has(v.title)) continue;
+    const basis = deletionBasis(v);
+    if (!basis) {
+      refused.push({ id: v.id || null, title: v.title, code: v.code, reason: 'no basis' });
+      continue;
+    }
+    if (!eligible.has(v.title)) {
+      eligible.set(v.title, { id: v.id || null, title: v.title, code: v.code, basis });
+    }
+  }
+  const none = { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [], receipts: [], refused };
+  if (!eligible.size) return none;
+  const { text, rows } = collectBacklogRows(backlogPath);
+  if (text == null) return none;
+  const doomedTitles = new Set(eligible.keys());
   let out = text;
   const removed = [];
+  const receipts = [];
   for (const row of rows) {
     if (!doomedTitles.has(row.title)) continue;
     if (row.text && out.includes(row.text)) {
       out = out.replace(row.text, '');
       removed.push(row.title);
+      const spec = eligible.get(row.title);
+      const id = row.id || spec.id || null;
+      receipts.push({ id: id || null, title: row.title, code: spec.code, basis: spec.basis });
     }
   }
   if (out !== text) {
@@ -1168,9 +1250,9 @@ function fixBacklog(backlogPath, violations, repoRootArg) {
         sidecarErrors.push(`${abs}: ${e.message}`);
       }
     }
-    return { changed: true, removed, sidecars_removed: sidecarsRemoved, sidecar_errors: sidecarErrors };
+    return { changed: true, removed, sidecars_removed: sidecarsRemoved, sidecar_errors: sidecarErrors, receipts, refused };
   }
-  return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
+  return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [], receipts: [], refused };
 }
 
 // gitMv NEVER clobbers an existing destination (🟠 fix: a plain fs.renameSync fallback
@@ -1710,7 +1792,9 @@ function main() {
   }
 
   const preFix = run(opts);
-  let backlogFix = { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [] };
+  let backlogFix = {
+    changed: false, removed: [], sidecars_removed: [], sidecar_errors: [], receipts: [], refused: [], receipt_path: null,
+  };
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
   let finalResult = preFix;
   if (opts.fix) {
@@ -1727,6 +1811,18 @@ function main() {
     // plan_released_not_archived violation IS re-derivable and will already be back in
     // finalResult.violations for that stem; this adds the more specific reason).
     finalResult.violations = finalResult.violations.concat(plansFix.blocked);
+    const receipts = backlogFix.receipts || [];
+    const refused = backlogFix.refused || [];
+    let receiptPath = null;
+    if (opts.receipt) receiptPath = path.resolve(opts.receipt);
+    else if (receipts.length) {
+      receiptPath = path.join(os.tmpdir(), `plan-graduation-fix-receipt-${Date.now()}.json`);
+    }
+    if (receiptPath) {
+      fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
+      fs.writeFileSync(receiptPath, `${JSON.stringify({ receipts, refused })}\n`);
+    }
+    backlogFix.receipt_path = receiptPath;
   }
 
   const blocking = finalResult.violations.filter((v) => BLOCKING_CODES.has(v.code));
@@ -1747,6 +1843,9 @@ function main() {
       backlog_sidecar_errors: backlogFix.sidecar_errors,
       plans_moved: plansFix.moved,
       references_rewritten: plansFix.referencesRewritten,
+      receipts: backlogFix.receipts || [],
+      refused: backlogFix.refused || [],
+      receipt_path: backlogFix.receipt_path || null,
     } : undefined,
   };
 

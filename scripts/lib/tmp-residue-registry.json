@@ -734,6 +734,13 @@
       "reason": "external: Chromium singleton dirs from headless browsers run by other tools; not created by autopilot; never pruned"
     },
     {
+      "pattern": "plan-graduation-fix-receipt-*",
+      "kind": "scratch",
+      "owner": "scripts/check-plan-graduation.js",
+      "retention_days": null,
+      "reason": "--fix default receipt when --receipt is omitted and at least one BACKLOG row was deleted"
+    },
+    {
       "pattern": "gitconfig-containment.*",
       "kind": "scratch",
       "owner": "scripts/lib/gitconfig-containment.sh",

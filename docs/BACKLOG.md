@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0234 -->
+<!-- next-id: BL-0240 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -969,3 +969,90 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-07-05 orchestrator-economy; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/official-codex-plugin-peer-consult-spike.md
 - **Context**: Consult channel shipped. No follow-up row for review calibration or the rescue write sandbox posture.
+
+### PostToolUse dispatch dies after /clear
+- **Id**: BL-0234
+- **Status**: open
+- **Since**: 2026-05-14
+- **Origin**: self
+- **Problem**: 清掉對話之後，工具用完的回呼就不再觸發，必須整個程式重開。說明已寫好，自動偵測與向上游回報都還沒做。
+- **Impact**: 長時間工作階段在清空後，紀錄與稽核會靜默停住，使用者不知道。
+- **Trigger**: Next report that intent, audit, or reload watch stops updating in a long session, or hook-dispatch notes change
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-05-14 v2.7.2 post-clear diagnostic; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/posttooluse-dispatch-dies-after-clear.md
+- **Context**: Docs shipped in v2.8.1. Detection spike and the upstream report were never done.
+
+### Investigate the /reload-plugins hook count discrepancy
+- **Id**: BL-0235
+- **Status**: open
+- **Since**: 2026-05-14
+- **Origin**: self
+- **Problem**: 重新載入外掛時，畫面上的掛鉤數量和實際清單差兩筆。功能仍正常，這項外觀調查從未做完。
+- **Impact**: 數量對不上會讓人誤判掛鉤沒載入，功能本身沒壞。
+- **Trigger**: Next time someone writes reload-watch logic, or a Claude Code update changes hook reload semantics
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-05-14 v2.7.2 reload verification; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/reload-plugins-hook-count-discrepancy.md
+- **Context**: Reported 11 hooks while the file had 13. Live hooks still fired. Cosmetic only.
+
+### Upstream report for agy install symlinked-destination truncation
+- **Id**: BL-0236
+- **Status**: open
+- **Since**: 2026-06-11
+- **Origin**: owner
+- **Problem**: 安裝時若目的地是符號連結，會把來源檔案截成空檔。防護已出貨，向上游回報仍要擁有者同意才能送。
+- **Impact**: 上游不知道這個會清掉檔案的行為，別人的安裝仍可能踩到。
+- **Trigger**: Before the next agy plugin install of autopilot in the fleet, or the next hardening slot; owner must send the report
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: 2026-06-11 incident plus sandbox repro; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/agy-install-symlinked-dest-upstream-report.md
+- **Context**: Guard shipped in v2.15.1. The upstream report still needs the owner account and identity consent.
+
+### Move large dispatch calibration scratch off the quota path
+- **Id**: BL-0237
+- **Status**: open
+- **Since**: 2026-07-13
+- **Origin**: self
+- **Problem**: 大型校準暫存仍寫在有配額的暫存區。其餘清理已出貨。沒有找到還會產生這類目錄的腳本，可能已不存在。
+- **Impact**: 配額再次被大型暫存撐滿時，整機指令會因磁碟配額假死。
+- **Trigger**: Next calibration.sh or swe-calibrate large clone, or when per-user temporary usage grows again
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-07-13 usrquota diagnosis; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
+- **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist.
+
+### Engine implement-review with verify_pass=false does not block
+- **Id**: BL-0238
+- **Status**: open
+- **Since**: 2026-07-24
+- **Origin**: peer
+- **Reporter**: codepower
+- **Report**: 2026-07-24 codepower
+- **Reply**: none
+- **Problem**: 實作審查在驗證沒過時仍不擋下，審查者放行就能收斂並當成已提交。有人回報過，程式仍依審查者的理由收斂。
+- **Impact**: 驗證失敗的缺陷可以在審查放行後被當成已完成。
+- **Trigger**: Next edit to engine implement-review convergence or the review-loop verify field
+- **Trigger-Type**: peer
+- **Effort**: M
+- **Source**: codepower 2026-07-24 implement-review; restored 2026-10-19; dropped by f2955b99e; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/shared-sealed-zero-diff-validator.md
+- **Context**: Reported 2026-07-24. The engine still converges with the reviewer reason. Read, not executed.
+
+### Watcher roots set has no upper bound
+- **Id**: BL-0239
+- **Status**: open
+- **Since**: 2026-10-04
+- **Origin**: self
+- **Problem**: 監看器記錄的專案根目錄清單沒有上限。其餘強化已修完，這項留給後續階段。
+- **Impact**: 長時間追蹤很多專案時，這份清單會一直變大。
+- **Trigger**: P3 start
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: mods P1a reviews, 2026-10-04; restored 2026-10-19; dropped by a1cc180cb; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
+- **Context**: Old id BL-0109. Everything else in that row was already fixed. P3 owns the bound.

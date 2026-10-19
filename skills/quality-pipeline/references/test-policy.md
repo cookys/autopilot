@@ -90,6 +90,8 @@ Summary:
 
 Status: BL-0001 stage 2. The gate's test step runs this selector first (SKILL.md "Tests"): `selective` runs `suites` + `extra_runners`, `full` runs the whole `hooks/tests/run.sh` plus `extra_runners`, and release preflight always runs the whole suite.
 
+When the project turned the opt-in outcome stage on (`qc-gate-config` `outcome: warn` or `block`), the test step runs the selection with the two extra flags, `node scripts/affected-suites.js --base <ref> --head <sha> --run --record`, which writes one plain JSON record per pushed SHA at the git common dir under `autopilot/qc-runs/<full-sha>.json`. The pre-push hook then re-derives (selection recompute plus a re-run sample) via `scripts/check-test-outcome.js` and treats the record as a claim; the unsampled remainder is reported "claimed, not re-derived". A selector full result is reported NOT JUDGED and not blocked. Escape hatch `AUTOPILOT_QC_OUTCOME=off`; default off. Plan: [docs/plans/2026-10-19-outcome-quality-gate.md](../../../docs/plans/2026-10-19-outcome-quality-gate.md).
+
 ## Prohibited Behaviors
 
 Test failure prohibitions: skip pre-existing, skip even 1 failure, commit before fixing, assume unrelated.

@@ -33,6 +33,8 @@ New results (new scorecard event ids; wall time from `chain.log`):
 | claude-opus-5-5 | qualified 24/24 | 329 | 510 s |
 | MiniMax-M3.1-Flash-Preview | qualified 24/24 | 330 | 386 s |
 
+Event 330 was sat on the day MiniMax released the GA model, so which weights answered the Preview name cannot be confirmed. Event 330 stays under the Preview name. The GA name was examined separately; see `docs/plans/evidence/2026-10-20-minimax-m31-flash-ga-qualify/` (scorecard event 331).
+
 Haiku at high failing while the old default-effort row passed is a genuine result.
 
 ## Directory layout

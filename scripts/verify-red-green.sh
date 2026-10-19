@@ -466,6 +466,24 @@ REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO
 # path runs through a symlink (e.g. a symlinked TMPDIR) never matches "$REPO"/* below and a tracked
 # in-repo command is misclassified as external. Only the directory is resolved; a path genuinely
 # outside REPO stays outside it.
+# A test path that is itself an in-repo symlink is the same class of escape: sha256_file and the
+# verifier follow it. Refuse when its physical target is not inside $REPO.
+refuse_test_path_escaping_repo() {
+  local rel="$1"
+  local candidate resolved
+  candidate="$REPO/$rel"
+  if [[ ! -e "$candidate" && ! -L "$candidate" ]]; then
+    return 0
+  fi
+  resolved="$(readlink -f -- "$candidate" 2>/dev/null || true)"
+  if [[ -z "$resolved" ]]; then
+    err_usage "test path unresolvable: $rel"
+  fi
+  case "$resolved" in
+    "$REPO"|"$REPO"/*) return 0 ;;
+  esac
+  err_usage "test path escapes repository via symlink: $rel -> $resolved"
+}
 if [[ "$VERIFY_CMD" == /* && -e "$VERIFY_CMD" ]]; then
   if _vc_dir="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd -P)"; then
     VERIFY_CMD="$_vc_dir/$(basename "$VERIFY_CMD")"
@@ -566,6 +584,9 @@ if [[ -z "$TEST_FILES" ]]; then
 fi
 
 mapfile -t TEST_FILE_ARRAY <<< "$TEST_FILES"
+for _test_file in "${TEST_FILE_ARRAY[@]}"; do
+  refuse_test_path_escaping_repo "$_test_file"
+done
 
 sha256_git_blob() {
   local commit="$1" path="$2"

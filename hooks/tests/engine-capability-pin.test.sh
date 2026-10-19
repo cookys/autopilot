@@ -413,6 +413,50 @@ else
   bad "15: implementer selector → ec=$ec err=$(cat "$ERR")"
 fi
 
+# ── 16: a JSON-valid pin row that fails validatePinRow is refused (names the
+# file + line), and a valid row is still accepted.
+# RED at 2871a3c3a: FAIL: 16b: ec=0 file=no line=no row=no err= out=[{"engine":"gemini-3.8-flash-low",...,"expires":null},{"engine":"not a token"}]
+PIN16_DIR="$(mktemp -d)"
+export ENGINE_CAPABILITY_DIR="$PIN16_DIR"
+export AUTOPILOT_STRIKE_WRITER=off
+pin_cmd() {
+  local role="$1" reason="$2"
+  shift 2
+  node "$CLI" pin-seat \
+    --engine gemini-3.8-flash-low \
+    --runner agy \
+    --role "$role" \
+    --effort low \
+    --endpoint local \
+    --reason "$reason" \
+    --operator cookys \
+    --store "$ENGINE_CAPABILITY_DIR" \
+    "$@"
+}
+pin_cmd implementer 'valid stored row' >"$OUT" 2>"$ERR"
+node "$CLI" pins >"$OUT" 2>"$ERR"
+valid_ec=$?
+valid_hit=$(grep -q 'implementer' "$OUT" && echo yes || echo no)
+if [ "$valid_ec" = "0" ] && [ "$valid_hit" = "yes" ]; then
+  ok "16a: valid pin row is still accepted under ENGINE_CAPABILITY_DIR"
+else
+  bad "16a: valid row ec=$valid_ec hit=$valid_hit out=$(cat "$OUT") err=$(cat "$ERR")"
+fi
+printf '%s\n' '{"engine":"not a token"}' >> "$ENGINE_CAPABILITY_DIR/pins.jsonl"
+bad_line=$(wc -l < "$ENGINE_CAPABILITY_DIR/pins.jsonl" | tr -d ' ')
+node "$CLI" pins >"$OUT" 2>"$ERR"
+bad_ec=$?
+bad_names_file=$(grep -qF "$ENGINE_CAPABILITY_DIR/pins.jsonl" "$ERR" && echo yes || echo no)
+bad_names_line=$(grep -q "line $bad_line" "$ERR" && echo yes || echo no)
+bad_names_row=$(grep -q "pin row" "$ERR" && echo yes || echo no)
+if [ "$bad_ec" != "0" ] && [ "$bad_names_file" = "yes" ] && [ "$bad_names_line" = "yes" ] && [ "$bad_names_row" = "yes" ]; then
+  ok "16b: schema-invalid but JSON-valid pin row fails loud naming file, line, and pin row"
+else
+  bad "16b: ec=$bad_ec file=$bad_names_file line=$bad_names_line row=$bad_names_row err=$(cat "$ERR") out=$(cat "$OUT")"
+fi
+unset ENGINE_CAPABILITY_DIR AUTOPILOT_STRIKE_WRITER
+rm -rf "$PIN16_DIR"
+
 echo "----"
 echo "engine-capability-pin harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

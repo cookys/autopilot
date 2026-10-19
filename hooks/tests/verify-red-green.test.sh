@@ -325,6 +325,32 @@ test_symlink_into_outside_is_external() {
     assert_eq "$(json_field "$out" verdict):$ec" "VALIDATED:0" "symlink-into-outside external command validates on its own exit codes"
 }
 
+# 12. An in-repo test path that is a symlink resolving outside the repository is
+# refused. A normal in-repo assertion path on the same range still validates.
+# RED at 2871a3c3a: in-repo symlink test path resolving outside the repo exits 2: expected '2', got '0'
+test_symlink_test_path_escapes_repo() {
+    local repo="$TEST_TMP/repo_escape_test" outside="$TEST_TMP/outside_escape_test"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$outside"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo leaked' > "$outside/secret.test.sh"
+    chmod +x "$outside/secret.test.sh"
+    ln -s "$outside/secret.test.sh" "$repo/escape.test.sh"
+    $GIT -C "$repo" add escape.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "symlink test path" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local err ec
+    err=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "in-repo symlink test path resolving outside the repo exits 2"
+    assert_contains "$err" "test path escapes repository via symlink: escape.test.sh" "refusal names the escaping test path"
+    # Control: the same range, bound to the ordinary in-repo test, still validates.
+    # GREEN-ON-BASE (coverage gap, no defect) for this control; the refusal above is the red case.
+    local out
+    out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" --assertion-artifact calc.test.sh 2>&1); ec=$?
+    assert_eq "$ec" "0" "normal in-repo assertion path still validates"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "normal in-repo assertion path verdict is VALIDATED"
+}
+
 test_validated
 test_validated_nested
 test_repo_owned_verify_cmd_uses_worktree_copy
@@ -339,5 +365,6 @@ test_relative_verify_cmd
 test_json_escape_control_chars
 test_verify_cmd_dirname_plain_file
 test_symlink_into_outside_is_external
+test_symlink_test_path_escapes_repo
 
 finalize_test

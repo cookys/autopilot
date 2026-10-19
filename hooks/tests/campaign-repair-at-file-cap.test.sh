@@ -470,7 +470,13 @@ assert_contains "$OUT" "b_intake_status=claimed" "intake admits the disposition 
 assert_contains "$OUT" "a_repair_same_paths phase=VERTICAL_VERIFICATION usage_files=4" "(a) repair on the counted paths completes; usage stays at the cap"
 assert_contains "$OUT" "b_repair_new_path=refused code=FILE_BUDGET_EXCEEDED" "(b) a repair adding a path beyond the cap is refused by the reducer"
 assert_contains "$OUT" "b_new_path_usage_after=4" "(b) refused repair leaves durable usage at the cap"
+# The contains-check below is a prefix: renaming the reducer code to
+# BUDGET_RESET_X kept the suite green (exit 0). The newline-bounded assertion
+# then went red: expected code=BUDGET_RESET, saw code=BUDGET_RESET_X. Restored.
+# Engine journal path (autopilot-engine.js) books Math.max and does not emit a
+# decrease; fxB3 drives the reducer, whose code is BUDGET_RESET.
 assert_contains "$OUT" "b_repair_decrease=refused code=BUDGET_RESET" "usage never decreases"
+assert_contains "$OUT" $'b_repair_decrease=refused code=BUDGET_RESET\n' "B3 rejection code is exactly BUDGET_RESET"
 # C. shared predicate
 assert_contains "$OUT" "c_helper_exported=true" "one shared pre-spend predicate is exported"
 assert_contains "$OUT" "c_cli_uses_helper=true" "cli.js uses the shared predicate"

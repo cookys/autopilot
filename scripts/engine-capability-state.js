@@ -928,6 +928,15 @@ function readPinRows(pinsFile) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error(`${pinsFile}: pin row not an object at line ${lineNo}`);
     }
+    // A parseable row is still operator state. validatePinRow runs at write time
+    // only, so a hand-edited object (valid JSON, wrong shape) used to survive and
+    // be rewritten by the next snapshot. Fail loud the same way an unparsable
+    // line does: name the file and the 1-based line, and do not return the row.
+    try {
+      validatePinRow(row);
+    } catch (err) {
+      throw new Error(`${pinsFile}: invalid pin row at line ${lineNo}: ${err.message}`);
+    }
     rows.push(row);
   }
   return rows;

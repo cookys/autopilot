@@ -3,7 +3,7 @@
 // affected-suites.js — select the test files a diff can affect (BL-0001: the quality gate's test step runs it first).
 //
 // Usage:
-//   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run]
+//   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
 //   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
@@ -15,6 +15,20 @@
 // changed file is documentation. Full mode never executes hooks/tests/run.sh: it prints
 // full_reasons and "whole suite deferred to the pre-merge run (CLAUDE.md Mission graph
 // verification)", then runs only always_run plus extra_runners.
+//
+// --record writes one plain JSON run record after --run finishes (every entry has run, whatever
+// its rc). Without --run it is a usage error (stderr, exit 2, nothing written). With --files
+// (no head ref) it is a usage error (exit 2). The next argument is the output path unless it
+// starts with --; otherwise the path is <git-common-dir>/autopilot/qc-runs/<full-head-sha>.json.
+// The common dir is `git rev-parse --git-common-dir` inside --root, made absolute against --root
+// when git prints a relative path; parent directories are created. base and head are full shas
+// from git rev-parse (--head or HEAD). The file is written atomically (temp file beside it, then
+// rename). A failed write prints to stderr and exits 2. After the summary line, stdout gets
+// `record: <path>`. The command's exit code stays the run's (non-zero when any entry failed).
+// Record schema 1, key order: {schema:1, head, base, mode:"selective"|"full",
+//   suites:[{path, rc}, ...]} — one object per entry actually executed, in execution order
+//   (suites then extra_runners when selective; always_run then extra_runners when full). rc is
+//   the integer already printed as rc=N.
 //
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
@@ -315,14 +329,37 @@ function runSelected(root, doc, alwaysRun) {
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
   }
   const entries = doc.mode === 'full' ? [...alwaysRun, ...doc.extra_runners] : [...doc.suites, ...doc.extra_runners];
+  const results = [];
   let failed = 0;
-  for (const rel of entries) if (runEntry(root, rel) !== 0) failed++;
+  for (const rel of entries) {
+    const rc = runEntry(root, rel);
+    results.push({ path: rel, rc });
+    if (rc !== 0) failed++;
+  }
   if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
     process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
     failed++;
   }
   process.stdout.write(`summary: ${entries.length} run, ${failed} failed\n`);
-  return failed === 0 ? 0 : 1;
+  return { code: failed === 0 ? 0 : 1, results };
+}
+
+function fullRef(root, ref) {
+  return git(root, ['rev-parse', ref]).toString('utf8').trim();
+}
+
+function recordPathFor(root, given, headSha) {
+  if (given) return path.resolve(given);
+  let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
+  if (!path.isAbsolute(common)) common = path.resolve(root, common);
+  return path.join(common, 'autopilot', 'qc-runs', `${headSha}.json`);
+}
+
+function writeRecord(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, JSON.stringify(obj) + '\n');
+  fs.renameSync(tmp, file);
 }
 
 function parseArgs(argv) {
@@ -336,6 +373,10 @@ function parseArgs(argv) {
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
     else if (x === '--run') a.run = true;
+    else if (x === '--record') {
+      a.record = true;
+      if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
+    }
     else if (x === '--files') { while (argv[i + 1] && !argv[i + 1].startsWith('--')) a.files.push(argv[++i]); a.useFiles = true; }
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown argument: ${x}`);
@@ -351,6 +392,14 @@ function main(argv) {
     const end = lines.findIndex((l, i) => i > 2 && l.startsWith('// Exit:'));
     process.stdout.write(lines.slice(2, end + 1).map((l) => l.replace(/^\/\/ ?/, '')).join('\n') + '\n');
     return 0;
+  }
+  if (a.record && !a.run) {
+    process.stderr.write('affected-suites: --record requires --run\n');
+    return 2;
+  }
+  if (a.record && a.useFiles) {
+    process.stderr.write('affected-suites: --record needs a head ref (--base [--head]); --files has none\n');
+    return 2;
   }
   const root = path.resolve(a.root || path.join(__dirname, '..'));
   try {
@@ -376,7 +425,22 @@ function main(argv) {
       suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
       chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
     };
-    if (a.run) return runSelected(root, doc, full ? r.alwaysRun : doc.always_run);
+    if (a.run) {
+      const ran = runSelected(root, doc, full ? r.alwaysRun : doc.always_run);
+      if (a.record) {
+        try {
+          const headSha = fullRef(root, headRef);
+          const baseSha = fullRef(root, baseRef);
+          const file = recordPathFor(root, a.recordPath, headSha);
+          writeRecord(file, { schema: 1, head: headSha, base: baseSha, mode: doc.mode, suites: ran.results });
+          process.stdout.write(`record: ${file}\n`);
+        } catch (e) {
+          process.stderr.write(`affected-suites: record write failed: ${e.message}\n`);
+          return 2;
+        }
+      }
+      return ran.code;
+    }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')) + extra);
     return 0;

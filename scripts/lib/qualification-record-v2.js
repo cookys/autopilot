@@ -29,8 +29,8 @@ function daysInMonth(year, month) {
   return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
 }
 
-// Same gate as llm-playground v2_record_from_row, written from the owner's rule (the Python regex
-// was not on this host): YYYY-MM-DDTHH:MM:SS(.f 1-9)?(Z|+HH:MM|-HH:MM) or date-only YYYY-MM-DD.
+// Same gate as llm-playground v2_record_from_row. The rule mirrors llm-playground ts_utc
+// (truncation to milliseconds): YYYY-MM-DDTHH:MM:SS(.f 1-9)?(Z|+HH:MM|-HH:MM) or date-only YYYY-MM-DD.
 // Impossible calendar dates throw. Non-strings stay null. Output is UTC, millisecond precision, .000 dropped.
 function tsUtc(v) {
   if (typeof v !== 'string') return null;

@@ -244,6 +244,11 @@ function enqueue(kind, payload, { env = process.env } = {}) {
 // ── flush ──
 function backoffS(failures) { return Math.min(3600, 60 * 2 ** Math.max(0, failures - 1)); }
 
+function isAlreadyIngested(code, transcriptHash, existingTranscriptHash) {
+  return code === 'SECONDARY_KEY_COLLISION' && typeof transcriptHash === 'string' && transcriptHash
+    && transcriptHash === existingTranscriptHash;
+}
+
 function quarantine(p, bad, events, warn) {
   fs.appendFileSync(p.corrupt, bad.map((b) => `${JSON.stringify({ at: nowIso(), line_no: b.line_no, reason: b.reason, raw: b.raw })}\n`).join(''), { mode: 0o600 });
   store.writeSnapshot(p.log, events);
@@ -253,7 +258,7 @@ function quarantine(p, bad, events, warn) {
 async function flush({ transport, env = process.env, force = false, nowMs = Date.now(), warn = (m) => process.stderr.write(`${m}\n`) } = {}) {
   const p = paths(outboxDir(env));
   store.ensureDir(p.dir);
-  const out = { sent: 0, acked: 0, retired: 0, rejected: 0, failed: 0, backoff_skipped: 0, quarantined: 0, compacted: 0 };
+  const out = { sent: 0, acked: 0, retired: 0, rejected: 0, already_ingested: 0, failed: 0, backoff_skipped: 0, quarantined: 0, compacted: 0 };
   // The lock is synchronous (PID lock); transport calls are awaited inside the held section.
   store.acquireLock({ storeDir: p.dir, lockFile: p.lock, name: 'qualification-outbox' });
   try {
@@ -275,7 +280,9 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
           ev.existing_transcript_hash = extra.existing_transcript_hash;
         }
         appendEvent(p, ev);
-        out.rejected += 1;
+        const ex = extra && typeof extra.existing_transcript_hash === 'string' ? extra.existing_transcript_hash : undefined;
+        if (isAlreadyIngested(code, ev.transcript_hash, ex)) out.already_ingested += 1;
+        else out.rejected += 1;
       };
       const ackIt = async (commit) => {
         failpoint('before-ack');
@@ -344,7 +351,7 @@ function status({ env = process.env, nowMs = Date.now() } = {}) {
       const code = s.rejected.code;
       const th = s.rejected.transcript_hash;
       const ex = s.rejected.existing_transcript_hash;
-      if (code === 'SECONDARY_KEY_COLLISION' && typeof th === 'string' && th && th === ex) {
+      if (isAlreadyIngested(code, th, ex)) {
         already_ingested.push({ id: s.id, kind: s.kind, code, transcript_hash: th });
         continue;
       }

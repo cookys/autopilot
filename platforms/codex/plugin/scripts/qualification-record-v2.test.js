@@ -1,9 +1,10 @@
 'use strict';
 /*
 # RED at 45b1c5fff: tsUtc is not exported (TypeError: tsUtc is not a function on every direct call; 9 fail / 8 reject-cases only threw because the export was missing) and buildV2Record does not throw on 2026-02-30 (returns null). exit 1.
+# RED at 5a93aadcf: item 3 has no red by design; 2026-01-01T00:00:00.9995Z/.999999999Z/.0005Z already truncate (exit 0).
 */
 // Run: node --test scripts/qualification-record-v2.test.js
-// tsUtc parity with the Python v2_record_from_row gate (owner rule; the Python regex was not on this host).
+// tsUtc parity with llm-playground ts_utc (truncation to milliseconds, never rounded).
 // Every case uses a temp HOME. This file does not touch ~/.autopilot.
 
 const test = require('node:test').test;
@@ -77,6 +78,12 @@ test('tsUtc returns null for a non-string', () => {
 
 test('tsUtc strips a .000 fraction', () => {
   assert.equal(tsUtc('2026-10-20T01:02:03.000Z'), '2026-10-20T01:02:03Z');
+});
+
+test('tsUtc truncates a fraction longer than 3 digits and does not round', () => {
+  assert.equal(tsUtc('2026-01-01T00:00:00.9995Z'), '2026-01-01T00:00:00.999Z');
+  assert.equal(tsUtc('2026-01-01T00:00:00.999999999Z'), '2026-01-01T00:00:00.999Z');
+  assert.equal(tsUtc('2026-01-01T00:00:00.0005Z'), '2026-01-01T00:00:00Z');
 });
 
 test('tsUtc keeps a .500 fraction', () => {

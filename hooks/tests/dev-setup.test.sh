@@ -115,7 +115,21 @@ case "$1" in
 esac
 SH
 chmod +x "$STUB_BIN/codex"
-CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" bash "$SCRIPT" --harness codex 2>&1)"; EXIT=$?
+# Outer CODEX_HOME must stay byte-identical: codex_config_dir prefers it over HOME.
+OUTER_CODEX="$TEST_TMP/outer-codex-home"
+mkdir -p "$OUTER_CODEX/nested"
+printf 'sentinel-marker\n' > "$OUTER_CODEX/marker.txt"
+printf 'nested\n' > "$OUTER_CODEX/nested/keep.txt"
+export CODEX_HOME="$OUTER_CODEX"
+fingerprint_dir() {
+  local dir="$1"
+  {
+    find "$dir" -printf '%P\t%y\t%s\n' | sort
+    find "$dir" -type f -print0 | sort -z | xargs -0 sha256sum
+  }
+}
+OUTER_CODEX_BEFORE="$(fingerprint_dir "$OUTER_CODEX")"
+CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" OUT="$(HOME="$CHECK_HOME" CODEX_HOME="$CHECK_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" bash "$SCRIPT" --harness codex 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "codex harness without --install is check-only"
 assert_contains "$OUT" "strict read-only mode" "codex check skips active CLI probes"
 assert_file_absent "$TEST_TMP/codex-stub-marker" "codex check does not call codex plugin subcommands"
@@ -139,7 +153,7 @@ esac
 SH
 chmod +x "$STUB_BIN/codex"
 LIVE_MARKER="$TEST_TMP/codex-live-marker"
-OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$LIVE_MARKER" DEV_SETUP_CODEX_PIDS="4242 4243" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
+OUT="$(HOME="$CHECK_HOME" CODEX_HOME="$CHECK_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$LIVE_MARKER" DEV_SETUP_CODEX_PIDS="4242 4243" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "codex --install refuses while Codex sessions are running"
 assert_contains "$OUT" "pid: 4242 4243" "refusal names the live Codex pids"
 assert_contains "$OUT" "MODULE_NOT_FOUND" "refusal explains the PostCompact breakage it prevents"
@@ -147,14 +161,14 @@ assert_contains "$OUT" "--force" "refusal names the override"
 assert_file_absent "$LIVE_MARKER" "refusal happens before any codex plugin mutation"
 
 FORCE_MARKER="$TEST_TMP/codex-force-marker"
-OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$FORCE_MARKER" DEV_SETUP_CODEX_PIDS="4242" bash "$SCRIPT" --harness codex --install --force 2>&1)"; EXIT=$?
+OUT="$(HOME="$CHECK_HOME" CODEX_HOME="$CHECK_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$FORCE_MARKER" DEV_SETUP_CODEX_PIDS="4242" bash "$SCRIPT" --harness codex --install --force 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "codex --install --force proceeds under live sessions"
 assert_contains "$(cat "$FORCE_MARKER")" "codex plugin add autopilot@autopilot-local" "forced update installs via plugin add"
 assert_not_contains "$(cat "$FORCE_MARKER")" "plugin remove" "update never runs plugin remove (add upgrades in place; remove only deletes the cache twice)"
 assert_contains "$OUT" "still reference the previous plugin cache" "forced update tells the operator to restart live sessions"
 
 QUIET_MARKER="$TEST_TMP/codex-quiet-marker"
-OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$QUIET_MARKER" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
+OUT="$(HOME="$CHECK_HOME" CODEX_HOME="$CHECK_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$QUIET_MARKER" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --install 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "codex --install proceeds when no Codex session is running"
 assert_not_contains "$(cat "$QUIET_MARKER")" "plugin remove" "quiet update never runs plugin remove"
 assert_not_contains "$OUT" "still reference" "quiet update prints no restart note"
@@ -248,6 +262,7 @@ assert_contains "$OUT" "auto-compact is off (env DISABLE_AUTO_COMPACT)" "doctor:
 
 # --- Codex dev hooks survive plugin-cache replacement (user hooks.json + hookless marketplace).
 # RED at cdb03a173: 13 failed — no hooks.json, commands/cache/once-checks ENOENT, marketplace add still not the derived dir, no hooks.json.bak, --uninstall exit 1 and no plugin-remove hint, malformed hooks.json accepted (exit 0), help lacks --uninstall.
+# RED at 2595989be: exported CODEX_HOME received hooks.json.bak-* (fake HOME hooks.json missing); uninstall of {}, {"hooks":{}}, and {"hooks":{"Stop":[]}} deleted the file and wrote a backup; a non-canonical foreign-only file was reformatted and backed up; malformed uninstall left autopilot-dev-marketplace in place.
 cat > "$STUB_BIN/codex" <<'SH'
 #!/usr/bin/env bash
 case "$1" in
@@ -263,7 +278,7 @@ chmod +x "$STUB_BIN/codex"
 
 codex_dev_install() {
   local home="$1" marker="$2"
-  HOME="$home" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" \
+  HOME="$home" CODEX_HOME="$home/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" \
     CODEX_STUB_MARKER="$marker" DEV_SETUP_CODEX_PIDS="" \
     bash "$SCRIPT" --harness codex --install
 }
@@ -390,7 +405,7 @@ if (keys.some((k) => seen.get(k) !== 1)) process.exit(4);
 assert_eq "$?" "0" "each dev hook command is registered once across user hooks and the plugin manifest"
 
 # (f) uninstall removes only autopilot entries; nothing-installed is a no-op
-OUT="$(HOME="$B_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+OUT="$(HOME="$B_HOME" CODEX_HOME="$B_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "uninstall exits 0"
 node -e '
 const fs = require("fs");
@@ -405,14 +420,14 @@ assert_not_contains "$OUT" "plugin remove autopilot" "uninstall does not run cod
 assert_contains "$OUT" "codex plugin remove" "uninstall prints a hint about codex plugin remove"
 B_AFTER="$(cat "$B_HOME/.codex/hooks.json")"
 B_BAK3="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
-OUT="$(HOME="$B_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+OUT="$(HOME="$B_HOME" CODEX_HOME="$B_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "second uninstall is a no-op"
 assert_eq "$(cat "$B_HOME/.codex/hooks.json")" "$B_AFTER" "second uninstall leaves the foreign file unchanged"
 B_BAK4="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
 assert_eq "$B_BAK4" "$B_BAK3" "second uninstall creates no backup"
 EMPTY_HOME="$TEST_TMP/codex-hooks-empty"
 mkdir -p "$EMPTY_HOME"
-OUT="$(HOME="$EMPTY_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+OUT="$(HOME="$EMPTY_HOME" CODEX_HOME="$EMPTY_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "uninstall with nothing installed exits 0"
 assert_file_absent "$EMPTY_HOME/.codex/hooks.json" "uninstall does not create hooks.json"
 assert_file_absent "$EMPTY_HOME/.codex/autopilot-dev-marketplace" "uninstall does not create a marketplace dir"
@@ -422,16 +437,16 @@ ONLY_HOME="$TEST_TMP/codex-hooks-only"
 ONLY_MARKER="$TEST_TMP/codex-hooks-only-marker"
 mkdir -p "$ONLY_HOME"
 codex_dev_install "$ONLY_HOME" "$ONLY_MARKER" >/dev/null
-OUT="$(HOME="$ONLY_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+OUT="$(HOME="$ONLY_HOME" CODEX_HOME="$ONLY_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "uninstall of an autopilot-only hooks.json exits 0"
 assert_file_absent "$ONLY_HOME/.codex/hooks.json" "uninstall deletes hooks.json when only autopilot entries were in it"
 
 # (g) negative control and malformed refusal
 G_HOME="$TEST_TMP/codex-hooks-check"
 mkdir -p "$G_HOME"
-OUT="$(HOME="$G_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --check --harness codex 2>&1)"; EXIT=$?
+OUT="$(HOME="$G_HOME" CODEX_HOME="$G_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --check --harness codex 2>&1)"; EXIT=$?
 assert_file_absent "$G_HOME/.codex/hooks.json" "--check --harness codex does not create hooks.json"
-OUT="$(HOME="$G_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness claude --check 2>&1)" || true
+OUT="$(HOME="$G_HOME" CODEX_HOME="$G_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness claude --check 2>&1)" || true
 assert_file_absent "$G_HOME/.codex/hooks.json" "--harness claude --check does not create hooks.json"
 BAD_HOME="$TEST_TMP/codex-hooks-bad"
 BAD_MARKER="$TEST_TMP/codex-hooks-bad-marker"
@@ -450,5 +465,40 @@ OUT="$(bash "$SCRIPT" --harness codex --uninstall --install 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "--uninstall and --install are mutually exclusive"
 OUT="$(bash "$SCRIPT" --help 2>&1)"
 assert_contains "$OUT" "--uninstall" "help documents --uninstall"
+
+# Foreign-only hooks.json must stay byte-identical across --uninstall.
+assert_uninstall_unchanged() {
+  local label="$1" body="$2"
+  local home="$TEST_TMP/codex-uninst-$label"
+  mkdir -p "$home/.codex/autopilot-dev-marketplace"
+  printf 'keep\n' > "$home/.codex/autopilot-dev-marketplace/marker.txt"
+  printf '%s' "$body" > "$home/.codex/hooks.json"
+  local before
+  before="$(cat "$home/.codex/hooks.json")"
+  OUT="$(HOME="$home" CODEX_HOME="$home/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+  assert_eq "$EXIT" "0" "uninstall ($label) exits 0"
+  assert_eq "$(cat "$home/.codex/hooks.json")" "$before" "uninstall ($label) leaves hooks.json byte-identical"
+  assert_eq "$(find "$home/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')" "0" "uninstall ($label) creates no backup"
+  assert_contains "$OUT" "unchanged" "uninstall ($label) prints unchanged"
+  assert_file_absent "$home/.codex/autopilot-dev-marketplace" "uninstall ($label) still removes the derived marketplace"
+}
+assert_uninstall_unchanged "empty-object" "{}"
+assert_uninstall_unchanged "empty-hooks" '{"hooks":{}}'
+assert_uninstall_unchanged "empty-stop" '{"hooks":{"Stop":[]}}'
+assert_uninstall_unchanged "foreign-nocanon" '{"hooks": {"Stop": [{"matcher": "x", "hooks": [{"type": "command", "command": "echo keep-me"}]}]}}'
+
+# Malformed hooks.json on uninstall: file untouched, marketplace still removed, non-zero.
+BAD_UN_HOME="$TEST_TMP/codex-uninstall-bad"
+mkdir -p "$BAD_UN_HOME/.codex/autopilot-dev-marketplace"
+printf 'market\n' > "$BAD_UN_HOME/.codex/autopilot-dev-marketplace/marker.txt"
+printf '{\n' > "$BAD_UN_HOME/.codex/hooks.json"
+OUT="$(HOME="$BAD_UN_HOME" CODEX_HOME="$BAD_UN_HOME/.codex" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "malformed hooks.json on uninstall exits non-zero"
+assert_eq "$(cat "$BAD_UN_HOME/.codex/hooks.json")" "{" "malformed hooks.json on uninstall is untouched"
+assert_eq "$(find "$BAD_UN_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')" "0" "malformed hooks.json on uninstall is not backed up"
+assert_file_absent "$BAD_UN_HOME/.codex/autopilot-dev-marketplace" "malformed hooks.json on uninstall still removes the derived marketplace"
+assert_contains "$OUT" "left untouched" "malformed hooks.json on uninstall reports the error"
+
+assert_eq "$(fingerprint_dir "$OUTER_CODEX")" "$OUTER_CODEX_BEFORE" "exported CODEX_HOME is byte-identical after every codex case"
 
 finalize_test

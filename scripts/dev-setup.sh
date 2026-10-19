@@ -48,7 +48,8 @@ cleanup_temp_files() {
     rm -f "${TEMP_FILES[@]}"
   fi
 }
-trap cleanup_temp_files EXIT
+# ${tmp:-} covers the hooks.json mktemp in codex_hooks_commit; cleared after mv so EXIT cannot delete the destination.
+trap 'cleanup_temp_files; rm -f "${tmp:-}"' EXIT
 
 usage() {
   cat <<'EOF'
@@ -587,25 +588,41 @@ function installDoc(existing, additions) {
 
 function stripDoc(doc) {
   const clone = JSON.parse(JSON.stringify(doc));
+  let removed = 0;
   const hooks = clone.hooks;
-  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) return clone;
+  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) return { doc: clone, removed };
   for (const event of Object.keys(hooks)) {
     if (!Array.isArray(hooks[event])) continue;
     const kept = [];
+    let eventRemoved = 0;
     for (const group of hooks[event]) {
       if (!group || typeof group !== 'object' || !Array.isArray(group.hooks)) {
         kept.push(group);
         continue;
       }
-      const hooksLeft = group.hooks.filter((hook) => !(hook && isOurs(hook.command)));
+      let groupRemoved = 0;
+      const hooksLeft = group.hooks.filter((hook) => {
+        if (hook && isOurs(hook.command)) {
+          groupRemoved += 1;
+          return false;
+        }
+        return true;
+      });
+      eventRemoved += groupRemoved;
+      if (groupRemoved === 0) {
+        kept.push(group);
+        continue;
+      }
       if (hooksLeft.length === 0) continue;
       kept.push(Object.assign({}, group, { hooks: hooksLeft }));
     }
+    removed += eventRemoved;
+    if (eventRemoved === 0) continue;
     if (kept.length === 0) delete hooks[event];
     else hooks[event] = kept;
   }
-  if (Object.keys(hooks).length === 0) delete clone.hooks;
-  return clone;
+  if (removed > 0 && Object.keys(hooks).length === 0) delete clone.hooks;
+  return { doc: clone, removed };
 }
 
 function canonical(doc) {
@@ -628,15 +645,15 @@ if (mode === 'uninstall') {
     process.exit(0);
   }
   const stripped = stripDoc(existing.doc);
-  if (Object.keys(stripped).length === 0) {
-    if (existing.raw.length === 0) {
-      process.stdout.write('unchanged\n');
-      process.exit(0);
-    }
+  if (stripped.removed === 0) {
+    process.stdout.write('unchanged\n');
+    process.exit(0);
+  }
+  if (Object.keys(stripped.doc).length === 0) {
     process.stdout.write('delete\n');
     process.exit(0);
   }
-  const next = canonical(stripped);
+  const next = canonical(stripped.doc);
   if (next === existing.raw) {
     process.stdout.write('unchanged\n');
     process.exit(0);
@@ -660,7 +677,7 @@ codex_hooks_commit() {
   status=$?
   set -e
   if [[ "$status" -eq 2 ]]; then
-    exit 1
+    return 1
   fi
   if [[ "$status" -ne 0 ]]; then
     die "failed to merge Codex hooks.json"
@@ -681,7 +698,11 @@ codex_hooks_commit() {
     return 0
   fi
   mkdir -p "$dir"
-  printf '%s' "$out" > "$dest"
+  local tmp=""
+  tmp="$(mktemp "$dir/hooks.json.tmp.XXXXXX")"
+  printf '%s' "$out" > "$tmp"
+  mv -f "$tmp" "$dest"
+  tmp=""
   printf 'codex hooks: wrote %s\n' "$dest"
 }
 
@@ -742,10 +763,10 @@ setup_codex() {
 }
 
 uninstall_codex() {
-  local dir market
+  local dir market hooks_status=0
   dir="$(codex_config_dir)"
   market="$dir/autopilot-dev-marketplace"
-  codex_hooks_commit uninstall
+  codex_hooks_commit uninstall || hooks_status=$?
   if [[ -e "$market" ]]; then
     rm -rf "$market"
     printf 'codex dev marketplace: removed %s\n' "$market"
@@ -755,6 +776,9 @@ uninstall_codex() {
   # Do not run `codex plugin remove`: that deletes the versioned cache a live
   # session's PLUGIN_ROOT still points at.
   printf 'hint: codex plugin remove deletes the versioned plugin cache; run it for autopilot@autopilot-local only when no Codex session is running.\n'
+  if [[ "$hooks_status" -ne 0 ]]; then
+    exit "$hooks_status"
+  fi
 }
 
 check_opencode() {

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0228 -->
+<!-- next-id: BL-0234 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -885,3 +885,87 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: plan section 0 fact 1 / section 6, 2026-09-15; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/managed-rail-scorecard-scope-fallback-ladder.md
 - **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file.
+
+### Roster qualification: Explorer formal suite
+- **Id**: BL-0228
+- **Status**: open
+- **Since**: 2026-08-17
+- **Origin**: self
+- **Problem**: 名冊資格還缺探索者角色的正式考卷。在宣稱這個角色可以自動派工之前，必須先補上這套考卷。腦席重考已在別列，這裡只留探索者這一段。
+- **Impact**: 探索者角色可能在沒有正式考卷時就被拿去自動派工。
+- **Trigger**: Explorer formal suite — before autonomous routing claims for that role
+- **Trigger-Type**: event
+- **Effort**: L
+- **Source**: v2.34.15 qualification 2026-08-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md
+- **Context**: Implementer leg already shipped. This row is only the Explorer formal suite. Brain re-sit lives in another row.
+
+### A stale topology tuple derails a plan-review loop
+- **Id**: BL-0229
+- **Status**: open
+- **Since**: 2026-09-08
+- **Origin**: self
+- **Problem**: 拓撲記錄留著一個已退役的模型。計畫審查因此失敗，包裝程式結束碼為三且沒有任何輸出。兩項補救都還沒做：派工前對照模型清單，以及讓包裝程式露出執行器的錯誤訊息。
+- **Impact**: 計畫審查會因過期席位名稱整圈停住，而且看不出是名稱錯了。
+- **Trigger**: the next plan-review loop that ends required_seat_transport_exhausted, or the next topology regeneration
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: observed 2026-09-08 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/stale-topology-tuple-derails-plan-review.md
+- **Context**: Recorded model was retired. Two mitigations never done: validate with the runner model list, and surface runner stderr.
+
+### consult_dispatch has no seat once the qc panel consumes the roster
+- **Id**: BL-0230
+- **Status**: open
+- **Since**: 2026-09-11
+- **Origin**: self
+- **Problem**: 品管席把名冊上的引擎都佔走之後，諮詢席就沒有位子。解析仍退回同一家族的預設席，諮詢程式接著拒絕，提問的人沒有正式通路。
+- **Impact**: 需要問另一個家族時沒有支援的路，只能繞過制度手動呼叫。
+- **Trigger**: next consult on a host whose qc panel covers the whole roster, or the next edit to consult resolution
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: measured 2026-09-11 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/consult-dispatch-no-seat-after-qc-panel.md
+- **Context**: Resolver still falls back to a same-family native seat, and consult then refuses that seat.
+
+### Per-hook by per-harness support matrix with verification dates
+- **Id**: BL-0231
+- **Status**: open
+- **Since**: 2026-09-07
+- **Origin**: owner
+- **Problem**: 每個掛鉤在各執行環境是否支援，只做了一半。腳本已出貨，但每一格都還沒驗證，六十天過期檢查也沒進上線前檢查或持續整合。
+- **Impact**: 表上看得到掛鉤，卻不知道各環境是否真的跑過，過期也不會被擋下。
+- **Trigger**: the next second-harness hook registration, or a harness-maintenance run finding a hook-event claim older than 60 days
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
+- **Context**: Old id BL-0026. Owner decides whether to finish it. Script shipped; cells unverified; 60-day check not in preflight or CI.
+
+### Engine-routing axis: evidence bar for any model-to-worktype default
+- **Id**: BL-0232
+- **Status**: open
+- **Since**: 2026-06-29
+- **Origin**: self
+- **Problem**: 任何模型預設負責某類工作，都還沒有站得住的證據門檻。領域感知路由那一列因此少了先決條件，這條規則目前只留在個人筆記。
+- **Impact**: 沒有這條證據門檻，模型對工作類型的預設可以被直接寫死。
+- **Trigger**: before hardcoding any domain-to-engine or phase-to-engine default, or when someone proposes a static model-to-worktype table
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-06-29 dual-agent survey; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/engine-routing-axis-evidence-bar.md
+- **Context**: Original label was a standing evidence bar, recorded here as effort S. Domain-aware routing lost this prerequisite.
+
+### Official codex plugin as a peer consult channel
+- **Id**: BL-0233
+- **Status**: open
+- **Since**: 2026-07-05
+- **Origin**: self
+- **Problem**: 把官方外掛當成同級諮詢通道的試驗，諮詢通道已經出貨。審查通道的校準，以及救援寫入的沙箱姿態，都沒有後續列在追。
+- **Impact**: 審查通道與救援寫入的風險沒有列在追，出貨後無人接手。
+- **Trigger**: consult channel already shipped; remaining trigger is review-channel calibration and the rescue write sandbox posture
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-07-05 orchestrator-economy; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/official-codex-plugin-peer-consult-spike.md
+- **Context**: Consult channel shipped. No follow-up row for review calibration or the rescue write sandbox posture.

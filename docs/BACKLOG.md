@@ -364,12 +364,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 測試完整性檢查目前只警告不擋。回放最近 60 個 merge 的違規，固定 seed 抽 150 筆，真陽性為 0，誤報太多，所以維持警告。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
-- **Trigger**: Fix the rules first (whole-file delete with its target, net assertion-line drop only, new file not surface_touch), add a planted-violation control, re-replay; block only below 5% false positives (d-133c23da)
+- **Trigger**: (a) exempt a test removed with its feature when same-topic replacement is added, keep N4; (b) surface_touch only on modified or deleted lines; (c) assertion form "if ! cmd; then exit"; (d) replay same seed and 60 merges, judge every group.
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
-- **Context**: Replay (scripts/replay-test-integrity.js, merge edd7d687f): last 60 develop merges, 40 ranges, 1101 violations, 150 sampled with a fixed seed, 0 true positives. Evidence: docs/plans/evidence/2026-10-19-test-integrity-replay/.
+- **Context**: Merge 53dc0ad3f tightened (a)(b)(c), added N1-N8 and F1-F5. v2: 668 violations, 16 groups, 1 true positive, 15 false positives (93.8% false-positive rate); stays warn. Evidence: docs/plans/evidence/2026-10-19-test-integrity-replay-v2/.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -698,17 +698,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
 - **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。
-
-### Autonomous next-pick never checks a row's Trigger, so deliberately parked rows rank first
-- **Id**: BL-0212
-- **Status**: open
-- **Since**: 2026-10-18
-- **Origin**: self
-- **Problem**: 自動選題只看大小和存在天數，不檢查 Trigger 是否已發生；刻意擱著等觸發的條目最舊，所以永遠排第一。2026-10-18 選到 BL-0071，量測後發現觸發並未發生。
-- **Impact**: 自動挑選會浪費一輪在量測，再提議關閉。
-- **Trigger**: 下一次自動選到觸發未發生的條目，或要在 /next 自動路徑加入觸發檢查時
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: 本 session，2026-10-18
-- **Pointer**: docs/backlog/next-pick-ignores-trigger.md
-- **Context**: Owner 2026-10-19 (d-02f19ce4): add a structured trigger-type field and backfill all rows; not done yet. Triggers are free text (70 rows); guidance change needs eval first. preferences.class_weights file absent, KR6 inert.

@@ -81,11 +81,12 @@ const FULL_TRIGGERS = [
 // Entry points that run.sh does NOT run. Any changed path matching `re` adds `runner` to the result's
 // extra_runners (selective AND full: a full run.sh still skips them). [re, runner]
 // The live and viewer mods import each other's files (the viewer takes the live mod's locale choice and colour roles, the live mod's pressable file paths call the viewer's
-// show.ts), and mods/register.ts composes both, so a change under either one runs both runners.
-const MODS_RE = /^mods\/(live|viewer)\/|^mods\/register\.ts$/;
+// show.ts). The roundtable pane imports the same colour roles and is composed from mods/register.ts, so a change under any of them runs all three runners.
+const MODS_RE = /^mods\/(live|viewer|roundtable)\/|^mods\/register\.ts$/;
 const EXTRA_RUNNERS = [
   [MODS_RE, 'mods/live/run-tests.sh'],
   [MODS_RE, 'mods/viewer/run-tests.sh'],
+  [MODS_RE, 'mods/roundtable/run-tests.sh'],
 ];
 function extraRunners(changed) {
   return EXTRA_RUNNERS.filter(([re]) => changed.some((p) => re.test(p))).map(([, r]) => r);

@@ -160,14 +160,13 @@ Phase 1 is implemented. The helper is `scripts/lib/room-log.js` (append under th
 
 ## 10. Window B — mod pane
 
-A pane under `mods/live/` that reads the same `room.jsonl`. Colours go through `PALETTE` in `mods/live/ui.ts` only, per `docs/plans/2026-10-13-live-pane-design-system.md` section 12 (one theme key, one meaning; no theme-key literal outside `PALETTE`).
+`mods/roundtable/` reads the same `room.jsonl`. Colours go through `PALETTE` in `mods/live/ui.ts` only, per `docs/plans/2026-10-13-live-pane-design-system.md` section 12 (one theme key, one meaning; no theme-key literal outside `PALETTE`).
 
-**Open point, resolved by the Phase 2 spike (round 2 of this work), not by this plan.** Whether the pane can take text input is unknown until that spike. Both branches are specified:
+**Spike resolved: INPUT-WORKS** (real Claude Code 2.1.303, tmux, `Input` on terminal / desktop / vscode; mobile has no Input). The pane has an Input. The owner types and presses Enter. `label` must not end with a colon (the field draws its own). Do not set `closeOnEscape` (Esc would close the pane). `$.fs.read` plus `$.clock.every` about once a second is the live read. Notes: `scratchpad/ceo/roundtable/spike/SPIKE.md` (read-only spike; not rewritten here).
 
-- **If input works:** the pane offers the same one-line input as window A. Enter appends `from` `owner` and fleet-sends. A failed send is a `system` row and is drawn as `broken` (`PALETTE` role `broken`, theme key `error`). Content text stays default text. The input affordance uses `action` only if it is a pressable control; a plain prompt line stays default text.
-- **If input does not work:** window B is display only. The owner speaks from the moderator session prompt (or from window A). The pane still live-reads `room.jsonl` and still uses only `PALETTE`.
+Chosen branch: Enter appends a `say` row with `from` `owner` and fleet-sends, by running `node <plugin root>/scripts/roundtable-window.js send ROOM TEXT` through `$.process.run` (the same script as window A, plugin root `$.plugin.root`). A non-zero exit is drawn on the pane as `broken` (`PALETTE.broken`) and is never reported as success. The script appends the `system` row for a failed seat send. Owner rows use `here`, other system rows use `attention`, seat rows use default text (no role: a seat utterance is not "you are here" and not a failure), separators use `structure`. The Input is not an `action` button.
 
-The spike result is written into this plan when it exists. Until then neither branch is chosen.
+Rooms directory: `AUTOPILOT_ROOMS_DIR`, else `$HOME/.autopilot/rooms`, read with `$.env.get`. When that call throws, or neither value is a non-empty string, the pane says the directory is unknown and does not guess a path. `/rt-room` with no id opens the most recently modified room directory under that parent. The one-second poll starts when the pane is opened.
 
 ## 11. Transport and addressing
 
@@ -199,11 +198,11 @@ The protocol was run by hand. Evidence and the operator's verdict are in "Phase 
 
 **Acceptance**: KR2 + KR3.
 
-### Phase 2 — window B
+### Phase 2 — window B (implemented)
 
-1. Spike: can the live mod pane take text input? Record the result here and delete the unchosen branch's implementation notes only after the owner accepts the spike.
-2. Build the pane (§10) on the chosen branch. Colours only through `PALETTE`.
-3. Same red-first rule and the same per-round acceptance commands as Phase 1. A negative control plants a theme-key literal outside `PALETTE` and must fail the existing ui-lint (design-system §12.4).
+1. Spike: INPUT-WORKS. The pane has an Input; the owner types and presses Enter. Recorded in §10. The display-only branch is not built.
+2. The pane is `mods/roundtable/` (§10). Colours only through `PALETTE`. `$.process.run` is the one extra allowlisted runner, argv fixed to `scripts/roundtable-window.js send`.
+3. Red first at `0de69d4e5` (`model.ts` missing; source lint found no pane files). Negative control: a fixture string with a hex colour, `backgroundColor`, `inverse`, and a theme-key literal fails the roundtable source lint; ui-lint L8 still scans the new folder.
 
 **Acceptance**: KR4.
 

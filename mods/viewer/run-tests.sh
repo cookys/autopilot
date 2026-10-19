@@ -18,8 +18,10 @@ printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wr
 printf '%s\n' '{"modules":["../mods/register.ts"]}' > "$tmp/hooks/hooks.json"
 cp -r "$here" "$tmp/mods/viewer"
 cp -r "$here/../live" "$tmp/mods/live"
+cp -r "$here/../roundtable" "$tmp/mods/roundtable"
 cp "$here/../register.ts" "$tmp/mods/register.ts"
-rm -f "$tmp/mods/viewer/run-tests.sh" "$tmp/mods/live/run-tests.sh"
+rm -f "$tmp/mods/viewer/run-tests.sh" "$tmp/mods/live/run-tests.sh" "$tmp/mods/roundtable/run-tests.sh"
+rm -f "$tmp/mods/roundtable/"*.test.ts "$tmp/mods/roundtable/"*.test.js
 rm -f "$tmp/mods/live/"*.test.ts "$tmp/mods/live/"*.test.js # the live suites run from their own wrapper
 
 cd "$tmp"

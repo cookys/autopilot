@@ -418,12 +418,23 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // Owner ruling 2026-10-17 (the viewer mod): ONE more use, in mods/viewer/show.ts, `$.process.run(gitDiffArgv(args))` - the `show` tool's `git diff` (argument vector, no shell). It is
 // allowed only while gitDiffArgv (viewer/model.ts) forces `--no-ext-diff --no-textconv` after the model's arguments and parseShowInput is a WHITELIST (revisions, --cached, --staged,
 // -U<n>, --unified=<n>; git accepts abbreviated long options, so a blacklist is bypassed by --ext / --textc / --open / --outp).
+// Roundtable window B (2026-10-19): ONE more use, in mods/roundtable/register.ts, `$.process.run(argv, ...)` whose argv is node + scripts/roundtable-window.js + send. The script is the same send as window A. A second use, another file, or a different argv is an offender.
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
 const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
 const processAccesses = src => PROCESS_ACCESS.flatMap(re => [...src.matchAll(re)].map(m => m[0]))
 const VIEWER_SHOW = path.join('viewer', 'show.ts')
+const RT_REGISTER = path.join('roundtable', 'register.ts')
+function roundtableSendOffenders(src) {
+  const uses = processAccesses(src)
+  const out = []
+  if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
+  if (!/\$\.process\.run\(argv,/.test(src)) out.push('the one use is not `$.process.run(argv, ...)`')
+  if (!src.includes('scripts/roundtable-window.js')) out.push('argv does not name scripts/roundtable-window.js')
+  if (!/['"]send['"]/.test(src)) out.push('argv does not pass the send subcommand')
+  return out
+}
 function viewerDiffOffenders(src) {
   const uses = processAccesses(src)
   const out = []
@@ -436,6 +447,7 @@ function processRunOffenders(src, where) {
   const uses = processAccesses(src)
   if (uses.length === 0) return []
   if (where === 'viewer') return viewerDiffOffenders(src)
+  if (where === 'roundtable') return roundtableSendOffenders(src)
   if (!isRegister) return ['$.process outside register.ts']
   const out = []
   if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
@@ -446,16 +458,16 @@ function processRunOffenders(src, where) {
   return out
 }
 // THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
-// `$.process.run(argv, ...)` in live/register.ts and `$.process.run(gitDiffArgv(...))` in viewer/show.ts. No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
+// `$.process.run(argv, ...)` in live/register.ts, `$.process.run(gitDiffArgv(...))` in viewer/show.ts, and `$.process.run(argv, ...)` in roundtable/register.ts (window A send). No receiver, alias, destructuring, helper argument or string key (`Reflect.get($, 'process')`, `$['process']`) can get a second
 // reach for it past a word count. The other nets above only give a better message. Anything legitimate that needs the word (copy, a type name) goes to a locale string.
-const PROCESS_WORD_BASELINE = 2 // live/register.ts (the cleanup scripts) and viewer/show.ts (the show tool's git diff)
+const PROCESS_WORD_BASELINE = 3 // live/register.ts, viewer/show.ts, roundtable/register.ts
 const processWords = src => [...code(src).matchAll(/\bprocess\b/g)].map(m => m[0])
 test('process allowlist, word count: `process` as a whole word occurs exactly ' + PROCESS_WORD_BASELINE + ' time(s) in the non-test sources of mods/, in register.ts', () => {
   const root = path.join(__dirname, '..')
   const files = walk(root).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.(ts|tsx)$/.test(f) && !f.includes('node_modules'))
   assert.ok(files.some(f => f.endsWith('register.ts')) && files.some(f => f.endsWith('locales.ts')), 'the scan sees register.ts and the generated locales.ts')
   const found = files.flatMap(f => processWords(fs.readFileSync(f, 'utf8')).map(() => path.relative(root, f)))
-  assert.deepEqual(found, ['live/register.ts', 'viewer/show.ts'])
+  assert.deepEqual(found, ['live/register.ts', 'roundtable/register.ts', 'viewer/show.ts'])
   assert.equal(found.length, PROCESS_WORD_BASELINE)
 })
 test('process allowlist, word count, controls: an alias, a helper argument, a nested destructuring, a string key and a bracket key each add a count (negative controls)', () => {
@@ -509,7 +521,7 @@ test('prompt.submit allowlist: under mods/ only register.ts sendDecide uses prom
     const src = code(fs.readFileSync(f, 'utf8'))
     if (/\basUser\b/.test(src)) offenders.push(rel + ': asUser')
     if (/process\s*\.\s*spawn\b/.test(src)) offenders.push(rel + ': process spawn')
-    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts') ? 'register' : rel === VIEWER_SHOW ? 'viewer' : '')) offenders.push(rel + ': ' + bad)
+    for (const bad of processRunOffenders(src, rel === path.join('live', 'register.ts') ? 'register' : rel === VIEWER_SHOW ? 'viewer' : rel === RT_REGISTER ? 'roundtable' : '')) offenders.push(rel + ': ' + bad)
     const uses = submitUses(src)
     if (rel !== path.join('live', 'register.ts')) { if (uses.length > 0) offenders.push(rel + ': prompt.submit') ; continue }
     assert.equal(uses.length, 1, 'exactly one use in register.ts')

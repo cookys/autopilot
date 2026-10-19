@@ -150,6 +150,8 @@ What Phase 0 still requires, carried here: exact fleet call shapes stay in `prot
 
 `scripts/roundtable-window.js`, using `scripts/lib/room-log.js`.
 
+Phase 1 is implemented. The helper is `scripts/lib/room-log.js` (append under the lock, read, tail). Window A is `scripts/roundtable-window.js` (`open`, `tail`, `input`, `send`). No `skills/roundtable/SKILL.md` exists; the skill is Phase 3 and still waits on BL-0216. Call the window when the operator is inside tmux and the room log should be tailed and spoken from. Contract: this section and §6. Inventory rows: `docs/scripts-inventory.md`.
+
 - Subcommand `open <room>` opens a new window in the **current** tmux session, split into two panes.
 - Upper pane live-tails `room.jsonl` and can be scrolled (tmux copy mode / scrollback). It prints `seq`, `from`, `kind`, and `text`. Plain text. Theme text colours only: no background colour, no inverse.
 - Lower pane is a one-line input. Enter appends one `say` row with `from` `owner` (and `to` set to the current live seats when a roster is known), then fleet-sends that text to each participant.
@@ -181,7 +183,7 @@ Send failures become `system` rows (§6) and are shown on the window that sent. 
 
 The protocol was run by hand. Evidence and the operator's verdict are in "Phase 0 result" below. Those files are history. Later phases do not extend them and do not treat them as the live record.
 
-### Phase 1 — room log + window A
+### Phase 1 — room log + window A (implemented)
 
 1. `scripts/lib/room-log.js` implements §6.
 2. `scripts/roundtable-window.js` implements §9.

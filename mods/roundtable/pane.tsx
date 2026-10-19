@@ -2,6 +2,7 @@
 // Owner rows: "you are here" (PALETTE.here, theme key claude) — the same meaning as window A's owner foreground.
 // System rows: attention. Send failures: broken. Seat rows: no colour (default text). Rules: structure.
 // No background, no inverse. The Input label has no trailing colon (the field draws its own).
+// The scrollbar thumb is scrollFrame → thumbOf (mods/live/scrollmath.ts): length visible/total of the track, minimum one cell.
 
 import { PALETTE } from '../live/ui'
 import { frameOf, scrollFrame } from '../live/scroll'

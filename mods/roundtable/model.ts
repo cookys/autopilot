@@ -104,6 +104,22 @@ export function displayLines(rows: readonly RoomRow[], width: number): DisplayLi
   return out
 }
 
+// Same formula as thumbOf in mods/live/scrollmath.ts. This file cannot import that module:
+// node --test loads model.ts, and scrollmath.ts imports './ui' with no extension, which node cannot resolve.
+// The pane draws the thumb through scrollFrame, which calls thumbOf. Length is visible/total of the track
+// (at least one cell). Offset 0 is the top; the last offset is the bottom. When every row fits, the thumb is the whole track
+// (thumbOf returns null and draws no bar; this helper reports the full track so the length rule stays one formula).
+export function thumbSpan(total: number, visible: number, offset: number): { top: number; len: number } {
+  const room = Number.isFinite(visible) ? Math.max(0, Math.floor(visible)) : 0
+  if (room <= 0) return { top: 0, len: 0 }
+  if (total <= room) return { top: 0, len: room }
+  const len = Math.min(room, Math.max(1, Math.round((room * room) / total)))
+  const movable = total - room
+  const clamped = Math.min(Math.max(offset, 0), movable)
+  const top = Math.round((clamped / movable) * (room - len))
+  return { top, len }
+}
+
 export function visibleLines<T>(lines: readonly T[], offset: number, room: number): T[] {
   const size = Math.max(room, 0)
   if (size === 0) return []

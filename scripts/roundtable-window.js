@@ -53,6 +53,8 @@ function colourOn(argv, env) {
 const OWNER_FG = '\x1b[38;5;173m';
 const ATTENTION_FG = '\x1b[33m';
 const BROKEN_FG = '\x1b[31m';
+// Structure role (plan §9): dim grey foreground. No background colour and no reverse video.
+const STRUCTURE_FG = '\x1b[90m';
 
 function paint(row, text, on) {
   if (!on) return text;
@@ -75,6 +77,14 @@ function cellWidth(cp) {
 function columnsOf() {
   const n = process.stdout.columns;
   return Number.isInteger(n) && n > 0 ? n : 80;
+}
+
+// One box-drawing rule, the terminal column count wide, printed once above the input prompt.
+function dividerLine(columns, on) {
+  const width = Number.isInteger(columns) && columns > 0 ? columns : 80;
+  const bar = '\u2500'.repeat(width);
+  if (!on) return `${bar}\n`;
+  return `${STRUCTURE_FG}${bar}\x1b[39m\n`;
 }
 
 // Wrap one paragraph to `columns`, keeping a two-space indent on the first line and every continuation.
@@ -253,6 +263,7 @@ function cmdOpen(room, env) {
 }
 
 function cmdInput(room, cliSeats, env, argv) {
+  process.stdout.write(dividerLine(columnsOf(), colourOn(argv, env)));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '> ' });
   let buf = '';
   let exitCode = 0;
@@ -323,4 +334,4 @@ if (require.main === module) {
   if (code !== null && code !== undefined) process.exit(code);
 }
 
-module.exports = { main, formatRow, sendText, OWNER_FG, ATTENTION_FG, BROKEN_FG };
+module.exports = { main, formatRow, sendText, dividerLine, OWNER_FG, ATTENTION_FG, BROKEN_FG, STRUCTURE_FG };

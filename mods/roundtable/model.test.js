@@ -95,3 +95,36 @@ test('roles: owner is here, system is attention, a send failure is broken, a sea
   assert.equal(ui.PALETTE.broken, 'error')
   assert.equal(ui.PALETTE.structure, 'subtle')
 })
+
+// Same arithmetic as mods/live/scrollmath.ts thumbOf. Rejects a thumb that fills the track while rows still overflow.
+function assertThumb(span, total, visible) {
+  assert.equal(typeof span, 'object')
+  assert.ok(span)
+  if (total > visible) {
+    assert.notEqual(span.len, visible, 'thumb fills the track while rows overflow')
+    const len = Math.min(visible, Math.max(1, Math.round((visible * visible) / total)))
+    const movable = total - visible
+    assert.equal(span.len, len)
+    assert.ok(span.top >= 0 && span.top + span.len <= visible)
+    void movable
+  } else {
+    assert.equal(span.len, visible)
+    assert.equal(span.top, 0)
+  }
+}
+
+// # RED at 916010ab9: node --test mods/roundtable/model.test.js exit 1.
+// not ok thumb: TypeError m.thumbSpan is not a function. The pane has no proportional thumb helper, so a 10-of-100 window is not one tenth of the track.
+test('thumb: 10 visible of 100 is one tenth; min 1; full track when it fits; top at 0 and bottom at the tail', () => {
+  const tenth = m.thumbSpan(100, 10, 0)
+  assertThumb(tenth, 100, 10)
+  assert.deepEqual(tenth, { top: 0, len: 1 })
+  const mid = m.thumbSpan(100, 10, 45)
+  assert.deepEqual(mid, { top: 5, len: 1 })
+  const tail = m.thumbSpan(100, 10, 90)
+  assert.deepEqual(tail, { top: 9, len: 1 })
+  assert.equal(m.thumbSpan(100000, 10, 0).len, 1)
+  assert.deepEqual(m.thumbSpan(10, 10, 0), { top: 0, len: 10 })
+  assert.deepEqual(m.thumbSpan(4, 10, 0), { top: 0, len: 10 })
+  assert.throws(() => assertThumb({ top: 0, len: 10 }, 100, 10))
+})

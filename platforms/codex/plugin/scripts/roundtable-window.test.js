@@ -348,3 +348,74 @@ test('input joins a backslash continuation and sends one say', () => {
     throw err;
   }
 });
+
+// A divider line is U+2500 repeated to `columns`, optionally wrapped in one foreground SGR.
+// Background (40–49, 100–107, 48) and reverse (7) are rejected. Plain mode allows no ESC.
+function assertDividerLine(blob, columns) {
+  const lines = String(blob).split('\n');
+  const hit = lines.find((l) => l.replace(/\x1b\[[0-9;]*m/g, '') === '\u2500'.repeat(columns));
+  assert.ok(hit, `no divider of length ${columns} in ${JSON.stringify(blob)}`);
+  const body = hit.replace(/\x1b\[[0-9;]*m/g, '');
+  assert.equal(body.length, columns);
+  assert.equal(body, '\u2500'.repeat(columns));
+  if (hit.includes('\x1b')) {
+    const seqs = hit.match(/\x1b\[[0-9;]*m/g) || [];
+    assert.ok(seqs.length > 0);
+    for (const seq of seqs) {
+      assert.equal(/\x1b\[(?:\d+;)*4\dm/.test(seq), false, seq);
+      assert.equal(/\x1b\[(?:\d+;)*10[0-7]m/.test(seq), false, seq);
+      assert.equal(/\x1b\[48[;m]/.test(seq), false, seq);
+      assert.equal(/\x1b\[7m/.test(seq), false, seq);
+      assert.match(seq, /^\x1b\[(?:3[0-9]|9[0-7]|38;5;\d+|38;2;\d+;\d+;\d+)m$/);
+    }
+  }
+}
+
+// # RED at 916010ab9: node --test scripts/roundtable-window.test.js exit 1.
+// not ok input divider: no divider of length 80 in "> " (input prints only the prompt).
+function readPrompt(args, env) {
+  const child = spawn(process.execPath, [SCRIPT, ...args], { env });
+  let stdout = '';
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('input prompt timed out: ' + JSON.stringify(stdout)));
+    }, 2000);
+    child.stdout.on('data', (b) => {
+      stdout += b;
+      if (!stdout.includes('>')) return;
+      clearTimeout(timer);
+      child.kill();
+      resolve(stdout);
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+test('input prompt prints a divider of the column count in foreground only; NO_COLOR has zero ESC', async () => {
+  const columns = 80;
+  const s = scratch();
+  try {
+    const stdout = await readPrompt(['input', 'room-div', '--seats', 'ns/courier/a'], s.env);
+    assertDividerLine(stdout, columns);
+    assert.match(stdout, /\x1b\[90m/);
+    assert.ok(stdout.indexOf('\u2500') < stdout.indexOf('>'));
+    const plainOut = await readPrompt(
+      ['input', 'room-div', '--no-color', '--seats', 'ns/courier/a'],
+      { ...s.env, NO_COLOR: '1' },
+    );
+    assertDividerLine(plainOut, columns);
+    assert.equal(plainOut.includes('\x1b'), false);
+    const noColor = await readPrompt(
+      ['input', 'room-div', '--seats', 'ns/courier/a'],
+      { ...s.env, NO_COLOR: '1' },
+    );
+    assert.equal(noColor.includes('\x1b'), false);
+    assert.throws(() => assertDividerLine('\u2500'.repeat(columns - 1) + '\n> ', columns));
+  } finally {
+    s.cleanup();
+  }
+});

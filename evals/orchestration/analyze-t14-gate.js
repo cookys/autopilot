@@ -131,8 +131,18 @@ function metricsFromOracleLog(logText) {
   };
 }
 
-function scoreDir(row) {
-  const logPath = path.join(row.out_dir, "oracle.log");
+function runDirFor(outRoot, row) {
+  return path.join(outRoot, "runs", String(row.run_id), "attempt-" + String(row.attempt));
+}
+
+function readResult(dir) {
+  const resultPath = path.join(dir, "result.json");
+  if (!fs.existsSync(resultPath)) return null;
+  try { return JSON.parse(fs.readFileSync(resultPath, "utf8")); } catch (err) { return null; }
+}
+
+function scoreDir(row, dir) {
+  const logPath = path.join(dir, "oracle.log");
   const logText = fs.readFileSync(logPath, "utf8");
   const parsed = metricsFromOracleLog(logText);
   const decoy = parsed.decoy; // SCORE_DECOY_FROM_LOG
@@ -224,6 +234,26 @@ function main() {
   }
 
   let versionOk = data.every((row) => row.runner_version === header.pin_version);
+  const mismatches = [];
+  function directoryFacts(row) {
+    const dir = runDirFor(outDir, row);
+    const result = readResult(dir);
+    const turns = result && Number.isFinite(result.turns_completed) ? result.turns_completed : null;
+    const failure = result && Object.prototype.hasOwnProperty.call(result, "failure_class") ? result.failure_class : null;
+    if (row.turns_completed !== turns || row.failure_class !== failure) {
+      mismatches.push({
+        run_id: row.run_id,
+        attempt: row.attempt,
+        row_turns_completed: row.turns_completed,
+        dir_turns_completed: turns,
+        row_failure_class: Object.prototype.hasOwnProperty.call(row, "failure_class") ? row.failure_class : null,
+        dir_failure_class: failure
+      });
+    }
+    return { dir, turns, failure, readable: result !== null };
+  }
+  const facts = new Map();
+  for (const row of data) facts.set(row, directoryFacts(row));
   const scored = { C: [], G: [] };
   for (const arm of ["C", "G"]) {
     const chosen = new Map();
@@ -232,12 +262,13 @@ function main() {
       if (!prev || row.attempt >= prev.attempt) chosen.set(row.run_id, row);
     }
     for (const row of chosen.values()) {
-      const structurallyValid = row.turns_completed === 5 && row.failure_class !== "infra_fail";
+      const fact = facts.get(row);
+      const structurallyValid = fact.readable && fact.turns === 5 && fact.failure !== "infra_fail";
       if (!structurallyValid) continue;
       let metrics;
-      try { metrics = scoreDir(row); } catch (err) { metrics = null; }
+      try { metrics = scoreDir(row, fact.dir); } catch (err) { metrics = null; }
       if (!metrics || metrics.decoy === null || metrics.fidelity === null) continue;
-      scored[arm].push({ row, metrics, gate: readGateLines(row.out_dir) });
+      scored[arm].push({ row, metrics, gate: readGateLines(fact.dir) });
     }
   }
 
@@ -260,7 +291,10 @@ function main() {
   function infraRate(arm) {
     const attempts = byArm[arm].length;
     if (!attempts) return 0;
-    const infra = byArm[arm].filter((row) => row.failure_class === "infra_fail").length;
+    const infra = byArm[arm].filter((row) => {
+      const fact = facts.get(row);
+      return !fact || !fact.readable || fact.failure === "infra_fail";
+    }).length;
     return infra / attempts;
   }
   const infra = { c: infraRate("C"), g: infraRate("G") };
@@ -329,6 +363,7 @@ function main() {
     fisher_p: fisherP,
     mechanism_runs: mechanismRuns,
     valid_runs: { c: scored.C.length, g: scored.G.length },
+    mismatches,
     infra_attempt_rate: infra,
     reported: {
       retries_per_run: retriesPerRun,

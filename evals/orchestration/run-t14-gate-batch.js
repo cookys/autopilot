@@ -341,6 +341,13 @@ function main() {
   let schedule;
   if (fs.existsSync(schedulePath)) {
     schedule = JSON.parse(fs.readFileSync(schedulePath, "utf8"));
+    if (schedule.pairs !== OPT.pairs) {
+      process.stderr.write(
+        "REFUSE --pairs " + OPT.pairs + " does not match schedule.json pairs " + schedule.pairs +
+        "; the schedule is never regenerated\n"
+      );
+      process.exit(2);
+    }
   } else {
     schedule = buildSchedule(OPT.pairs);
     schedule.workers = OPT.workers;
@@ -367,6 +374,13 @@ function main() {
     rows.push(header);
   } else if (!hashesMatch(header.frozen)) {
     process.stderr.write("REFUSE frozen-file hash mismatch\n");
+    process.exit(2);
+  }
+  if (header.pairs !== OPT.pairs) {
+    process.stderr.write(
+      "REFUSE --pairs " + OPT.pairs + " does not match results.jsonl header pairs " + header.pairs +
+      "; the schedule is never regenerated\n"
+    );
     process.exit(2);
   }
   if (header.pin_version !== OPT.pin) stopBatch("version");

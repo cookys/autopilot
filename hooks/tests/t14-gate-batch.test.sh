@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/t14-gate-batch.test.sh — BL-0055 S3 batch driver and analyzer
 # RED at 6a6373eed: driver and analyzer were absent; the test exited 1 with "missing evals/orchestration/run-t14-gate-batch.js" before any batch or verdict check ran.
+# RED at f8f1ec90e: lying row counted valid_runs.c=1 with no mismatches key; resume never compared --pairs (schedule reused, exit 0).
 
 set -euo pipefail
 
@@ -14,8 +15,19 @@ TASK_DIR="$EVAL_DIR/tasks/t14-constraint-horizon"
 
 TEST_TMP=$(mktemp -d -t "t14-gate-batch-test-XXXXXX")
 trap 'rm -rf "$TEST_TMP"' EXIT
-mkdir -p "$(dirname "$EVIDENCE")"
-: > "$EVIDENCE"
+EVIDENCE_PLACEHOLDER="/tmp/ORCH-GATE-TEST-TMP"
+if [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ]; then
+  mkdir -p "$(dirname "$EVIDENCE")"
+  : > "$EVIDENCE"
+fi
+
+note_evidence() {
+  local text
+  text="$(cat)"
+  [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ] || return 0
+  text="${text//$TEST_TMP/$EVIDENCE_PLACEHOLDER}"
+  printf '%s\n' "$text" >> "$EVIDENCE"
+}
 
 export ORCH_TIMEOUT="30s"
 
@@ -150,7 +162,7 @@ lines.push(JSON.stringify({
 function one(group, i, m1, m2, lie) {
   const idNum = String(i + 1).padStart(2, "0");
   const runId = group + "-" + idNum;
-  const runDir = path.join(out, "runs", runId);
+  const runDir = path.join(out, "runs", runId, "attempt-1");
   fs.mkdirSync(runDir, { recursive: true });
   const decoy = i < m1;
   const fidelity = i < m2;
@@ -168,6 +180,10 @@ function one(group, i, m1, m2, lie) {
     ""
   ].join("\n");
   fs.writeFileSync(path.join(runDir, "oracle.log"), log);
+  fs.writeFileSync(path.join(runDir, "result.json"), JSON.stringify({
+    turns_completed: 5,
+    failure_class: (decoy && fidelity) ? null : "capability_fail"
+  }));
   if (group === "G" && i < 3) {
     fs.writeFileSync(path.join(runDir, "gate.jsonl"),
       '{"turn":3,"ok":false,"violations":[{"constraint":1,"rule":"tabs","evidence":"comma"}],"feature_gaps":[],"checked":[1]}\n' +
@@ -250,7 +266,7 @@ set -e
   cat "$TEST_TMP/nc9-red-stdout.txt"
   echo
   echo "RED NC9: mutant driver did not stop on 401 unauthorized"
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$NC9_RED_STATUS" -eq 75 ] || grep -q "reason=auth" "$TEST_TMP/nc9-red-stdout.txt"; then
   fail "NC9 mutant should not stop with reason=auth"
 fi
@@ -283,7 +299,7 @@ set -e
   cat "$TEST_TMP/nc9v-red-stdout.txt"
   echo
   echo "RED NC9 version: mutant driver did not stop when claude --version differed from the pin"
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$NC9V_RED_STATUS" -eq 75 ] || grep -q "reason=version" "$TEST_TMP/nc9v-red-stdout.txt"; then
   fail "NC9 version mutant should not stop with reason=version"
 fi
@@ -313,7 +329,7 @@ set -e
   cat "$TEST_TMP/nc10-red-stdout.txt"
   echo
   echo "RED NC10: row-reading analyzer accepted the lying decoy flags"
-} >> "$EVIDENCE"
+} | note_evidence
 NC10_RED_VERDICT="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(j.verdict);' "$TEST_TMP/nc10-red-stdout.txt")"
 if [ "$NC10_RED_VERDICT" != "SUCCESS" ]; then
   fail "NC10 mutant should reach SUCCESS from the lying rows (got $NC10_RED_VERDICT)"
@@ -353,7 +369,7 @@ set -e
   cat "$TEST_TMP/hash-red-stdout.txt"
   echo
   echo "RED hash: analyzer mutant scored a batch whose frozen-file hash does not match"
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$HASH_RED_STATUS" -ne 0 ]; then
   fail "hash mutant should still score the mismatched batch (exit $HASH_RED_STATUS)"
 fi
@@ -588,5 +604,76 @@ QUOTA_ROWS="$(data_lines "$QUOTA_OUT/results.jsonl")"
 if [ "$QUOTA_ROWS" -ne 2 ]; then
   fail "quota stop should keep two zero-turn rows (got $QUOTA_ROWS)"
 fi
+
+# --- resume refuses a different --pairs (schedule is never regenerated) ---
+write_claude "$TEST_TMP/pairs-claude" ok "$TEST_TMP/pairs-count"
+write_stub "$TEST_TMP/pairs-stub" 0
+PAIRS_OUT="$TEST_TMP/pairs-out"
+run_driver --out "$PAIRS_OUT" --pairs 1 --pin-version "$PIN" \
+  --claude-bin "$TEST_TMP/pairs-claude" --runner stub --stub-bin "$TEST_TMP/pairs-stub" \
+  > "$TEST_TMP/pairs-first-stdout.txt"
+cp "$PAIRS_OUT/schedule.json" "$TEST_TMP/pairs-schedule-before.json"
+set +e
+run_driver --out "$PAIRS_OUT" --pairs 2 --pin-version "$PIN" \
+  --claude-bin "$TEST_TMP/pairs-claude" --runner stub --stub-bin "$TEST_TMP/pairs-stub" \
+  > "$TEST_TMP/pairs-resume-stdout.txt" 2> "$TEST_TMP/pairs-resume-stderr.txt"
+PAIRS_STATUS=$?
+set -e
+if [ "$PAIRS_STATUS" -ne 2 ]; then
+  fail "resume with a different --pairs should exit 2 (got $PAIRS_STATUS) stderr=$(cat "$TEST_TMP/pairs-resume-stderr.txt")"
+fi
+grep -q "2" "$TEST_TMP/pairs-resume-stderr.txt" || fail "pairs refusal should name the new --pairs value"
+grep -q "1" "$TEST_TMP/pairs-resume-stderr.txt" || fail "pairs refusal should name the recorded pairs value"
+grep -q "never regenerated" "$TEST_TMP/pairs-resume-stderr.txt" || fail "pairs refusal should say the schedule is never regenerated"
+cmp "$PAIRS_OUT/schedule.json" "$TEST_TMP/pairs-schedule-before.json" || fail "pairs refusal regenerated schedule.json"
+
+# --- analyzer validity comes from the run directory, not the row ---
+MIS="$TEST_TMP/mismatch-set"
+mkdir -p "$MIS/runs/C-01/attempt-1" "$MIS/decoy-out"
+frozen_json > "$TEST_TMP/mismatch-frozen.json"
+node - "$MIS" "$PIN" "$TEST_TMP/mismatch-frozen.json" << 'JS'
+const fs = require("fs");
+const path = require("path");
+const out = process.argv[2];
+const pin = process.argv[3];
+const frozen = JSON.parse(fs.readFileSync(process.argv[4], "utf8"));
+const real = path.join(out, "runs", "C-01", "attempt-1");
+const decoy = path.join(out, "decoy-out");
+const log = [
+  "{",
+  '  "features_pass": true,',
+  '  "constraints_pass": true,',
+  '  "features": {"1":true,"2":true,"3":true,"4":true,"5":true},',
+  '  "constraints": {"1":true,"2":true,"3":true}',
+  "}",
+  "decoy_respected=true",
+  "fidelity_ok=true",
+  ""
+].join("\n");
+fs.writeFileSync(path.join(decoy, "oracle.log"), log);
+fs.writeFileSync(path.join(decoy, "result.json"), JSON.stringify({ turns_completed: 5, failure_class: null }));
+fs.writeFileSync(path.join(real, "oracle.log"), log);
+fs.writeFileSync(path.join(real, "result.json"), JSON.stringify({ turns_completed: 5, failure_class: "infra_fail" }));
+const header = { record: "header", batch_id: "synthetic", plan_commit: "synthetic", harness_commit: "synthetic", git_sha: "synthetic", pin_version: pin, frozen, pairs: 1 };
+const row = {
+  batch_id: "synthetic", run_id: "C-01", pair: 1, group: "C", attempt: 1,
+  started_at: "2026-10-19T00:00:00.000Z", git_sha: "synthetic", runner_version: pin,
+  model: "claude-haiku-4-5", duration: 1, turns_completed: 5, valid: true,
+  failure_class: null, failure_cause: null, oracle_pass: true, decoy_respected: true, fidelity_ok: true,
+  constraints: { "1": true, "2": true, "3": true }, features: { "1": true, "2": true, "3": true, "4": true, "5": true },
+  gate_mode: "observe", gate_retries: 0, gate_retries_by_turn: [], gate_violations_by_turn: [],
+  gate_exhausted: false, verifier_final_ok: null, cost_usd: null, out_dir: decoy
+};
+fs.writeFileSync(path.join(out, "results.jsonl"), JSON.stringify(header) + "\n" + JSON.stringify(row) + "\n");
+JS
+MIS_REPORT="$(node "$ANALYZER" --out "$MIS")"
+node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (!j.valid_runs || j.valid_runs.c !== 0) process.exit(2);
+const hits = (j.mismatches || []).filter((m) => m.run_id === "C-01" && m.attempt === 1);
+if (hits.length !== 1) process.exit(3);
+const m = hits[0];
+if (m.row_failure_class !== null || m.dir_failure_class !== "infra_fail") process.exit(4);
+' <<<"$MIS_REPORT" || fail "analyzer trusted a valid self-report over infra_fail in the run directory: $MIS_REPORT"
 
 echo "OK t14 gate batch"

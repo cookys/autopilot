@@ -269,7 +269,9 @@ else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
 
-mkdir -p "$(dirname "$EVIDENCE")"
-printf '%s\n' "$RED_LOG" >"$EVIDENCE"
+if [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ]; then
+  mkdir -p "$(dirname "$EVIDENCE")"
+  printf '%s\n' "${RED_LOG//$TEST_TMP//tmp/ORCH-GATE-TEST-TMP}" >"$EVIDENCE"
+fi
 
 finalize_test

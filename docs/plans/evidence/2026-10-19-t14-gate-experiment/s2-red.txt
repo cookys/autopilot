@@ -10,6 +10,6 @@ exit=0
 RED NC7: observe mutant recorded gate_retries=6
 === NC8 red: verifier copied into TEMP_REPO ===
 exit=0 hits=1
-/tmp/orchestration-eval-gate-test-IKUPfP/nc8-snap/verify-turn.js
+/tmp/ORCH-GATE-TEST-TMP/nc8-snap/verify-turn.js
 
 RED NC8: copied verifier is visible in the temp repo

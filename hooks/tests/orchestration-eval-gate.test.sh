@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/orchestration-eval-gate.test.sh — BL-0055 S2 harness --gate
 # RED at d7ce15a9e: unmodified harness has no gate_enforce_wants_retry; the NC6 mutant step exited 1 with "gate_enforce_wants_retry missing" before any enforce retry could run.
+# RED at f8f1ec90e: gate_error kept calling the model (stub calls=5); later turn_0N.md files were still written.
 
 set -euo pipefail
 
@@ -9,11 +10,23 @@ EVAL_DIR="$REPO_ROOT/evals/orchestration"
 HARNESS="$EVAL_DIR/run-orchestration-eval.sh"
 BASE_SHA="3a72a54dcaf2df27ed82a9d8a42bd776c93b23b5"
 EVIDENCE="$REPO_ROOT/docs/plans/evidence/2026-10-19-t14-gate-experiment/s2-red.txt"
+EVIDENCE_PLACEHOLDER="/tmp/ORCH-GATE-TEST-TMP"
 BAD_CSV="$EVAL_DIR/tasks/t14-constraint-horizon/gate/fixtures/bad-csv/cli.py"
 TEST_TMP=$(mktemp -d -t "orchestration-eval-gate-test-XXXXXX")
 trap 'rm -rf "$TEST_TMP"' EXIT
-mkdir -p "$(dirname "$EVIDENCE")"
-: > "$EVIDENCE"
+# Committed red transcripts stay untouched unless a human asks to refresh them.
+if [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ]; then
+  mkdir -p "$(dirname "$EVIDENCE")"
+  : > "$EVIDENCE"
+fi
+
+note_evidence() {
+  local text
+  text="$(cat)"
+  [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ] || return 0
+  text="${text//$TEST_TMP/$EVIDENCE_PLACEHOLDER}"
+  printf '%s\n' "$text" >> "$EVIDENCE"
+}
 
 export ORCH_TIMEOUT="1m"
 
@@ -144,7 +157,7 @@ set -e
   cat "$TEST_TMP/nc6-red-stderr.txt"
   if [ -f "$NC6_RED_OUT/result.json" ]; then cat "$NC6_RED_OUT/result.json"; fi
   echo
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$NC6_RED_STATUS" -ne 0 ] || [ ! -f "$NC6_RED_OUT/result.json" ]; then
   fail "NC6 mutant did not produce a result (exit $NC6_RED_STATUS)"
 fi
@@ -152,7 +165,7 @@ NC6_RED_RETRIES="$(json_get "$NC6_RED_OUT/result.json" gate_retries)"
 if [ "$NC6_RED_RETRIES" != "0" ]; then
   fail "NC6 mutant should record 0 retries (got $NC6_RED_RETRIES)"
 fi
-echo "RED NC6: enforce with the retry predicate removed recorded gate_retries=0" >> "$EVIDENCE"
+echo "RED NC6: enforce with the retry predicate removed recorded gate_retries=0" | note_evidence
 
 # --- NC7 red: observe retries ---
 NC7_MUT="$TEST_TMP/nc7/evals/orchestration/run-orchestration-eval.sh"
@@ -177,7 +190,7 @@ set -e
   echo "exit=$NC7_RED_STATUS"
   if [ -f "$NC7_RED_OUT/result.json" ]; then cat "$NC7_RED_OUT/result.json"; fi
   echo
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$NC7_RED_STATUS" -ne 0 ] || [ ! -f "$NC7_RED_OUT/result.json" ]; then
   fail "NC7 mutant did not produce a result (exit $NC7_RED_STATUS)"
 fi
@@ -185,7 +198,7 @@ NC7_RED_RETRIES="$(json_get "$NC7_RED_OUT/result.json" gate_retries)"
 if [ "$NC7_RED_RETRIES" = "0" ]; then
   fail "NC7 mutant observe should retry and the red control did not fire"
 fi
-echo "RED NC7: observe mutant recorded gate_retries=$NC7_RED_RETRIES" >> "$EVIDENCE"
+echo "RED NC7: observe mutant recorded gate_retries=$NC7_RED_RETRIES" | note_evidence
 
 # --- NC8 red: verifier copied into the temp repo ---
 NC8_MUT="$TEST_TMP/nc8/evals/orchestration/run-orchestration-eval.sh"
@@ -213,11 +226,11 @@ NC8_HITS="$(find "$NC8_SNAP" -name 'verify-turn.js' -o -name 'retry_*.md' -o -ty
   echo "exit=$NC8_RED_STATUS hits=$NC8_HITS"
   find "$NC8_SNAP" -name 'verify-turn.js' -o -name 'retry_*.md' -o -type d -name gate 2>/dev/null || true
   echo
-} >> "$EVIDENCE"
+} | note_evidence
 if [ "$NC8_HITS" = "0" ]; then
   fail "NC8 mutant should leave verify-turn.js in the temp repo"
 fi
-echo "RED NC8: copied verifier is visible in the temp repo" >> "$EVIDENCE"
+echo "RED NC8: copied verifier is visible in the temp repo" | note_evidence
 
 # --- NC6 green ---
 NC6_OUT="$TEST_TMP/nc6-green"
@@ -295,6 +308,26 @@ run_harness "$HARNESS" "$ERR_OUT" --gate enforce > "$TEST_TMP/gate-error-stdout.
 [ "$(json_get "$ERR_OUT/result.json" failure_class)" = "infra_fail" ] || fail "gate_error row is not infra_fail ($(json_get "$ERR_OUT/result.json" failure_class))"
 compgen -G "$ERR_OUT/retry_*.md" > /dev/null && fail "gate_error wrote a retry" || true
 echo "gate_error green: verifier exit 2 is infra_fail with no retry"
+
+# --- gate_error ends the run: later turns are not executed ---
+GATE_STOP_COUNT="$TEST_TMP/gate-stop-count"
+: > "$GATE_STOP_COUNT"
+cat > "$TEST_TMP/gate-stop-stub.sh" << EOF
+#!/usr/bin/env bash
+echo "call" >> "$GATE_STOP_COUNT"
+rm -f "\$PWD/cli.py"
+EOF
+chmod +x "$TEST_TMP/gate-stop-stub.sh"
+export ORCH_STUB_BIN="$TEST_TMP/gate-stop-stub.sh"
+STOP_OUT="$TEST_TMP/gate-error-stop"
+run_harness "$HARNESS" "$STOP_OUT" --gate enforce > "$TEST_TMP/gate-error-stop-stdout.txt"
+STOP_CALLS="$(wc -l < "$GATE_STOP_COUNT" | tr -d ' ')"
+[ "$STOP_CALLS" = "1" ] || fail "gate_error kept calling the model (stub calls=$STOP_CALLS)"
+[ -f "$STOP_OUT/turn_01.md" ] || fail "gate_error did not record the failing turn prompt"
+for later in 02 03 04 05; do
+  [ ! -f "$STOP_OUT/turn_${later}.md" ] || fail "gate_error wrote turn_${later}.md after the verifier exited 2"
+done
+echo "gate_error stop green: no model call and no turn file past the failing turn"
 
 # --- byte-identical off vs base commit harness ---
 export ORCH_STUB_BIN="$TEST_TMP/noop-stub.sh"

@@ -370,6 +370,10 @@ if [ "$RUNNER" = "cc" ]; then
           RUN_EXIT=$GATE_TURN_EXIT
           break
         fi
+        # Verifier exit 2 is an infra failure. Do not call the model for later turns.
+        if [ "$GATE_ERROR" = "true" ]; then
+          break
+        fi
       fi
       TURNS_COMPLETED=$((TURNS_COMPLETED + 1))
     done
@@ -474,6 +478,10 @@ elif [ "$RUNNER" = "stub" ]; then
         apply_gate "$((TURNS_COMPLETED + 1))" stub
         if [ "$GATE_TURN_FAILED" -eq 1 ]; then
           RUN_EXIT=$GATE_TURN_EXIT
+          break
+        fi
+        # Verifier exit 2 is an infra failure. Do not call the model for later turns.
+        if [ "$GATE_ERROR" = "true" ]; then
           break
         fi
       fi

@@ -105,6 +105,17 @@
         "lib/stage-graph-cell.js": "cfd434a000d646d12661dc72c94aa5151163c8f8191042d53774ffea846f5dfd",
         "prereg/stage-graph.amend-6-refused-call.json": "24ecac1e332ef3c78147aeea785401ea71b257ca6a5aaa53ddd66fc0474405c3"
       }
+    },
+    "stage-graph.amend-7-v11": {
+      "date": "2026-10-19",
+      "effective_from": "v11",
+      "no_counted_cell_had_run": true,
+      "note": "guidance drift since v10 + BL-0117/BL-0093-2 text; guidance.files/non_skill_files extended, guidance.out_of_arm added (6 entries), runner stays pinned at 2.1.296. Digests are of the as-amended files.",
+      "files": {
+        "prereg/stage-graph.json": "979b451269991cf15cfb06e804500ca92b60a3ad240c697c7d32ec878d374ee7",
+        "prereg/stage-graph.amend-7-v11.json": "49de15b0341868a388865e7e3c3a851b3ab17e57974f524ad51bedb4536fbb48",
+        "../../scripts/check-guidance-eval.js": "23f694fbff9c8bc62b3d0c81264442d53a042961f4c8b0b7dcdf018acc986ddc"
+      }
     }
   },
   "stage-graph-g67": {

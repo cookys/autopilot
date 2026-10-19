@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 7,
+  "row": "stage-graph",
+  "date": "2026-10-19",
+  "effective_from": "v11",
+  "no_counted_cell_had_run": true,
+  "made_after_v10_results_seen": true,
+  "v1_to_v10_rescored": false,
+  "reason": "guidance drift since v10 plus two owner-approved wording changes; the v10 arm no longer matches the repo. Recomputed on the new base (develop 621f61a37 + the v11 guidance commits): check-guidance-eval.js --base 8a10980f against the v10 results reported 63 differing guidance files and 40 failures, 15 of them not in the prereg guidance file set.",
+  "text_changes": [
+    {
+      "id": "BL-0117",
+      "file": "skills/dev-flow/SKILL.md",
+      "change": "wait table split at 2 min: \"<= 2 min\" foreground Bash with an explicit timeout; \"> 2 min\" Monitor with an end condition, or run_in_background with the output path written down plus a dead-man timer. Replaces the \"<= 15 min / > 15 min\" rows."
+    },
+    {
+      "id": "BL-0093 point 2",
+      "file": "skills/ceo-agent/SKILL.md",
+      "change": "one sentence: no TaskCreate means bookkeeping is unavailable, not a missing required capability; keep going and record tasks in the report."
+    },
+    {
+      "id": "mirror",
+      "file": "profiles/*",
+      "change": "profiles hash chain repinned (canonical_rules 645 -> 646); codex mirrors synced."
+    }
+  ],
+  "guidance_files_added": {
+    "non_skill_files": [
+      "project-config-template/qc-gate-config.md",
+      "project-config-template/task-class-config.md",
+      "project-config-template/worktree-teardown-config.md",
+      "references/consult-discuss-seats.md",
+      "references/mods.md",
+      "references/qualification-defaults.md",
+      "references/workflow-snapshot.md",
+      "references/worktree-placement.md"
+    ],
+    "skill_files_in_arm_skills": [
+      "skills/dev-flow/references/card-relocated.md"
+    ],
+    "counts_before": {
+      "files": 65,
+      "non_skill_files": 11
+    },
+    "counts_after": {
+      "files": 74,
+      "non_skill_files": 19
+    }
+  },
+  "out_of_arm": {
+    "note": "Declared under the new guidance.out_of_arm field of prereg/stage-graph.json, enforced by scripts/check-guidance-eval.js (shipping commit must change the path inside base..head; no arm manifest may load the path). These 4 skills are in neither the base nor the change arm; the eval cannot see them.",
+    "entries": [
+      {
+        "path": "skills/engine-onboarding/SKILL.md",
+        "commit": "caed99ef8ea21bc96acb89ad025aaf1fdef8e197",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/engine-onboarding/references/role-and-harness-governance.md",
+        "commit": "0f9a16ef4d0e8bab3835c5996703a3e4ca101f17",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/handoff/SKILL.md",
+        "commit": "7bcef39cfa7e820e6e29957ce713ea73a8ddac23",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/harness-maintenance/SKILL.md",
+        "commit": "061cc11c79286232f68906c750ec78fb8300fcfd",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/hetero-review/SKILL.md",
+        "commit": "56a951ce1a6673aaddf61438563bd3d3d8282a93",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/hetero-review/references/code-loop.md",
+        "commit": "f787aef9da2d3aa88f2c40b4b25c221dd808167a",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      }
+    ]
+  },
+  "drifted_files_at_new_base": [
+    "project-config-template/dev-flow-config.md",
+    "project-config-template/finish-flow-config.md",
+    "project-config-template/qc-gate-config.md",
+    "project-config-template/review-loop-config.md",
+    "project-config-template/task-class-config.md",
+    "project-config-template/worktree-teardown-config.md",
+    "references/backlog-entry.md",
+    "references/consult-discuss-seats.md",
+    "references/evidence-discipline.md",
+    "references/four-layer-design.md",
+    "references/hetero-dispatch.md",
+    "references/mods.md",
+    "references/multi-agent-portability.md",
+    "references/plan-template.md",
+    "references/qualification-defaults.md",
+    "references/review-page.md",
+    "references/skill-contract-card.md",
+    "references/workflow-snapshot.md",
+    "references/worktree-placement.md",
+    "skills/ceo-agent/SKILL.md",
+    "skills/ceo-agent/references/depth0-control-loop.md",
+    "skills/ceo-agent/references/level-front-door.md",
+    "skills/ceo-agent/references/task-prompt-templates.md",
+    "skills/ceo-agent/references/tree-adapter.md",
+    "skills/debug/SKILL.md",
+    "skills/dev-flow/SKILL.md",
+    "skills/dev-flow/references/card-relocated.md",
+    "skills/dev-flow/references/context-continuation.md",
+    "skills/dev-flow/references/hetero-loops.md",
+    "skills/dev-flow/references/historical-rationale.md",
+    "skills/dev-flow/references/post-feature-doc-sync.md",
+    "skills/dev-flow/references/stage-graph.md",
+    "skills/distill/SKILL.md",
+    "skills/doc-sync/SKILL.md",
+    "skills/engine-onboarding/SKILL.md",
+    "skills/engine-onboarding/references/role-and-harness-governance.md",
+    "skills/finish-flow/SKILL.md",
+    "skills/handoff/SKILL.md",
+    "skills/harness-maintenance/SKILL.md",
+    "skills/hetero-review/SKILL.md",
+    "skills/hetero-review/references/code-loop.md",
+    "skills/l4/SKILL.md",
+    "skills/l5/SKILL.md",
+    "skills/l5/references/hetero-impl-loop.md",
+    "skills/l6/SKILL.md",
+    "skills/l6/references/full-dispatch-pipeline.md",
+    "skills/learn/SKILL.md",
+    "skills/next/SKILL.md",
+    "skills/next/references/phase0-hygiene.md",
+    "skills/project-lifecycle/SKILL.md",
+    "skills/project-lifecycle/references/plan-bootstrap.md",
+    "skills/project-lifecycle/references/project-archive.md",
+    "skills/project-lifecycle/references/project-structure.md",
+    "skills/project-lifecycle/references/templates.md",
+    "skills/quality-pipeline/SKILL.md",
+    "skills/quality-pipeline/references/code-review.md",
+    "skills/quality-pipeline/references/completeness-gate.md",
+    "skills/quality-pipeline/references/test-integrity-gate.md",
+    "skills/quality-pipeline/references/test-policy.md",
+    "skills/research-to-ship/SKILL.md",
+    "skills/team/SKILL.md",
+    "skills/think-tank/SKILL.md",
+    "skills/think-tank/references/dialectic-brief-template.md"
+  ],
+  "runner_pin": {
+    "version": "2.1.296",
+    "path": "~/.autopilot/claude-pin/2.1.296/claude (a copy), PATH dir ~/.autopilot/claude-pin/bin/",
+    "launch": "DISABLE_AUTOUPDATER=1",
+    "not_upgraded": "host claude is 2.1.303; v11 stays on the amend-4 pin so v10 and v11 differ only in guidance text. Every v11 row must carry runner_version 2.1.296; a mixed-version file is instrument-invalid."
+  },
+  "written_before_results": "This amendment, the prereg edit and the v11 freeze are committed before any v11 cell has run. No v11 result existed when it was written.",
+  "unchanged": [
+    "ship thresholds (change >= 10/12, red <= 4/12, generic no regression)",
+    "briefs, answer keys, markers, scorer and extractor (amend-6 effective from v11)",
+    "base arm and base pack ids",
+    "amendments 1-6"
+  ]
+}

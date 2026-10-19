@@ -120,28 +120,44 @@
     "non_skill_files": [
       "project-config-template/dev-flow-config.md",
       "project-config-template/finish-flow-config.md",
+      "project-config-template/qc-gate-config.md",
       "project-config-template/review-loop-config.md",
+      "project-config-template/task-class-config.md",
+      "project-config-template/worktree-teardown-config.md",
       "references/backlog-entry.md",
+      "references/consult-discuss-seats.md",
       "references/evidence-discipline.md",
       "references/four-layer-design.md",
       "references/hetero-dispatch.md",
+      "references/mods.md",
       "references/multi-agent-portability.md",
       "references/plan-template.md",
+      "references/qualification-defaults.md",
       "references/review-page.md",
-      "references/skill-contract-card.md"
+      "references/skill-contract-card.md",
+      "references/workflow-snapshot.md",
+      "references/worktree-placement.md"
     ],
     "files": [
       "project-config-template/dev-flow-config.md",
       "project-config-template/finish-flow-config.md",
+      "project-config-template/qc-gate-config.md",
       "project-config-template/review-loop-config.md",
+      "project-config-template/task-class-config.md",
+      "project-config-template/worktree-teardown-config.md",
       "references/backlog-entry.md",
+      "references/consult-discuss-seats.md",
       "references/evidence-discipline.md",
       "references/four-layer-design.md",
       "references/hetero-dispatch.md",
+      "references/mods.md",
       "references/multi-agent-portability.md",
       "references/plan-template.md",
+      "references/qualification-defaults.md",
       "references/review-page.md",
       "references/skill-contract-card.md",
+      "references/workflow-snapshot.md",
+      "references/worktree-placement.md",
       "skills/ceo-agent/SKILL.md",
       "skills/ceo-agent/references/decision-matrix.md",
       "skills/ceo-agent/references/depth0-control-loop.md",
@@ -151,6 +167,7 @@
       "skills/ceo-agent/references/tree-adapter.md",
       "skills/debug/SKILL.md",
       "skills/dev-flow/SKILL.md",
+      "skills/dev-flow/references/card-relocated.md",
       "skills/dev-flow/references/context-continuation.md",
       "skills/dev-flow/references/hetero-loops.md",
       "skills/dev-flow/references/historical-rationale.md",
@@ -207,6 +224,38 @@
         "references/review-page.md",
         "skills/dev-flow/references/stage-graph.md"
       ]
-    }
+    },
+    "out_of_arm": [
+      {
+        "path": "skills/engine-onboarding/SKILL.md",
+        "commit": "caed99ef8ea21bc96acb89ad025aaf1fdef8e197",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/engine-onboarding/references/role-and-harness-governance.md",
+        "commit": "0f9a16ef4d0e8bab3835c5996703a3e4ca101f17",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/handoff/SKILL.md",
+        "commit": "7bcef39cfa7e820e6e29957ce713ea73a8ddac23",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/harness-maintenance/SKILL.md",
+        "commit": "061cc11c79286232f68906c750ec78fb8300fcfd",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/hetero-review/SKILL.md",
+        "commit": "56a951ce1a6673aaddf61438563bd3d3d8282a93",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      },
+      {
+        "path": "skills/hetero-review/references/code-loop.md",
+        "commit": "f787aef9da2d3aa88f2c40b4b25c221dd808167a",
+        "reason": "not loaded by any arm; shipped mechanism/doc change"
+      }
+    ]
   }
 }

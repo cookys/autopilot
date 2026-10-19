@@ -18,6 +18,18 @@ REINJECT_FILE=""
 # holds everything else equal. Unset ⇒ byte-identical behaviour to before.
 PACK_FILE=""
 CONTRACT_MODE=""
+# --gate defaults to off (empty). observe records the per-turn verifier; enforce
+# retries the same session. Neither path runs unless the flag is observe|enforce,
+# so an unflagged run stays byte-identical.
+GATE_MODE=""
+GATE_MAX_RETRIES="2"
+GATE_RETRIES=0
+GATE_EXHAUSTED=false
+GATE_ERROR=false
+GATE_RETRIES_BY_TURN=""
+GATE_VIOLATIONS_BY_TURN=""
+GATE_TURN_FAILED=0
+GATE_TURN_EXIT=0
 
 # Parse arguments
 while [ $# -gt 0 ]; do
@@ -28,6 +40,8 @@ while [ $# -gt 0 ]; do
     --model) MODEL="$2"; shift 2 ;;
     --out) OUT_DIR="$2"; shift 2 ;;
     --reinject) REINJECT_FILE="$2"; shift 2 ;;
+    --gate) GATE_MODE="$2"; shift 2 ;;
+    --gate-max-retries) GATE_MAX_RETRIES="$2"; shift 2 ;;
     --pack) PACK_FILE="$2"; shift 2 ;;
     --contract) CONTRACT_MODE="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -35,7 +49,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--pack <file>] [--contract on|off]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--pack <file>] [--contract on|off]" >&2
   exit 2
 fi
 # Default the two overrides to the arm-derived values so an unflagged run is unchanged.
@@ -76,6 +90,119 @@ if [ -n "$REINJECT_FILE" ]; then
   fi
 fi
 
+if ! [[ "$GATE_MAX_RETRIES" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --gate-max-retries must be a non-negative integer (got: $GATE_MAX_RETRIES)" >&2
+  exit 2
+fi
+if [ -n "$GATE_MODE" ]; then
+  case "$GATE_MODE" in
+    off|observe|enforce) ;;
+    *) echo "ERROR: --gate must be off|observe|enforce (got: $GATE_MODE)" >&2; exit 2 ;;
+  esac
+  if [ "$HAS_TURNS" != "true" ]; then
+    echo "ERROR: --gate requires a multi-turn task" >&2
+    exit 2
+  fi
+fi
+
+# Verifier lives beside the task, derived from this script's repo root. It is
+# never copied into TEMP_REPO.
+GATE_VERIFIER="$TASK_DIR/gate/verify-turn.js"
+
+gate_enforce_wants_retry() {
+  local vexit="$1"
+  local so_far="$2"
+  [ "$vexit" -eq 1 ] || return 1
+  [ "$so_far" -lt "$GATE_MAX_RETRIES" ] || return 1
+  [ "$GATE_MODE" = "enforce" ]
+}
+
+gate_write_retry() {
+  local dest="$1"
+  GATE_JSON_PAYLOAD="$2" node -e '
+const j = JSON.parse(process.env.GATE_JSON_PAYLOAD || "{}");
+const violations = Array.isArray(j.violations) && j.violations.length
+  ? j.violations
+  : [{ constraint: "?", rule: "unspecified", evidence: "verifier reported a violation" }];
+const lines = violations.map((v) =>
+  "The change you just made breaks project rule " + v.constraint + ": `" + v.rule + "`. Observed: `" + v.evidence + "`. Fix this without removing any feature you were asked for, and keep every other rule."
+);
+process.stdout.write(lines.join("\n\n") + "\n");
+' > "$dest"
+}
+
+gate_invoke_cc() {
+  local prompt="$1"
+  (
+    cd "$TEMP_REPO"
+    export HOME="$SCRATCH_HOME"
+    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json --resume "$SESSION_ID" < "$prompt"
+  ) >> "$RAW_LOG" 2>&1
+}
+
+gate_invoke_stub() {
+  local prompt="$1"
+  (
+    cd "$TEMP_REPO"
+    timeout "$TIMEOUT_LIMIT" "$ORCH_STUB_BIN" "$prompt" < "$prompt"
+  ) >> "$RAW_LOG" 2>&1
+}
+
+apply_gate() {
+  local turn="$1"
+  local runner_kind="$2"
+  local retries=0
+  local vexit=0
+  local json=""
+  local inv=0
+  local vcount=0
+  local retry_path=""
+  GATE_TURN_FAILED=0
+  while :; do
+    vexit=0
+    if [ ! -f "$GATE_VERIFIER" ]; then
+      vexit=2
+      json='{"turn":'"$turn"',"ok":false,"violations":[],"feature_gaps":[],"checked":[],"error":"verifier missing"}'
+    else
+      json=$(node "$GATE_VERIFIER" --turn "$turn" --repo "$TEMP_REPO" --json 2>>"$RAW_LOG") && vexit=0 || vexit=$?
+    fi
+    printf '%s\n' "$json" >> "$OUT_DIR/gate.jsonl"
+    if [ "$vexit" -ne 0 ] && [ "$vexit" -ne 1 ]; then
+      GATE_ERROR=true
+      break
+    fi
+    if [ "$vexit" -eq 0 ]; then
+      break
+    fi
+    if gate_enforce_wants_retry "$vexit" "$retries"; then
+      retries=$((retries + 1))
+      GATE_RETRIES=$((GATE_RETRIES + 1))
+      retry_path="$OUT_DIR/retry_${turn}_${retries}.md"
+      gate_write_retry "$retry_path" "$json"
+      # GATE_RETRY_INVOCATION
+      if [ "$runner_kind" = "cc" ]; then
+        gate_invoke_cc "$retry_path"
+      else
+        gate_invoke_stub "$retry_path"
+      fi
+      inv=$?
+      if [ "$inv" -ne 0 ]; then
+        GATE_TURN_FAILED=1
+        GATE_TURN_EXIT=$inv
+        break
+      fi
+      continue
+    fi
+    if [ "$GATE_MODE" = "enforce" ]; then
+      GATE_EXHAUSTED=true
+    fi
+    break
+  done
+  vcount=$(GATE_JSON_PAYLOAD="$json" node -e 'const j=JSON.parse(process.env.GATE_JSON_PAYLOAD||"{}"); process.stdout.write(String((j.violations||[]).length));' 2>/dev/null) || vcount=0
+  GATE_RETRIES_BY_TURN="${GATE_RETRIES_BY_TURN:+$GATE_RETRIES_BY_TURN,}$retries"
+  GATE_VIOLATIONS_BY_TURN="${GATE_VIOLATIONS_BY_TURN:+$GATE_VIOLATIONS_BY_TURN,}$vcount"
+}
+
 emit_reinject_block() {
   if [ -z "${REINJECT_SRC}" ]; then
     return 0
@@ -102,6 +229,7 @@ trap cleanup EXIT
 
 # Copy the micro-repo content
 cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
+# GATE_REPO_COPY_ONLY
 # The prompt tells the arm to use this helper, so it is part of the frozen harness
 # base rather than an unexplained post-base repository effect.
 mkdir -p "$TEMP_REPO/scripts"
@@ -224,11 +352,26 @@ if [ "$RUNNER" = "cc" ]; then
         (
           cd "$TEMP_REPO"
           export HOME="$SCRATCH_HOME"
-          timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --resume "$SESSION_ID" < "$TURN_PROMPT"
+          if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json --resume "$SESSION_ID" < "$TURN_PROMPT"
+          else
+            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --resume "$SESSION_ID" < "$TURN_PROMPT"
+          fi
         ) >> "$RAW_LOG" 2>&1
         TURN_EXIT=$?
         if [ $TURN_EXIT -ne 0 ]; then
           RUN_EXIT=$TURN_EXIT
+          break
+        fi
+      fi
+      if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+        apply_gate "$((TURNS_COMPLETED + 1))" cc
+        if [ "$GATE_TURN_FAILED" -eq 1 ]; then
+          RUN_EXIT=$GATE_TURN_EXIT
+          break
+        fi
+        # Verifier exit 2 is an infra failure. Do not call the model for later turns.
+        if [ "$GATE_ERROR" = "true" ]; then
           break
         fi
       fi
@@ -331,6 +474,17 @@ elif [ "$RUNNER" = "stub" ]; then
         RUN_EXIT=$TURN_EXIT
         break
       fi
+      if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+        apply_gate "$((TURNS_COMPLETED + 1))" stub
+        if [ "$GATE_TURN_FAILED" -eq 1 ]; then
+          RUN_EXIT=$GATE_TURN_EXIT
+          break
+        fi
+        # Verifier exit 2 is an infra failure. Do not call the model for later turns.
+        if [ "$GATE_ERROR" = "true" ]; then
+          break
+        fi
+      fi
       TURNS_COMPLETED=$((TURNS_COMPLETED + 1))
     done
   else
@@ -428,6 +582,11 @@ if [ "$oracle_pass" = "false" ]; then
   fi
 fi
 
+if [ "$GATE_ERROR" = "true" ]; then
+  failure_class='"infra_fail"'
+  failure_cause='"gate_error"'
+fi
+
 # Adherence checks
 adjudication_valid="false"
 patterns_named="false"
@@ -477,12 +636,17 @@ REINJECT_JSON_FRAGMENT=""
 if [ -n "${REINJECT_SRC:-}" ]; then
   REINJECT_JSON_FRAGMENT=',"reinject":"'"$(printf '%s' "$REINJECT_FILE" | tr -d '"\\')"'"'
 fi
+GATE_JSON_FRAGMENT=""
+if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+  GATE_JSON_FRAGMENT=$(printf ',"gate":"%s","gate_retries":%s,"gate_retries_by_turn":[%s],"gate_violations_by_turn":[%s],"gate_exhausted":%s,"gate_error":%s' \
+    "$GATE_MODE" "$GATE_RETRIES" "$GATE_RETRIES_BY_TURN" "$GATE_VIOLATIONS_BY_TURN" "$GATE_EXHAUSTED" "$GATE_ERROR")
+fi
 
 if [ "$HAS_TURNS" = "true" ]; then
   printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"failure_class":%s,"failure_cause":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s%s}\n' \
     "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
     "$oracle_pass" "$failure_class" "$failure_cause" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
-    "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" "$REINJECT_JSON_FRAGMENT" > "$RESULT_JSON"
+    "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" "$REINJECT_JSON_FRAGMENT$GATE_JSON_FRAGMENT" > "$RESULT_JSON"
 else
   # Single-prompt tasks still omit turns/run_error; failure truth is additive.
   printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"failure_class":%s,"failure_cause":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \

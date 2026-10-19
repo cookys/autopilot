@@ -4841,6 +4841,21 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "T14_GATE_WRITE_EVIDENCE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/tests/t14-turn-verifier.test.sh",
+        "hooks/tests/orchestration-eval-gate.test.sh",
+        "hooks/tests/t14-gate-batch.test.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "When set to 1, the t14 gate tests refresh docs/plans/evidence/2026-10-19-t14-gate-experiment/s*-red.txt. Default is unset, and the tests leave those files alone. Paths written into the transcripts use the placeholder /tmp/ORCH-GATE-TEST-TMP."
     }
   ]
 }

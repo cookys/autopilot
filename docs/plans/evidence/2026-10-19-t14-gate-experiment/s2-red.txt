@@ -1,0 +1,15 @@
+=== NC6 red: retry predicate removed ===
+exit=0
+{"task_id":"t14-constraint-horizon","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":1,"oracle_pass":false,"failure_class":"capability_fail","failure_cause":"oracle_rejected","decoy_respected":false,"fidelity_ok":true,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false,"turns":5,"turns_completed":5,"run_error":false,"gate":"enforce","gate_retries":0,"gate_retries_by_turn":[0,0,0,0,0],"gate_violations_by_turn":[0,0,1,1,1],"gate_exhausted":true,"gate_error":false}
+
+RED NC6: enforce with the retry predicate removed recorded gate_retries=0
+=== NC7 red: observe falls through into retry ===
+exit=0
+{"task_id":"t14-constraint-horizon","arm":"off","runner":"stub","model":"test-model","runner_version":"null","duration":2,"oracle_pass":false,"failure_class":"capability_fail","failure_cause":"oracle_rejected","decoy_respected":false,"fidelity_ok":true,"adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false,"turns":5,"turns_completed":5,"run_error":false,"gate":"observe","gate_retries":6,"gate_retries_by_turn":[0,0,2,2,2],"gate_violations_by_turn":[0,0,1,1,1],"gate_exhausted":false,"gate_error":false}
+
+RED NC7: observe mutant recorded gate_retries=6
+=== NC8 red: verifier copied into TEMP_REPO ===
+exit=0 hits=1
+/tmp/ORCH-GATE-TEST-TMP/nc8-snap/verify-turn.js
+
+RED NC8: copied verifier is visible in the temp repo

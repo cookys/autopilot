@@ -36,9 +36,11 @@
 //      A data file (fixture, golden) is reached through the non-generic directory names a test uses
 //      to build its path.
 //   4. Anything that cannot be judged statically (hooks/hooks.json, package files, run.sh, plugin
-//      manifest, CI) => mode "full". So is any changed file that no selected suite reaches and that
-//      is not prose (docs/, root *.md) or a platforms/ mirror: an empty list is never returned for a
-//      change that could matter.
+//      manifest, CI) => mode "full". So is any changed file that a bounded walk from that file
+//      alone cannot connect to a present suite, and that is not prose (docs/, root *.md) or a
+//      platforms/ mirror. Reach is per seed: the parent chain records one parent, so it is not
+//      the reachability test. A suite path that the diff deletes is absent from the head tree
+//      and does not force full. An empty list is never returned for a change that could matter.
 //   5. A fixed always-run list (ALWAYS_RUN, with a reason each) is added to every selective result
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
@@ -230,15 +232,13 @@ function referrersOf(graph, p) {
   return out;
 }
 
-function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
-  const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
-  const graph = buildGraph(headTree);
-  // Cost = weak (mere mention) hops on the path; strong (require/source) hops are free. A diff
-  // reaches a suite within maxWeak weak hops: lib -(strong)-> lib -(weak)-> script -(weak)-> test.
-  // Unbounded textual transitivity floods (a hub script naming 40 hooks drags in every suite).
+// Same bounded reverse walk the selector uses. Cost = weak (mere mention) hops; strong
+// (require/source) hops are free. One parent per node (first accepted cost wins) — that parent
+// is only for chains, not for deciding which seeds were reached.
+function walkParents(seeds, graph, maxWeak) {
   const parent = new Map(), cost = new Map();
   let level = [];
-  for (const c of changed) { parent.set(c, null); cost.set(c, 0); level.push(c); }
+  for (const c of seeds) { parent.set(c, null); cost.set(c, 0); level.push(c); }
   for (let w = 0; w <= maxWeak && level.length; w++) {
     const next = [];
     const q = level.slice();
@@ -254,6 +254,14 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
     }
     level = next;
   }
+  return parent;
+}
+
+function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
+  const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
+  const graph = buildGraph(headTree);
+  // Unbounded textual transitivity floods (a hub script naming 40 hooks drags in every suite).
+  const parent = walkParents(changed, graph, maxWeak);
   const present = new Set(headTree.files);
   const suites = [...parent.keys()].filter((p) => isSuite(p) && present.has(p)).sort();
   const chains = {};
@@ -262,9 +270,18 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
     for (let c = s; c != null; c = parent.get(c)) chain.push(c);
     chains[s] = chain;
   }
-  // A changed file that no selected suite reaches and that is not prose cannot be judged: run everything.
+  // Reach is per seed. The chain above records one parent, so a second seed that shares a
+  // referrer is missing from `reached` even when its own walk hits a present suite.
   const reached = new Set(suites.flatMap((s) => chains[s]));
-  const unreferenced = changed.filter((p) => !isProse(p) && !MIRROR.test(p) && !reached.has(p));
+  const unreferenced = [];
+  for (const p of changed) {
+    if (isProse(p) || MIRROR.test(p)) continue;
+    if (isSuite(p) && !present.has(p)) continue; // deleted suite: nothing left to run
+    if (reached.has(p)) continue;
+    const alone = walkParents([p], graph, maxWeak);
+    const hits = [...alone.keys()].some((x) => isSuite(x) && present.has(x));
+    if (!hits) unreferenced.push(p);
+  }
   for (const p of unreferenced) fullReasons.push(`unreferenced change (no suite reaches it): ${p}`);
   // Content-scanning suites ride along with every selective result that has a non-prose change.
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];

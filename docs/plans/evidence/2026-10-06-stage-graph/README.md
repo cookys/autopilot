@@ -120,12 +120,12 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - **Owner decision B (panel card d-6d1598af):** `check-guidance-eval.js` now accepts a prereg `guidance.out_of_arm` list (path, shipping commit, reason). The gate re-derives that the commit changed the path inside base..head and that no arm loads it. Six files of four skills no arm loads (engine-onboarding, handoff, harness-maintenance, hetero-review) are declared this way; a drifted file that is neither in `guidance.files` nor declared still fails.
   - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v11.jsonl` exits 0, `ok:true`, 63 differing files, 0 failures, 6/6 out_of_arm accepted, scorer SHIP.
   - The amend-6 extractor fix is in force for v11 (effective from v11, as recorded).
-
 - **Verdict, stage-graph v12: SHIP** (2026-10-19; the v11 text re-frozen on develop `0badcf2c2`; packs `*-sg-change-v12` / `*-sg-red-v12`, base arm with `guidance-files-sg-extra-base-v12`, results `results/stage-graph.v12.jsonl`, Claude Code 2.1.296, amend-8 `prereg/stage-graph.amend-8-v12-rebase.json`).
   - **Why a rerun:** after the v11 freeze, develop merged cppfix (`0270c58cc`), which changed line 93 of `skills/quality-pipeline/references/test-policy.md` from a link to inline code. That file is in the change arm, so the v11 pack no longer matched the shipped file and the cut gate refused. Only the link format changed. v11 results stay as a record and are not used for the cut. Thresholds, tasks, scorer and runner pin are unchanged.
   - **Change 10/12** (m-urgent-high 2/3; l-research-a and l-research-b 0/3, structural), **deliberately broken arm 3/12**, **generic: 5 checked, none regressed**.
   - Run notes: two cells (m-urgent-high change r3 and red r3) hit the 600 s runner timeout (`infra_fail runner_timeout`) in the first pass. Re-running the same command re-ran only those two cells (100 s and 99 s, both usable). The two infra rows remain in the results file and are not scored.
   - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v12.jsonl` exits 0, `ok:true`, 63 differing files, 0 failures, 6/6 out_of_arm accepted, scorer SHIP.
+
 ## P7 body (release/3.0.0, alpha.2)
 
 Contract: [`p7/contract.md`](p7/contract.md) (data facts D1–D4, slot grammar, width table). Plan: §P7 and Owner addendum A1.

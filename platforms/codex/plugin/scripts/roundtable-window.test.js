@@ -237,8 +237,10 @@ test('tail --once prints header and indent, no background or reverse, NO_COLOR h
     assert.equal(/\x1b\[4\d*m/.test(r.stdout), false);
     assert.equal(/\x1b\[10\d*m/.test(r.stdout), false);
     assert.equal(/\x1b\[7m/.test(r.stdout), false);
-    assert.match(r.stdout, /\x1b\[36m/);
-    assert.match(r.stdout, /\x1b\[33m/);
+    const { OWNER_FG, ATTENTION_FG } = require('./roundtable-window');
+    assert.match(r.stdout, new RegExp(OWNER_FG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(r.stdout, new RegExp(ATTENTION_FG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.equal(r.stdout.includes('\x1b[36m'), false);
     const plain = run(['tail', 'room-t', '--once'], { ...s.env, NO_COLOR: '1' });
     assert.equal(plain.status, 0, plain.stderr);
     assert.equal(plain.stdout.includes('\x1b'), false);
@@ -249,6 +251,39 @@ test('tail --once prints header and indent, no background or reverse, NO_COLOR h
   } finally {
     s.cleanup();
   }
+});
+
+// # RED at 51e68c71e: node --test scripts/roundtable-window.test.js exit 1.
+// not ok wrap and owner colour: OWNER_FG is undefined (paint is still ESC[36m cyan) and
+// formatRow ignores the column count, so the mixed line is one unwrapped body line.
+test('wrap and owner colour: a mixed line stays inside the column count, indent on every continuation, wide chars whole; owner ANSI is the shared here-role constant', () => {
+  const { formatRow, OWNER_FG } = require('./roundtable-window');
+  // Same meaning as window B PALETTE.here (theme key claude). Nearest plain ANSI foreground.
+  assert.equal(OWNER_FG, '\x1b[38;5;173m');
+  // inner width 8: seven ASCII then 中 (width 2) must break before 中, never cut it.
+  const text = '1234567中文' + 'Z'.repeat(24);
+  const row = { seq: 3, from: 'owner', kind: 'say', text, reply_to: null };
+  const painted = formatRow(row, true, 10);
+  assert.match(painted, new RegExp(OWNER_FG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const plain = painted.replace(/\x1b\[[0-9;]*m/g, '');
+  const content = plain.split('\n').filter((l) => /^ {2}/.test(l));
+  assert.ok(content.length > 1, plain);
+  for (const l of content) {
+    let w = 0;
+    for (const ch of l) {
+      const cp = ch.codePointAt(0);
+      w += cp >= 0x4e00 && cp <= 0x9fff ? 2 : 1;
+    }
+    assert.ok(w <= 10, JSON.stringify(l) + ' width ' + w);
+  }
+  assert.equal(content.map((l) => l.slice(2)).join(''), text);
+  const zhong = content.find((l) => l.includes('中'));
+  assert.ok(zhong);
+  assert.equal(zhong.includes('7'), false);
+  assert.equal(/\x1b\[4\d*m/.test(painted), false);
+  assert.equal(/\x1b\[10\d*m/.test(painted), false);
+  assert.equal(/\x1b\[7m/.test(painted), false);
+  assert.equal(painted.includes('\x1b[36m'), false);
 });
 
 test('open inside TMUX splits a window; outside TMUX exits 2', () => {

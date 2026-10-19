@@ -70,6 +70,21 @@ test('scroll window and tail-follow: an offset at the bottom stays at the bottom
   assert.equal(m.nextOffset(1, 5, 7, 2), 1)
 })
 
+// # RED at 51e68c71e: node --test mods/roundtable/model.test.js exit 1.
+// not ok open scroll: TypeError m.openOffset is not a function. A fitting room has no
+// opening offset of 0, so row 1 is not pinned; the longer-room tail case never runs.
+test('open scroll: a room that fits is offset 0 with row 1 visible; a longer room opens at the tail; owner is PALETTE.here', () => {
+  const fit = ['row1', 'row2', 'row3'].map((text) => ({ text, role: 'text' }))
+  assert.equal(m.openOffset(fit.length, 10), 0)
+  assert.equal(m.visibleLines(fit, m.openOffset(fit.length, 10), 10)[0].text, 'row1')
+  const long = Array.from({ length: 8 }, (_, i) => ({ text: 'r' + i, role: 'text' }))
+  const tail = m.openOffset(long.length, 3)
+  assert.equal(tail, 5)
+  assert.deepEqual(m.visibleLines(long, tail, 3).map((l) => l.text), ['r5', 'r6', 'r7'])
+  assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'here')
+  assert.equal(ui.PALETTE.here, 'claude')
+})
+
 test('roles: owner is here, system is attention, a send failure is broken, a seat is text', () => {
   assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'here')
   assert.equal(m.rowRole(row({ from: 'moderator', kind: 'system', text: 'seat added' })), 'attention')

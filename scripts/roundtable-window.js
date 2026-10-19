@@ -32,7 +32,9 @@ const USAGE = `roundtable-window.js — window A (tmux)
       Non-interactive append-and-send (what input uses).
 
   --no-color    ANSI off. NO_COLOR does the same.
-  Colour is ANSI foreground only: owner one colour, system another, say default.
+  Colour is ANSI foreground only. Same roles as window B:
+  owner = you are here (38;5;173, nearest to PALETTE.here / claude),
+  system = attention (33), send failure = broken (31), seat = default.
   No background colour and no reverse video.
 
 Seats: --seats, else ROUNDTABLE_SEATS, else distinct from values of say rows
@@ -46,17 +48,63 @@ function colourOn(argv, env) {
   return true;
 }
 
+// Shared meaning with window B: an owner row is "you are here" (PALETTE.here, theme key claude, about #d77757).
+// Nearest plain ANSI foreground is xterm 173 (#d7875f). Attention stays yellow; a send failure stays red (broken).
+const OWNER_FG = '\x1b[38;5;173m';
+const ATTENTION_FG = '\x1b[33m';
+const BROKEN_FG = '\x1b[31m';
+
 function paint(row, text, on) {
   if (!on) return text;
-  if (row.from === 'owner') return `\x1b[36m${text}\x1b[39m`;
-  if (row.kind === 'system') return `\x1b[33m${text}\x1b[39m`;
+  if (row.kind === 'system' && String(row.text).includes('send failed')) return `${BROKEN_FG}${text}\x1b[39m`;
+  if (row.from === 'owner') return `${OWNER_FG}${text}\x1b[39m`;
+  if (row.kind === 'system') return `${ATTENTION_FG}${text}\x1b[39m`;
   return text;
 }
 
-function formatRow(row, on) {
+// East Asian width, the same cuts as mods/live/ui.ts cellWidth. A wide character is never split.
+function cellWidth(cp) {
+  if (cp === 0 || (cp >= 0x0300 && cp <= 0x036f) || (cp >= 0x200b && cp <= 0x200f) || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x20d0 && cp <= 0x20ff)) return 0;
+  if ((cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0x303e) || (cp >= 0x3041 && cp <= 0x33ff) || (cp >= 0x3400 && cp <= 0x4dbf)
+    || (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xa000 && cp <= 0xa4cf) || (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xf900 && cp <= 0xfaff)
+    || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xff60) || (cp >= 0xffe0 && cp <= 0xffe6)
+    || (cp >= 0x1f300 && cp <= 0x1f64f) || (cp >= 0x1f900 && cp <= 0x1f9ff) || (cp >= 0x20000 && cp <= 0x3fffd)) return 2;
+  return 1;
+}
+
+function columnsOf() {
+  const n = process.stdout.columns;
+  return Number.isInteger(n) && n > 0 ? n : 80;
+}
+
+// Wrap one paragraph to `columns`, keeping a two-space indent on the first line and every continuation.
+function wrapIndent(text, columns) {
+  const width = Number.isInteger(columns) && columns >= 2 ? columns : 80;
+  const inner = Math.max(1, width - 2);
+  const out = [];
+  for (const part of String(text).split('\n')) {
+    let line = '';
+    let used = 0;
+    for (const ch of part) {
+      const cw = cellWidth(ch.codePointAt(0));
+      if (line !== '' && used + cw > inner) {
+        out.push(`  ${line}`);
+        line = '';
+        used = 0;
+      }
+      line += ch;
+      used += cw;
+    }
+    out.push(`  ${line}`);
+  }
+  return out.join('\n');
+}
+
+function formatRow(row, on, columns) {
   const round = row.round === undefined || row.round === null ? '' : ` round=${row.round}`;
   const header = `#${row.seq} ${row.from} ${row.kind}${round}`;
-  const body = String(row.text).split('\n').map((line) => `  ${line}`).join('\n');
+  const width = Number.isInteger(columns) && columns > 0 ? columns : columnsOf();
+  const body = wrapIndent(row.text, width);
   return `${paint(row, `${header}\n${body}`, on)}\n`;
 }
 
@@ -160,7 +208,7 @@ function cmdTail(room, once, env, argv) {
   let last = 0;
   const paintRows = (rows) => {
     for (const row of rows) {
-      process.stdout.write(formatRow(row, on));
+      process.stdout.write(formatRow(row, on, columnsOf()));
       if (row.seq > last) last = row.seq;
     }
   };
@@ -275,4 +323,4 @@ if (require.main === module) {
   if (code !== null && code !== undefined) process.exit(code);
 }
 
-module.exports = { main, formatRow, sendText };
+module.exports = { main, formatRow, sendText, OWNER_FG, ATTENTION_FG, BROKEN_FG };

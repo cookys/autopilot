@@ -1,10 +1,12 @@
 // mods/roundtable/pane.tsx — the room window. Colours only through PALETTE (mods/live/ui.ts).
-// Owner rows: here. System rows: attention. Send failures: broken. Seat rows: no colour (default text). Rules: structure.
+// Owner rows: "you are here" (PALETTE.here, theme key claude) — the same meaning as window A's owner foreground.
+// System rows: attention. Send failures: broken. Seat rows: no colour (default text). Rules: structure.
 // No background, no inverse. The Input label has no trailing colon (the field draws its own).
 
 import { PALETTE } from '../live/ui'
 import { frameOf, scrollFrame } from '../live/scroll'
 import type { ScrollModel } from '../live/scroll'
+import { nextOffset, openOffset } from './model'
 import type { DisplayLine, LineRole } from './model'
 import type { RT } from './strings'
 
@@ -42,6 +44,11 @@ export function RoundtablePane(
   win?: { props: unknown; model: ScrollModel },
 ) {
   const { Box, Text, Input } = el
+  // scrollFrame sets framed; the next paint clears it. Read the previous paint first so the opening offset runs only once.
+  const hadFrame = win !== undefined && win.model.framed
+  const prevMax = win !== undefined ? win.model.max : 0
+  const prevRoom = win !== undefined ? win.model.room : 0
+  const prevOffset = win !== undefined ? win.model.offset : 0
   if (win !== undefined) win.model.framed = false
   const title = view.room === null ? t('rt.empty') : t('rt.head', { room: view.room, n: view.count })
   const name = <Text key="name" wrap="truncate-end">{title}</Text>
@@ -52,9 +59,17 @@ export function RoundtablePane(
   )
   const frame = win === undefined ? null : frameOf(win.props)
   if (frame !== null && win !== undefined) {
-    const wasBottom = win.model.offset >= win.model.max
-    if (wasBottom) win.model.offset = 1_000_000_000
     const bar = [failure, field].filter(n => n !== null)
+    const headRows = note === null ? 1 : 2
+    const room = Math.max(1, frame.rows - headRows - 1 - bar.length)
+    const total = view.lines.length
+    // A room that fits opens at row 1. A longer room opens at the tail, and stays there only while it was already at the tail.
+    if (hadFrame) {
+      const prevCount = prevMax + (prevRoom > 0 ? prevRoom : room)
+      win.model.offset = nextOffset(prevOffset, prevCount, total, room)
+    } else {
+      win.model.offset = openOffset(total, room)
+    }
     return scrollFrame(el, {
       rows: frame.rows, cols: frame.cols,
       head: [name, ...(note === null ? [] : [note])],

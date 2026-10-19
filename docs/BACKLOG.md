@@ -308,12 +308,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: Owner decides whether to write the plan that makes the per-turn gate a formal mechanism.
+- **Trigger**: Plan review of docs/plans/2026-10-20-per-turn-gate.md, then owner approval of the P0 spike. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced until a later change owns it.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
-- **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: second experiment SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). Next: make the per-turn gate (retry carries violations plus feature gaps) a formal mechanism; needs a new plan, owner to decide.
+- **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
+- **Context**: Second experiment SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). Owner d-9f311d27 chose to write the plan. docs/plans/2026-10-20-per-turn-gate.md is drafted, awaiting review. C-arm M2 drop 23/30 to 11/29 is an open anomaly in phase P1.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056

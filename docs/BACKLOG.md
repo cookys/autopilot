@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0215 -->
+<!-- next-id: BL-0216 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -682,8 +682,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
-- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Run 1: dev-setup.sh 484 (lib.sh 477). Run 2: review-resolution.js mirror 380 (engine.js 378); docs plan 202.
+- **Pointer**: scripts/affected-suites.js
+- **Context**: Top fan-in: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
 - **Id**: BL-0214
@@ -696,5 +696,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: follow-up of BL-0027 (merge d997355a9), 2026-10-19
-- **Pointer**: docs/backlog/verify-codex-marketplace-remove-and-hook-dedupe.md
+- **Pointer**: scripts/dev-setup.sh
 - **Context**: Check (a) that "codex plugin marketplace remove" exists and works so --uninstall clears the derived dev marketplace registration, and (b) whether a user-level and a plugin-level hook with the same name are de-duplicated.
+
+### PEER-REPORTED (cuda): count a dispatch branch as integrated when its patch-id or diff matches
+- **Id**: BL-0215
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: cuda revival.3d
+- **Report**: 01M59TJ90DWG5XVE6JS78CZ6Z7
+- **Reply**: 2026-10-19 01M59TMBZ32K3YSC7Q707QWV1Q
+- **Problem**: 殘留清理只用提交祖先關係判斷分支有沒有併入。派工候選常在改過後才被採用，例如讀過差異或去掉鎖定檔後採用，採用後的提交和候選不同，所以永遠被判成沒併入，只能閒置十四天後封存。cuda 一天清出二十條這種分支。
+- **Impact**: 分支列表一直堆積；封存前那段時間分不出是真的沒併入，還是已經被採用。
+- **Trigger**: the next residue sweep that lists unintegrated hetero branches whose patch-id or diff already landed on the target
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: fleet msg 01M59TJ90DWG5XVE6JS78CZ6Z7; replied 01M59TMBZ32K3YSC7Q707QWV1Q
+- **Pointer**: scripts/repo-residue-sweep.js

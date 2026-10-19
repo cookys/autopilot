@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0246 -->
+<!-- next-id: BL-0251 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -486,7 +486,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
+### CEO/dev-flow: reversible-candidate release gates and optional Boil-the-Lake re-try
 - **Id**: BL-0093
 - **Status**: open
 - **Since**: 2026-09-06
@@ -494,14 +494,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: cuda（revival.3d）
 - **Report**: 2026-09-06 peer
 - **Reply**: 2026-09-05 session e1e51201:1496
-- **Problem**: cuda 專案審計我方技能後提出：CEO 與開發流程的指引太極端（例如「完成成本近乎零」的說法）、缺少任務工具時的處理沒說清、可逆候選的發版檢查過嚴，希望放寬。 (draft)
-- **Impact**: 外部專案認為指引不合比例；改動需先有評測證據，擁有者尚未決定。 (draft)
-- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule). Point 1 (Boil the Lake) was evaluated 2026-10-17: UNINFORMATIVE, no change; only points 2 and 3 plus an optional point-1 re-try remain.
+- **Problem**: 可逆的候選改動仍要過發版核准。煮乾湖泊那條已評過但沒有資訊量，是否再測一次由擁有者決定。
+- **Impact**: 可逆改動的發版門檻仍然過嚴；指引要等擁有者裁決才動。
+- **Trigger**: owner decides to open this; point 3 (reversible-candidate release gates) and an optional point-1 re-try remain
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
-- **Context**: Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0117; guidance text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
+- **Context**: Point 2 shipped in the 98e5c6e7d merge. BL-0147 is tracked separately. Owner decision card d-c9b50973 for text.
 
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
@@ -535,39 +535,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
 
-
-
-
-### Run stage-graph v11 regression covering the packet guidance text
-- **Id**: BL-0116
-- **Status**: open
-- **Since**: 2026-10-11
-- **Origin**: self
-- **Problem**: 要在 3.0.0 正式版前跑一次 stage-graph 的 v11 回歸評測，涵蓋新的 packet 審查指引文字。目前檢查擋住，因為兩份指引檔不在原預先登記的範圍內，需要先修訂登記。 (draft)
-- **Impact**: 沒跑評測就改了指引文字，等於沒有證據支持；正式版前必須處理。 (draft)
-- **Trigger**: before the 3.0.0 final cut
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: packet-guidance owner ruling, 2026-10-11
-- **Pointer**: none
-- **Context**: Gate blocks: two guidance files outside prereg. Revise prereg, freeze v11. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0117/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
-
-### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
-- **Id**: BL-0117
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: peer
-- **Reporter**: c4140 llm-playground
-- **Report**: 01M4NVXM8WM1Q6GR4VSTST0P22
-- **Reply**: 2026-10-12 01M4NVY57683RPV21TNXTGQC2D
-- **Problem**: c4140 的 llm-playground 專案回報：dev-flow 說明裡建議在前景等待最多 15 分鐘，這個建議有問題；現在系統對前景輪詢已改為只提醒，但說明文字尚未改。 (draft)
-- **Impact**: 說明文字仍可能誤導使用者在前景久等；改動屬於指引，需要評測證據，排在 3.0.0 正式版前。 (draft)
-- **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
-- **Pointer**: none
-- **Context**: Foreground polling now only warns; this wording waits on eval. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
 
 
 
@@ -1140,3 +1107,88 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/eval-router-judge-harness-unbuilt.md
 - **Context**: Low priority. The harness was never built. The plan is archived.
+
+### Final-panel seat whose transport fails leaves no reason
+- **Id**: BL-0246
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 最終審查有席位傳輸失敗時，座位紀錄沒留下結束碼、錯誤尾段與乾淨室階段。只有走乾淨室的席位會在那裡失敗。
+- **Impact**: 事後分不出是傳輸失敗還是審查本身有問題，只能重跑才知道原因。
+- **Trigger**: a final-panel seat fails in transport during the cleanroom and the seat record keeps no exit code, stderr tail, or stage
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/final-panel-seat-transport-failure-no-reason.md
+- **Context**: See BL-0223: a red campaign_verification keeps only digests, so the failing command is lost.
+
+### Work-order "requires adoption" names no command or flow
+- **Id**: BL-0247
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 工作單丟出需要採納時，沒有寫要跑哪道指令，也沒有說明採納流程。
+- **Impact**: 遇到這則訊息的人不知道下一步，只能自己猜指令。
+- **Trigger**: the work-order throw says the controller worktree requires adoption, and nothing documents the command or the flow
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/work-order-requires-adoption-undocumented.md
+- **Context**: Message text is in the work-order module. No adoption command is named next to the throw.
+
+### Mission stays not ready after a section 11 downgrade
+- **Id**: BL-0248
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 第十一節降級並記錄整合之後，任務圖仍判定還沒準備好，也沒有辦法把節點標成結束。
+- **Impact**: 整合做完仍過不了就緒檢查，任務卡在無法收尾的狀態。
+- **Trigger**: after a section 11 downgrade and record-integration, the mission graph still says not ready and nothing marks the node terminal
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
+- **Context**: See BL-0220: no_verdict leaves the phase in REVIEWING and resume refuses.
+
+### Managed-rail failure messages do not say what to do
+- **Id**: BL-0249
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 受管軌道失敗時看不出該怎麼做：沒說登入失效、沒說哪個席位或主機，授權被釋放後還得人手重新授予。
+- **Impact**: 操作者無法從訊息判斷要重登、換席位還是重新授權。
+- **Trigger**: a managed-rail failure omits the auth failure, the seat or host, and that the released grant must be re-granted by hand
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/managed-rail-failure-messages-not-actionable.md
+- **Context**: provider readiness, scorecard, and grant release each name a gap the operator cannot act on from the message alone.
+
+### autoCompactWindow and context budget must be aligned by hand
+- **Id**: BL-0250
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59WNDJSZG3Y6YTERWD9DF4J
+- **Reply**: 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V
+- **Problem**: 自動壓縮視窗與情境預算要在兩處手動對齊，數字對不上時沒有任何消費者會發現。
+- **Impact**: 提醒與壓縮時機會錯開，而且沒有檢查會把不一致叫出來。
+- **Trigger**: a 1M-token window with nothing configured, or the two recommended values drift apart across the two files
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
+- **Context**: Two suggestions: print the recommended pair on every such SessionStart, or one command that writes both.

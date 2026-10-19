@@ -6,11 +6,11 @@
 
 | Category | Description | Violation Kind |
 |----------|-------------|----------------|
-| **Deleted test lines** | In a test-path file, the diff must contain no deleted (`-`) lines — weakening an existing assertion (`assertEqual→assertTrue`) necessarily produces one. | `deleted_line` |
+| **Deleted test lines** | `deleted_line` is reported only when the same test file's assertion-class line count has a net decrease (deleted minus added > 0). The report lists every deleted assertion-class line. A wholly deleted test file whose target is also deleted is exempt; if no target is deleted, every deleted line of that file is still reported. See Precision rules below. | `deleted_line` |
 | **Skip/solo markers** | Added (`+`) lines in test files must not introduce skip / xfail / pending / todo or solo/only/focused markers (per-language set: `xit`/`.only`/`fit`/`fdescribe`/`@pytest.mark.skip`/`t.Skipf`/`#[ignore]`/…). | `skip_marker` / `solo_marker` |
 | **Early exit** | In `*.test.sh` files, an ADDED unconditional top-level `exit`/`return` (also `true; exit 0`, `trap - EXIT; exit 0`, `{ exit 0; }`, `true && exit 0`, `if true; then exit 0; fi`) that still has assertion-like lines after it. File-level, so guard clauses (`cond \|\| exit 0`, `if ...; then exit 0; fi`) and a terminating exit are not flagged. | `early_exit` |
 | **Rename escapes** | A test file renamed to a non-test path / non-matching name (removes coverage) is blocked. Pure rename that stays in a test path is OK. | `rename_escape` |
-| **Integrity-surface touch** | Edits to non-test integrity-surface files (conftest, fixtures, mocks, snapshots/goldens, runner config, setupTests/matchers, `package.json` scripts, CI workflows) are flagged — **independently of whether the path is also a test path**. In `block` mode a surface touch is itself a violation unless waived. | `surface_touch` |
+| **Integrity-surface touch** | Edits to non-test integrity-surface files (conftest, fixtures, mocks, snapshots/goldens, runner config, setupTests/matchers, `package.json` scripts, CI workflows) are flagged — **independently of whether the path is also a test path**. A file **added** in the range (status A) is not a surface touch; modified, deleted, and renamed surface files still are. In `block` mode a surface touch is itself a violation unless waived. | `surface_touch` |
 | **Protected-path touch** | The candidate diff touching `.qc/**`, the gate script, the config, or `.gitattributes` is a **non-waivable** structural violation. | `protected_path_touch` |
 | **Config / git failure** | Malformed (present-but-unparseable) config fails closed to `block`; an invalid range/ref or git failure exits 2. Both **non-waivable**. | `malformed_config` / `git_error` |
 
@@ -38,6 +38,28 @@ L0 reads diff text only, so it misses gaming that is additions-only or happens o
 - Flags: `--no-l1`, `--l1-timeout`, `--l1-runner`, `--l1-verdict-file`, `--assert-worker-dead <pgid>`. JSON adds `l1` + `l1_runners[]` (backward-compatible with L0).
 
 Full per-runner contract (detection markers, normalized test-ids, status→executed mapping, failure-classification table, override design): [`docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md`](../../../docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md).
+
+## Precision rules (BL-0060)
+
+Mode stays **warn** (the global default). These rules do not switch the gate to block.
+
+(a) A test file deleted in the range (git status D) is not a `deleted_line` violation when the same range also deletes its target. The target is a product file whose basename matches the test basename after stripping the test suffix — `foo.test.sh` → `foo.sh`, `foo.test.js` → `foo.js`, `test_foo.py` → `foo.py`, `foo_test.go` → `foo.go` — also dropping a leading `test-` or `test_`. The target is also a product file that the deleted test's **old** content sources or requires and that is deleted in the same range: shell `source` / `.` of a path, or an invocation of `scripts/<name>`; JavaScript `require(...)` / `import` of a relative path; Python `import` of a repo module. If the test file is deleted and no target is deleted, every deleted line of that file is still reported.
+
+(b) For a test file that is not wholly deleted, `deleted_line` is reported only when the assertion-class line count of that same file shows a net decrease across the whole file diff (assertion-class lines deleted minus assertion-class lines added is greater than zero). When it does decrease, every deleted assertion-class line is reported. Deleted lines that are not assertion-class (comments, renames, blank lines, setup) never produce a report on their own. A line counts only when it is not a pure comment. A tautological assertion does not count as assertion-class, so turning a real assertion into an always-true one is a net decrease: `assert True`, `assert 1`, `expect(true).toBe(true)`, `assert.ok(true)`, `[ 1 = 1 ]`, `[ "a" = "a" ]`, `true || fail`. Adding only a comment never counts as an added assertion.
+
+Assertion-class, per language:
+
+| Language | Counts as assertion-class |
+|----------|---------------------------|
+| Python | `assert` statements, `self.assert*`, `pytest.raises` |
+| JavaScript / TypeScript | `assert(`, `assert.*(`, `expect(`, `t.equal` / `t.is` / `t.ok` / `t.deepEqual` / `t.throws` family, `should` |
+| Go | `t.Error` / `t.Errorf` / `t.Fatal` / `t.Fatalf`, `require.` / `assert.` calls |
+| Rust | `assert!` / `assert_eq!` / `assert_ne!` |
+| Java / Kotlin | `assert` / `assert*` / `assertThat` |
+| Ruby | `expect(` / `assert` |
+| Shell | calls to `pass` / `fail` / `ok` / `assert_*` (including `hooks/tests/lib.sh` helpers), `[ ... ] \|\| fail`, `test ... \|\| fail`, `grep -q ... \|\| fail` |
+
+(c) A file added in the range (status A) is not a `surface_touch` and is not listed in `surface_touches`. Modified, deleted, and renamed surface files still are. `skip_marker`, `solo_marker`, `early_exit`, `rename_escape`, and `protected_path_touch` are unchanged. JSON keys are unchanged.
 
 ## Mode Semantics
 - **`block`** — fails (exit 1) on any L0 violation/surface touch, or an L1 `executed_set_shrink`/`collection_failed`, unless waived. **Default for `/l5` hetero-impl dispatch (opt-in per project).**

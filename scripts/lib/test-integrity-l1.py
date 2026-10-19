@@ -1539,6 +1539,171 @@ def is_protected_path(path):
     )
 
 
+# Assertion-class lines (BL-0060). A line counts only when it is not a pure
+# comment and it is not a tautology (assert True, assert 1, expect(true).toBe(true),
+# assert.ok(true), [ 1 = 1 ], [ "a" = "a" ], true || fail). Comment-only additions
+# therefore never hide a deleted assertion.
+#
+# When a file's assertion-class deletions exceed its assertion-class additions,
+# every deleted assertion-class line is reported (not truncated to the net count).
+# Non-assertion deletions never produce deleted_line on their own.
+_ASSERTION_LINE = {
+    # python: assert statements, self.assert*, pytest.raises
+    "python": re.compile(
+        r"(?:^|[^\w.])assert\s+\S|\bself\.assert[A-Za-z_]+\s*\(|\bpytest\.raises\s*\("
+    ),
+    # js/ts: assert(, assert.*(, expect(, node:test t.* family, should
+    "js_ts": re.compile(
+        r"\bassert(?:\.\w+)?\s*\(|\bexpect\s*\(|\bt\.(?:equal|notEqual|deepEqual|is|ok|throws|doesNotThrow|true|false|regex)\s*\(|\bshould\b"
+    ),
+    # go: t.Error/t.Errorf/t.Fatal/t.Fatalf and require./assert. calls
+    "go": re.compile(
+        r"\bt\.(?:Error|Errorf|Fatal|Fatalf)\s*\(|\b(?:require|assert)\.\w+\s*\("
+    ),
+    # rust: assert!/assert_eq!/assert_ne!
+    "rust": re.compile(r"\bassert(?:_eq|_ne)?!\s*\("),
+    # java/kotlin: assert statements, assert*, assertThat
+    "java_kotlin": re.compile(r"\bassert(?:[A-Za-z]+)?\s*(?:\(|\S)|\bassertThat\s*\("),
+    # ruby: expect( / assert
+    "ruby": re.compile(r"\bexpect\s*\(|\bassert(?:_\w+)?\b"),
+    # shell: pass/fail/ok/assert_* calls (not `name()` definitions), [ ] || fail,
+    # test ... || fail, grep -q ... || fail. lib.sh helpers are assert_*.
+    "shell": re.compile(
+        r"(?:^|[;&|(`]|then\b|else\b|elif\b|do\b)\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:pass|fail|ok|not_ok)\b(?!\s*\(\s*\))"
+        r"|\bassert_[A-Za-z0-9_]+\b"
+        r"|\]\s*\|\|\s*\(?\s*fail\b"
+        r"|\btest\s+\S.+\|\|\s*\(?\s*fail\b"
+        r"|\bgrep\s+-q\s+\S.+\|\|\s*\(?\s*fail\b"
+    ),
+}
+_TAUTOLOGY = {
+    "python": re.compile(
+        r"(?:^|[^\w.])assert\s+True\b|(?:^|[^\w.])assert\s+1\b(?!\s*[=<>!])|(?:^|[^\w.])assert\s*\(\s*(?:True|1)\s*\)"
+    ),
+    "js_ts": re.compile(
+        r"\bexpect\s*\(\s*true\s*\)\s*\.toBe\s*\(\s*true\s*\)"
+        r"|\bassert\.ok\s*\(\s*true\s*\)"
+        r"|\bassert\s*\(\s*true\s*\)"
+        r"|\bassert\.equal\s*\(\s*true\s*,\s*true\s*\)"
+    ),
+    "shell": re.compile(
+        r"\[\s*1\s*=\s*1\s*\]|\[\s*\"a\"\s*=\s*\"a\"\s*\]|\[\s*'a'\s*=\s*'a'\s*\]|(?:^|[;&|])\s*true\s*\|\|\s*\(?\s*fail\b"
+    ),
+}
+_SHELL_SOURCE = re.compile(
+    r"(?:^|[\n;&|(`]|then\b|else\b|elif\b|do\b)\s*(?:source|\.)\s+([\"']?)([^\"'\s;|&]+)\1"
+)
+_SHELL_SCRIPTS_INVOKED = re.compile(r"(?:^|[\s\"'`])(scripts/[A-Za-z0-9_./-]+)")
+_JS_REL_IMPORT = re.compile(
+    r"""(?:require\s*\(\s*|from\s+|import\s+)(['"])(\.[^'"]+)\1"""
+)
+_PY_IMPORT = re.compile(
+    r"(?m)^[ \t]*(?:import[ \t]+([A-Za-z_][\w.]*)|from[ \t]+([A-Za-z_][\w.]*)[ \t]+import)\b"
+)
+
+
+def _code_without_comment(content, lang_key):
+    """Return the executable text of one source line, or '' when it is comment-only."""
+    stripped = content.strip()
+    if not stripped:
+        return ""
+    if lang_key in ("python", "ruby", "shell") and stripped.startswith("#"):
+        return ""
+    if lang_key in ("js_ts", "go", "java_kotlin", "rust"):
+        if stripped.startswith(("//", "/*", "*", "*/")):
+            return ""
+    if lang_key:
+        return strip_trailing_comment(content, lang_key).strip()
+    return stripped
+
+
+def is_assertion_class_line(content, lang_key):
+    """True when content is an assertion-class line for lang_key (BL-0060)."""
+    if not lang_key:
+        return False
+    code = _code_without_comment(content, lang_key)
+    if not code:
+        return False
+    taut = _TAUTOLOGY.get(lang_key)
+    if taut is not None and taut.search(code):
+        return False
+    rule = _ASSERTION_LINE.get(lang_key)
+    return bool(rule and rule.search(code))
+
+
+def product_basenames_for_test(test_path):
+    """Basenames of the product file a test basename points at.
+
+    foo.test.sh / foo.test.js -> foo.sh / foo.js; test_foo.py -> foo.py;
+    foo_test.go -> foo.go. A leading test- or test_ is also dropped.
+    """
+    base = os.path.basename(test_path)
+    seeds = {base}
+    dotted = re.match(r"^(.+)\.test\.([^.]+)$", base)
+    if dotted:
+        seeds.add(f"{dotted.group(1)}.{dotted.group(2)}")
+    underscored = re.match(r"^(.+)_test(\.[^.]+)$", base)
+    if underscored:
+        seeds.add(f"{underscored.group(1)}{underscored.group(2)}")
+    candidates = set()
+    for seed in seeds:
+        candidates.add(seed)
+        prefixed = re.match(r"^test[_-](.+)$", seed)
+        if prefixed:
+            candidates.add(prefixed.group(1))
+    candidates.discard(base)
+    return candidates
+
+
+def _referenced_product_paths(test_path, content, lang_key):
+    """Product paths a deleted test's old content sources, requires, or imports."""
+    refs = []
+    if lang_key == "shell":
+        for match in _SHELL_SOURCE.finditer(content):
+            refs.append(match.group(2))
+        for match in _SHELL_SCRIPTS_INVOKED.finditer(content):
+            refs.append(match.group(1))
+    elif lang_key == "js_ts":
+        for match in _JS_REL_IMPORT.finditer(content):
+            refs.append(match.group(2))
+    elif lang_key == "python":
+        for match in _PY_IMPORT.finditer(content):
+            mod = match.group(1) or match.group(2)
+            rel = mod.replace(".", "/")
+            refs.append(rel + ".py")
+            refs.append(rel + "/__init__.py")
+    return refs
+
+
+def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_paths):
+    """Rule (a): a deleted test is exempt when its target is deleted in the same range."""
+    deleted = {path for path in deleted_paths if path != test_path}
+    wanted = product_basenames_for_test(test_path)
+    for path in deleted:
+        if os.path.basename(path) in wanted:
+            return True
+    if not old_text:
+        return False
+    test_dir = os.path.dirname(test_path)
+    for ref in _referenced_product_paths(test_path, old_text, lang_key):
+        ref = ref.strip()
+        if not ref or ref.startswith(("-", "<")):
+            continue
+        relative = os.path.normpath(os.path.join(test_dir, ref))
+        options = [ref, relative]
+        if lang_key == "js_ts":
+            for ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
+                options.append(ref + ext)
+                options.append(relative + ext)
+        for path in deleted:
+            norm = path.replace("\\", "/")
+            for option in options:
+                option = option.replace("\\", "/")
+                if norm == option or norm.endswith("/" + option):
+                    return True
+    return False
+
+
 def main():
     repo_dir = sys.argv[1]
     range_str = sys.argv[2]
@@ -1921,7 +2086,9 @@ def main():
         if is_new_test:
             test_paths_matched += 1
 
-        if matches_patterns(new_path, surface_path_regexes):
+        # BL-0060 rule (c): a file ADDED in the range is not a surface touch.
+        # Modified (M), deleted (D) and renamed (R*) surface files still are.
+        if matches_patterns(new_path, surface_path_regexes) and not status.startswith("A"):
             if new_path not in surface_touches:
                 surface_touches.append(new_path)
             if config["mode"] == "block":
@@ -1946,6 +2113,69 @@ def main():
                 }
             )
 
+    deleted_paths = [
+        entry["old_path"]
+        for entry in raw_files
+        if isinstance(entry.get("status"), str) and entry["status"].startswith("D")
+    ]
+
+    def _append_deleted_line(file_path, line_no, detail):
+        violations.append(
+            {
+                "layer": "L0",
+                "file": file_path,
+                "kind": "deleted_line",
+                "line": line_no,
+                "detail": detail,
+            }
+        )
+
+    for file_path, info in files_diff.items():
+        if not matches_patterns(file_path, test_path_regexes):
+            continue
+        entry = entry_by_new.get(file_path) or entry_by_old.get(info.get("old_path") or file_path) or {}
+        status = entry.get("status") or ""
+        lang_key = get_lang_key(file_path)
+        old_path = info.get("old_path") or file_path
+        wholly_deleted = isinstance(status, str) and status.startswith("D")
+        if wholly_deleted:
+            shown = run_command(["git", "show", f"{base_ref}:{old_path}"], repo_dir, check=False)
+            old_text = shown.stdout or "" if shown.returncode == 0 else ""
+            # Rule (a): co-deleted target exempts the whole file. Otherwise every
+            # deleted line is still reported, same as before this precision pass.
+            if deleted_test_target_also_deleted(old_path, lang_key, old_text, deleted_paths):
+                continue
+            for hunk in info.get("hunks", []):
+                old_current = hunk["old_start"]
+                for line in hunk["lines"]:
+                    if not line or line.startswith("\\"):
+                        continue
+                    if line.startswith("-"):
+                        _append_deleted_line(file_path, old_current, line[1:])
+                        old_current += 1
+            continue
+
+        # Rule (b): report deleted assertion-class lines only when that class
+        # has a net decrease across the whole file (deleted minus added > 0).
+        # All such deleted lines are reported, not only `net` of them.
+        deleted_asserts = []
+        added_asserts = 0
+        for hunk in info.get("hunks", []):
+            old_current = hunk["old_start"]
+            for line in hunk["lines"]:
+                if not line or line.startswith("\\"):
+                    continue
+                if line.startswith("-"):
+                    if is_assertion_class_line(line[1:], lang_key):
+                        deleted_asserts.append((old_current, line[1:]))
+                    old_current += 1
+                elif line.startswith("+"):
+                    if is_assertion_class_line(line[1:], lang_key):
+                        added_asserts += 1
+        if len(deleted_asserts) - added_asserts > 0:
+            for line_no, detail in deleted_asserts:
+                _append_deleted_line(file_path, line_no, detail)
+
     for file_path, info in files_diff.items():
         if not matches_patterns(file_path, test_path_regexes):
             continue
@@ -1960,15 +2190,6 @@ def main():
                 if line.startswith("\\"):
                     continue
                 if line.startswith("-"):
-                    violations.append(
-                        {
-                            "layer": "L0",
-                            "file": file_path,
-                            "kind": "deleted_line",
-                            "line": old_current,
-                            "detail": line[1:],
-                        }
-                    )
                     old_current += 1
                     continue
 

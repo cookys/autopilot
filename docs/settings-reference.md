@@ -195,6 +195,7 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 | `AUTOPILOT_RUNS_WATCH_AUTOSTART` | Set to "0" (or false, off, no) to stop sessions from starting the live runs watcher. | on |  |
 | `AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S` | Seconds of idleness before the runs watcher exits (positive integer). | unset |  |
 | `AUTOPILOT_RUNS_WATCH_INTERVAL_S` | Seconds between runs watcher polls (positive integer). | unset |  |
+| `AUTOPILOT_QC_OUTCOME` | Overrides `outcome` in `.claude/qc-gate-config.md` for the pre-push outcome stage: `off`, `warn`, or `block`. `off` skips that stage only (the trailer stage still runs) and prints a one-line notice when the file says warn or block. The same file's `outcome_rerun` (`sample`, `all`, or `none`; default `sample`), `outcome_sample` (default `20`), and `outcome_budget_s` (default `600`) have no environment override. An unknown outcome value falls back to `off`. | off |  |
 
 ## Project-level files (`.claude/`)
 

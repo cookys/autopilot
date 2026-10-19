@@ -4119,6 +4119,22 @@
       "summary": "Branch-name pattern the opt-in branch-protection hook guards."
     },
     {
+      "name": "AUTOPILOT_QC_OUTCOME",
+      "kind": "env",
+      "audience": "user",
+      "group": "project",
+      "default": "off",
+      "readers": [
+        "scripts/resolve-qc-gate.sh",
+        ".githooks/pre-push"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        ".claude/qc-gate-config.md"
+      ],
+      "summary": "Overrides outcome in qc-gate-config.md (off, warn, or block). off skips the outcome stage only."
+    },
+    {
       "name": "AUTOPILOT_QUALIFICATION_OVERRIDE",
       "kind": "env",
       "audience": "user",

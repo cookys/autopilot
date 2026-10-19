@@ -382,3 +382,76 @@ test('a deleted suite file is not unreferenced and does not force full', () => {
     assert.notStrictEqual(out.mode, 'full');
   } finally { r.cleanup(); }
 });
+
+// RED at 30454e703: --record unknown (exit 2, stderr "unknown argument: --record"); shape 2!==0; rc record ENOENT; no-run stderr lacks --run.
+function gitSha(dir, ref) {
+  return execFileSync('git', ['rev-parse', ref], { cwd: dir, stdio: 'pipe' }).toString().trim();
+}
+
+test('--record shape: schema 1, full shas, mode selective, suites are the executed {path, rc} list', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/rec-ok.js': 'console.log("ok");\n',
+    'hooks/tests/rec-ok.test.sh': '#!/usr/bin/env bash\necho scripts/rec-ok.js >/dev/null\nexit 0\n',
+  });
+  try {
+    const head = r.change({ 'scripts/rec-ok.js': 'console.log("changed");\n' });
+    const rec = path.join(r.dir, 'qc-record.json');
+    const ran = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record', rec]);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    assert.strictEqual(doc.schema, 1);
+    assert.strictEqual(doc.head, gitSha(r.dir, head));
+    assert.strictEqual(doc.base, gitSha(r.dir, r.base));
+    assert.strictEqual(doc.mode, 'selective');
+    assert.deepStrictEqual(doc.suites, [{ path: 'hooks/tests/rec-ok.test.sh', rc: 0 }]);
+    assert.match(ran.stdout, /summary: 1 run, 0 failed\nrecord: /);
+  } finally { r.cleanup(); }
+});
+
+test('--record captures rc: a suite that exits 1 is rc 1 and the command is non-zero; a passing suite is rc 0', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/rc-target.js': 'console.log(1);\n',
+    'hooks/tests/rc-fail.test.sh': '#!/usr/bin/env bash\necho scripts/rc-target.js >/dev/null\nexit 1\n',
+    'hooks/tests/rc-pass.test.sh': '#!/usr/bin/env bash\necho scripts/rc-target.js >/dev/null\nexit 0\n',
+  });
+  try {
+    const head = r.change({ 'scripts/rc-target.js': 'console.log(2);\n' });
+    const rec = path.join(r.dir, 'qc-rc.json');
+    const ran = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record', rec]);
+    assert.notStrictEqual(ran.status, 0);
+    const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    assert.deepStrictEqual(doc.suites, [
+      { path: 'hooks/tests/rc-fail.test.sh', rc: 1 },
+      { path: 'hooks/tests/rc-pass.test.sh', rc: 0 },
+    ]);
+  } finally { r.cleanup(); }
+});
+
+test('--record without --run exits 2, names --run, writes nothing; default path is git-common-dir/autopilot/qc-runs/<full sha>.json', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/def-rec.js': 'console.log(1);\n',
+    'hooks/tests/def-rec.test.sh': '#!/usr/bin/env bash\necho scripts/def-rec.js >/dev/null\nexit 0\n',
+  });
+  try {
+    const missing = path.join(r.dir, 'should-not-exist.json');
+    const bad = runCli(r.dir, ['--record', missing]);
+    assert.strictEqual(bad.status, 2);
+    assert.match(bad.stderr, /--run/);
+    assert.strictEqual(fs.existsSync(missing), false);
+    const head = r.change({ 'scripts/def-rec.js': 'console.log(2);\n' });
+    const ok = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record']);
+    assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
+    const sha = gitSha(r.dir, head);
+    let common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: r.dir, stdio: 'pipe' }).toString().trim();
+    if (!path.isAbsolute(common)) common = path.resolve(r.dir, common);
+    const rec = path.join(common, 'autopilot', 'qc-runs', `${sha}.json`);
+    const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    assert.strictEqual(doc.schema, 1);
+    assert.strictEqual(doc.head, sha);
+    assert.deepStrictEqual(doc.suites, [{ path: 'hooks/tests/def-rec.test.sh', rc: 0 }]);
+    assert.match(ok.stdout, new RegExp(`record: ${rec.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`));
+  } finally { r.cleanup(); }
+});

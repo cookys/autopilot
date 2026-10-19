@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0218 -->
+<!-- next-id: BL-0228 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -742,3 +742,146 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: Phase 0 finding F1, restored 2026-10-19; dropped by 5f3aa3b1d cleanup
 - **Pointer**: docs/plans/evidence/2026-09-19-roundtable/notes.md
 - **Context**: `fleet peers` now tags couriers `[switchboard: …]` and refuses a handle without one; protocol.md must name the courier lookup, never `--to <host> --local`
+
+### Openclaw leftover side effects: a refusal keeps a live lease, and verify PATH is a precondition miss
+- **Id**: BL-0218
+- **Status**: open
+- **Since**: 2026-09-12
+- **Origin**: peer
+- **Reporter**: openclaw
+- **Report**: 2026-09-12 fleet
+- **Reply**: none
+- **Problem**: 主訴求已出貨。還剩兩件：拒絕時回報已釋放，持久狀態卻仍留有效租約，下次啟動會撞上未關租約；驗證指令繼承的搜尋路徑缺工具，找不到命令應算前置條件失敗。
+- **Impact**: 下次啟動被未關租約擋住；缺工具被當成驗證失敗，分不清是環境還是產品。
+- **Trigger**: a refusal reports released while durable state keeps a live lease, or verify_cmd inherits a PATH missing the operator tool
+- **Trigger-Type**: peer
+- **Effort**: S
+- **Source**: openclaw fleet relay 2026-09-12; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md
+- **Context**: Main claim shipped in v2.36.28. Original effort label was Fix. (a) may be partly covered by v2.36.71, unconfirmed.
+
+### Managed rail: already-scrambled carry-only ledger segments cannot project
+- **Id**: BL-0219
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 帳本裡已經被打亂、只剩搬移片段的段落無法再投影還原。寫入端先出貨，讀取端的復原刻意留到後面，還沒做。
+- **Impact**: 受影響主機的舊帳本無法還原，輪替後的紀錄一直讀不回去。
+- **Trigger**: host ledgers already rotated under the sorted group_by carry still throw event input artifact must match the prior output artifact
+- **Trigger-Type**: event
+- **Effort**: L
+- **Source**: l5 plan 2026-09-16, writer-only; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
+- **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
+
+### Managed rail: no_verdict leaves the phase in REVIEWING and resume refuses
+- **Id**: BL-0220
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 審查沒有裁決時，階段會停在審查中，恢復執行會拒絕繼續。紀錄寫著可以等待後恢復，恢復卻不接受這個階段。
+- **Impact**: 審查格式出錯後活動停在不可恢復的階段，這次嘗試只能放棄。
+- **Trigger**: any managed campaign whose in-rail reviewer returns no_verdict (format fault) — the next run of that station
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 1b-B campaign 2026-09-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-no-verdict-reviewing-resume.md
+- **Context**: The claim is kept, but the persisted phase stays REVIEWING, outside the durable-wait set, so resume is refused.
+
+### Managed rail: changed_files at the cap refuses repair when every sealed path was touched
+- **Id**: BL-0221
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 實作已經改過每一條封存路徑時，變更檔數達到上限，修復回合會被拒絕，即使沒有再碰到新檔案。
+- **Impact**: 該修的回合進不去，封存路徑全被碰過的活動無法在軌道內修復。
+- **Trigger**: the hand changed every sealed output path and verification is red, so repair is refused because changed_files is at max_changed_files
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-changed-files-repair-refused.md
+- **Context**: Original effort label was Fix. The changed_files axis uses >= against the sealed cap, so a repair that adds no new path is refused.
+
+### next-touch-validation reads symbolic-ref HEAD and fails in a detached verification checkout
+- **Id**: BL-0222
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 下一觸驗證測試會讀目前分支名稱。受管軌道的驗證檢出是分離狀態，沒有分支名稱，這個讀取會失敗。是否仍會紅尚未重跑確認。
+- **Impact**: 軌道內驗證可能因此變紅，同一提交在一般分支上卻是綠的。
+- **Trigger**: next-touch-validation reads symbolic-ref HEAD during the rail's detached verification checkout
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 detached checkout; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/next-touch-validation-symbolic-ref-detached.md
+- **Context**: Seen 2026-09-17: red in-rail, green on a branch. Whether it is still red when detached was not re-run.
+
+### Managed rail: a red campaign_verification keeps only digests, so the failing command is lost
+- **Id**: BL-0223
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 驗證變紅時，紀錄只留摘要雜湊，失敗的指令和輸出都沒留下來，事後看不出是哪一步、印了什麼。
+- **Impact**: 只能重跑才知道失敗原因，當次的指令與輸出已經不在紀錄裡。
+- **Trigger**: a red campaign_verification whose receipt keeps only digests, so the failing command and its output are lost
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-red-verification-digests-only.md
+- **Context**: The receipt sees stdout, stderr, and exit status, but nothing durable keeps the failing command or its tail.
+
+### Managed rail: graph-check allows max_wall_seconds to 14400 but the contract schema caps 7200
+- **Id**: BL-0224
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 圖檢查允許牆鐘上限到一萬四千四百秒，契約上限是七千二百秒。收件時才拒絕，而且已經先花掉一次授權。
+- **Impact**: 收件前檢查放行、收件時才拒絕，一次授權額度已經燒掉。
+- **Trigger**: graph-check admits max_wall_seconds above 7200, then intake rejects and the grant attempt is already spent
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 intake-rejected; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-max-wall-seconds-schema-mismatch.md
+- **Context**: Original effort label was Fix. One limit, checked at graph time, so intake does not burn the attempt.
+
+### Managed rail: ADJUDICATING or VERTICAL_VERIFICATION resume spends the claim before git-drift
+- **Id**: BL-0225
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 在裁決中或垂直驗證階段恢復時，會在檢查版本是否漂移之前就花掉任務的領取額度。
+- **Impact**: 版本已漂移的恢復仍先消耗領取額度，一次嘗試白費。
+- **Trigger**: a drifted ADJUDICATING or VERTICAL_VERIFICATION resume spends the Mission claim before the git-drift check
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: plan 2026-09-16 section 6, rubric R6; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-adjudicating-resume-spends-claim.md
+- **Context**: Extend the pre-claim preflight from durable-wait phases to every git-candidate resume.
+
+### Managed rail: a reviewer that withdraws a MUST-FIX and reuses the finding id is no_verdict
+- **Id**: BL-0226
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 審查者撤回一則必須修復、又沿用同一個發現編號時，系統把它當成沒有裁決，活動因此停住，雖然裁決其實讀得到。
+- **Impact**: 讀得到的撤回被當成沒有裁決，活動停在等待，修復被拖延。
+- **Trigger**: a rail review that withdraws a MUST-FIX and reuses the finding id is normalized as no_verdict
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 MiniMax r1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-revoked-finding-reused-id.md
+- **Context**: Drop withdrawn findings before the duplicate-id check and keep them advisory.
+
+### Managed rail does not pass the scorecard scope file, so fallback_ladder stays empty
+- **Id**: BL-0227
+- **Status**: open
+- **Since**: 2026-09-15
+- **Origin**: self
+- **Problem**: 受管軌道沒把記分卡範圍檔傳進去，後備梯永遠是空的。有證據的品管席若沒有釘選，收件就會拒絕。這件事現在是否仍成立尚未確認。
+- **Impact**: 有資格的品管席若沒釘選就進不了收件。是否仍如此尚未確認。
+- **Trigger**: a qc seat qualified by scorecard for reviewer is refused at intake without a pin because fallback_ladder stays empty
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: plan section 0 fact 1 / section 6, 2026-09-15; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-scorecard-scope-fallback-ladder.md
+- **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file.

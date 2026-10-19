@@ -792,6 +792,28 @@
       "type": "string"
     },
     {
+      "name": "qualification_feed.trust",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "auto",
+      "readers": [
+        "scripts/lib/qualification-trust.js",
+        "scripts/lib/qualification-confirm.js",
+        "scripts/qualification-feed-trust.js",
+        "scripts/engine-scorecard.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "How a gate-passed qualification feed is used: auto (default), confirm, or off. An unrecognised value is off.",
+      "type": "enum",
+      "allowed": [
+        "auto",
+        "confirm",
+        "off"
+      ]
+    },
+    {
       "name": "qualification_outbox.enqueue",
       "kind": "config_key",
       "audience": "user",

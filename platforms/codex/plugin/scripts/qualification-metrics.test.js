@@ -433,18 +433,45 @@ test('admission is byte-identical with the metrics cache absent or hostile', asy
     out.push(JSON.stringify(fs.readdirSync(store)));
     return JSON.stringify(out);
   };
+  // P6 withdraws byte-identity under the default trust mode auto. This assertion
+  // stays, with qualification_feed.trust off (config.json is $HOME/.autopilot/config.json).
+  const trustOff = (home) => {
+    const dir = path.join(home, '.autopilot');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ qualification_feed: { trust: 'off' } }));
+  };
   const absentHome = tmp('home');
   const hostileHome = tmp('home');
+  trustOff(absentHome);
+  trustOff(hostileHome);
   const { feed } = feedDirWithMetrics(isoAgo(100));
   const cacheDir = path.join(hostileHome, '.autopilot', 'qualification-feeds');
   assert.equal((await lib.fetchMetrics(feed, { cacheDir, now: NOW })).ok, true);
   assert.equal(run(hostileHome), run(absentHome));
 });
 
+test('under auto a cached qualification admits the seat it qualifies', async () => {
+  const home = tmp('home');
+  const store = tmp('store');
+  const { feed } = feedDirWithMetrics(isoAgo(1));
+  const cacheDir = path.join(home, '.autopilot', 'qualification-feeds');
+  assert.equal((await lib.fetchMetrics(feed, { cacheDir, now: NOW })).ok, true);
+  const env = { ...process.env, HOME: home, ENGINE_SCORECARD_DIR: store };
+  const r = spawnSync('node', [path.join(REPO, 'scripts', 'engine-scorecard.js'),
+    'seat-status', '--engine', 'grok-4.6', '--runner', 'grok', '--role', 'reviewer', '--effort', 'default',
+    '--now', NOW], { env, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const doc = JSON.parse(r.stdout);
+  assert.equal(doc.admission_status, 'qualified');
+  assert.equal(doc.admission_source, 'feed');
+  assert.equal(doc.baseline_event_id, null);
+});
+
 test('no other script or hook requires the metrics module (whole-tree scan)', () => {
   const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js',
     // P3 write side: uses only recordIdV1 / strikeId / validateRecord, never admission or ordering.
-    'scripts/qualification-send-queue.js', 'scripts/qualification-send-queue.test.js', 'scripts/lib/qualification-record-v2.js']);
+    'scripts/qualification-send-queue.js', 'scripts/qualification-send-queue.test.js', 'scripts/lib/qualification-record-v2.js',
+    'scripts/lib/qualification-trust.js', 'scripts/qualification-trust.test.js']);
   const hits = [];
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

@@ -74,7 +74,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
-const { readFeedSource, parseFeed } = require('./lib/qualification-feed.js');
+const { readFeedSource, parseFeed, generatedAtAge } = require('./lib/qualification-feed.js');
 
 const SCRIPT_DIR = __dirname;
 const DEFAULT_REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -488,17 +488,18 @@ function checkSnapshotAge(opts) {
     return;
   }
   const at = recipe.snapshot.generated_at;
-  if (typeof at !== 'string' || !ISO_UTC.test(at) || Number.isNaN(Date.parse(at))) {
+  const nowMs = opts.now ? Date.parse(opts.now) : Date.now();
+  const age = generatedAtAge(at, nowMs, opts.maxDays);
+  if (age.reason === 'malformed') {
     fail(`recipe snapshot.generated_at is missing or malformed (${JSON.stringify(at)})`);
   }
-  const nowMs = opts.now ? Date.parse(opts.now) : Date.now();
   if (Number.isNaN(nowMs)) failUsage(`--now is not a timestamp: ${opts.now}`);
-  const ageDays = (nowMs - Date.parse(at)) / 86400000;
+  const ageDays = age.age_days;
   const report = { status: 'ok', generated_at: at, age_days: Math.round(ageDays * 100) / 100, max_days: opts.maxDays };
-  if (ageDays < 0) {
+  if (age.reason === 'future') {
     fail(`recipe snapshot.generated_at ${at} is in the future (clock skew or a bad snapshot)`);
   }
-  if (ageDays > opts.maxDays) {
+  if (age.reason === 'stale') {
     fail(`official defaults snapshot is ${report.age_days} days old (generated_at ${at}), over the ${opts.maxDays}-day release limit — re-fetch the feed and rebuild: node scripts/build-qualification-defaults.js build --from-snapshot <feed>`);
   }
   process.stdout.write(`${JSON.stringify(report)}\n`);

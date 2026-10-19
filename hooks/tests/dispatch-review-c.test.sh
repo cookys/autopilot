@@ -29,6 +29,10 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$CR_LAUNCH_LOG"
 if [ "${1:-}" = "--preflight" ] || grep -q -- '--preflight' < <(printf '%s\n' "$@"); then
   printf 'preflight\n' >> "$CR_LAUNCH_LOG"
+  if [ "${CR_PREFLIGHT_BLOCK:-0}" = "1" ]; then
+    printf 'blocked\n' >> "$CR_LAUNCH_LOG"
+    sleep 60
+  fi
   if [ "${CR_PREFLIGHT_RC:-0}" != "0" ]; then
     echo "${CR_PREFLIGHT_ERR:-preflight failed}" >&2
     exit "${CR_PREFLIGHT_RC}"
@@ -121,6 +125,31 @@ OUT="$(TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_
   "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "isolated preflight success still reviews"
 assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "preflight success leaves no cleanroom preflight temp"
+rm -rf "$PF_ISOLATED"
+
+# A TERM between mktemp and removal must not leave the codex preflight temp file.
+# RED at d61f742d8: TERM during preflight leaves no cleanroom preflight temp: expected '1', got '0'
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+SCRIPT_PID=""
+TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_BLOCK=1 \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" >/dev/null 2>&1 &
+SCRIPT_PID=$!
+PF_SEEN=""
+for _pf_i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | grep -q .; then
+    PF_SEEN=1
+    break
+  fi
+  sleep 0.1
+done
+assert_eq "1" "${PF_SEEN:-0}" "preflight temp exists before TERM"
+kill -TERM "$SCRIPT_PID" 2>/dev/null || true
+wait "$SCRIPT_PID" 2>/dev/null || true
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "TERM during preflight leaves no cleanroom preflight temp"
 rm -rf "$PF_ISOLATED"
 
 # RED at base ceb7c81d: npm-wrapper layout was not a named gate

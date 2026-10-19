@@ -397,16 +397,28 @@ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -e
         CLEANROOM_BWRAP="$(command -v bwrap)"
       fi
       _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
+      # Registered for the EXIT/INT/TERM traps: a signal between mktemp and rm must not leak.
+      CLEANROOM_PREFLIGHT_ERR=""
+      _reap_cleanroom_preflight_err() {
+        [ -n "${CLEANROOM_PREFLIGHT_ERR:-}" ] || return 0
+        rm -f "$CLEANROOM_PREFLIGHT_ERR"
+        CLEANROOM_PREFLIGHT_ERR=""
+      }
+      trap _reap_cleanroom_preflight_err EXIT
+      trap 'rc=$?; _reap_cleanroom_preflight_err; exit "$rc"' INT TERM
       _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
+      CLEANROOM_PREFLIGHT_ERR="$_pf_err"
       _pf_rc=0
       "$_CLEANROOM_LAUNCHER" --preflight --deny-path "$AUTOPILOT_REVIEW_PACKET_DIR" \
         --bwrap "$CLEANROOM_BWRAP" >/dev/null 2>"$_pf_err" || _pf_rc=$?
       if [ "$_pf_rc" -ne 0 ]; then
         _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
         rm -f "$_pf_err"
+        CLEANROOM_PREFLIGHT_ERR=""
         die_precondition "cleanroom runtime unusable: ${_pf_first}"
       fi
       rm -f "$_pf_err"
+      CLEANROOM_PREFLIGHT_ERR=""
       _codex_lookup="${BIN:-codex}"
       command -v "$_codex_lookup" >/dev/null 2>&1 \
         || die_precondition "codex binary not found: $_codex_lookup"
@@ -913,6 +925,10 @@ cleanup() {
   [ -n "$GROK_PARSE" ] && rm -f "$GROK_PARSE"
   [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
   [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
+  if [ -n "${CLEANROOM_PREFLIGHT_ERR:-}" ]; then
+    rm -f "$CLEANROOM_PREFLIGHT_ERR"
+    CLEANROOM_PREFLIGHT_ERR=""
+  fi
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines
@@ -926,6 +942,9 @@ cleanup() {
   declare -F review_manifest_finalize >/dev/null 2>&1 && review_manifest_finalize
 }
 trap cleanup EXIT
+# INT/TERM must reap the same files as EXIT and keep the interrupted status.
+# Disarm EXIT first so cleanup does not run twice and clobber that status.
+trap 'cleanup; trap - EXIT INT TERM; exit "$_cleanup_rc"' INT TERM
 PARSE_INPUT="$RAW_LOG"
 
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE, telemetry only) ---

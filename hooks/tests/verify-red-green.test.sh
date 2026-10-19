@@ -351,6 +351,63 @@ test_symlink_test_path_escapes_repo() {
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "normal in-repo assertion path verdict is VALIDATED"
 }
 
+# 13. A symlink that exists only in the head commit (absent from the working tree)
+# must still be refused: the verifier runs the head tree, not the operator checkout.
+# RED at d61f742d8: head-only escaping symlink is refused even when the working tree lacks it: expected '2', got '0'
+test_head_only_symlink_escape_refused() {
+    local repo="$TEST_TMP/repo_head_only_escape" outside="$TEST_TMP/outside_head_only_escape"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$outside"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo leaked' > "$outside/secret.test.sh"
+    chmod +x "$outside/secret.test.sh"
+    ln -s "$outside/secret.test.sh" "$repo/escape-head-only.test.sh"
+    $GIT -C "$repo" add escape-head-only.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "head-only escape symlink" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    rm -f "$repo/escape-head-only.test.sh"
+    local err ec
+    err=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "head-only escaping symlink is refused even when the working tree lacks it"
+    assert_contains "$err" "test path escapes repository via symlink: escape-head-only.test.sh" "head-only escape refusal names the path"
+}
+
+# 14. A committed relative symlink whose target climbs out with two dot-dot segments.
+# RED at d61f742d8: dotdot escape refusal names the path: 'test path escapes repository via symlink: escape-dotdot.test.sh' not found in output
+test_relative_symlink_two_dotdot_refused() {
+    local repo="$TEST_TMP/repo_dotdot_escape" outside="$TEST_TMP/outside_dotdot_escape"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$outside"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo leaked' > "$outside/secret.test.sh"
+    chmod +x "$outside/secret.test.sh"
+    ln -s "../../outside_dotdot_escape/secret.test.sh" "$repo/escape-dotdot.test.sh"
+    $GIT -C "$repo" add escape-dotdot.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "dotdot escape symlink" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local err ec
+    err=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "committed symlink climbing two dot-dot segments is refused"
+    assert_contains "$err" "test path escapes repository via symlink: escape-dotdot.test.sh" "dotdot escape refusal names the path"
+}
+
+# 15. Negative control: a committed symlink to a normal in-repo file is accepted.
+test_inrepo_symlink_accepted() {
+    local repo="$TEST_TMP/repo_inrepo_link"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    ln -s "calc.test.sh" "$repo/ok-link.test.sh"
+    $GIT -C "$repo" add ok-link.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "in-repo symlink" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local out ec
+    # The symlink is a changed test path on the range. The verify command stays the
+    # ordinary in-repo file it points at, so acceptance is the refuse-check's decision.
+    out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1); ec=$?
+    assert_eq "$ec" "0" "committed symlink to an in-repo file is accepted"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "in-repo symlink verdict is VALIDATED"
+}
+
 test_validated
 test_validated_nested
 test_repo_owned_verify_cmd_uses_worktree_copy
@@ -366,5 +423,8 @@ test_json_escape_control_chars
 test_verify_cmd_dirname_plain_file
 test_symlink_into_outside_is_external
 test_symlink_test_path_escapes_repo
+test_head_only_symlink_escape_refused
+test_relative_symlink_two_dotdot_refused
+test_inrepo_symlink_accepted
 
 finalize_test

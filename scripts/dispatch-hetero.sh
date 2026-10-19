@@ -194,6 +194,16 @@ AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
+# Set only when the matching --*-bin flag was supplied (a value equal to the
+# default name is still an explicit override). Read after the parse loop.
+BIN_FLAG_AGY=0
+BIN_FLAG_GROK=0
+BIN_FLAG_PI=0
+BIN_FLAG_CODEX=0
+BIN_FLAG_QODER=0
+BIN_FLAG_CURSOR=0
+BIN_FLAG_OPENCODE=0
+BIN_FLAG_KIMI=0
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
@@ -1730,6 +1740,12 @@ write_manifest() {
   if [ "${STRIKE_WRITER_SUPPRESSED:-}" = "1" ]; then
     strike_suppressed_fields=", \"strike_writer_suppressed\": true, \"strike_writer_suppressed_seat\": \"$(_flat_json_escape "$STRIKE_WRITER_SUPPRESSED_SEAT")\""
   fi
+  # Present only when a strike or passive-capture write was skipped because a
+  # non-PATH --*-bin override had no isolated store (2026-10-19).
+  local capability_suppressed_fields=""
+  if [ -n "${CAPABILITY_WRITE_SUPPRESSED:-}" ]; then
+    capability_suppressed_fields=", \"capability_write_suppressed\": \"$(_flat_json_escape "$CAPABILITY_WRITE_SUPPRESSED")\""
+  fi
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -1739,13 +1755,13 @@ write_manifest() {
   fi
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$REPO_IDENTITY_FIELDS" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -1777,14 +1793,14 @@ while [ $# -gt 0 ]; do
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
-    --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
-    --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
-    --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
-    --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
-    --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
-    --cursor-bin) CURSOR_BIN="${2:-}"; shift 2 ;;
-    --opencode-bin) OPENCODE_BIN="${2:-}"; shift 2 ;;
-    --kimi-bin) KIMI_BIN="${2:-}"; shift 2 ;;
+    --agy-bin) AGY_BIN="${2:-}"; BIN_FLAG_AGY=1; shift 2 ;;
+    --grok-bin) GROK_BIN="${2:-}"; BIN_FLAG_GROK=1; shift 2 ;;
+    --pi-bin) PI_BIN="${2:-}"; BIN_FLAG_PI=1; shift 2 ;;
+    --codex-bin) CODEX_BIN="${2:-}"; BIN_FLAG_CODEX=1; shift 2 ;;
+    --qoder-bin) QODER_BIN="${2:-}"; BIN_FLAG_QODER=1; shift 2 ;;
+    --cursor-bin) CURSOR_BIN="${2:-}"; BIN_FLAG_CURSOR=1; shift 2 ;;
+    --opencode-bin) OPENCODE_BIN="${2:-}"; BIN_FLAG_OPENCODE=1; shift 2 ;;
+    --kimi-bin) KIMI_BIN="${2:-}"; BIN_FLAG_KIMI=1; shift 2 ;;
     --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
@@ -1829,6 +1845,57 @@ while [ $# -gt 0 ]; do
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+# Test double without an isolated store (2026-10-19). A --*-bin whose realpath is
+# not the PATH default, with neither ENGINE_CAPABILITY_DIR nor ENGINE_CAPABILITY_FILE
+# set, must not let seat_strike_capture or passive_capture write the real store.
+# --store exports ENGINE_CAPABILITY_DIR during the parse above, so flag order does
+# not matter. AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE=1 releases the guard.
+CAPABILITY_WRITE_GUARD=0
+CAPABILITY_WRITE_SUPPRESSED=""
+_CAPABILITY_WRITE_NOTE_DONE=0
+_bin_override_differs() {
+  # $1 supplied path or bare command name, $2 default command name, $3 1 when the flag was supplied.
+  [ "${3:-0}" = 1 ] || return 1
+  local def a b supplied
+  def="$(command -v "$2" 2>/dev/null || true)"
+  [ -n "$def" ] || return 0
+  supplied="$1"
+  # A bare name has no slash. realpath would resolve it against the cwd and
+  # miss the PATH binary, so resolve it with command -v first. Unresolvable
+  # still counts as differing. Path-form values skip this and keep realpath.
+  case "$supplied" in
+    */*) ;;
+    *)
+      supplied="$(command -v "$supplied" 2>/dev/null || true)"
+      [ -n "$supplied" ] || return 0
+      ;;
+  esac
+  if command -v realpath >/dev/null 2>&1; then
+    a="$(realpath "$supplied" 2>/dev/null || true)"
+    b="$(realpath "$def" 2>/dev/null || true)"
+  else
+    a="$(readlink -f "$supplied" 2>/dev/null || true)"
+    b="$(readlink -f "$def" 2>/dev/null || true)"
+  fi
+  [ -n "$a" ] && [ "$a" = "$b" ] && return 1
+  return 0
+}
+if [ "${AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE:-}" != "1" ] \
+    && [ -z "${ENGINE_CAPABILITY_DIR:-}" ] && [ -z "${ENGINE_CAPABILITY_FILE:-}" ]; then
+  if _bin_override_differs "$AGY_BIN" agy "$BIN_FLAG_AGY" \
+      || _bin_override_differs "$GROK_BIN" grok "$BIN_FLAG_GROK" \
+      || _bin_override_differs "$PI_BIN" pi "$BIN_FLAG_PI" \
+      || _bin_override_differs "$CODEX_BIN" codex "$BIN_FLAG_CODEX" \
+      || _bin_override_differs "$QODER_BIN" qoderclicn "$BIN_FLAG_QODER" \
+      || _bin_override_differs "$CURSOR_BIN" cursor-agent "$BIN_FLAG_CURSOR" \
+      || _bin_override_differs "$OPENCODE_BIN" opencode "$BIN_FLAG_OPENCODE" \
+      || _bin_override_differs "$KIMI_BIN" kimi "$BIN_FLAG_KIMI"; then
+    CAPABILITY_WRITE_GUARD=1
+    _CAPABILITY_WRITE_NOTE_DONE=1
+    echo "dispatch-hetero: not writing the capability store (test double runner binary without an isolated store). Set ENGINE_CAPABILITY_DIR or pass --store to isolate, or set AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE=1 to write the real store." >&2
+  fi
+fi
 
 # A removed teardown-config key (BL-0115) is a hard precondition failure, not a silent ignore.
 if ! _td_err="$(bash "$SELF_DIR/resolve-worktree-teardown.sh" 2>&1 >/dev/null)"; then
@@ -4373,12 +4440,35 @@ _hetero_runner_token() {
   printf '%s' "$runner"
 }
 
+# One stderr line per dispatch. The parent prints it when the guard arms (the
+# detached child's stderr is discarded); the write sites call this too so an
+# inline run that arms without the early print still speaks once.
+_capability_write_note() {
+  [ "${_CAPABILITY_WRITE_NOTE_DONE:-0}" = 1 ] && return 0
+  _CAPABILITY_WRITE_NOTE_DONE=1
+  echo "dispatch-hetero: not writing the capability store (test double runner binary without an isolated store). Set ENGINE_CAPABILITY_DIR or pass --store to isolate, or set AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE=1 to write the real store." >&2
+}
+
+# 0 when this call suppressed a real-store write. Sets the manifest field.
+_capability_write_suppress_now() {
+  [ "${CAPABILITY_WRITE_GUARD:-0}" = 1 ] || return 1
+  CAPABILITY_WRITE_SUPPRESSED="test_double_without_isolated_store"
+  _capability_write_note
+  return 0
+}
+
 passive_capture() {
   local status="${1:-}"
   CLASSIFIED_ERROR=""
   if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
     # Classify once, outside the recording subshell, so classify_outcome can reuse the result.
     CLASSIFIED_ERROR="$("$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || CLASSIFIED_ERROR=""
+    if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
+      if declare -F _capability_write_suppress_now >/dev/null 2>&1 && _capability_write_suppress_now; then
+        write_manifest 2>/dev/null || true
+        return 0
+      fi
+    fi
     (
       if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
         local quota_status="unknown" confidence="low"
@@ -4514,9 +4604,20 @@ seat_strike_capture() {
   # returned. Only now does the debug hatch get to suppress it, and only LOUDLY:
   # set outside the write subshell (subshell vars don't survive back to this
   # function) so write_manifest can stamp the manifest sidecar before we return.
+  local _strike_hatch=0
   if [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ]; then
     STRIKE_WRITER_SUPPRESSED="1"
     STRIKE_WRITER_SUPPRESSED_SEAT="$MODEL/$(_hetero_runner_token)/implementer"
+    _strike_hatch=1
+  fi
+  # Same loud-suppression contract as the hatch: a skipped real-store write is
+  # visible on the manifest and does not change OUTCOME_* or the exit code.
+  # declare -F: the strike-writer suite extracts this function alone and
+  # invokes it without the helper. A missing helper must not look like a suppress.
+  if declare -F _capability_write_suppress_now >/dev/null 2>&1 && _capability_write_suppress_now; then
+    _strike_hatch=1
+  fi
+  if [ "$_strike_hatch" = 1 ]; then
     write_manifest 2>/dev/null || true
     return 0
   fi
@@ -4931,11 +5032,12 @@ dispatch_detached_run() {
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
+    declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

@@ -3243,6 +3243,19 @@
       "summary": "Set to \"off\" to stop the subagent activity stamps."
     },
     {
+      "name": "AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"1\" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it."
+    },
+    {
       "name": "AUTOPILOT_ASK_DECISION",
       "kind": "env",
       "audience": "user",

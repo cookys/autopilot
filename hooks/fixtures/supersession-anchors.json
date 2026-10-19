@@ -48,8 +48,8 @@
       "start_marker": "# cause_class mapping — derived ONLY from the host's own classification of OUTCOME_STATUS,",
       "end_marker": "# classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the",
       "why": "§7 out of scope: this plan reads strike rows, it never changes how they are written",
-      "sha256": "74626462bac648a90dbcdc97d5630ce5c962025a3d6e09c7fdd7effc21027906",
-      "bytes": 6044
+      "sha256": "98c4dbfb2f5acd92a3e8b2cc9c9a183ca110f69781f59403d7658296da26e9b5",
+      "bytes": 6568
     },
     {
       "id": "mission-enforcement-gate",

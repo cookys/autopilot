@@ -473,6 +473,9 @@ REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO
 # Absolute targets and targets that climb above the repository root are refused. A relative
 # link that stays inside the repository is not refused. Each leading directory component is
 # checked the same way, so an intermediate symlink cannot hide an escape.
+# A symlink in the final component is followed the same way (a -> b -> ../x).
+# At most 40 symlink resolutions are attempted; a deeper chain or a cycle
+# (d -> d) is refused.
 normalize_head_symlink_target() {
   local parent="$1" target="$2" combined seg
   case "$target" in
@@ -516,6 +519,7 @@ normalize_head_symlink_target() {
 refuse_test_path_escaping_repo() {
   local rel="$1"
   local rest="$rel" prefix="" component look line mode blob target parent norm rc
+  local hops=0
   while [[ "$rest" == ./* ]]; do rest="${rest#./}"; done
   rest="${rest#/}"
   while [[ -n "$rest" ]]; do
@@ -537,6 +541,10 @@ refuse_test_path_escaping_repo() {
     line="$(git -C "$REPO" ls-tree "$HEAD_SHA" -- "$look" 2>/dev/null | head -n 1 || true)"
     mode="${line%% *}"
     if [[ "$mode" == "120000" ]]; then
+      hops=$((hops + 1))
+      if [[ "$hops" -gt 40 ]]; then
+        err_usage "test path symlink chain too deep or cyclic: $rel"
+      fi
       blob="$(printf '%s\n' "$line" | awk '{print $3}')"
       target="$(git -C "$REPO" cat-file -p "$blob" 2>/dev/null || true)"
       target="${target%$'\n'}"
@@ -550,9 +558,11 @@ refuse_test_path_escaping_repo() {
         if [[ -n "$norm" ]]; then
           rest="${norm}/${rest}"
         fi
-        prefix=""
-        continue
+      else
+        rest="$norm"
       fi
+      prefix=""
+      continue
     fi
     if [[ -n "$prefix" ]]; then
       prefix="${prefix}/${component}"

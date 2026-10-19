@@ -373,7 +373,9 @@ test_head_only_symlink_escape_refused() {
 }
 
 # 14. A committed relative symlink whose target climbs out with two dot-dot segments.
-# RED at d61f742d8: dotdot escape refusal names the path: 'test path escapes repository via symlink: escape-dotdot.test.sh' not found in output
+# Re-ran this body on d61f742d8 (scratch worktree): EC=2, stderr
+# 'test path unresolvable: escape-dotdot.test.sh' (readlink -f found no target).
+# The escape-message assertion failed. RED, not green on that base.
 test_relative_symlink_two_dotdot_refused() {
     local repo="$TEST_TMP/repo_dotdot_escape" outside="$TEST_TMP/outside_dotdot_escape"
     local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
@@ -408,6 +410,66 @@ test_inrepo_symlink_accepted() {
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "in-repo symlink verdict is VALIDATED"
 }
 
+# 16. Two-hop final-component chain: a.test.sh -> b -> a path that climbs out.
+# RED at aa4a4e6b8: two-hop symlink chain escaping the repo exits 2: expected '2', got '0'; escape message not found
+test_two_hop_symlink_escape_refused() {
+    local repo="$TEST_TMP/repo_twohop_escape" outside="$TEST_TMP/outside_twohop_escape"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$outside"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo leaked' > "$outside/secret.test.sh"
+    chmod +x "$outside/secret.test.sh"
+    ln -s "../../outside_twohop_escape/secret.test.sh" "$repo/b"
+    ln -s "b" "$repo/a.test.sh"
+    $GIT -C "$repo" add b a.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "two-hop escape" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local err ec
+    err=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "two-hop symlink chain escaping the repo exits 2"
+    assert_contains "$err" "test path escapes repository via symlink: a.test.sh" "two-hop escape refusal names the path"
+}
+
+# 17. A committed symlink cycle d -> d, reached via test path d/x.test.sh, must
+# refuse in bounded time instead of following the cycle forever.
+# RED at aa4a4e6b8: timeout 20 killed the follow loop; cyclic symlink test path exits 2: expected '2', got '124'; cycle message not found
+test_symlink_cycle_refused() {
+    local repo="$TEST_TMP/repo_symlink_cycle"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$repo/d"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$repo/d/x.test.sh"
+    chmod +x "$repo/d/x.test.sh"
+    $GIT -C "$repo" add d/x.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "cycle path on base side" >/dev/null 2>&1
+    base=$($GIT -C "$repo" rev-parse HEAD)
+    $GIT -C "$repo" rm -r d >/dev/null 2>&1
+    ln -s "d" "$repo/d"
+    $GIT -C "$repo" add d >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "cycle d -> d" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local err ec
+    err=$(timeout 20 "$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "cyclic symlink test path exits 2"
+    assert_contains "$err" "test path symlink chain too deep or cyclic: d/x.test.sh" "cycle refusal names the path"
+}
+
+# 18. Negative control: a.test.sh -> b -> an in-repo test file is accepted.
+test_two_hop_inrepo_symlink_accepted() {
+    local repo="$TEST_TMP/repo_twohop_ok"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    ln -s "calc.test.sh" "$repo/b"
+    ln -s "b" "$repo/a.test.sh"
+    $GIT -C "$repo" add b a.test.sh >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "two-hop in-repo" >/dev/null 2>&1
+    head=$($GIT -C "$repo" rev-parse HEAD)
+    local out ec
+    out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" 2>&1); ec=$?
+    assert_eq "$ec" "0" "two-hop in-repo symlink chain is accepted"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "two-hop in-repo symlink verdict is VALIDATED"
+}
+
 test_validated
 test_validated_nested
 test_repo_owned_verify_cmd_uses_worktree_copy
@@ -426,5 +488,8 @@ test_symlink_test_path_escapes_repo
 test_head_only_symlink_escape_refused
 test_relative_symlink_two_dotdot_refused
 test_inrepo_symlink_accepted
+test_two_hop_symlink_escape_refused
+test_symlink_cycle_refused
+test_two_hop_inrepo_symlink_accepted
 
 finalize_test

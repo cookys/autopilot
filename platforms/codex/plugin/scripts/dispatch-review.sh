@@ -397,7 +397,11 @@ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -e
         CLEANROOM_BWRAP="$(command -v bwrap)"
       fi
       _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
-      # Registered for the EXIT/INT/TERM traps: a signal between mktemp and rm must not leak.
+      # Registered for the EXIT trap: a signal between mktemp and rm must not leak.
+      # INT/TERM are not trapped. Bash defers those traps until the foreground
+      # child finishes and then exits with the child's status, so TERM would not
+      # stop the preflight promptly. An untrapped TERM exits 143 at once and the
+      # EXIT trap still removes the temp file.
       CLEANROOM_PREFLIGHT_ERR=""
       _reap_cleanroom_preflight_err() {
         [ -n "${CLEANROOM_PREFLIGHT_ERR:-}" ] || return 0
@@ -405,7 +409,6 @@ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -e
         CLEANROOM_PREFLIGHT_ERR=""
       }
       trap _reap_cleanroom_preflight_err EXIT
-      trap 'rc=$?; _reap_cleanroom_preflight_err; exit "$rc"' INT TERM
       _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
       CLEANROOM_PREFLIGHT_ERR="$_pf_err"
       _pf_rc=0
@@ -942,9 +945,10 @@ cleanup() {
   declare -F review_manifest_finalize >/dev/null 2>&1 && review_manifest_finalize
 }
 trap cleanup EXIT
-# INT/TERM must reap the same files as EXIT and keep the interrupted status.
-# Disarm EXIT first so cleanup does not run twice and clobber that status.
-trap 'cleanup; trap - EXIT INT TERM; exit "$_cleanup_rc"' INT TERM
+# INT/TERM are not trapped. Bash defers a signal trap until the foreground
+# child finishes and then exits with that child's status, so a TERM trap does
+# not stop the script promptly. An untrapped TERM exits 143 immediately and
+# this EXIT trap still runs cleanup. _cleanup_rc is set only inside cleanup.
 PARSE_INPUT="$RAW_LOG"
 
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE, telemetry only) ---

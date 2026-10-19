@@ -11,9 +11,23 @@
  *      evaluated change pack — by sha256 recorded in <packs-dir>/manifest.json AND by the pack's bytes
  *      on disk. A differing file that is not in the prereg guidance file set, has no pack entry, or
  *      differs from its pack copy fails the gate. A deleted file must be absent from the pack.
+ *      Optional prereg guidance.out_of_arm is an array of {path, commit, reason} (all three
+ *      non-empty strings). A differing manifest file that is not in guidance.files is accepted
+ *      when it has one valid entry and the gate re-derives both of the following itself: the
+ *      commit resolves, is an ancestor of --head, is not an ancestor of --base (it lies in
+ *      base..head; compared by full sha), and git diff-tree --no-renames of that commit lists
+ *      the path; and the path is not loaded by any arm manifest named base.json, change.json or
+ *      red.json next to --arm (plus --arm itself). A path under skills/<name>/ is loaded when
+ *      <name> is a key of that arm's skills object. Any other path is loaded when packs/manifest.json
+ *      has "<pack id>/<path>" for a pack named by that arm's files field (string or array) or by
+ *      a skills entry. The declaration's commit and reason are echoed; they are never trusted.
+ *      An entry that does not differ, that is also in guidance.files, that is malformed, or whose
+ *      path is duplicated fails the gate. Accepted out_of_arm files do not by themselves require
+ *      packs or a results file.
  *   2. re-running score-stage-graph.js on the recorded results reproduces SHIP.
- * When no manifest file differs from the base there is nothing to evaluate: gate 1 passes vacuously
- * and the scorer is not required (`score: null`).
+ * When no manifest file differs from the base, or every differing file is an accepted out_of_arm
+ * file, there is nothing to evaluate: gate 1 passes vacuously and the scorer is not required
+ * (`score: null`).
  *
  * Pack mapping comes from the arm manifest (--arm; the evaluated arm's pack ids carry a version suffix
  * on later runs, v2..v5): skills/<s>/<rest> -> pack arm.skills[<s>], file <rest>; every other manifest
@@ -24,7 +38,8 @@
  *       [--prereg <json>] [--packs-dir <dir>] [--arm <json>] [--results <jsonl>] [--scorer <script>]
  *   Defaults: prereg/packs/scorer/arm (arms/stage-graph/change.json) from evals/skill-onoff next to this script; --results required
  *   whenever a manifest file differs.
- * stdout: ONE JSON object {ok, base, head, arm, differing[], failures[], score}. Diagnostics on stderr.
+ * stdout: ONE JSON object {ok, base, head, arm, differing[], failures[], score, out_of_arm[]}.
+ * out_of_arm lists every declared entry: {path, commit, reason, ok, reason_failed?}. Diagnostics on stderr.
  * Exit: 0 gate passes · 1 gate fails · 2 usage / unreadable input.
  * Wiring into scripts/preflight-release.sh is P8, not now.
  * Node >= 20.10, built-ins only.
@@ -87,6 +102,133 @@ for (let i = 0; i + 1 < diff.length; i += 2) {
 }
 const listed = new Set(P.guidance.files);
 const failures = [];
+const diffSet = new Set(differing.map((d) => d.path));
+
+function gitStatus(args) {
+  return cp.spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', maxBuffer: 1 << 28 });
+}
+function resolveCommit(rev) {
+  const r = gitStatus(['rev-parse', '--verify', `${rev}^{commit}`]);
+  if (r.status !== 0) return null;
+  return r.stdout.trim();
+}
+function isAncestor(ancestor, desc) {
+  return gitStatus(['merge-base', '--is-ancestor', ancestor, desc]).status === 0;
+}
+function commitChangesPath(full, filePath) {
+  const listedNames = git(['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', full]).toString('utf8').split('\0').filter(Boolean);
+  return listedNames.includes(filePath);
+}
+function commitInRange(rev, filePath) {
+  const full = resolveCommit(rev);
+  if (!full) return 'out_of_arm commit does not resolve (not in base..head)';
+  if (!isAncestor(full, head) || isAncestor(full, base)) return 'out_of_arm commit is not in base..head';
+  if (!commitChangesPath(full, filePath)) return 'out_of_arm commit did not change the path';
+  return null;
+}
+
+function packIdList(field) {
+  if (typeof field === 'string' && field) return [field];
+  if (Array.isArray(field)) return field.filter((x) => typeof x === 'string' && x);
+  return [];
+}
+function readSiblingArms() {
+  const arms = [arm];
+  const seen = new Set([path.resolve(armPath)]);
+  for (const name of ['base.json', 'change.json', 'red.json']) {
+    const p = path.join(path.dirname(armPath), name);
+    const resolved = path.resolve(p);
+    if (seen.has(resolved) || !fs.existsSync(p)) continue;
+    seen.add(resolved);
+    try { arms.push(JSON.parse(fs.readFileSync(p, 'utf8'))); } catch (e) { failures.push(`unreadable arm manifest ${name}: ${e.message}`); }
+  }
+  return arms;
+}
+const loadArms = readSiblingArms();
+function packContains(id, repoPath) {
+  const packs = man.packs && man.packs[id];
+  return !!(packs && Object.hasOwn(packs, `${id}/${repoPath}`));
+}
+function loadedByArm(repoPath) {
+  const skillName = (/^skills\/([^/]+)\//.exec(repoPath) || [])[1];
+  for (const a of loadArms) {
+    const skills = a && a.skills && typeof a.skills === 'object' && !Array.isArray(a.skills) ? a.skills : {};
+    if (skillName && Object.hasOwn(skills, skillName)) return true;
+    if (!skillName) {
+      const ids = packIdList(a && a.files);
+      for (const v of Object.values(skills)) if (typeof v === 'string' && v) ids.push(v);
+      if (ids.some((id) => packContains(id, repoPath))) return true;
+    }
+  }
+  return false;
+}
+
+function blankEntry(e) {
+  const pathOk = !!(e && typeof e.path === 'string' && e.path);
+  const commitOk = !!(e && typeof e.commit === 'string' && e.commit);
+  const reasonOk = !!(e && typeof e.reason === 'string' && e.reason);
+  return {
+    path: pathOk ? e.path : '',
+    commit: commitOk ? e.commit : '',
+    reason: reasonOk ? e.reason : '',
+    pathOk, commitOk, reasonOk,
+  };
+}
+const outOfArm = [];
+const declByPath = new Map();
+const rawOut = P.guidance && P.guidance.out_of_arm;
+if (rawOut !== undefined && !Array.isArray(rawOut)) {
+  failures.push('malformed out_of_arm entry (guidance.out_of_arm must be an array)');
+} else if (Array.isArray(rawOut)) {
+  rawOut.forEach((e) => {
+    const rec = blankEntry(e);
+    if (!rec.pathOk || !rec.commitOk || !rec.reasonOk) {
+      rec.ok = false;
+      rec.reason_failed = 'malformed out_of_arm entry (path, commit and reason must be non-empty strings)';
+      failures.push(rec.path ? `${rec.path}: ${rec.reason_failed}` : rec.reason_failed);
+      outOfArm.push(rec);
+      return;
+    }
+    if (declByPath.has(rec.path)) {
+      rec.ok = false;
+      rec.reason_failed = 'duplicate out_of_arm path';
+      failures.push(`${rec.path}: ${rec.reason_failed}`);
+      const first = declByPath.get(rec.path);
+      if (first.ok !== false) {
+        first.ok = false;
+        first.reason_failed = rec.reason_failed;
+        failures.push(`${first.path}: ${first.reason_failed}`);
+      }
+      declByPath.delete(rec.path);
+      outOfArm.push(rec);
+      return;
+    }
+    rec.ok = true;
+    declByPath.set(rec.path, rec);
+    outOfArm.push(rec);
+  });
+  for (const rec of declByPath.values()) {
+    if (listed.has(rec.path)) {
+      rec.ok = false;
+      rec.reason_failed = 'a file cannot be both in guidance.files and out_of_arm';
+      failures.push(`${rec.path}: ${rec.reason_failed}`);
+      continue;
+    }
+    if (!diffSet.has(rec.path)) {
+      rec.ok = false;
+      rec.reason_failed = 'declared out_of_arm but unchanged';
+      failures.push(`${rec.path}: ${rec.reason_failed}`);
+      continue;
+    }
+    const commitFail = commitInRange(rec.commit, rec.path);
+    const loaded = loadedByArm(rec.path);
+    if (commitFail || loaded) {
+      rec.ok = false;
+      rec.reason_failed = [commitFail, loaded ? 'path is loaded by an arm' : null].filter(Boolean).join('; ');
+    }
+  }
+}
+
 for (const d of differing) {
   const { id, rel, skill } = packFor(d.path);
   d.pack = id;
@@ -94,7 +236,19 @@ for (const d of differing) {
   const key = `${id}/${rel}`;
   const entry = id && man.packs && man.packs[id] ? man.packs[id][key] : undefined;
   const fail = (reason) => { d.ok = false; d.reason = reason; failures.push(`${d.path}: ${reason}`); };
-  if (!listed.has(d.path)) { fail('not in the prereg guidance file set (an unevaluated guidance change: new pack + new arm required)'); continue; }
+  if (!listed.has(d.path)) {
+    const rec = declByPath.get(d.path);
+    if (rec && rec.ok) {
+      d.ok = true;
+      d.out_of_arm = true;
+      d.commit = rec.commit;
+      d.reason = rec.reason;
+      continue;
+    }
+    if (rec && rec.reason_failed) { fail(rec.reason_failed); continue; }
+    fail('not in the prereg guidance file set (an unevaluated guidance change: new pack + new arm required)');
+    continue;
+  }
   if (!id) { fail(`skill ${skill} has no change pack in the arm manifest`); continue; }
   if (!man.packs || !man.packs[id]) { fail(`change pack ${id} is not frozen in packs/manifest.json`); continue; }
   if (d.status === 'D') {
@@ -141,7 +295,8 @@ function armBindingFailures(file) {
 }
 
 let score = null;
-if (differing.length) {
+const needsScore = differing.some((d) => d.out_of_arm !== true);
+if (needsScore) {
   if (!resultsPath) failures.push('results file required: manifest files differ from base but --results was not given');
   else {
     failures.push(...armBindingFailures(resultsPath));
@@ -153,6 +308,11 @@ if (differing.length) {
   }
 }
 
-const out = { ok: failures.length === 0, base, head, arm: armPath, differing, failures, score };
+const outOfArmOut = outOfArm.map((rec) => {
+  const row = { path: rec.path, commit: rec.commit, reason: rec.reason, ok: rec.ok === true };
+  if (!row.ok) row.reason_failed = rec.reason_failed;
+  return row;
+});
+const out = { ok: failures.length === 0, base, head, arm: armPath, differing, failures, score, out_of_arm: outOfArmOut };
 process.stdout.write(`${JSON.stringify(out)}\n`);
 process.exit(out.ok ? 0 : 1);

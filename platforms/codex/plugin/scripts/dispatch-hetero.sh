@@ -1855,16 +1855,27 @@ CAPABILITY_WRITE_GUARD=0
 CAPABILITY_WRITE_SUPPRESSED=""
 _CAPABILITY_WRITE_NOTE_DONE=0
 _bin_override_differs() {
-  # $1 supplied path, $2 default command name, $3 1 when the flag was supplied.
+  # $1 supplied path or bare command name, $2 default command name, $3 1 when the flag was supplied.
   [ "${3:-0}" = 1 ] || return 1
-  local def a b
+  local def a b supplied
   def="$(command -v "$2" 2>/dev/null || true)"
   [ -n "$def" ] || return 0
+  supplied="$1"
+  # A bare name has no slash. realpath would resolve it against the cwd and
+  # miss the PATH binary, so resolve it with command -v first. Unresolvable
+  # still counts as differing. Path-form values skip this and keep realpath.
+  case "$supplied" in
+    */*) ;;
+    *)
+      supplied="$(command -v "$supplied" 2>/dev/null || true)"
+      [ -n "$supplied" ] || return 0
+      ;;
+  esac
   if command -v realpath >/dev/null 2>&1; then
-    a="$(realpath "$1" 2>/dev/null || true)"
+    a="$(realpath "$supplied" 2>/dev/null || true)"
     b="$(realpath "$def" 2>/dev/null || true)"
   else
-    a="$(readlink -f "$1" 2>/dev/null || true)"
+    a="$(readlink -f "$supplied" 2>/dev/null || true)"
     b="$(readlink -f "$def" 2>/dev/null || true)"
   fi
   [ -n "$a" ] && [ "$a" = "$b" ] && return 1

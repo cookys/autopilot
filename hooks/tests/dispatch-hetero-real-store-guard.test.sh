@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # RED at 2377ad913: FAIL [dispatch-hetero-real-store-guard] a: default store has no new strike: expected '0', got '1'
+# RED at 43a0ff230: FAIL [dispatch-hetero-real-store-guard] f: bare name matching PATH writes a strike: expected '1', got '0'
 # A non-PATH --*-bin override without an isolated capability store must not
 # write strikes or passive-capture events into the default store.
 # Incident 2026-10-19: a hand-run fake runner polluted ~/.autopilot strikes.
@@ -157,17 +158,48 @@ run_dispatch "$ERR_EI" env ENGINE_CAPABILITY_DIR="$ISO_E" "$SCRIPT" --branch fea
 assert_file_exists "$ISO_E/capability.jsonl" "e-iso: passive capture writes the isolated store"
 assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "e-iso: no suppression field"
 
+# (f) --agy-bin agy is a bare command name. PATH's agy is the failure stub.
+# Same binary as the default: the strike is written and nothing is suppressed.
+reset_stores
+PATHBIN_F="$TEST_TMP/pathbin-f"
+mkdir -p "$PATHBIN_F"
+STUB_F="$PATHBIN_F/agy"
+make_fail_stub "$STUB_F"
+ERR_F="$TEST_TMP/err-f"
+run_dispatch "$ERR_F" env PATH="$PATHBIN_F:$PATH" "$SCRIPT" --branch feat/guard-f --prompt-file "$PROMPT" \
+  --agy-bin agy --model guard-engine-f --runner agy
+assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "1" "f: bare name matching PATH writes a strike"
+assert_eq "$(latest_manifest_field capability_write_suppressed)" "" "f: no suppression field"
+
+# (g) a bare name that command -v cannot resolve still counts as differing.
+# The runner dies at "agy binary not found" before a strike write, so the
+# suppression signal is the guard's stderr note, not the manifest field
+# (that field is stamped only when a write is actually skipped).
+reset_stores
+ERR_G="$TEST_TMP/err-g"
+run_dispatch "$ERR_G" env PATH="$PATHBIN_F:$PATH" "$SCRIPT" --branch feat/guard-g --prompt-file "$PROMPT" \
+  --agy-bin not-a-real-agy-bin --model guard-engine-g --runner agy
+assert_eq "$(strike_count "$DEFAULT_STORE/strikes.jsonl")" "0" "g: unresolved bare name writes no strike"
+assert_contains "$(cat "$ERR_G")" "not writing the capability store" "g: unresolved bare name is suppressed"
+
 # Negative control: the live-rail smoke allowlist must pass the store selectors.
-# This assertion fails on an unpatched scripts/engine-qualify.js.
+# Anchored on the passthrough array in the allowlist env object, not a fixed
+# character window after DISPATCH_QUIET. Removing either name from that array
+# fails this block (mutation 2026-10-19: dropped both names from the array in
+# scripts/engine-qualify.js; node exited 1 with
+# "FAIL: smoke env allowlist dropped ENGINE_CAPABILITY_DIR"; edit restored).
 node - "$REPO_ROOT/scripts/engine-qualify.js" <<'NODE'
 const fs = require("fs");
 const src = fs.readFileSync(process.argv[2], "utf8");
-const idx = src.indexOf("DISPATCH_QUIET: '1'");
-if (idx < 0) { console.error("FAIL: qualify spawn env anchor missing"); process.exit(1); }
-const window = src.slice(idx, idx + 900);
+const m = src.match(/for \(const passthrough of \[([^\]]+)\]\)/);
+if (!m) {
+  console.error("FAIL: qualify smoke env passthrough loop missing");
+  process.exit(1);
+}
+const list = m[1];
 for (const name of ["ENGINE_CAPABILITY_DIR", "ENGINE_CAPABILITY_FILE"]) {
-  if (!window.includes(name)) {
-    console.error("FAIL: smoke env does not carry " + name);
+  if (!list.includes("'" + name + "'")) {
+    console.error("FAIL: smoke env allowlist dropped " + name);
     process.exit(1);
   }
 }

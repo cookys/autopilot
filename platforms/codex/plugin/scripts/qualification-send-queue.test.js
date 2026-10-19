@@ -1,4 +1,8 @@
 'use strict';
+/*
+# RED at 45b1c5fff: new cases 8 fail / 1 pass (exit 1). enqueue_enabled_at absent from status; first enqueue writes no meta; ts_rejected missing (buildV2Record returns null); SECONDARY_KEY_COLLISION stays in rejected with no already_ingested array; old rejected line still parses but already_ingested is undefined. The pre-set sentinel case passed only because the base never reads outbox.meta.json.
+# RED at 5a93aadcf: record stderr is the legacy_shape line (no ts_rejected) for observed_at 2026-02-30; flush summary.already_ingested is undefined (equal-hash rejected count stays on rejected; different-hash already_ingested !== 0). exit 1.
+*/
 // Run: node --test scripts/qualification-send-queue.test.js
 //
 // BL-0194 P3. Fault tests (SIGKILL at every AUTOPILOT_OUTBOX_FAILPOINT, then resume: zero lost, zero duplicate) and
@@ -261,6 +265,233 @@ test('scorecard hook: off by default, one entry when qualification_outbox.enqueu
   assert.equal(sq.enqueueScorecardRow(row, { env: on }).status, 'duplicate');
   const legacy = { ...row, evidence_store: {} };
   assert.equal(sq.enqueueScorecardRow(legacy, { env: on }).status, 'legacy_shape');
+});
+
+test('record writes the local scorecard row and reports ts_rejected on stderr', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-rec-'));
+  const store = path.join(home, 'score');
+  const outbox = path.join(home, 'ob');
+  const cfg = path.join(home, 'cfg.json');
+  fs.mkdirSync(store, { recursive: true });
+  fs.writeFileSync(cfg, JSON.stringify({ qualification_outbox: { enqueue: true } }));
+  const hash = 'ab'.repeat(32);
+  const row = {
+    engine: 'grok-4.6', runner: 'grok', family: 'f', role: 'reviewer', effort: 'default',
+    model_version: 'v1', version_source: 'manual', corpus_version: null,
+    harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: hash,
+    date: '2026-06-30', quality: { corpus_pass: '10/10' }, capability_score: 0.9,
+    cost: { source: 'manual' }, latency: { sample_wall_time_s: 0 },
+    status: 'failed', qualified_at: '2026-03-02', expires: '2026-04-02',
+    evidence_store: { producer: 'p', transcript_hash: hash },
+    evidence: {
+      schema_version: 1, source: 'external_prior', source_ref: 'src', state: 'provisional', role: 'reviewer',
+      scope: { task_classes: ['t'], domains: ['d'], languages: ['js'], tool_surface: [] },
+      identity: {
+        identity: 'grok-4.6', model_alias: 'grok-4.6', model_version: 'v1', family: 'f', runner: 'grok',
+        runner_version: 'rv1', harness_version: 'h1', effort: 'default', prompt_config_hash: hash,
+        semantic_fingerprint: hash, containment_fingerprint: hash, identity_resolved: false,
+      },
+      issued_at: '2026-03-02T00:00:00Z', observed_at: '2026-02-30T00:00:00Z', expires_at: '2026-04-02T00:00:00Z',
+      methodology: {
+        kind: 'external_prior', name: 'ext', version: '1', corpus_version: null, corpus_manifest_hash: null, thresholds: null,
+        basis: { cohort: 'c', cohort_hash: hash, observation_hash: hash, dimensions: ['x'], applicability: [] },
+      },
+      trials: [], revocation: null, supersedes: null,
+    },
+  };
+  const file = path.join(home, 'row.json');
+  fs.writeFileSync(file, JSON.stringify(row));
+  const env = {
+    ...process.env,
+    HOME: home,
+    AUTOPILOT_CONFIG_FILE: cfg,
+    AUTOPILOT_OUTBOX_DIR: outbox,
+    ENGINE_SCORECARD_DIR: store,
+    ENGINE_CAPABILITY_DIR: store,
+    AUTOPILOT_STRIKE_WRITER: 'off',
+  };
+  delete env.AUTOPILOT_SESSION_ID;
+  delete env.CLAUDE_CODE_SESSION_ID;
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record', '--file', file], { env, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stderr, /ts_rejected/);
+  assert.match(r.stderr, /2026-02-30T00:00:00Z/);
+  const lines = fs.readFileSync(path.join(store, 'scorecard.jsonl'), 'utf8').trim().split('\n');
+  assert.equal(lines.length, 1);
+  const stored = JSON.parse(lines[0]);
+  assert.equal(stored.engine, 'grok-4.6');
+  assert.ok(!fs.existsSync(path.join(outbox, 'outbox.jsonl')));
+});
+
+function isoCase() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-home-'));
+  const dir = path.join(home, 'ob');
+  return {
+    home, dir,
+    env: { HOME: home, AUTOPILOT_OUTBOX_DIR: dir, AUTOPILOT_CONFIG_FILE: path.join(home, 'none.json') },
+  };
+}
+
+test('enqueue_enabled_at is absent before any enqueue', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const st = sq.status({ env: t.env });
+  assert.equal(st.enqueue_enabled_at, null);
+  assert.ok(!fs.existsSync(path.join(t.dir, 'outbox.meta.json')));
+  assert.doesNotMatch(sq.statusLines(st).join('\n'), /enqueue_enabled_at/);
+});
+
+test('enqueue_enabled_at is written on the first enqueue and status shows it', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const before = Date.now();
+  assert.equal(sq.enqueue('record', makeRecord(1), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  assert.match(meta.enqueue_enabled_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/);
+  assert.ok(Math.abs(Date.parse(meta.enqueue_enabled_at) - before) < 60_000);
+  assert.equal((fs.statSync(path.join(t.dir, 'outbox.meta.json')).mode & 0o777), 0o600);
+  const st = sq.status({ env: t.env });
+  assert.equal(st.enqueue_enabled_at, meta.enqueue_enabled_at);
+  assert.match(sq.statusLines(st).join('\n'), new RegExp(`enqueue_enabled_at ${meta.enqueue_enabled_at}`));
+});
+
+test('a second enqueue does not change a pre-set enqueue_enabled_at', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  fs.mkdirSync(t.dir, { recursive: true });
+  const sentinel = '2001-01-01T00:00:00Z';
+  fs.writeFileSync(path.join(t.dir, 'outbox.meta.json'), JSON.stringify({ enqueue_enabled_at: sentinel, keep: 1 }), { mode: 0o600 });
+  assert.equal(sq.enqueue('record', makeRecord(1), { env: t.env }).status, 'enqueued');
+  assert.equal(sq.enqueue('record', makeRecord(2), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  assert.equal(meta.enqueue_enabled_at, sentinel);
+  assert.equal(meta.keep, 1);
+});
+
+test('a corrupt outbox.meta.json is repaired on enqueue', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  fs.mkdirSync(t.dir, { recursive: true });
+  fs.writeFileSync(path.join(t.dir, 'outbox.meta.json'), '{not json', { mode: 0o600 });
+  assert.equal(sq.enqueue('record', makeRecord(1), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  assert.match(meta.enqueue_enabled_at, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('enqueueScorecardRow returns ts_rejected instead of throwing on a bad timestamp', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const cfg = path.join(t.home, 'on.json');
+  fs.writeFileSync(cfg, JSON.stringify({ qualification_outbox: { enqueue: true } }));
+  const rec = makeRecord(1);
+  const row = { ...rec.seat, status: 'qualified', date: '2026-10-16', evidence: { observed_at: '2026-02-30T00:00:00Z' }, evidence_store: { producer: rec.producer, transcript_hash: rec.transcript_hash } };
+  const r = sq.enqueueScorecardRow(row, { env: { ...t.env, AUTOPILOT_CONFIG_FILE: cfg } });
+  assert.equal(r.status, 'ts_rejected');
+  assert.equal(typeof r.message, 'string');
+  assert.ok(!fs.existsSync(path.join(t.dir, 'outbox.jsonl')));
+});
+
+function rejectTransport(fields) {
+  return {
+    async findAck() { return { state: 'pending' }; },
+    async send() { return { status: 'rejected', ...fields }; },
+  };
+}
+
+test('flush counts an equal-hash SECONDARY_KEY_COLLISION as already_ingested', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(1);
+  sq.enqueue('record', rec, { env: t.env });
+  const summary = await sq.flush({ transport: rejectTransport({ code: 'SECONDARY_KEY_COLLISION', message: 'exists', existing_transcript_hash: rec.transcript_hash }), env: t.env, warn() {} });
+  assert.equal(summary.already_ingested, 1);
+  assert.equal(summary.rejected, 0);
+  const log = fs.readFileSync(path.join(t.dir, 'outbox.jsonl'), 'utf8');
+  assert.match(log, /"event":"rejected"/);
+  assert.match(log, new RegExp(rec.transcript_hash));
+  assert.match(log, /existing_transcript_hash/);
+});
+
+test('flush counts a different-hash SECONDARY_KEY_COLLISION as rejected', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(2);
+  sq.enqueue('record', rec, { env: t.env });
+  const summary = await sq.flush({ transport: rejectTransport({ code: 'SECONDARY_KEY_COLLISION', message: 'diff', existing_transcript_hash: 'b'.repeat(64) }), env: t.env, warn() {} });
+  assert.equal(summary.rejected, 1);
+  assert.equal(summary.already_ingested, 0);
+});
+
+test('equal SECONDARY_KEY_COLLISION hashes are already_ingested and absent from pending and rejected', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(1);
+  sq.enqueue('record', rec, { env: t.env });
+  await sq.flush({ transport: rejectTransport({ code: 'SECONDARY_KEY_COLLISION', message: 'exists', existing_transcript_hash: rec.transcript_hash }), env: t.env, warn() {} });
+  const st = sq.status({ env: t.env });
+  assert.equal(st.already_ingested.length, 1);
+  assert.equal(st.already_ingested[0].id, rec.record_id);
+  assert.equal(st.already_ingested[0].kind, 'record');
+  assert.equal(st.already_ingested[0].code, 'SECONDARY_KEY_COLLISION');
+  assert.equal(st.already_ingested[0].transcript_hash, rec.transcript_hash);
+  assert.equal(st.pending.length, 0);
+  assert.equal(st.rejected.length, 0);
+  const lines = sq.statusLines(st).join('\n');
+  assert.match(lines, /1 already_ingested/);
+  assert.match(lines, new RegExp(`already_ingested record ${rec.record_id.slice(0, 12)}`));
+});
+
+test('SECONDARY_KEY_COLLISION with different hashes stays rejected', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(2);
+  sq.enqueue('record', rec, { env: t.env });
+  await sq.flush({ transport: rejectTransport({ code: 'SECONDARY_KEY_COLLISION', message: 'diff', existing_transcript_hash: 'b'.repeat(64) }), env: t.env, warn() {} });
+  const st = sq.status({ env: t.env });
+  assert.equal(st.rejected.length, 1);
+  assert.equal(st.rejected[0].code, 'SECONDARY_KEY_COLLISION');
+  assert.equal(st.already_ingested.length, 0);
+  assert.equal(st.pending.length, 0);
+});
+
+test('SECONDARY_KEY_COLLISION with no hashes stays rejected', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(3);
+  sq.enqueue('record', rec, { env: t.env });
+  await sq.flush({ transport: rejectTransport({ code: 'SECONDARY_KEY_COLLISION', message: 'no hash' }), env: t.env, warn() {} });
+  const st = sq.status({ env: t.env });
+  assert.equal(st.rejected.length, 1);
+  assert.equal(st.already_ingested.length, 0);
+  assert.equal(st.pending.length, 0);
+});
+
+test('another code with equal hashes stays rejected', async () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const rec = makeRecord(4);
+  sq.enqueue('record', rec, { env: t.env });
+  await sq.flush({ transport: rejectTransport({ code: 'SCHEMA', message: 'no', existing_transcript_hash: rec.transcript_hash }), env: t.env, warn() {} });
+  const st = sq.status({ env: t.env });
+  assert.equal(st.rejected.length, 1);
+  assert.equal(st.rejected[0].code, 'SCHEMA');
+  assert.equal(st.already_ingested.length, 0);
+});
+
+test('an old-format rejected event stays rejected', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  fs.mkdirSync(t.dir, { recursive: true });
+  const id = 'c'.repeat(64);
+  const line = sq.makeLine({ event: 'rejected', id, kind: 'record', payload_sha256: 'd'.repeat(64), code: 'SECONDARY_KEY_COLLISION', message: 'old' });
+  fs.writeFileSync(path.join(t.dir, 'outbox.jsonl'), line);
+  const parsed = sq.parseLine(line.trim());
+  assert.ok(parsed.ok);
+  assert.equal(parsed.ok.code, 'SECONDARY_KEY_COLLISION');
+  const st = sq.status({ env: t.env });
+  assert.equal(st.rejected.length, 1);
+  assert.equal(st.rejected[0].id, id);
+  assert.equal(st.already_ingested.length, 0);
 });
 
 // ── git transport against a local bare repo and a stub gh ──

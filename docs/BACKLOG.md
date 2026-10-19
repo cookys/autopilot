@@ -1296,3 +1296,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: backlog deletion audit section C-3, commit e05a1edc3
 - **Pointer**: docs/backlog/bl0039-notes-instant2-filter.md
 - **Context**: Notes 7 and 8 survived the body fix; the sidecar was deleted. Detail is in the Pointer.
+
+### cc-shim implementer qualification records are labelled effort high but cc-shim did not forward effort at exam time
+- **Id**: BL-0258
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 4 筆 cc-shim implementer 資格考紀錄標成 effort high，但考試當時 cc-shim 還沒有傳 effort；受影響 event 203、204、205（10-12）和 247（10-14 05:47Z）。
+- **Impact**: 這幾筆座位的 effort 與考試當下的實際標籤不一致，直接拿來當資格依據會把高努力度算進不該算的紀錄。
+- **Trigger**: owner decides on card d-1156e740 (re-exam, relabel, or both)
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: llm-playground report 2026-10-20 via depth-0
+- **Context**: Cause: before commit c313173ca (merge 6d8e7e77e, 2026-10-14 12:22Z) cc-shim did not forward effort. No sidecar.

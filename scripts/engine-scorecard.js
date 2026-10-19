@@ -2328,6 +2328,7 @@ function cmdRecord(args) {
     : fs.readFileSync(0, 'utf8');
   const parsed = parseJsonObject(raw, 'record input');
 
+  const submittedEvidence = parsed.evidence && typeof parsed.evidence === 'object' ? { ...parsed.evidence } : null;
   validateRecordRow(parsed);
 
   const stored = { ...parsed };
@@ -2341,8 +2342,28 @@ function cmdRecord(args) {
     return row;
   });
 
-  enqueueForRegistry(writtenRow);
+  enqueueForRegistry(queueRowForOutbox(writtenRow, submittedEvidence));
   process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+}
+
+// The compiled receipt rewrites an impossible calendar day (2026-02-30 -> March 2). The outbox gate
+// must see the submitted stamp so tsUtc can reject it instead of queueing the rolled instant.
+function queueRowForOutbox(writtenRow, submittedEvidence) {
+  if (!submittedEvidence || !writtenRow.evidence || typeof writtenRow.evidence !== 'object') return writtenRow;
+  const stamp = submittedEvidence.observed_at || submittedEvidence.issued_at;
+  try {
+    require('./lib/qualification-record-v2.js').tsUtc(stamp);
+    return writtenRow;
+  } catch {
+    return {
+      ...writtenRow,
+      evidence: {
+        ...writtenRow.evidence,
+        observed_at: submittedEvidence.observed_at,
+        issued_at: submittedEvidence.issued_at,
+      },
+    };
+  }
 }
 
 // BL-0194 P3: the local scorecard write above stays (legacy path until P4b); when qualification_outbox.enqueue is on
@@ -2353,6 +2374,8 @@ function enqueueForRegistry(row) {
     const result = require('./qualification-send-queue.js').enqueueScorecardRow(row);
     if (result.status === 'legacy_shape') {
       process.stderr.write('qualification outbox: row has no transcript_hash/producer/observed_at (legacy shape); not queued\n');
+    } else if (!['enqueued', 'off', 'noop', 'duplicate'].includes(result.status)) {
+      process.stderr.write(`qualification outbox: ${result.status}: ${result.message || ''}\n`);
     }
   } catch (error) {
     process.stderr.write(`qualification outbox: not queued: ${error.message}\n`);

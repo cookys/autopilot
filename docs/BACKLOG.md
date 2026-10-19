@@ -325,9 +325,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: The next experiment aimed at improving long-horizon constraint adherence, or before claiming that prompt re-injection solves t14-class drift.
 - **Trigger-Type**: owner
 - **Effort**: M
-- **Source**: `docs/projects/_archive/2026-07-08-t14-reinject/report.md` § Follow-up.
+- **Source**: `docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md` § Follow-up.
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: Per-turn re-injection moved vocabulary, no conclusive behavior lift. Owner 2026-10-19 (d-8bc3d286): open the experiment; not started.
+- **Context**: Build S1-S3 done in 58afd4ece (verifier, --gate, batch driver, analyzer). S4 pilot and S5 batch wait on owner card d-24e8bff5 (threshold freeze); S4 must show zero analyzer mismatches on the driver's batch.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056

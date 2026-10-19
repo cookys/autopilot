@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "per-turn-gate-g1",
+  "logical_plan_id": "per-turn-gate-2026-10-20",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "08e36b5aae07b17ac4fc8f505c2c25a3fb06fabcdd4a99e6a3c35d2a9dc83cbb",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "6976bc396d839d7fb90a09ae20a691ea813caf962d36c0fee739e26a8bfb4d33",
+  "manifest_sha256": "2f19bc7cb4381c6a9ea7aab313740f9ccb8400fcc0bffc9e316b29b3cd9e26fd",
+  "plan_sha256": "923ebc9aac3d5057e723b5599fdf806332586774f5b257f113c903408b3576d3",
+  "growth_ratio": {
+    "numerator": 59823,
+    "denominator": 53141
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "211b70c99aa82cb6aefedf7a052275fc5500c9249f55723e1d2b29568cf02658"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8ad72cbf61dfaae39ef5e6c47a999cad64c7f18f8c583d808a873489806951c3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-vDpXMZ/stdout",
+          "digest": "8ad72cbf61dfaae39ef5e6c47a999cad64c7f18f8c583d808a873489806951c3"
+        },
+        "receipt_digest": "39af64bbd1cc328909653abbe2752c2f907e84808b97f50b730779bc7a3c89ff"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "d7c3d8b11a2eaf7ba14485cd0964004bc3a3f19035fd3ffee722ab5efcf993c4"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-outsTl",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "b8db8e0ccab234b0a21bfb3568f2c0a7094b0419ffb576c0ebaaba5680fbe813"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 1 P4 validity rule and section 4 P3b rerun contract",
+      "claim": "The frozen validity rule and the driver contract specify different infra-failure attempt ceilings.",
+      "evidence": "Section 1 says infra failures are re-run at most 3 times each, allowing an initial attempt plus three reruns. P3b instead specifies at most 3 attempts per run id, with three infra failures constituting an infra loss. The P4 cost note also specifies three total attempts. Consequently the driver cannot implement every frozen clause verbatim.",
+      "evidence_reference": "Section 1, P4 decision rule KR4; section 4, P3b deliverable and P4 cost note; section 2 requirement to copy the decision rule verbatim.",
+      "repair": "Choose one ceiling before execution and make every occurrence identical. If three total attempts is intended, state one initial attempt plus at most two reruns in section 1, P3b, and the P4 dispatch contract.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8f7e25c83fb8b27c59d0192f99bd0c581759bb0b6d54b7f8c5b2a43109110050"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Section 4 P1 candidate-exclusion criteria",
+      "claim": "Several proposed observations cannot exclude the causes that the plan says they exclude.",
+      "evidence": "Candidate 2 permits excluding provider-side variance when the third baseline returns to the first experiment's M2, although that result remains compatible with a transient provider effect in the second window. Candidate 5 permits excluding auth-state effects from the absence of logged auth errors before C-16 and similar failure mixtures before and after, although neither establishes equivalent auth state or excludes unlogged degradation. These criteria can prematurely close causes rather than distinguish them.",
+      "evidence_reference": "Section 4, P1 candidate 2 and candidate 5; KR3 requirement to report which candidates the evidence excludes.",
+      "repair": "During P1 preregistration, distinguish evidence consistent with a candidate from evidence that excludes it. Keep provider and auth explanations unresolved unless an appropriate controlled comparison distinguishes them; report the third baseline as replication evidence rather than causal exclusion.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c6cf50119514ccd9f2038fd6f0a63c0fbda61a60617c699b81fd67500da99ea9"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "c6cf50119514ccd9f2038fd6f0a63c0fbda61a60617c699b81fd67500da99ea9",
+      "rubric_id": "R7",
+      "affected_surface": "Section 4 P1 candidate-exclusion criteria",
+      "claim": "Several proposed observations cannot exclude the causes that the plan says they exclude.",
+      "evidence_reference": "Section 4, P1 candidate 2 and candidate 5; KR3 requirement to report which candidates the evidence excludes.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-19T19:18:30.545Z"
+}

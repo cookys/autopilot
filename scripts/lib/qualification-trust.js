@@ -16,8 +16,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { TextDecoder } = require('util');
 const { configPath } = require('./config-path.js');
-const { preflightJsonSource } = require('../validate-json-schema.js');
-const { generatedAtAge } = require('./qualification-feed.js');
+const { generatedAtAge, parseStrictJson } = require('./qualification-feed.js');
 const metrics = require('./qualification-metrics.js');
 
 const TRUST_VALUES = new Set(['auto', 'confirm', 'off']);
@@ -26,12 +25,34 @@ const MAX_AGE_DAYS = 30;
 function resolveTrustMode(opts = {}) {
   const file = opts.configFile || configPath({ home: opts.home, env: opts.env || process.env });
   let raw;
+  let text;
   try {
-    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
-    raw = cfg && cfg.qualification_feed ? cfg.qualification_feed.trust : undefined;
-  } catch {
-    raw = undefined;
+    text = fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    // A missing file is the default. Anything else (EACCES, EISDIR, a
+    // directory) is a present config we cannot trust, so fail closed.
+    if (error && error.code === 'ENOENT') return 'auto';
+    process.stderr.write(
+      `qualification-feed trust: config ${file} cannot be read (${error.code || error.message}); treating qualification_feed.trust as off\n`,
+    );
+    return 'off';
   }
+  let cfg;
+  try {
+    cfg = JSON.parse(text);
+  } catch (error) {
+    process.stderr.write(
+      `qualification-feed trust: config ${file} cannot be parsed (${error.message}); treating qualification_feed.trust as off\n`,
+    );
+    return 'off';
+  }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+    process.stderr.write(
+      `qualification-feed trust: config ${file} is not a JSON object; treating qualification_feed.trust as off\n`,
+    );
+    return 'off';
+  }
+  raw = cfg.qualification_feed ? cfg.qualification_feed.trust : undefined;
   if (raw === undefined || raw === null || raw === '') return 'auto';
   if (TRUST_VALUES.has(raw)) return raw;
   process.stderr.write(
@@ -43,16 +64,6 @@ function resolveTrustMode(opts = {}) {
 function reject(step, reason) {
   process.stderr.write(`qualification-feed gate REJECTED ${step}: ${reason}\n`);
   return { ok: false, doc: null, manifest: null, reasons: [`${step}: ${reason}`] };
-}
-
-function recordObjects(node, out) {
-  if (!node || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    node.forEach((item) => recordObjects(item, out));
-    return;
-  }
-  if (typeof node.schema === 'number' && Object.prototype.hasOwnProperty.call(node, 'record_id')) out.push(node);
-  for (const value of Object.values(node)) recordObjects(value, out);
 }
 
 function gate(cacheDir, nowMs) {
@@ -85,8 +96,7 @@ function gate(cacheDir, nowMs) {
     let doc;
     try {
       source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-      preflightJsonSource(source, 'qualification feed');
-      doc = JSON.parse(source);
+      doc = parseStrictJson(source);
     } catch (error) {
       return reject('strict-json', error.message);
     }
@@ -101,15 +111,11 @@ function gate(cacheDir, nowMs) {
       const detail = validated.errors.slice(0, 3).map(([code, message]) => `${code}: ${message}`).join('; ');
       return reject('semantics', detail);
     }
-    const records = [];
-    recordObjects(doc, records);
-    for (const rec of records) {
-      const checked = metrics.validateRecord(JSON.stringify(rec), { semantic: true });
-      if (checked.errors.length) {
-        const detail = checked.errors.slice(0, 3).map(([code, message]) => `${code}: ${message}`).join('; ');
-        return reject('semantics', detail);
-      }
-    }
+    // The metrics document (schemas/qualification-feed-v2.schema.json, additionalProperties
+    // false) carries no standalone qualification-record objects. Qualification state lives
+    // only in seat_metrics[].qualification, which validateMetrics already checks. A walk that
+    // looks for { schema: <number>, record_id } matches nothing in a real document, so this
+    // step is a no-op. It does not invent a second check.
     if (!Number.isFinite(nowMs)) return reject('freshness', 'malformed');
     const age = generatedAtAge(doc.generated_at, nowMs, MAX_AGE_DAYS);
     if (!age.ok) return reject('freshness', age.reason);

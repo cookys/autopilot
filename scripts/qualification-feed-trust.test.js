@@ -12,6 +12,14 @@
 // no-adopt-command: answer appended stray-adopt.json in the scorecard dir. Reverted.
 // sync-failure-does-not-break-fetch: a failed sync called process.exit(1) and the fetch exited 1. Reverted.
 //
+// # RED at 6bb17926c83a4bc0158f88447c9cfae3b42fc158:
+// confirmation-seat-null: seat null threw TypeError reading engine at qualification-confirm.js:70. Reverted.
+// confirmation-garbage-file: malformed lines were dropped with no stderr, so /skipped 2 line/ did not match. Reverted.
+// concurrent-sync-one-card: two syncs opened 2 cards (iteration 0). Reverted by one exclusive feed lock.
+// concurrent-answer-one-line: green across 5 runs on the base. Removing the answer lock appended 2 confirmation lines (2 !== 1). Lock restored.
+// rejected-row-not-reasked: the later card still listed the rejected implementer row. Reverted.
+// rejected-row-changed-digest-reasked: the changed-digest row was not the only row on the next card. Reverted.
+//
 // BL-0194 P6 stage C. Temp HOME, temp feed cache, temp git repo, temp
 // ENGINE_CAPABILITY_DIR. No network. No adopt command.
 
@@ -21,7 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const FIX = path.join(REPO, 'hooks', 'tests', 'fixtures', 'qualification-registry');
@@ -515,4 +523,175 @@ test('sync-failure-does-not-break-fetch', () => {
   assert.equal(body.ok, true);
   assert.equal(typeof body.manifest.digest, 'string');
   assert.equal(fs.existsSync(path.join(cacheDir, 'card-batches.jsonl')), false);
+});
+
+test('confirmation-seat-null', () => {
+  const doc = baseDoc();
+  const { home, cacheDir } = homeWith(doc, 'confirm');
+  const rows = rowOf(doc);
+  const line = {
+    record_id: rows[0].record_id,
+    seat: null,
+    content_digest: rows[0].content_digest,
+    confirmed_at: NOW_ISO,
+    card_id: 'd-null',
+  };
+  fs.appendFileSync(path.join(cacheDir, 'confirmations.jsonl'), `${JSON.stringify(line)}\nnot json at all\n`);
+  const env = childEnv(home);
+  const r = seatStatus(env, 'grok-4.6', 'grok', 'reviewer', 'default');
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.admission_source, undefined);
+  assert.equal(r.stderr.trim().split('\n').length, 1);
+  assert.match(r.stderr, /skipped 2 line/);
+  const confirm = require('./lib/qualification-confirm.js');
+  const read = confirm.readConfirmations(cacheDir);
+  assert.deepEqual(read, []);
+});
+
+test('confirmation-garbage-file', () => {
+  const doc = baseDoc();
+  const { home, cacheDir } = homeWith(doc, 'confirm');
+  const file = path.join(cacheDir, 'confirmations.jsonl');
+  fs.writeFileSync(file, 'this is garbage\n{{{');
+  const confirm = require('./lib/qualification-confirm.js');
+  const lines = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (chunk, ...rest) => {
+    lines.push(String(chunk));
+    return orig(chunk, ...rest);
+  };
+  let read;
+  try {
+    read = confirm.readConfirmations(cacheDir);
+  } finally {
+    process.stderr.write = orig;
+  }
+  assert.deepEqual(read, []);
+  assert.equal(lines.join('').trim().split('\n').length, 1);
+  assert.match(lines.join(''), /skipped 2 line/);
+
+  fs.rmSync(file);
+  fs.mkdirSync(file);
+  let dirRead;
+  const dirLines = [];
+  process.stderr.write = (chunk, ...rest) => {
+    dirLines.push(String(chunk));
+    return orig(chunk, ...rest);
+  };
+  try {
+    dirRead = confirm.readConfirmations(cacheDir);
+  } finally {
+    process.stderr.write = orig;
+  }
+  assert.deepEqual(dirRead, []);
+  assert.equal(dirLines.join('').trim().split('\n').length, 1);
+  const env = childEnv(home);
+  const r = seatStatus(env, 'grok-4.6', 'grok', 'reviewer', 'default');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).admission_source, undefined);
+});
+
+function spawnTogether(argvs, env, cwd) {
+  return Promise.all(argvs.map((args) => new Promise((resolve) => {
+    const child = spawn(process.execPath, args, { env, cwd });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  })));
+}
+
+test('concurrent-sync-one-card', async () => {
+  for (let i = 0; i < 5; i += 1) {
+    const doc = baseDoc();
+    const { home, cacheDir } = homeWith(doc);
+    const env = childEnv(home);
+    const cwd = gitRepo();
+    const args = [TRUST, 'sync', '--feed-cache-dir', cacheDir, '--cwd', cwd];
+    const [a, b] = await spawnTogether([args, args], env, cwd);
+    assert.equal(a.status, 0, a.stderr);
+    assert.equal(b.status, 0, b.stderr);
+    assert.equal(decisionCount(env, cwd).length, 1, `iteration ${i} opened ${decisionCount(env, cwd).length}`);
+    const opened = batchLines(cacheDir).filter((line) => Array.isArray(line.rows));
+    assert.equal(opened.length, 1);
+  }
+});
+
+test('concurrent-answer-one-line', async () => {
+  for (let i = 0; i < 5; i += 1) {
+    const doc = baseDoc();
+    const { home, cacheDir } = homeWith(doc);
+    const env = childEnv(home);
+    const cwd = gitRepo();
+    assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+    const card = decisionCount(env, cwd)[0].id;
+    const args = [TRUST, 'answer', '--card', card, '--decision', 'confirm', '--feed-cache-dir', cacheDir, '--cwd', cwd];
+    const [a, b] = await spawnTogether([args, args], env, cwd);
+    assert.equal(a.status, 0, a.stderr);
+    assert.equal(b.status, 0, b.stderr);
+    const lines = confirmLines(cacheDir);
+    const ids = lines.map((line) => `${line.record_id} ${line.content_digest}`);
+    assert.equal(ids.length, 1, `iteration ${i} wrote ${ids.length} confirmation lines`);
+    assert.equal(new Set(ids).size, 1);
+    const decisions = batchLines(cacheDir).filter((line) => line.decision === 'confirm');
+    assert.equal(decisions.length, 1);
+  }
+});
+
+test('rejected-row-not-reasked', () => {
+  const doc = baseDoc();
+  const seed = qualEntry(doc);
+  doc.seat_metrics = doc.seat_metrics.filter((entry) => entry.kind !== 'qualification').concat([
+    withSeat(seed, 'reviewer', 'default', 'aa'.repeat(32), { window_end: '2026-10-12T10:00:00Z' }),
+    withSeat(seed, 'implementer', 'low', 'bb'.repeat(32), { window_end: '2026-10-12T11:00:00Z' }),
+  ]);
+  const { home, cacheDir } = homeWith(doc);
+  const env = childEnv(home);
+  const cwd = gitRepo();
+  assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const card = decisionCount(env, cwd)[0].id;
+  assert.equal(runTrust(env, ['answer', '--card', card, '--decision', 'reject', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const rejectedRows = batchLines(cacheDir).filter((line) => line.decision === 'rejected' && line.record_id);
+  assert.equal(rejectedRows.length, 2);
+  doc.seat_metrics.push(withSeat(seed, 'planner', 'low', 'dd'.repeat(32), { window_end: '2026-10-12T13:00:00Z' }));
+  writeCacheBytes(cacheDir, Buffer.from(JSON.stringify(doc)), doc.generated_at);
+  assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const cards = decisionCount(env, cwd);
+  assert.equal(cards.length, 1);
+  assert.match(cards[0].background, /planner/);
+  assert.doesNotMatch(cards[0].background, /reviewer/);
+  assert.doesNotMatch(cards[0].background, /implementer/);
+  const opened = batchLines(cacheDir).filter((line) => Array.isArray(line.rows));
+  const newest = opened[opened.length - 1];
+  assert.equal(newest.rows.length, 1);
+  assert.equal(newest.rows[0].record_id, 'dd'.repeat(32));
+});
+
+test('rejected-row-changed-digest-reasked', () => {
+  const doc = baseDoc();
+  const seed = qualEntry(doc);
+  doc.seat_metrics = doc.seat_metrics.filter((entry) => entry.kind !== 'qualification').concat([
+    withSeat(seed, 'reviewer', 'default', 'aa'.repeat(32), { window_end: '2026-10-12T10:00:00Z' }),
+    withSeat(seed, 'implementer', 'low', 'bb'.repeat(32), { window_end: '2026-10-12T11:00:00Z' }),
+  ]);
+  const { home, cacheDir } = homeWith(doc);
+  const env = childEnv(home);
+  const cwd = gitRepo();
+  assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const card = decisionCount(env, cwd)[0].id;
+  assert.equal(runTrust(env, ['answer', '--card', card, '--decision', 'reject', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const reviewer = doc.seat_metrics.find((entry) => entry.seat && entry.seat.role === 'reviewer');
+  reviewer.evidence_ref = 'benchmarks/qualification/cookys/changed-after-reject.json';
+  writeCacheBytes(cacheDir, Buffer.from(JSON.stringify(doc)), doc.generated_at);
+  assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const cards = decisionCount(env, cwd);
+  assert.equal(cards.length, 1);
+  assert.match(cards[0].background, /reviewer/);
+  assert.doesNotMatch(cards[0].background, /implementer/);
+  const opened = batchLines(cacheDir).filter((line) => Array.isArray(line.rows));
+  const newest = opened[opened.length - 1];
+  assert.equal(newest.rows.length, 1);
+  assert.equal(newest.rows[0].record_id, 'aa'.repeat(32));
 });

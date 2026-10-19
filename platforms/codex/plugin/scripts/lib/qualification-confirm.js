@@ -63,15 +63,56 @@ function seatsEqual(left, right) {
 }
 
 function confirmationShape(line) {
-  if (!line || typeof line !== 'object') return false;
+  if (!line || typeof line !== 'object' || Array.isArray(line)) return false;
   if (!CONFIRM_KEYS.every((key) => Object.prototype.hasOwnProperty.call(line, key))) return false;
   if (typeof line.record_id !== 'string' || typeof line.content_digest !== 'string') return false;
   if (typeof line.confirmed_at !== 'string' || typeof line.card_id !== 'string') return false;
-  return SEAT_FIELDS.every((field) => typeof line.seat[field] === 'string');
+  const seat = line.seat;
+  if (!seat || typeof seat !== 'object' || Array.isArray(seat)) return false;
+  if (typeof seat.engine !== 'string' || typeof seat.runner !== 'string' || typeof seat.role !== 'string') return false;
+  return typeof seat.effort === 'string' || seat.effort === null;
 }
 
 function readConfirmations(cacheDir) {
-  return readJsonl(confirmationsPath(cacheDir)).filter(confirmationShape);
+  const file = confirmationsPath(cacheDir);
+  let text;
+  try {
+    const stat = fs.lstatSync(file);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      process.stderr.write(
+        `qualification-feed confirmations: skipped 1 line (${file} is not a regular file); no confirmations\n`,
+      );
+      return [];
+    }
+    text = fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return [];
+    process.stderr.write(
+      `qualification-feed confirmations: skipped 1 line (${file} unreadable: ${error.code || error.message}); no confirmations\n`,
+    );
+    return [];
+  }
+  const rows = [];
+  let skipped = 0;
+  for (const line of String(text).split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const value = JSON.parse(line);
+      if (!confirmationShape(value)) {
+        skipped += 1;
+        continue;
+      }
+      rows.push(value);
+    } catch {
+      skipped += 1;
+    }
+  }
+  if (skipped > 0) {
+    process.stderr.write(
+      `qualification-feed confirmations: skipped ${skipped} line(s) in ${file}\n`,
+    );
+  }
+  return rows;
 }
 
 function readBatches(cacheDir) {
@@ -97,9 +138,21 @@ function batchIdOf(rows) {
   return crypto.createHash('sha256').update(pairs.join('\n')).digest('hex');
 }
 
+function rejectedAtDigest(cacheDir) {
+  const rejected = new Set();
+  for (const line of readBatches(cacheDir)) {
+    if (line.decision !== 'rejected') continue;
+    if (typeof line.record_id !== 'string' || typeof line.content_digest !== 'string') continue;
+    rejected.add(`${line.record_id} ${line.content_digest}`);
+  }
+  return rejected;
+}
+
 function pendingRows(cacheDir, gateResult) {
+  const rejected = rejectedAtDigest(cacheDir);
   return qualificationTrust.usableQualificationRows(gateResult)
     .filter((row) => !isConfirmed(cacheDir, row))
+    .filter((row) => !rejected.has(`${row.record_id} ${row.content_digest}`))
     .map((row) => ({
       record_id: row.record_id,
       seat: seatOf(row.seat),
@@ -130,12 +183,16 @@ function ensureStore(file) {
   fs.chmodSync(file, 0o600);
 }
 
-function appendLines(file, rows) {
+function feedLock(cacheDir) {
+  const dir = path.resolve(cacheDir);
+  return { storeDir: dir, lockFile: path.join(dir, '.feed-write.lock'), name: 'qualification-feed' };
+}
+
+// Caller holds feedLock. withWriteLock is not reentrant, so this must not lock again.
+function appendLinesUnlocked(file, rows) {
   if (rows.length === 0) return;
   ensureStore(file);
-  withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: path.basename(file) }, () => {
-    for (const row of rows) appendRow(file, row);
-  });
+  for (const row of rows) appendRow(file, row);
   fs.chmodSync(file, 0o600);
 }
 
@@ -159,36 +216,38 @@ function sync(opts) {
   if (!gated.ok) {
     return { ok: true, skipped: true, gateRejected: true, reason: `gate rejected: ${(gated.reasons || []).join('; ')}` };
   }
-  const rows = pendingRows(cacheDir, gated);
-  const batchId = batchIdOf(rows);
-  if (rows.length === 0) {
-    return { ok: true, skipped: true, reason: 'no pending rows', batch_id: batchId, pending: rows };
-  }
-  if (batchRecorded(cacheDir, batchId)) {
-    return { ok: true, skipped: true, reason: 'a card is already recorded for this batch', batch_id: batchId, pending: rows };
-  }
-  const count = rows.length;
-  const opened = openDecision({
-    cwd: cwd || process.cwd(),
-    question: `Confirm ${count} qualification feed ${count === 1 ? 'row' : 'rows'}?`,
-    background: `${count} new feed ${count === 1 ? 'row is' : 'rows are'} waiting: ${describeSeats(rows)}. Confirming records that you accept ${count === 1 ? 'this row' : 'these rows'}. Rejecting leaves ${count === 1 ? 'it' : 'them'} unused.`,
-    options: [
-      { label: 'confirm', description: 'Record a confirmation for each row in this batch.' },
-      { label: 'reject', description: 'Leave these rows unused. This batch is not asked again.' },
-    ],
-    source: 'qualification-feed trust',
+  return withWriteLock(feedLock(cacheDir), () => {
+    const rows = pendingRows(cacheDir, gated);
+    const batchId = batchIdOf(rows);
+    if (rows.length === 0) {
+      return { ok: true, skipped: true, reason: 'no pending rows', batch_id: batchId, pending: rows };
+    }
+    if (batchRecorded(cacheDir, batchId)) {
+      return { ok: true, skipped: true, reason: 'a card is already recorded for this batch', batch_id: batchId, pending: rows };
+    }
+    const count = rows.length;
+    const opened = openDecision({
+      cwd: cwd || process.cwd(),
+      question: `Confirm ${count} qualification feed ${count === 1 ? 'row' : 'rows'}?`,
+      background: `${count} new feed ${count === 1 ? 'row is' : 'rows are'} waiting: ${describeSeats(rows)}. Confirming records that you accept ${count === 1 ? 'this row' : 'these rows'}. Rejecting leaves ${count === 1 ? 'it' : 'them'} unused.`,
+      options: [
+        { label: 'confirm', description: 'Record a confirmation for each row in this batch.' },
+        { label: 'reject', description: 'Leave these rows unused. This batch is not asked again.' },
+      ],
+      source: 'qualification-feed trust',
+    });
+    if (!opened || opened.status !== 'ok') {
+      return { ok: false, reason: (opened && opened.message) || 'could not open a decision card', batch_id: batchId };
+    }
+    appendLinesUnlocked(batchesPath(cacheDir), [{
+      batch_id: batchId,
+      card_id: opened.id,
+      rows,
+      opened_at: new Date().toISOString(),
+      file: opened.file,
+    }]);
+    return { ok: true, opened: true, card_id: opened.id, file: opened.file, batch_id: batchId, pending: rows };
   });
-  if (!opened || opened.status !== 'ok') {
-    return { ok: false, reason: (opened && opened.message) || 'could not open a decision card', batch_id: batchId };
-  }
-  appendLines(batchesPath(cacheDir), [{
-    batch_id: batchId,
-    card_id: opened.id,
-    rows,
-    opened_at: new Date().toISOString(),
-    file: opened.file,
-  }]);
-  return { ok: true, opened: true, card_id: opened.id, file: opened.file, batch_id: batchId, pending: rows };
 }
 
 function answer(opts) {
@@ -201,33 +260,49 @@ function answer(opts) {
   if (decision !== 'confirm' && decision !== 'reject') {
     return { ok: false, usage: true, reason: 'decision must be confirm or reject' };
   }
-  const batch = lookupBatch(cacheDir, cardId);
-  if (!batch) return { ok: false, usage: true, reason: `unknown card id ${cardId}` };
-  const already = readBatches(cacheDir).some((line) => line.batch_id === batch.batch_id && (line.decision === 'confirm' || line.decision === 'rejected'));
-  if (decision === 'confirm' && !already) {
-    const fresh = [];
-    for (const row of batch.rows) {
-      if (isConfirmed(cacheDir, row)) continue;
-      fresh.push({
-        record_id: row.record_id,
-        seat: seatOf(row.seat),
-        content_digest: row.content_digest,
-        confirmed_at: new Date().toISOString(),
-        card_id: cardId,
-      });
+  return withWriteLock(feedLock(cacheDir), () => {
+    const batch = lookupBatch(cacheDir, cardId);
+    if (!batch) return { ok: false, usage: true, reason: `unknown card id ${cardId}` };
+    const already = readBatches(cacheDir).some((line) => line.batch_id === batch.batch_id && (line.decision === 'confirm' || line.decision === 'rejected'));
+    if (decision === 'confirm' && !already) {
+      const fresh = [];
+      for (const row of batch.rows) {
+        if (isConfirmed(cacheDir, row)) continue;
+        fresh.push({
+          record_id: row.record_id,
+          seat: seatOf(row.seat),
+          content_digest: row.content_digest,
+          confirmed_at: new Date().toISOString(),
+          card_id: cardId,
+        });
+      }
+      appendLinesUnlocked(confirmationsPath(cacheDir), fresh);
     }
-    appendLines(confirmationsPath(cacheDir), fresh);
-  }
-  if (!already) {
-    appendLines(batchesPath(cacheDir), [{
-      batch_id: batch.batch_id,
-      card_id: cardId,
-      decision: decision === 'confirm' ? 'confirm' : 'rejected',
-      answered_at: new Date().toISOString(),
-    }]);
-  }
-  if (typeof batch.file === 'string' && batch.file) closeDecisionById(batch.file, cardId);
-  return { ok: true, decision, card_id: cardId, batch_id: batch.batch_id };
+    if (!already) {
+      const answeredAt = new Date().toISOString();
+      const lines = [{
+        batch_id: batch.batch_id,
+        card_id: cardId,
+        decision: decision === 'confirm' ? 'confirm' : 'rejected',
+        answered_at: answeredAt,
+      }];
+      if (decision === 'reject') {
+        for (const row of batch.rows) {
+          lines.push({
+            batch_id: batch.batch_id,
+            card_id: cardId,
+            decision: 'rejected',
+            record_id: row.record_id,
+            content_digest: row.content_digest,
+            answered_at: answeredAt,
+          });
+        }
+      }
+      appendLinesUnlocked(batchesPath(cacheDir), lines);
+    }
+    if (typeof batch.file === 'string' && batch.file) closeDecisionById(batch.file, cardId);
+    return { ok: true, decision, card_id: cardId, batch_id: batch.batch_id };
+  });
 }
 
 module.exports = {

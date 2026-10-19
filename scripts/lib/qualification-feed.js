@@ -231,11 +231,18 @@ async function readFeedSource(from, { fetchImpl = globalThis.fetch } = {}) {
  * and that its collections are arrays. Every ENTRY is validated where it is consumed, against the
  * same rules a locally-produced row faces — a feed entry gets no easier path than a local one.
  */
+// Shared strict preflight + JSON.parse. parseFeed and the metrics gate both
+// call this so the strict-JSON step exists once. Error text is the preflight
+// or JSON.parse message, unchanged.
+function parseStrictJson(body) {
+  preflightJsonSource(body, 'qualification feed');
+  return JSON.parse(body);
+}
+
 function parseFeed(body, origin, bytes) {
   let doc;
   try {
-    preflightJsonSource(body, 'qualification feed');
-    doc = JSON.parse(body);
+    doc = parseStrictJson(body);
   } catch (err) {
     throw feedError(`qualification feed is not valid JSON (${err.message})`);
   }
@@ -397,6 +404,7 @@ module.exports = {
   loadFeed,
   readFeedSource,
   parseFeed,
+  parseStrictJson,
   writeCache,
   readCurrentManifest,
   defaultCacheDir,

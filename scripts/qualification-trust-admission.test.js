@@ -11,6 +11,12 @@
 // confirm-admits-nothing-yet: confirm admitted with no confirmation line; stdout differed from no-feed. Reverted.
 // default-is-auto: a missing config was treated as off; the seat stayed no_record. Reverted.
 //
+// # RED at 6bb17926c83a4bc0158f88447c9cfae3b42fc158:
+// strict-path-ignores-feed: green on the base. Routing --require-evidence through computeSeatProjection admitted the feed (admission_source feed). Restored computeSeatProjectionStrict.
+// brain-seat-ignores-feed: green on the base. Disabling the seatKind !== default guard stamped admission_source feed on the brain seat. Guard restored.
+// revoked-local-row-not-rescued: green on the base. Forcing hasLocalSeatRow to return false let the feed qualify a revoked row. Guard restored.
+// superseded-local-row-not-rescued: green on the base. The same hasLocalSeatRow mutation let the feed qualify a superseded row. Guard restored.
+//
 // BL-0194 P6 stage B. Temp HOME, temp config, temp cache, temp scorecard store.
 // No network. Confirm with no confirmation line matches the no-feed projection.
 
@@ -328,4 +334,85 @@ test('default-is-auto', () => {
   const out = JSON.parse(r.stdout);
   assert.equal(out.admission_status, 'qualified');
   assert.equal(out.admission_source, 'feed');
+});
+
+test('strict-path-ignores-feed', () => {
+  const score = tmp('score');
+  const cap = tmp('cap');
+  const scope = path.join(tmp('scope'), 'scope.json');
+  fs.writeFileSync(scope, '{}\n');
+  const bare = childEnv(tmp('home'), { scorecard: score, capability: cap });
+  const fed = childEnv(homeWithCache(baseDoc(), 'auto'), { scorecard: score, capability: cap });
+  const run = (env) => spawnSync(process.execPath, [
+    SCORECARD, 'seat-status', '--engine', 'grok-4.6', '--runner', 'grok', '--role', 'reviewer',
+    '--effort', 'default', '--now', NOW_ISO, '--require-evidence', '--scope-file', scope,
+  ], { env, encoding: 'utf8' });
+  const a = run(bare);
+  const b = run(fed);
+  assert.equal(b.status, a.status);
+  assert.equal(b.stdout, a.stdout);
+  assert.equal(b.stderr, a.stderr);
+});
+
+test('brain-seat-ignores-feed', () => {
+  const score = tmp('score');
+  const cap = tmp('cap');
+  const bare = childEnv(tmp('home'), { scorecard: score, capability: cap });
+  const fed = childEnv(homeWithCache(baseDoc(), 'auto'), { scorecard: score, capability: cap });
+  const run = (env) => spawnSync(process.execPath, [
+    SCORECARD, 'seat-status', '--engine', 'grok-4.6', '--runner', 'grok', '--role', 'reviewer',
+    '--effort', 'default', '--seat-kind', 'brain', '--now', NOW_ISO,
+  ], { env, encoding: 'utf8' });
+  const a = run(bare);
+  const b = run(fed);
+  assert.equal(b.status, a.status);
+  assert.equal(b.stdout, a.stdout);
+  assert.equal(b.stderr, a.stderr);
+  assert.equal(JSON.parse(b.stdout).admission_source, undefined);
+});
+
+test('revoked-local-row-not-rescued', () => {
+  const doc = baseDoc();
+  const noFeed = childEnv(tmp('home'));
+  const fed = childEnv(homeWithCache(doc, 'auto'));
+  for (const env of [noFeed, fed]) {
+    fs.mkdirSync(env.ENGINE_SCORECARD_DIR, { recursive: true });
+    fs.appendFileSync(path.join(env.ENGINE_SCORECARD_DIR, 'scorecard.jsonl'), `${JSON.stringify({
+      event_id: 1,
+      engine: 'grok-4.6',
+      runner: 'grok',
+      role: 'reviewer',
+      effort: 'default',
+      status: 'revoked',
+      qualified_at: '2026-06-01',
+      date: '2026-06-30',
+    })}\n`);
+  }
+  const a = seatStatus(noFeed, 'grok-4.6', 'grok', 'reviewer', 'default');
+  const b = seatStatus(fed, 'grok-4.6', 'grok', 'reviewer', 'default');
+  assert.equal(b.status, a.status);
+  assert.equal(b.stdout, a.stdout);
+  const body = JSON.parse(b.stdout);
+  assert.equal(body.admission_source, undefined);
+  assert.notEqual(body.admission_status, 'qualified');
+});
+
+test('superseded-local-row-not-rescued', () => {
+  const doc = baseDoc();
+  const noFeed = childEnv(tmp('home'));
+  const fed = childEnv(homeWithCache(doc, 'auto'));
+  for (const env of [noFeed, fed]) {
+    const written = recordLocal(env, 'qualified');
+    const marker = spawnSync(process.execPath, [
+      SCORECARD, 'record', '--supersede-provisional',
+      '--supersedes-event-id', String(written.event_id), '--reason', 'replaced by a later exam',
+    ], { env, encoding: 'utf8' });
+    assert.equal(marker.status, 0, marker.stderr || marker.stdout);
+  }
+  const a = seatStatus(noFeed, 'grok-4.6', 'grok', 'reviewer', 'default');
+  const b = seatStatus(fed, 'grok-4.6', 'grok', 'reviewer', 'default');
+  assert.equal(b.stdout, a.stdout);
+  const body = JSON.parse(b.stdout);
+  assert.equal(body.admission_source, undefined);
+  assert.notEqual(body.admission_status, 'qualified');
 });

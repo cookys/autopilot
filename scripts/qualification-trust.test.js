@@ -8,6 +8,12 @@
 // stale-generated-at: skipped the freshness rejection; a generated_at older than 30 days passed the gate (ok true). Reverted.
 // non-strict-json: skipped preflightJsonSource; the BOM no longer said "not supported JSON at offset 0", and the lone surrogate failed later as semantics STRICT_JSON. Reverted.
 //
+// # RED at 6bb17926c83a4bc0158f88447c9cfae3b42fc158:
+// config-json-corrupt-is-off: invalid JSON was caught and treated as unset, so resolveTrustMode returned auto. Reverted by failing closed to off.
+// config-json-missing-is-auto: green on the base (ENOENT and a parsed object with no trust key already return auto). Coverage of that branch.
+// one-strict-parser: parseStrictJson was not exported and the gate still called preflightJsonSource itself. Reverted by factoring one parser.
+// record-object-checked: the gate still walked typeof node.schema === 'number'. A real metrics document carries no standalone record objects (qualification blocks only). Reverted; the record step is a no-op.
+//
 // BL-0194 P6 stage A. Temp home and cache only. No network.
 
 const { test } = require('node:test');
@@ -228,4 +234,94 @@ test('shared-age-function-used', () => {
   ], { encoding: 'utf8' });
   assert.equal(none.status, 0);
   assert.equal(none.stdout, '{"status":"no-snapshot"}\n');
+});
+
+test('config-json-corrupt-is-off', () => {
+  const home = tmp('home');
+  const env = {};
+  const file = path.join(home, '.autopilot', 'config.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{');
+  const bad = capture(() => trust.resolveTrustMode({ home, env }));
+  assert.equal(bad.result, 'off');
+  assert.equal(bad.stderr.trim().split('\n').length, 1);
+  assert.match(bad.stderr, /off/);
+
+  fs.rmSync(file);
+  fs.mkdirSync(file);
+  const dir = capture(() => trust.resolveTrustMode({ home, env }));
+  assert.equal(dir.result, 'off');
+  assert.equal(dir.stderr.trim().split('\n').length, 1);
+
+  fs.rmSync(file, { recursive: true });
+  fs.writeFileSync(file, '[]');
+  const arr = capture(() => trust.resolveTrustMode({ home, env }));
+  assert.equal(arr.result, 'off');
+  assert.match(arr.stderr, /not a JSON object/);
+});
+
+test('config-json-missing-is-auto', () => {
+  const home = tmp('home');
+  const env = {};
+  const missing = capture(() => trust.resolveTrustMode({ home, env }));
+  assert.equal(missing.result, 'auto');
+  assert.equal(missing.stderr, '');
+  const file = path.join(home, '.autopilot', 'config.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{}');
+  assert.equal(trust.resolveTrustMode({ home, env }), 'auto');
+  fs.writeFileSync(file, JSON.stringify({ qualification_feed: {} }));
+  assert.equal(trust.resolveTrustMode({ home, env }), 'auto');
+  fs.writeFileSync(file, JSON.stringify({ qualification_feed: { trust: null } }));
+  assert.equal(trust.resolveTrustMode({ home, env }), 'auto');
+});
+
+test('one-strict-parser', () => {
+  const feed = require('./lib/qualification-feed.js');
+  assert.equal(typeof feed.parseStrictJson, 'function');
+  const trustSrc = fs.readFileSync(path.join(__dirname, 'lib', 'qualification-trust.js'), 'utf8');
+  const feedSrc = fs.readFileSync(path.join(__dirname, 'lib', 'qualification-feed.js'), 'utf8');
+  assert.doesNotMatch(trustSrc, /preflightJsonSource/);
+  assert.equal((feedSrc.match(/function parseStrictJson/g) || []).length, 1);
+  assert.equal((feedSrc.match(/preflightJsonSource\(/g) || []).length, 1);
+  const bom = `\uFEFF${JSON.stringify(baseDoc())}`;
+  assert.throws(
+    () => feed.parseFeed(bom, 'mem', Buffer.from(bom)),
+    (error) => /qualification feed is not valid JSON \(/.test(error.message)
+      && /not supported JSON at offset 0/.test(error.message),
+  );
+  let thrown;
+  try { feed.parseStrictJson(bom); } catch (error) { thrown = error; }
+  assert.ok(thrown);
+  const cacheDir = tmp('cache');
+  writeCacheBytes(cacheDir, Buffer.from(bom), '2026-10-16T09:00:00Z');
+  const gated = capture(() => trust.gate(cacheDir, NOW_MS));
+  assert.equal(gated.result.ok, false);
+  assert.match(gated.stderr, /strict-json/);
+  assert.match(gated.stderr, /not supported JSON at offset 0/);
+});
+
+test('record-object-checked', () => {
+  const trustSrc = fs.readFileSync(path.join(__dirname, 'lib', 'qualification-trust.js'), 'utf8');
+  assert.doesNotMatch(trustSrc, /typeof node\.schema === 'number'/);
+  assert.match(trustSrc, /no standalone qualification-record/);
+  const doc = baseDoc();
+  const walk = (node, found) => {
+    if (!node || typeof node !== 'object') return;
+    if (!Array.isArray(node) && typeof node.schema === 'number' && Object.prototype.hasOwnProperty.call(node, 'record_id')) {
+      found.push(node);
+    }
+    for (const value of Object.values(node)) walk(value, found);
+  };
+  const found = [];
+  walk(doc, found);
+  assert.equal(found.length, 0);
+  assert.ok(doc.seat_metrics.some((entry) => entry.kind === 'qualification' && entry.qualification && entry.qualification.record_id));
+  const ok = trust.gate(cacheDoc(doc), NOW_MS);
+  assert.equal(ok.ok, true, JSON.stringify(ok.reasons));
+  const smuggled = baseDoc();
+  smuggled.records = [{ schema: 2, record_id: 'not-a-real-record' }];
+  const rejected = capture(() => trust.gate(cacheDoc(smuggled), NOW_MS));
+  assert.equal(rejected.result.ok, false);
+  assert.match(rejected.stderr, /REJECTED/);
 });

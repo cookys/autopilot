@@ -373,6 +373,78 @@ function main() {
     }
   };
   process.stdout.write(JSON.stringify(report) + "\n");
+  process.stdout.write(snapshotSection(outDir, data));
+}
+
+function triggerKind(record) {
+  const violations = Array.isArray(record.violations) && record.violations.length > 0;
+  const gaps = Array.isArray(record.feature_gaps) && record.feature_gaps.length > 0;
+  if (violations && gaps) return "both";
+  if (violations) return "violations only";
+  if (gaps) return "features only";
+  return null;
+}
+
+function snapshotSection(outDir, rows) {
+  const totals = {
+    "violations only": { kept: 0, lost: 0, gained: 0 },
+    "features only": { kept: 0, lost: 0, gained: 0 },
+    both: { kept: 0, lost: 0, gained: 0 }
+  };
+  let verifyTurn = null;
+  try {
+    verifyTurn = require(path.join(TASK_DIR, "gate", "verify-turn.js")).verifyTurn;
+  } catch (err) {
+    verifyTurn = null;
+  }
+  for (const row of rows) {
+    if (row.record === "header" || row.group !== "G") continue;
+    const dir = row.out_dir && fs.existsSync(row.out_dir) ? row.out_dir : runDirFor(outDir, row);
+    if (!fs.existsSync(dir)) continue;
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch (err) { continue; }
+    const snaps = names.filter((name) => /^snapshot_[1-5]_[0-9]+$/.test(name));
+    if (!snaps.length) continue;
+    const byTurn = new Map();
+    for (const line of readGateLines(dir)) {
+      const key = String(line.turn);
+      if (!byTurn.has(key)) byTurn.set(key, []);
+      byTurn.get(key).push(line);
+    }
+    for (const name of snaps) {
+      const match = name.match(/^snapshot_([1-5])_([0-9]+)$/);
+      const turn = Number(match[1]);
+      const k = Number(match[2]);
+      const seq = byTurn.get(String(turn)) || [];
+      const pre = seq[k - 1];
+      const next = seq[k];
+      const kind = pre ? triggerKind(pre) : null;
+      if (!kind || !next || !verifyTurn) continue;
+      let before = [];
+      try {
+        const result = verifyTurn({ turn, repo: path.join(dir, name) });
+        before = result && result.body && Array.isArray(result.body.feature_gaps) ? result.body.feature_gaps : [];
+      } catch (err) {
+        continue;
+      }
+      const after = Array.isArray(next.feature_gaps) ? next.feature_gaps : [];
+      const beforeSet = new Set(before);
+      const afterSet = new Set(after);
+      for (const item of beforeSet) {
+        if (afterSet.has(item)) totals[kind].kept++;
+        else totals[kind].lost++;
+      }
+      for (const item of afterSet) {
+        if (!beforeSet.has(item)) totals[kind].gained++;
+      }
+    }
+  }
+  const lines = ["features kept, lost and gained by retries"];
+  for (const kind of ["violations only", "features only", "both"]) {
+    const item = totals[kind];
+    lines.push(kind + ": kept=" + item.kept + " lost=" + item.lost + " gained=" + item.gained);
+  }
+  return lines.join("\n") + "\n";
 }
 
 main();

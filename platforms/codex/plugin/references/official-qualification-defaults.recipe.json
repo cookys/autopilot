@@ -439,6 +439,26 @@
       "event_id": 310,
       "role": "consult",
       "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-kimi28-consult"
+    },
+    {
+      "event_id": 327,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-haiku-5-5-qualify"
+    },
+    {
+      "event_id": 328,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-sonnet-5-5-qualify"
+    },
+    {
+      "event_id": 329,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-opus-5-5-qualify"
+    },
+    {
+      "event_id": 330,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/MiniMax-M3.1-Flash-Preview-qualify"
     }
   ]
 }

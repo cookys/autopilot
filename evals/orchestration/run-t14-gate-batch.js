@@ -36,7 +36,8 @@ function usage(msg) {
   if (msg) process.stderr.write(msg + "\n");
   process.stderr.write(
     "Usage: node run-t14-gate-batch.js --out DIR --pairs N --pin-version VER [--workers 1]\n" +
-    "       [--harness PATH] [--claude-bin PATH] [--runner cc|stub] [--stub-bin PATH]\n"
+    "       [--harness PATH] [--claude-bin PATH] [--runner cc|stub] [--stub-bin PATH]\n" +
+    "       [--retry-feedback violations|violations+features]\n"
   );
   process.exit(2);
 }
@@ -50,7 +51,8 @@ function parseArgs(argv) {
     harness: DEFAULT_HARNESS,
     claudeBin: "claude",
     runner: "cc",
-    stubBin: process.env.ORCH_STUB_BIN || ""
+    stubBin: process.env.ORCH_STUB_BIN || "",
+    retryFeedback: "violations+features"
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -66,6 +68,7 @@ function parseArgs(argv) {
     else if (a === "--claude-bin") opt.claudeBin = next();
     else if (a === "--runner") opt.runner = next();
     else if (a === "--stub-bin") opt.stubBin = next();
+    else if (a === "--retry-feedback") opt.retryFeedback = next();
     else usage("unknown argument: " + a);
   }
   if (!opt.out || !opt.pin) usage("missing --out or --pin-version");
@@ -73,6 +76,9 @@ function parseArgs(argv) {
   if (!Number.isInteger(opt.workers) || opt.workers < 1) usage("--workers must be a positive integer");
   if (opt.runner !== "cc" && opt.runner !== "stub") usage("--runner must be cc or stub");
   if (opt.runner === "stub" && !opt.stubBin) usage("--stub-bin (or ORCH_STUB_BIN) is required for --runner stub");
+  if (opt.retryFeedback !== "violations" && opt.retryFeedback !== "violations+features") {
+    usage("--retry-feedback must be violations|violations+features");
+  }
   return opt;
 }
 
@@ -276,6 +282,7 @@ function runOne(item) {
     "--out", outDir,
     "--gate", gate
   ];
+  if (group === "G") args.push("--gate-retry-feedback", OPT.retryFeedback);
   const env = { ...process.env };
   if (OPT.stubBin) env.ORCH_STUB_BIN = OPT.stubBin;
   const started = new Date().toISOString();
@@ -324,6 +331,7 @@ function runOne(item) {
     gate_retries_by_turn: Array.isArray(result.gate_retries_by_turn) ? result.gate_retries_by_turn : [],
     gate_violations_by_turn: Array.isArray(result.gate_violations_by_turn) ? result.gate_violations_by_turn : [],
     gate_exhausted: result.gate_exhausted === true,
+    retry_feedback: OPT.retryFeedback,
     verifier_final_ok: gateLast && typeof gateLast.ok === "boolean" ? gateLast.ok : null,
     cost_usd: readCost(outDir),
     out_dir: outDir
@@ -368,7 +376,8 @@ function main() {
       git_sha: git(["rev-parse", "HEAD"]),
       pin_version: OPT.pin,
       frozen: frozenHashes(),
-      pairs: schedule.pairs
+      pairs: schedule.pairs,
+      retry_feedback: OPT.retryFeedback
     };
     appendJson(resultsPath, header);
     rows.push(header);
@@ -384,6 +393,13 @@ function main() {
     process.exit(2);
   }
   if (header.pin_version !== OPT.pin) stopBatch("version");
+  if (header.retry_feedback !== OPT.retryFeedback) {
+    process.stderr.write(
+      "REFUSE --retry-feedback " + OPT.retryFeedback +
+      " does not match results.jsonl header retry_feedback " + header.retry_feedback + "\n"
+    );
+    process.exit(2);
+  }
 
   // Consecutive stop rules are defined on schedule order, so workers are serialized.
   let zeroStreak = 0;

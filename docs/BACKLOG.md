@@ -308,12 +308,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: A new plan for a follow-up round, decided by the owner.
+- **Trigger**: Second round is in progress: retry text also names feature gaps.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: Verdict FAIL-TRADE. Report: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md
+- **Context**: Plan docs/plans/2026-10-19-t14-gate-round2.md. Owner card d-768a4c10.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056

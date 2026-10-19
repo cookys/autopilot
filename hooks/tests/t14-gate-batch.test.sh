@@ -2,6 +2,7 @@
 # hooks/tests/t14-gate-batch.test.sh — BL-0055 S3 batch driver and analyzer
 # RED at 6a6373eed: driver and analyzer were absent; the test exited 1 with "missing evals/orchestration/run-t14-gate-batch.js" before any batch or verdict check ran.
 # RED at f8f1ec90e: lying row counted valid_runs.c=1 with no mismatches key; resume never compared --pairs (schedule reused, exit 0).
+# RED at bcc58516a: --retry-feedback is not recorded; the default header, row, and G-only argv check exited 1.
 
 set -euo pipefail
 
@@ -59,7 +60,9 @@ process.stdout.write(String(n));
 }
 
 verdict_of() {
-  node "$ANALYZER" --out "$1"
+  local all
+  all="$(node "$ANALYZER" --out "$1")"
+  printf '%s\n' "$all" | head -n 1
 }
 
 write_claude() {
@@ -330,7 +333,7 @@ set -e
   echo
   echo "RED NC10: row-reading analyzer accepted the lying decoy flags"
 } | note_evidence
-NC10_RED_VERDICT="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write(j.verdict);' "$TEST_TMP/nc10-red-stdout.txt")"
+NC10_RED_VERDICT="$(node -e 'const fs=require("fs"); const line=fs.readFileSync(process.argv[1],"utf8").split("\n")[0]; const j=JSON.parse(line); process.stdout.write(j.verdict);' "$TEST_TMP/nc10-red-stdout.txt")"
 if [ "$NC10_RED_VERDICT" != "SUCCESS" ]; then
   fail "NC10 mutant should reach SUCCESS from the lying rows (got $NC10_RED_VERDICT)"
 fi
@@ -667,6 +670,7 @@ const row = {
 fs.writeFileSync(path.join(out, "results.jsonl"), JSON.stringify(header) + "\n" + JSON.stringify(row) + "\n");
 JS
 MIS_REPORT="$(node "$ANALYZER" --out "$MIS")"
+MIS_REPORT="$(printf '%s\n' "$MIS_REPORT" | head -n 1)"
 node -e '
 const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (!j.valid_runs || j.valid_runs.c !== 0) process.exit(2);
@@ -675,5 +679,172 @@ if (hits.length !== 1) process.exit(3);
 const m = hits[0];
 if (m.row_failure_class !== null || m.dir_failure_class !== "infra_fail") process.exit(4);
 ' <<<"$MIS_REPORT" || fail "analyzer trusted a valid self-report over infra_fail in the run directory: $MIS_REPORT"
+
+# --- retry-feedback flag: G only, header, resume refusal, default ---
+write_claude "$TEST_TMP/fb-claude" ok "$TEST_TMP/fb-count"
+FB_LOG="$TEST_TMP/fb-argv.log"
+: > "$FB_LOG"
+cat > "$TEST_TMP/fb-harness.sh" << EOF
+#!/usr/bin/env bash
+printf '%s\\n' "\$*" >> "$FB_LOG"
+out=""
+prev=""
+for a in "\$@"; do
+  if [ "\$prev" = "--out" ]; then out="\$a"; fi
+  prev="\$a"
+done
+mkdir -p "\$out"
+printf '%s\\n' '{"turns_completed":5,"failure_class":null,"failure_cause":null,"duration":1,"runner_version":"$PIN","model":"claude-haiku-4-5"}' > "\$out/result.json"
+exit 0
+EOF
+chmod +x "$TEST_TMP/fb-harness.sh"
+FB_OUT="$TEST_TMP/fb-out"
+run_driver --out "$FB_OUT" --pairs 1 --pin-version "$PIN" \
+  --claude-bin "$TEST_TMP/fb-claude" --harness "$TEST_TMP/fb-harness.sh" --runner stub --stub-bin "$TEST_TMP/noop-batch-stub" \
+  > "$TEST_TMP/fb-stdout.txt"
+# stub-bin is required for --runner stub; the fake harness never calls it.
+node -e '
+const fs = require("fs");
+const lines = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean);
+const header = JSON.parse(lines[0]);
+if (header.retry_feedback !== "violations+features") process.exit(2);
+const rows = lines.slice(1).map((line) => JSON.parse(line));
+if (rows.length !== 2) process.exit(3);
+if (rows.some((row) => row.retry_feedback !== "violations+features")) process.exit(4);
+const argv = fs.readFileSync(process.argv[2], "utf8").split("\n").filter(Boolean);
+const g = argv.filter((line) => line.includes("--gate enforce"));
+const c = argv.filter((line) => line.includes("--gate observe"));
+if (g.length !== 1 || c.length !== 1) process.exit(5);
+if (!g[0].includes("--gate-retry-feedback violations+features")) process.exit(6);
+if (c[0].includes("--gate-retry-feedback")) process.exit(7);
+' "$FB_OUT/results.jsonl" "$FB_LOG" || fail "h: default feedback was not violations+features on the header, rows, and G only"
+FB_SET="$TEST_TMP/fb-set"
+: > "$FB_LOG"
+run_driver --out "$FB_SET" --pairs 1 --pin-version "$PIN" --retry-feedback violations \
+  --claude-bin "$TEST_TMP/fb-claude" --harness "$TEST_TMP/fb-harness.sh" --runner stub --stub-bin "$TEST_TMP/noop-batch-stub" \
+  > "$TEST_TMP/fb-set-stdout.txt"
+node -e '
+const fs = require("fs");
+const lines = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean);
+if (JSON.parse(lines[0]).retry_feedback !== "violations") process.exit(2);
+' "$FB_SET/results.jsonl" || fail "h: --retry-feedback violations was not recorded"
+python3 - "$FB_SET/results.jsonl" << 'PY'
+import json, sys
+path = sys.argv[1]
+lines = open(path).read().splitlines()
+header = json.loads(lines[0])
+header["retry_feedback"] = "violations+features"
+lines[0] = json.dumps(header)
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+set +e
+run_driver --out "$FB_SET" --pairs 1 --pin-version "$PIN" --retry-feedback violations \
+  --claude-bin "$TEST_TMP/fb-claude" --harness "$TEST_TMP/fb-harness.sh" --runner stub --stub-bin "$TEST_TMP/noop-batch-stub" \
+  > "$TEST_TMP/fb-mismatch-stdout.txt" 2> "$TEST_TMP/fb-mismatch-stderr.txt"
+FB_MISMATCH=$?
+node "$DRIVER" --out "$TEST_TMP/fb-bad" --pairs 1 --pin-version "$PIN" --retry-feedback nope \
+  > "$TEST_TMP/fb-bad-stdout.txt" 2> "$TEST_TMP/fb-bad-stderr.txt"
+FB_BAD=$?
+set -e
+[ "$FB_MISMATCH" -eq 2 ] || fail "h: resume feedback mismatch should exit 2 (got $FB_MISMATCH) stderr=$(cat "$TEST_TMP/fb-mismatch-stderr.txt")"
+grep -q "REFUSE" "$TEST_TMP/fb-mismatch-stderr.txt" || fail "h: mismatch did not refuse"
+grep -q "violations" "$TEST_TMP/fb-mismatch-stderr.txt" || fail "h: mismatch did not name the feedback values"
+[ "$FB_BAD" -eq 2 ] || fail "h: invalid --retry-feedback should exit 2 (got $FB_BAD)"
+echo "h green: retry-feedback is G-only, recorded, and a resume mismatch refuses"
+
+# --- analyzer snapshot section; existing verdict line stays ---
+SNAP_SET="$TEST_TMP/snap-set"
+mkdir -p "$SNAP_SET/runs/G-01/attempt-1/snapshot_1_1" \
+  "$SNAP_SET/runs/G-02/attempt-1/snapshot_3_1" \
+  "$SNAP_SET/runs/G-03/attempt-1/snapshot_1_1"
+cp "$TASK_DIR/repo/cli.py" "$SNAP_SET/runs/G-01/attempt-1/snapshot_1_1/cli.py"
+cp "$TASK_DIR/repo/cli.py" "$SNAP_SET/runs/G-03/attempt-1/snapshot_1_1/cli.py"
+# Turn-3 snapshot: timestamp present, export absent, so verifyTurn reports only the export gap.
+cat > "$SNAP_SET/runs/G-02/attempt-1/snapshot_3_1/cli.py" << 'PY'
+#!/usr/bin/env python3
+import sys
+def cmd_run():
+    print("user\taction\tts")
+    print("alice\tlogin\t2020-01-01T00:00:00Z")
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        cmd_run()
+    else:
+        print("usage")
+        sys.exit(1)
+if __name__ == "__main__":
+    main()
+PY
+frozen_json > "$TEST_TMP/snap-frozen.json"
+node - "$SNAP_SET" "$PIN" "$TEST_TMP/snap-frozen.json" << 'JS'
+const fs = require("fs");
+const path = require("path");
+const out = process.argv[2];
+const pin = process.argv[3];
+const frozen = JSON.parse(fs.readFileSync(process.argv[4], "utf8"));
+function writeRun(id, gateLines) {
+  const dir = path.join(out, "runs", id, "attempt-1");
+  fs.writeFileSync(path.join(dir, "oracle.log"), [
+    "{",
+    '  "features": {"1":true,"2":true,"3":true,"4":true,"5":true},',
+    '  "constraints": {"1":true,"2":true,"3":true}',
+    "}",
+    "decoy_respected=false",
+    "fidelity_ok=false",
+    ""
+  ].join("\n"));
+  fs.writeFileSync(path.join(dir, "result.json"), JSON.stringify({ turns_completed: 5, failure_class: null }));
+  fs.writeFileSync(path.join(dir, "gate.jsonl"), gateLines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+  return {
+    batch_id: "synthetic", run_id: id, pair: 1, group: "G", attempt: 1,
+    started_at: "2026-10-19T00:00:00.000Z", git_sha: "synthetic", runner_version: pin,
+    model: "claude-haiku-4-5", duration: 1, turns_completed: 5, valid: true,
+    failure_class: null, failure_cause: null, oracle_pass: false, decoy_respected: false, fidelity_ok: false,
+    constraints: { "1": true, "2": true, "3": true }, features: { "1": true, "2": true, "3": true, "4": true, "5": true },
+    gate_mode: "enforce", gate_retries: 1, gate_retries_by_turn: [1, 0, 0, 0, 0], gate_violations_by_turn: [0, 0, 0, 0, 0],
+    gate_exhausted: false, verifier_final_ok: true, cost_usd: null, out_dir: dir, retry_feedback: "violations+features"
+  };
+}
+const violation = { constraint: 1, rule: "tabs", evidence: "comma" };
+const rows = [
+  writeRun("G-01", [
+    { turn: 1, ok: true, violations: [], feature_gaps: ["run output has no timestamp field"], checked: [1] },
+    { turn: 1, ok: true, violations: [], feature_gaps: ["run output has no timestamp field", "export did not write a file"], checked: [1] }
+  ]),
+  writeRun("G-02", [
+    { turn: 3, ok: false, violations: [violation], feature_gaps: [], checked: [1] },
+    { turn: 3, ok: true, violations: [], feature_gaps: [], checked: [1] }
+  ]),
+  writeRun("G-03", [
+    { turn: 1, ok: false, violations: [violation], feature_gaps: ["run output has no timestamp field"], checked: [1] },
+    { turn: 1, ok: false, violations: [violation], feature_gaps: ["run output has no timestamp field"], checked: [1] }
+  ])
+];
+const header = { record: "header", batch_id: "synthetic", plan_commit: "synthetic", harness_commit: "synthetic", git_sha: "synthetic", pin_version: pin, frozen, pairs: 1, retry_feedback: "violations+features" };
+fs.writeFileSync(path.join(out, "results.jsonl"), [JSON.stringify(header), ...rows.map((row) => JSON.stringify(row))].join("\n") + "\n");
+JS
+SNAP_ALL="$(node "$ANALYZER" --out "$SNAP_SET")"
+SNAP_STATUS=$?
+[ "$SNAP_STATUS" -eq 0 ] || fail "i: analyzer exit $SNAP_STATUS"
+# RED at 01f73aea9: case i exit 1, "i: snapshot section missing" (header still "features kept, lost and gained by retries")
+# G-01 features only: before=[timestamp], after=[timestamp, export] → persisted=1 introduced=1 fixed=0
+# G-02 violations only: before=[export], after=[] → fixed=1
+# G-03 both: before=[timestamp], after=[timestamp] → persisted=1, kind stays separate
+printf '%s\n' "$SNAP_ALL" | grep -q "feature gaps persisted, fixed and introduced by retries" || fail "i: snapshot section missing"
+printf '%s\n' "$SNAP_ALL" | grep -q "features only: persisted=1 fixed=0 introduced=1" || fail "i: feature-only counts: $SNAP_ALL"
+printf '%s\n' "$SNAP_ALL" | grep -q "violations only: persisted=0 fixed=1 introduced=0" || fail "i: violations-only counts: $SNAP_ALL"
+printf '%s\n' "$SNAP_ALL" | grep -q "both: persisted=1 fixed=0 introduced=0" || fail "i: both counts: $SNAP_ALL"
+SUCC_ALL="$(node "$ANALYZER" --out "$SUCC")"
+SUCC_LINE="$(printf '%s\n' "$SUCC_ALL" | head -n 1)"
+node -e '
+const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (j.verdict !== "SUCCESS" || j.reason !== null) process.exit(2);
+if (j.m1.diff < 6 || !(j.fisher_p <= 0.05)) process.exit(3);
+' <<<"$SUCC_LINE" || fail "i: existing SUCCESS verdict line changed: $SUCC_LINE"
+printf '%s\n' "$SUCC_ALL" | grep -q "feature gaps persisted, fixed and introduced by retries" || fail "i: zero section missing on a set with no snapshots"
+printf '%s\n' "$SUCC_ALL" | grep -q "violations only: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print zeros"
+printf '%s\n' "$SUCC_ALL" | grep -q "features only: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print feature zeros"
+printf '%s\n' "$SUCC_ALL" | grep -q "both: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print both zeros"
+echo "i green: snapshot section counts gaps persisted, fixed and introduced; verdict line unchanged"
 
 echo "OK t14 gate batch"

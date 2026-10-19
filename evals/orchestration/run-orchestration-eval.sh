@@ -23,6 +23,10 @@ CONTRACT_MODE=""
 # so an unflagged run stays byte-identical.
 GATE_MODE=""
 GATE_MAX_RETRIES="2"
+# violations reproduces the first-experiment retry (exit 1 only). violations+features
+# also retries when the verifier exits 0 with a non-empty feature_gaps list.
+GATE_RETRY_FEEDBACK="violations"
+GATE_RETRY_FEEDBACK_SET=0
 GATE_RETRIES=0
 GATE_EXHAUSTED=false
 GATE_ERROR=false
@@ -42,6 +46,7 @@ while [ $# -gt 0 ]; do
     --reinject) REINJECT_FILE="$2"; shift 2 ;;
     --gate) GATE_MODE="$2"; shift 2 ;;
     --gate-max-retries) GATE_MAX_RETRIES="$2"; shift 2 ;;
+    --gate-retry-feedback) GATE_RETRY_FEEDBACK="$2"; GATE_RETRY_FEEDBACK_SET=1; shift 2 ;;
     --pack) PACK_FILE="$2"; shift 2 ;;
     --contract) CONTRACT_MODE="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -49,7 +54,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--pack <file>] [--contract on|off]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
   exit 2
 fi
 # Default the two overrides to the arm-derived values so an unflagged run is unchanged.
@@ -104,31 +109,84 @@ if [ -n "$GATE_MODE" ]; then
     exit 2
   fi
 fi
+case "$GATE_RETRY_FEEDBACK" in
+  violations|violations+features) ;;
+  *)
+    echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
+    echo "ERROR: --gate-retry-feedback must be violations|violations+features (got: $GATE_RETRY_FEEDBACK)" >&2
+    exit 2
+    ;;
+esac
+if [ "$GATE_RETRY_FEEDBACK_SET" -eq 1 ] && [ -z "$GATE_MODE" ]; then
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
+  echo "ERROR: --gate-retry-feedback requires --gate" >&2
+  exit 2
+fi
 
 # Verifier lives beside the task, derived from this script's repo root. It is
 # never copied into TEMP_REPO.
 GATE_VERIFIER="$TASK_DIR/gate/verify-turn.js"
 
+gate_gaps_nonempty() {
+  GATE_JSON_PAYLOAD="$1" node -e 'const j=JSON.parse(process.env.GATE_JSON_PAYLOAD||"{}"); process.stdout.write(Array.isArray(j.feature_gaps)&&j.feature_gaps.length?"1":"0");'
+}
+
+# A turn is still reportable when this mode would have retried it. Observe never
+# retries. The cap records gate_exhausted only when something reportable remains.
+gate_turn_reportable() {
+  local vexit="$1"
+  local json="$2"
+  if [ "$vexit" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$GATE_RETRY_FEEDBACK" = "violations+features" ] && [ "$vexit" -eq 0 ]; then
+    [ "$(gate_gaps_nonempty "$json")" = "1" ]
+    return $?
+  fi
+  return 1
+}
+
 gate_enforce_wants_retry() {
   local vexit="$1"
   local so_far="$2"
-  [ "$vexit" -eq 1 ] || return 1
+  local json="$3"
+  [ "$GATE_MODE" = "enforce" ] || return 1
   [ "$so_far" -lt "$GATE_MAX_RETRIES" ] || return 1
-  [ "$GATE_MODE" = "enforce" ]
+  gate_turn_reportable "$vexit" "$json"
 }
 
 gate_write_retry() {
   local dest="$1"
-  GATE_JSON_PAYLOAD="$2" node -e '
+  GATE_JSON_PAYLOAD="$2" GATE_RETRY_FEEDBACK="$GATE_RETRY_FEEDBACK" node -e '
 const j = JSON.parse(process.env.GATE_JSON_PAYLOAD || "{}");
-const violations = Array.isArray(j.violations) && j.violations.length
-  ? j.violations
-  : [{ constraint: "?", rule: "unspecified", evidence: "verifier reported a violation" }];
+const real = Array.isArray(j.violations) ? j.violations : [];
+const gaps = Array.isArray(j.feature_gaps) ? j.feature_gaps : [];
+const withGaps = process.env.GATE_RETRY_FEEDBACK === "violations+features" && gaps.length > 0;
+const violations = real.length
+  ? real
+  : (withGaps ? [] : [{ constraint: "?", rule: "unspecified", evidence: "verifier reported a violation" }]);
 const lines = violations.map((v) =>
   "The change you just made breaks project rule " + v.constraint + ": `" + v.rule + "`. Observed: `" + v.evidence + "`. Fix this without removing any feature you were asked for, and keep every other rule."
 );
-process.stdout.write(lines.join("\n\n") + "\n");
+let text = lines.length ? lines.join("\n\n") + "\n" : "";
+if (withGaps) {
+  const extra = gaps.map((gap) => "A feature you were asked for so far is not working yet: `" + gap + "`.");
+  extra.push("Keep the parts that already work; do not delete or break any existing feature.");
+  text += extra.join("\n") + "\n";
+}
+process.stdout.write(text);
 ' > "$dest"
+}
+
+# Copy TEMP_REPO before the retry prompt. The copy lives under OUT_DIR, so the
+# model never sees it. A copy failure is logged and does not abort the run.
+gate_take_snapshot() {
+  local dest="$1"
+  if cp -a "$TEMP_REPO" "$dest" >>"$RAW_LOG" 2>&1; then
+    return 0
+  fi
+  echo "WARN: snapshot copy failed: $dest" >>"$RAW_LOG" || true
+  return 0
 }
 
 gate_invoke_cc() {
@@ -171,14 +229,12 @@ apply_gate() {
       GATE_ERROR=true
       break
     fi
-    if [ "$vexit" -eq 0 ]; then
-      break
-    fi
-    if gate_enforce_wants_retry "$vexit" "$retries"; then
+    if gate_enforce_wants_retry "$vexit" "$retries" "$json"; then
       retries=$((retries + 1))
       GATE_RETRIES=$((GATE_RETRIES + 1))
       retry_path="$OUT_DIR/retry_${turn}_${retries}.md"
       gate_write_retry "$retry_path" "$json"
+      gate_take_snapshot "$OUT_DIR/snapshot_${turn}_${retries}"
       # GATE_RETRY_INVOCATION
       if [ "$runner_kind" = "cc" ]; then
         gate_invoke_cc "$retry_path"
@@ -193,7 +249,7 @@ apply_gate() {
       fi
       continue
     fi
-    if [ "$GATE_MODE" = "enforce" ]; then
+    if [ "$GATE_MODE" = "enforce" ] && gate_turn_reportable "$vexit" "$json"; then
       GATE_EXHAUSTED=true
     fi
     break
@@ -638,8 +694,8 @@ if [ -n "${REINJECT_SRC:-}" ]; then
 fi
 GATE_JSON_FRAGMENT=""
 if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
-  GATE_JSON_FRAGMENT=$(printf ',"gate":"%s","gate_retries":%s,"gate_retries_by_turn":[%s],"gate_violations_by_turn":[%s],"gate_exhausted":%s,"gate_error":%s' \
-    "$GATE_MODE" "$GATE_RETRIES" "$GATE_RETRIES_BY_TURN" "$GATE_VIOLATIONS_BY_TURN" "$GATE_EXHAUSTED" "$GATE_ERROR")
+  GATE_JSON_FRAGMENT=$(printf ',"gate":"%s","gate_retries":%s,"gate_retries_by_turn":[%s],"gate_violations_by_turn":[%s],"gate_exhausted":%s,"gate_error":%s,"gate_retry_feedback":"%s"' \
+    "$GATE_MODE" "$GATE_RETRIES" "$GATE_RETRIES_BY_TURN" "$GATE_VIOLATIONS_BY_TURN" "$GATE_EXHAUSTED" "$GATE_ERROR" "$GATE_RETRY_FEEDBACK")
 fi
 
 if [ "$HAS_TURNS" = "true" ]; then

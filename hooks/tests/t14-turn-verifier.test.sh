@@ -274,4 +274,40 @@ if [ "${T14_GATE_WRITE_EVIDENCE:-}" = "1" ]; then
   printf '%s\n' "${RED_LOG//$TEST_TMP//tmp/ORCH-GATE-TEST-TMP}" >"$EVIDENCE"
 fi
 
+# Turn gates are frozen. A gap is absent until the turn that asks for that feature.
+gaps_of() {
+  node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.stdout.write((o.feature_gaps||[]).join("\n"));' "$1"
+}
+has_gap() {
+  printf '%s\n' "$1" | grep -F -x -q -- "$2"
+}
+for t in 1 2 3 4 5; do
+  pin_out="$TEST_TMP/pin-turn-$t.json"
+  run_at "$VERIFIER" "$t" "$TASK/repo" "$pin_out"
+  pin_ec=$?
+  assert_exit "turn-gating pin turn $t exits 0" "$pin_ec" 0
+done
+g1="$(gaps_of "$TEST_TMP/pin-turn-1.json")"
+g2="$(gaps_of "$TEST_TMP/pin-turn-2.json")"
+g3="$(gaps_of "$TEST_TMP/pin-turn-3.json")"
+g4="$(gaps_of "$TEST_TMP/pin-turn-4.json")"
+g5="$(gaps_of "$TEST_TMP/pin-turn-5.json")"
+[ "$g1" = "run output has no timestamp field" ] || fail "turn 1 gap is not the timestamp gap: $g1"
+has_gap "$g1" "export did not write a file" && fail "export gap present before turn 3" || true
+has_gap "$g2" "export did not write a file" && fail "export gap present at turn 2" || true
+has_gap "$g1" "run --bad-flag exited 0" && fail "bad-flag gap present before turn 4" || true
+has_gap "$g2" "run --bad-flag exited 0" && fail "bad-flag gap present at turn 2" || true
+has_gap "$g3" "run --bad-flag exited 0" && fail "bad-flag gap present at turn 3" || true
+has_gap "$g1" "run --since bad-date exited 0" && fail "bad-date gap present before turn 4" || true
+has_gap "$g3" "run --since bad-date exited 0" && fail "bad-date gap present at turn 3" || true
+has_gap "$g1" "stdout has no Total rows footer" && fail "footer gap present before turn 5" || true
+has_gap "$g4" "stdout has no Total rows footer" && fail "stdout footer gap present at turn 4" || true
+has_gap "$g4" "export has no Total rows footer" && fail "export footer gap present before turn 5" || true
+has_gap "$g4" "export file unavailable for footer check" && fail "export-unavailable footer gap present before turn 5" || true
+has_gap "$g3" "export did not write a file" || fail "export gap missing at turn 3"
+has_gap "$g4" "run --bad-flag exited 0" || fail "bad-flag gap missing at turn 4"
+has_gap "$g4" "run --since bad-date exited 0" || fail "bad-date gap missing at turn 4"
+has_gap "$g5" "stdout has no Total rows footer" || fail "stdout footer gap missing at turn 5"
+has_gap "$g5" "export file unavailable for footer check" || fail "export-unavailable footer gap missing at turn 5"
+
 finalize_test

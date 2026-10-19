@@ -50,7 +50,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 工頭目前分不出「手下卡在等回答」和「手下還在工作」，只能去讀對話紀錄或憑猜測喚醒。規劃過的「結構化 worker_condition」就是要讓手下直接回報這個狀態，但這個設計從未實作，也從未測試。
 - **Impact**: 工頭現在要讀對話紀錄或憑猜測喚醒才能判斷，白花 token 也可能亂喚醒；設計能省這些，但還沒做、沒測。
 - **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript
-- **Trigger-Type**: event
+- **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-09-20 orphan-plan triage (plan frozen into a mission graph, zero identifiers in history)
 - **Pointer**: docs/backlog/foreman-depth0-typed-worker-condition.md
@@ -140,7 +140,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: Codex 的外掛快取被取代後，開發模式的 hook 設定會失效，使用者會看到模組找不到的錯誤。計畫新增一條指向 repo 路徑的設定，等再有人回報第二次才動工。 (draft)
 - **Impact**: 開發者在 Codex 升級外掛後 hook 可能失效；目前只遇過一次。 (draft)
 - **Trigger**: a second report of `PostCompact MODULE_NOT_FOUND` on a host that ran `dev-setup.sh --harness codex --install` with `--force`, or a Codex release that documents whether hook `command` strings run through a shell (then a self-contained…
-- **Trigger-Type**: peer
+- **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: local Codex session hand-off via agent-call 2026-09-07; `hooks/tests/codex-plugin-package.test.sh` upgrade case.
 - **Pointer**: docs/backlog/codex-dev-mode-hook-entry-that-survives-plugin-cache-replacement-codex-hooks-jso.md
@@ -280,7 +280,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 引擎評分機制會記錄席位的「失誤次數」，但目前只做影子記錄、不會真的把席位降級，因為怕誤判。要等影子資料累積並人工確認屬實，才打開。 (draft)
 - **Impact**: 表現差的席位不會被自動降級，目前靠人工留意。擁有者 2026-10-13 同意等 11/22 檢討再決定。
 - **Trigger**: When shadow data exists for a role — i.e. `would_requalify` has fired at least once against a seat and the operator has replayed those strikes and agrees each was a true engine/pair failure. Also: this row must be re-read by…
-- **Trigger-Type**: owner
+- **Trigger-Type**: date:2026-11-22
 - **Effort**: S
 - **Source**: hetero design panel 2026-08-22 (kimi's "trench coat" objection), shipped shadow-first per synthesis §8.
 - **Pointer**: docs/backlog/arm-the-ordinary-strike-threshold-currently-shadow-only-dated-review-required.md
@@ -337,7 +337,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
 - **Trigger**: The next experiment aimed at improving long-horizon constraint adherence, or before claiming that prompt re-injection solves t14-class drift.
-- **Trigger-Type**: event
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: `docs/projects/_archive/2026-07-08-t14-reinject/report.md` § Follow-up.
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
@@ -379,7 +379,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 測試完整性檢查目前只警告不擋。回放最近 60 個 merge 的違規，固定 seed 抽 150 筆，真陽性為 0，誤報太多，所以維持警告。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
 - **Trigger**: Fix the rules first (whole-file delete with its target, net assertion-line drop only, new file not surface_touch), add a planted-violation control, re-replay; block only below 5% false positives (d-133c23da)
-- **Trigger-Type**: event
+- **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
@@ -542,7 +542,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 其他專案的 campaign（自動化連續任務）建立後被封存，之後想在同一個 campaign 內改成「每次修復單獨審查、最後再整體審查」，目前做不到，只能在建立時選。 (draft)
 - **Impact**: 遇到這種需求的專案只能重建 campaign；建立時就選好的情況不受影響。 (draft)
 - **Trigger**: next peer/operator campaign needing per-repair single review plus a terminal panel inside one already-sealed campaign
-- **Trigger-Type**: peer
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
@@ -556,7 +556,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 擁有者要求 mods 介面能顯示「代理替你做的決定」提醒。目前沒有任何地方記錄這類決定，所以介面無從顯示；要先做記錄寫入，再做監看，最後才是顯示。 (draft)
 - **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods 隨 3.0.0 發布之後。 (draft)
 - **Trigger**: after mods ship with 3.0.0
-- **Trigger-Type**: peer
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
@@ -574,7 +574,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 要在 3.0.0 正式版前跑一次 stage-graph 的 v11 回歸評測，涵蓋新的 packet 審查指引文字。目前檢查擋住，因為兩份指引檔不在原預先登記的範圍內，需要先修訂登記。 (draft)
 - **Impact**: 沒跑評測就改了指引文字，等於沒有證據支持；正式版前必須處理。 (draft)
 - **Trigger**: before the 3.0.0 final cut
-- **Trigger-Type**: peer
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: packet-guidance owner ruling, 2026-10-11
 - **Pointer**: none
@@ -591,7 +591,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: c4140 的 llm-playground 專案回報：dev-flow 說明裡建議在前景等待最多 15 分鐘，這個建議有問題；現在系統對前景輪詢已改為只提醒，但說明文字尚未改。 (draft)
 - **Impact**: 說明文字仍可能誤導使用者在前景久等；改動屬於指引，需要評測證據，排在 3.0.0 正式版前。 (draft)
 - **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
-- **Trigger-Type**: peer
+- **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
 - **Pointer**: none
@@ -621,7 +621,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 使用者通常不知道要設定自動壓縮視窗（autoCompactWindow），偵測功能和 T2 新提示文字都已完成，剩下是在下一版發布標題寫出這個設定，讓使用者知道要設。 (draft)
 - **Impact**: 使用者會被不必要地要求停下重開；擁有者已驗證 Claude Code 的摘要夠用，改文字屬指引，需評測證據。 (draft)
 - **Trigger**: next alpha or 3.0.0 release cut
-- **Trigger-Type**: peer
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
@@ -658,7 +658,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 三個席位各報一次同一個舊問題，上一輪留下的問題清單就列三行，而且每個席位都收到全部行；清單約占增量輸入的四分之一。
 - **Impact**: 範圍小的帶回，清單比省下的檔案還大，增量反而多花輸入。
 - **Trigger**: 增量帶回要設為預設，或帶回範圍不大但席位數增加
-- **Trigger-Type**: event
+- **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: BL-0146 D5 實測 2026-10-17，審查 finding 0ad19dc1
 - **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
@@ -672,7 +672,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 交接機制已出貨。剩：T2 提示改成先寫交接檔再繼續（指引變更，要 eval 和 owner 同意）；間隔設定只有開 session 的檢查會讀。壓縮點已有第一筆實測（約窗口減 33K，數據在 Context），還缺別台機器或別的模型的紀錄。
 - **Impact**: 交接檔要模型自己寫才有，現在的 T2 提示沒叫它寫，所以壓縮後多半只有腳本產生的那部分。
 - **Trigger**: owner 同意改 T2 文字並排 eval 時，或別的模型出現新壓縮點紀錄時（核對 pre_tokens 是否為這次壓縮）
-- **Trigger-Type**: event
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
@@ -707,7 +707,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: autopilot 同時含異質引擎（panel、discuss、plan review、code review）、軟體開發流程、實驗性功能，使用者難分辨哪些是核心。拆法還沒定。
 - **Impact**: 不分組只是說明與目錄較雜，沒有功能影響；使用者要分辨用途時較費力。
 - **Trigger**: owner 重新提起分組，或新增的技能與腳本再次難以歸類
-- **Trigger-Type**: event
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
@@ -721,7 +721,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 自動選題只看大小和存在天數，不檢查 Trigger 是否已發生；刻意擱著等觸發的條目最舊，所以永遠排第一。2026-10-18 選到 BL-0071，量測後發現觸發並未發生。
 - **Impact**: 自動挑選會浪費一輪在量測，再提議關閉。
 - **Trigger**: 下一次自動選到觸發未發生的條目，或要在 /next 自動路徑加入觸發檢查時
-- **Trigger-Type**: event
+- **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 本 session，2026-10-18
 - **Pointer**: docs/backlog/next-pick-ignores-trigger.md

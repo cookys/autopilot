@@ -254,6 +254,8 @@ function normaliseEffort(fields, entryText) {
 // fixed by editing the field, never by moving prose to a sidecar — they must not make a row
 // "need migration". A rebuilt row carries the reporter fields over verbatim (rowFields in
 // planMigration), so moving one would not shorten them anyway.
+// A missing Trigger-Type is the same kind of hole: the migrator can only move a value that
+// already exists, so a rewrite would leave the gate violation in place. It is not migration.
 const REPORTER_FIELD_CODES = new Set([
   'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',

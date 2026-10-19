@@ -331,4 +331,39 @@ EOF
 P="$(node "$SCRIPT" parse --backlog "$TEST_TMP/trigger-bl.md" --today 2026-10-19)"
 assert_contains "$P" '"trigger_type": "event"' "parse exposes trigger_type"
 
+# Every candidate is owner, event, peer, or a date after --today: pick exits 0, selects nothing,
+# and names all four exclusion reasons.
+# green at fe2683ed1: pick already exited 0 with pick null and all four reasons (82 passed, this case included). Assertion locks that.
+cat > "$TEST_TMP/trigger-all-excluded.json" <<'JSON'
+[
+ {"title":"Owner only","effort":"S","tags":[],"class":"standard-impl","age_days":9,"source":"s","trigger_type":"owner"},
+ {"title":"Event only","effort":"S","tags":[],"class":"standard-impl","age_days":8,"source":"s","trigger_type":"event"},
+ {"title":"Peer only","effort":"S","tags":[],"class":"standard-impl","age_days":7,"source":"s","trigger_type":"peer"},
+ {"title":"Future only","effort":"S","tags":[],"class":"standard-impl","age_days":6,"source":"s","trigger_type":"date:2026-12-01"}
+]
+JSON
+set +e
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/trigger-all-excluded.json" --preferences "$TEST_TMP/prefs.json" --today 2026-10-19)"
+ALL_RC=$?
+set -e
+assert_exit_code "$ALL_RC" "0" "all candidates excluded still exits 0"
+PICKED="$(printf '%s' "$OUT" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s).pick;console.log(p==null?'none':p.title)})")"
+assert_eq "none" "$PICKED" "all candidates excluded selects no entry"
+assert_contains "$OUT" "trigger_type owner" "all-excluded output names owner"
+assert_contains "$OUT" "trigger_type event" "all-excluded output names event"
+assert_contains "$OUT" "trigger_type peer" "all-excluded output names peer"
+assert_contains "$OUT" "date:2026-12-01" "all-excluded output names the future date"
+
+# The gate accepts a fullwidth colon after the field name; parse must too.
+# RED at fe2683ed1: FAIL parse accepts a fullwidth colon after Trigger-Type: '"trigger_type": "event"' not found (parsed trigger_type null). 82 passed, 1 failed.
+cat > "$TEST_TMP/trigger-fw.md" <<'EOF'
+### Parked fullwidth
+- **Trigger**: later
+- **Trigger-Type**： event
+- **Effort**: S
+- **Source**: s
+EOF
+P="$(node "$SCRIPT" parse --backlog "$TEST_TMP/trigger-fw.md" --today 2026-10-19)"
+assert_contains "$P" '"trigger_type": "event"' "parse accepts a fullwidth colon after Trigger-Type"
+
 finalize_test

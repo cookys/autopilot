@@ -50,7 +50,7 @@ const TRIGGER_TYPE_WORDS = ['owner', 'event', 'ready', 'peer'];
 // them gets the larger row cap (R2). `required_fields` may name only REQUIRABLE ones; the peer
 // trio is required by `Origin: peer` itself.
 const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
-const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact'];
+const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact', 'Trigger-Type'];
 const PEER_FIELDS = ['Reporter', 'Report', 'Reply'];
 const ALL_FIELDS = KNOWN_FIELDS.concat(NEW_FIELDS);
 const ORIGINS = ['peer', 'owner', 'self'];

@@ -747,6 +747,16 @@ const m=require("./scripts/migrate-backlog-entries.js");
 const r=m.renderEntry("T",{Status:"open",Trigger:"t","Trigger-Type":"event",Effort:"S",Source:"s",Pointer:"none"});
 process.stdout.write(/Trigger\*\*: t\n- \*\*Trigger-Type\*\*: event\n- \*\*Effort\*\*: S/.test(r)?"kept":"dropped");')"
 assert_eq "$nm" "kept" "renderEntry keeps Trigger-Type directly under Trigger"
+# A missing Trigger-Type is a gate violation, not a migration: rewrite cannot invent the value.
+# green at fe2683ed1: needsMigration already returned no (154 assertions, this one included). The exclusion stays; this assertion locks it.
+nm="$(cd "$REPO_ROOT" && node -e '
+const gate=require("./scripts/check-backlog-entries.js");
+const m=require("./scripts/migrate-backlog-entries.js");
+const text="### Lacks\n- **Status**: open\n- **Trigger**: t\n- **Effort**: S\n- **Source**: s\n- **Pointer**: none\n";
+const cfg=Object.assign(gate.builtinConfig(),{trigger_type_adopted:true});
+const e=gate.parseHeadingBlock(gate.splitHeadingEntries(text)[0],cfg);
+process.stdout.write(m.needsMigration(e,cfg,process.cwd(),Date.now())?"yes":"no");')"
+assert_eq "$nm" "no" "needsMigration is false when the only defect is a missing Trigger-Type"
 
 
 # -- end to end: the sidecar migration keeps a row's reporter fields, and an over-cap Problem

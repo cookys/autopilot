@@ -107,7 +107,7 @@ The archive passes (`check-plan-graduation.js --fix`, `--archive`, `--migrate-ar
 - row: 1200
 ```
 
-`required_fields` may also be a `## Required Fields` section with one bullet per field; only Id, Since, Origin, Problem, Impact are accepted. Other keys: `id_pattern`, `allowlist_path`, `done_retention_days`, `## Pointer roots`, and for table conversion `## Columns` / `## Status map`.
+`required_fields` may also be a `## Required Fields` section with one bullet per field; only Id, Since, Origin, Problem, Impact, and Trigger-Type are accepted. Other keys: `id_pattern`, `allowlist_path`, `done_retention_days`, `## Pointer roots`, and for table conversion `## Columns` / `## Status map`.
 
 ## Styles
 

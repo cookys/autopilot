@@ -645,4 +645,24 @@ d="$(repo tt-ok)"
 o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
 assert_eq "$(json_exit "$o")" "0" "ready and a real date: Trigger-Type pass"
 
+# required_fields may name Trigger-Type (REQUIRABLE). A file that never uses the field still blocks a row that lacks it.
+# RED at fe2683ed1: required_fields Trigger-Type expected missing_field yes, got no; 'Config requires type' absent. 123 passed, 2 failed.
+d="$(repo tt-required-config)"
+printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' '- required_fields: Trigger-Type' > "$d/.claude/backlog-config.md"
+tt_row 'Config requires type' > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" missing_field)" "yes" "required_fields Trigger-Type blocks an entry that lacks it"
+assert_contains "$o" "Config requires type" "required_fields Trigger-Type names the entry"
+
+# Leap day: 2026 is not a leap year; 2028 is.
+# green at fe2683ed1: date:2026-02-29 was already bad_trigger_date and date:2028-02-29 already exited 0 (both assertions were in the 123 passed). Locks the calendar check.
+d="$(repo tt-leap-reject)"
+tt_row 'Not a leap day' '- **Trigger-Type**: date:2026-02-29' > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" bad_trigger_date)" "yes" "date:2026-02-29 is not a calendar date"
+d="$(repo tt-leap-accept)"
+tt_row 'Leap day' '- **Trigger-Type**: date:2028-02-29' > "$d/docs/BACKLOG.md"
+o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_exit "$o")" "0" "date:2028-02-29 is a real calendar date"
+
 finalize_test

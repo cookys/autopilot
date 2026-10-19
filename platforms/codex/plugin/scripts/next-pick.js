@@ -195,7 +195,8 @@ function parseBacklog(opts) {
     const tokenMatch = effortText.match(new RegExp(`(?<![A-Za-z])(${sizeAlt})(!|急)?(?![A-Za-z])`, 'u'));
     const sinceMatch = section.match(/^- \*\*Since\*\*:\s*(\S+)/mu);
     const sinceMs = sinceMatch ? parseUtcDay(sinceMatch[1]) : null;
-    const typeMatch = section.match(/\*\*Trigger-Type\*\*:\s*([^\n]*)/u);
+    // ASCII or fullwidth colon, same as the backlog gate's fieldLine.
+    const typeMatch = section.match(/\*\*Trigger-Type\*\*\s*[:：]\s*([^\n]*)/u);
     // Whole UTC days since the entry's Since date; a future Since clamps to 0, a missing or malformed one stays null.
     const ageDays = sinceMs === null ? null : Math.max(0, Math.round((todayMs - sinceMs) / 86400000));
     const tags = [];

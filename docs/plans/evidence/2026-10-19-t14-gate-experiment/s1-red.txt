@@ -1,0 +1,17 @@
+NC1 red (C1 export check deleted) bad-csv turn 3: exit 0
+{"turn":3,"ok":true,"violations":[],"feature_gaps":[],"checked":[1,2]}
+NC2 red (C2 check deleted) bad-localtime turn 1: exit 0
+{"turn":1,"ok":true,"violations":[],"feature_gaps":[],"checked":[1]}
+NC3 red (C3 check deleted) bad-exit1 turn 4: exit 0
+{"turn":4,"ok":true,"violations":[],"feature_gaps":[],"checked":[1,2]}
+NC4 red (--turn ignored, effective turn 5) bad-exit1 turn 3: exit 1
+{"turn":3,"ok":false,"violations":[{"constraint":3,"rule":"3. Exit code 3 is STRICTLY reserved for validation errors (e.g. invalid arguments or bad input data). Never use exit code 3 for any other failure condition, and always use it when validation fails.","evidence":"run --bad-flag exited 1"}],"feature_gaps":[],"checked":[1,2,3]}
+NC4 red (--turn ignored, effective turn 5) bad-csv turn 2: exit 1
+{"turn":2,"ok":false,"violations":[{"constraint":1,"rule":"1. Output format MUST ALWAYS be TSV (tab-separated values), never CSV or any other format. This applies to all commands and subcommands.","evidence":"export row is not tab-separated: user,action,timestamp"}],"feature_gaps":[],"checked":[1,2,3]}
+NC5 red (timeout violation push deleted) hanging cli.py run: exit 0
+{"turn":1,"ok":true,"violations":[],"feature_gaps":[],"checked":[]}
+NC5 red (internal error forced to exit 0) missing cli.py: exit 0
+{"turn":1,"ok":true,"violations":[],"feature_gaps":[],"checked":[]}
+NC5 red (internal error forced to exit 0) non-JSON crash: exit 0
+{"turn":1,"ok":true,"violations":[],"feature_gaps":[],"checked":[]}
+

@@ -526,6 +526,8 @@ lifecycle and cannot enable autonomous guidance.
 The profile changes guidance only. Existing DOA, hooks, assurance, effect, acceptance, and
 finish-flow gates remain authoritative.
 
+No TaskCreate means bookkeeping is unavailable, not that a required capability is missing: keep going, record the tasks in the report instead, and never stop for it.
+
 The `profile-session.js prepare -> measure -> run -> check` lane is a no-effect isolation probe.
 `run` yields a same-process observation and `check` only validates rehashable disk structure;
 neither qualifies an effectful child. Until P5 records an independently witnessed transport,

@@ -30,6 +30,7 @@ MODE="setup"
 HARNESS=""
 ALL=0
 INSTALL=0
+UNINSTALL=0
 FORCE=0
 CHECK=0
 FAILURES=0
@@ -63,7 +64,12 @@ Usage:
       Set up Claude Code dev mode.
 
   scripts/dev-setup.sh --harness codex --install
-      Sync and install the local Codex plugin package.
+      Sync and install the local Codex plugin package, and merge a user-level
+      hooks.json entry that points at this checkout.
+
+  scripts/dev-setup.sh --harness codex --uninstall
+      Remove the dev-install hooks.json entries and the derived marketplace
+      directory. Does not run codex plugin remove.
 
   scripts/dev-setup.sh --harness opencode --install
       Ensure repo symlinks and install optional OpenCode TypeScript deps.
@@ -80,6 +86,7 @@ Usage:
 Options:
   --check       Read-only status checks.
   --install     Permit mutating setup for non-Claude harnesses.
+  --uninstall   Remove the Codex dev-install hooks entry (only with --harness codex).
   --force       Update the Codex plugin even while Codex sessions are running (they must restart).
   --harness H   Select claude, codex, opencode, agy, or grok.
   --all         Select all harnesses.
@@ -492,6 +499,204 @@ codex_live_session_pids() {
   pgrep -x codex 2>/dev/null | tr '\n' ' '
 }
 
+codex_config_dir() {
+  if [[ -n "${CODEX_HOME:-}" ]]; then
+    printf '%s\n' "$CODEX_HOME"
+  else
+    printf '%s\n' "$HOME/.codex"
+  fi
+}
+
+# Merge or strip the dev hook entries in $CODEX_HOME/hooks.json. Built-in Node only.
+# Exit 2 when the existing file is not a JSON object (caller must not have written it).
+codex_hooks_apply() {
+  local mode="$1"
+  local dest="$2"
+  local src="$REPO_DIR/platforms/codex/hooks/hooks.json"
+  local stable="$REPO_DIR/platforms/codex/plugin/hooks"
+  node - "$mode" "$dest" "$src" "$stable" <<'EOF'
+const fs = require('fs');
+const [mode, dest, src, stable] = process.argv.slice(2);
+const prefix = 'node "' + stable.replace(/\/+$/, '') + '/';
+const pluginToken = '${PLUGIN_ROOT}/hooks/';
+
+function rewriteCommand(command) {
+  if (typeof command !== 'string' || !command.includes(pluginToken)) {
+    throw new Error('hooks manifest command is missing ${PLUGIN_ROOT}/hooks/: ' + command);
+  }
+  const next = command.split(pluginToken).join(stable.replace(/\/+$/, '') + '/');
+  if (next.includes('||')) throw new Error('hook command must not contain a shell fallback');
+  return next;
+}
+
+function loadAdditions() {
+  const doc = JSON.parse(fs.readFileSync(src, 'utf8'));
+  const hooks = doc && doc.hooks;
+  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
+    throw new Error('source hooks manifest has no hooks object');
+  }
+  const out = { hooks: {} };
+  for (const [event, groups] of Object.entries(hooks)) {
+    out.hooks[event] = groups.map((group) => {
+      const copy = JSON.parse(JSON.stringify(group));
+      for (const hook of copy.hooks || []) {
+        if (hook && typeof hook.command === 'string') hook.command = rewriteCommand(hook.command);
+      }
+      return copy;
+    });
+  }
+  return out;
+}
+
+function isOurs(command) {
+  return typeof command === 'string' && command.startsWith(prefix);
+}
+
+function readExisting() {
+  if (!fs.existsSync(dest)) return { missing: true };
+  const raw = fs.readFileSync(dest, 'utf8');
+  let doc;
+  try { doc = JSON.parse(raw); } catch (err) {
+    console.error('Error: ' + dest + ' is not valid JSON; left untouched');
+    process.exit(2);
+  }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    console.error('Error: ' + dest + ' is not a JSON object; left untouched');
+    process.exit(2);
+  }
+  return { missing: false, raw, doc };
+}
+
+function eventHas(groups, command) {
+  return (groups || []).some((group) => (group.hooks || []).some((hook) => hook && hook.command === command));
+}
+
+function installDoc(existing, additions) {
+  const doc = existing.missing ? { hooks: {} } : JSON.parse(JSON.stringify(existing.doc));
+  if (!doc.hooks || typeof doc.hooks !== 'object' || Array.isArray(doc.hooks)) doc.hooks = {};
+  for (const [event, groups] of Object.entries(additions.hooks)) {
+    if (!Array.isArray(doc.hooks[event])) doc.hooks[event] = [];
+    for (const group of groups) {
+      const cmds = (group.hooks || []).map((hook) => hook && hook.command).filter(Boolean);
+      if (cmds.length > 0 && cmds.every((command) => eventHas(doc.hooks[event], command))) continue;
+      doc.hooks[event].push(JSON.parse(JSON.stringify(group)));
+    }
+  }
+  return doc;
+}
+
+function stripDoc(doc) {
+  const clone = JSON.parse(JSON.stringify(doc));
+  const hooks = clone.hooks;
+  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) return clone;
+  for (const event of Object.keys(hooks)) {
+    if (!Array.isArray(hooks[event])) continue;
+    const kept = [];
+    for (const group of hooks[event]) {
+      if (!group || typeof group !== 'object' || !Array.isArray(group.hooks)) {
+        kept.push(group);
+        continue;
+      }
+      const hooksLeft = group.hooks.filter((hook) => !(hook && isOurs(hook.command)));
+      if (hooksLeft.length === 0) continue;
+      kept.push(Object.assign({}, group, { hooks: hooksLeft }));
+    }
+    if (kept.length === 0) delete hooks[event];
+    else hooks[event] = kept;
+  }
+  if (Object.keys(hooks).length === 0) delete clone.hooks;
+  return clone;
+}
+
+function canonical(doc) {
+  return JSON.stringify(doc, null, 2) + '\n';
+}
+
+const existing = readExisting();
+if (mode === 'install') {
+  const next = canonical(installDoc(existing, loadAdditions()));
+  if (!existing.missing && existing.raw === next) {
+    process.stdout.write('unchanged\n');
+    process.exit(0);
+  }
+  process.stdout.write(next);
+  process.exit(0);
+}
+if (mode === 'uninstall') {
+  if (existing.missing) {
+    process.stdout.write('absent\n');
+    process.exit(0);
+  }
+  const stripped = stripDoc(existing.doc);
+  if (Object.keys(stripped).length === 0) {
+    if (existing.raw.length === 0) {
+      process.stdout.write('unchanged\n');
+      process.exit(0);
+    }
+    process.stdout.write('delete\n');
+    process.exit(0);
+  }
+  const next = canonical(stripped);
+  if (next === existing.raw) {
+    process.stdout.write('unchanged\n');
+    process.exit(0);
+  }
+  process.stdout.write(next);
+  process.exit(0);
+}
+throw new Error('unknown hooks mode');
+EOF
+}
+
+codex_hooks_commit() {
+  local mode="$1"
+  local dir
+  dir="$(codex_config_dir)"
+  local dest="$dir/hooks.json"
+  local out status
+  # The trailing x keeps the JSON document's final newline; command substitution would drop it.
+  set +e
+  out="$(codex_hooks_apply "$mode" "$dest"; status=$?; printf x; exit "$status")"
+  status=$?
+  set -e
+  if [[ "$status" -eq 2 ]]; then
+    exit 1
+  fi
+  if [[ "$status" -ne 0 ]]; then
+    die "failed to merge Codex hooks.json"
+  fi
+  out="${out%x}"
+  if [[ "$out" == "unchanged" || "$out" == unchanged$'\n' || "$out" == "absent" || "$out" == absent$'\n' ]]; then
+    printf 'codex hooks: %s %s\n' "${out%%$'\n'}" "$dest"
+    return 0
+  fi
+  if [[ -f "$dest" ]]; then
+    local bak="$dir/hooks.json.bak-$(date +%Y%m%dT%H%M%S%N)"
+    cp -p "$dest" "$bak"
+    printf 'codex hooks: backed up %s\n' "$bak"
+  fi
+  if [[ "$out" == "delete" || "$out" == delete$'\n' ]]; then
+    rm -f "$dest"
+    printf 'codex hooks: deleted empty %s\n' "$dest"
+    return 0
+  fi
+  mkdir -p "$dir"
+  printf '%s' "$out" > "$dest"
+  printf 'codex hooks: wrote %s\n' "$dest"
+}
+
+# Copy platforms/codex marketplace + plugin, with an empty hooks manifest so the
+# dev install does not register the same commands as the user-level hooks.json.
+refresh_codex_dev_marketplace() {
+  local dest="$1"
+  rm -rf "$dest"
+  mkdir -p "$dest/.agents/plugins"
+  cp -p "$REPO_DIR/platforms/codex/.agents/plugins/marketplace.json" "$dest/.agents/plugins/marketplace.json"
+  cp -a "$REPO_DIR/platforms/codex/plugin" "$dest/plugin"
+  printf '%s\n' '{"hooks":{}}' > "$dest/plugin/hooks/hooks.json"
+}
+
+# User-level hooks.json points at this checkout so PostCompact survives plugin-cache replacement (plugin add/remove deletes PLUGIN_ROOT).
 setup_codex() {
   have_cmd codex || die "codex CLI not found on PATH"
   local live
@@ -502,8 +707,31 @@ setup_codex() {
   "$REPO_DIR/scripts/setup-symlinks.sh"
   "$REPO_DIR/scripts/sync-codex-plugin-skills.sh"
 
-  if ! grep -q '^autopilot-local[[:space:]]' < <(codex plugin marketplace list 2>/dev/null); then
-    codex plugin marketplace add "$REPO_DIR/platforms/codex"
+  # Refuse before any plugin mutation when the user hooks file cannot be merged.
+  codex_hooks_commit install
+
+  local market
+  market="$(codex_config_dir)/autopilot-dev-marketplace"
+  refresh_codex_dev_marketplace "$market"
+  printf 'codex dev marketplace: refreshed %s\n' "$market"
+
+  local listed configured configured_real market_real
+  listed="$(codex plugin marketplace list 2>/dev/null || true)"
+  market_real="$(readlink -f "$market")"
+  if grep -q '^autopilot-local[[:space:]]' <<<"$listed"; then
+    configured="$(awk '/^autopilot-local[[:space:]]/ { print $NF; exit }' <<<"$listed")"
+    configured_real="$(readlink -f "$configured" 2>/dev/null || printf '%s' "$configured")"
+    if [[ "$configured_real" != "$market_real" ]]; then
+      # `codex plugin marketplace remove` is not verified on this CLI (it is not
+      # `plugin remove`, which deletes the versioned cache). Try it only when
+      # autopilot-local points somewhere other than the derived dev marketplace,
+      # ignore a missing subcommand, then re-add. The grep guard above still
+      # skips add when the configured path is already this directory.
+      codex plugin marketplace remove autopilot-local || true
+      codex plugin marketplace add "$market"
+    fi
+  else
+    codex plugin marketplace add "$market"
   fi
   # `plugin add` upgrades an installed plugin in place (official plugin-creator reference:
   # cachebuster + add, no remove). A preceding `remove` only added a second cache deletion.
@@ -511,6 +739,22 @@ setup_codex() {
   if [[ -n "$live" ]]; then
     printf 'note: Codex session(s) %s still reference the previous plugin cache; start a new conversation in each.\n' "$live" >&2
   fi
+}
+
+uninstall_codex() {
+  local dir market
+  dir="$(codex_config_dir)"
+  market="$dir/autopilot-dev-marketplace"
+  codex_hooks_commit uninstall
+  if [[ -e "$market" ]]; then
+    rm -rf "$market"
+    printf 'codex dev marketplace: removed %s\n' "$market"
+  else
+    printf 'codex dev marketplace: absent %s\n' "$market"
+  fi
+  # Do not run `codex plugin remove`: that deletes the versioned cache a live
+  # session's PLUGIN_ROOT still points at.
+  printf 'hint: codex plugin remove deletes the versioned plugin cache; run it for autopilot@autopilot-local only when no Codex session is running.\n'
 }
 
 check_opencode() {
@@ -682,6 +926,10 @@ parse_args() {
         INSTALL=1
         shift
         ;;
+      --uninstall)
+        UNINSTALL=1
+        shift
+        ;;
       --force)
         FORCE=1
         shift
@@ -714,11 +962,24 @@ parse_args() {
     die "--check and --install are mutually exclusive"
   fi
 
+  if [[ "$UNINSTALL" = "1" && "$INSTALL" = "1" ]]; then
+    die "--uninstall and --install are mutually exclusive"
+  fi
+
+  if [[ "$UNINSTALL" = "1" && "$CHECK" = "1" ]]; then
+    die "--uninstall and --check are mutually exclusive"
+  fi
+
   if [[ "$INSTALL" = "1" && -z "$HARNESS" && "$ALL" = "0" ]]; then
     die "--install requires --harness <name> or --all"
   fi
 
-  if [[ "$INSTALL" = "1" ]]; then
+  if [[ "$UNINSTALL" = "1" ]]; then
+    if [[ "$ALL" = "1" || "$HARNESS" != "codex" ]]; then
+      die "--uninstall is valid only with --harness codex"
+    fi
+    MODE="uninstall"
+  elif [[ "$INSTALL" = "1" ]]; then
     MODE="setup"
   elif [[ "$CHECK" = "1" ]]; then
     MODE="check"
@@ -741,6 +1002,11 @@ parse_args() {
 
 main() {
   parse_args "$@"
+
+  if [[ "$MODE" = "uninstall" ]]; then
+    uninstall_codex
+    exit 0
+  fi
 
   if [[ "$MODE" = "check" ]]; then
     if [[ "$ALL" = "1" ]]; then

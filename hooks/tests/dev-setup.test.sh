@@ -246,4 +246,209 @@ assert_contains "$OUT" "auto-compact window 400000 (env: CLAUDE_CODE_AUTO_COMPAC
 OUT="$(run_ac_check DISABLE_AUTO_COMPACT=1)"
 assert_contains "$OUT" "auto-compact is off (env DISABLE_AUTO_COMPACT)" "doctor: disabled compaction reported"
 
+# --- Codex dev hooks survive plugin-cache replacement (user hooks.json + hookless marketplace).
+# RED at cdb03a173: 13 failed — no hooks.json, commands/cache/once-checks ENOENT, marketplace add still not the derived dir, no hooks.json.bak, --uninstall exit 1 and no plugin-remove hint, malformed hooks.json accepted (exit 0), help lacks --uninstall.
+cat > "$STUB_BIN/codex" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  --version) echo "codex-cli test"; exit 0 ;;
+  plugin)
+    echo "codex $*" >> "$CODEX_STUB_MARKER"
+    exit 0
+    ;;
+  *) exit 42 ;;
+esac
+SH
+chmod +x "$STUB_BIN/codex"
+
+codex_dev_install() {
+  local home="$1" marker="$2"
+  HOME="$home" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" \
+    CODEX_STUB_MARKER="$marker" DEV_SETUP_CODEX_PIDS="" \
+    bash "$SCRIPT" --harness codex --install
+}
+
+HOOKS_REPO_DIR="$REPO_ROOT/platforms/codex/plugin/hooks"
+STABLE_PREFIX="node \"$HOOKS_REPO_DIR/"
+
+# (a) install writes three stable events
+A_HOME="$TEST_TMP/codex-hooks-a"
+A_MARKER="$TEST_TMP/codex-hooks-a-marker"
+mkdir -p "$A_HOME"
+OUT="$(codex_dev_install "$A_HOME" "$A_MARKER" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "codex dev install writes user hooks"
+A_HOOKS="$A_HOME/.codex/hooks.json"
+assert_file_exists "$A_HOOKS" "codex dev install creates hooks.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const prefix = process.argv[2];
+const events = ["PostCompact", "Stop", "SessionEnd"];
+const hooks = doc.hooks || {};
+if (events.some((e) => !Array.isArray(hooks[e]) || hooks[e].length === 0)) process.exit(2);
+const cmds = [];
+for (const event of events) {
+  for (const group of hooks[event]) {
+    for (const hook of group.hooks || []) cmds.push(hook.command || "");
+  }
+}
+if (cmds.length !== 3) process.exit(3);
+if (cmds.some((c) => !c.startsWith(prefix) || c.includes("||"))) process.exit(4);
+for (const cmd of cmds) {
+  const m = cmd.match(/^node "([^"]+)"$/);
+  if (!m || !fs.existsSync(m[1])) process.exit(5);
+}
+' "$A_HOOKS" "$STABLE_PREFIX"
+assert_eq "$?" "0" "three hook commands use node plus the repo plugin hooks path"
+assert_contains "$(cat "$A_MARKER")" "codex plugin marketplace add $A_HOME/.codex/autopilot-dev-marketplace" "marketplace add uses the derived dev marketplace"
+assert_not_contains "$(cat "$A_MARKER")" "plugin remove" "dev install never runs plugin remove"
+
+# (b) foreign entry is backed up and kept
+B_HOME="$TEST_TMP/codex-hooks-b"
+B_MARKER="$TEST_TMP/codex-hooks-b-marker"
+mkdir -p "$B_HOME/.codex"
+cat > "$B_HOME/.codex/hooks.json" <<'JSON'
+{
+  "foreignTop": true,
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "foreign",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo foreign-hook"
+          }
+        ]
+      }
+    ]
+  }
+}
+JSON
+OUT="$(codex_dev_install "$B_HOME" "$B_MARKER" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "install merges into an existing hooks.json"
+B_BAK_COUNT="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
+assert_eq "$B_BAK_COUNT" "1" "install backs up hooks.json once when it changes"
+assert_file_exists "$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | head -1)" "backup file exists"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (doc.foreignTop !== true) process.exit(2);
+const foreign = JSON.stringify(doc).includes("echo foreign-hook");
+if (!foreign) process.exit(3);
+const cmds = [];
+for (const groups of Object.values(doc.hooks || {})) {
+  for (const group of groups) for (const hook of group.hooks || []) cmds.push(hook.command);
+}
+if (cmds.filter((c) => c === "echo foreign-hook").length !== 1) process.exit(4);
+' "$B_HOME/.codex/hooks.json"
+assert_eq "$?" "0" "foreign hooks.json entry survives the merge"
+
+# (c) second install is byte-identical and adds no backup
+B_BYTES="$(cat "$B_HOME/.codex/hooks.json")"
+OUT="$(codex_dev_install "$B_HOME" "$B_MARKER" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "second codex dev install succeeds"
+assert_eq "$(cat "$B_HOME/.codex/hooks.json")" "$B_BYTES" "second install leaves hooks.json byte-identical"
+B_BAK2="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
+assert_eq "$B_BAK2" "1" "second install creates no extra backup"
+
+# (d) deleting a fake plugin cache does not break the command paths
+mkdir -p "$A_HOME/.codex/plugins/cache/autopilot-local/autopilot/9.9.9/hooks"
+rm -rf "$A_HOME/.codex/plugins"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+for (const groups of Object.values(doc.hooks || {})) {
+  for (const group of groups) for (const hook of group.hooks || []) {
+    const m = String(hook.command).match(/^node "([^"]+)"$/);
+    if (!m || !fs.existsSync(m[1])) process.exit(2);
+  }
+}
+' "$A_HOOKS"
+assert_eq "$?" "0" "hook paths still exist after the plugin cache directory is gone"
+
+# (e) derived plugin manifest is empty, so each event command exists once
+node -e '
+const fs = require("fs");
+const user = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const plugin = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (JSON.stringify(plugin.hooks || {}) !== "{}") process.exit(2);
+const seen = new Map();
+function take(doc) {
+  for (const [event, groups] of Object.entries(doc.hooks || {})) {
+    for (const group of groups) for (const hook of group.hooks || []) {
+      const key = event + "\n" + hook.command;
+      seen.set(key, (seen.get(key) || 0) + 1);
+    }
+  }
+}
+take(user); take(plugin);
+const keys = [...seen.keys()];
+if (keys.length !== 3) process.exit(3);
+if (keys.some((k) => seen.get(k) !== 1)) process.exit(4);
+' "$A_HOOKS" "$A_HOME/.codex/autopilot-dev-marketplace/plugin/hooks/hooks.json"
+assert_eq "$?" "0" "each dev hook command is registered once across user hooks and the plugin manifest"
+
+# (f) uninstall removes only autopilot entries; nothing-installed is a no-op
+OUT="$(HOME="$B_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" DEV_SETUP_CODEX_PIDS="" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "uninstall exits 0"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const text = JSON.stringify(doc);
+if (!text.includes("echo foreign-hook") || doc.foreignTop !== true) process.exit(2);
+if (text.includes("platforms/codex/plugin/hooks")) process.exit(3);
+' "$B_HOME/.codex/hooks.json"
+assert_eq "$?" "0" "uninstall keeps the foreign entry and drops autopilot commands"
+assert_file_absent "$B_HOME/.codex/autopilot-dev-marketplace" "uninstall removes the derived dev marketplace"
+assert_not_contains "$OUT" "plugin remove autopilot" "uninstall does not run codex plugin remove"
+assert_contains "$OUT" "codex plugin remove" "uninstall prints a hint about codex plugin remove"
+B_AFTER="$(cat "$B_HOME/.codex/hooks.json")"
+B_BAK3="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
+OUT="$(HOME="$B_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "second uninstall is a no-op"
+assert_eq "$(cat "$B_HOME/.codex/hooks.json")" "$B_AFTER" "second uninstall leaves the foreign file unchanged"
+B_BAK4="$(find "$B_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')"
+assert_eq "$B_BAK4" "$B_BAK3" "second uninstall creates no backup"
+EMPTY_HOME="$TEST_TMP/codex-hooks-empty"
+mkdir -p "$EMPTY_HOME"
+OUT="$(HOME="$EMPTY_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "uninstall with nothing installed exits 0"
+assert_file_absent "$EMPTY_HOME/.codex/hooks.json" "uninstall does not create hooks.json"
+assert_file_absent "$EMPTY_HOME/.codex/autopilot-dev-marketplace" "uninstall does not create a marketplace dir"
+
+# only-ours file is deleted once empty
+ONLY_HOME="$TEST_TMP/codex-hooks-only"
+ONLY_MARKER="$TEST_TMP/codex-hooks-only-marker"
+mkdir -p "$ONLY_HOME"
+codex_dev_install "$ONLY_HOME" "$ONLY_MARKER" >/dev/null
+OUT="$(HOME="$ONLY_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness codex --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "uninstall of an autopilot-only hooks.json exits 0"
+assert_file_absent "$ONLY_HOME/.codex/hooks.json" "uninstall deletes hooks.json when only autopilot entries were in it"
+
+# (g) negative control and malformed refusal
+G_HOME="$TEST_TMP/codex-hooks-check"
+mkdir -p "$G_HOME"
+OUT="$(HOME="$G_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --check --harness codex 2>&1)"; EXIT=$?
+assert_file_absent "$G_HOME/.codex/hooks.json" "--check --harness codex does not create hooks.json"
+OUT="$(HOME="$G_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" bash "$SCRIPT" --harness claude --check 2>&1)" || true
+assert_file_absent "$G_HOME/.codex/hooks.json" "--harness claude --check does not create hooks.json"
+BAD_HOME="$TEST_TMP/codex-hooks-bad"
+BAD_MARKER="$TEST_TMP/codex-hooks-bad-marker"
+mkdir -p "$BAD_HOME/.codex"
+printf '{\n' > "$BAD_HOME/.codex/hooks.json"
+OUT="$(codex_dev_install "$BAD_HOME" "$BAD_MARKER" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "malformed hooks.json is refused"
+assert_eq "$(cat "$BAD_HOME/.codex/hooks.json")" "{" "malformed hooks.json is left untouched"
+assert_eq "$(find "$BAD_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | wc -l | tr -d ' ')" "0" "malformed hooks.json is not backed up"
+
+OUT="$(bash "$SCRIPT" --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "--uninstall without --harness codex fails"
+OUT="$(bash "$SCRIPT" --harness claude --uninstall 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "--uninstall with a non-codex harness fails"
+OUT="$(bash "$SCRIPT" --harness codex --uninstall --install 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "--uninstall and --install are mutually exclusive"
+OUT="$(bash "$SCRIPT" --help 2>&1)"
+assert_contains "$OUT" "--uninstall" "help documents --uninstall"
+
 finalize_test

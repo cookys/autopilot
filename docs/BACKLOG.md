@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0258 -->
+<!-- next-id: BL-0262 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1297,15 +1297,47 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/bl0039-notes-instant2-filter.md
 - **Context**: Notes 7 and 8 survived the body fix; the sidecar was deleted. Detail is in the Pointer.
 
-### cc-shim implementer qualification records are labelled effort high but cc-shim did not forward effort at exam time
-- **Id**: BL-0258
+### engine-scorecard record accepts calendar-impossible dates and stores them rolled over
+- **Id**: BL-0259
 - **Status**: open
 - **Since**: 2026-10-20
 - **Origin**: self
-- **Problem**: 4 筆 cc-shim implementer 資格考紀錄標成 effort high，但考試當時 cc-shim 還沒有傳 effort；受影響 event 203、204、205（10-12）和 247（10-14 05:47Z）。
-- **Impact**: 這幾筆座位的 effort 與考試當下的實際標籤不一致，直接拿來當資格依據會把高努力度算進不該算的紀錄。
-- **Trigger**: owner decides on card d-1156e740 (re-exam, relabel, or both)
+- **Problem**: 成績列的日期檢查會收下日曆上不存在的日子，例如二月三十日，並把它進位存成三月二日。外送副本雖保留原戳記，那只是權宜，不是修正。
+- **Impact**: 不存在的日期會被悄悄改寫，之後的成績與稽核會對不上。
+- **Trigger**: next change to engine-scorecard record validation, or the next scorecard row with an impossible date
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hetero-review bl194x g2 (538aac4f/cf3d4745)
+- **Pointer**: docs/backlog/engine-scorecard-record-accepts-impossible-dates.md
+- **Context**: Reject non-existent calendar dates in record validation, then remove the outbox stamp workaround.
+
+### event 330 engine identity uncertain: MiniMax-M3.1-Flash-Preview was retired and now served by GA
+- **Id**: BL-0260
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: peer
+- **Reporter**: cookys/7840hs/llm-playground--claude
+- **Report**: 01M5AT5WE6C2JE2J3P87S04TKM
+- **Reply**: none
+- **Problem**: 十月十九日的第三三零號高努力度重考標成預覽版且全數通過，但該預覽名稱已停用，舊名稱的請求現在由正式版回應。這筆很可能量到的是正式版權重。
+- **Impact**: 名冊若沿用預覽標籤，之後的座位與重考會把正式版誤記成預覽版。
+- **Trigger**: owner decides relabel, roster rename and GA re-exam
 - **Trigger-Type**: owner
 - **Effort**: S
-- **Source**: llm-playground report 2026-10-20 via depth-0
-- **Context**: Cause: before commit c313173ca (merge 6d8e7e77e, 2026-10-14 12:22Z) cc-shim did not forward effort. No sidecar.
+- **Source**: llm-playground report 2026-10-20
+- **Pointer**: docs/backlog/minimax-m31-flash-preview-event-330-identity.md
+- **Context**: Decisions: annotate 330 as identity-uncertain, whether the roster Preview name becomes the GA name, and whether to re-sit under GA.
+
+### P6 feed-trust follow-ups: confirm-mode answer step, plan wording, reject-then-confirm, repeated stderr
+- **Id**: BL-0261
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 信任檢查還有四件小事：確認模式答覆後還要再跑一次才算數、計畫第五節用詞與實作不符、拒絕後再確認會安靜回成功、設定檔損壞時每次都重複同一則錯誤。
+- **Impact**: 不處理的話，確認流程會漏算、文件與行為不一致，錯誤訊息也會洗版。
+- **Trigger**: next change to qualification-feed-trust or the P6 plan
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hetero-review p6trust g2
+- **Pointer**: docs/backlog/p6-trust-followups.md
+- **Context**: Four small follow-ups. Automating the extra answer step needs eval evidence before skill text changes.

@@ -98,7 +98,7 @@ Spend-free infrastructure for the guidance eval of `docs/plans/2026-10-06-dev-fl
 `hooks/tests/fixtures/stage-graph/expected.json`), per-cell extractor `lib/stage-graph-cell.js` (via each
 brief's `markers.sh` + `lib/stage-graph-markers.sh`), aggregate scorer `score-stage-graph.js`, frozen rule
 `prereg/stage-graph.{md,json}`, base packs `*-sg-base` + `guidance-files-sg-base`, and the cut gate
-`scripts/check-guidance-eval.js`. Always pass an explicit `--tasks` list (the 12 ids in the prereg) to the
+`scripts/check-guidance-eval.js`. A prereg may declare `guidance.out_of_arm` (`path`, shipping `commit`, `reason`) for a manifest file no eval arm loads; the gate re-derives that the commit changed that path inside `base..head` and that no arm loads it. Always pass an explicit `--tasks` list (the 12 ids in the prereg) to the
 matrix runner. Proof: `hooks/tests/skill-onoff-stage-graph.test.sh`, `hooks/tests/check-guidance-eval.test.sh`.
 
 ### Stage-graph P5 arm builder (multi-pack arms, planted-red builder, campaign command)

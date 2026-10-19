@@ -55,11 +55,14 @@ write_manifest() {
 }
 write_manifest
 
-# prereg: the real task/arm/threshold block, with a scratch guidance file set
+# prereg: the real task/arm/threshold block, with a scratch guidance file set.
+# RED at 170b420b0c0098ef1c4133fa659b283f3d90cce3: FAIL: matching must pass ... declared out_of_arm but unchanged
+# The fixture repo does not contain those commits, so the copied list is dropped below.
 PRE="$TEST_TMP/prereg.json"
 node -e '
   const P = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   P.guidance.files = ["skills/dev-flow/SKILL.md", "references/plan-template.md", "references/hetero-dispatch.md"];
+  delete P.guidance.out_of_arm;
   require("fs").writeFileSync(process.argv[2], JSON.stringify(P));
 ' "$REAL_PREREG" "$PRE"
 
@@ -218,5 +221,95 @@ gate --arm "$TEST_TMP/no-such-arm.json" --base "$BASE_REF" --repo "$R" --prereg 
 echo "=== usage ==="
 set +e; node "$GATE" >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 2 ] || fail "missing --base must exit 2 (got $rc)"
+
+# out_of_arm — negative controls. RED at 787f8ab39682a207eacec93f044b7b0d5522e5b5 on the
+# unmodified gate (every new case below exited 1 for the wrong reason, or 0 where a pass
+# is required: the gate has no guidance.out_of_arm and treats every unlisted manifest
+# drift as "not in the prereg guidance file set").
+echo "=== out_of_arm declarations ==="
+OBASE=$(git -C "$R" rev-parse HEAD)
+mkdir -p "$R/skills/handoff" "$R/skills/dev-flow/references"
+printf 'other\n' > "$R/scripts/helper.js"
+git -C "$R" add -A; git -C "$R" commit -qm "touch helper only"
+C_OTHER=$(git -C "$R" rev-parse HEAD)
+printf 'handoff v1\n' > "$R/skills/handoff/SKILL.md"
+git -C "$R" add -A; git -C "$R" commit -qm "handoff skill"
+C_HAND=$(git -C "$R" rev-parse HEAD)
+printf 'extra ref\n' > "$R/skills/dev-flow/references/extra.md"
+git -C "$R" add -A; git -C "$R" commit -qm "dev-flow extra ref"
+C_SKILL=$(git -C "$R" rev-parse HEAD)
+printf 'packed note\n' > "$R/references/packed-note.md"
+git -C "$R" add -A; git -C "$R" commit -qm "packed note"
+C_PACK=$(git -C "$R" rev-parse HEAD)
+node -e '
+  const fs = require("fs"); const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  m.packs["guidance-files-sg-change"]["guidance-files-sg-change/references/packed-note.md"] = "aa";
+  fs.writeFileSync(process.argv[1], JSON.stringify(m));' "$PK/manifest.json"
+
+ooa_prereg() { # $1=dest json, then one JSON object per entry; pass --omit as the only extra to drop the field
+  node -e '
+    const fs = require("fs");
+    const [src, dest, ...rest] = process.argv.slice(1);
+    const P = JSON.parse(fs.readFileSync(src, "utf8"));
+    if (rest.length === 1 && rest[0] === "--omit") delete P.guidance.out_of_arm;
+    else P.guidance.out_of_arm = rest.map((s) => JSON.parse(s));
+    fs.writeFileSync(dest, JSON.stringify(P));
+  ' "$PRE" "$@"
+}
+OOA="$TEST_TMP/prereg-ooa.json"
+
+echo "=== undeclared drifted file outside the prereg set -> 1 ==="
+ooa_prereg "$OOA" --omit
+gate --base "$OBASE" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'not in the prereg guidance file set' <<<"$G_OUT" || fail "undeclared out-of-set drift must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm commit that did not touch the path -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/handoff/SKILL.md","commit":"%s","reason":"helper commit never touched handoff"}' "$C_OTHER")"
+gate --base "$OBASE" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'did not change the path' <<<"$G_OUT" || fail "wrong commit must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm commit before base (not in base..head) -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/handoff/SKILL.md","commit":"%s","reason":"base itself is outside the range"}' "$BASE_REF")"
+gate --base "$OBASE" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'not in base..head' <<<"$G_OUT" || fail "commit before base must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm path loaded because its skill is an arm key -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/dev-flow/references/extra.md","commit":"%s","reason":"dev-flow is on the arm"}' "$C_SKILL")"
+gate --base "$C_HAND" --head "$C_SKILL" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'loaded by an arm' <<<"$G_OUT" || fail "skill-key path must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm path that is a file inside an arm files pack -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"references/packed-note.md","commit":"%s","reason":"sits in the files pack"}' "$C_PACK")"
+gate --base "$C_SKILL" --head "$C_PACK" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'loaded by an arm' <<<"$G_OUT" || fail "files-pack path must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm declared but the file has no difference -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/handoff/SKILL.md","commit":"%s","reason":"already at head"}' "$C_HAND")"
+gate --base "$C_PACK" --head "$C_PACK" --repo "$R" --prereg "$OOA" --packs-dir "$PK"
+[ "$G_RC" -eq 1 ] && grep -q 'declared out_of_arm but unchanged' <<<"$G_OUT" || fail "unchanged declaration must fail (rc=$G_RC): $G_OUT"
+
+echo "=== out_of_arm also listed in guidance.files -> 1 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/dev-flow/SKILL.md","commit":"%s","reason":"cannot be both"}' "$C_HAND")"
+gate --base "$BASE_REF" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'both in guidance.files and out_of_arm' <<<"$G_OUT" || fail "in-set declaration must fail (rc=$G_RC): $G_OUT"
+
+echo "=== malformed out_of_arm entry (missing reason) -> 1, no crash ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/handoff/SKILL.md","commit":"%s"}' "$C_HAND")"
+gate --base "$OBASE" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'malformed out_of_arm' <<<"$G_OUT" || fail "malformed entry must fail without crashing (rc=$G_RC err=$(cat "$TEST_TMP/gate.err")): $G_OUT"
+
+echo "=== correct out_of_arm (commit in range, no arm loads it) -> 0 ==="
+ooa_prereg "$OOA" "$(printf '{"path":"skills/handoff/SKILL.md","commit":"%s","reason":"no eval arm loads handoff"}' "$C_HAND")"
+gate --base "$OBASE" --head "$C_HAND" --repo "$R" --prereg "$OOA" --packs-dir "$PK"
+[ "$G_RC" -eq 0 ] || fail "correct out_of_arm must pass (rc=$G_RC): $G_OUT"
+node -e '
+  const o = JSON.parse(process.argv[1]);
+  const d = o.differing.find((x) => x.path === "skills/handoff/SKILL.md");
+  const e = (o.out_of_arm || []).find((x) => x.path === "skills/handoff/SKILL.md");
+  if (!d || d.ok !== true || d.out_of_arm !== true || d.commit !== process.argv[2] || d.reason !== "no eval arm loads handoff") process.exit(2);
+  if (!e || e.ok !== true || e.commit !== process.argv[2] || e.reason !== "no eval arm loads handoff" || e.reason_failed) process.exit(3);
+  if (o.score !== null) process.exit(4);
+  if (o.differing.some((x) => x.path !== "skills/handoff/SKILL.md")) process.exit(5);
+' "$G_OUT" "$C_HAND" || fail "correct out_of_arm must be listed ok with score null: $G_OUT"
 
 echo "PASS: check-guidance-eval fixtures"

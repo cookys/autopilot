@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 8,
+  "row": "stage-graph",
+  "date": "2026-10-19",
+  "effective_from": "v12",
+  "no_counted_cell_had_run": true,
+  "made_after_v11_results_seen": true,
+  "reason": "rerun of the v11 guidance text on a newer base, not a rule change. After the v11 freeze, develop merged cppfix (commit 0270c58cc), which changed line 93 of skills/quality-pipeline/references/test-policy.md from a markdown link to inline code (the codex package has no docs/plans, so the codex-plugin-package suite was red). test-policy.md is in the change arm, so the shipped file no longer equals the v11 pack and the cut gate reports 'shipped file digest != pack manifest digest'. Only the link format changed; no instruction changed.",
+  "v11_results": "results/stage-graph.v11.jsonl (SHIP, change 10/12, red 3/12, generic 4 checked) stays in the repo as a record. It is NOT used for the cut: the cut uses the v12 results. v11 is not re-scored and not pooled with v12.",
+  "change": "stage-graph v12 (results/stage-graph.v12.jsonl, arms *-sg-change-v12 / *-sg-red-v12, base arm rebuilt with guidance-files-sg-extra-base-v12) is the v11 arm re-frozen from the develop 0badcf2c2 tree, so every pack carries the post-cppfix test-policy.md. Cells live under results/stage-graph-cells/stage-graph.v12.jsonl/.",
+  "unchanged": [
+    "ship thresholds (change >= 10/12, red <= 4/12, generic no regression)",
+    "tasks, briefs, answer keys, markers, scorer and extractor (amend-6)",
+    "guidance.files, non_skill_files and out_of_arm from amend-7",
+    "runner pin: Claude Code 2.1.296 from ~/.autopilot/claude-pin with DISABLE_AUTOUPDATER=1 (amend-4)",
+    "model sonnet, reps 3",
+    "amendments 1-7"
+  ],
+  "written_before_results": "Committed before any v12 cell ran."
+}

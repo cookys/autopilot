@@ -70,6 +70,8 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --harness codex --install
 ```
 
+That `--install` also merges a user-level entry into `${CODEX_HOME:-$HOME/.codex}/hooks.json`. Each command is `node` plus the absolute path of a file under `platforms/codex/plugin/hooks/` in this checkout, so it still resolves after Codex replaces the versioned plugin cache. An existing `hooks.json` is copied to `hooks.json.bak-<timestamp>` in the same directory only when the merge changes the file. The plugin is registered from a derived dev marketplace whose own hook manifest is empty, so those events run once. `./scripts/dev-setup.sh --harness codex --uninstall` removes just those autopilot entries and that marketplace directory; it does not run `codex plugin remove`.
+
 The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
 declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains
 exactly one production Codex-native registration: `PostCompact` with matcher `manual|auto` for

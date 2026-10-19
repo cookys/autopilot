@@ -38,5 +38,4 @@ No adjudication of true or false positives. Checker sources were not modified.
 8. env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID bash scripts/check-canonical-invariants.sh < /dev/null
    exit 0 (0 broken)
 
-Harness directive: no git commit in this session. The commit is left to the harness.
-The replay was not rerun after this repair because tightening rule (a) can only add reports, never remove them, and the verdict (false-positive rate far above 5 percent, mode stays warn) cannot move toward block from added reports.
+The replay was not rerun after this repair, and the repair is not report-additive only: it moves the report set in both directions. Narrowing the candidate targets to product files only adds reports (N7, N8), while _SHELL_SCRIPTS_INVOKED now recognising the "$REPO_ROOT/scripts/x.sh" spelling adds a rule (a) exemption and so removes reports (the F5a class). It is still not rerun because about 98 percent of the FPs left in the v2 replay are the "tested feature removed, script still present" class, which neither direction touches; the verdict stays warn and does not come near the 5 percent threshold; and the next rule change will rerun the full replay with the same seed and the same 60 merges.

@@ -5798,9 +5798,12 @@ function buildEmittedRow(row, effortCheck) {
 // seat.corpus_version). Reviewer and owner take it from the pinned oracle
 // methodology plus the generator version. Brain, verification_author,
 // implementer, consult, and discuss take it from the same corpus constant
-// and generator version the row builder interpolates. Those are known before
-// the exam. Foreman emits no row.corpus_version; that comparison waits until
-// after the run. Kept out of runQualification so its source pin stays put.
+// and generator version the row builder interpolates. Foreman has no
+// qualification row; its corpus is the pinned case-set hash in
+// evals/foreman-asset-pins.json plus foreman-eval-generator GENERATOR_VERSION.
+// methodology_version is "foreman-live-rail/1", which the seat schema rejects
+// (TOKEN has no "/"), so the hash is the schema-legal pin. All of these are
+// known before the exam. Kept out of runQualification so its source pin stays put.
 function examCorpusVersionBeforeRun(role) {
   if (role === 'reviewer' || role === 'owner') {
     const staticOracle = role === 'owner'
@@ -5824,6 +5827,11 @@ function examCorpusVersionBeforeRun(role) {
     const { generator } = loadSealedConsultDiscussModules(role);
     return `${generator.CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`;
   }
+  if (role === 'foreman') {
+    const foremanGenerator = require('../evals/foreman-eval-generator');
+    const foremanPins = require('../evals/foreman-asset-pins.json');
+    return `${foremanPins.corpus}.${foremanGenerator.GENERATOR_VERSION}`;
+  }
   return null;
 }
 
@@ -5843,20 +5851,22 @@ function assertSeatCorpusMatchesExam(options) {
   } catch (error) {
     usage(2, `qualification precondition failed: ${error.message}`);
   }
+  // Stored so the post-exam check never calls examCorpusVersionBeforeRun again.
+  options.examCorpusVersion = examCorpusVersion;
   if (examCorpusVersion === null) return;
   if (options.corpusVersion !== examCorpusVersion) {
     rejectCorpusMismatch(options.corpusVersion, examCorpusVersion);
   }
 }
 
-// Foreman (and any role whose row corpus is not a pre-exam constant): the
-// value recordIdV1 would hash is row.corpus_version. Compare it before
-// --emit-record writes stdout. These roles do not write --store or --raw-dir
-// until a row exists; a mismatch exits here with neither written.
+// Roles whose row corpus is not a pre-exam constant: the value recordIdV1
+// would hash is row.corpus_version. Compare it before --emit-record writes
+// stdout. Use the pre-exam value already stored on options. These roles do
+// not write --store or --raw-dir until a row exists; a mismatch exits here
+// with neither written.
 function assertProducedCorpusMatchesSeat(options, runResult) {
   if (options.corpusVersion === undefined) return;
-  const role = options.role || 'reviewer';
-  if (examCorpusVersionBeforeRun(role) !== null) return;
+  if (options.examCorpusVersion !== null && options.examCorpusVersion !== undefined) return;
   const row = runResult && runResult.row;
   const examCorpusVersion = row ? row.corpus_version : undefined;
   if (options.corpusVersion !== examCorpusVersion) {

@@ -14,6 +14,7 @@ SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 # RED at 48d012322: FAIL exit-codes-merged got 2 for codes 0,1,3,4,5 (pairwise uniq 1); missing and schema seat cases got 2; emit-record stdout lines 0. Usage (2) and bare no_verdict (1) already matched.
 # RED at eaf8c9eef: corpus mismatch exits 0 (expected 2), stdout 6932 bytes, stderr names neither seat-corpus-1 nor reviewer-known-bad-clean-v2.reviewer-metamorphic-v6, and both --store and --raw-dir were created. effort=default and the 0/1/2/3/4/5 stdout matrix already passed.
 # RED at 891119040: owner/brain/verification_author/implementer/consult/discuss/foreman wrong corpus_version exits 0 (expected 2); seat.role disagreeing with the subcommand was untested; a headless throw (consult without --execute) exits 2. Reviewer mismatch already exits 2.
+# RED at 4140e208f: a schema-valid foreman seat whose corpus_version is the pinned corpus hash plus generator version still exits 2; stderr names undefined because the sitting row has no corpus_version.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -276,7 +277,16 @@ const path = require('path');
 const root = process.argv[2];
 const role = process.argv[3];
 if (role === 'owner') {
-  process.stdout.write('owner-intent-control-v1.owner-intent-control-metamorphic-v1');
+  const q = require(path.join(root, 'scripts/engine-qualify.js'));
+  const g = require(path.join(root, 'evals/owner-eval-generator.js'));
+  const oracle = q.verifyPinnedOwnerEvaluationAssets();
+  process.stdout.write(`${oracle.methodology_version}.${g.GENERATOR_VERSION}`);
+} else if (role === 'foreman') {
+  // methodology_version is foreman-live-rail/1; the seat schema rejects "/".
+  // The pinned corpus hash plus the generator version is the schema-legal pin.
+  const g = require(path.join(root, 'evals/foreman-eval-generator.js'));
+  const pins = require(path.join(root, 'evals/foreman-asset-pins.json'));
+  process.stdout.write(`${pins.corpus}.${g.GENERATOR_VERSION}`);
 } else if (role === 'brain') {
   const g = require(path.join(root, 'evals/brain-eval-generator.js'));
   process.stdout.write(`${g.CORPUS.methodology_version}.${g.GENERATOR_VERSION}`);
@@ -319,14 +329,11 @@ PY
 # Wrong corpus_version: exit 2 before any exam write. brain, verification_author,
 # implementer, consult, and discuss have no headless stub that finishes a sitting
 # (implementer is the live rail; consult/discuss refuse without a paid broker).
-# Foreman test mode emits no row.corpus_version, so the compared value is the
-# missing row field and a matching pass cannot be stubbed.
+# Foreman compares the pinned corpus hash plus generator version before the exam.
+# AUTOPILOT_QUALIFY_SEED is the foreman test-mode gate that returns from parseArgs
+# before the panel transport is required, so the corpus check is what runs.
 for role in owner brain verification_author implementer consult discuss foreman; do
-  if [[ "$role" == "foreman" ]]; then
-    EXAM_VALUE=""
-  else
-    EXAM_VALUE="$(exam_corpus_for "$role")"
-  fi
+  EXAM_VALUE="$(exam_corpus_for "$role")"
   MIS_PATH="$TEST_TMP/seat-$role-mis.json"
   node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role=process.argv[2]; s.corpus_version="seat-corpus-1"; fs.writeFileSync(process.argv[3], JSON.stringify(s));' "$SEAT" "$role" "$MIS_PATH"
   ST="$TEST_TMP/store-$role-mis"
@@ -340,18 +347,21 @@ for role in owner brain verification_author implementer consult discuss foreman;
   if [[ "$role" != "implementer" && "$role" != "foreman" ]]; then
     EXTRA=(--panel-cmd "$PASS_PANEL" "${PANEL_BINDS[@]}")
   fi
+  if [[ "$role" == "foreman" ]]; then
+    export AUTOPILOT_QUALIFY_SEED=foreman-headless-corpus
+  fi
   run_q "$TEST_TMP/$role-mis.out" "$role" --seat-file "$MIS_PATH" \
     --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
     --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
     --task-class code_review --domain repository --language en --tool diff_read \
     "${EXTRA[@]}" --store "$ST" --raw-dir "$RW" --emit-record
+  unset AUTOPILOT_QUALIFY_SEED
   assert_exit_code "$RUN_RC" "2" "$role corpus mismatch exits 2"
   assert_eq "$(wc -c <"$TEST_TMP/$role-mis.out" | tr -d ' ')" "0" "$role corpus mismatch prints no record"
   assert_contains "$(cat "$ERR")" "seat-corpus-1" "$role corpus mismatch names the seat corpus_version"
-  if [[ "$role" == "foreman" ]]; then
-    assert_contains "$(cat "$ERR")" "undefined" "foreman corpus mismatch spells the missing row corpus_version"
-  else
-    assert_contains "$(cat "$ERR")" "$EXAM_VALUE" "$role corpus mismatch spells the exam corpus_version"
+  assert_contains "$(cat "$ERR")" "$EXAM_VALUE" "$role corpus mismatch spells the exam corpus_version"
+  if grep -q 'undefined' "$ERR"; then
+    fail "$role corpus mismatch mentions undefined"
   fi
   assert_eq "$(dir_snapshot "$ST")" "$BEFORE_ST" "$role corpus mismatch leaves --store unchanged"
   assert_eq "$(dir_snapshot "$RW")" "$BEFORE_RW" "$role corpus mismatch leaves --raw-dir unchanged"
@@ -381,6 +391,37 @@ if (rec.seat.corpus_version !== process.argv[2]) {
 }
 ' "$OWN_OUT" "$OWNER_CORPUS"
 assert_eq "$?" "0" "owner matching corpus record uses the exam corpus_version"
+
+# Foreman matching corpus: test mode is the whole sitting the CLI can run without a
+# panel. It is inadmissible (qualified stays false), so headless exits 3 and writes
+# no record. The corpus check must not reject the pinned value.
+FOREMAN_CORPUS="$(exam_corpus_for foreman)"
+FM_SEAT="$TEST_TMP/seat-foreman-match.json"
+node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role="foreman"; s.corpus_version=process.argv[2]; fs.writeFileSync(process.argv[3], JSON.stringify(s));' "$SEAT" "$FOREMAN_CORPUS" "$FM_SEAT"
+FM_ST="$TEST_TMP/store-foreman-match"
+FM_RW="$TEST_TMP/raw-foreman-match"
+mkdir -p "$FM_ST" "$FM_RW"
+printf 'kept\n' >"$FM_ST/marker"
+printf 'kept\n' >"$FM_RW/marker"
+BEFORE_FM_ST="$(dir_snapshot "$FM_ST")"
+BEFORE_FM_RW="$(dir_snapshot "$FM_RW")"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-match
+run_q "$TEST_TMP/foreman-match.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$FM_ST" --raw-dir "$FM_RW" --emit-record
+unset AUTOPILOT_QUALIFY_SEED
+assert_exit_code "$RUN_RC" "3" "foreman matching corpus test-mode sitting exits 3"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-match.out" | tr -d ' ')" "0" "foreman test-mode sitting prints no record"
+if grep -q 'differs from exam corpus_version' "$ERR"; then
+  fail "foreman matching corpus was rejected as a mismatch"
+fi
+if grep -q 'undefined' "$ERR"; then
+  fail "foreman matching corpus mentions undefined"
+fi
+assert_eq "$(dir_snapshot "$FM_ST")" "$BEFORE_FM_ST" "foreman matching corpus leaves --store unchanged"
+assert_eq "$(dir_snapshot "$FM_RW")" "$BEFORE_FM_RW" "foreman matching corpus leaves --raw-dir unchanged"
 
 # Consult and discuss: a matching corpus passes the pre-exam check and then the
 # missing --execute guard throws. Headless maps that throw to exit 3. No store write.

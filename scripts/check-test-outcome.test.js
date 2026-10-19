@@ -1,5 +1,6 @@
 'use strict';
 // RED at 0f810c88488a9028ce6afd440485dc07db33898f: tests 12, pass 0, fail 12 (MODULE_NOT_FOUND scripts/check-test-outcome.js)
+// RED at 269e334417afe9fff9f1d05b9c8b2822db15d5fa: tests 15, pass 12, fail 3 (single-sha --range exits 2, outcome gate: bad --range)
 // node --test scripts/check-test-outcome.test.js
 // Throwaway git repos. Expected suite lists are literals from the real selector
 // on this fixture shape: ['scripts/other.test.js', 'scripts/tool.test.js'].
@@ -283,6 +284,61 @@ test('checker_error: unknown sha exits 2', () => {
     assert.strictEqual(v.code, 'checker_error');
     assert.strictEqual(v.verdict, 'error');
     assert.match(out.stderr, /NOT enforced/);
+  } finally { r.cleanup(); }
+});
+
+// A single-sha --range is the new-branch window (no origin/HEAD). The fixture
+// has no full-mode trigger, so the literal selection is the two direct suites.
+const WHOLE = {
+  'scripts/tool.js': 'console.log(1);\n',
+  'scripts/other.js': 'console.log(2);\n',
+  'scripts/tool.test.js': PASS_JS('scripts/tool.js'),
+  'scripts/other.test.js': PASS_JS('scripts/other.js'),
+  'docs/note.md': 'text\n',
+};
+
+test('single-sha --range: green record passes and selected is 2', () => {
+  const r = makeRepo(WHOLE);
+  try {
+    const head = r.change({ 'scripts/tool.js': 'console.log(3);\n' });
+    const rec = path.join(r.dir, 'rec.json');
+    fs.writeFileSync(rec, JSON.stringify(greenRecord(head, 'informational', SELECTED)) + '\n');
+    const out = runCheck(r, ['--range', head, '--record-file', rec, '--rerun', 'all', '--seed', '1']);
+    assert.notStrictEqual(out.status, 2, out.stderr);
+    assert.strictEqual(out.status, 0, out.stderr);
+    const v = parseOut(out);
+    assert.strictEqual(v.verdict, 'pass');
+    assert.strictEqual(v.code, 'ok');
+    assert.strictEqual(v.selected, 2);
+    const empty = execFileSync('git', ['-C', r.dir, 'hash-object', '-t', 'tree', '--stdin'], {
+      input: '', env: gitEnv(), encoding: 'utf8',
+    }).trim();
+    assert.strictEqual(v.base, empty);
+  } finally { r.cleanup(); }
+});
+
+test('single-sha --range: really red suite is rerun_red', () => {
+  const r = makeRepo(WHOLE);
+  try {
+    const red = PASS_JS('scripts/tool.js').replace('assert.strictEqual(named.length > 0, true)', 'assert.strictEqual(1, 2)');
+    const head = r.change({ 'scripts/tool.test.js': red });
+    const rec = path.join(r.dir, 'rec.json');
+    fs.writeFileSync(rec, JSON.stringify(greenRecord(head, 'informational', SELECTED)) + '\n');
+    const out = runCheck(r, ['--range', head, '--record-file', rec, '--rerun', 'all', '--seed', '1']);
+    assert.notStrictEqual(out.status, 2, out.stderr);
+    assert.strictEqual(out.status, 1, out.stderr);
+    assert.strictEqual(parseOut(out).code, 'rerun_red');
+  } finally { r.cleanup(); }
+});
+
+test('single-sha --range: no record is record_missing', () => {
+  const r = makeRepo(WHOLE);
+  try {
+    const head = r.change({ 'scripts/tool.js': 'console.log(3);\n' });
+    const out = runCheck(r, ['--range', head, '--record-file', path.join(r.dir, 'absent.json'), '--rerun', 'none']);
+    assert.notStrictEqual(out.status, 2, out.stderr);
+    assert.strictEqual(out.status, 1);
+    assert.strictEqual(parseOut(out).code, 'record_missing');
   } finally { r.cleanup(); }
 });
 

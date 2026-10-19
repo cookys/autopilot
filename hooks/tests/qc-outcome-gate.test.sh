@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # qc-outcome-gate.test.sh — pre-push outcome stage (BL-0050 S3).
 # RED at 83b77e8c1: FAIL 13 passed, 19 failed — base pre-push has no outcome stage (exit 0 where a refuse was required; missing rerun_red, no test run record, hatch line, selector picks, amended or rebased, Treated as warn, fell back to off, NOT JUDGED, checker sentinel, could not check).
+# RED at 269e334417afe9fff9f1d05b9c8b2822db15d5fa: FAIL 36 passed, 4 failed — new branch red suite expected refuse 1 got 0, 'fails when re-run' missing, unexpected 'NOT enforced' on both the red suite and the green record.
 #
 # Expected suite list for a scripts/bl0050-widget.sh change is the literal pair
 # hooks/tests/bl0050-widget.test.sh and hooks/tests/check-js-syntax.test.sh (2).
@@ -251,5 +252,87 @@ commit_t "selector throws" >/dev/null
 push_with "$CFG_BLOCK"
 assert_eq "$PUSH_RC" "0" "checker throw allows the push"
 assert_contains "$PUSH_OUT" "could not check" "checker throw prints could not check"
+
+# ---- new remote branch, no origin/HEAD: a single-sha range is still judged ----
+# The committed tree is only the widget and its two suites (no .githooks, no
+# hooks.json). A dirty protected file makes the trailer stage see a change for
+# a one-sha range; the checker still judges the pushed SHA.
+SBX2="$TEST_TMP/newbranch"
+BARE2="$TEST_TMP/bare2.git"
+rm -rf "$SBX2" "$BARE2"
+mkdir -p "$SBX2/scripts/lib" "$SBX2/.githooks" "$SBX2/hooks/tests"
+cp "$RESOLVE" "$SBX2/scripts/resolve-qc-gate.sh"; chmod +x "$SBX2/scripts/resolve-qc-gate.sh"
+cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$SBX2/scripts/lib/json-emit.sh"
+cp "$REPO_ROOT/scripts/lib/resolve-config.sh" "$SBX2/scripts/lib/resolve-config.sh"
+cp "$REPO_ROOT/scripts/lib/qc-evidence.sh" "$SBX2/scripts/lib/qc-evidence.sh"
+cp "$REPO_ROOT/scripts/affected-suites.js" "$SBX2/scripts/affected-suites.js"
+cp "$REPO_ROOT/scripts/check-test-outcome.js" "$SBX2/scripts/check-test-outcome.js"
+cp "$HOOK" "$SBX2/.githooks/pre-push"; chmod +x "$SBX2/.githooks/pre-push"
+printf 'echo widget\n' > "$SBX2/scripts/bl0050-widget.sh"
+printf 'echo "scripts/bl0050-widget.sh"\nexit 1\n' > "$SBX2/hooks/tests/bl0050-widget.test.sh"
+printf 'exit 0\n' > "$SBX2/hooks/tests/check-js-syntax.test.sh"
+chmod +x "$SBX2/hooks/tests/bl0050-widget.test.sh" "$SBX2/hooks/tests/check-js-syntax.test.sh"
+git -C "$SBX2" init -q -b main
+git -C "$SBX2" config user.email t@local
+git -C "$SBX2" config user.name t
+git -C "$SBX2" config autopilot.testIdentityGate off
+git -C "$SBX2" config core.hooksPath .githooks
+git init -q --bare "$BARE2"
+git -C "$SBX2" remote add origin "$BARE2"
+if git -C "$SBX2" rev-parse --verify --quiet origin/HEAD >/dev/null; then
+  fail "new-branch sandbox has origin/HEAD"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+git -C "$SBX2" add scripts/bl0050-widget.sh hooks/tests/bl0050-widget.test.sh hooks/tests/check-js-syntax.test.sh
+git -C "$SBX2" commit -q -m "red widget on a new branch
+
+$TRAILER"
+RED2="$(git -C "$SBX2" rev-parse HEAD)"
+write_record2() {
+  local dest common
+  common="$(git -C "$SBX2" rev-parse --git-common-dir)"
+  case "$common" in /*) ;; *) common="$SBX2/$common" ;; esac
+  dest="$common/autopilot/qc-runs/$1.json"
+  mkdir -p "$(dirname "$dest")"
+  printf '%s\n' "$2" > "$dest"
+}
+write_record2 "$RED2" \
+  "{\"schema\":1,\"head\":\"$RED2\",\"base\":\"informational\",\"mode\":\"selective\",\"suites\":[{\"path\":\"hooks/tests/bl0050-widget.test.sh\",\"rc\":0},{\"path\":\"hooks/tests/check-js-syntax.test.sh\",\"rc\":0}]}"
+printf 'echo dirty\n' >> "$SBX2/scripts/bl0050-widget.sh"
+PUSH_OUT="$(
+  cd "$SBX2" && env -u AUTOPILOT_QC_OUTCOME -u GIT_ALLOW_PROTOCOL QC_GATE_CONFIG_OVERRIDE="$CFG_BLOCK" \
+    git -c protocol.file.allow=always push origin HEAD:refs/heads/feature 2>&1
+)" && PUSH_RC=0 || PUSH_RC=$?
+assert_eq "$PUSH_RC" "1" "new branch with a red suite is refused"
+assert_contains "$PUSH_OUT" "fails when re-run" "new branch red suite says fails when re-run"
+assert_not_contains "$PUSH_OUT" "NOT enforced" "new branch red suite is not NOT enforced"
+if git -C "$SBX2" rev-parse --verify --quiet origin/HEAD >/dev/null; then
+  fail "origin/HEAD appeared after the refused new-branch push"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+# Drop the remote branch so the green push is also a create (all-zero remote sha).
+if git --git-dir "$BARE2" show-ref --verify --quiet refs/heads/feature; then
+  env -u GIT_ALLOW_PROTOCOL git -C "$SBX2" -c protocol.file.allow=always push origin :refs/heads/feature
+fi
+printf 'echo "scripts/bl0050-widget.sh"\nexit 0\n' > "$SBX2/hooks/tests/bl0050-widget.test.sh"
+git -C "$SBX2" add scripts/bl0050-widget.sh hooks/tests/bl0050-widget.test.sh hooks/tests/check-js-syntax.test.sh
+git -C "$SBX2" commit -q -m "green widget on a new branch
+
+$TRAILER"
+GRN2="$(git -C "$SBX2" rev-parse HEAD)"
+GPR2="$(git -C "$SBX2" rev-parse "$GRN2^")"
+( cd "$SBX2" && env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX \
+  node scripts/affected-suites.js --root "$SBX2" --base "$GPR2" --head "$GRN2" --run --record ) >"$TEST_TMP/newbranch-record.txt"
+assert_eq "$?" "0" "new branch producer record exits 0"
+printf 'echo dirty-green\n' >> "$SBX2/scripts/bl0050-widget.sh"
+PUSH_OUT="$(
+  cd "$SBX2" && env -u AUTOPILOT_QC_OUTCOME -u GIT_ALLOW_PROTOCOL QC_GATE_CONFIG_OVERRIDE="$CFG_BLOCK" \
+    git -c protocol.file.allow=always push origin HEAD:refs/heads/feature 2>&1
+)" && PUSH_RC=0 || PUSH_RC=$?
+assert_eq "$PUSH_RC" "0" "new branch with a green record is allowed"
+assert_not_contains "$PUSH_OUT" "NOT enforced" "new branch green record is not NOT enforced"
 
 finalize_test

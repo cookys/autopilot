@@ -5,6 +5,13 @@
 // Usage:
 //   node scripts/check-test-outcome.js --base <ref> --head <ref> [options]
 //   node scripts/check-test-outcome.js --range <base>..<head> [options]
+//   node scripts/check-test-outcome.js --range <sha> [options]
+//     A --range with no ".." is a single sha: the whole history of that commit.
+//     The base is the git empty tree (git hash-object -t tree /dev/null), written
+//     into the repo first so diff and rev-parse can see it. That selection is
+//     every file in the head tree, which is what the trailer stage's wider
+//     window already means for a new branch when origin/HEAD does not resolve,
+//     and unlike a root-commit base it also includes the root commit's own files.
 //   Options:
 //     --root <dir>         repo to read (default: the repo containing this script)
 //     --rerun sample|all|none   default sample
@@ -71,10 +78,18 @@ function parseArgs(argv) {
     else if (x === '--head') a.head = argv[++i];
     else if (x === '--range') {
       const v = argv[++i];
-      const idx = v == null ? -1 : v.indexOf('..');
-      if (idx <= 0 || !v.slice(idx + 2)) throw new Error(`bad --range ${v}`);
-      a.base = v.slice(0, idx);
-      a.head = v.slice(idx + 2);
+      if (v == null || v === '') throw new Error(`bad --range ${v}`);
+      const idx = v.indexOf('..');
+      if (idx === -1) {
+        // New remote branch and origin/HEAD did not resolve: the hook passes
+        // the local sha alone. Judge that commit from the empty tree.
+        a.head = v;
+        a.fromRoot = true;
+      } else {
+        if (idx <= 0 || !v.slice(idx + 2)) throw new Error(`bad --range ${v}`);
+        a.base = v.slice(0, idx);
+        a.head = v.slice(idx + 2);
+      }
     } else if (x === '--rerun') a.rerun = argv[++i];
     else if (x === '--sample') a.sample = Number(argv[++i]);
     else if (x === '--budget-s') a.budgetS = Number(argv[++i]);
@@ -210,7 +225,7 @@ function main(argv) {
     process.stdout.write(lines.slice(2, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n') + '\n');
     return 0;
   }
-  if (!a.base || !a.head) {
+  if (!a.head || (!a.base && !a.fromRoot)) {
     process.stderr.write('outcome gate: need --base and --head, or --range <base>..<head>\n');
     return 2;
   }
@@ -223,6 +238,10 @@ function main(argv) {
   let base;
   let doc;
   try {
+    if (a.fromRoot) {
+      // -w so the empty tree object exists for rev-parse and for computeDoc's diff.
+      a.base = git(root, ['hash-object', '-w', '-t', 'tree', '/dev/null']).trim();
+    }
     head = git(root, ['rev-parse', a.head]).trim();
     base = git(root, ['rev-parse', a.base]).trim();
     doc = computeDoc(root, base, head);

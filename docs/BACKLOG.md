@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0240 -->
+<!-- next-id: BL-0246 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1056,3 +1056,87 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: mods P1a reviews, 2026-10-04; restored 2026-10-19; dropped by a1cc180cb; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
 - **Context**: Old id BL-0109. Everything else in that row was already fixed. P3 owns the bound.
+
+### Cursor seat admission stays blocked until tool-deny or a portable sandbox
+- **Id**: BL-0240
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: Cursor 席位仍不能准入，因為該代理無法強制拒絕未授權工具，資格考也還沒跑。要等官方做出可攜沙箱或全面拒絕，或擁有者同意花錢再測。
+- **Impact**: 沒有這一列時，不准入的原因只寫在計畫裡，之後沒人會記得何時可以重測。
+- **Trigger**: cursor-agent ships a catch-all deny or portable sandbox, rerun the 18 probes under docs/plans/evidence/2026-08-29-cursor-containment-probe, or the owner authorises the Stage-1 spend
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
+- **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
+
+### mods-visible-dispatch P2 to P4: do or withdraw
+- **Id**: BL-0241
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: owner
+- **Problem**: 畫面上可見派工的後三段還沒做，也沒有人決定要繼續還是撤回。有可能已被新的階段圖路線取代，尚未確認。
+- **Impact**: 沒有裁決的話，未完成的三段會一直掛著，或被別的路線默默取代。
+- **Trigger**: owner decides do or withdraw for mods visible-dispatch P2 to P4; stage-graph route may supersede, unconfirmed
+- **Trigger-Type**: owner
+- **Effort**: L
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
+- **Context**: May be superseded by the stage-graph route; unconfirmed. P5 is already BL-0110.
+
+### dispatch-tree step 5 and R blocked by the D0 probes
+- **Id**: BL-0242
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 派工樹的後段步驟被探針擋住，還沒有結果就不能做。車隊那一步已經另有追蹤。
+- **Impact**: 步驟停在探針，沒人盯著就不會重跑，後面的工作也不會開始。
+- **Trigger**: D0 probes clear step 5 (row h) and R (row d2 kimi/agy/opencode not_run); fleet step tracked by BL-0144
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Context**: Fleet step is tracked by BL-0144. Step 5 and R stay blocked on the D0 probes.
+
+### workflow-snapshot P3: handoff reads the snapshot and dev-flow calls task-card
+- **Id**: BL-0243
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: owner
+- **Problem**: 交接時讀取壓縮快照，以及流程開始時自動寫任務卡，這兩件還沒做，要等評測與擁有者裁決。
+- **Impact**: 交接仍不會讀快照，任務卡也不會在流程開始時自動寫入。
+- **Trigger**: P3: handoff reads the snapshot and dev-flow calls task-card, after guidance and eval
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: original backlog row; restored 2026-10-19; dropped by 0a9c9efac; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md
+- **Context**: Prior row deleted in 0a9c9efac. BL-0147 covers T2 text only, not P3.
+
+### default-dispatch-topology P5 per-host rollout, cuda first
+- **Id**: BL-0244
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 預設派工拓樸的逐主機推廣還沒做，原來說先從 cuda 那台開始。之後預設拓樸又改過，是否仍適用尚未確認。
+- **Impact**: 各主機可能一直用舊的拓樸設定，沒有人安排逐台更新。
+- **Trigger**: per-host rollout of the default dispatch topology, cuda first
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/default-dispatch-topology-p5-rollout.md
+- **Context**: Archived plan P0-P4 shipped in v2.35.16. P5 per-host rollout was left untracked.
+
+### eval-router-judge harness was never built
+- **Id**: BL-0245
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: owner
+- **Problem**: 路由評審的量測工具只有計畫、沒有做出來。優先順序低，之後改技能說明需要量化證據時才會用到。
+- **Impact**: 下次需要量化路由準確度時，才會發現量測工具從未建立。
+- **Trigger**: next skill-description tightening needs routing-precision evidence
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/eval-router-judge-harness-unbuilt.md
+- **Context**: Low priority. The harness was never built. The plan is archived.

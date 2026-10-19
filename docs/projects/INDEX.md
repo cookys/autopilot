@@ -529,7 +529,7 @@ The 2026-05-14 retro-roundup row originally claimed `v2.7.3`. Relabelled to `v2.
 
 | Plan | Status |
 |------|--------|
-| [fable-skills absorption](../plans/2026-07-08-fable-skills-absorption.md) | R0 only; implementation requires an explicit Board decision and is tracked in `docs/BACKLOG.md` |
+| [fable-skills absorption](../plans/2026-07-08-fable-skills-absorption.md) | R0 only; implementation requires an explicit Board decision and the tracking row was removed on 2026-08-28 by 1631709a7; remaining work is listed in the project file, if any |
 
 ### Plan-only records (work shipped/absorbed — no project dir, kept for reference)
 

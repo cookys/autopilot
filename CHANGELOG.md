@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- BL-0202 closed (merge b8bdd61f3, owner card d-44ea93e2): incremental re-review merges prior findings that share location, whitespace-normalised claim and severity into one addendum row listing every id; each seat still gets the full list and must resolve each id. `evaluateClosure` is unchanged and `carriedOpenFindings` stays one row per id. Synthetic 11 findings × 3 seats: addendum 3875 → 2449 bytes (−37%). New test `hooks/tests/review-addendum-dedupe.test.sh` (15 assertions); three existing tests updated to the merged row format.
+
+- BL-0027 closed (merge d997355a9, owner card d-b492cb1a): Codex pins `PLUGIN_ROOT` to a cache directory that plugin add and plugin remove delete, so dev-mode hooks failed with PostCompact MODULE_NOT_FOUND. `dev-setup.sh --harness codex --install` (dev path only) now merges the three Codex hook events into `$CODEX_HOME/hooks.json` (or `~/.codex/hooks.json`) pointing at the repo's `platforms/codex/plugin/hooks/`, backs up as `hooks.json.bak-<ts>` only when content changes, keeps foreign entries, is re-entrant, refuses a malformed file untouched, and writes via a same-dir temp file and `mv`. The plugin installs from a derived hook-less dev marketplace so each hook registers once. `--uninstall` removes only our entries and the derived marketplace. A normal install never touches `hooks.json`. No settings keys changed.
+
+- Outcome gate on in warn mode (merge b4522da5b, owner card d-716e951c): `.claude/qc-gate-config.md` keeps every template default and sets `outcome: warn`, so a protected push re-runs the diff's direct suites plus a 20-suite sample and reports a red result without blocking.
+
+- `test-policy.md` now cites the outcome-gate plan as inline code instead of a relative link, which the Codex plugin payload does not carry (merge 0270c58cc); `codex-plugin-package.test.sh` was red 2 of 130 on develop and is green again (codex mirror identical).
+
 - BL-0055 gate experiment ran 30 pairs on haiku-4-5 and ended FAIL-TRADE (constraints held 1/30 vs 29/30, features built 23/30 vs 17/30); report under docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/.
 
 - BL-0060 precision rules (merge 53dc0ad3f): `scripts/lib/test-integrity-l1.py` now (a) skips a wholly deleted test when the same range deletes the product file it tests, (b) reports `deleted_line` only on a net drop of assertion-class lines, and (c) does not treat a file added in the range as `surface_touch`. Planted controls N1-N8 are reported and false-positive classes F1-F5 are not. A second replay of the same 60 merges found 668 reports in 16 groups, 1 true positive and 15 false positives (93.8%), so the gate stays at `warn`. Evidence in `docs/plans/evidence/2026-10-19-test-integrity-replay-v2/`.

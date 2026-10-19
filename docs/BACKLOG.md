@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0213 -->
+<!-- next-id: BL-0216 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -117,20 +117,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.32 review round 6, 2026-09-13, adjudicated at depth 0 by re-derivation.
 - **Pointer**: docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
-
-### Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)
-- **Id**: BL-0027
-- **Status**: open
-- **Since**: 2026-09-07
-- **Origin**: self
-- **Problem**: Codex 的外掛快取被取代後，開發模式的 hook 設定會失效，使用者會看到模組找不到的錯誤。計畫新增一條指向 repo 路徑的設定，等再有人回報第二次才動工。 (draft)
-- **Impact**: 開發者在 Codex 升級外掛後 hook 可能失效；目前只遇過一次。 (draft)
-- **Trigger**: a second report of `PostCompact MODULE_NOT_FOUND` on a host that ran `dev-setup.sh --harness codex --install` with `--force`, or a Codex release that documents whether hook `command` strings run through a shell (then a self-contained…
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: local Codex session hand-off via agent-call 2026-09-07; `hooks/tests/codex-plugin-package.test.sh` upgrade case.
-- **Pointer**: docs/backlog/codex-dev-mode-hook-entry-that-survives-plugin-cache-replacement-codex-hooks-jso.md
-- **Context**: v2.36.10 guards the update (refuse under live sessions) but cannot make a live session survive it: Codex pins `PLUGIN_ROOT` to `~/.codex/plugins/cache/…/<version>/`, and both `plugin add` (in-place upgrade) and `plugin remove` delete…
 
 ### Apply two-tier + pooled verdict to reviewer/implementer/owner/verification_author/brain
 - **Id**: BL-0028
@@ -636,20 +622,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
-### 附錄把同一個舊問題按席位重複列出
-- **Id**: BL-0202
-- **Status**: open
-- **Since**: 2026-10-17
-- **Origin**: self
-- **Problem**: 三個席位各報一次同一個舊問題，上一輪留下的問題清單就列三行，而且每個席位都收到全部行；清單約占增量輸入的四分之一。
-- **Impact**: 範圍小的帶回，清單比省下的檔案還大，增量反而多花輸入。
-- **Trigger**: 增量帶回要設為預設，或帶回範圍不大但席位數增加
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: BL-0146 D5 實測 2026-10-17，審查 finding 0ad19dc1
-- **Pointer**: docs/plans/evidence/2026-10-17-review-only-increment/README.md
-- **Context**: 每個舊問題 3.0 至 3.1 行；去重後約少三分之二的清單位元組，未實測。
-
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
 - **Status**: open
@@ -698,3 +670,47 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
 - **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。
+
+### Affected-suites selects nearly every suite for a small diff
+- **Id**: BL-0213
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 選擇器對很小的改動也選了幾乎全部套件。實測兩次合併：只改開發安裝腳本的一次選了 546 個（共 616），只改審查解析模組的一次選了 588 個（共 617）；其中固定必跑的只有 15 個，其餘多半是被少數共用檔案連鎖帶進來。
+- **Impact**: 結果閘要執行紀錄，選五百多個套件就記不成，每次 push 只能報沒有紀錄；品質流程的測試也要跑這麼多。
+- **Trigger**: the next small diff that selects more than half of all suites, or any push where the outcome gate reports no record
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
+- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
+- **Context**: Top fan-in: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
+
+### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
+- **Id**: BL-0214
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 開發模式安裝改成使用者層 hook 設定後，有兩件事只用假的 Codex 測過，沒在真的 Codex 上驗：一是移除 marketplace 的子命令是否存在可用，好讓解除安裝能清掉註冊；二是使用者層與外掛層同名 hook 是否會去重。
+- **Impact**: 若子命令不存在，解除安裝會留下殘留註冊；若不去重，hook 可能每次觸發兩次。
+- **Trigger**: the next dev-mode install on Codex (dev-setup.sh --harness codex --install) on a host with the real CLI
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: follow-up of BL-0027 (merge d997355a9), 2026-10-19
+- **Pointer**: docs/backlog/verify-codex-marketplace-remove-and-hook-dedupe.md
+- **Context**: Check (a) that "codex plugin marketplace remove" exists and works so --uninstall clears the derived dev marketplace registration, and (b) whether a user-level and a plugin-level hook with the same name are de-duplicated.
+
+### PEER-REPORTED (cuda): count a dispatch branch as integrated when its patch-id or diff matches
+- **Id**: BL-0215
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: cuda revival.3d
+- **Report**: 01M59TJ90DWG5XVE6JS78CZ6Z7
+- **Reply**: 2026-10-19 01M59TMBZ32K3YSC7Q707QWV1Q
+- **Problem**: 殘留清理只用提交祖先關係判斷分支有沒有併入。派工候選常在改過後才被採用，例如讀過差異或去掉鎖定檔後採用，採用後的提交和候選不同，所以永遠被判成沒併入，只能閒置十四天後封存。cuda 一天清出二十條這種分支。
+- **Impact**: 分支列表一直堆積；封存前那段時間分不出是真的沒併入，還是已經被採用。
+- **Trigger**: the next residue sweep that lists unintegrated hetero branches whose patch-id or diff already landed on the target
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: fleet msg 01M59TJ90DWG5XVE6JS78CZ6Z7; replied 01M59TMBZ32K3YSC7Q707QWV1Q
+- **Pointer**: docs/backlog/count-dispatch-branch-integrated-by-patch-id.md

@@ -1,0 +1,95 @@
+3600-s-wall-cap-is-the-schema-maximum-and-too-small-for-an-implement-review-camp.md	A	schemas/mission-execution-graph.schema.json max_wall_seconds 14400; CHANGELOG:4372 U3
+a-campaign-s-output-paths-must-enumerate-every-codex-mirror-and-the-rejection-ar.md	A	CHANGELOG:2513 mirror-roots graph-check rule (v2.36.36/47)
+a-managed-campaign-whose-wall-expires-leaves-no-terminal-summary-and-no-journal.md	A	CHANGELOG:1483 v2.36.71 wall_expired, summary JSON never 0 byte; autopilot-engine.js:10394
+a-non-claude-engine-cannot-sit-in-the-foreman-seat-no-rail-exists-and-the-reques.md	A	file says shipped v2.36.34 (Shape B); scripts/dispatch-foreman.sh at HEAD
+a-rejected-autopilot-live-dir-override-silently-falls-through-to-the-real-live-dir.md	A	scripts/lib/live-state-dir.js:239-262 override never replaced; safety rejection throws LiveDirRefusedError
+adopt-qualification-defaults-js-list-prints-event-undefined-null-for-legacy-feed.md	A	scripts/adopt-qualification-defaults.js:361-364 pre-effort row fallback string
+agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md	A	file closed 2026-10-18; git merge b681b6c8d (flash38) re-sit parses every envelope
+autopilot-endpoints-test-hardcodes-claude-3-haiku-20240307-a-local-server-that-v.md	A	src/endpoints/cli.js:337 --model flag, default kept
+calendar-teeth-instant2-expiry-ceiling.md	A	hooks/tests/calendar-teeth-negative.test.sh:692 instant2 now asserts qualified under default clock
+campaign-bridge-resolves-lease-identity-from-campaigncontrol-initial-state-corre.md	C	src/engine/autopilot-engine.js:3173/5082/8371 still assign campaignControl.initial_state; no live_state rename; naming risk untracked (cosmetic)
+cc-shim-framing-chrome-leaks-via-generate-session-title-v2-34-7-fix-incomplete.md	A	scripts/dispatch-review.sh:1915-1918 exact-match skip of generate_session_title line (parser-side fix instead of launch env)
+check-phase-review-receipt-a-head-moved-only-by-commits-touching-allowlisted-exc.md	A	scripts/check-phase-review-receipt.js:1159 moved head accepted when delta touches only allowlisted paths
+check-phase-review-receipt-min-reviewed-seats-enforcement-test-on-a-multi-seat-f.md	C	hooks/tests/check-phase-review-receipt.test.sh case 14 only parse guard + min=1 accept; no test of a higher minimum on multi-seat chain (script enforces at :909)
+check-phase-review-receipt-open-findings-comparison-ignores-severity-reviewed-se.md	A	scripts/check-phase-review-receipt.js:1088-1100 deep equality id/severity/disposition
+ci-repair-2026-09-23-followups.md	A	all 5 items: #1 BL-0094 done, #4 BL-0097 done, #2 resolve-review-loop.sh:1224 declared consult wins, #3 check-plan-graduation.js .frozen-evidence marker, #5 implementation-campaign-state.test.sh:2687 park case
+completeness-scan-follow-ups-after-bl-0119.md	A	scripts/completeness-scan.sh:47 trim, :114 PAT_MARKER built from pieces, :213 no-file usage error
+context-budget-falls-back-to-inference-after-a-long-foreground-tool-call-live-ti.md	A	hooks/context-budget.js:360 rememberedWindow reuse + lastLive record; BL-0137 Atomics.wait (CHANGELOG:361)
+contract-first-escalation-and-local-repair-gates-2-3-classes-shipped-v2-34-32-cl.md	B	docs/BACKLOG.md BL-0035 (dispatch-justification check, Trigger-Type owner, planted negative required); its Pointer file docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md exists at HEAD
+cost-fuse-dispatch-exemption-prefix-and-session-id-collisions.md	A	hooks/cost-fuse.js quotesPaired/BL-0183/BL-0189 exemption anchoring; scripts/lib/brain-spend.js:84 safe() hash-suffixed
+cost-tracker-cost-fuse-pricing-table-has-no-fable-row-and-opus-5-x-rates-a.md	A	hooks/cost-tracker-lib.js fable rows + hasPriceRow (official URL citation not found, minor)
+dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md	A	CHANGELOG:601 dev-setup registers directory marketplace; dev-update no longer pulls clone (supersedes symlink spike)
+dispatch-author-sh-success-predicate-is-non-empty-stdout-truncated-tool-narratin.md	A	scripts/dispatch-author.sh:85,102 truncated status/exit 5
+dispatch-plan-review-terminal-ticket-visibility.md	A	scripts/dispatch-plan-review.js:1883 ticket_session_already_terminal message
+dispatch-review-raw-log-deviation-prompt-verdict.md	A	scripts/dispatch-review.sh validate_review_block (single anchored VERDICT, prompt_framing_leakage, BL-0197 anti-copy)
+engine-implement-review-campaign-ledger-custom-path-is-refused-at-intake-and-the.md	A	CHANGELOG v2.36.42 --campaign-ledger rejected before claim
+engine-scorecard-js-current-seat-status-require-evidence-cannot-be-run-standalon.md	A	scripts/engine-scorecard.js:137,157 --role-default-scope (consult/discuss only, other roles fail closed by design)
+every-gate-needs-a-negative-control-the-caution-needs-a-routine-behind-it.md	D	owner approved the rule 2026-10-13 (evidence-discipline.md section 58); BL-0058 deleted as shipped in 81f8cfd8e; meta-gate deliberately not built, recorded at references/evidence-discipline.md:1274
+feed-listing-prints-the-pre-effort-seat-hash-once-per-row-consider-one-consolida.md	A	scripts/adopt-qualification-defaults.js:485 one consolidated pre-effort notice
+final-panel-nonempty-findings-terminal-stop-instead-of-parking.md	A	src/engine/campaign-composition.js:2010-2013 final-panel park (await_final_disposition_authority)
+foreman-context-is-not-measurable-by-hook-context-budget-only-sees-the-parent-tr.md	A	hooks/foreman-guard.js:37-39,417 denies at tokenCount >= t2 from subagent live tasks feed
+foreman-guard-role-aware-caps.md	A	CHANGELOG:895 v2.36.97 role caps + reserve; hooks/foreman-guard.js:78 Role line, no-marker advisory path :18
+foreman-model-is-hardcoded-as-opus-in-l4-l6-prose-routing-config-already-overrid.md	A	level-front-door.md:162,429 default sonnet; l6/SKILL.md:105; dispatch-model-guard.js:73 guarded_models_implementing is config-driven, no hard opus assertion on sub-orchestrator; Workflow option level-front-door.md:450
+governance-cli-ux-polish-experience-critic-findings-v2-34-13-dogfood.md	C	scripts/decision-ledger.js:249 veto message still no list hint; scripts/next-pick.js:69 usage plain, no flag examples (next-pick envelope already present)
+hetero-review-loop-charset-guard-on-seat-ids-before-path-join.md	A	scripts/lib/seat-id-guard.js; hetero-review-loop.js:16-21,950
+hetero-review-loop-check-phase-review-receipt-hoist-exclude-allowlist-and-ispath.md	A	scripts/lib/exclude-allowlist.js shared by both scripts
+hetero-review-loop-confirm-finalize-always-emits-severity-in-open-findings-check.md	A	check-phase-review-receipt.js:1100 requires severity equality
+hetero-review-loop-js-collect-appends-to-chain-json-without-a-lock-or-atomic-ren.md	A	scripts/hetero-review-loop.js:44-82 chain.json lock
+hetero-review-loop-js-exports-the-stub-seat-id-test-seam-into-the-real-dispatch.md	A	hetero-review-loop.js:542 STUB_SEAT_ID only when AUTOPILOT_DISPATCH_REVIEW_SCRIPT set
+hetero-review-loop-js-opt-out-knob-parser-character-class-parses-as-a-range.md	A	hetero-review-loop.js handleOptOut regex anchored (?:^|[-\s#*>]) knob
+hook-stderr-advisories-invisible.md	A	hooks/advisory-relay.js and hooks/_shared/advisory-sink.js exist; additionalContext emitted in cost-fuse.js, context-budget.js, branch-protection.js (git grep -c)
+hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137.md	A	hooks/tests/run.sh:496 timeout no longer inferred from 124/137
+import-aa-capabilities-test-host-pinned-tmp-in-worktree.md	A	commit dcba36e35 empty .git dir is not a worktree marker
+killed-dead-managed-campaign-stuck-at-implementing-with-a-held-lease-has-no-oper.md	A	src/campaign/cli.js:111,145 and bin/autopilot.js:39 campaign terminalize verb with --leaf-manifest
+live-state-base-on-world-writable-tmpfs-ownership-mode-check-on-the-reader-side.md	A	live-state-dir.js isOwnedMode700Dir + lstat symlink/uid/mode checks
+live-state-dir-leftovers-multi-row-findmnt-040-only-unescape-per-process-ssd-war.md	C	3 of 4 leftovers fixed (findmnt multi-row :99-101, proc-mounts unescape :129, 200K window test); the SSD-fallback warning (live-state-dir.js:288) has no per-process dedup (warnedOverrides only covers override path)
+managed-campaign-controller-cannot-record-boundary-rejected-lease-fenced-by-its.md	A	CHANGELOG:679 v2.36.112 + v2.36.71 boundary_rejected/lease identity fixes
+managed-campaign-intake-a-rejected-intake-sometimes-releases-the-mission-claim-a.md	未確認	sub-items 2-3 fixed (v2.36.71 repair_lineage digest, v2.36.41 resume); sub-item 1 (grant-ref mismatch not releasing claim) unverifiable: code mission_grant_ref_mismatch no longer exists in src and I did not locate the equivalent rejection path; sub-item 4 (repair grant after merge) not found documented
+managed-rail-repair-scope-pathless-finding.md	A	autopilot-engine.js:1696 task_surface fallback, :8595 park/refuse when scope cannot be sealed
+managed-rail-resume-with-a-disposition-authority-drops-the-prior-findings-and-te.md	A	commit 7ff84c21 exists (git cat-file); src/engine/campaign-composition.js:2005-2020 disposition-only resume path
+mission-grant-silently-replays-a-stale-claim-when-the-node-holds-an-open-active.md	A	hooks/tests/mission-grant-open-claim.test.sh exists at HEAD (git ls-tree)
+mission-withdraw-cannot-bind-a-mission-subject-v2-claim-to-its-icc-campaign-the.md	A	src/engine/campaign-intake.js:1603-1604 journals mission_claim_id/mission_campaign_id
+mods-live-campaign-phase.md	A	commits 648056aec/3876955b9 band shows campaign phase; mods/live/live.test.ts phase source campaign; stage-graph replaced marker phase
+next-touch-validation-test-sh-asserts-against-un-versioned-local-mission-state.md	A	hooks/tests/next-touch-validation.test.sh:5,32,410 fixture clone + ledger fixture lib
+no-operator-level-release-for-a-claim-whose-campaign-died-without-a-terminal-rec.md	A	src/mission/cli.js:536 mission_withdraw_campaign_not_terminal (mission withdraw verb)
+opencode-go-responses-transport.md	A	scripts/qualification-review-provider.js:733-738 x-opencode-session header, :806 /v1/responses transport
+opt-out-receipt-with-a-non-existent-config-path-hashes-the-empty-buffer.md	A	hetero-review-loop.js handleOptOut exits 1 when config path missing
+peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md	A	references/peer-addressing.md no longer carries the persistence claim (grep persist/forever/indefinite empty)
+peer-reported-308-8f-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo.md	A	scripts/dispatch-hetero.sh:3909-3915 and scripts/dispatch-explore.sh:199-201 pass --new-project to agy
+peer-reported-308-dogfood-acceptance-records-no-accepted-sha-so-containment-cann.md	A	scripts/record-integration.js, check-inputs-landed.js, repo-residue-sweep.js exist; resolve-review-loop.sh:830-860 now prints reasons
+peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the.md	A	CHANGELOG v2.36.33 sections (1)-(4) all shipped
+peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con.md	A	CHANGELOG v2.36.32/34/45: (A) qc-panel out dir, (B) wait-dispatch-results.js, (D) wrapper subject, (E) check-hands-commit, foreman rail
+peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec.md	A	file says Phases 1-3 shipped v2.36.38, migration v2.36.39; scripts/check-backlog-entries.js
+peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md	C	main claim shipped v2.36.28; side effects (a) rejection says released but state keeps live_lease and (b) verify_cmd PATH classification: only mention at HEAD is docs/plans/2026-09-12-integration-ledger-and-marker-gates.md:118 non-goal "Logged"; no BACKLOG row
+peer-reported-revival3d-worktree-branch-accumulation.md	A	CHANGELOG:478-515 retention_reason marker, archive refs, aged archive reminder
+pin-store-hardening-fsync-orphaned-temp-files-and-re-validation-of-stored-rows.md	C	(a) fsync and (b) orphan tmp cleanup done (scripts/lib/jsonl-store.js:153,168,208,215); (c) readPinRows (engine-capability-state.js:914) still does not schema-validate parseable rows (validatePinRow only on build, :994); (d) --role empty-string idiom unchanged
+plan-review-roster-resolves-to-a-single-family-on-this-repo.md	A	resolve-review-loop.sh:1160 resolves from topology
+plan-review-seats-judge-plans-from-text-alone-no-source-access.md	A	scripts/dispatch-plan-review.js:109-122 --context-file
+population-b-switch-suite-flakes-with-a-stale-entry-under-parallel-runs.md	A	commit b0b103d88 stale check only judges tracked files (BL-0104)
+probe-runner-coverage-parallel-only-flake-fork-pressure-suspected-residue-ruled.md	A	commit 03aaf6b25 here-string fix; CHANGELOG:1071
+probe-unknown-memory-dir-from-worktree.md	A	scripts/probe-unknown.js:353-355 derives main checkout via git-common-dir
+project-paths-is-write-only-config-scaffold-config-js-emits-it-nothing-reads-it.md	A	scripts/resolve-project-paths.sh; six skills call it
+promote-the-depth-0-hetero-run-watcher-to-a-shipped-dispatch-watch-script.md	A	scripts/watch-foreman.js + wait-dispatch-results.js shipped
+qualification-provider-cli-error-text-and-last-line-rule.md	A	scripts/qualification-review-provider.js:1220,1813 cliQuotaAuthError (item 1 verified; item 2 last-line rule pinned by comment/test not re-verified, file marks owner kept the rule)
+qualification-recipes-seed-staged-credentials-only-when-the-staged-file-is-absen.md	A	scripts/lib/qualify-stage-credentials.sh; U2
+reap-dispatch-branches-sh-scan-cannot-see-branches-that-carry-no-root-run-id.md	A	scripts/reap-dispatch-branches.sh:11 scan --all unattributed report-only
+resolve-review-loop-test-sh-asserts-on-the-live-project-config-so-any-legitimate.md	A	hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md exists at HEAD (git ls-tree)
+review-candidate-follow-ups.md	A	CHANGELOG:311,340 BL-0155 remote branch numbering
+review-chain-derive-js-documents-no-side-effects-but-mutates-the-chain-entries-i.md	A	scripts/lib/review-chain-derive.js:33 doc now states mutation in place
+review-only-adoption-of-external-candidate.md	A	docs/review-candidate.md; CHANGELOG:88,98 BL-0090/BL-0146 review-only campaign
+roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md	C	brain re-sit tracked (BL row "Brain-seat sittings", B); Explorer formal suite not tracked anywhere (plans list it Out of scope: 2026-08-22-implementer-qualification-suite.md:149, 2026-08-26-cursor-cli-adaptor.md:526)
+run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md	A	hooks/tests/run.sh:112-135 __ts_child_shutdown signals child group directly
+runner-opencode-usage-stays-null-parse-step-finish-tokens-from-the-format-json-e.md	A	scripts/dispatch-status.js:36,230-253 jsonl-opencode step_finish parsing
+scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not.md	A	engine-scorecard.js:1807 and resolve-dispatch-topology.js:134 normalise codex-cli to codex
+shared-sealed-zero-diff-validator.md	C	file holds 4 entries: zero-diff helper done (src/engine/sealed-zero-diff-validator); Work Order self-lock fixed (autopilot-engine.js:4228 controller WOs excluded); live-spend probe --model fixed (probe-engine-capability.sh:393); BUT verify_pass=false + reviewer SHIP still converges (autopilot-engine.js:12151-12175 reason reviewer, no verify gate), untracked
+suite-oracle-lock-a-killed-full-suite-run-leaves-the-next-one-refused-observed-2.md	A	hooks/tests/lib/suite-oracle-lock.sh:38-45 sidecar .owner staleness documented/handled
+suite-pollutes-real-capability-store.md	A	hooks/tests/run.sh:75 exports AUTOPILOT_TEST_RUN_GUARD=1; scripts/engine-capability-state.js:378 refuses real-store write under it
+the-mission-graph-models-parallel-deliverables-that-the-controller-cannot-actual.md	A	src/engine/autopilot-engine.js:7110,7285,7549 refreshExactMissionAuthority
+the-shared-config-ladder-s-tier-3-reads-the-plugin-s-claude-and-the-installed-pl.md	A	CHANGELOG:2297-2304 v2.36.45 tier 3 dogfood-only; resolve-config.sh:15,50
+the-shipped-operator-pin-admission-is-unreachable-from-the-managed-rail-it-only.md	A	scripts/dispatch-hetero.sh:1054-1075 builds --resolved-live document and passes it to the contract checker
+topic-title.md	D	empty template stub (<Topic title> placeholder), no work content
+two-l5-deliverables-cannot-run-on-one-repo-inside-24h-the-marker-bridge-scans-ev.md	A	scripts/session-mode.js:63-74 retire verb (v2.36.48)
+v2-36-112-review-follow-ups.md	C	run.sh SKIP summary fixed (run.sh:576) and Row E closed; rest 🔵 untracked: RUN_LEDGER_MAX_ROTATIONS still read from env (run-ledger.sh:2817), verify-red-green symlink-escape refusal, B3 rejection code pin, finish_reason whitespace-only case
+v2-36-114-review-follow-ups.md	A	src/engine/campaign-intake.js:1669-1674 advisory format w/o trailing colon; hooks/tests/campaign-repair-at-file-cap.test.sh:574-597 stderr + side-by-side parity
+vacuous-red-case-in-the-guided-disposition-suite-alien-hash-branch.md	A	scripts/build-profile-payload.js:483 distinct code PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE
+validate-json-schema-js-json.md	A	scripts/validate-json-schema.js:209-240 lossless non-integer literals accepted

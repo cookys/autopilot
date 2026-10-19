@@ -1,0 +1,80 @@
+902542671	Pre-existing red suites: review-loop-resolver-a r23, qualification-scorecard-tools r51/r52/r75	?	r23 and r75 fixed by 2c0bec205 (2026-10-08); r51/r52 have no named fix; commit says "both suites green" but I may not run suites
+902542671	Prove the generic-arm fixture-scripts-sg overlay does not suppress row markers	A	skill-onoff-generic-overlay.test.sh added in this commit
+902542671	finish-flow close-out does not archive-then-delete this session's unintegrated dispatch branches	A	close-session shipped in v3.0.0-alpha.4 (CHANGELOG line 473, c0c38cd70, 53fa21057)
+902542671	refs/archive/* written by the residue sweep never expire	D	owner ruling 2026-10-10 recorded in contract.md; reminder-only (archive_remind_days=90) shipped in alpha.4; prune rule deliberately not built
+902542671	/l4–/l6 sessions never set a size, so the band position slot and Graph tab stay empty	A	/l4-/l6 entry --size required: v3.0.0-alpha.4 (c0c38cd70, CHANGELOG line 481)
+902542671	the eval scorer skips classify when the whole tool call is refused	A	amend-6 in stage-graph-cell.js, this commit; v10 re-extracted 0 diffs
+9d0fbc9bc	Managed rail: repair scope is derived from the reviewer's claim text — a path-less finding terminali	A	mrce r1: ba8083cc6+620ef6ed2, v2.36.81, assert_r1 in managed-rail-core-engine.test.sh
+9d0fbc9bc	`run-ledger.sh lease-gc` aborts mid-loop on a failed transition and the reap wrapper masks it as zer	A	dlrm row-3: c16a2284f (run-ledger.sh/reap-dispatch-worktrees.sh), v2.36.81
+9d0fbc9bc	Managed rail: verify_cmd runs in a fresh detached worktree with no deps; its stdout/stderr never rea	A	mrce r10: 7796a405b, v2.36.81
+9d0fbc9bc	context-budget: no model-id window source — a 1M session without the autopilot statusline gets 200k 	A*	hlsm r12: 2fafa2fa7 is comment-only plus a test pinning the no-signal behaviour; same defect re-reported by peer 2026-10-02; real mitigation 4026c1e33 (v2.36.107, unknown window -> T2 advisory). Deleted early, fixed later
+9d0fbc9bc	`dispatch-foreman.test.sh` loses its TEST_TMP after case 3 — 40 assertions red on develop	A	dispatch-foreman test red: already fixed by 8de505788 (2026-09-20); regression guard assert_r16 (3e8f45ffa/7e7163dfa), v2.36.81
+9d0fbc9bc	Managed rail: a malformed `review.findings` string parks the campaign in AWAITING_DISPOSITION with `	A	mrce r17: 4b56bffec, v2.36.81
+9d0fbc9bc	Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows	A	dlrm row-19: e09eb075c (lib/jsonl-store.js), v2.36.81
+9d0fbc9bc	check-phase-review-receipt: min-reviewed-seats enforcement test on a multi-seat fixture	A	rlr r34: bfd64bbfd (test row, asked for a test), v2.36.81
+9d0fbc9bc	hetero-review-loop: confirm finalize always emits severity in open_findings (checker now requires de	A	rlr r35: 753a0bc5a (confirmation row, test), v2.36.81
+9d0fbc9bc	hetero-review-loop: charset guard on seat ids before path.join	A	rlr r37: 529c9bde3 (lib/seat-id-guard.js), v2.36.81
+9d0fbc9bc	check-phase-review-receipt: a head moved only by commits touching allowlisted excluded paths should 	A	rlr r38: bb9cd237a (check-phase-review-receipt.js), v2.36.81
+9d0fbc9bc	hetero-review-loop / check-phase-review-receipt: hoist EXCLUDE_ALLOWLIST and isPathspecAllowed into 	A	rlr r39: de2d991d6 (lib/exclude-allowlist.js), v2.36.81
+9d0fbc9bc	review-chain-derive.js documents "no side effects" but mutates the chain entries it receives	A	rlr r40: 993fd0247 (review-chain-derive.js), v2.36.81
+9d0fbc9bc	`hetero-review-loop.js` opt-out knob parser character class parses `*->` as a range	A	rlr r46: f9b193d83, v2.36.81
+9d0fbc9bc	`hetero-review-loop.js` exports the STUB_SEAT_ID test seam into the real dispatch-review.sh environm	A	rlr r47: 29f3e86d1, v2.36.81
+9d0fbc9bc	scorecard runner token drift: sol's reviewer row is recorded under `codex-cli`, not `codex`	A	qst r49: 47f125ceb (engine-scorecard.js), v2.36.81
+9d0fbc9bc	`adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows	A	qst r51: 0122babd2 (adopt-qualification-defaults.js), v2.36.81
+9d0fbc9bc	Feed listing prints the pre-effort `seat_hash` ⚠ once per row — consider one consolidated notice	A	qst r52: 43c55cacb, v2.36.81
+9d0fbc9bc	`--runner opencode` usage stays `null` — parse `step_finish.tokens` from the `--format json` event s	A	qst r53: e72b890ac (dispatch-status.js), v2.36.81
+9d0fbc9bc	`autopilot endpoints test` hardcodes `claude-3-haiku-20240307` — a local server that validates model	A	qst r55: c1aa11b61 (endpoints/cli.js), v2.36.81
+9d0fbc9bc	Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it	A	foreman-model prose: fb4da7fe2 (level-front-door.md) hlsm r59, v2.36.81
+9d0fbc9bc	`validate-json-schema.js` 拒絕所有非整數數字 —— 任何帶小數的 JSON 文件都驗不了	A	qst r64 = validate-json-schema: 61f9d74e0 (2026-08-28), ancestor of HEAD
+9d0fbc9bc	Vacuous red case in the guided-disposition suite (alien-hash branch)	A	qst r75: 2d873ce1c (build-profile-payload.js + test), v2.36.81
+9d0fbc9bc	cc-shim framing chrome leaks via `generate_session_title` (v2.34.7 fix incomplete)	A	hlsm r79: 80ea1f345 (dispatch-review.sh), v2.36.81
+9d0fbc9bc	Governance CLI UX polish（experience-critic findings, v2.34.13 dogfood）	A	qst r82: 1324fcde5 (decision-ledger.js, next-pick.js), v2.36.81
+9d0fbc9bc	`reap-dispatch-branches.sh scan` cannot see branches that carry no `root_run_id`	A	dlrm row-92: fe8fd46e4 (reap-dispatch-branches.sh), v2.36.81
+9d0fbc9bc	Managed-campaign controller cannot record `BOUNDARY_REJECTED` — lease-fenced by its own synthesized 	A	mrce r121: regression guard f592e6a59; real fix 35cda9ff0 (2026-08-30)
+9d0fbc9bc	Campaign bridge resolves lease identity from `campaignControl.initial_state` — correct today only be	A	mrce r125: 05cc796bb, v2.36.81
+9d0fbc9bc	`engine-scorecard.js current/seat-status --require-evidence` cannot be run standalone	A	qst r127: 2bf059e0c (engine-scorecard.js), v2.36.81
+9d0fbc9bc	Live-state base on world-writable tmpfs — ownership/mode check on the reader side	A	hlsm r132: 3ed7db2dd, v2.36.81
+9d0fbc9bc	live-state-dir 🔵 leftovers — multi-row findmnt, `\040`-only unescape, per-process SSD warning, sub-	A	hlsm r133: bd2843832+9febdc55d, v2.36.81
+41f1bff64	Managed rail: a non-git `--repo` still consumes a Mission claim before intake rejects it	A	mrce r15: ea81dcdb1 (+580f535a2 repair), v2.36.95
+41f1bff64	`prune_tmp_residue` covers 7 prefixes; 25 scripts create `/tmp` dirs	A	dlrm r93: 916696180, v2.36.95
+41f1bff64	Recover stale backlog admission locks safely	A	dlrm r109: 1e0182bfe, v2.36.95
+41f1bff64	Verification-author seats on agy / cc-shim / anthropic-compatible are structurally NO-GO under the e	A	dlrm r122: 1b2e24854 (+7b90f681a, 2b598435c repairs), v2.36.95
+41f1bff64	No supported withdraw for a never-granted DRAFT Mission adoption; graph revisions mint unbounded lin	A	dlrm r123: d179c3646, v2.36.95
+41f1bff64	Plan-loop freeze: dispatcher and checker disagree on disposition shape; terminal artifact carries no	A	rlr r131: b2ad7eb95, v2.36.95
+41f1bff64	`hetero-review-loop --exclude` allowlist is autopilot's own tree — consumer repos cannot shrink a re	A	rlr r136: 1c1e8ee6d, v2.36.95
+41f1bff64	agy seat payload overflow is discovered per seat at dispatch time — the loop could pre-compute it an	A	rlr r137: ca39a6535, v2.36.95
+41f1bff64	depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher	A	hlsm r139: 25c935f6c, v2.36.95
+41f1bff64	live-state-dir / context-budget test strength — two surviving mutants, one vacuous-off-Linux asserti	A	hlsm r140: b1f1817a9, v2.36.95; items (a)-(d) of sidecar verified in test/header. NOTE its BACKLOG row Trigger/Context were the consult_dispatch text (migration corruption)
+9fc56347f	`probe-unknown.js classify` spawns `resolve-review-loop.sh` up to seven times per call — memoize one	A	B1 r23: b93f4bf84, v2.36.96
+9fc56347f	resolve-review-loop.sh: audit every remaining runner comparison for codex-cli/codex canonicalisation	A	B1 r36: 542df2e93, v2.36.96
+9fc56347f	resolve-review-loop.test.sh capability-warning assertion messages still say "no warning" while expec	A	B1 r41: 76b03de21, v2.36.96
+9fc56347f	`normalize_agy_alias()` rewrites config-side seat names before the qc-exclusion match in `consult_di	A	B1 r42: bab2a50ce, v2.36.96
+9fc56347f	`resolve-review-loop.sh` `auto` knobs read a stale `~/.autopilot/topology.json` and fall back native	A	B1 r43: eb6fd6b54 (distinct warning = the sidecar candidate), v2.36.96
+9fc56347f	`contract-parity` / `resolve-review-loop-consult-discuss-switch` tests read the real `~/.autopilot/t	A	B1 r44: 58180b14a, v2.36.96
+9fc56347f	`resolve-review-loop-consult-discuss-gate` case (xix) mutates the canonical evals corpus — move it t	A	B1 r54: 2404db235, v2.36.96
+ab00b82ec	`engine-qualify-verdict-stability.test.sh` is red at origin/develop — D6 honest/parity grader-hash d	A	test change in this commit (grader base -> dbf0e123)
+ab00b82ec	`migrate-backlog-entries.test.sh` is red at origin/develop — real BACKLOG.md migratable count below 	A	test change in this commit (floor 100 -> 20); BACKLOG is a queue since v2.36.78
+ab00b82ec	codeforge statusline creates `$XDG_RUNTIME_DIR/autopilot` 0775 — should mkdir 0700	A	codeforge 1b388ed (2026-09-29) fix(live): create live-dir ancestors 0700
+2b312c356	A full in-place suite run rewrites `.opencode/package.json` and its lock	A	5bb222736, v2.36.107 row 2
+2b312c356	verification_author: a standing operator pin can never reach dispatch-author	A	5e989ff9e, v2.36.107 row 4
+2b312c356	dispatch-author kimi: `--timeout` never reaches the adapter (hard 300 s cap)	A	ae7b0594b, v2.36.107 row 3
+2b312c356	context-budget fires a directive T2 at 150k on a 1M session when no live file exists (window unknown	A	4026c1e33, v2.36.107 row 1
+79c0960f7	`campaign resume` refuses a final-panel retry: REVIEWING unsupported; zero-write resume hits file ca	A	911b9a652 (row A), v2.36.111
+79c0960f7	Reviewer seats at max effort can spend the whole 4096-token output budget on thinking and return no 	A	c4cae9c9b (row B), v2.36.111
+79c0960f7	Final-panel resume after a seat transport failure re-runs every seat, discarding valid verdicts	A	4380ce34c+9350ae499 (row C), v2.36.111
+dabdd20e0	A campaign that passed through BOUNDARY_REJECTED can never reach terminal success (transcript audit 	A	4e0e8a0be+d2a14ffb5 (row E), v2.36.112
+dabdd20e0	Reviewer output budget: follow-ups from v2.36.111	A	458c2c822 (row H: output_budget_exhausted on openai rail, bracketed raw-log), v2.36.112
+dabdd20e0	Final-panel seat artifacts under the git common dir are never reaped	A	1b3a2b313+e61981d86+d4f996056 (row G), v2.36.112
+dabdd20e0	Five lib.sh suites are green by construction (never finalize)	A	48a42cce8+ef5f5c6c1+b4c0e0577 (row F), v2.36.112
+dabdd20e0	v2.36.111 review follow-ups (test-hardening and predicate-alignment nits)	A	458c2c822 (cap predicate, negative controls) + remaining nits carried to new row v2-36-112-review-follow-ups.md (still in BACKLOG)
+f4f53b1a8	PEER-REPORTED (revival.3d): retained dispatch worktrees have no retention record and never expire	A	alpha.3 R1 retention_reason/retention_expires_at (CHANGELOG v3.0.0-alpha.3, contract.md "three BACKLOG rows close here")
+f4f53b1a8	PEER-REPORTED (revival.3d): rejected hands/hetero/foreman branches are never archived or deleted	A	alpha.3 reap --auto archives then deletes dispatch branches past archive_branch_days=14
+f4f53b1a8	PEER-REPORTED (revival.3d): plain-session and /l4 dispatch-hetero work has no close-out reap	B	moved to row "finish-flow close-out does not archive-then-delete..." (Trigger: v7 skill-onoff eval); later shipped as close-session in alpha.4 (see 902542671)
+8f5f37245	`hetero-review-loop.js` collect appends to chain.json without a lock or atomic rename	A	hetero-review-loop.js chain.json mkdir lock (this commit)
+8f5f37245	P7c: .githooks/pre-push passes silently when scripts/lib/qc-evidence.sh is missing	A	.githooks/pre-push loud WARNING (this commit)
+8f5f37245	dispatch-review parser rejects a multi-line NO-FINDING-PROOF that carries all three fields	A	dispatch-review.sh multi-line NO-FINDING-PROOF fold (this commit)
+8f5f37245	check-guidance-eval does not bind the results file to the arm manifest	A	check-guidance-eval.js arm_manifest_sha256 binding (this commit)
+8f5f37245	pre-push degrades open silently when scripts/lib/qc-evidence.sh is missing	A	same fix as row 2 (merged into one fix in this commit)
+41f1bff64	(sidecar-embedded, no BACKLOG row) A stale topology tuple derails a plan-review loop, and the failure is unreadable	C	sidecar live-state-dir...of.md lines 10-19; mitigations not shipped: no list-models validation in resolve-dispatch-topology.js, no successor identity; no row at HEAD
+41f1bff64	(sidecar-embedded, no BACKLOG row) The plan-loop freeze predicate cannot be satisfied by the plan loop	A	same defect as row plan-loop-freeze (r131) b2ad7eb95, v2.36.95
+41f1bff64	(sidecar-embedded, and its text sits in the BACKLOG row 10 body) consult_dispatch has no seat left once the qc panel excludes everything	C	resolve-review-loop.sh:1305-1313 still falls back to sonnet native; only partial mitigation 5cd0eb5f3/79f79d368/f13f7e041 (declared consult seat); consult-only fallback list not built; no row at HEAD

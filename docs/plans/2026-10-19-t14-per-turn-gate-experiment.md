@@ -1,6 +1,6 @@
 # Plan — t14 per-turn verification gate experiment (BL-0055)
 
-> Status: active · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
+> Status: S1-S6 done, verdict FAIL (FAIL-TRADE). Report: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
 > Source: BL-0055 (`docs/BACKLOG.md:311-321`). Decision: panel card d-8bc3d286, 2026-10-19 ("open the experiment").
 > Pre-registration: the thresholds in §2 are frozen when this plan is committed. Nothing in §2 changes after the first pilot run.
 
@@ -14,7 +14,7 @@ CONSTRAINTS.md every turn) then scored 3/15 against the reused OFF 1/18, one-tai
 - **Path correction.** BACKLOG's Source field points at `docs/projects/_archive/2026-07-08-t14-reinject/report.md`
   (`docs/BACKLOG.md:319`). The real path has `2026/07/` in it: `docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md` (plus
   `reinject-results.jsonl` beside it). The sidecar `docs/backlog/t14-long-horizon-per-turn-verification-gate.md:8` carries the same wrong
-  path. Fix both at S6.
+  path. Fix both at S6. The two Source-path fixes were already in place by S6 (BACKLOG.md and the sidecar both carry the 2026/07 path) and are verified at S6.
 - Weak points of the old data this plan must not inherit: OFF was reused, not run beside ON (`report.md:48-51`); all 15 ON rows ran on
   `runner_version` 2.1.204 (`reinject-results.jsonl:1`) while the installed CLI is 2.1.303
   (`claude --version`, 2026-10-19), so old rows are context, never a comparator (evidence-discipline §46,
@@ -277,3 +277,4 @@ must resolve and record:
 ## Review log
 
 - R0: authored 2026-10-19 by a sonnet plan-author seat, not yet reviewed. Next: bounded `dispatch-plan-review` before S1.
+- R1 2026-10-19 S6 written up.

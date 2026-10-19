@@ -322,12 +322,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: The next experiment aimed at improving long-horizon constraint adherence, or before claiming that prompt re-injection solves t14-class drift.
+- **Trigger**: A new plan for a follow-up round, decided by the owner.
 - **Trigger-Type**: owner
 - **Effort**: M
-- **Source**: `docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md` § Follow-up.
+- **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: Build S1-S3 done in 58afd4ece (verifier, --gate, batch driver, analyzer). S4 pilot and S5 batch wait on owner card d-24e8bff5 (threshold freeze); S4 must show zero analyzer mismatches on the driver's batch.
+- **Context**: Verdict FAIL-TRADE. Report: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056

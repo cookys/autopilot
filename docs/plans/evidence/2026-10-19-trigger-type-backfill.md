@@ -6,7 +6,7 @@ Depth-0 judged every existing `docs/BACKLOG.md` entry. Each row below is that ju
 |---|---|---|
 | BL-0002 | event | Waits for a stale background row to be seen or a resume with background work running; opportunistic probe. |
 | BL-0004 | event | Owner chose no rule now; waits for the first real cross-repo dispatch that goes wrong. |
-| BL-0012 | ready | Done in 517fbe910; row only awaits deletion at closeout, which can be done now. |
+| BL-0012 | deleted | Done in 517fbe910 (rail emits waiting); row and sidecar removed per Done handling. |
 | BL-0014 | event | Owner kept it approved; waits for a harness migration proposal or a disputed host capability claim. |
 | BL-0015 | event | Residuals fire only when a real foreman run trips egress, uncounted Write/Edit, or inline-hands death. |
 | BL-0018 | peer | Waits on hangar lab-ingress v2 `lab preview` decision (plus mods in 3.0.0); hangar is the external party. |
@@ -22,7 +22,7 @@ Depth-0 judged every existing `docs/BACKLOG.md` entry. Each row below is that ju
 | BL-0041 | event | Waits for a consumer repo asking to adopt a brain seat or a fourth passing brain sitting. |
 | BL-0042 | event | Waits for an observed bypass of stateless refusal (e.g. direct reducer no_effect_release) or terminal evidence. |
 | BL-0043 | event | Waits for the Policy-layer redesign to settle and per-skill eval ON/OFF evidence to exist. |
-| BL-0046 | date:2026-11-22 | Owner agreed 2026-10-13 to decide at the 11/22 review; Trigger text is truncated, date inferred from Impact. |
+| BL-0046 | owner | Waits for the operator to replay the shadow strikes and agree; the 2026-11-22 owner review date stays in Impact. |
 | BL-0047 | event | Fires on anomalous detector strike rate, multi-seat trips from a gate bug, or an unnoticed re-exam need. |
 | BL-0051 | event | Waits for a skill/routing policy about to consume scaffold tiers as a quality claim, or tier expansion. |
 | BL-0052 | peer | Waits for codex or another CLI to expose a verifiable runtime model-identity signal in headless mode. |

@@ -42,20 +42,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
-### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
-- **Id**: BL-0012
-- **Status**: open
-- **Since**: 2026-09-20
-- **Origin**: self
-- **Problem**: 工頭目前分不出「手下卡在等回答」和「手下還在工作」，只能去讀對話紀錄或憑猜測喚醒。規劃過的「結構化 worker_condition」就是要讓手下直接回報這個狀態，但這個設計從未實作，也從未測試。
-- **Impact**: 工頭現在要讀對話紀錄或憑猜測喚醒才能判斷，白花 token 也可能亂喚醒；設計能省這些，但還沒做、沒測。
-- **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: 2026-09-20 orphan-plan triage (plan frozen into a mission graph, zero identifiers in history)
-- **Pointer**: docs/backlog/foreman-depth0-typed-worker-condition.md
-- **Context**: The plan was archived unbuilt, but the owner kept the need on 2026-10-18 (token saving, no spurious wakeups); the plan stays the design source (the sidecar names it). The mission graph that sealed it is terminal.
-
 ### Host Conformance tool — authorized by the 2026-08-23 consolidation decision, never built
 - **Id**: BL-0014
 - **Status**: open
@@ -280,7 +266,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: 引擎評分機制會記錄席位的「失誤次數」，但目前只做影子記錄、不會真的把席位降級，因為怕誤判。要等影子資料累積並人工確認屬實，才打開。 (draft)
 - **Impact**: 表現差的席位不會被自動降級，目前靠人工留意。擁有者 2026-10-13 同意等 11/22 檢討再決定。
 - **Trigger**: When shadow data exists for a role — i.e. `would_requalify` has fired at least once against a seat and the operator has replayed those strikes and agrees each was a true engine/pair failure. Also: this row must be re-read by…
-- **Trigger-Type**: date:2026-11-22
+- **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: hetero design panel 2026-08-22 (kimi's "trench coat" objection), shipped shadow-first per synthesis §8.
 - **Pointer**: docs/backlog/arm-the-ordinary-strike-threshold-currently-shadow-only-dated-review-required.md

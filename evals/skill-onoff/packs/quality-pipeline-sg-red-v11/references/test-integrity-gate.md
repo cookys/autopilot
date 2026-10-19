@@ -1,0 +1,84 @@
+# Test Integrity Gate (Anti-Gaming Enforcement)
+
+**L0 static, git-artifact-based test-integrity checks. Runs post-commit to block a developer/agent from gaming tests to go green** — by deleting assertions, skipping/soloing tests, escaping the test dir, or weakening the integrity surface. Reads git artifacts only; never trusts agent self-report. Sibling of `check-disjointness.sh` (files) — this one certifies *test integrity*.
+
+## What Gets Scanned
+
+| Category | Description | Violation Kind |
+|----------|-------------|----------------|
+| **Deleted test lines** | `deleted_line` is reported only when the same test file's assertion-class line count has a net decrease (deleted minus added > 0). The report lists every deleted assertion-class line. A wholly deleted test file whose target is also deleted is exempt; if no target is deleted, every deleted line of that file is still reported. See Precision rules below. | `deleted_line` |
+| **Skip/solo markers** | Added (`+`) lines in test files must not introduce skip / xfail / pending / todo or solo/only/focused markers (per-language set: `xit`/`.only`/`fit`/`fdescribe`/`@pytest.mark.skip`/`t.Skipf`/`#[ignore]`/…). | `skip_marker` / `solo_marker` |
+| **Early exit** | In `*.test.sh` files, an ADDED unconditional top-level `exit`/`return` (also `true; exit 0`, `trap - EXIT; exit 0`, `{ exit 0; }`, `true && exit 0`, `if true; then exit 0; fi`) that still has assertion-like lines after it. File-level, so guard clauses (`cond \|\| exit 0`, `if ...; then exit 0; fi`) and a terminating exit are not flagged. | `early_exit` |
+| **Rename escapes** | A test file renamed to a non-test path / non-matching name (removes coverage) is blocked. Pure rename that stays in a test path is OK. | `rename_escape` |
+| **Integrity-surface touch** | Edits to non-test integrity-surface files (conftest, fixtures, mocks, snapshots/goldens, runner config, setupTests/matchers, `package.json` scripts, CI workflows) are flagged — **independently of whether the path is also a test path**. A file **added** in the range (status A) is not a surface touch; modified, deleted, and renamed surface files still are. In `block` mode a surface touch is itself a violation unless waived. | `surface_touch` |
+| **Protected-path touch** | The candidate diff touching `.qc/**`, the gate script, the config, or `.gitattributes` is a **non-waivable** structural violation. | `protected_path_touch` |
+| **Config / git failure** | Malformed (present-but-unparseable) config fails closed to `block`; an invalid range/ref or git failure exits 2. Both **non-waivable**. | `malformed_config` / `git_error` |
+
+## Execution
+
+```bash
+scripts/check-test-integrity.sh validate --range <base>..<head> [--repo <dir>] [--base <ref>] [--allow-env-config]
+```
+
+1. **Config from the TRUSTED base ref** (`git show <base>:.claude/test-integrity-config.md`), NOT the candidate head — so a candidate cannot weaken the gate (`mode: off`, bogus `test_paths`) in the same diff. Falls back to `project-config-template/test-integrity-config.md` then built-in defaults. `$TEST_INTEGRITY_CONFIG_OVERRIDE` is ignored unless `--allow-env-config`.
+2. Reads `git diff -M --name-status -z` (authoritative paths, whitespace/rename safe) + hunks.
+3. Runs the L0 checks above.
+4. Exit: `0` clean (or warn/off) · `1` block-violation · `2` usage/internal error (non-overridable).
+
+`scripts/replay-test-integrity.js` replays the checker over recent merged ranges to measure its false-positive rate before a warn-to-block change.
+
+## L1 — Executed-Set Invariance (v2.25.7, additive)
+
+L0 reads diff text only, so it misses gaming that is additions-only or happens outside test files. **L1 RUNS the test collector on base vs head and fails (`executed_set_shrink`) if the set of tests that *actually execute* shrinks** — catching `test.only`/`fit`, module `pytestmark=skip`, `collect_ignore`, runner-config exclusions (`testPathIgnorePatterns`), go build-tag drops, and fixture changes that skip tests. Per-runner: **pytest / jest / vitest / go**.
+
+- **RUN-not-collect**: `--collect-only`/`--listTests`/`-list` still list *skipped* tests, so L1 uses execution/report status (pytest junit, jest/vitest `--json`, go `-json`), never collection listing.
+- **Best-effort**: runs only when a runner is detected on both sides (`l1:"unavailable"` otherwise — L0 + reviewer backstop). Two-sided `git worktree` collection, env-scrubbed, pgroup-killed timeout, always-cleanup.
+- **Fail-closed** on a broken head runner (`collection_failed` — go multi-package build-fail, JS empty/crashed report, timeout), never a silent pass (a candidate could break the runner to dodge L1).
+- **No fuzzy rename matching** — a renamed test id is a drop (documented false-positive requiring a depth-0 override); this is the main false-positive cost, justifying the `warn` default.
+- Flags: `--no-l1`, `--l1-timeout`, `--l1-runner`, `--l1-verdict-file`, `--assert-worker-dead <pgid>`. JSON adds `l1` + `l1_runners[]` (backward-compatible with L0).
+
+Full per-runner contract (detection markers, normalized test-ids, status→executed mapping, failure-classification table, override design): [`docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md`](../../../docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md).
+
+## Precision rules (BL-0060)
+
+Mode stays **warn** (the global default). These rules do not switch the gate to block.
+
+(a) A test file deleted in the range (git status D) is not a `deleted_line` violation when the same range also deletes its target. The target is a product file whose basename matches the test basename after stripping the test suffix — `foo.test.sh` → `foo.sh`, `foo.test.js` → `foo.js`, `test_foo.py` → `foo.py`, `foo_test.go` → `foo.go` — also dropping a leading `test-` or `test_`. Tests, helpers, and fixtures do not count as targets. The target is also a product file that the deleted test's **old** content sources or requires and that is deleted in the same range: shell `source` / `.` of a path, or an invocation of `scripts/<name>`; JavaScript `require(...)` / `import` of a relative path; Python `import` of a repo module. If the test file is deleted and no target is deleted, every deleted line of that file is still reported.
+
+(b) For a test file that is not wholly deleted, `deleted_line` is reported only when the assertion-class line count of that same file shows a net decrease across the whole file diff (assertion-class lines deleted minus assertion-class lines added is greater than zero). When it does decrease, every deleted assertion-class line is reported. Deleted lines that are not assertion-class (comments, renames, blank lines, setup) never produce a report on their own. A line counts only when it is not a pure comment. A tautological assertion does not count as assertion-class, so turning a real assertion into an always-true one is a net decrease: `assert True`, `assert 1`, `expect(true).toBe(true)`, `assert.ok(true)`, `[ 1 = 1 ]`, `[ "a" = "a" ]`, `true || fail`. Adding only a comment never counts as an added assertion.
+
+Assertion-class, per language:
+
+| Language | Counts as assertion-class |
+|----------|---------------------------|
+| Python | `assert` statements, `self.assert*`, `pytest.raises` |
+| JavaScript / TypeScript | `assert(`, `assert.*(`, `expect(`, `t.equal` / `t.is` / `t.ok` / `t.deepEqual` / `t.throws` family, `should` |
+| Go | `t.Error` / `t.Errorf` / `t.Fatal` / `t.Fatalf`, `require.` / `assert.` calls |
+| Rust | `assert!` / `assert_eq!` / `assert_ne!` |
+| Java / Kotlin | `assert` / `assert*` / `assertThat` |
+| Ruby | `expect(` / `assert` |
+| Shell | calls to `pass` / `fail` / `ok` / `assert_*` (including `hooks/tests/lib.sh` helpers), `[ ... ] \|\| fail`, `test ... \|\| fail`, `grep -q ... \|\| fail` |
+
+(c) A file added in the range (status A) is not a `surface_touch` and is not listed in `surface_touches`. Modified, deleted, and renamed surface files still are. `skip_marker`, `solo_marker`, `early_exit`, `rename_escape`, and `protected_path_touch` are unchanged. JSON keys are unchanged.
+
+## Mode Semantics
+- **`block`** — fails (exit 1) on any L0 violation/surface touch, or an L1 `executed_set_shrink`/`collection_failed`, unless waived. **Default for `/l5` hetero-impl dispatch (opt-in per project).**
+- **`warn`** — reports but does not block (exit 0). **Global default** (shadow→calibrate→gate). Used when no config is present.
+- **`off`** — gate disabled.
+
+## Override verdicts (escape hatch — see limitation)
+A verdict at the **committed** path `.qc/<head_sha>.verdict.json` (read via `git show`, NOT the filesystem — untracked forgery is rejected) may waive **specific** violations it enumerates:
+```json
+{ "tree": "<head^{tree} sha>", "waives": [ {"file": "tests/x_test.py", "kind": "deleted_line"} ] }
+```
+A violation is waived only if `tree == git rev-parse <head>^{tree}` AND its `{file,kind}` is listed. **Never waivable:** `protected_path_touch`, `malformed_config`, `git_error`.
+
+> **Known limitation (L0 stub + L1 deferral):** the L0 committed-path override is a **fail-safe stub** (a committed verdict changes the commit SHA its filename must match — a fixed-point that makes a legit override unconstructable; it fails *closed*). L1 (v2.25.7) builds real out-of-commit verdict verification (changeset-digest + dropped-digest bound), **but HONORING it in `block` mode is DEFERRED** — in the same-user linked-worktree `/l5` dispatch model a worker can forge the override channel, and `--assert-worker-dead <pgid>` can't stop a `setsid`-escaped descendant. So a block-mode `executed_set_shrink` is a hard fail with **no honored override** until `dispatch-hetero.sh` gains descendant-containment (own-session + tree-sweep reap on all exit paths). Refusing a forgeable waiver is fail-safe; in `block` dispatched flows the depth-0 orchestrator controls the merge regardless. See design-spec §8.3.
+
+## See Also
+
+| Skill / script | Boundary |
+|-------|----------|
+| `check-disjointness.sh` | Sibling gate — certifies *files* (allowlist/denylist), not test behavior. |
+| `quality-pipeline` (completeness-gate) | Anti-stub scan; this gate is about *not weakening existing tests*. |
+| `quality-pipeline` (code-review) | Runs after the gates pass; catches semantic "green-but-meaningless" weakening that no deterministic gate can. |

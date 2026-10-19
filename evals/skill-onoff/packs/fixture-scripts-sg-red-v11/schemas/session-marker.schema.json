@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/session-marker.schema.json",
+  "title": "session-marker",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "level", "repo_root", "started_at", "expires_at"],
+  "properties": {
+    "session_id": { "type": "string", "minLength": 1 },
+    "level": { "type": ["string", "null"], "enum": ["l3", "l4", "l5", "l6", null] },
+    "repo_root": { "type": "string", "minLength": 1 },
+    "started_at": { "$ref": "#/$defs/isoUtcMs" },
+    "expires_at": { "$ref": "#/$defs/isoUtcMs" },
+    "entry_level": { "type": "string", "enum": ["l3", "l4", "l5", "l6"] },
+    "fallback_reason": { "type": ["string", "null"] },
+    "mission_routing": { "type": "object" },
+    "mission_noop": { "type": "object" },
+    "repo_identity": { "type": ["string", "null"] },
+    "project_key": { "type": ["string", "null"] },
+    "root_run_id": { "type": ["string", "null"] },
+    "campaign_roots": { "type": "array", "maxItems": 8, "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" } },
+    "size": { "type": "string", "enum": ["XS", "S", "M", "L", "XL"] },
+    "urgent": { "type": "boolean" },
+    "bug": { "type": "boolean" },
+    "base_ref": { "type": ["string", "null"], "pattern": "^[0-9a-f]{7,64}$" },
+    "stage": {
+      "type": "string",
+      "enum": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"]
+    },
+    "stage_set_at": { "$ref": "#/$defs/isoUtcMs" },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "index", "total", "label"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["phase", "deliverable"] },
+        "index": { "type": "integer", "minimum": 1 },
+        "total": { "type": "integer", "minimum": 1 },
+        "label": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "review_families": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "high_risk": { "type": "boolean" }
+  },
+  "$defs": {
+    "isoUtcMs": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" }
+  }
+}

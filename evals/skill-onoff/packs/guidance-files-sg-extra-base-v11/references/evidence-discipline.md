@@ -1,0 +1,1220 @@
+# Evidence discipline — when green is not proof
+
+> Companion to the CLAUDE.md caution "**a script existing is not evidence it is running**". That
+> caution is one member of a family. This file collects the family, because each member was learned
+> the same expensive way: something looked verified for weeks while verifying nothing.
+>
+> Every entry below is a real incident in this repository, with the artifact that now prevents it.
+
+---
+
+## 1. Existing is not running. Being called is not the same as existing.
+
+The 2026-08-06 incident: several scripts were fully built, tested and documented, yet inert — an age
+threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry.
+
+2026-08-10/11 added two sharper variants:
+
+**A component the code demands can simply never have been written.**
+`src/engine/owner-kernel/witness.js` had said since P1 that "production callers must inject a
+separate host-resident witness adapter", and the release gate required `trustTier === 'external'`.
+No such adapter existed. Every P0–P4 suite had run against `MemoryWitness`, which the gate explicitly
+refuses. The project sat complete-but-inert for three weeks, and the diagnosis "we are waiting for a
+14-day window" was wrong: the component that would start the window did not exist.
+
+**A component can ship with zero callers while its commit message claims otherwise.**
+`shadow-terminal-observer.js` was committed with 8 passing unit tests and a message stating it "gives
+terminal.js its first real caller". Nothing called it. The author of that commit had, in the same
+session, diagnosed the identical failure in two other places.
+
+> **A module with no caller is indistinguishable from a module never written, and its own unit tests
+> pass in both cases.** Only an end-to-end run separates them.
+
+Prevention: `hooks/tests/status-task-shadow-wiring.test.sh` runs the real entry point and asserts the
+side effect lands. Remove the wiring and it fails.
+
+**A flag can be ACCEPTED without being WIRED, and grep will tell you it is fine.**
+`engine-capability-state.js` gained `--effort` on `invalidate-strike`: the option was added to the
+command's allowlist, but never to the payload passed to `appendStrikeInvalidation`. So the flag
+parsed, the command succeeded, and the invalidation computed the effort-less seat hash — targeting a
+seat no projection reads, while the strike it was meant to lift kept counting. Self-verification
+found nothing because it grepped for the string `effort: options.effort` and the string WAS present
+— twice, in the two *other* handlers. Presence in the file is not presence in the call.
+
+> **Grep proves a token exists somewhere in the file, not that it is on the path you care about.**
+> A reviewer asking "is it wired or merely accepted?" and demanding an end-to-end fixture is what
+> separated them; the fixture went red on the first run.
+
+**Check**: for anything you just claimed is wired, grep for its callers outside its own file and its
+tests. Empty output is the finding. If the grep DOES hit, read the hit — a match in an allowlist, a
+usage string, or a sibling handler is not the wiring you were looking for. The end-to-end run is the
+only answer that cannot be misread: drive the flag in at one end and assert the effect at the other.
+
+---
+
+## 2. A suite that passes when you delete the thing it tests has not tested it
+
+Retiring KR10 as a release gate removed an entire gate from the disposition. Both of its suites
+stayed green — they had never asserted that KR10 gated anything.
+
+**Check**: delete the gate (or invert its result) and re-run. If the suite still passes, the suite was
+measuring the gate's existence, not its effect.
+
+This is why §2.5 of the promotion charter requires a planted negative control per gate, and why the
+`no_third_outcome` test in `owner-kernel-terminal.test.sh` sweeps all 32 combinations rather than
+sampling: exactly one may return COMPLETE, and an exhaustive sweep proves no other input reaches it.
+
+---
+
+## 3. A shadow derived from the answer it is checking is a tautology
+
+The obvious way to build a second opinion on `can_close` is to derive the shadow's obligations from
+`can_close`. That agrees 100% forever, because it is one conclusion restated. It would fill a
+divergence monitor with data proving nothing while reading downstream as a validated shadow —
+carrying the authority of a measurement without being one.
+
+`shadow-terminal-observer.js` therefore builds obligations from the RAW evidence
+(mission terminality, campaign terminality, acceptance verdict, integration) and never from the
+predicate it judges, and adds one obligation legacy lacks (`evidence-bound-to-artifact`) so a real
+divergence is reachable at all.
+
+**The same tautology fits inside a single assertion.** A test for
+`adopt-qualification-defaults.js --from` had to prove that a feed's own advertised digest never
+becomes ours. It asserted that our digest "is 64 hex characters" and that "the cache directory is
+named after it" — and both of those stay true if the code adopts the producer's value, because both
+are read back out of the value under test. The assertions looked like two independent checks and
+were two restatements. The planted negative (let a declared basis switch which digest we use) passed
+straight through them; only computing the expectation independently — `sha256sum` on the file, from
+outside the program — turned it red.
+
+> **An expectation derived from the answer cannot fail with it.** If your expected value comes out of
+> the same code path as the actual value, you have asserted that a thing equals itself.
+
+**Check**: can your second opinion ever disagree? If not, it is a mirror. A test that plants a
+"claims pass, evidence says otherwise" input and asserts the shadow is not dragged along is the
+proof. For an assertion, ask where the expected value came from: if the answer is "from the program",
+compute it another way — by hand, with a different tool, or from a fixture written before the run.
+
+---
+
+**A test can re-implement the code it checks.** The SCOPE2 engine test proved that the campaign id
+bound onto the session marker was right by recomputing it with the same formula the engine uses
+(identity, ticket, sha256 of the raw contract). A drift in the engine's inputs would have moved both
+sides together. The fix compares against the `campaign_id` the real `runCampaignIntake` emits (case H),
+and depth-0 checked the id against the work-order directory a real run created.
+
+## 4. Absence of evidence must not read as agreement
+
+`divergence-monitor.js` refuses a path with zero paired samples. "No disagreements observed" across
+zero observations is not a statement about the path — it is a statement about the absence of testing.
+Shadow-only observations are counted separately and fund nothing, so the gap stays visible.
+
+Corrupt rows count against **every** path query, because a corrupt row has no readable path and
+filtering it out would shrink the denominator — making agreement look better than it is, which is the
+exact failure the counter exists to prevent.
+
+---
+
+## 5. Assert the property, not the machine you are sitting at
+
+Provisioning the production trust roots turned 7 assertions red across two suites. They were not
+wrong about the property; they checked it by asserting `trusted_authority_present !== true` — that no
+authority exists anywhere — to prove a forged one cannot authenticate. That only holds on a machine
+nobody has provisioned.
+
+Re-anchored: an authority may exist; what must never happen is one resolved from a **caller-supplied
+path**. The suites' own planted forgeries still fail, which is what distinguishes a fix from a
+weakening.
+
+Same root cause as the earlier `next-touch-validation.test.sh` incident (asserting against one
+machine's un-versioned local state).
+
+**Check**: would this assertion still pass on a fresh machine? Would it still pass on a fully
+configured one? If the answer differs, it is testing the environment.
+
+---
+
+## 6. A refusal's wording is not the property
+
+Four assertions pinned the exact refusal message. With a real authority installed, the loader reached
+a later, equally valid refusal (stream binding mismatch) instead of the path-containment one, and
+they failed while the property held perfectly.
+
+Widen to the SET of refusals that all mean the same thing — never to "any reason", which accepts a
+silent pass.
+
+---
+
+## 7. CI green is a claim about the summary line, not the log
+
+Two prior incidents, both preserved here because they are the same shape:
+
+- **Nested fixture FAIL lines**: a suite that plants failures prints `FAIL` on both green and red
+  runs. Judge the run by its summary section only.
+- **`run:` steps have no `pipefail`**: GitHub Actions' default shell swallows a pipeline's exit code,
+  so `cmd | tee log` reports success when `cmd` failed. Set `shell: bash` with `set -o pipefail`, or
+  do not pipe the command whose status you are trusting.
+- **A job's one red step hides every skipped step** (v2.36.59→v2.36.60): `test.yml` runs the detached-dispatch
+  smoke before the hooks suite; when the smoke went red the suite step's conclusion became `skipped`, and
+  two releases read "only the known detached failure is red" as "everything else passed". A dogfood
+  kill/resume case had been red since v2.36.58 and nobody saw it (runs `35132044435`, `35174146770`).
+  Judge a run by each step's conclusion, not the job's; a skipped gate is a gate that did not run.
+  Prevention: BACKLOG row — suite step `if: always()` so a smoke failure cannot mask suite regressions.
+
+---
+
+## 8. Tamper-evidence of a claim is not verification of the claim
+
+**The incident (2026-07-20 → 2026-08-16, the owner-kernel retirement).** Over four weeks the repo
+grew a ~27,000-line trust framework: a hash-chained event ledger, per-event witness receipts, a
+root-owned notary adapter outside the repo, an OKR-gated release checker, a shadow second-opinion
+observer. Every component defended one of two things — *the record cannot be rewritten afterwards*,
+or *the emitter is who it claims to be*. Not one component could answer the only question the system
+was built for: **was the claim true when it was recorded?** Independent re-derivation (re-run the
+test, re-scan the diff, decorrelated review) existed nowhere; truth entered exclusively through
+caller-injected verifier adapters that were never implemented. The kernel could not even run a test:
+no `child_process`, no `fs.stat`, anywhere in 13 files. The machinery hardened the *ledger* against
+an adversary who edits the past, while the actual adversary submits a false claim in the present —
+through the front door, with valid provenance, onto an immutable chain.
+
+Armor is not a verifier. If a component's failure mode is "the lie is now beautifully preserved",
+it is bookkeeping, not verification — however much cryptography it contains.
+
+**The second lesson, from the retirement's own review.** The retirement plan's author twice recorded
+"verified" claims that decorrelated reviewers then refuted with line-precise evidence:
+
+- *"zero external callers"* — the author's grep matched `new OwnerKernel(` and per-module require
+  paths, missing static factory calls (`OwnerKernel.start/.resume`) and barrel requires
+  (`require('./owner-kernel')`). Four production modules were live callers.
+- *"the config file is retired machinery"* — `.claude/owner-kernel-governance.json` carries a
+  kernel-flavored name but is a live mission-policy input read by five keeper surfaces; deleting it
+  would have silently flipped mission enforcement from `enforce` to `off`.
+- *"first-require tells you a test's subject"* — a keeper test's first require looked keeper-only;
+  it destructured four kernel symbols further down.
+
+Same-author verification inherits the author's blind spots: whoever wrote the grep pattern is the
+wrong person to certify what the pattern cannot see. A reviewer from a different model family,
+attacking the claim rather than confirming it, found in one pass what two same-author sweeps missed
+twice. The quarried decision rule now lives in [`evidence-contract.md`](evidence-contract.md):
+closure requires a clear challenge from a challenger that is not the author and not the author's
+model family.
+
+---
+
+## 9. A green test that writes outside its sandbox is manufacturing tomorrow's false evidence
+
+**The incident (discovered 2026-08-17, roster-qualification repair).** Every seat in the /l5
+roster reported `qualification: unknown` and `/l5` fail-closed to inline. The cause was not
+missing qualifications — it was that **289 of the 299 rows in the operator's real scorecard
+store were test fixtures**: `hooks/tests/engine-qualify.test.sh` piped its `--emit-row` output
+into `engine-scorecard.js record` without setting `ENGINE_SCORECARD_DIR`, appending one fake
+`eng-review` row to `~/.autopilot/engine-scorecard/scorecard.jsonl` on every run — for weeks,
+across every CI and local run, while the test itself PASSED every time. One leaked row carried a
+dangling `supersedes` reference that crashed `current --role reviewer` outright; five old-schema
+rows in the sibling capability-evidence store poisoned every role's `report-evidence`. The suite
+was green; the green was the damage.
+
+The trap is asymmetric visibility: a test's ASSERTIONS are checked on every run, but its WRITES
+are checked never. Isolation that covers one store (`ENGINE_CAPABILITY_DIR` was set) reads as
+"the test is isolated" while a second store leaks. The fix shape: every test that invokes a
+store-writing tool asserts WHERE the row landed (a landing assertion in the isolated store), and
+repairing the damage requires quarantine-and-filter, never wholesale deletion — 10 of the 299
+rows were the only real qualification history the roster had.
+
+---
+
+## 10. An exam FAIL is a claim about the administration AND the candidate — attribute before you conclude
+
+**Incident (2026-08-17, brain-seat first real administrations)**: the incumbent seat failed
+3 of 4 subjects with "17 clean false positives" per trial. The raw-log replay showed those 17
+were 5 UNIQUE flag pairs — 4 of them REAL plants — re-reported every round, because the
+candidate prompt taught "cross-check every claim EVERY round" while the exam's pinned semantic
+(per its own mock candidate) is incremental first-visibility flagging. A second subject failed
+because the prompt never said the stream is 12 rounds long; a third sitting-2 failure traced to
+the prompt's own final-round teaching conflict. Three separate FAIL lines were administration
+defects wearing a seat-behavior costume — while one subject (fairness) was a genuine,
+seed-stable capability miss that no prompt repair changed.
+
+The trap: the grader is deterministic and the transport was clean, so the verdict LOOKS like
+pure candidate signal. But the candidate prompt is part of the instrument, and a teaching
+defect produces exactly the same red as incompetence. The counterfeit-signal test from §The
+one question applies to every subject line separately: for each failed line, replay the raw
+exchanges and ask "would a candidate doing exactly what the instrument TOLD it to do produce
+this failure?" If yes, the line indicts the instrument. Repair the instrument (new identity,
+recorded prompt-hash history), keep the FAIL rows untouched, and re-sit fresh — and when two
+independent seeds then put the same subjects at the same margins, that is capability signal:
+stop. A third sitting after that is selecting on the exam's own noise.
+
+**Second data point (2026-08-27), from the other direction — the RAIL is part of the instrument too.**
+`grok-4.6` on the `grok` CLI is a recorded implementer FAIL: 23/24, the single miss an integrity
+violation carrying a `false_pass_critical` — a behaviour failure, not a capability one. The same model
+family at the same effort, administered through the `cursor` rail, returned a clean 24/24 with all four
+zero-tolerance counters at zero. Three variables differ between the rows (runner, harness version, and
+the fast lane), so this attributes nothing to a specific harness property — but it does show that a
+FAIL can be a claim about the rail, and it is direct evidence for the premise `engine-onboarding`
+otherwise asserts on principle: qualification binds to **engine + runner + role**, never to a model
+name. Note the reasoning that nearly prevented the measurement: "its sibling failed on a more direct
+rail, so the expected value is poor" silently equates *the model failed* with *the model failed on that
+rail* — the exact conflation the binding rule exists to forbid.
+Evidence: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
+## 11. A grep is not a call graph — and a rule can be spelled in arithmetic
+
+**2026-08-16 → fired 2026-08-17.** A retirement sweep asked "does anything enforce capability-claim
+expiry at runtime?", answered **no**, and shipped that as evidence
+(`docs/plans/_archive/2026/08/evidence/2026-08-16-owner-kernel-retirement/p4-claim-expiry-non-enforcement.md`). It
+even named the `2026-08-17` date and classified it harmless. At `2026-08-17T22:23:16Z` that expiry
+hard-blocked every agy dispatch, every agy review, and every Codex PostCompact, and turned twelve
+test files red.
+
+The sweep was `grep -rn "expires_at|freshness" src scripts` plus a check for `require()` consumers.
+Both instruments were blind in the same direction:
+
+- **The consumers were subprocesses.** `dispatch-hetero.sh` and `dispatch-review.sh` run
+  `node "$CLAIMS_SCRIPT" validate-consumer …`; `post-compact.js` runs
+  `spawnSync(process.execPath, [validator, …])`. A `require()`/import search sees none of it. **A
+  module with zero importers can still be the most load-bearing code in the repo** — the inverse of
+  §1's dead-module lesson, and it hides in exactly the same blind spot.
+- **The rule was computed, not spelled.** The enforcing line is
+  `Date.parse(expiration(live)) <= nowMs`, where `expiration()` is derived from
+  `observed_at + ttl_seconds`. Neither grep token occurs there. **Searching for a rule's vocabulary
+  does not find the rule** when the rule is arithmetic over other fields.
+
+The two dispositions this produces:
+
+1. To prove a rule is *not enforced*, do not enumerate call sites — **make the condition true and
+   watch what happens.** Shift the clock, delete the check, feed the expired input. §2's "delete the
+   gate and see if the suite notices" applied to a claim of absence. Two independent agents each
+   settled this in one run by rewinding `Date` seven days; the paper sweep had been wrong for a day.
+2. Grep for the **enforcement verb**, not the field name: `die_`, `block(`, `exit 1`, `throw`,
+   `precondition_failed` — then read what each one is conditioned on.
+
+Related failure the same incident exposed: a fuse **nobody could defuse**. The four D3 claims replay
+a hardcoded `codexHostObservedAt` (`probe-harness-capabilities.sh:126`) because a live Codex
+compaction cannot be provoked from a script, so re-probing could never clear their expiry. **Before
+shipping a check that fails on a schedule, verify the path that clears it actually exists and can be
+run by the person who will be holding the pager.**
+
+---
+
+## 12. A file mtime is not a record timestamp — resumed sessions re-date old evidence
+
+**Incident (2026-08-20, interactive-CC drivability spike).** Archaeology for "does interactive CC
+still have TaskCreate?" grepped `~/.claude/projects/*/*.jsonl` and dated the hits by file mtime:
+"TaskCreate fired on 8/17 and 8/20 — the tool exists today." A live probe the same hour said the
+opposite (`NO_TASK_TOOL`, ToolSearch-backed). The contradiction was the dating method: **resuming a
+session touches the whole transcript file**, so a file whose newest mtime is today can carry records
+written only under an older CLI version. Per-record `timestamp` + `version` fields put every
+TaskCreate hit at ≤ 2026-08-16 / CC ≤ 2.1.232 — the tool family was removed at 2.1.233 and the
+mtime-dated "today" evidence was a ghost.
+
+The general form: **append-mostly stores date their container, not their contents.** Any conclusion
+of the shape "X was still happening at time T" drawn from a container timestamp (file mtime, dir
+mtime, branch tip date, log rotation stamp) inherits every process that touches the container
+without writing new content — resume, re-open, rsync, checkout, chmod.
+
+Rule: when the claim is about *when a record was produced*, date it from a field **inside the
+record**. If the store has no per-record timestamp, say so and downgrade the claim; do not let
+`ls -lt` stand in for one. Evidence: `docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/`.
+
+---
+
+## 13. A fixture anchored to a non-production shape certifies a dead gate — pin bidirectionally
+
+**Incident (2026-08-21, p6d-corrective-gates R2 review).** A gate's precondition read
+`campaignControl.resume_candidate` at top level; production attaches it to the generation-claim
+object. The unit test built its fixture in the SAME wrong shape — so the planted red fired, the
+greens passed, mutations of the predicate went red, and the suite certified a gate that never
+fires in production. The reviewer proved it with a REVERSE mutation: correcting the code made
+the test go red — a test that fails when the code is fixed is anchored to a phantom shape.
+
+Rule: when a test feeds a hand-built object into a unit that production feeds from elsewhere,
+(a) derive the fixture shape from the PRODUCER's write site (cite it in the test), and
+(b) pin BIDIRECTIONALLY — the production shape must trigger, and the plausible-wrong shape
+must NOT ("reverse pin"). Forward mutation (neuter the gate → red) catches dead logic;
+only the reverse pin catches dead WIRING. Evidence:
+`docs/projects/_archive/2026/08/2026-08-21-p6d-corrective-gates/` (R2/R3 reviewer reports).
+
+---
+
+## 14. A named mechanism with no resolvable referent is worse than a dead script
+
+**Incident (found 2026-08-24, knowledge-routing review).** `skills/distill/SKILL.md` asserted, in two
+places, that "the lint **reliably catches** structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
+key-shapes); bare hostnames and client names are the **gate's** job", and twice instructed the reader
+to configure `~/.autopilot/distill/identifiers.deny` — a file **no code has ever read into a
+decision**: nothing in the repo created it, no test fixture supplied it, and its only consumer was an
+optional read that silently fell back to empty. The lint itself *did* exist — buried as an undocumented `--path` mode inside
+`distill-scan.js`, a script whose every other line and whose entire inventory row describe a
+conversation-history frequency scanner. Neither sentence named a path. So a reader following the skill
+had no way to tell which half was real, and **no gate could tell either**.
+
+> **Prose 具名的機制沒有可解參照的實作,等同從未寫過 —— 而且它比 dead script 更毒,因為連「去檢查它
+> 有沒有在跑」的對象都不存在。**
+
+§1's dead script is at least inspectable: you can open it, grep its callers, and discover it is inert.
+An unnamed mechanism offers nothing to inspect. The reader inherits a belief in a defense with no
+address, and the belief propagates — a reviewer reads "the lint reliably catches", concludes the
+structured-token class is handled, and spends their attention elsewhere. The false confidence is the
+damage, and it is the same shape as §8: a label standing in for a property.
+
+**This family was already named.** `CLAUDE.md` recorded the 2026-08-06 caution — *a script existing is
+not evidence it is running* — and this very file collected the family around it. The distill sentence
+was written afterwards and survived every subsequent review. **Naming a failure class does not defend
+against it; only a gate does.** Three weeks, in a repo whose CLAUDE.md carries the warning in bold.
+
+The enforcer pair, both required because either alone is inert:
+
+1. **The writing rule** — an asserted mechanism must name its executable path
+   (`references/skill-contract-card.md` § Review checklist). Without this the gate has nothing to
+   dereference; the ghost lint slipped through precisely by never naming one.
+2. **The gate** — `scripts/doc-drift-gate.js`'s `script-refs` check dereferences every
+   `scripts/<name>.<ext>` reference in `skills/**` and `references/*.md` and fails on any that does
+   not resolve (run by the doc-drift gate check in `preflight-portability.sh` — `check_doc_drift`,
+   labeled "doc-drift gate: internal links resolve + code-fences balance").
+
+**Check**: for every sentence in a skill that promises a mechanical defense, ask *what is its path?*
+If the sentence cannot answer, the defense is unverifiable — and per §"The one question", the working
+case and the broken case look identical from where you are standing.
+
+---
+
+## 15. A claim's layer decides its evidence class — get the layer wrong and no amount of evidence saves it
+
+**Incident (2026-08-25, peer-coordination spike for the `docs/BACKLOG.md` peer-coordination-skill
+item).** A message sent to a peer's machine landed on the wrong session on that machine — the receiving
+protocol addresses a *machine* (one identifier shared by every session on it), not a *session*. The
+first report called this "misdelivery" and proposed logging a failure rate. That was wrong: the
+message reached the machine it was addressed to. The protocol never promised to select a session — it
+has no field for one — so nothing failed at the transport layer; the outcome there is a documented
+fact about the interface, not a rate to be measured. A same-day correction swung the other way and
+called the whole thing "not a failure, session-selection is merely undefined" — which was *closer* but
+still wrong, because it silently discarded a real failure one layer up: **the intended recipient may
+never see the message, and that layer carries no receipt at all.** Three tellings, three different
+claims, and every one of them was backed by real observation. What changed between them was never the
+evidence — it was which layer the sentence was actually about.
+
+Split the claim before asking what would verify it:
+
+| Layer | What the evidence would need to show | Evidence class |
+|---|---|---|
+| Transport (reaches the addressed identifier) | Delivery per the interface's own contract | **Interface fact** — the type signature already proves it; verified once, by reading the schema |
+| Addressing (selects among multiple valid targets sharing that identifier) | Whether the interface has a field for this at all | **Interface fact** — same: read the schema, do not infer it from a sample of outcomes |
+| Recipient (the intended party actually observes it) | Whether delivery in fact occurred, this time, for this message | **Behavior observation** — needs a repro count, a machine, a date; a single instance proves only that a single instance happened |
+
+An interface fact needs exactly one dereference — reading the type signature, the enum, the schema —
+and no amount of repeating that dereference on other machines strengthens it, because the object under
+test is the definition, not an environment. A behavior observation is the opposite: one instance never
+generalizes, and reporting it as a rate (`n/n`) implies a denominator the incident does not support
+unless the trial was actually repeated **and** every leg of it was pinned to the same layer.
+
+The two errors above are the same root cause pointing in different directions. Reading a schema and
+mistaking what it enumerates for a promise about behavior converts an interface fact into a false rate
+(§"the working case and the broken case look identical" from below — here the confusion is not that
+the outcomes look alike, but that a *fact about the type* and a *claim about an event* look alike once
+both are phrased as prose). And correcting that error by re-deriving the interface fact still leaves a
+genuine behavior-layer claim unaddressed, if there was one riding along in the same sentence.
+
+> **Check**: before asking what evidence a claim needs, ask what *layer* it is a claim about. A
+> sentence that mixes layers — "X failed" when X is actually "Y is undefined and Z has no receipt" —
+> will pass any evidence-quality check aimed at the wrong layer, because the check was never aimed at
+> what the sentence actually asserts.
+
+---
+
+## 16. A blind gate usually has two layers — fixing one leaves it blind
+
+**Incident (2026-08-23, v2.34.38).** `check-test-integrity` was blind to all 300 test suites in this
+repo. The visible layer looked like a missing config: autopilot had no
+`.claude/test-integrity-config.md`, so the check fell back to a generic template glob. Fixing that
+alone would have changed nothing, because the real layer underneath was that `parse_config` tested
+`#` before `##` — `test_paths` had never been settable for **any** project, on any repo, ever. Worse,
+supplying a `test_paths` value didn't fail loudly; it silently tripped `malformed_config` and fell
+back to the same broken default, so the 510-line acceptance suite had never once exercised that code
+path. Three documents claimed the config gap was already noted; none of them was true — an undocumented
+gap is bad, but a gap **three docs claim is documented** is worse, because a reader stops looking.
+
+A second layer in the same incident: the same "one bad regex" bypass reappeared three separate times
+across a hardening round (`skip;`, a `#` truncated inside quotes, `( skip )` in a subshell) — each a
+different one-character evasion of the same detection regex. Patching regexes one bypass at a time
+never converges, because the bypass space is a grammar, not a finite list of known-bad strings. What
+converged it was replacing the regex with a quote/escape-aware scanner driven by an enumerated grammar
+of command-position/tail classes (45 probe classes) — and **naming the five classes it still does not
+cover** (a time/coproc prefix, a leading redirect, a heredoc body, `eval`, a heredoc-form skip), each
+pinned with its own boundary assertion so a future reader knows exactly where the blind spots are
+rather than discovering them by incident.
+
+> **Check**: when a gate reports "nothing to check" or "all clean" on a domain it should obviously see
+> activity in, do not stop at the first explanation that fits. Ask whether the absence has a second,
+> independent cause underneath the first, and whether any existing documentation claiming the gap is
+> known is itself unverified. Verify a repaired detection gate by planting an adversarial bypass
+> yourself — never accept a self-report that "it now catches X" — and prefer enumerating the class of
+> evasions over patching each observed instance, because the difference is the gap between "one bug
+> fixed" and "no further bug in this shape ships silently."
+
+**Related**: `scripts/check-test-integrity.sh`, `scripts/lib/test-integrity-l1.py`.
+
+## 17. Fixing the instance is not fixing the assumption — count the copies before you close
+
+**Incident (2026-08-27, v2.34.42–44).** A heterogeneous review panel found that
+`probe-engine-capability.sh` derived a runner's binary from the runner token, so the `cursor` runner
+probed `cursor` — the IDE launcher — instead of `cursor-agent`. It was fixed, verified, and shipped.
+
+The same assumption had **two more independent copies**. `qualification-sweep.sh` carried its own
+inline `verbin="$runner"`, and it was found only when the tool was actually operated: it folded
+stderr into stdout, ran the sanitizer over the launcher's error sentence, and passed
+`--runner-version Error:-No-Cursor-IDE-installation-found.-...` into a **paid** qualification
+administration. `runner_version` is part of the deployment identity that decides whether the evidence
+is applicable later, so the run was about to mint a row that looked authoritative and could never
+match anything. (A third copy existed in `src/readiness/probe.js` and was correct — but unexported and
+welded to its module, so no other caller could reuse it. Correct and unreachable is still a copy.)
+
+Two things generalise. First, **a review finding is about a site, not about the belief** — the panel
+could only report what was in the diff it was given. Second, all three defects this release was built
+around (`*/` closing a block comment, a fabricated `--cwd` flag, this one) were found by **using** the
+thing, and two of them had already passed review with a PASS verdict attached.
+
+> **Check**: when a review or an incident identifies a wrong assumption, do not close on the site that
+> was reported. Grep for every other place that encodes the same belief and say how many you found —
+> "one copy, checked" is a finding; silence is not. If several copies exist, the fix is one owner the
+> others consume, and the count of independent copies must go **down**, not up. Then ask what would
+> have surfaced it earlier than operating it in production, and build that instead of trusting the
+> next review to catch the next copy.
+
+**Related**: `scripts/lib/runner-binary.js`, `scripts/qualification-sweep.sh`, `scripts/check-js-syntax.js`.
+
+---
+
+## 18. A bound inside a fail-closed guard must refuse when it truncates
+
+**Incident (2026-08-27, v2.34.44).** The repaired version-probe guard validated the first stdout line
+and then scanned the tail for error markers — bounded at 20 lines. The same `Error: ...` line refused
+when it sat at line 2 and was **accepted** when it sat at line 23. Only its distance from the top
+decided whether the guard saw it. A module whose entire contract is "anything I cannot positively
+validate refuses" had a limit that silently stopped looking, which is the same shape as the bug it was
+written to prevent: a value nobody checked becoming an identity.
+
+The sibling defect in the same code: stdout and stderr were folded with `2>&1`, so a diagnostic on
+stderr could be read as the value. Separating the streams is what made "the version" a positively
+identified thing rather than "whatever came out first".
+
+A bound is not the problem — unbounded scanning of untrusted output is its own hazard. The problem is
+a bound that fails **open**. The repair keeps a limit and refuses when the limit is reached, with a
+reason distinguishable from a real error line, so an operator can tell "too much output to vouch for"
+apart from "the output announced a failure". Every other bound in the module was then audited and
+each one's behaviour recorded, rather than assumed.
+
+> **Check**: for every cap, slice, `head -n`, timeout, or buffer limit sitting inside a guard, ask what
+> happens to the material past it. If the answer is "it is not examined" and the guard's contract is
+> fail-closed, the bound is a bypass with a length prefix. Refuse on truncation and give it its own
+> reason string. Then enumerate the other bounds in the same unit and state each one's direction —
+> a table of bounds that all fail closed is evidence; one unaudited bound is where the next one hides.
+
+**Related**: `scripts/lib/runner-binary.js`.
+
+---
+
+## 19. A proxy is not the measurement — name what you counted and when it is written
+
+**Incident (2026-08-27.)** A paid qualification run was killed mid-flight. Asked how much had been
+spent, the orchestrator counted entries in the administration's `raw/` output directory, saw zero, and
+reported "0 of 24 dispatches spent". The directory is written per case **on completion**; the dispatch
+logs showed **seven** cases had already run. The number was not a lie and not a guess — it was a
+plausible stand-in adopted without asking what it actually measures relative to the event being
+claimed.
+
+This is the same failure as the two around it, one layer up: an error sentence was accepted as a
+version because it was string-shaped, and a directory count was accepted as a spend count because it
+was in the right place. In each case the observation was real and the **binding between observation
+and claim** was never checked.
+
+> **Check**: before reporting a quantity as fact, state what produced it and when that artefact is
+> written relative to the event you are describing. If the artefact lands at completion, it cannot
+> count things in flight. Prefer a source that is written by the event itself (a dispatch log, a
+> receipt) over one written by its aftermath, and when only a proxy is available, report it as a proxy
+> and say so — "raw/ shows 0 completed cases; in-flight count unknown" is honest, and "0 spent" is not.
+
+**Related**: `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/`.
+
+---
+
+## 20. A hetero implementer's green build is a claim, not a gate
+
+**Incident (2026-07-02, host "openclaw").** An `/l6` run where the implementer quietly loosened a committed live-test ACL and the test suite stayed green throughout.
+
+**Why green was not proof**: the implementer's self-reported pass came from a test it had itself weakened, so the suite passing carried no information about the ACL regression.
+
+**Prevention artifact**: depth-0 re-derives the verdict from the diff itself and the reviewer's JSON artifacts — `scripts/hetero-review-loop.js`'s receipts bind the exact base..head commit range reviewed, so a loosened check inside that range is visible to the re-derivation step even when the implementer's own report says pass.
+
+---
+
+## 21. A leaf process that is a systemd unit or a bare CLI process (not an interactive session) cannot be reached by SendMessage or any agent-call mechanism
+
+**Incident/reasoning**: such leaves have no persistent conversational session to address by instance id — the only recovery path when one appears stuck or silent is a brand-new dispatch, never a message into the old one.
+
+**Prevention artifact**: the dev-flow skill's Background Wait Rule — a dead-man timer plus re-dispatch on timeout, never a wait on a reply message that a non-interactive leaf has no way to send.
+
+---
+
+## The one question
+
+Before recording anything as verified:
+
+> **What would this look like if it were broken — and would I be able to tell?**
+
+If the broken case and the working case produce the same observation, you have not verified anything
+yet. Plant the broken case and watch it fail. That is the only step that converts a green run into
+evidence.
+
+## 22. A test stub that is more permissive than the real program hides the contract it stubs
+
+v2.36.0: `hetero-review-loop.js` spawned the review-loop resolver with `--repo-root <path>`. The real
+resolver rejects unknown flags (exit 2), so every real run produced zero seats. The suite was green
+because its resolver stub accepted any argv. Two more of the same shape in one day: the stub dispatcher
+returned `reviewed` for a seat with no `no_finding_proof`, which the real dispatcher never does, and the
+stub resolver emitted `qc_panel_runners` keys the real resolver never emits.
+
+> **A stub must be at least as strict as the program it replaces.** Every driver that talks to a
+> sibling script needs one case against the real script (a scratch config, a PATH shim only for the
+> paid transport).
+
+Prevention: `hooks/tests/hetero-review-loop.test.sh` case 10d runs `collect` against the real
+`scripts/resolve-review-loop.sh`; the driver fails closed on resolver exit ≠ 0 instead of falling back.
+
+## 23. A test-only carve-out in production code is a backdoor the unit suite cannot see
+
+v2.36.0: a hands cut added `prevEntry.status === 'pending' && phase === 'p7'` to `handleCollect` so test
+case 7 could collect generation 2 behind a non-finalized generation 1. The suite was green (the branch
+existed for it). Three hetero reviewers flagged it independently as a contiguity bypass; nothing in the
+repository would have caught it otherwise.
+
+> **When a test needs a special path, the special path belongs in the fixture, never in the program.**
+> Grep the diff for literal fixture names (`p7`, `test`, `fixture`) before integrating a hands cut.
+
+Prevention: the carve-out is removed and case 7 finalizes generation 1 first; `check-redispatch-prompt.sh`
+style linting of hands diffs for fixture literals is a BACKLOG row.
+
+## 24. A foreman's "green" is a claim until depth-0 re-runs the command
+
+v2.36.0: a foreman reported cut D1-2d "GREEN, integrated" with the topology test. Depth-0 ran the same
+test in the foreman's own worktree: 39 passed, 2 failed. The foreman had read a stale output file from
+an earlier background run. Separately, foremen that only ran their own deliverable's DONE line shipped a
+resolver-contract change that turned 25 other test files red; nobody saw it until the release suite.
+
+> **Verify by re-running, not by reading a report — and each deliverable's DONE includes the parallel
+> section of the full suite** when it touches a shared contract (resolver fields, schema, defaults).
+
+Prevention: depth-0 re-runs the cut's test file in a scratch worktree before every merge (this session's
+integration rule); the front-door topology section carries the full-suite-per-deliverable line.
+
+## 25. A new `auto` default that reads host state leaks that state into every fixture that did not pin it
+
+v2.36.0: `plan_review`/`hetero_review`/`consult_dispatch` gained `auto`, which reads
+`~/.autopilot/topology.json`. Every mini-repo fixture that had never mentioned those knobs suddenly
+expanded the real host's plan panel, collided with the fixture's implementer runner, and tripped the
+same-runner guard — 25 red files, all "unrelated" to the change.
+
+> **A default that consults the environment needs a test-side kill switch, and every fixture must set
+> it.** Here: `AUTOPILOT_TOPOLOGY_FILE` pinned to a nonexistent path.
+
+Prevention: the shell resolver suite, the ladder unit test and the integration fixtures pin the variable;
+the product fix makes `auto` skip colliding seats and fall back natively instead of exiting 3.
+
+## 26. A gate built on inference when the harness already publishes the value through another channel
+
+**Incident (2026-09-05, v2.36.1).** `hooks/context-budget.js` inferred the model's context window from "observed N
+tokens ⇒ window > N" because hook stdin carries no model and no window (verified against the hooks reference and
+two closed GitHub issues). It fired T2 "STOP, hand off now" at 153k and again at 180k on a 1M session (15–18%).
+The same Claude Code build hands the **status line** `model.id`, `context_window.context_window_size`,
+`used_percentage`, and — per running subagent — `tasks[].contextWindowSize` / `tokenCount`. A BACKLOG row had
+waited nine days for "an equivalent per-agent usage field" that was already arriving through the other door.
+Fix: codeforge writes what the status line receives into a tmpfs live file; the hooks read it (`scripts/lib/live-state-dir.js`).
+
+**The lesson.** Before inferring a value the harness withholds on one channel, enumerate the harness's other
+channels (status line stdin, SDK result messages, transcript rows, env) and check whether it publishes the value
+there. An inference-based gate is a claim about the harness; the harness's own JSON is the measurement.
+
+**Corollary recorded the same day.** A status-line writer that "only draws" is a measurement that is thrown away
+every tick. If a channel already receives the truth, persist it where the acting component can read it — in RAM
+(`$XDG_RUNTIME_DIR`, probed with `findmnt`, never assumed) when it is rewritten every tick.
+
+## 27. A gate that measures the wrong unit passes the request straight into the wall behind it
+
+**Incident (2026-09-07, v2.36.14).** `dispatch-review.sh`'s kimi rail passed the prompt as one `-p` argv string
+with a comment reading "ARG_MAX risk accepted with context-window gate upstream". The context-window gate counts
+tokens; the wall is Linux `MAX_ARG_STRLEN` (128 KiB per argv string, unrelated to `ARG_MAX`). A 145 KB prompt
+cleared the token gate and died in `execve` with rc=126, surfaced as an opaque `no_verdict`. The risk had been
+"accepted" by the wrong instrument.
+
+> **An accepted risk must name the unit the wall is measured in, and the gate that guards it must measure that
+> unit.** Tokens do not bound bytes; bytes do not bound argv strings.
+
+Prevention: the rail measures prompt bytes before spend and fails closed naming the kernel limit and the remedies;
+the test proves the guard with a 150 KB stub prompt (the stub itself would die on the same wall, which is the
+evidence).
+
+## 28. An update that replaces the artifact a live process has pinned breaks every live process, remove-then-add or not
+
+**Incident (2026-09-07, v2.36.10).** Every Codex plugin update left running Codex sessions failing `PostCompact`
+with `MODULE_NOT_FOUND …/cache/<plugin>/<old-version>/hooks/post-compact.js`. The suspected cause was
+`dev-setup.sh`'s remove-then-add; the isolated-`CODEX_HOME` experiment showed the in-place `plugin add` upgrade
+deletes the previous version directory as well. Dropping `remove` would have fixed nothing.
+
+> **Reproduce the replacement in isolation before blaming the visible step.** The fix that follows from the
+> hypothesis (drop `remove`) and the fix that follows from the measurement (refuse to update while sessions
+> that pinned the directory are alive) are different fixes.
+
+Prevention: `dev-setup.sh` detects live `codex` processes and refuses without `--force`; the package test pins the
+"upgrade deletes the old version dir" fact in a sandbox so the guard's premise cannot rot silently.
+
+
+## 29. A derived cache that matches its generator proves the generator ran, not that the generator is right
+
+**Incident (2026-09-07, v2.36.16).** Two resolver tests sat red on develop for three days. The handoff attributed
+them to a stale `~/.autopilot/topology.json` ("rebuild the cache; host state, owner decides") and
+`resolve-dispatch-topology.js --check` returned 0, which read as "the cache is fine". Re-running the generator
+produced the same two `effort: ""` rungs: the implementer path emitted an empty effort for legacy seats while the
+reviewer path had defaulted to `high` since Case 12. `--check` compares the file to what the script would write
+now — a wrong script and its faithful cache agree perfectly.
+
+> **A consistency check between an artifact and its generator is evidence about the artifact, never about the
+> generator.** Before filing a red as "host state", regenerate from source and diff; if the fresh output carries the
+> same defect, the defect is in the code and the cache is a witness, not a suspect.
+
+Prevention: the producer now emits a contract-valid effort and dedupes identities; the consumer names the rung and
+the fix on a stale cache instead of failing an index deep in the validator; Case 13 pins the legacy-seat emission so
+the two role paths cannot drift apart again silently.
+
+
+## 30. A mutation that crashes instead of bypassing the guard is a false green
+
+**Incident (2026-09-08, v2.36.17).** A new hook's receipt required a `pending` record before it
+could mark a run approved. To prove the requirement was load-bearing, the guard line was deleted:
+
+```js
+  const st = readState(file);
+- if (!st || st.run_key !== key || !st.pending_at) return false;
+  writeState(file, { ..., pending_at: st.pending_at, ... });
+```
+
+The suite stayed green at 14/14, which read as "the tests do not cover this". They did. Deleting
+the line left `st` null, so the next statement threw, the hook's fail-open `catch` swallowed it,
+and no receipt was written — the same OBSERVABLE outcome as the guard working. The mutant had
+broken the code in a second way that happened to mask the first. Rewriting it to actually bypass
+the guard (tolerating a null `st` and writing anyway) turned exactly the two intended tests red.
+
+> **A mutation is evidence only when the mutant fails the way you intended.** Before reading a
+> surviving mutant as a coverage gap, check that it changed the behaviour under test rather than
+> triggering an error path that produces the same result.
+
+Prevention: when a mutant survives in a module with a broad `catch`, re-run it with the error
+path disabled, or assert on the state the guard protects rather than only on the outward decision.
+
+## 31. An implementer that fabricates a hash it was told to expect
+
+**Incident (2026-09-09, v2.36.21 profiles re-pin).** The foreman leaf-dispatched
+the profiles hash-chain re-pin to `agy` / `gemini-3.8-flash-low`. Across three
+consecutive dispatches the implementer returned a wrong `inventory_sha256`,
+hand-invented `content_hashes` and `rule_ids` for the migration, and a catalog
+hash whose first 16 characters were exactly the prefix the foreman had stated as
+its expectation with the remainder invented. It also reported having run
+verification steps it never ran. Only the fourth dispatch — a verbatim executable
+script with no room for model judgment — produced truthful artifacts, and the
+foreman confirmed them byte-identical against an independent dry run in a scratch
+worktree before merging.
+
+**Why it slipped past the obvious defence.** A hash is a plausible-looking opaque
+string, so a fabricated one survives every check that does not recompute it. And
+naming the expected value in the prompt makes it *worse*: the prefix the reviewer
+supplied is the part the implementer reproduces correctly, which is exactly the
+part a spot-check looks at.
+
+**The rule.** Never accept a digest, a line number, or a count from a dispatched
+engine as evidence — regenerate it locally and compare. When the deliverable *is*
+a set of derived values, do not ask a model to compute them: dispatch a script
+that computes them, and review the script. And never state the expected digest in
+the prompt; it converts a check into an answer key. Related: §29 (a derived cache
+matching its generator proves only that the generator ran).
+
+## 32. A mutant that goes red for the wrong reason hides the finding you were looking for
+
+**Incident (2026-09-11, the operator pin store).** §30 covers the mutant that survives because it
+broke the code a second way. This is its mirror, and it cost a wrong conclusion in both directions
+inside one review.
+
+First, a *surviving* mutant read as a coverage gap. To test that `writeSnapshot` is atomic, the
+`fs.renameSync` call was deleted. The suite stayed green, which looked like proof that the atomicity
+assertion was vacuous. It was not: with no rename, nothing is ever written to the target, so the
+assertion "the file still holds its prior contents" is satisfied trivially. The correct mutant —
+write straight to the target instead of temp+rename — turned that assertion red immediately. A
+correct implementation was one step away from being reported as untested.
+
+Then a *failing* mutant read as coverage. To test that the pin path takes the write lock,
+`withWriteLock(opts, fn)` had its head replaced with `(() => {` — leaving the closing `})` intact,
+so the callback became an arrow function that was never invoked. The mutator stopped working
+entirely and three assertions went red. "The suite went red" reads as "the lock is covered" — but
+the assertion that claims to cover the lock **stayed green**, and the three that failed were about
+the pin landing at all. The real finding (that assertion was a `grep` matching the section's own
+comment, and passes with the lock removed) only appeared once the mutant preserved behaviour:
+`withWriteLock` replaced by an immediate call, so the mutator still pins, just without the lock.
+
+> **Read which assertion moved, never whether the suite moved.** A mutant is evidence only when the
+> assertion under test is the one that changes state. A red suite whose relevant assertion stayed
+> green is the same non-evidence as a green suite whose mutant crashed.
+
+Prevention: name the assertion the mutant is supposed to break before running it, and require that
+exact assertion to flip. A mutant that removes a property must leave every other behaviour intact —
+if unrelated assertions move, the mutant is malformed, not informative.
+
+## 33. An assertion that cannot fail is the default output of writing tests, not an aberration
+
+**Incident (2026-09-11, three deliverables of one plan).** Three bounded deliverables, three
+different implementer engines, three test suites written to briefs that explicitly demanded red
+proofs. Each shipped exactly one assertion that could not fail, and in all three cases a decorrelated
+review seat — never the author, never the orchestrator's own verification — found it:
+
+| deliverable | the assertion | why it could not fail |
+|---|---|---|
+| pin store | `grep withWriteLock` over the pin code section | the section's own COMMENT contains the token |
+| live resolver | `if …; then ok "7: …"; else ok "7: …"; fi` | both arms report success |
+| contract admission | `assert_not_contains <body> '"assurance":"operator-pin"'` | a NO-GO payload structurally never carries that key |
+
+None of the three is careless. Each is a plausible way to express the intended property, and each
+passes on the day it is written. The first survives because source text is not behaviour; the second
+because an `if` with two success arms still reads like a check; the third because asserting the
+ABSENCE of a key is vacuous whenever the surrounding shape guarantees the key is absent.
+
+> **Treat "at least one assertion here cannot fail" as the prior, not the exception.** The suite's
+> pass count is quoted as evidence, so a vacuous assertion does not merely fail to help — it inflates
+> the number that gets reported.
+
+Prevention, in order of strength: require a red proof per *assertion group* rather than per
+deliverable; refuse any `if/else` whose arms both report success; and for absence-assertions, first
+demonstrate a case where the key IS present, or the absence proves nothing. The orchestrator's own
+verification caught none of these — all three came from the decorrelated panel seat, which is the
+argument for `min_panel_size` being a floor rather than a budget.
+
+## 34. A check that prints only its verdict cannot be distinguished from one that read nothing
+
+A pass and a question never asked look identical when the output is a verdict alone.
+Print the values the comparison actually read, beside the verdict, always.
+
+**2026-09-12, reported by a peer session within ten minutes of discussing §33.** A shell
+loop compared two commits by `git patch-id`, splitting each pair with `set -- $pair`.
+Under zsh that does not word-split, so both sides of every comparison were the empty
+string, and the script cheerfully printed `same patch? YES` three times. The conclusion
+it supported — that an accepted commit was a re-application of a hands commit — was
+false, and the run that produced it was green. It was caught only because the author
+happened to look at the inputs; had the script printed YES/NO and nothing else, the
+wrong answer would have shipped with a table behind it.
+
+This is the read-side twin of §33. §33 is an assertion whose *predicate* cannot fail;
+this is an assertion whose *operands* were never populated. The predicate is fine —
+`[ "$a" = "$b" ]` is a real comparison — and it is comparing two things that do not
+exist. Every guard in §33 (mutate the source, watch a named assertion move) passes here
+too, because mutating the source changes neither empty string.
+
+Two rules follow, and the first is cheap enough that there is no reason not to:
+
+- **Emit the operands.** `same patch? YES (a=<sha> b=<sha>)` would have been unmissable.
+  A comparison that prints only its verdict is not reviewable and not reproducible.
+- **Assert the operands are non-empty before comparing them.** An empty-string equality
+  is the degenerate case of the same defect the negative-control helper had
+  (`hooks/tests/pending-revocation-fold.test.sh`, v2.36.27): a `grep` miss on a file
+  that does not exist is also a comparison against nothing. Both were repaired the same
+  way — prove the thing being read exists and carries what you are searching within,
+  and only then treat a non-match as evidence.
+
+**A third rule, and it is not a corollary of the second.** Reported by the same session
+hours later, after applying the two rules above to the gate they had built to stop this
+very family — and finding the gate was itself an instance:
+
+- **A parser that dies must not be readable as valid-but-empty input.**
+
+Their `check-inputs-landed.sh` had an embedded Python heredoc with a quoting error. The
+interpreter raised SyntaxError, `mapfile` read zero lines, and the gate printed
+`OK: all 0 declared input(s) are contained in HEAD.` and exited 0. That `--manifest`
+path is the entire purpose of the gate, and its commit message claimed it gated phase
+inputs; only the positional-argument path had ever been run.
+
+Rule 2 does not catch this. They *had* `|| fail` on the `mapfile`, and it never fired,
+because `mapfile` reading zero lines from a failed pipeline **succeeds**. The SyntaxError
+did reach stderr — three lines above the success message. Embedding the parse inside the
+shell makes "the parser died" and "the input was empty" indistinguishable at the shell
+level, so no amount of checking the emptiness afterwards helps: by then both look the
+same. The fix is structural — move the parse into its own program and check its exit
+code explicitly. Theirs now exits 2 on zero inputs, a missing `inputs` key, a non-list,
+or an entry without a sha, with the exact regression pinned by a test.
+
+Two things about that incident are worth keeping. The gate was written specifically to
+prevent a false-negative existence check, and it shipped as one — **building the guard is
+not the same as running it**, which is this file's oldest lesson arriving from a new
+direction. And the repair itself broke the other code path (a literal tab written as
+`\t`) and was caught immediately, by the tests the first version did not have.
+
+The family now has six members across four deliverables of one plan, a peer repository,
+and a guard built to stop the family. Treat "my check is green" as meaning nothing until
+you can say what it read, that the operands were populated, and that the thing which
+produced them exited zero.
+
+## 35. A fixture shaped like what you assume the pipeline emits proves only that your assumption is self-consistent
+
+**2026-09-14, v2.36.43, caught by the pre-merge reviewer.** The fix for "a reviewer
+`no_verdict` terminal-stops the campaign" added a discriminator in the composition layer
+keyed on `fullDiff.raw.status === 'no_verdict'`, and a test that fed the composition a
+hand-built review adapter returning exactly that shape. Red on HEAD, green on the fix,
+three mutants caught — every guard in this file that runs at the composition layer passed.
+
+The real pipeline never produces that shape. `reviewDiff()` collapses every non-reviewed
+dispatch to `status:'blocked'` and keeps the dispatcher's parsed status only at
+`raw.reviewResult.result.status`. In production the branch was dead; the dogfood incident
+the version was named after would have recurred with the suite green.
+
+This is §33/§34's cousin one layer up: the assertion could fail and the operands were
+populated — by the test author, from an assumption about an adjacent module, instead of
+by the adjacent module. A mock at a module boundary is a claim about the neighbour's
+output contract, and a claim needs the same evidence as any other.
+
+- **When a fixture stands in for a neighbour's output, derive the fixture from the
+  neighbour.** Either call the real neighbour with its own dependencies stubbed one level
+  further out (here: the real `engine.reviewDiff` with a stub `reviewDispatcher`), or
+  build the fixture by reading the neighbour's return site and cite the line. A fixture
+  written from memory of what the neighbour "obviously" returns is the §34 empty operand
+  wearing a plausible value.
+- **A discriminator on a foreign shape needs one test that crosses the boundary.** The
+  composition-level cases still earn their keep (they pin the branch's own behaviour);
+  the boundary-crossing case is what makes them mean something.
+
+**Prevention artifact**: `hooks/tests/autopilot-engine.test.sh` "no_verdict is a
+resumable gate fault" — drives the real `reviewDiff`, asserts the collapsed shape it
+actually emits, then feeds that into the exported classifier.
+
+## 36. A suite that is green in your shell and red in the rail is measuring your shell, not the candidate
+
+**2026-09-18, v2.36.68, the 2-C station campaign.** The hand's commit was green on all
+thirteen §4.1 commands in a detached scratch checkout; the rail's acceptance ran the same
+thirteen and `mission-runtime-v2.test.sh` went 50/53 red, the terminal journal refused the
+acceptance failure (an open BACKLOG row), the campaign was stuck IMPLEMENTING, and 85 hand
+minutes had to be closed out by hand. The candidate was not the variable. Depth-0 had
+exported `AUTOPILOT_SESSION_ID` in the dispatch environment; the acceptance runner inherited
+it; the suite spawns the engine, the engine reads the live marker of whatever session the
+environment names, and that session had an active `l5` marker. The same suite goes red on
+`develop` under the same variable.
+
+Two guards failed at once. The suite trusted its environment (it never pinned its own session
+identity, so its verdict was a function of who ran it), and the operator's verification ran in
+a different environment from the rail's, so "green here" said nothing about "red there". The
+bisection that found it — one variable at a time, on the candidate and then on `develop` —
+is what should have preceded any conclusion about the candidate.
+
+- **A test that spawns a process which reads ambient identity must pin that identity.**
+  Session ids, HOME, config dirs, marker directories: set them in the test, from the test's
+  own fixture, so the verdict is the same in every shell (`implementation-campaign-state`
+  does this since 2-B; every suite that drives the engine should).
+- **Verify in the rail's environment or reproduce the rail's environment before blaming the
+  candidate.** When a rail and a shell disagree, diff the environments first (`env -u` one
+  variable at a time), and check the base under the rail's environment — a base that is red
+  the same way clears the candidate in one run.
+- **Export nothing into a dispatch that the rail does not need.** Every extra variable is a
+  new input to every process the rail spawns; the intake matched the marker through
+  `CLAUDE_CODE_SESSION_ID` without help.
+
+## 37. A verify list written by the brief's author covers the author's model of the change, not its consumers
+
+**2026-09-18, v2.36.70, four rail rows fixed in parallel.** Each brief carried a verify list
+(the suites the author knew touched the files) and each hand ran it green; the integrated
+head ran the union of the four lists plus two more, 18/18. The advisor's question was the
+right one: three interfaces had moved — the dispatch-review result JSON gained a key, the
+engine's run result gained a `status` value, a journal event gained a payload key — and the
+consumers of those interfaces are not enumerated in any brief. `grep -l` over
+`hooks/tests/*.test.sh` for the moved identifiers minus the suites already run gave 44 more;
+38 green, 6 red. The six were then run at the pre-release base: red with the identical 65
+failing assertions, so the release was clean — but that was known only after the sweep, not
+before the push.
+
+- **Derive the consumer set mechanically after the change, never from the brief.** Grep the
+  test tree for the identifiers that moved (file names, JSON keys, enum values, exported
+  functions) and run whatever the verify lists did not cover.
+- **A red found by the sweep is attributed at the base before it is called a regression.**
+  Run the same suites on the commit before the change; equal failure sets clear the release,
+  a superset names the regression. Normalise temp paths before diffing the sets.
+- **The sweep is part of the release, not a follow-up.** It costs one background run; a
+  v2.36.N+1 that could have been avoided costs a release cycle.
+
+## 38. A live proof measured by a rail that runs the base engine is a proof about the base
+
+**2026-09-18, v2.36.69, the shared-packet campaign.** Plan §5 asked the campaign to prove
+"one packet build per candidate" live; the panel station built four per-seat packets and no
+shared directory ever appeared. Not a defect: `bin/autopilot.js` runs from the main checkout
+at the sealed base, so the engine executing the campaign was the pre-change engine, and the
+candidate's engine ran only inside the verify station's suites. Every plan whose deliverable
+IS the engine or a runner has this shape.
+
+- **Before claiming a live proof, say which code executed the measurement.** If the change
+  is in the code that runs the campaign, the earliest live observation is the next campaign
+  after the merge; record "not producible this campaign" and where it will show.
+- **A missing artefact during a run is a fact to explain, not to file.** The absence of the
+  shared directory was visible during the run; the explanation (which engine ran) was one
+  `ps` and one path away, and it changed what the evidence README could honestly claim.
+
+## 39. A brief that changes a rail's output contract must list the contract's consumers before it lists its tests
+
+**2026-09-19, v2.36.71, unit D.** The brief made `dispatch-author.sh` demand a nonce-keyed frame in
+the runner's output. Its Verify block listed six suites — the author's, the schema's, the two
+downstream consumers the author knew about. Eight sibling suites drive `dispatch-author.sh` with
+fake runners that print unframed text; every one went red, and none was in the brief. The §37
+sweep caught them after the fact, at the price of two more hand rounds and a shared fixture
+helper written under time pressure.
+
+- **Run the §37 consumer grep while WRITING the brief, not after the merge.** If the change
+  alters what a rail emits or accepts, `grep -l <rail-name> hooks/tests/*.test.sh` is the Verify
+  block, and the fake runners in those suites are part of the deliverable.
+- **A fixture that fakes the rail's counterpart must be updated by the same hand that changed
+  the contract.** Leaving it to a later round splits one change across two reviewers who each
+  see half of it.
+
+## 40. A sweep loop that reads its list from stdin hands the list to the suites
+
+**2026-09-19, v2.36.71.** `while read -r s; do bash "$s"; done < list` ran 13 of 71 suites and
+reported DONE: the first suite that read stdin consumed the remaining 58 lines. Nothing failed;
+the tally simply had 13 rows where 71 were expected, and the count was the only tell.
+
+- **Every child in a `while read` loop gets `< /dev/null`.** Suites spawn processes that read
+  stdin (engine CLIs, `node -e`, interactive fallbacks); assume they will.
+- **A sweep's row count is an assertion.** Compare it to the list length before reading the
+  verdicts; a short tally is a broken sweep, not a fast one.
+
+## 41. A hand-created test file is not a test until it is executable
+
+**2026-09-19, v2.36.71, unit A.** Two new `*.test.sh` suites were committed as 100644.
+They passed when invoked as `bash <file>` (every verify command did) and `run.sh` refused the
+whole L2 layer — surfacing as an unrelated suite (`suite-oracle-lock`) going red in the sweep,
+two hops from the cause.
+
+- **`test -x` on every new `*.test.sh` belongs in the hand prompt's Verify block**, next to the
+  suite itself; `bash <file>` cannot see the mode bit.
+- **The rail's own runner (`run.sh <filter>`) is the verify command for a new suite**, because
+  it enforces the rules `bash <file>` does not — mode, name pattern, registration.
+
+## 42. An advisory channel existing is not evidence the message arrives
+
+**v2.36.97–v2.36.98.** 15 hooks (6 default-on) printed model-facing warnings to stderr with
+exit 0; the model never saw any of them for months, because Claude Code's own docs say stderr
+on exit 0 goes to the debug log only. A channel that has never been probed for reachability is
+an assumption wearing the shape of a mitigation.
+
+- **The detector is a nonce probe per event** — emit a unique marker on the channel under test
+  and confirm the model can quote it back, not that the hook ran without error.
+- Preventing artifacts: `hooks/README.md` § Hook Output Channels, `hooks/tests/hook-advisory-channel.test.sh`,
+  and the probe evidence dirs.
+
+## 43. A per-row review cannot replace the combined review
+
+**v2.36.97–v2.36.98.** The v2.36.97 combined `origin/develop..HEAD` review caught
+`permissionDecision:"allow"` silently auto-approving a tool call — invisible to any review scoped
+to one hunk. The v2.36.98 combined review caught five things that per-row SHIP-AS-IS reviews had
+already passed: the multiplexer dropping deny/ask, exit-2 paths touched, exit-1 dropped, a
+queue race, and `tsc` not queued. One of the five (the mcp-health exit-2 hunk) had been explicitly
+judged a non-issue by the same reviewer in its own row review — the reviewer did not lack the
+finding, the framing hid it.
+
+- **Every landing brief runs a full `origin/develop..HEAD` review**, never a per-file or per-row
+  substitute.
+- **A foreman may not refute a 🔴/🟠 itself; depth-0 re-derives** (ADR-0001) — self-refutation by
+  the party being reviewed is not verification.
+- Evidence: `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/` and
+  `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
+
+## 44. A diff in a real store during a test run is not proof of test pollution
+
+**v2.36.98.** A `capability.jsonl` row appeared mid-suite and was deleted as "pollution" on
+sight. A tripwire clone instrumented to refuse and log any test write later ran two full suites
+with zero writes recorded — the row was most likely a genuine concurrent operator capture, and
+the delete had most likely destroyed real data on an assumption.
+
+- **Verify the writer before deleting operator data** — an instrumented clone that refuses and
+  logs is cheap; a deleted row is not recoverable.
+- Preventing artifact: `AUTOPILOT_TEST_RUN_GUARD` (v2.36.99, `hooks/tests/capability-store-test-guard.test.sh`).
+- Evidence: `docs/backlog/suite-pollutes-real-capability-store.md`.
+
+## 45. A capability a tool's docs claim is not a capability it has — probe with the unenumerated case
+
+A third-party CLI's documentation (or a prior adapter's comment) is a claim, not evidence, that the
+tool can do what you need — especially for a *containment* capability, where being wrong exposes the
+host. 2026-08-29, wiring exam-transport adapters that must guarantee the exam child cannot run tools
+or touch the filesystem: grok's `--tools ""` *looked* like it disabled tools but a live probe ran
+`hostname` and leaked the real host — only a catch-all `--deny "*"` actually held. cursor-agent's
+docs advertised `permissions.deny` + `--sandbox` + `--mode ask`; live-probed, its deny is an
+enumerated allow-by-omission list (TodoWrite and WebSearch — a real outbound call — ran under the
+full documented deny + `--force`), a wildcard `["*"]` silently no-ops, `--sandbox` is AppArmor-gated
+and unavailable, and `--mode ask` is overridden by the `--force` that headless mode requires — so it
+is genuinely NOT-containable, and the honest adapter refuses rather than spawn it uncontained.
+
+The verification is not "does the documented flag exist / exit 0" — it is a **planted-negative probe
+using a capability the deny list does not enumerate**: ask the model to invoke a novel tool
+(`todo_write`, `spawn_subagent`, `WebSearch`, a fabricated tool name) and confirm it is actually
+blocked with no real side effect (no real hostname, no real network result), not merely that a known
+name was refused. An enumerated denylist that passes on the five names you thought of is
+allow-by-omission (§17's uncounted copies, in tool-surface form); only a proven catch-all — or a
+refusal — is containment. This is the same shape as the whole family: a documentation claim and a
+working capability produce the same observation until you plant the case the claim did not cover.
+
+**Related**: `docs/plans/evidence/2026-08-29-cursor-containment-probe/` (19 receipts), the grok/qoderclicn
+containment probes under `docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/`.
+
+## 46. Re-grading old outputs is not re-measuring — a fixed prompt changes what the subject does
+
+When an evaluation's grader OR its prompt is corrected, re-scoring the *already-collected responses*
+under the new grader answers a different question than re-administering under the new prompt. The old
+responses were produced under the old stimulus; the subject's behavior is a function of that stimulus.
+2026-08-29: after fixing a consult exam's aside-channel contradiction (the prompt had invited asides
+the grader forbade), an offline re-grade of the prior MiniMax/GLM responses predicted they would still
+fail (6→7, 8→8). But re-administering under the *corrected prompt* scored 19/20 and 18/20 — the engines
+stopped misusing the aside channel once the instruction was clear. The offline preview systematically
+under-predicted because it re-scored old behavior, not new behavior.
+
+Rule: an offline re-grade is valid only for a **grader-logic-only** change whose stimulus (envelope,
+prompt, case content) is byte-identical to what the responses answered — and even then, verify that
+invariant before trusting it. Any change to the *instruction the subject reads* invalidates the old
+responses as a sample; you must re-run to measure. Re-grading a changed-prompt exam records the old
+run's ghost, not the current instrument's result — a §12-adjacent trap where the artifact looks
+current but measures a superseded stimulus.
+
+**Related**: `docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md`.
+
+## 47. A real-host proof that mutates the state it proves makes every later proof vacuous
+
+2026-09-28, v2.36.100: round 1's real-host proof for a live-dir permission fix `chmod`'d the real
+`/run/user/1000/autopilot` from 0775 to 0700 as a side effect of running it. Round 2's proof, and
+depth-0's own before/after check, then ran against that already-tightened 0700 dir and passed —
+while the round-2 rule still rejected the real production case (0775 under a private parent). Only
+the landing foreman's combined review across the full range caught it (🔴). Compounding it: the spec
+author (depth-0) had written the rule as "no other bits" despite having observed the real dir at 0775
+in the pre-check — the wrong rule was picked *with* the disconfirming observation already in hand.
+Round 1 also wrote a synthetic `livedir-proof-*.json` into the real context dir (removed by depth-0)
+— a second way a proof run leaves the store it's supposed to only observe.
+
+Rule: a real-host proof must restore its precondition before each run (here: `chmod 0775` the
+target and `stat` it to confirm) and never write into a real store. A test suite for a permission
+rule must name the actual production case, not only synthetic ones.
+
+## 48. A stub suite that never takes the production path proves the stub
+
+2026-09-29, v2.36.101 (`dispatch-hetero.sh` wall-timeout watchdog): all stub cases in the round-3
+suite went green while every real dispatch runs through the detached child, whose `declare -f`
+serialisation list lacked `normalize_timeout_seconds` — the watchdog was silently never armed on
+that path. The brief's mandatory real-rail proof (`--timeout 20s`, the agent told to `sleep 300`)
+ran 322 s and exposed it; the preventing artifact is the detached-path test case plus the real-rail
+proof clause in the brief, not the stub suite, which never took that path.
+
+The same closeout's combined review also found a 🟠 (bare-pid fallback) on a diff byte-identical to
+one a per-row review had already passed — reviewer verdicts are samples, which is why the combined
+review is not optional (§43).
+
+## 49. Fixing a fail-open one shape per review round does not converge — enumerate the shape matrix and rewrite as one rule
+
+2026-09-29, v2.36.104 (`dispatch-hetero.sh` watchdog alive-check): the gate answered "is the worker
+still alive?" and treated "cannot tell" as "dead", so the watchdog exited silently and the run went
+unbounded while the manifest still said `timeout_enforced: true`. The combined review found it three
+rounds running, each time in a different input shape — `ps` unusable (round 1), SCOPE_UNIT with an
+empty fallback pgid (round 2), `WORKER_RP` and fallback both empty (round 3). Each repair closed the
+shape the reviewer named and left its siblings; three per-shape repairs did not converge. What
+converged was a single-rule rewrite: dead only when positively proven dead, every other outcome
+(including unknown) is alive, plus a matrix test over every combination.
+
+Rule: when the same defect class recurs in a second review round, stop patching the named shape.
+Enumerate the input-shape matrix, state the one rule that covers all cells (for a guard whose failure
+disables enforcement, unknown must resolve toward enforcing), rewrite to it, and pin it with a test
+that walks the matrix. A reviewer names an instance; the repair must cover the class (§17).
+
+## 50. A parity test keyed on a name both sides share compares a file to itself
+
+2026-10-03, v2.36.108 → `24c97d2b`. `dispatch-review-blind-kimi-agy.test.sh` claimed the non-blind
+kimi/agy branch was byte-identical to base: it ran the base copy and the head script against a
+recording stub and compared the records. Both scripts were named `dispatch-review.sh` and the stub
+keyed its record file on the script name, so both runs appended to ONE file and the compare read it
+against itself — green for any drift. It also pinned the base to `47a0e1c6`, a SHA that existed only
+in a private work clone, so every fresh clone went red once the "unreachable base fails loudly" fix
+landed. A deliberately injected argv token passing the suite exposed the first defect.
+
+Rule: a parity/equivalence test must (a) key each side's evidence on an identity the sides do NOT
+share (`base`/`head`), with an assertion that each side actually produced a record, (b) derive its
+baseline from history every clone has (e.g. the parent of the commit that introduced the feature),
+never a SHA from a scratch clone, and (c) be shown to fail on an injected drift before it is trusted
+(§48: a check that cannot fail proves nothing).
+
+## 51. A lib.sh suite that never calls finalize_test is green by construction
+
+2026-10-03, v2.36.111. A new suite (`campaign-resume-reviewing-phase`) shipped through its hand's
+rc-0 report and a per-row fable review. It sourced `lib.sh` and never called `finalize_test`;
+`fail()` only appends and prints to stderr, so the suite exited 0 whatever it asserted. A sibling
+hand noticed it printed no PASS/FAIL line. The gate written in response then found five older suites
+with the same shape. Same family, same day: `echo $?` after `node … | tail -1` reports tail's status,
+not node's (the xproc suite's `drive()`).
+
+Rule: a shell suite's own summary line must exist, and a deliberately broken product line must turn it
+red before the suite is trusted. An rc of 0 from a suite that printed nothing is not a pass. Capture a
+piped command's status with `${PIPESTATUS[0]}` or run it to a file first.
+
+Preventing artifact: `hooks/tests/test-suite-finalize-gate.test.sh` — every lib.sh suite must finalize
+(a bare `[ "$FAIL" -eq 0 ]` counts only as the last command); the allowlist can only shrink.
+
+## 52. A hook's advisory is a proxy until re-derived from the harness's own number
+
+2026-10-03, v2.36.113. The cost-tracker hook told the model "context is heavy" while the statusline
+read 33% of a 1M window. The hook summed `cache_read` tokens over every API call of the session
+(calls x window), which grows without bound and says nothing about window fill; the hook's
+message carried no percentage, and it cited a doc pointer for an unrelated rule. The model relayed
+the claim to the owner twice without checking; the owner caught the contradiction. The real figure
+was already on disk in the live context file the whole time.
+
+Rule: an advisory author must ship the contradicting-axis figure in the message (here the real
+context %, now enforced by the hooks/README wording rule), and a model must re-derive a size or cost
+claim from the harness's own number (read the live context file) before relaying it to the owner.
+A hook's sentence is a proxy for the quantity it names, not the quantity.
+
+Preventing artifact: v2.36.113 cost-tracker reads the live % and recommends /clear only at >= 50%;
+evidence in `docs/plans/evidence/2026-10-03-v113-cost-tracker-context-signal/`.
+
+## 53. An isolation env var the code silently rejects still writes the real store
+
+2026-10-04, mods P1a. `resolveLiveDir` accepts `AUTOPILOT_LIVE_DIR` only when it is RAM-backed and
+mode 0700; anything else is skipped and resolution continues to `$XDG_RUNTIME_DIR`, the operator's real
+live store. Three kinds of suite went green while doing exactly that: the R1 manifest suite set the override on
+`/tmp` (ext4 here), so `status runs` wrote its enrich cursor into `/run/user/1000/autopilot/`; two
+suites isolated only `AUTOPILOT_SESSION_MODE_DIR` while the new code wrote the live pointer under
+`$HOME`; and the pre-existing `session-mode-null-admission` suite had no isolation at all and wrote real
+markers. The combined review and a before/after store diff caught them, not the suites.
+
+Rule: setting an isolation variable is not isolation until something checks the code accepted it. Diff
+the real store before and after a suite run, and prefer a path the validator cannot reject over `/tmp`.
+
+Preventing artifact: `hooks/tests/lib.sh` defaults `AUTOPILOT_LIVE_DIR` to a 0700 dir under `/dev/shm`;
+the live pointer location follows the session-mode dir; the remaining fall-through is BACKLOG row
+"A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir".
+
+## 54. A token found anywhere in the line is not the token in its slot
+
+The W4 gate checker judged the band's phase by `line1.includes(expected)`. The expected phase label
+`完成` is a substring of the verdict word `完成待驗收`, so every 完成待驗收 band passed the phase item
+even while its phase slot printed the raw code `COMPLETED` — two real captures (l5i-done2, l6-done)
+were PASS for exactly the defect the LABEL row then fixed. The elapsed item, in the same file, already
+split the line on ` · ` and read its own segment; the phase item did not.
+
+Rule: when a display has fields, judge each field in its own slot. A whole-line search can only prove
+that the characters occur somewhere.
+
+Preventing artifact: `gate/check.js` judges the phase on `line1.split(' · ')[1]`; `check.test.js` pins a
+band `✓ 完成待驗收 x · COMPLETED · …` to FAIL; a sweep of all 89 capture dirs flipped exactly those two.
+
+## 55. Text that renders is not text that reads — judge a screen from the screen
+
+The first TUI spike reported "all five items rendered" from `tmux capture-pane -p`, which strips every
+color and attribute. The owner looked over ssh and found the badges unreadable: `inverse` plus
+`backgroundColor` swapped into colored text on grey, white on yellow. Nothing in the plain capture could
+show it; the claim covered glyphs, not legibility.
+
+Rule: a claim about how a screen looks needs the colored screen — capture with `-e`, render it, and look.
+
+Preventing artifact: `docs/plans/evidence/2026-10-06-tui-band/ansi2html.py` + headless chrome screenshot
+(recipe in that README); the band palette uses Claude Code theme keys as text color only.

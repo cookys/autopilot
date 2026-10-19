@@ -2,25 +2,25 @@
   "schema_version": 1,
   "arm": "red",
   "skills": {
-    "dev-flow": "dev-flow-sg-red-v10",
-    "finish-flow": "finish-flow-sg-red-v10",
-    "ceo-agent": "ceo-agent-sg-red-v10",
-    "team": "team-sg-red-v10",
-    "debug": "debug-sg-red-v10",
-    "think-tank": "think-tank-sg-red-v10",
-    "l4": "l4-sg-red-v10",
-    "l5": "l5-sg-red-v10",
-    "l6": "l6-sg-red-v10",
-    "next": "next-sg-red-v10",
-    "quality-pipeline": "quality-pipeline-sg-red-v10",
-    "distill": "distill-sg-red-v10",
-    "doc-sync": "doc-sync-sg-red-v10",
-    "learn": "learn-sg-red-v10",
-    "project-lifecycle": "project-lifecycle-sg-red-v10",
-    "research-to-ship": "research-to-ship-sg-red-v10"
+    "dev-flow": "dev-flow-sg-red-v11",
+    "finish-flow": "finish-flow-sg-red-v11",
+    "ceo-agent": "ceo-agent-sg-red-v11",
+    "team": "team-sg-red-v11",
+    "debug": "debug-sg-red-v11",
+    "think-tank": "think-tank-sg-red-v11",
+    "l4": "l4-sg-red-v11",
+    "l5": "l5-sg-red-v11",
+    "l6": "l6-sg-red-v11",
+    "next": "next-sg-red-v11",
+    "quality-pipeline": "quality-pipeline-sg-red-v11",
+    "distill": "distill-sg-red-v11",
+    "doc-sync": "doc-sync-sg-red-v11",
+    "learn": "learn-sg-red-v11",
+    "project-lifecycle": "project-lifecycle-sg-red-v11",
+    "research-to-ship": "research-to-ship-sg-red-v11"
   },
-  "files": "guidance-files-sg-red-v10",
+  "files": "guidance-files-sg-red-v11",
   "fixture_scripts": [
-    "fixture-scripts-sg-red-v10"
+    "fixture-scripts-sg-red-v11"
   ]
 }

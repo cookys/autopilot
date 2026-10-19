@@ -53,7 +53,7 @@ assert_contains "$out" '"ok":true' "clean fixture reports ok:true"
 
 # --- backlog_row_has_plan: Pointer resolves to a SHIPPED plan ---
 # CONFLICT: an unshipped top-level plan is the row's tracking pointer, not backlog_row_has_plan.
-# This fixture names the slug in a released CHANGELOG section so the assertion still covers a shipped plan.
+# CONFLICT: a slug word is not shipped. This fixture names the full plan path in a released section.
 d="$(fixture_repo has-plan)"
 printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
 cat > "$d/CHANGELOG.md" <<'MD'
@@ -61,7 +61,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 backlog_row "$d/docs/BACKLOG.md" "Widget row" "open" "docs/plans/2026-01-01-widget.md"
 out="$(node "$GATE" --repo-root "$d" --json)"
@@ -80,7 +80,7 @@ assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" "backlog_row_has_plan 
 #     the plan file, a sidecar, or anything under its evidence dir — counts, not just a
 #     direct docs/plans/<stem>.md pointer. ---
 # CONFLICT: the evidence-dir and sidecar fixtures below used to point at an unshipped top-level
-# plan. They now name the slug in a released CHANGELOG section so the pointer still raises has_plan.
+# plan. A slug word is not shipped, so they name the full plan path in a released section.
 
 # ...a pointer into the plan's evidence dir counts.
 d="$(fixture_repo evidence-pointer)"
@@ -91,7 +91,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/notes.md"
 backlog_row "$d/docs/BACKLOG.md" "Widget evidence row" "open" "docs/plans/evidence/2026-01-01-widget/notes.md"
@@ -109,7 +109,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 printf '# Rubric\n' > "$d/docs/plans/2026-01-01-widget.rubric.md"
 backlog_row "$d/docs/BACKLOG.md" "Widget sidecar row" "open" "docs/plans/2026-01-01-widget.rubric.md"
@@ -307,16 +307,18 @@ backlog_row "$d/docs/BACKLOG.md" "Keep me" "open" "none"
 backlog_row "$d/docs/BACKLOG.md" "Widget has-plan row" "open" "docs/plans/2026-01-01-widget.md"
 backlog_row "$d/docs/BACKLOG.md" "Old shipped row" "shipped v1.0.0 2020-01-01" "none"
 backlog_row "$d/docs/BACKLOG.md" 'MAIN CLAIM CLOSED but still open' "open" "none"
+# CONFLICT: slug-only "widget" is not a shipped plan, so the has_plan row would stay.
+# The released section names the full path so the row is still deleted.
 cat > "$d/CHANGELOG.md" <<'MD'
 # Changelog
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 # 🟡 fix: --fix re-runs the check against the POST-fix state and derives exit/ok from
 # that, not the pre-fix snapshot.
 # CONFLICT: backlog_title_closed_status_open is report-only for --fix (still blocking), so the
@@ -341,7 +343,7 @@ assert_eq "$(json_exit "$out2")" "1" "a fixed repo still blocks on the kept clos
 # --fix never touches plan_orphan (report-only, non-blocking, --fix is silent on it).
 d="$(fixture_repo fix-orphan-untouched)"
 printf '# Plan\n' > "$d/docs/plans/2026-01-01-forgotten.md"
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_file_exists "$d/docs/plans/2026-01-01-forgotten.md" "--fix never moves an orphaned plan"
 
 # A row pointing INTO a released plan's evidence dir is caught by the broadened
@@ -352,16 +354,17 @@ printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
 mkdir -p "$d/docs/plans/evidence/2026-01-01-widget"
 printf 'notes\n' > "$d/docs/plans/evidence/2026-01-01-widget/README.md"
 backlog_row "$d/docs/BACKLOG.md" "Widget evidence row" "open" "docs/plans/evidence/2026-01-01-widget/README.md"
+# CONFLICT: slug-only text is not shipped; the full path keeps backlog_row_has_plan.
 cat > "$d/CHANGELOG.md" <<'MD'
 # Changelog
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Widget evidence row" \
   "the evidence-pointing row is deleted, not left to dangle"
 assert_file_exists "$d/docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" \
@@ -387,7 +390,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_eq "$(json_exit "$out")" "1" "archive_destination_exists blocks (post-fix exit stays 1)"
 assert_eq "$(json_count "$out" archive_destination_exists)" "1" "the clash is reported by name"
 assert_contains "$(cat "$d/docs/plans/_archive/2026/01/2026-01-01-widget.md")" "STALE, pre-existing" \
@@ -468,7 +471,7 @@ assert_eq "$(json_count "$out" plan_released_not_archived)" "0" \
   "an active-lineage plan is excluded from plan_released_not_archived despite being released"
 assert_eq "$(json_count "$out" plan_active_lineage)" "1" "it is reported as plan_active_lineage instead"
 assert_eq "$(json_exit "$out")" "0" "plan_active_lineage alone does not block (report-only)"
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_file_exists "$d/docs/plans/2026-09-19-blind-review-2d-overlap.md" \
   "--fix never moves an active-lineage plan (defense in depth even if somehow doomed)"
 
@@ -494,7 +497,7 @@ backlog_row "$d/docs/BACKLOG.md" "Historical widget mention" "open" "none"
 printf '\nsee docs/plans/2026-01-01-widget.md for history\n' >> "$d/docs/BACKLOG.md"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
   "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "a skill doc's link to the plan is rewritten to the dated _archive/ path"
@@ -526,7 +529,7 @@ cp "$d/evals/x-rubric.md" "$TEST_TMP/frozen-rubric.before"
 cp "$d/evals/x-rubric.seal.json" "$TEST_TMP/frozen-seal.before"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_contains "$(cat "$d/references/contract.md")" \
   "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "control: an ordinary doc in the same repo IS rewritten"
@@ -549,7 +552,7 @@ printf '# Changelog\n\n## v1.2.3 — ships widget\n\n- landed. See docs/plans/20
 cp "$d/docs/plans/2026-02-02-sealed.md" "$TEST_TMP/mission-sealed.before"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_contains "$(cat "$d/references/contract.md")" \
   "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "control (mission case): an ordinary doc IS rewritten"
@@ -570,7 +573,7 @@ printf '# Changelog\n\n## v1.2.3 - ships widget\n\n- landed. See docs/plans/2026
 cp "$d/docs/mission-x-execution-graph.json" "$TEST_TMP/graph-sealed.before"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_contains "$(cat "$d/docs/mission-y-execution-graph.json")" \
   "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "control (graph case): a graph WITHOUT graph_digest IS rewritten"
@@ -599,7 +602,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 MD
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_contains "$(cat "$d/skills/some-skill/SKILL.md")" \
   "docs/plans/_archive/2026/01/evidence/2026-01-01-widget/README.md" \
   "RED: a doc linking docs/plans/evidence/<stem>/... is rewritten to the dated _archive/evidence/ path"
@@ -1036,13 +1039,13 @@ r7_fixture() { # <name> [mark|cfg|none] -> repo; how the backlog opts in to repo
   esac
   printf '# Plan\n\nCarries BL-0003.\n' > "$d/docs/plans/2026-01-01-widget.md"
   # CONFLICT: answered / plan-named peer rows are deleted only when has_plan fires, which now
-  # requires a shipped plan. The slug is named in a released CHANGELOG section so that still holds.
+  # requires a shipped plan. A slug word does not count; the full path does.
   cat > "$d/CHANGELOG.md" <<'MD'
 # Changelog
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
   peer_row "$d/docs/BACKLOG.md" "Unanswered peer row" BL-0001 open docs/plans/2026-01-01-widget.md none
   peer_row "$d/docs/BACKLOG.md" "Answered peer row" BL-0002 open docs/plans/2026-01-01-widget.md "2026-09-06 msg_01R"
@@ -1058,7 +1061,7 @@ assert_eq "$(json_exit "$out")" "1" "R7: an unanswered peer row blocks"
 assert_eq "$(json_count "$out" peer_row_unanswered)" "2" "R7: both unanswered peer rows not named in a plan are peer_row_unanswered"
 assert_contains "$out" "BL-0001" "R7: the violation carries the Id"
 d="$(r7_fixture r7-fix)"
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 bl="$(cat "$d/docs/BACKLOG.md")"
 assert_contains "$bl" "### Unanswered peer row" "R7 --fix: the unanswered has-plan peer row is kept"
 assert_contains "$bl" "### Unanswered shipped peer row" "R7 --fix: the unanswered done peer row is kept"
@@ -1092,7 +1095,7 @@ sed -i -e 's/if (violations.length > rowStart \&\& peerRowUnanswered(row)) {/if 
   "$MUT/scripts/check-plan-graduation.js"
 if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "R7 mutation did not apply"; fi
 d="$(r7_fixture r7-mut-fix)"
-node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --fix --json >/dev/null 2>&1 || true
+node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null 2>&1 || true
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "### Unanswered peer row" "R7 mutation: without the guard --fix deletes the unanswered row"
 
 # --- BL-0171: --shipped-in takes stem=sha pairs (per-plan merge points) and the reference
@@ -1245,7 +1248,7 @@ cp "$d/proj/mixed/audit.json" "$TEST_TMP/marked-audit.before"
 cp "$d/proj/frozen-dir/sub/state.json" "$TEST_TMP/marked-state.before"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_contains "$(cat "$d/proj/mixed/loose.json")" \
   "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
   "control (BL-0096): an UNMARKED json in the same dir IS rewritten"
@@ -1352,7 +1355,7 @@ backlog_row "$d/docs/BACKLOG.md" "Shared done row" "shipped v1.0.0 2020-01-01" "
 backlog_row "$d/docs/BACKLOG.md" "Surviving row" "open" "docs/backlog/shared-note.md"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_file_absent "$d/docs/backlog/solo-note.md" "--fix deletes the sidecar of a deleted row"
 assert_file_exists "$d/docs/backlog/shared-note.md" "--fix keeps a sidecar a surviving row still mentions"
 assert_contains "$(cat "$d/docs/BACKLOG.md")" "Surviving row" "surviving row kept"
@@ -1366,7 +1369,7 @@ backlog_row "$d/docs/BACKLOG.md" "Done x row" "shipped v1.0.0 2020-01-01" "docs/
 backlog_row "$d/docs/BACKLOG.md" "Prefix row" "open" "docs/backlog/prefix-x.md"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-out="$(node "$GATE" --repo-root "$d" --fix --json)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json")"
 assert_file_absent "$d/docs/backlog/x.md" "x.md deleted although prefix-x.md is still mentioned"
 assert_file_exists "$d/docs/backlog/prefix-x.md" "prefix-x.md kept"
 assert_contains "$out" '"backlog_sidecars_removed":["docs/backlog/x.md"]' "--json fix result lists the deleted note"
@@ -1380,7 +1383,7 @@ backlog_row "$d/docs/BACKLOG.md" "Done stuck row" "shipped v1.0.0 2020-01-01" "d
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
 chmod a-w "$d/docs/backlog"
-out="$(node "$GATE" --repo-root "$d" --fix --json 2>/dev/null)"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" 2>/dev/null)"
 chmod u+w "$d/docs/backlog"
 if [ "$(id -u)" != "0" ]; then
   assert_contains "$out" '"backlog_sidecar_errors":["' "undeletable note is reported in backlog_sidecar_errors"
@@ -1394,7 +1397,7 @@ printf 'n\n' > "$d/docs/backlog/x.md"
 backlog_row "$d/docs/BACKLOG.md" "Done other row" "shipped v1.0.0 2020-01-01" "other/backlog/x.md"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_file_exists "$d/docs/backlog/x.md" "a row naming other/backlog/x.md does not delete docs/backlog/x.md"
 
 # relative-link spellings: backlog/x.md and ./backlog/x.md, ./docs/backlog/y.md name the notes beside the backlog
@@ -1406,7 +1409,7 @@ backlog_row "$d/docs/BACKLOG.md" "Done dot row" "shipped v1.0.0 2020-01-01" "./d
 backlog_row "$d/docs/BACKLOG.md" "Done dotrel row" "shipped v1.0.0 2020-01-01" "./backlog/z.md"
 git -C "$d" add -A >/dev/null
 git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_file_absent "$d/docs/backlog/x.md" "backlog/x.md spelling deletes the note"
 assert_file_absent "$d/docs/backlog/y.md" "./docs/backlog/y.md spelling deletes the note"
 assert_file_absent "$d/docs/backlog/z.md" "./backlog/z.md spelling deletes the note"
@@ -1423,7 +1426,7 @@ backlog_row "$d/docs/BACKLOG.md" "Tracking open row" "open" "docs/plans/2026-01-
 out="$(node "$GATE" --repo-root "$d" --json)"
 assert_eq "$(json_count "$out" backlog_row_has_plan)" "0" \
   "(a) an open row pointing at an unshipped top-level plan is not backlog_row_has_plan"
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_contains "$(cat "$d/docs/BACKLOG.md")" "Tracking open row" \
   "(a) --fix leaves the unshipped-plan tracking row in BACKLOG"
 
@@ -1451,7 +1454,9 @@ assert_contains "$receipt_body" 'docs/plans/_archive/2026-01-01-widget.md' \
 assert_contains "$receipt_body" 'archived_path' "(b) the receipt file cites archived shipped evidence"
 assert_contains "$receipt_body" 'backlog_row_has_plan' "(b) the receipt file names the rule code"
 
-# (b2) open Status, top-level plan whose slug is in a released CHANGELOG section.
+# (b2) open Status, top-level plan named by its full path in a released CHANGELOG section.
+# CONFLICT: the original fixture only named the slug word. A slug-only hit is not shipped,
+# so the section now contains docs/plans/2026-01-01-widget.md and the deletion assertion stays.
 d="$(fixture_repo open-released-plan)"
 printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
 cat > "$d/CHANGELOG.md" <<'MD'
@@ -1459,7 +1464,7 @@ cat > "$d/CHANGELOG.md" <<'MD'
 
 ## v1.2.3 — ships widget
 
-- landed the thing.
+- landed the thing. See docs/plans/2026-01-01-widget.md.
 MD
 backlog_row "$d/docs/BACKLOG.md" "Released widget row" "open" "docs/plans/2026-01-01-widget.md"
 git -C "$d" add -A >/dev/null
@@ -1487,7 +1492,7 @@ assert_eq "$(json_count "$out" backlog_title_closed_status_open)" "1" \
   "(c) CLOSED title with open status is still reported"
 assert_contains "$out" 'title implies closed but Status is open' \
   "(c) the closed-title detail is unchanged"
-node "$GATE" --repo-root "$d" --fix --json >/dev/null
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
 assert_contains "$(cat "$d/docs/BACKLOG.md")" "A CLOSED-looking title" \
   "(c) --fix does not delete a closed-title open row"
 
@@ -1519,5 +1524,98 @@ out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$receipt")"
 assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Id shipped row" "(e) --fix deletes the row that has an Id"
 assert_contains "$out" '"id":"BL-0042"' "(e) the stdout receipt contains the row Id"
 assert_contains "$(cat "$receipt")" '"id":"BL-0042"' "(e) the receipt file contains the row Id"
+
+# --- repair: shipped means archive or a bounded full stem/path, never a slug word ---
+# RED at 1f7dcd62b: (i) slug-only "widget" still raised backlog_row_has_plan (count 1) and --fix deleted the row; (ii) an allowlisted stem whose full path is in a released section was still deleted; (iii) passed already (full path counts); receipt-fail rewrote BACKLOG before the receipt write threw (row gone, no JSON ok:false); --receipt without --fix exited 0.
+
+# (i) slug word in a released section, neither full stem nor path: not has_plan, --fix keeps the row.
+d="$(fixture_repo slug-only-not-shipped)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships widget
+
+- landed the thing.
+MD
+backlog_row "$d/docs/BACKLOG.md" "Slug only row" "open" "docs/plans/2026-01-01-widget.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "0" \
+  "(i) a released-section slug word without the full stem or path is not backlog_row_has_plan"
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
+assert_contains "$(cat "$d/docs/BACKLOG.md")" "Slug only row" \
+  "(i) --fix leaves the slug-only tracking row in BACKLOG"
+
+# (ii) stem on the allowlist, full path in a released section: row stays.
+d="$(fixture_repo allowlist-not-shipped)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3
+
+- see docs/plans/2026-01-01-widget.md
+MD
+printf '["2026-01-01-widget"]\n' > "$d/allow.json"
+backlog_row "$d/docs/BACKLOG.md" "Allowlisted row" "open" "docs/plans/2026-01-01-widget.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --allowlist "$d/allow.json" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "0" \
+  "(ii) an allowlisted stem is not backlog_row_has_plan"
+node "$GATE" --repo-root "$d" --allowlist "$d/allow.json" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
+assert_contains "$(cat "$d/docs/BACKLOG.md")" "Allowlisted row" \
+  "(ii) --fix leaves the allowlisted row in BACKLOG"
+
+# (iii) full path in a released section, not allowlisted: deleted, receipt cites the path.
+d="$(fixture_repo full-path-shipped)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3
+
+- see docs/plans/2026-01-01-widget.md
+MD
+backlog_row "$d/docs/BACKLOG.md" "Full path row" "open" "docs/plans/2026-01-01-widget.md"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" backlog_row_has_plan)" "1" \
+  "(iii) a released full path is backlog_row_has_plan"
+receipt="$d/fix-receipt.json"
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$receipt")"
+assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "Full path row" \
+  "(iii) --fix deletes the full-path shipped row"
+assert_contains "$out" 'docs/plans/2026-01-01-widget.md' \
+  "(iii) the stdout receipt cites the plan path"
+assert_contains "$(cat "$receipt")" 'docs/plans/2026-01-01-widget.md' \
+  "(iii) the receipt file cites the plan path"
+
+# Receipt write fails: delete nothing, JSON ok:false, exit non-zero.
+d="$(fixture_repo receipt-write-fails)"
+backlog_row "$d/docs/BACKLOG.md" "Must stay if receipt fails" "shipped v1" "none"
+before="$(cat "$d/docs/BACKLOG.md")"
+mkdir -p "$d/ro"
+chmod 555 "$d/ro"
+set +e
+out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/ro/nested/receipt.json" 2>"$d/err")"
+rc=$?
+set +e
+assert_neq "$rc" "0" "a failed receipt write exits non-zero"
+assert_contains "$out" '"ok":false' "a failed receipt write prints JSON ok false"
+assert_contains "$out" 'receipt' "the error field names the receipt failure"
+assert_eq "$(cat "$d/docs/BACKLOG.md")" "$before" "a failed receipt write leaves BACKLOG unchanged"
+
+# --receipt without --fix is a usage error.
+d="$(fixture_repo receipt-without-fix)"
+set +e
+node "$GATE" --repo-root "$d" --receipt "$d/fix-receipt.json" >/dev/null 2>"$d/err"
+rc=$?
+set +e
+assert_eq "$rc" "2" "--receipt without --fix exits 2"
+assert_contains "$(cat "$d/err")" "receipt" "--receipt without --fix writes a usage message on stderr"
 
 finalize_test

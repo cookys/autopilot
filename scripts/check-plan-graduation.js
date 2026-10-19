@@ -13,12 +13,17 @@
  *                                 `docs/plans/evidence/<stem>/` dir. Shipped means the plan
  *                                 exists under docs/plans/_archive (dated or legacy, via
  *                                 findExistingArchivedPlan), OR the plan is at top-level
- *                                 docs/plans and its stem or slug is mentioned in a released
- *                                 (non-Unreleased) CHANGELOG section (planMentioned, same
- *                                 pointer variants as plan_released_not_archived). An open
- *                                 row whose Pointer resolves only to an unshipped top-level
- *                                 plan is that plan's tracking row: not a violation. The
- *                                 violation carries the matched stem and the shipped evidence.
+ *                                 docs/plans and a released (non-Unreleased) CHANGELOG section
+ *                                 contains its FULL path (docs/plans/<stem>.md or the
+ *                                 docs/plans/_archive/<stem>.md form, including the dated
+ *                                 archive path) or its FULL stem, bounded on both sides by a
+ *                                 character outside [A-Za-z0-9-]. A slug-only hit never
+ *                                 counts. A stem on --allowlist, and a stem excluded from
+ *                                 plan_released_not_archived as an active campaign lineage
+ *                                 (frozen source sha), is always unshipped. An open row whose
+ *                                 Pointer resolves only to an unshipped top-level plan is
+ *                                 that plan's tracking row: not a violation. The violation
+ *                                 carries the matched stem and the shipped evidence.
  *   backlog_row_done              row Status starts with shipped/dropped
  *   backlog_title_closed_status_open
  *                                 title contains ~~, CLOSED, SHIPPED, FIXED v, or LANDED
@@ -83,18 +88,21 @@
  *     [--repo-root <dir>] [--backlog <file>] [--changelog <file>] [--plans-dir <dir>]
  *     [--allowlist <file>] [--fix] [--receipt <path>] [--json]
  *
- * --receipt <path>: with --fix, write the deletion receipts (and any refusals) as JSON
- *   at <path>. Each receipt is a row --fix actually removed: Id (or null), title, rule
- *   code, and basis (Status for backlog_row_done; plan path plus shipped evidence for
- *   backlog_row_has_plan). A row with no basis is not deleted; it is listed under
- *   fix.refused. The same arrays are on the stdout payload as fix.receipts and
+ * --receipt <path>: requires --fix (without it, exit 2). The receipt file is written
+ *   BEFORE any BACKLOG rewrite. If that write fails, nothing is deleted, stdout is a
+ *   JSON payload with ok false and an error field naming the receipt failure, and the
+ *   process exits non-zero. Each receipt is a row --fix actually removed: Id (or null),
+ *   title, rule code, and basis (Status for backlog_row_done; plan path plus shipped
+ *   evidence for backlog_row_has_plan). A row with no basis is not deleted; it is listed
+ *   under fix.refused. The same arrays are on the stdout payload as fix.receipts and
  *   fix.refused. When --receipt is omitted and --fix removed at least one row, the file
  *   is os.tmpdir()/plan-graduation-fix-receipt-<timestamp>.json and its path is
  *   fix.receipt_path.
  *
  * --allowlist <file>: a JSON file holding an array of plan stems (e.g.
- *   "2026-09-19-roundtable") to exclude from plan_released_not_archived and
- *   plan_orphan — for plans that are intentionally living docs.
+ *   "2026-09-19-roundtable") to exclude from plan_released_not_archived,
+ *   plan_orphan, and the shipped decision behind backlog_row_has_plan — for plans
+ *   that are intentionally living docs.
  *
  * --archive <stem>... [--shipped-in <v> | --shipped-in <stem>=<v>[,<stem>=<v>...]...]:
  *   explicit archive. A single bare --shipped-in value applies to every --archive stem; the
@@ -968,11 +976,32 @@ function planReferenced(repoRoot, plansDir, backlogText, changelogText, stem, sl
   return false;
 }
 
+// Full path or full stem in released changelog text. A bare slug never matches.
+// Paths: docs/plans/<stem>.md, the flat _archive form, and the dated archive form.
+function releasedFullPlanMention(released, stem) {
+  const text = released || '';
+  const basename = `${stem}.md`;
+  const paths = [
+    `docs/plans/${basename}`,
+    `docs/plans/_archive/${basename}`,
+  ];
+  const parts = stemDateParts(stem);
+  if (parts) paths.push(`docs/plans/_archive/${parts.year}/${parts.month}/${basename}`);
+  for (const variant of paths) {
+    if (text.includes(variant)) return variant;
+  }
+  if (slugBoundaryRegExp(stem).test(text)) return stem;
+  return null;
+}
+
 // Shipped plan for a BACKLOG Pointer stem. Returns the plan path plus the evidence
-// (archived path, or a released-changelog match) or null when the plan is missing or
-// only an unshipped top-level file. Same predicate as plan_released_not_archived for
-// the changelog half: planMentioned(releasedText, stem, slug, pointerVariants).
-function shippedPlanDecision(repoRoot, stem, releasedText) {
+// (archived path, or the released full-path/full-stem match) or null when the plan is
+// missing or only an unshipped top-level file. Allowlisted stems and active-lineage
+// stems (the same exclusions that skip plan_released_not_archived) are never shipped.
+function shippedPlanDecision(repoRoot, stem, releasedText, exclusions) {
+  const skip = exclusions || {};
+  if (skip.allowlist && skip.allowlist.has(stem)) return null;
+  if (skip.activeLineageStems && skip.activeLineageStems.has(stem)) return null;
   const plansRoot = path.join(repoRoot, 'docs', 'plans');
   const archived = findExistingArchivedPlan(path.join(plansRoot, '_archive'), stem);
   if (archived) {
@@ -981,14 +1010,11 @@ function shippedPlanDecision(repoRoot, stem, releasedText) {
   }
   const basename = `${stem}.md`;
   if (!fs.existsSync(path.join(plansRoot, basename))) return null;
-  const pointerVariants = [
-    `docs/plans/${basename}`,
-    `docs/plans/_archive/${basename}`,
-  ];
-  if (planMentioned(releasedText || '', stem, planSlug(stem), pointerVariants)) {
+  const match = releasedFullPlanMention(releasedText, stem);
+  if (match) {
     return {
       plan_path: `docs/plans/${basename}`,
-      shipped: { released_changelog: true },
+      shipped: { released_changelog: match },
     };
   }
   return null;
@@ -1042,7 +1068,10 @@ function run(opts) {
     } else if (row.pointer && row.pointer !== 'none') {
       const stem = planStemForPointer(row.pointer);
       if (stem) {
-        const shipped = shippedPlanDecision(repoRoot, stem, releasedText);
+        const shipped = shippedPlanDecision(repoRoot, stem, releasedText, {
+          allowlist,
+          activeLineageStems,
+        });
         if (shipped) {
           violations.push({
             code: 'backlog_row_has_plan',
@@ -1183,8 +1212,36 @@ function mentionsBasename(text, name) {
 
 // repoRoot is optional: when omitted it is derived from the backlog file's git toplevel (falling
 // back to the backlog's own directory), so the note path is never computed from undefined.
-function fixBacklog(backlogPath, violations, repoRootArg) {
+function commitBacklogFix(backlogPath, planned, root) {
+  if (!planned.changed) return planned;
+  fs.writeFileSync(backlogPath, planned.nextText);
+  const dir = path.join(path.dirname(backlogPath), 'backlog');
+  const sidecarsRemoved = [];
+  const sidecarErrors = [];
+  for (const name of planned.sidecarNames || []) {
+    if (mentionsBasename(planned.nextText, name)) continue;
+    const abs = path.join(dir, name);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      fs.rmSync(abs);
+      sidecarsRemoved.push(path.relative(root, abs).split(path.sep).join('/'));
+    } catch (e) {
+      sidecarErrors.push(`${abs}: ${e.message}`);
+    }
+  }
+  return {
+    changed: true,
+    removed: planned.removed,
+    sidecars_removed: sidecarsRemoved,
+    sidecar_errors: sidecarErrors,
+    receipts: planned.receipts,
+    refused: planned.refused,
+  };
+}
+
+function fixBacklog(backlogPath, violations, repoRootArg, fixOpts) {
   const root = repoRootArg || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
+  const apply = !fixOpts || fixOpts.apply !== false;
   const rowCodes = new Set(['backlog_row_has_plan', 'backlog_row_done']);
   const peerTitles = new Set();
   // Belt and braces: a title run() flagged peer_row_unanswered is never deleted, whatever else it hit.
@@ -1222,7 +1279,6 @@ function fixBacklog(backlogPath, violations, repoRootArg) {
     }
   }
   if (out !== text) {
-    fs.writeFileSync(backlogPath, out);
     // A deleted row's note in the `backlog/` dir beside the backlog goes with it, unless a
     // remaining row still names it. Failures are reported, never swallowed.
     const dir = path.join(path.dirname(backlogPath), 'backlog');
@@ -1232,25 +1288,17 @@ function fixBacklog(backlogPath, violations, repoRootArg) {
     const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const relDir = path.relative(root, dir).split(path.sep).join('/');
     const noteRe = new RegExp(`(?:^|[^A-Za-z0-9._/-])(?:\\./)?(?:${esc(relDir)}|${esc(path.basename(dir))})/([A-Za-z0-9._-]+\\.md)`, 'g');
-    const sidecars = new Set();
+    const sidecarNames = new Set();
     for (const row of rows) {
       if (!doomedTitles.has(row.title) || !row.text) continue;
-      for (const m of row.text.matchAll(noteRe)) sidecars.add(m[1]);
+      for (const m of row.text.matchAll(noteRe)) sidecarNames.add(m[1]);
     }
-    const sidecarsRemoved = [];
-    const sidecarErrors = [];
-    for (const name of sidecars) {
-      if (mentionsBasename(out, name)) continue;
-      const abs = path.join(dir, name);
-      if (!fs.existsSync(abs)) continue;
-      try {
-        fs.rmSync(abs);
-        sidecarsRemoved.push(path.relative(root, abs).split(path.sep).join('/'));
-      } catch (e) {
-        sidecarErrors.push(`${abs}: ${e.message}`);
-      }
-    }
-    return { changed: true, removed, sidecars_removed: sidecarsRemoved, sidecar_errors: sidecarErrors, receipts, refused };
+    const planned = {
+      changed: true, removed, sidecars_removed: [], sidecar_errors: [], receipts, refused,
+      nextText: out, sidecarNames,
+    };
+    if (!apply) return planned;
+    return commitBacklogFix(backlogPath, planned, root);
   }
   return { changed: false, removed: [], sidecars_removed: [], sidecar_errors: [], receipts: [], refused };
 }
@@ -1747,6 +1795,10 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.receipt && !opts.fix) {
+    process.stderr.write('error: --receipt requires --fix\n');
+    usage(2);
+  }
 
   if (opts.registerTemplate) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
@@ -1798,7 +1850,30 @@ function main() {
   let plansFix = { moved: [], blocked: [], referencesRewritten: [] };
   let finalResult = preFix;
   if (opts.fix) {
-    backlogFix = fixBacklog(preFix.backlogPath, preFix.violations, preFix.repoRoot);
+    const plannedBacklog = fixBacklog(preFix.backlogPath, preFix.violations, preFix.repoRoot, { apply: false });
+    const receipts = plannedBacklog.receipts || [];
+    const refused = plannedBacklog.refused || [];
+    let receiptPath = null;
+    if (opts.receipt) receiptPath = path.resolve(opts.receipt);
+    else if (receipts.length) {
+      receiptPath = path.join(os.tmpdir(), `plan-graduation-fix-receipt-${Date.now()}.json`);
+    }
+    if (receiptPath) {
+      try {
+        fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
+        fs.writeFileSync(receiptPath, `${JSON.stringify({ receipts, refused })}\n`);
+      } catch (e) {
+        process.stdout.write(`${JSON.stringify({
+          ok: false,
+          error: `receipt write failed: ${e.message}`,
+        })}\n`);
+        process.exit(1);
+      }
+    }
+    backlogFix = plannedBacklog.changed
+      ? commitBacklogFix(preFix.backlogPath, plannedBacklog, preFix.repoRoot)
+      : plannedBacklog;
+    backlogFix.receipt_path = receiptPath;
     plansFix = fixPlans(
       preFix.repoRoot, preFix.plansDir, preFix.archiveDir, preFix.violations, preFix.activeLineageStems,
       preFix.changelogPath
@@ -1811,18 +1886,6 @@ function main() {
     // plan_released_not_archived violation IS re-derivable and will already be back in
     // finalResult.violations for that stem; this adds the more specific reason).
     finalResult.violations = finalResult.violations.concat(plansFix.blocked);
-    const receipts = backlogFix.receipts || [];
-    const refused = backlogFix.refused || [];
-    let receiptPath = null;
-    if (opts.receipt) receiptPath = path.resolve(opts.receipt);
-    else if (receipts.length) {
-      receiptPath = path.join(os.tmpdir(), `plan-graduation-fix-receipt-${Date.now()}.json`);
-    }
-    if (receiptPath) {
-      fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
-      fs.writeFileSync(receiptPath, `${JSON.stringify({ receipts, refused })}\n`);
-    }
-    backlogFix.receipt_path = receiptPath;
   }
 
   const blocking = finalResult.violations.filter((v) => BLOCKING_CODES.has(v.code));

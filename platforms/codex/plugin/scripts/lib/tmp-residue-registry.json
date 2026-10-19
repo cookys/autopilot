@@ -737,8 +737,8 @@
       "pattern": "plan-graduation-fix-receipt-*",
       "kind": "scratch",
       "owner": "scripts/check-plan-graduation.js",
-      "retention_days": null,
-      "reason": "--fix default receipt when --receipt is omitted and at least one BACKLOG row was deleted"
+      "retention_days": 1,
+      "reason": "--fix default receipt when --receipt is omitted and at least one BACKLOG row was deleted; same one-day scratch retention as other owner-cleaned temp files"
     },
     {
       "pattern": "gitconfig-containment.*",

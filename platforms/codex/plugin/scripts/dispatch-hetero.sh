@@ -4580,36 +4580,6 @@ seat_strike_capture() {
   ) || true
 }
 
-# _emit_question_waiting_event — side effect only. When classify_outcome has
-# settled on question_suspected, record condition=waiting on the live stage so
-# watch-foreman can print it. The stage-transition that closes a committed
-# lease happens later; this must run first, while the latest stage row is
-# still that lease. A write failure warns and never touches OUTCOME_* or exit.
-# No resumed-run hook already knows the worker left the question, so a later
-# working event is left to the existing heartbeat path.
-_emit_question_waiting_event() {
-  [ "${OUTCOME_STATUS:-}" = "question_suspected" ] || return 0
-  [ -n "${LEDGER:-}" ] && [ -n "${RUN_ID:-}" ] && [ -n "${STAGE:-}" ] || return 0
-  local latest_cond="" reason="" err=""
-  latest_cond="$(jq -s -r --arg rid "$RUN_ID" --arg stg "$STAGE" '
-    [ .[] | select(.kind=="worker_event" and .run_id==$rid and .stage==$stg) ]
-    | if length==0 then "" else (.[-1].condition // "") end
-  ' "$LEDGER" 2>/dev/null)" || latest_cond=""
-  [ "$latest_cond" = "waiting" ] && return 0
-  reason=""
-  if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
-    # LOG is the worker log. Last non-empty worker line (skip the rail's own
-    # [dispatch-hetero: ...] footer), controls stripped, first 200 characters.
-    reason="$(awk 'NF && $0 !~ /^\[dispatch-hetero:/ { line=$0 } END { print line }' "$LOG" | tr -d '[:cntrl:]' | jq -Rr '.[:200]')" || reason=""
-  fi
-  if ! err="$(bash "$SELF_DIR/run-ledger.sh" stage-event \
-      --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
-      --condition waiting --reason "$reason" 2>&1 >/dev/null)"; then
-    printf 'dispatch-hetero: warning: waiting condition event was not recorded (%s)\n' "${err:-stage-event failed}" >&2
-  fi
-  return 0
-}
-
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
 # inline path (→ emit to stdout + exit) and the detached child (→ write-result + ledger). It
 # sets OUTCOME_* and performs the outcome-specific side effects (passive_capture; worktree
@@ -4803,6 +4773,36 @@ classify_outcome() {
   # Seat strike writer (P4, references/strike-decay.md) — fail-soft, never mutates
   # OUTCOME_* or this function's already-decided status/exit.
   seat_strike_capture
+}
+
+# _emit_question_waiting_event — side effect only. When classify_outcome has
+# settled on question_suspected, record condition=waiting on the live stage so
+# watch-foreman can print it. The stage-transition that closes a committed
+# lease happens later; this must run first, while the latest stage row is
+# still that lease. A write failure warns and never touches OUTCOME_* or exit.
+# No resumed-run hook already knows the worker left the question, so a later
+# working event is left to the existing heartbeat path.
+_emit_question_waiting_event() {
+  [ "${OUTCOME_STATUS:-}" = "question_suspected" ] || return 0
+  [ -n "${LEDGER:-}" ] && [ -n "${RUN_ID:-}" ] && [ -n "${STAGE:-}" ] || return 0
+  local latest_cond="" reason="" err=""
+  latest_cond="$(jq -s -r --arg rid "$RUN_ID" --arg stg "$STAGE" '
+    [ .[] | select(.kind=="worker_event" and .run_id==$rid and .stage==$stg) ]
+    | if length==0 then "" else (.[-1].condition // "") end
+  ' "$LEDGER" 2>/dev/null)" || latest_cond=""
+  [ "$latest_cond" = "waiting" ] && return 0
+  reason=""
+  if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
+    # LOG is the worker log. Last non-empty worker line (skip the rail's own
+    # [dispatch-hetero: ...] footer), controls stripped, first 200 characters.
+    reason="$(awk 'NF && $0 !~ /^\[dispatch-hetero:/ { line=$0 } END { print line }' "$LOG" | tr -d '[:cntrl:]' | jq -Rr '.[:200]')" || reason=""
+  fi
+  if ! err="$(bash "$SELF_DIR/run-ledger.sh" stage-event \
+      --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+      --condition waiting --reason "$reason" 2>&1 >/dev/null)"; then
+    printf 'dispatch-hetero: warning: waiting condition event was not recorded (%s)\n' "${err:-stage-event failed}" >&2
+  fi
+  return 0
 }
 
 # ============================ R1 DETACH (setsid kill-survival) ============================

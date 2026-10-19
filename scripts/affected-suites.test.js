@@ -328,3 +328,57 @@ test('--run empty suites: docs-only exits 0; a non-doc empty selection exits non
     assert.match(ran.stdout + ran.stderr, /not every changed file is documentation|empty suites/);
   } finally { mirror.cleanup(); }
 });
+
+// RED at 143fdd764: 3 fail — mirror pair unreferenced ['scripts/x.sh']; shared referrer unreferenced ['scripts/b.js']; deleted suite unreferenced ['hooks/tests/lone.test.sh'] (each forces full). Orphan case stayed green.
+function filesSelect(dir, files) {
+  return JSON.parse(execFileSync('node', [SEL, '--root', dir, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+}
+
+test('a script and its codex mirror changed together are both reached', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/x.sh': 'echo x\n',
+    'platforms/codex/plugin/scripts/x.sh': 'echo x\n',
+    'hooks/tests/x.test.sh': '#!/usr/bin/env bash\nbash "$ROOT/scripts/x.sh"\n',
+  });
+  try {
+    const out = r.select(r.change({
+      'scripts/x.sh': 'echo y\n',
+      'platforms/codex/plugin/scripts/x.sh': 'echo y\n',
+    }));
+    assert.deepStrictEqual(out.unreferenced, []);
+    assert.notStrictEqual(out.mode, 'full');
+    const script = filesSelect(r.dir, ['scripts/x.sh']);
+    const mirror = filesSelect(r.dir, ['platforms/codex/plugin/scripts/x.sh']);
+    const both = filesSelect(r.dir, ['scripts/x.sh', 'platforms/codex/plugin/scripts/x.sh']);
+    const union = [...new Set([...script.suites, ...mirror.suites])].sort();
+    assert.deepStrictEqual(both.suites, union);
+  } finally { r.cleanup(); }
+});
+
+test('two seeds that share one referrer suite are both reached', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/a.js': 'module.exports = 1;\n',
+    'scripts/b.js': 'module.exports = 2;\n',
+    'hooks/tests/ab.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/a.js"\nnode "$ROOT/scripts/b.js"\n',
+  });
+  try {
+    const out = r.select(r.change({
+      'scripts/a.js': 'module.exports = 3;\n',
+      'scripts/b.js': 'module.exports = 4;\n',
+    }));
+    assert.deepStrictEqual(out.unreferenced, []);
+    assert.notStrictEqual(out.mode, 'full');
+    assert.ok(out.suites.includes('hooks/tests/ab.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('a deleted suite file is not unreferenced and does not force full', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const out = r.select(r.change({ 'hooks/tests/lone.test.sh': null }));
+    assert.deepStrictEqual(out.unreferenced, []);
+    assert.notStrictEqual(out.mode, 'full');
+  } finally { r.cleanup(); }
+});

@@ -5375,10 +5375,10 @@ function runQualification(options) {
   }
   if (role === 'foreman') {
     const { runForemanQualification } = require('../evals/foreman-eval-runner');
-    return foremanResultWithExamCorpus(runForemanQualification({
+    return runForemanQualification({
       ...options,
       test_mode: options.test_mode === true || Boolean(process.env.AUTOPILOT_QUALIFY_SEED),
-    }), options);
+    });
   }
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
@@ -5835,16 +5835,23 @@ function verifyPinnedForemanEvaluationAssets(overrides = {}) {
 // Headless foreman sittings return no scorecard row. --emit-record / --emit-row
 // hash row.corpus_version, so the row carries the same value compared above.
 // Only when that pre-exam value was stored (a seat file). A live row, if one
-// already exists, keeps every other field.
+// already exists, keeps every other field. A sitting that returned no row
+// gets a row only in AUTOPILOT_QUALIFY_SEED test mode, and that row is marked
+// engine-qualify:foreman-test-seed. A real run with no row stays without one
+// so headless treats it as no_verdict and writes no registry record.
 function foremanResultWithExamCorpus(result, options) {
   const version = options && options.examCorpusVersion;
   if (version === undefined || version === null) return result;
   const base = result && typeof result === 'object' ? result : {};
   const prior = base.row && typeof base.row === 'object' ? base.row : null;
+  if (prior) return { ...base, row: { ...prior, corpus_version: version } };
+  const testSeed = (options && options.test_mode === true)
+    || Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
+  if (!testSeed) return base;
   const observedAt = timestamp();
-  const row = prior
-    ? { ...prior, corpus_version: version }
-    : {
+  return {
+    ...base,
+    row: {
       engine: options.engine,
       model: options.model,
       model_version: options.modelVersion,
@@ -5857,12 +5864,12 @@ function foremanResultWithExamCorpus(result, options) {
       prompt_config_hash: options.promptConfigHash,
       corpus_version: version,
       evidence_store: {
-        producer: 'engine-qualify:foreman',
+        producer: 'engine-qualify:foreman-test-seed',
         transcript_hash: byteHash(`foreman-exam:${version}`),
       },
       evidence: { observed_at: observedAt, issued_at: observedAt },
-    };
-  return { ...base, row };
+    },
+  };
 }
 
 function examCorpusVersionBeforeRun(role) {
@@ -5952,6 +5959,12 @@ function main() {
       process.exit(3);
     }
     usage(2, error.message);
+  }
+  // Kept out of runQualification: that body is byte-compared to the D6 base
+  // plus the named foreman branches. Attaching corpus_version here does not
+  // change the reviewer/owner path.
+  if ((options.role || 'reviewer') === 'foreman') {
+    runResult = foremanResultWithExamCorpus(runResult, options);
   }
   assertProducedCorpusMatchesSeat(options, runResult);
   const verdict = {

@@ -470,6 +470,10 @@ if (row.corpus_version !== expected) {
   console.error("row.corpus_version " + row.corpus_version);
   process.exit(1);
 }
+if (!row.evidence_store || row.evidence_store.producer !== "engine-qualify:foreman-test-seed") {
+  console.error("producer " + (row.evidence_store && row.evidence_store.producer));
+  process.exit(1);
+}
 const rec = buildV2Record(row, { originHostClass: "cloud-api" });
 if (!rec) {
   console.error("buildV2Record returned null");
@@ -486,6 +490,43 @@ if (rec.record_id !== id) {
 }
 ' "$REPO_ROOT" "$FM_ROW_OUT" "$FOREMAN_CORPUS"
 assert_eq "$?" "0" "foreman test-mode row corpus_version matches the seat and recordIdV1"
+
+# A real foreman run that returns no row must not gain a synthetic transcript.
+# The CLI cannot reach that return without a live sitting: disk pins throw first.
+# This stub replaces runForemanQualification so the headless path sees no row
+# and no AUTOPILOT_QUALIFY_SEED, and must exit 3 with an empty stdout.
+NO_ROW_STUB="$TEST_TMP/foreman-no-row-require.js"
+cat >"$NO_ROW_STUB" <<'STUB'
+const Module = require('module');
+const orig = Module.prototype.require;
+Module.prototype.require = function (id) {
+  const exported = orig.apply(this, arguments);
+  if (typeof id === 'string' && id.indexOf('foreman-eval-runner') !== -1 && exported && typeof exported === 'object') {
+    exported.runForemanQualification = function () {
+      return { qualified: false, verdict: { role: 'foreman', graded: false, evidence: null } };
+    };
+  }
+  return exported;
+};
+STUB
+NO_ROW_OUT="$TEST_TMP/foreman-no-row.out"
+NO_ROW_ERR="$TEST_TMP/foreman-no-row.err"
+unset AUTOPILOT_QUALIFY_SEED
+set +e
+node --require "$NO_ROW_STUB" "$REPO_ROOT/scripts/engine-qualify.js" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --panel-cmd true \
+  --store "$TEST_TMP/store-foreman-no-row" --raw-dir "$TEST_TMP/raw-foreman-no-row" --emit-record \
+  >"$NO_ROW_OUT" 2>"$NO_ROW_ERR"
+NO_ROW_RC=$?
+set -e
+assert_exit_code "$NO_ROW_RC" "3" "non-test-mode foreman run without a row exits 3"
+assert_eq "$(wc -c <"$NO_ROW_OUT" | tr -d ' ')" "0" "non-test-mode foreman run without a row prints nothing"
+if grep -q 'foreman-test-seed' "$NO_ROW_OUT" "$NO_ROW_ERR"; then
+  fail "non-test-mode foreman run wrote a test-seed row"
+fi
 
 # A mutated copy of a pinned foreman asset must exit 2 before any store write.
 # The copy is the only tree that changes; the worktree evals stay as they are.

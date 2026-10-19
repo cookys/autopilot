@@ -5804,6 +5804,74 @@ function buildEmittedRow(row, effortCheck) {
 // methodology_version is "foreman-live-rail/1", which the seat schema rejects
 // (TOKEN has no "/"), so the hash is the schema-legal pin. All of these are
 // known before the exam. Kept out of runQualification so its source pin stays put.
+// Foreman pins are file hashes, checked the same way as the owner manifest:
+// read the bytes, hash them, refuse before any exam write when they differ.
+const FOREMAN_PIN_ASSETS = Object.freeze([
+  ['generator', 'evals/foreman-eval-generator.js'],
+  ['grader', 'evals/foreman-eval-grader.js'],
+  ['corpus', 'evals/foreman-capability-evidence-corpus.json'],
+  ['conformance', 'evals/foreman-harness-conformance.js'],
+]);
+
+function verifyPinnedForemanEvaluationAssets(overrides = {}) {
+  const root = overrides.root
+    || process.env.AUTOPILOT_FOREMAN_ASSET_ROOT
+    || path.join(__dirname, '..');
+  const pinPath = overrides.pinPath || path.join(root, 'evals/foreman-asset-pins.json');
+  const pins = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+  for (const [name, rel] of FOREMAN_PIN_ASSETS) {
+    const computed = byteHash(fs.readFileSync(path.join(root, rel)));
+    const pinned = pins[name];
+    if (computed !== pinned) {
+      process.stderr.write(
+        `engine-qualify: foreman pin ${name} mismatch pinned ${pinned} computed ${computed}\n`,
+      );
+      process.exit(2);
+    }
+  }
+  return pins;
+}
+
+// Headless foreman sittings return no scorecard row. --emit-record / --emit-row
+// hash row.corpus_version, so the row carries the same value compared above.
+// Only when that pre-exam value was stored (a seat file). A live row, if one
+// already exists, keeps every other field. A sitting that returned no row
+// gets a row only in AUTOPILOT_QUALIFY_SEED test mode, and that row is marked
+// engine-qualify:foreman-test-seed. A real run with no row stays without one
+// so headless treats it as no_verdict and writes no registry record.
+function foremanResultWithExamCorpus(result, options) {
+  const version = options && options.examCorpusVersion;
+  if (version === undefined || version === null) return result;
+  const base = result && typeof result === 'object' ? result : {};
+  const prior = base.row && typeof base.row === 'object' ? base.row : null;
+  if (prior) return { ...base, row: { ...prior, corpus_version: version } };
+  const testSeed = (options && options.test_mode === true)
+    || Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
+  if (!testSeed) return base;
+  const observedAt = timestamp();
+  return {
+    ...base,
+    row: {
+      engine: options.engine,
+      model: options.model,
+      model_version: options.modelVersion,
+      runner: options.runner,
+      role: 'foreman',
+      effort: options.effort,
+      family: options.family,
+      runner_version: options.runnerVersion,
+      harness_version: options.harnessVersion,
+      prompt_config_hash: options.promptConfigHash,
+      corpus_version: version,
+      evidence_store: {
+        producer: 'engine-qualify:foreman-test-seed',
+        transcript_hash: byteHash(`foreman-exam:${version}`),
+      },
+      evidence: { observed_at: observedAt, issued_at: observedAt },
+    },
+  };
+}
+
 function examCorpusVersionBeforeRun(role) {
   if (role === 'reviewer' || role === 'owner') {
     const staticOracle = role === 'owner'
@@ -5829,7 +5897,7 @@ function examCorpusVersionBeforeRun(role) {
   }
   if (role === 'foreman') {
     const foremanGenerator = require('../evals/foreman-eval-generator');
-    const foremanPins = require('../evals/foreman-asset-pins.json');
+    const foremanPins = verifyPinnedForemanEvaluationAssets();
     return `${foremanPins.corpus}.${foremanGenerator.GENERATOR_VERSION}`;
   }
   return null;
@@ -5891,6 +5959,12 @@ function main() {
       process.exit(3);
     }
     usage(2, error.message);
+  }
+  // Kept out of runQualification: that body is byte-compared to the D6 base
+  // plus the named foreman branches. Attaching corpus_version here does not
+  // change the reviewer/owner path.
+  if ((options.role || 'reviewer') === 'foreman') {
+    runResult = foremanResultWithExamCorpus(runResult, options);
   }
   assertProducedCorpusMatchesSeat(options, runResult);
   const verdict = {

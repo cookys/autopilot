@@ -1790,6 +1790,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_FOREMAN_ASSET_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-qualify.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Test-only override of the foreman asset root. Points verifyPinnedForemanEvaluationAssets at a fixture tree instead of the repo evals pins."
+    },
+    {
       "name": "AUTOPILOT_FOREMAN_GUARD_DIR",
       "kind": "env",
       "audience": "internal",

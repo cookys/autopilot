@@ -55,11 +55,14 @@ write_manifest() {
 }
 write_manifest
 
-# prereg: the real task/arm/threshold block, with a scratch guidance file set
+# prereg: the real task/arm/threshold block, with a scratch guidance file set.
+# RED at 170b420b0c0098ef1c4133fa659b283f3d90cce3: FAIL: matching must pass ... declared out_of_arm but unchanged
+# The fixture repo does not contain those commits, so the copied list is dropped below.
 PRE="$TEST_TMP/prereg.json"
 node -e '
   const P = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   P.guidance.files = ["skills/dev-flow/SKILL.md", "references/plan-template.md", "references/hetero-dispatch.md"];
+  delete P.guidance.out_of_arm;
   require("fs").writeFileSync(process.argv[2], JSON.stringify(P));
 ' "$REAL_PREREG" "$PRE"
 

@@ -5,7 +5,7 @@ Original row from 5f3aa3b1d^:docs/BACKLOG.md:
 > ### Managed rail: graph-check admits `max_wall_seconds` to 14400, the contract schema caps 7200 — intake burns the attempt
 > - **Status**: open
 > - **Trigger**: blind-review-packet lineage 1 attempt 1 sealed 12000 s: graph-check READY, grant claimed, intake `REJECTED: max_wall_seconds: expected integer in 1..7200`
-> - **Effort**: Fix
+> - Effort label in the old enum (retired): small fix
 > - **Source**: /l5 dogfood 2026-09-17 (`impl-run1-attempt1-intake-rejected.json`)
 > - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-packet/README.md
 > - **Context**: `mission-execution-graph.js:260` allows 1..14400; `schemas/implementation-campaign-contract.schema.json` maximum 7200. One limit, checked at graph time.

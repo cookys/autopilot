@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0251 -->
+<!-- next-id: BL-0252 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1192,3 +1192,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
 - **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
 - **Context**: Two suggestions: print the recommended pair on every such SessionStart, or one command that writes both.
+
+### Child processes must declare lifetime and parent to fleet (FLEET_LIFETIME / FLEET_PARENT / FLEET_ROLE contract)
+- **Id**: BL-0251
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: openclaw hangar
+- **Report**: 01M5A264B59E7ETAETJRAEBXJQ
+- **Reply**: 2026-10-19 01M5A27RA0AFGZ3WCDYFVWQK5X
+- **Problem**: autopilot 派出的 claude 系子行程（review 席位、eval run 等）被 fleet 當成互動 session 登記，aimax395 名冊累積約 200 筆殘留；fleet 端將只認 entrypoint cli，並以明確的 FLEET_LIFETIME 為準。
+- **Impact**: 名冊被殘留子行程塞滿，操作者分不出哪些是真正的互動 session。
+- **Trigger**: the operator decides to start the autopilot-side work (child_session_mint exports the fleet contract)
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PEER-REPORTED openclaw hangar 2026-10-19
+- **Pointer**: docs/backlog/fleet-child-lifetime-parent-contract.md
+- **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable.

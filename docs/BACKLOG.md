@@ -682,7 +682,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
-- **Pointer**: scripts/affected-suites.js
+- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
 - **Context**: Top fan-in: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
@@ -696,7 +696,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: follow-up of BL-0027 (merge d997355a9), 2026-10-19
-- **Pointer**: scripts/dev-setup.sh
+- **Pointer**: docs/backlog/verify-codex-marketplace-remove-and-hook-dedupe.md
 - **Context**: Check (a) that "codex plugin marketplace remove" exists and works so --uninstall clears the derived dev marketplace registration, and (b) whether a user-level and a plugin-level hook with the same name are de-duplicated.
 
 ### PEER-REPORTED (cuda): count a dispatch branch as integrated when its patch-id or diff matches
@@ -713,4 +713,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: fleet msg 01M59TJ90DWG5XVE6JS78CZ6Z7; replied 01M59TMBZ32K3YSC7Q707QWV1Q
-- **Pointer**: scripts/repo-residue-sweep.js
+- **Pointer**: docs/backlog/count-dispatch-branch-integrated-by-patch-id.md

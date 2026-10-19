@@ -3,6 +3,30 @@
 # Prevents implementers from gaming tests by deleting assertions,
 # skipping tests, or escaping test directories.
 #
+# Precision rules (BL-0060). Mode defaults are unchanged (warn is the global default).
+# (a) A test file deleted in the range (status D) is not a deleted_line violation
+#     when the same range also deletes its target. The target is a product file
+#     whose basename matches the test basename after stripping the test suffix
+#     (foo.test.sh -> foo.sh, test_foo.py -> foo.py, foo_test.go -> foo.go, also
+#     dropping a leading test- or test_), or a product file the deleted test's
+#     old content sources/requires/imports that is deleted in the same range.
+#     Tests, helpers, and fixtures do not count as targets.
+#     If the test file is deleted and no target is deleted, every deleted line
+#     of that file is still reported.
+# (b) Otherwise deleted_line is reported only when the assertion-class line count
+#     of the same file has a net decrease (assertion-class lines deleted minus
+#     assertion-class lines added > 0). The report lists every deleted
+#     assertion-class line, not a truncated net-count sample. Non-assertion
+#     deletions (comments, renames, blanks, setup) never produce a report on
+#     their own. A tautological assertion (assert True, expect(true).toBe(true),
+#     true || fail, ...) does not count as assertion-class, so rewriting a real
+#     assertion into an always-true one is a net decrease. A comment-only
+#     addition never counts as an added assertion.
+# (c) A file added in the range (status A) is not a surface_touch. Modified,
+#     deleted, and renamed surface files still are.
+# skip_marker, solo_marker, early_exit, rename_escape, and protected_path_touch
+# are unchanged.
+#
 # Usage:
 #   scripts/check-test-integrity.sh validate --range <base>..<head> [--repo <dir>]
 #
@@ -32,7 +56,7 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,53p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 if [[ $# -eq 0 ]]; then

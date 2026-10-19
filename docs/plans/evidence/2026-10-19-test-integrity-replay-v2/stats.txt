@@ -1,0 +1,26 @@
+total_remaining_records 668
+old_total 1101
+remaining_versus_old_1101 -433
+ranges_scanned 60
+ranges_with_violations 11
+errors 0
+by_kind
+  deleted_line 655
+  surface_touch 13
+groups merge file kind count
+16dd391e 647 deleted_line hooks/tests/dispatch-hetero-gc.test.sh
+16dd391e 7 deleted_line hooks/tests/resolve-worktree-teardown.test.sh
+6fcfed4b 1 surface_touch .github/workflows/test.yml
+a8dac5e6 1 surface_touch evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js
+0be6405d 1 surface_touch hooks/tests/lib.sh
+07238277 1 surface_touch hooks/tests/lib.sh
+749c224f 1 surface_touch hooks/tests/lib.sh
+6ed65d18 1 surface_touch hooks/tests/lib/dispatch-review-fixtures.sh
+9883b639 1 surface_touch hooks/tests/lib/dispatch-review-fixtures.sh
+6e92b769 1 surface_touch hooks/tests/lib/review-candidate-driver.js
+2210b470 1 surface_touch hooks/tests/lib/review-candidate-driver.js
+6e92b769 1 surface_touch hooks/tests/lib/review-candidate-stub-review.sh
+2210b470 1 surface_touch hooks/tests/lib/review-candidate-stub-review.sh
+f682db55 1 surface_touch hooks/tests/lib/subagent-budget-fixture.js
+0be6405d 1 surface_touch hooks/tests/lib/task-status-input-fixture.js
+0be6405d 1 deleted_line hooks/tests/task-status-input.test.sh

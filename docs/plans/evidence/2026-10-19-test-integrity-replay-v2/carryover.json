@@ -1,0 +1,1359 @@
+{
+  "totals": {
+    "sample": 150,
+    "group_still_reported": 91,
+    "exact_still_reported": 85
+  },
+  "rows": [
+    {
+      "n": 0,
+      "old_index": 1,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/affected-suites.test.js",
+      "merge8": "16a406dc",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 1,
+      "old_index": 3,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/engine-qualify-impl.test.js",
+      "merge8": "36abe7bd",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 2,
+      "old_index": 7,
+      "kind": "deleted_line",
+      "file": "hooks/tests/review-increment.test.sh",
+      "merge8": "6c592943",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 3,
+      "old_index": 11,
+      "kind": "deleted_line",
+      "file": "hooks/tests/review-increment.test.sh",
+      "merge8": "6c592943",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 4,
+      "old_index": 15,
+      "kind": "surface_touch",
+      "file": "hooks/tests/fixtures/review-increment-real-seat/missing-prior-prefix.txt",
+      "merge8": "6c592943",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 5,
+      "old_index": 16,
+      "kind": "deleted_line",
+      "file": "mods/live/live.test.ts",
+      "merge8": "b3693669",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 6,
+      "old_index": 27,
+      "kind": "surface_touch",
+      "file": "evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js",
+      "merge8": "a8dac5e6",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 7,
+      "old_index": 34,
+      "kind": "deleted_line",
+      "file": "hooks/tests/check-l1-cache-key-parity.test.sh",
+      "merge8": "6fcfed4b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 8,
+      "old_index": 40,
+      "kind": "deleted_line",
+      "file": "hooks/tests/check-l1-cache-key-parity.test.sh",
+      "merge8": "6fcfed4b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 9,
+      "old_index": 48,
+      "kind": "deleted_line",
+      "file": "hooks/tests/check-l1-cache-key-parity.test.sh",
+      "merge8": "6fcfed4b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 10,
+      "old_index": 57,
+      "kind": "deleted_line",
+      "file": "hooks/tests/check-l1-cache-key-parity.test.sh",
+      "merge8": "6fcfed4b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 11,
+      "old_index": 65,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-review-c.test.sh",
+      "merge8": "6ed65d18",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 12,
+      "old_index": 68,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-review-c.test.sh",
+      "merge8": "6ed65d18",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 13,
+      "old_index": 79,
+      "kind": "deleted_line",
+      "file": "hooks/tests/opencode-discovery-probe.test.sh",
+      "merge8": "48a66b5b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 14,
+      "old_index": 82,
+      "kind": "deleted_line",
+      "file": "hooks/tests/opencode-discovery-probe.test.sh",
+      "merge8": "48a66b5b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 15,
+      "old_index": 84,
+      "kind": "deleted_line",
+      "file": "hooks/tests/opencode-discovery-probe.test.sh",
+      "merge8": "48a66b5b",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 16,
+      "old_index": 90,
+      "kind": "deleted_line",
+      "file": "mods/live/live.test.ts",
+      "merge8": "1456a232",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 17,
+      "old_index": 93,
+      "kind": "deleted_line",
+      "file": "mods/live/scroll.test.ts",
+      "merge8": "62d54529",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 18,
+      "old_index": 96,
+      "kind": "deleted_line",
+      "file": "hooks/tests/opencode-v2-plugin.test.sh",
+      "merge8": "375a1601",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 19,
+      "old_index": 117,
+      "kind": "deleted_line",
+      "file": "hooks/tests/opencode-v2-plugin.test.sh",
+      "merge8": "375a1601",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 20,
+      "old_index": 126,
+      "kind": "deleted_line",
+      "file": "hooks/tests/implementation-campaign-state.test.sh",
+      "merge8": "a593878c",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 21,
+      "old_index": 129,
+      "kind": "deleted_line",
+      "file": "hooks/tests/mission-retire-on-integration.test.sh",
+      "merge8": "a593878c",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 22,
+      "old_index": 146,
+      "kind": "deleted_line",
+      "file": "mods/live/ui-lint.test.js",
+      "merge8": "48965f54",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 23,
+      "old_index": 151,
+      "kind": "deleted_line",
+      "file": "mods/live/ui-lint.test.js",
+      "merge8": "48965f54",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 24,
+      "old_index": 152,
+      "kind": "deleted_line",
+      "file": "mods/live/ui-lint.test.js",
+      "merge8": "48965f54",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 25,
+      "old_index": 154,
+      "kind": "deleted_line",
+      "file": "mods/live/ui-lint.test.js",
+      "merge8": "48965f54",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 26,
+      "old_index": 155,
+      "kind": "deleted_line",
+      "file": "mods/live/ui-lint.test.js",
+      "merge8": "48965f54",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 27,
+      "old_index": 167,
+      "kind": "deleted_line",
+      "file": "hooks/tests/skill-frontmatter-portability.test.sh",
+      "merge8": "b6e11294",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 28,
+      "old_index": 172,
+      "kind": "deleted_line",
+      "file": "hooks/tests/child-parent-record.test.sh",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 29,
+      "old_index": 188,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 30,
+      "old_index": 189,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 31,
+      "old_index": 196,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 32,
+      "old_index": 198,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 33,
+      "old_index": 206,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 34,
+      "old_index": 213,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 35,
+      "old_index": 217,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 36,
+      "old_index": 218,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 37,
+      "old_index": 233,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 38,
+      "old_index": 244,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 39,
+      "old_index": 251,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 40,
+      "old_index": 253,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 41,
+      "old_index": 255,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 42,
+      "old_index": 259,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 43,
+      "old_index": 262,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 44,
+      "old_index": 269,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 45,
+      "old_index": 275,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 46,
+      "old_index": 278,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 47,
+      "old_index": 279,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 48,
+      "old_index": 293,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 49,
+      "old_index": 298,
+      "kind": "deleted_line",
+      "file": "scripts/lib/opencode-containment.test.js",
+      "merge8": "9883b639",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 50,
+      "old_index": 308,
+      "kind": "deleted_line",
+      "file": "mods/live/live.test.ts",
+      "merge8": "35f07d83",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 51,
+      "old_index": 327,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/affected-suites.test.js",
+      "merge8": "2f8d1da3",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 52,
+      "old_index": 342,
+      "kind": "deleted_line",
+      "file": "hooks/tests/final-panel-kimi-agy-intake.test.sh",
+      "merge8": "48985afc",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 53,
+      "old_index": 345,
+      "kind": "surface_touch",
+      "file": "hooks/tests/fixtures/dispatch-discuss-single-turn-empty-taken.golden.txt",
+      "merge8": "2f5ba118",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 54,
+      "old_index": 364,
+      "kind": "deleted_line",
+      "file": "hooks/tests/review-resolution-closure.test.sh",
+      "merge8": "6e92b769",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 55,
+      "old_index": 372,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 56,
+      "old_index": 377,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 57,
+      "old_index": 381,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 58,
+      "old_index": 385,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 59,
+      "old_index": 386,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 60,
+      "old_index": 402,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 61,
+      "old_index": 404,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 62,
+      "old_index": 412,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 63,
+      "old_index": 445,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 64,
+      "old_index": 450,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 65,
+      "old_index": 458,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 66,
+      "old_index": 459,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 67,
+      "old_index": 460,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 68,
+      "old_index": 461,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 69,
+      "old_index": 463,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 70,
+      "old_index": 474,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 71,
+      "old_index": 478,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 72,
+      "old_index": 486,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 73,
+      "old_index": 493,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 74,
+      "old_index": 511,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 75,
+      "old_index": 521,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 76,
+      "old_index": 525,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 77,
+      "old_index": 546,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 78,
+      "old_index": 547,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 79,
+      "old_index": 560,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 80,
+      "old_index": 566,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 81,
+      "old_index": 569,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 82,
+      "old_index": 587,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 83,
+      "old_index": 592,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 84,
+      "old_index": 595,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 85,
+      "old_index": 597,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 86,
+      "old_index": 605,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 87,
+      "old_index": 642,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 88,
+      "old_index": 653,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 89,
+      "old_index": 662,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 90,
+      "old_index": 665,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 91,
+      "old_index": 667,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 92,
+      "old_index": 676,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 93,
+      "old_index": 680,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 94,
+      "old_index": 681,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 95,
+      "old_index": 684,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 96,
+      "old_index": 717,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 97,
+      "old_index": 723,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 98,
+      "old_index": 729,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 99,
+      "old_index": 739,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 100,
+      "old_index": 744,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 101,
+      "old_index": 746,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 102,
+      "old_index": 771,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 103,
+      "old_index": 773,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 104,
+      "old_index": 795,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 105,
+      "old_index": 798,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 106,
+      "old_index": 802,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 107,
+      "old_index": 805,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 108,
+      "old_index": 812,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 109,
+      "old_index": 827,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 110,
+      "old_index": 831,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 111,
+      "old_index": 833,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 112,
+      "old_index": 846,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 113,
+      "old_index": 854,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 114,
+      "old_index": 855,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 115,
+      "old_index": 865,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 116,
+      "old_index": 866,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 117,
+      "old_index": 878,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 118,
+      "old_index": 912,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 119,
+      "old_index": 921,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 120,
+      "old_index": 922,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 121,
+      "old_index": 929,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 122,
+      "old_index": 930,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 123,
+      "old_index": 935,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 124,
+      "old_index": 941,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 125,
+      "old_index": 942,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 126,
+      "old_index": 949,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 127,
+      "old_index": 953,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 128,
+      "old_index": 966,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 129,
+      "old_index": 967,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 130,
+      "old_index": 968,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 131,
+      "old_index": 978,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 132,
+      "old_index": 981,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 133,
+      "old_index": 992,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 134,
+      "old_index": 999,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 135,
+      "old_index": 1006,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 136,
+      "old_index": 1010,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 137,
+      "old_index": 1011,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 138,
+      "old_index": 1014,
+      "kind": "deleted_line",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": true
+    },
+    {
+      "n": 139,
+      "old_index": 1029,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 140,
+      "old_index": 1046,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 141,
+      "old_index": 1050,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 142,
+      "old_index": 1052,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 143,
+      "old_index": 1056,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 144,
+      "old_index": 1058,
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "merge8": "16dd391e",
+      "group_still_reported": true,
+      "exact_still_reported": false
+    },
+    {
+      "n": 145,
+      "old_index": 1071,
+      "kind": "deleted_line",
+      "file": "hooks/tests/review-resolution-closure.test.sh",
+      "merge8": "2210b470",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 146,
+      "old_index": 1077,
+      "kind": "deleted_line",
+      "file": "hooks/tests/profile-context-isolation.test.sh",
+      "merge8": "a9a508c6",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 147,
+      "old_index": 1081,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/qualification-consult-discuss-transport.test.js",
+      "merge8": "09c5eeb6",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 148,
+      "old_index": 1088,
+      "kind": "deleted_line",
+      "file": "platforms/codex/plugin/scripts/qualification-review-provider.test.js",
+      "merge8": "09c5eeb6",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    },
+    {
+      "n": 149,
+      "old_index": 1095,
+      "kind": "deleted_line",
+      "file": "scripts/qualification-consult-discuss-transport.test.js",
+      "merge8": "09c5eeb6",
+      "group_still_reported": false,
+      "exact_still_reported": false
+    }
+  ]
+}

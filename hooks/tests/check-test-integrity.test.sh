@@ -323,6 +323,10 @@ printf "## Mode\nmode: block\n" > .claude/test-integrity-config.md
 git add .claude/test-integrity-config.md
 git commit -qm "config block mode"
 
+# BL-0060: an added surface file is not a touch. Seed the file, then modify it.
+echo "seed" > pytest.ini
+git add pytest.ini
+git commit -qm "seed pytest.ini"
 echo "test config" > pytest.ini
 git add pytest.ini
 git commit -qm "touch pytest.ini"
@@ -340,6 +344,9 @@ printf "## Mode\nmode: warn\n" > .claude/test-integrity-config.md
 git add .claude/test-integrity-config.md
 git commit -qm "config warn mode"
 
+echo "seed" > pytest.ini
+git add pytest.ini
+git commit -qm "seed pytest.ini"
 echo "test config" > pytest.ini
 git add pytest.ini
 git commit -qm "touch pytest.ini"
@@ -360,6 +367,10 @@ git commit -qm "config block mode"
 mkdir -p tests/fixtures tests/__snapshots__
 echo "{}" > tests/fixtures/x.json
 echo "snapshot" > tests/__snapshots__/x.snap
+git add tests/fixtures/x.json tests/__snapshots__/x.snap
+git commit -qm "seed snapshot and fixture"
+echo '{"changed":true}' > tests/fixtures/x.json
+echo "snapshot-2" > tests/__snapshots__/x.snap
 git add tests/fixtures/x.json tests/__snapshots__/x.snap
 git commit -qm "touch snapshot and fixture"
 
@@ -532,6 +543,9 @@ git commit -qm "config with custom test and surface paths"
 
 mkdir -p harness
 printf 'check() { [ "$1" = "$2" ]; }\n' > harness/lib.sh
+git add harness/lib.sh
+git commit -qm "seed harness surface"
+printf 'check() { [ "$1" = "$2" ]; }\n# touched\n' > harness/lib.sh
 printf 'check a a\ncheck b b\n' > custom.suite.sh
 git add harness/lib.sh custom.suite.sh
 git commit -qm "add custom-convention suite"

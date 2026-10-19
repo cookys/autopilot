@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- gradfix (917067dca): `check-plan-graduation --fix` now deletes only rows that are really done and writes a receipt per deleted row; a row pointing at an unshipped plan is kept.
+- closeout5 (7cc36db49): restored the two roundtable rows dropped by the v2.36.78 cleanup as BL-0216 and BL-0217.
+- t14r2 (794622aee): BL-0055 round 2 pre-registered; the retry gate can name feature gaps.
+- v11 (98e5c6e7d): stage-graph eval v12 SHIP for BL-0117 and BL-0093 point 2 wording; the guidance gate accepts declared out-of-arm drift.
+
 - BL-0202 closed (merge b8bdd61f3, owner card d-44ea93e2): incremental re-review merges prior findings that share location, whitespace-normalised claim and severity into one addendum row listing every id; each seat still gets the full list and must resolve each id. `evaluateClosure` is unchanged and `carriedOpenFindings` stays one row per id. Synthetic 11 findings × 3 seats: addendum 3875 → 2449 bytes (−37%). New test `hooks/tests/review-addendum-dedupe.test.sh` (15 assertions); three existing tests updated to the merged row format.
 
 - BL-0027 closed (merge d997355a9, owner card d-b492cb1a): Codex pins `PLUGIN_ROOT` to a cache directory that plugin add and plugin remove delete, so dev-mode hooks failed with PostCompact MODULE_NOT_FOUND. `dev-setup.sh --harness codex --install` (dev path only) now merges the three Codex hook events into `$CODEX_HOME/hooks.json` (or `~/.codex/hooks.json`) pointing at the repo's `platforms/codex/plugin/hooks/`, backs up as `hooks.json.bak-<ts>` only when content changes, keeps foreign entries, is re-entrant, refuses a malformed file untouched, and writes via a same-dir temp file and `mv`. The plugin installs from a derived hook-less dev marketplace so each hook registers once. `--uninstall` removes only our entries and the derived marketplace. A normal install never touches `hooks.json`. No settings keys changed.

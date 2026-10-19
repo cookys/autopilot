@@ -1,0 +1,151 @@
+5d0b29c1d	CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞	B	retitled "CLAUDE.md 逼近 40k 硬上限(目前僅餘 6 bytes)" in same commit; closed as completed by 2879dac8c (archive backlog-actionable-successor)
+5d0b29c1d	OpenCode 1.17 遷移收尾 — ✅ check 15 根治、check 16 降級 advisory（v2.32.50）	B	retitled "OpenCode debug skill truncation - restore portability check 16" (new5d:62, migrated e70de5492); row closed by 18b73df05 (2026-10-18) as part of opencode 2.x fix; check-16 hard-fail restore not independently verified
+5d0b29c1d	engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用	A	CHANGELOG v2.32.46 "engine wires reviewer_endpoint + --resume re-entry" (CHANGELOG:7699)
+5d0b29c1d	Dispatch-branch lifecycle：支援 SHA-256 object format	B	retitled "Dispatch-branch lifecycle - SHA-256 check --ack residual"; fixed 0db64c610 (BL-0063, 2026-10-16)
+5d0b29c1d	Inherited L1 hook-config hermeticity / OpenCode V2 / eval-doc-drift portability baselines	B	narrowed to "Orchestrator edit-gate hermetic baseline" (new5d:147), retired by dc02e22af D1; other halves repaired per its Context
+5d0b29c1d	codex-native `spawn_agent` 盲區納管（codex 當 depth-0 時）	B	retitled "codex-native spawn_agent lifecycle / teardown" (new5d:153); SHIPPED in bc2d36464 Track 2
+5d0b29c1d	check-test-integrity-l1.test.sh 固定 /tmp 路徑在多使用者機器上撞牆（flaky）	A	aedce0057 (2026-07-17) removed fixed /tmp/autopilot-l1-js-install.log from hooks/tests/check-test-integrity-l1.test.sh; row was stale
+5d0b29c1d	context-budget T3 deny tier（handoff 結構檢查 + 新 dispatch 拒絕 + anti-spiral）	B	retitled "context-budget T3 deny tier - calibration and obedience evidence" (migrated e70de5492); closed by owner card in 293cdaa8b (BL-0064, 2026-10-18)
+5d0b29c1d	✅ SHIPPED (2026-07-11, v2.32.21) — Dispatch observability Stage 2 — 雙工溝通：`--runner pi`（RPC）整合	A	CHANGELOG v2.32.21 (:8166)
+5d0b29c1d	✅ SHIPPED (2026-07-11, v2.32.20) — Dispatch observability Stage 1 — hetero run 失聯歸零（start manifest + dispatch-status + usage 入 ledger）	A	CHANGELOG v2.32.20 (:8183)
+5d0b29c1d	官方 codex plugin(openai/codex-plugin-cc)作「同級 consult 通道」的 Spike 評估	C	consult channel shipped v2.31.20, but residual (review channel calibration after Spark reset 2026-07-07; rescue --write sandbox posture) has no successor row; grep codex:review/codex-plugin-cc in BACKLOG, backlog sidecars, knowledge = 0
+5d0b29c1d	✅ FULLY SHIPPED (2026-07-10, v2.32.16+v2.32.18) — terse reviewer contracts:三份契約全數量測過 gate 出貨	A	CHANGELOG v2.32.16 + v2.32.18 (:8253,:8222)
+5d0b29c1d	✅ RESOLVED (2026-07-10, 同日) — reviewer-harness 校準:換 claude-native haiku 腿(選項 c)	A	CHANGELOG v2.32.18 (haiku leg)
+5d0b29c1d	✅ RESOLVED (2026-07-10, v2.32.18) — Path-C 忠實儀器:syscontract 通道(--system-prompt-file + read-only tools + 時間軸 worktree)三輪迭代認證忠實	A	CHANGELOG v2.32.18 syscontract instrument
+5d0b29c1d	表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）	B	split into "Codex payload install-time generation" and "Release-time payload branch (B)" (both still in current BACKLOG with sidecars; C1a Spike trigger carried)
+5d0b29c1d	✅ RESOLVED (2026-07-10, v2.32.17) — pre-existing full-suite failures: autopilot-cli/review-runner/intent-capture already fixed on develop (stale classification); the REAL red was contract-parity (JS twin missing on_engine_unavailable) — fixed	A	CHANGELOG v2.32.17 (:8242) + self-declared RESOLVED 2026-07-10
+5d0b29c1d	✅ RESOLVED (2026-07-10, v2.32.19) — resolve-endpoint.test.sh hermeticity(AUTOPILOT_ENDPOINTS_ENV 釘不存在路徑)	A	CHANGELOG v2.32.19 (:8203)
+5d0b29c1d	✅ RESOLVED (2026-07-10, v2.32.19) — Contract JSON-schema SSOT: schemas/review-loop-contract.schema.json + JS derivation + check-contract-schema.js gate	A	CHANGELOG v2.32.19; scripts/check-contract-schema.js
+5d0b29c1d	✅ DONE (already shipped ~v2.31.13, `2a5d7fa` feat/eb-w2; BACKLOG entry was stale) — dispatch-author.sh `--endpoint` parity	A	commit 2a5d7fa feat/eb-w2; CHANGELOG v2.31.13 (:8691)
+5d0b29c1d	✅ DONE (2026-07-05, v2.31.17) — late-flush `empty_output` misclassification (cc-shim/codex/any runner)	A	CHANGELOG v2.31.17 (:8629)
+5d0b29c1d	Per-event opt-in hook multiplexer — REAFFIRMED deferred (see existing entry below)	B	duplicate pointer to the real multiplexer entry (kept at new5d:383); retired by dc02e22af D6
+5d0b29c1d	distill 情節模式（episodic mode）＋ finish-flow/next 定期呼叫整合	A	CHANGELOG v2.31.18 distill episodic mode + periodic anchors (:8617)
+5d0b29c1d	distill Step 4.5 — 高風險產出加 RED-phase 品質環（skill 產出後的「弱模型會不會照做」驗收）	A	delivered as skills/distill/SKILL.md "Step 2E-quality (optional) RED acceptance" (f95837f65, 2026-07-05); narrower than proposed Step 4.5 (episodic path only)
+5d0b29c1d	`autopilot endpoints test <name>` — live auth-roundtrip probe	A	CHANGELOG v2.31.13: autopilot endpoints test <name> (:8696)
+5d0b29c1d	Overlay repo-keying refinements (path-fallback stability / rename handling)	A	CHANGELOG v2.31.13: repo_key_source provenance + set --repo warning (:8697)
+5d0b29c1d	✅ DONE (2026-07-03, v2.31.3) — `dispatch-review.sh` prompt-echo pollution	A	CHANGELOG v2.31.3 (:8889)
+5d0b29c1d	Reviewer response/runner exits cause fail-closed verdict loss（Grok / GLM / Kimi / Qwen / Codex）	B	retitled "Reviewer transport exits can erase an otherwise valid fail-closed verdict"; shipped v2.34.33 (1631709a7)
+5d0b29c1d	✅ DONE (2026-07-03, v2.31.4) — `anthropic-compatible` reviewer under the nonce wrapped-block protocol	A	CHANGELOG v2.31.4 (:8878)
+5d0b29c1d	✅ DONE (2026-07-02, v2.30.2) — `engine implement-review` codex-flag misclassification	A	CHANGELOG v2.30.2 (:8942)
+5d0b29c1d	✅ DONE (2026-07-02, v2.29.0) — Pre-existing full-suite failures repaired	A	CHANGELOG v2.29.0 (:8982); f9d1590
+5d0b29c1d	✅ DONE (2026-07-02, v2.29.0) — Engine integration follow-up hardening from external architecture review	A	CHANGELOG v2.29.0; ce3d79e
+5d0b29c1d	✅ DONE (2026-07-01, v2.28.0) — `/l6` — full-dispatch CEO front-door	A	CHANGELOG v2.28.0 (:9047)
+5d0b29c1d	✅ DONE (2026-07-02, v2.29.0) — `dispatch-hetero.sh` wrapper commit captures net-new files	A	CHANGELOG v2.29.0; f9d1590
+5d0b29c1d	Eval plugin-arm context isolation — guard the baseline against silent self-contamination	B	ABSORBED into docs/plans/2026-07-04-quality-floor-engine.md P3-pre (plan archived); evals/orchestration/README.md:28 arm isolation
+5d0b29c1d	Deliberately-minimal baseline arm — prove skill lift, not just trigger precision	B	ABSORBED into quality-floor-engine P3 (OFF arm doubles as minimal baseline)
+5d0b29c1d	✅ DONE (2026-06-27, v2.26.2) — Migrate the remaining 12 Tier-B opt-in hooks off the `${CLAUDE_PLUGIN_ROOT}`-in-settings.json route	A	CHANGELOG v2.26.2 (:9234)
+5d0b29c1d	✅ DONE (2026-06-27, v2.26.3) — update-checker release-hygiene gate: require a CHANGELOG `opt-in` mention when the opt-in set changes	A	CHANGELOG v2.26.4 opt-in CHANGELOG release-hygiene gate (:9208); row said v2.26.3 (version mislabel)
+5d0b29c1d	Engine-routing axis — evidence bar for ANY model→worktype default (domain AND lifecycle-phase BOTH survey-refuted)	C	standing evidence bar gating the retained "Domain-aware routing" row; survey evidence (WebDev Arena, arXiv 2603.02540) exists only in personal memory [[project_routing-axis-evidence]]; grep of repo, backlog sidecars = 0
+5d0b29c1d	`dispatch-review.sh` agy path — harden isolation if agy ships a read-only sandbox	A	superseded: agy reviewer/author hard isolation (bwrap) SHIPPED bc2d36464 Track 2; scripts/lib/cleanroom-launch.sh agy profile
+5d0b29c1d	✅ DONE (2026-06-26, v2.25.9) — `agy` restored as a `/l5` implementer (anchor fix) + read-only reviewer	A	CHANGELOG v2.25.9 (:9381)
+5d0b29c1d	✅ DONE (2026-06-26, v2.25.8) — `dispatch-hetero.sh` codex-trigger + `--effort` + best-effort containment; review-loop automation	A	CHANGELOG v2.25.8 (:9396)
+5d0b29c1d	✅ DONE (2026-06-24, this ship) — `check-redispatch-prompt.sh` had no test (pre-existing gap)	A	hooks/tests/check-redispatch-prompt.test.sh exists
+5d0b29c1d	Depth-0 loop hardening — content-fingerprint no-progress + hook backpressure (from loop-engineering study)	U	adjacent gates exist (scripts/check-loop-convergence.js 860ef7844 zero-execution rounds + generation cap; scripts/check-stall-fuse.js verification-spin) but neither is the content-fingerprint same-diff/same-verdict check; trigger (a) is incident-based, unverifiable whether it still matters
+5d0b29c1d	agent-skills study — rejected items (don't re-litigate)	D	reasons recorded in docs/plans/2026-06-24-agent-skills-learnings.md (plan still present); row was a do-not-relitigate mirror
+5d0b29c1d	✅ DONE (2026-06-22, `e96998d` via /l4 dogfood) — subagent-driven-development: explicit BLOCKED / incomplete-return handling	A	commit e96998d (self-declared DONE)
+5d0b29c1d	writing-skills: RED-phase pressure-testing for behavior-shaping skills	B	RED-phase apparatus partly delivered as distill Step 2E-quality (f95837f65); publish-broadly trigger no longer tracked
+5d0b29c1d	`/compact` slash-command silent miss documentation	A	hooks/README.md:204 section "/compact != real PreCompact"; ENXIO root cause fixed by fd-0 reads (2348ee7b4, fc71ae154)
+5d0b29c1d	PostToolUse dispatch dies after `/clear` — process restart required（verified）	C	(c) docs done v2.8.1 (hooks/README.md:55); (a) spike-gated SessionStart detection and (b) upstream report never done; trigger (user report / CC release note) not tracked; verified on CC 2.1.1xx only
+5d0b29c1d	Claude Code tool-event hooks get NO stdin pipe — event-type-specific, not version regression	A	row self-corrected 2026-06-23: fd-0 read; hooks re-enabled v2.23.0 (66056f3cb); transcript pivot v2.8.0 (83f33c06e)
+5d0b29c1d	✅ DONE (2026-06-24, v2.25.2) — Re-enable v2.7.4 disabled hooks: cost-tracker was the last one	A	CHANGELOG v2.25.2 (:9497)
+5d0b29c1d	Investigate `/reload-plugins` hook count discrepancy	C	reload-watch hook (hooks/reload-watch.js) still shipped; S investigation of /reload-plugins count 11 vs 13 never done; trigger untracked. Cosmetic
+5d0b29c1d	✅ DONE (2026-07-02, superseded by v2.25.8–v2.29.0) — hetero-dispatch skill wrapper (and/or dispatch-config Implementer chain)	A	superseded by v2.25.8-v2.29.0 (self-declared, CHANGELOG headings present)
+5d0b29c1d	✅ DONE (2026-06-22, `b274439` via /l5 hetero dogfood) — resolve-doa.sh override-row preset-column injection (sibling of v2.17.0 fix)	A	commit b274439
+5d0b29c1d	agy install symlinked-dest self-copy truncation — guard install script + upstream report	C	(b) guard shipped v2.15.1 in install-antigravity.sh/.ps1; (c) upstream report to Antigravity (3-line repro) never filed; needs owner identity; no tracker
+5d0b29c1d	✅ DONE (2026-07-08, v2.32.9) — resolver `min_panel_size` emission (family-agnostic)	A	CHANGELOG v2.32.9 (:8388)
+5d0b29c1d	✅ DONE (2026-06-24, v2.25.1) — sync-version.js: omitting `--disabled-count` silently dropped the "N disabled" hook fragment	A	CHANGELOG v2.25.1 (:9516)
+5d0b29c1d	OS-sandboxed hetero reviewer (hard isolation on untrusted diffs)	U	cleanroom bwrap isolation now covers codex/kimi/agy on blind rail (scripts/lib/cleanroom-launch.sh; v2.36.108-109); cc-shim/grok reviewers remain documented best-effort (dispatch-review.sh:89-90); untrusted-diff trigger untracked
+5d0b29c1d	cross_family_satisfied 是 boolean,無法表達 required_review_families=2 的「≥2 個相異家族」語意	A	self-declared RESOLVED 2026-07-05 (counting semantics); CHANGELOG mentions cross_family_satisfied
+5d0b29c1d	🔬 foreman↔depth-0 協調：liveness query + ownership lease + 插隊/steer 通道（l6-resilience R6-research）	B	retitled "Foreman<->depth-0 coordination R6" (new5d:56); completed in 2879dac8c
+5d0b29c1d	✅ DONE (2026-07-08, develop `c35dc88`) — l6-resilience R0-R5 + fix pass merged	A	commit c35dc88
+5d0b29c1d	單輪任務對 M3 判別是死路 — 要量 pack/procedure lift 需轉向 long-horizon	D	negative-result record; conclusion preserved in docs/projects/_archive/2026-07-09-m3-band-tasks/report.md; no work owed
+5d0b29c1d	verification-authoring rails 三件小缺陷（author 唯讀契約／leakage 誤判／polarity tripwire）	B	retitled "Review-response leakage false reject + RED/green polarity tripwire"; completed in 2879dac8c
+5d0b29c1d	capability-state quota 身分缺 endpoint 維度＋local runner 語意未定	B	local-runner half kept as "First local runner capability semantics" (current BACKLOG + sidecar); endpoint-dimension half shipped v2.34.1 (exact endpoint identity)
+5d0b29c1d	✅ DONE (v2.32.25) — engine in-loop 去相關 review 對預設 roster（openai×openai）結構性死路	A	CHANGELOG v2.32.25 (:8094)
+5d0b29c1d	✅ DONE (v2.32.25) — reviewer_qualified 資格檢查未覆蓋 low-risk tier 代換後的 reviewer	A	CHANGELOG v2.32.25
+5d0b29c1d	codex spawn_agent model 欄位被鎖 — 追蹤上游、解鎖後撤 opt-in 文件	B	retitled "Codex 0.146 native spawn_agent schema/docs reconciliation"; SHIPPED bc2d36464
+5d0b29c1d	dispatch 大型 calibration/eval scratch 改走非配額路徑（usrquota 事故殘項 d）	C	(a)(b)(c) shipped v2.32.22 (23878ae9b); (d) large calibration clones (swe-calibrate-*, 44 x ~110M) still write TMPDIR; no producer script in repo; no tracker
+bc2d36464	Readiness gate 的 session-local qualification provider	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	codex-native `spawn_agent` lifecycle / teardown 盲區納管（codex 當 depth-0 時）	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	E1 dispatch-manifest 合規 merge gate（/lN 宣稱 ⇒ 機器可驗）	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	codex 宿主 slash-entry 探針入 gate(committed、可重跑)	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	preflight-portability.sh meta-smoke test	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	agy reviewer/author hard isolation	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	Codex 0.146 native `spawn_agent` schema/docs reconciliation	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	identity rail on dispatch-author non-strict path（2026-07-17, 低優先）	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	agy generic model alias normalization（`gemini-flash`）	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	Legacy ready Mission terminals lack exact controller Work Orders	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+bc2d36464	Dispatch/session tests inherit production Mission authority state	A	archive 2026-08-01-backlog-convergence README: Tracks 1-3 shipped 11 entries; merge 952df77ad on develop; code present (src/readiness/qualification-provider.js, scripts/mission-terminal-reconcile.js, src/engine/controller-execution.js). CHANGELOG v2.34.x does not itemize it
+2879dac8c	Foreman↔depth-0 coordination R6 — reliable state, ownership lease, and adaptive recovery	A	archive 2026-08-02-backlog-actionable-successor README: R6 completed, merge fa076b3c
+2879dac8c	CLAUDE.md 逼近 40k 硬上限（目前僅餘 6 bytes）	A	same archive: CLAUDE.md capacity hygiene completed (fa076b3c)
+2879dac8c	B1/B2 review 路徑效率（diff-only 強制 + delta re-review）	A	same archive: review-path B1/B2 completed (fa076b3c)
+2879dac8c	Review-response leakage false reject + RED/green polarity tripwire	A	same archive: leakage/polarity completed (fa076b3c); note follow-up kept as row
+9d45531e2	Harness capability-state refresh after 2026-08 platform releases	A	CHANGELOG v2.34.2 (D1-D4); archive commit 312a41c58
+9d45531e2	Codex production `PostCompact` recovery wiring	A	CHANGELOG v2.34.2 Codex PostCompact adapter (D3)
+9d45531e2	agy structured-output telemetry integration	A	CHANGELOG v2.34.2 agy structured usage (D2)
+9d45531e2	Strict `/l5` provider-readiness CLI trust root	A	CHANGELOG v2.34.2 strict-L5 readiness bootstrap (D4); follow-up BL-0198 merge 395a1f09b
+dc02e22af	Review-loop enum gate — behavioral per-field invalid-value proof	A	archive next-touch-debt-retirement README D1 done (A01-A04)
+dc02e22af	grok implementer 摩擦調校（toolFailure 28%／零 commit 72%／effort 反效果假說）	A	D8 Grok effort A/B: scripts/run-grok-implementer-ab.sh; commits c43370dd3 746f22338
+dc02e22af	dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）	A	D3 cgroup tier: scripts/lib/dispatch-author-codex-transport.sh:357
+dc02e22af	classify-error quota 共現 gate 偏寬 — 裸 `status`/`error` 子串共現即判 quota	A	D1 numeric HTTP quota gate: scripts/engine-capability-state.js:2007
+dc02e22af	Orchestrator edit-gate hermetic baseline	A	D1 hermetic edit-gate HOME
+dc02e22af	distill/learn 邊界句進 description(+ retro「session」詞彙鄰接註記)	A	D5 distill/learn boundary text in skills/distill/SKILL.md description
+dc02e22af	distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點	A	D5 distill-scan filters
+dc02e22af	distill identifier lint 開放給外部 skill pack 使用（單獨入口）	A	D5 identifier-scan path entry: scripts/identifier-scan.js
+dc02e22af	`dispatch-review.sh` echo-hardening — derived/transformed delimiter (max-security variant)	A	D4 derived delimiter framing
+dc02e22af	Per-event opt-in hook multiplexer (perf) — avoid spawning gated-off opt-in hooks on every tool call	A	D6 hooks/opt-in-multiplexer.js + benchmark commits 482a26a5b 0e3e68a66
+dc02e22af	Generated `.opencode/agent-bodies/*.body.md` relative links break one level deep	A	D1 agent-body link depth rewrite
+dc02e22af	`verify_strength` as the third density input — decomposed into ordered precursors	A	D7 scripts/verify-strength.js
+dc02e22af	Explicit findings identity authority	A	D2 explicit identity verdict: src/engine/controller-execution.js:809
+dc02e22af	Shared sealed zero-diff validator	A	D2 src/engine/sealed-zero-diff-validator.js
+ef5d5defc	P0 — Review repair convergence gate：同 finding 重用原 worktree，禁止整體重派	A	CHANGELOG v2.34.1 Changed: repair generations append one work order; archive repair-lineage-convergence
+ef5d5defc	P0 — Controller execution discipline：full-diff 先行、原工單續修、compact 後機械復原	A	CHANGELOG v2.34.1 Added: controller-execution state machine; src/engine/controller-execution.js
+ef5d5defc	Live quota probe writes legacy capability partition; strict dispatch needs exact effort/endpoint	A	CHANGELOG v2.34.1 Changed: exact runner/model/effort/endpoint identity
+ef5d5defc	Mission graph admission: reject non-existent/mistyped output_paths and verify version-mirror closure pre-spend	A	CHANGELOG v2.34.1 Changed: Mission admission validates creates + version-mirror closure
+ef5d5defc	Campaign controller treats `boundary_rejected` as unknown status (obscures boundary reason)	A	CHANGELOG v2.34.1 Fixed: boundary_rejected first-class; src/engine/repair-ladder.js
+ef5d5defc	Missing finding-disposition authority terminal-stops campaign instead of resumable adjudication	A	CHANGELOG v2.34.1 Changed: awaiting_disposition state; src/campaign/status.js
+ef5d5defc	QC panel count degradation vs declared `min_panel_size` (final_panel_count: 1 on 3-seat roster)	A	CHANGELOG v2.34.1 Fixed: min QC panel; min_panel_size in campaign-intake.js
+ef5d5defc	Deterministic Mission resume-projection gate (historical-output replay rejection + no-op adoption)	A	CHANGELOG v2.34.1 Changed: receipt-proven no-op adoption
+ef5d5defc	Codex compaction recovery 與 dispatch admission 去重	A	CHANGELOG v2.34.1 Fixed: compaction replay/duplicate dispatch admission
+ef5d5defc	Retained-worktree lease 與每輪 outcome disposition 機械閘	A	CHANGELOG v2.34.1 Changed: retained outcomes require leases; max_leaf_worktrees in dispatch-hetero.sh
+ef5d5defc	Managed campaign orphan-mutation adoption	A	CHANGELOG v2.34.1 Fixed: interrupted-controller adoption; src/engine/work-order.js
+ef5d5defc	Run-ledger rotation 的 active campaign replay 一致性	A	CHANGELOG v2.34.1 Changed: rotation-aware campaign replay
+eea9b3173	`preflight-release.sh` 的 prose-justification 檢查掃全檔，等同永久放行	A	merge 9f26e0822 (scripts/preflight-release.sh current-version prose); archive 2026-07-31-correctness-gates
+eea9b3173	`verify-red-green.sh` 對「從 `$0` 推導 REPO_ROOT」的測試套件失效（＝autopilot 自己全部）	A	1361dc900 verify-red-green detached worktrees
+eea9b3173	Engine-transcript → scorecard importer（四家引擎真實遙測灌進決策層）	A	796c5e736 + 25951df12 transcript import; archive 2026-07-31-evidence-eval-truth
+eea9b3173	Orchestration-eval failure-triage rule — every FAIL must carry a classified cause before it may be scored	A	796c5e736 failure classification fail-closed (evidence-eval-truth P1)
+eea9b3173	MiniMax-M3（anthropic-compatible）reviewer 校準：自信但錯誤的 central finding 比率過高	A	a5074592f separate calibration from capability warnings (evidence-eval-truth P3)
+eea9b3173	classify-diff-risk.sh：binary diff 無 ---/+++ 行 → 路徑不進風險規則	A	cb30647e5 classify quoted binary diff paths
+eea9b3173	commit-secret-scan hook 掃 deletion 行造成 false positive 死路	A	4812a7ab1 scan only added staged content
+1631709a7	~~North-star per-skill ratchet is red on develop~~ — RESOLVED v2.34.35 post-merge (prose-justification with per-release attribution added to CHANGELOG v2.34.35 §; baseline refreshed via --update-baseline; preflight 8/8)	A	CHANGELOG v2.34.35 prose-justification + baseline refresh
+1631709a7	~~`external-lifecycle-witness` 500 ms wall-clock bound flakes under --parallel 8~~ — RESOLVED v2.34.37	A	CHANGELOG v2.34.37 (load-relative bound)
+1631709a7	~~Official qualification defaults~~ — 官方考過的 roster 成績單,consumer 吃預設或自考 — SHIPPED v2.34.36	A	CHANGELOG v2.34.36; references/official-qualification-defaults.json present
+1631709a7	~~`engine-qualify-impl.test.js` wall-truncation 斷言是負載敏感 flake —— 機器夠快就轉紅~~ — RESOLVED v2.34.37	A	CHANGELOG v2.34.37
+1631709a7	~~Same-UTC-day evidence receipt reads as not-yet-valid — three QUALIFIED implementer rows have no baseline on administration day~~ — RESOLVED v2.34.37	A	CHANGELOG v2.34.37 nowArgToMs real clock
+1631709a7	~~Plan-review has no aggregate progress view~~ — RESOLVED v2.34.31 (panel manifest at every seat transition + `dispatch-status --panels/--panel`; concurrency question DECIDED sequential-with-rationale in docs/plans/2026-08-21-panel-progress-view.md §3)	A	CHANGELOG v2.34.31 panel progress view
+1631709a7	~~Replace calendar-based authority decay with accumulated no-confidence~~ — RESOLVED v2.34.35 (all three roster teeth pulled; seat-scoped strike fold, ordinary threshold in shadow, critical re-exam registry enforcing)	A	CHANGELOG v2.34.35 strike accumulation
+1631709a7	~~`codex_transport_scan_fd_holders` walks all of /proc with a fork per fd~~ — RESOLVED v2.34.22 (8000ms → 80ms; test 318s → 52s; stat field-shift bug fixed too)	A	CHANGELOG v2.34.22 (95x faster /proc scan)
+1631709a7	~~Two test files are not parallel-safe~~ — RESOLVED v2.34.22 (root-caused: codex-plugin-package regenerates the live mirror that dev-setup asserts on; both serialized)	A	CHANGELOG v2.34.22 serialized the two test files; merge 6582ac68b
+1631709a7	~~🔴 The repo's own test gate is red on develop — 12 of 260 files~~ — RESOLVED 2026-08-18	A	merge 024e11e0f (3 test-side) + v2.34.20 capability receipt expiry (8 product-side)
+1631709a7	~~Fable skills absorption plan — Board triage~~ — RESOLVED-NOT-PURSUED 2026-08-23 (Board CEO-delegated)	D	Board CEO-delegated ruling 2026-08-23 RESOLVED-NOT-PURSUED; rationale in plan header docs/plans/2026-07-08-fable-skills-absorption.md (CLOSED-NOT-PURSUED). Note docs/projects/INDEX.md:531 still says tracked in BACKLOG
+1631709a7	~~`check-test-integrity.sh` does not cover this repo's main test surface~~ — RESOLVED v2.34.38	A	CHANGELOG v2.34.38; .claude/test-integrity-config.md present
+1631709a7	~~Reviewer transport exits can erase an otherwise valid fail-closed verdict~~ — RESOLVED v2.34.33 (verdict-bytes preservation: full-battery salvage → non-authoritative `unratified_verdict`/`unratified_observations` columns on both rails + aggregation retention; parser NOT relaxed; reader set closed by canonical-invariants allowlist. Plan `docs/plans/2026-08-21-verdict-bytes-preservation.md` R3 + two-generation review + dead-gate mutation record)	A	CHANGELOG v2.34.33 verdict-bytes preservation
+1631709a7	~~Tree-engine graduation Board review~~ — RESOLVED-ABORT 2026-08-23 (Board CEO-delegated)	D	board_signoff abort 2026-08-23 recorded in task-tree-engine events.jsonl:33, re-entry condition stated
+a588cd948	Four-layer redesign: contract-only policy + harness graph（2026-08-16 owner-kernel retirement 後繼）	A	shipped as four-layer-redesign v2.34.11 (CHANGELOG:6557, merge 58e883c38); D6 leftover re-filed as scaffold-tier A/B row (now BACKLOG:276)
+a588cd948	Role qualification is absent across the whole roster, which fails L5 closed	B	v2.34.12 repaired stores + requalified grok implementer; reviewer-seat remainder re-filed as new row "Reviewer-seat full qualifications..." in same commit (later rewritten a18fe5ee5 and absent from current BACKLOG; out of scope)
+a588cd948	Implementer scorecard lapses on runner-version drift, silently degrading every /l5	A	v2.34.12: grok requalified on 1.0.3 + resolve-review-loop.sh --check-scorecard capability_warnings (CHANGELOG:6503)
+61ca80aeb	Context-handoff state-checkpoint symlink reject — diag detail	A	CHANGELOG v2.7.6 Item A (state-checkpoint diag echoes HOME); merge c79e44cc0
+61ca80aeb	Failure counter cleanup（housekeeping）	A	CHANGELOG v2.7.6 Item B selectFailureCounter; d1f458b0e
+61ca80aeb	intent-capture disable flag — malformed → STALE handling	A	CHANGELOG v2.7.6 Item C malformed disable flag self-heals
+61ca80aeb	Test suite for autopilot — automated coverage for hooks / scripts	A	CHANGELOG v2.7.5; commit 81e769d; project 2026-06-01-test-suite-foundation archived
+5d0b29c1d	Resolved bullet: README.zh-TW.md staleness + no drift guard	A	scripts/check-readme-parity.js exists; self-declared RESOLVED 2026-06-22
+5d0b29c1d	Resolved bullet: hook inventory reconciliation (4 sources)	A	scripts/check-hook-inventory.js exists; RESOLVED 2026-06-22
+5d0b29c1d	Resolved bullet: .opencode/skills/ stale mirror	A	CHANGELOG v2.17.2 (:9700)
+5d0b29c1d	Resolved bullet: resolve-dispatch.sh tree-role integration	A	CHANGELOG v2.17.0 (:9727)
+5d0b29c1d	Resolved bullet: agents/_bodies surface as dispatchable agents	A	relocated 2026-06-11 (self-declared; agent-bodies now under .opencode/agent-bodies and sync-agent-bodies.sh)
+5d0b29c1d	Resolved bullet: Nested subagent (depth=5) integration	A	CHANGELOG v2.14.0 (:9836)
+5d0b29c1d	H2 section: dispatch worker git-identity containment (2026-07-16)	A	CHANGELOG v2.32.51 (:7631)
+5d0b29c1d	H2 section: dispatch-hetero strict postcheck emits empty status (2026-07-17)	A	b496add8d (2026-07-25) "preserve strict checks when detached" with test "strict detach: outcome status is committed"
+5d0b29c1d	H2 section: identity rail on dispatch-author non-strict path	B	converted ## to ### (new5d:336), SHIPPED bc2d36464
+5d0b29c1d	H2 section: broader shared-config containment / per-worktree isolation	B	converted ## to ### (new5d:346); closed with sidecar in a1cc180cb (2026-10-19 "close 11 finished rows")
+5d0b29c1d	H2 section: agy gemini-flash model-name drift	B	retitled "agy generic model alias normalization" (new5d:363); SHIPPED bc2d36464; scripts/lib/agy-model-alias.sh

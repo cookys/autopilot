@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0218 -->
+<!-- next-id: BL-0251 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -486,7 +486,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### CEO/dev-flow guidance proportionality — peer request to soften "Boil the Lake" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates
+### CEO/dev-flow: reversible-candidate release gates and optional Boil-the-Lake re-try
 - **Id**: BL-0093
 - **Status**: open
 - **Since**: 2026-09-06
@@ -494,14 +494,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: cuda（revival.3d）
 - **Report**: 2026-09-06 peer
 - **Reply**: 2026-09-05 session e1e51201:1496
-- **Problem**: cuda 專案審計我方技能後提出：CEO 與開發流程的指引太極端（例如「完成成本近乎零」的說法）、缺少任務工具時的處理沒說清、可逆候選的發版檢查過嚴，希望放寬。 (draft)
-- **Impact**: 外部專案認為指引不合比例；改動需先有評測證據，擁有者尚未決定。 (draft)
-- **Trigger**: owner decides to open this; AND eval ON/OFF evidence exists for the affected skills (scorecard-first rule). Point 1 (Boil the Lake) was evaluated 2026-10-17: UNINFORMATIVE, no change; only points 2 and 3 plus an optional point-1 re-try remain.
+- **Problem**: 可逆的候選改動仍要過發版核准。煮乾湖泊那條已評過但沒有資訊量，是否再測一次由擁有者決定。
+- **Impact**: 可逆改動的發版門檻仍然過嚴；指引要等擁有者裁決才動。
+- **Trigger**: owner decides to open this; point 3 (reversible-candidate release gates) and an optional point-1 re-try remain
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
-- **Context**: Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0117; guidance text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
+- **Context**: Point 2 shipped in the 98e5c6e7d merge. BL-0147 is tracked separately. Owner decision card d-c9b50973 for text.
 
 ### Sealed-campaign review-station migration
 - **Id**: BL-0106
@@ -535,39 +535,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
 
-
-
-
-### Run stage-graph v11 regression covering the packet guidance text
-- **Id**: BL-0116
-- **Status**: open
-- **Since**: 2026-10-11
-- **Origin**: self
-- **Problem**: 要在 3.0.0 正式版前跑一次 stage-graph 的 v11 回歸評測，涵蓋新的 packet 審查指引文字。目前檢查擋住，因為兩份指引檔不在原預先登記的範圍內，需要先修訂登記。 (draft)
-- **Impact**: 沒跑評測就改了指引文字，等於沒有證據支持；正式版前必須處理。 (draft)
-- **Trigger**: before the 3.0.0 final cut
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: packet-guidance owner ruling, 2026-10-11
-- **Pointer**: none
-- **Context**: Gate blocks: two guidance files outside prereg. Revise prereg, freeze v11. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0117/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
-
-### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
-- **Id**: BL-0117
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: peer
-- **Reporter**: c4140 llm-playground
-- **Report**: 01M4NVXM8WM1Q6GR4VSTST0P22
-- **Reply**: 2026-10-12 01M4NVY57683RPV21TNXTGQC2D
-- **Problem**: c4140 的 llm-playground 專案回報：dev-flow 說明裡建議在前景等待最多 15 分鐘，這個建議有問題；現在系統對前景輪詢已改為只提醒，但說明文字尚未改。 (draft)
-- **Impact**: 說明文字仍可能誤導使用者在前景久等；改動屬於指引，需要評測證據，排在 3.0.0 正式版前。 (draft)
-- **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
-- **Pointer**: none
-- **Context**: Foreground polling now only warns; this wording waits on eval. Owner 2026-10-19 (d-1376bd32): one v11 round with BL-0116/0093; text waits on d-c9b50973; BL-0147 (hook code) needs a separate quiz eval.
 
 
 
@@ -742,3 +709,486 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: Phase 0 finding F1, restored 2026-10-19; dropped by 5f3aa3b1d cleanup
 - **Pointer**: docs/plans/evidence/2026-09-19-roundtable/notes.md
 - **Context**: `fleet peers` now tags couriers `[switchboard: …]` and refuses a handle without one; protocol.md must name the courier lookup, never `--to <host> --local`
+
+### Openclaw leftover side effects: a refusal keeps a live lease, and verify PATH is a precondition miss
+- **Id**: BL-0218
+- **Status**: open
+- **Since**: 2026-09-12
+- **Origin**: peer
+- **Reporter**: openclaw
+- **Report**: 2026-09-12 fleet
+- **Reply**: none
+- **Problem**: 主訴求已出貨。還剩兩件：拒絕時回報已釋放，持久狀態卻仍留有效租約，下次啟動會撞上未關租約；驗證指令繼承的搜尋路徑缺工具，找不到命令應算前置條件失敗。
+- **Impact**: 下次啟動被未關租約擋住；缺工具被當成驗證失敗，分不清是環境還是產品。
+- **Trigger**: a refusal reports released while durable state keeps a live lease, or verify_cmd inherits a PATH missing the operator tool
+- **Trigger-Type**: peer
+- **Effort**: S
+- **Source**: openclaw fleet relay 2026-09-12; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md
+- **Context**: Main claim shipped in v2.36.28. Original effort label was Fix. (a) may be partly covered by v2.36.71, unconfirmed.
+
+### Managed rail: already-scrambled carry-only ledger segments cannot project
+- **Id**: BL-0219
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 帳本裡已經被打亂、只剩搬移片段的段落無法再投影還原。寫入端先出貨，讀取端的復原刻意留到後面，還沒做。
+- **Impact**: 受影響主機的舊帳本無法還原，輪替後的紀錄一直讀不回去。
+- **Trigger**: host ledgers already rotated under the sorted group_by carry still throw event input artifact must match the prior output artifact
+- **Trigger-Type**: event
+- **Effort**: L
+- **Source**: l5 plan 2026-09-16, writer-only; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
+- **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
+
+### Managed rail: no_verdict leaves the phase in REVIEWING and resume refuses
+- **Id**: BL-0220
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 審查沒有裁決時，階段會停在審查中，恢復執行會拒絕繼續。紀錄寫著可以等待後恢復，恢復卻不接受這個階段。
+- **Impact**: 審查格式出錯後活動停在不可恢復的階段，這次嘗試只能放棄。
+- **Trigger**: any managed campaign whose in-rail reviewer returns no_verdict (format fault) — the next run of that station
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 1b-B campaign 2026-09-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-no-verdict-reviewing-resume.md
+- **Context**: The claim is kept, but the persisted phase stays REVIEWING, outside the durable-wait set, so resume is refused.
+
+### Managed rail: changed_files at the cap refuses repair when every sealed path was touched
+- **Id**: BL-0221
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 實作已經改過每一條封存路徑時，變更檔數達到上限，修復回合會被拒絕，即使沒有再碰到新檔案。
+- **Impact**: 該修的回合進不去，封存路徑全被碰過的活動無法在軌道內修復。
+- **Trigger**: the hand changed every sealed output path and verification is red, so repair is refused because changed_files is at max_changed_files
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-changed-files-repair-refused.md
+- **Context**: Original effort label was Fix. The changed_files axis uses >= against the sealed cap, so a repair that adds no new path is refused.
+
+### next-touch-validation reads symbolic-ref HEAD and fails in a detached verification checkout
+- **Id**: BL-0222
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 下一觸驗證測試會讀目前分支名稱。受管軌道的驗證檢出是分離狀態，沒有分支名稱，這個讀取會失敗。是否仍會紅尚未重跑確認。
+- **Impact**: 軌道內驗證可能因此變紅，同一提交在一般分支上卻是綠的。
+- **Trigger**: next-touch-validation reads symbolic-ref HEAD during the rail's detached verification checkout
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 detached checkout; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/next-touch-validation-symbolic-ref-detached.md
+- **Context**: Seen 2026-09-17: red in-rail, green on a branch. Whether it is still red when detached was not re-run.
+
+### Managed rail: a red campaign_verification keeps only digests, so the failing command is lost
+- **Id**: BL-0223
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 驗證變紅時，紀錄只留摘要雜湊，失敗的指令和輸出都沒留下來，事後看不出是哪一步、印了什麼。
+- **Impact**: 只能重跑才知道失敗原因，當次的指令與輸出已經不在紀錄裡。
+- **Trigger**: a red campaign_verification whose receipt keeps only digests, so the failing command and its output are lost
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-red-verification-digests-only.md
+- **Context**: The receipt sees stdout, stderr, and exit status, but nothing durable keeps the failing command or its tail.
+
+### Managed rail: graph-check allows max_wall_seconds to 14400 but the contract schema caps 7200
+- **Id**: BL-0224
+- **Status**: open
+- **Since**: 2026-09-17
+- **Origin**: self
+- **Problem**: 圖檢查允許牆鐘上限到一萬四千四百秒，契約上限是七千二百秒。收件時才拒絕，而且已經先花掉一次授權。
+- **Impact**: 收件前檢查放行、收件時才拒絕，一次授權額度已經燒掉。
+- **Trigger**: graph-check admits max_wall_seconds above 7200, then intake rejects and the grant attempt is already spent
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-17 intake-rejected; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-max-wall-seconds-schema-mismatch.md
+- **Context**: Original effort label was Fix. One limit, checked at graph time, so intake does not burn the attempt.
+
+### Managed rail: ADJUDICATING or VERTICAL_VERIFICATION resume spends the claim before git-drift
+- **Id**: BL-0225
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 在裁決中或垂直驗證階段恢復時，會在檢查版本是否漂移之前就花掉任務的領取額度。
+- **Impact**: 版本已漂移的恢復仍先消耗領取額度，一次嘗試白費。
+- **Trigger**: a drifted ADJUDICATING or VERTICAL_VERIFICATION resume spends the Mission claim before the git-drift check
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: plan 2026-09-16 section 6, rubric R6; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-adjudicating-resume-spends-claim.md
+- **Context**: Extend the pre-claim preflight from durable-wait phases to every git-candidate resume.
+
+### Managed rail: a reviewer that withdraws a MUST-FIX and reuses the finding id is no_verdict
+- **Id**: BL-0226
+- **Status**: open
+- **Since**: 2026-09-16
+- **Origin**: self
+- **Problem**: 審查者撤回一則必須修復、又沿用同一個發現編號時，系統把它當成沒有裁決，活動因此停住，雖然裁決其實讀得到。
+- **Impact**: 讀得到的撤回被當成沒有裁決，活動停在等待，修復被拖延。
+- **Trigger**: a rail review that withdraws a MUST-FIX and reuses the finding id is normalized as no_verdict
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: /l5 dogfood 2026-09-16 MiniMax r1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-revoked-finding-reused-id.md
+- **Context**: Drop withdrawn findings before the duplicate-id check and keep them advisory.
+
+### Managed rail does not pass the scorecard scope file, so fallback_ladder stays empty
+- **Id**: BL-0227
+- **Status**: open
+- **Since**: 2026-09-15
+- **Origin**: self
+- **Problem**: 受管軌道沒把記分卡範圍檔傳進去，後備梯永遠是空的。有證據的品管席若沒有釘選，收件就會拒絕。這件事現在是否仍成立尚未確認。
+- **Impact**: 有資格的品管席若沒釘選就進不了收件。是否仍如此尚未確認。
+- **Trigger**: a qc seat qualified by scorecard for reviewer is refused at intake without a pin because fallback_ladder stays empty
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: plan section 0 fact 1 / section 6, 2026-09-15; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/managed-rail-scorecard-scope-fallback-ladder.md
+- **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file.
+
+### Roster qualification: Explorer formal suite
+- **Id**: BL-0228
+- **Status**: open
+- **Since**: 2026-08-17
+- **Origin**: self
+- **Problem**: 名冊資格還缺探索者角色的正式考卷。在宣稱這個角色可以自動派工之前，必須先補上這套考卷。腦席重考已在別列，這裡只留探索者這一段。
+- **Impact**: 探索者角色可能在沒有正式考卷時就被拿去自動派工。
+- **Trigger**: Explorer formal suite — before autonomous routing claims for that role
+- **Trigger-Type**: event
+- **Effort**: L
+- **Source**: v2.34.15 qualification 2026-08-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md
+- **Context**: Implementer leg already shipped. This row is only the Explorer formal suite. Brain re-sit lives in another row.
+
+### A stale topology tuple derails a plan-review loop
+- **Id**: BL-0229
+- **Status**: open
+- **Since**: 2026-09-08
+- **Origin**: self
+- **Problem**: 拓撲記錄留著一個已退役的模型。計畫審查因此失敗，包裝程式結束碼為三且沒有任何輸出。兩項補救都還沒做：派工前對照模型清單，以及讓包裝程式露出執行器的錯誤訊息。
+- **Impact**: 計畫審查會因過期席位名稱整圈停住，而且看不出是名稱錯了。
+- **Trigger**: the next plan-review loop that ends required_seat_transport_exhausted, or the next topology regeneration
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: observed 2026-09-08 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/stale-topology-tuple-derails-plan-review.md
+- **Context**: Recorded model was retired. Two mitigations never done: validate with the runner model list, and surface runner stderr.
+
+### consult_dispatch has no seat once the qc panel consumes the roster
+- **Id**: BL-0230
+- **Status**: open
+- **Since**: 2026-09-11
+- **Origin**: self
+- **Problem**: 品管席把名冊上的引擎都佔走之後，諮詢席就沒有位子。解析仍退回同一家族的預設席，諮詢程式接著拒絕，提問的人沒有正式通路。
+- **Impact**: 需要問另一個家族時沒有支援的路，只能繞過制度手動呼叫。
+- **Trigger**: next consult on a host whose qc panel covers the whole roster, or the next edit to consult resolution
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: measured 2026-09-11 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/consult-dispatch-no-seat-after-qc-panel.md
+- **Context**: Resolver still falls back to a same-family native seat, and consult then refuses that seat.
+
+### Per-hook by per-harness support matrix with verification dates
+- **Id**: BL-0231
+- **Status**: open
+- **Since**: 2026-09-07
+- **Origin**: owner
+- **Problem**: 每個掛鉤在各執行環境是否支援，只做了一半。腳本已出貨，但每一格都還沒驗證，六十天過期檢查也沒進上線前檢查或持續整合。
+- **Impact**: 表上看得到掛鉤，卻不知道各環境是否真的跑過，過期也不會被擋下。
+- **Trigger**: the next second-harness hook registration, or a harness-maintenance run finding a hook-event claim older than 60 days
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
+- **Context**: Old id BL-0026. Owner decides whether to finish it. Script shipped; cells unverified; 60-day check not in preflight or CI.
+
+### Engine-routing axis: evidence bar for any model-to-worktype default
+- **Id**: BL-0232
+- **Status**: open
+- **Since**: 2026-06-29
+- **Origin**: self
+- **Problem**: 任何模型預設負責某類工作，都還沒有站得住的證據門檻。領域感知路由那一列因此少了先決條件，這條規則目前只留在個人筆記。
+- **Impact**: 沒有這條證據門檻，模型對工作類型的預設可以被直接寫死。
+- **Trigger**: before hardcoding any domain-to-engine or phase-to-engine default, or when someone proposes a static model-to-worktype table
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-06-29 dual-agent survey; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/engine-routing-axis-evidence-bar.md
+- **Context**: Original label was a standing evidence bar, recorded here as effort S. Domain-aware routing lost this prerequisite.
+
+### Official codex plugin as a peer consult channel
+- **Id**: BL-0233
+- **Status**: open
+- **Since**: 2026-07-05
+- **Origin**: self
+- **Problem**: 把官方外掛當成同級諮詢通道的試驗，諮詢通道已經出貨。審查通道的校準，以及救援寫入的沙箱姿態，都沒有後續列在追。
+- **Impact**: 審查通道與救援寫入的風險沒有列在追，出貨後無人接手。
+- **Trigger**: consult channel already shipped; remaining trigger is review-channel calibration and the rescue write sandbox posture
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-07-05 orchestrator-economy; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/official-codex-plugin-peer-consult-spike.md
+- **Context**: Consult channel shipped. No follow-up row for review calibration or the rescue write sandbox posture.
+
+### PostToolUse dispatch dies after /clear
+- **Id**: BL-0234
+- **Status**: open
+- **Since**: 2026-05-14
+- **Origin**: self
+- **Problem**: 清掉對話之後，工具用完的回呼就不再觸發，必須整個程式重開。說明已寫好，自動偵測與向上游回報都還沒做。
+- **Impact**: 長時間工作階段在清空後，紀錄與稽核會靜默停住，使用者不知道。
+- **Trigger**: Next report that intent, audit, or reload watch stops updating in a long session, or hook-dispatch notes change
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-05-14 v2.7.2 post-clear diagnostic; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/posttooluse-dispatch-dies-after-clear.md
+- **Context**: Docs shipped in v2.8.1. Detection spike and the upstream report were never done.
+
+### Investigate the /reload-plugins hook count discrepancy
+- **Id**: BL-0235
+- **Status**: open
+- **Since**: 2026-05-14
+- **Origin**: self
+- **Problem**: 重新載入外掛時，畫面上的掛鉤數量和實際清單差兩筆。功能仍正常，這項外觀調查從未做完。
+- **Impact**: 數量對不上會讓人誤判掛鉤沒載入，功能本身沒壞。
+- **Trigger**: Next time someone writes reload-watch logic, or a Claude Code update changes hook reload semantics
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-05-14 v2.7.2 reload verification; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/reload-plugins-hook-count-discrepancy.md
+- **Context**: Reported 11 hooks while the file had 13. Live hooks still fired. Cosmetic only.
+
+### Upstream report for agy install symlinked-destination truncation
+- **Id**: BL-0236
+- **Status**: open
+- **Since**: 2026-06-11
+- **Origin**: owner
+- **Problem**: 安裝時若目的地是符號連結，會把來源檔案截成空檔。防護已出貨，向上游回報仍要擁有者同意才能送。
+- **Impact**: 上游不知道這個會清掉檔案的行為，別人的安裝仍可能踩到。
+- **Trigger**: Before the next agy plugin install of autopilot in the fleet, or the next hardening slot; owner must send the report
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: 2026-06-11 incident plus sandbox repro; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/agy-install-symlinked-dest-upstream-report.md
+- **Context**: Guard shipped in v2.15.1. The upstream report still needs the owner account and identity consent.
+
+### Move large dispatch calibration scratch off the quota path
+- **Id**: BL-0237
+- **Status**: open
+- **Since**: 2026-07-13
+- **Origin**: self
+- **Problem**: 大型校準暫存仍寫在有配額的暫存區。其餘清理已出貨。沒有找到還會產生這類目錄的腳本，可能已不存在。
+- **Impact**: 配額再次被大型暫存撐滿時，整機指令會因磁碟配額假死。
+- **Trigger**: Next calibration.sh or swe-calibrate large clone, or when per-user temporary usage grows again
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-07-13 usrquota diagnosis; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
+- **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist.
+
+### Engine implement-review with verify_pass=false does not block
+- **Id**: BL-0238
+- **Status**: open
+- **Since**: 2026-07-24
+- **Origin**: peer
+- **Reporter**: codepower
+- **Report**: 2026-07-24 codepower
+- **Reply**: none
+- **Problem**: 實作審查在驗證沒過時仍不擋下，審查者放行就能收斂並當成已提交。有人回報過，程式仍依審查者的理由收斂。
+- **Impact**: 驗證失敗的缺陷可以在審查放行後被當成已完成。
+- **Trigger**: Next edit to engine implement-review convergence or the review-loop verify field
+- **Trigger-Type**: peer
+- **Effort**: M
+- **Source**: codepower 2026-07-24 implement-review; restored 2026-10-19; dropped by f2955b99e; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/shared-sealed-zero-diff-validator.md
+- **Context**: Reported 2026-07-24. The engine still converges with the reviewer reason. Read, not executed.
+
+### Watcher roots set has no upper bound
+- **Id**: BL-0239
+- **Status**: open
+- **Since**: 2026-10-04
+- **Origin**: self
+- **Problem**: 監看器記錄的專案根目錄清單沒有上限。其餘強化已修完，這項留給後續階段。
+- **Impact**: 長時間追蹤很多專案時，這份清單會一直變大。
+- **Trigger**: P3 start
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: mods P1a reviews, 2026-10-04; restored 2026-10-19; dropped by a1cc180cb; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
+- **Context**: Old id BL-0109. Everything else in that row was already fixed. P3 owns the bound.
+
+### Cursor seat admission stays blocked until tool-deny or a portable sandbox
+- **Id**: BL-0240
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: Cursor 席位仍不能准入，因為該代理無法強制拒絕未授權工具，資格考也還沒跑。要等官方做出可攜沙箱或全面拒絕，或擁有者同意花錢再測。
+- **Impact**: 沒有這一列時，不准入的原因只寫在計畫裡，之後沒人會記得何時可以重測。
+- **Trigger**: cursor-agent ships a catch-all deny or portable sandbox, rerun the 18 probes under docs/plans/evidence/2026-08-29-cursor-containment-probe, or the owner authorises the Stage-1 spend
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
+- **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
+
+### mods-visible-dispatch P2 to P4: do or withdraw
+- **Id**: BL-0241
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: owner
+- **Problem**: 畫面上可見派工的後三段還沒做，也沒有人決定要繼續還是撤回。有可能已被新的階段圖路線取代，尚未確認。
+- **Impact**: 沒有裁決的話，未完成的三段會一直掛著，或被別的路線默默取代。
+- **Trigger**: owner decides do or withdraw for mods visible-dispatch P2 to P4; stage-graph route may supersede, unconfirmed
+- **Trigger-Type**: owner
+- **Effort**: L
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
+- **Context**: May be superseded by the stage-graph route; unconfirmed. P5 is already BL-0110.
+
+### dispatch-tree step 5 and R blocked by the D0 probes
+- **Id**: BL-0242
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 派工樹的後段步驟被探針擋住，還沒有結果就不能做。車隊那一步已經另有追蹤。
+- **Impact**: 步驟停在探針，沒人盯著就不會重跑，後面的工作也不會開始。
+- **Trigger**: D0 probes clear step 5 (row h) and R (row d2 kimi/agy/opencode not_run); fleet step tracked by BL-0144
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Context**: Fleet step is tracked by BL-0144. Step 5 and R stay blocked on the D0 probes.
+
+### workflow-snapshot P3: handoff reads the snapshot and dev-flow calls task-card
+- **Id**: BL-0243
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: owner
+- **Problem**: 交接時讀取壓縮快照，以及流程開始時自動寫任務卡，這兩件還沒做，要等評測與擁有者裁決。
+- **Impact**: 交接仍不會讀快照，任務卡也不會在流程開始時自動寫入。
+- **Trigger**: P3: handoff reads the snapshot and dev-flow calls task-card, after guidance and eval
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: original backlog row; restored 2026-10-19; dropped by 0a9c9efac; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md
+- **Context**: Prior row deleted in 0a9c9efac. BL-0147 covers T2 text only, not P3.
+
+### default-dispatch-topology P5 per-host rollout, cuda first
+- **Id**: BL-0244
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 預設派工拓樸的逐主機推廣還沒做，原來說先從 cuda 那台開始。之後預設拓樸又改過，是否仍適用尚未確認。
+- **Impact**: 各主機可能一直用舊的拓樸設定，沒有人安排逐台更新。
+- **Trigger**: per-host rollout of the default dispatch topology, cuda first
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/default-dispatch-topology-p5-rollout.md
+- **Context**: Archived plan P0-P4 shipped in v2.35.16. P5 per-host rollout was left untracked.
+
+### eval-router-judge harness was never built
+- **Id**: BL-0245
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: owner
+- **Problem**: 路由評審的量測工具只有計畫、沒有做出來。優先順序低，之後改技能說明需要量化證據時才會用到。
+- **Impact**: 下次需要量化路由準確度時，才會發現量測工具從未建立。
+- **Trigger**: next skill-description tightening needs routing-precision evidence
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Pointer**: docs/backlog/eval-router-judge-harness-unbuilt.md
+- **Context**: Low priority. The harness was never built. The plan is archived.
+
+### Final-panel seat whose transport fails leaves no reason
+- **Id**: BL-0246
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 最終審查有席位傳輸失敗時，座位紀錄沒留下結束碼、錯誤尾段與乾淨室階段。只有走乾淨室的席位會在那裡失敗。
+- **Impact**: 事後分不出是傳輸失敗還是審查本身有問題，只能重跑才知道原因。
+- **Trigger**: a final-panel seat fails in transport during the cleanroom and the seat record keeps no exit code, stderr tail, or stage
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/final-panel-seat-transport-failure-no-reason.md
+- **Context**: See BL-0223: a red campaign_verification keeps only digests, so the failing command is lost.
+
+### Work-order "requires adoption" names no command or flow
+- **Id**: BL-0247
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 工作單丟出需要採納時，沒有寫要跑哪道指令，也沒有說明採納流程。
+- **Impact**: 遇到這則訊息的人不知道下一步，只能自己猜指令。
+- **Trigger**: the work-order throw says the controller worktree requires adoption, and nothing documents the command or the flow
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/work-order-requires-adoption-undocumented.md
+- **Context**: Message text is in the work-order module. No adoption command is named next to the throw.
+
+### Mission stays not ready after a section 11 downgrade
+- **Id**: BL-0248
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 第十一節降級並記錄整合之後，任務圖仍判定還沒準備好，也沒有辦法把節點標成結束。
+- **Impact**: 整合做完仍過不了就緒檢查，任務卡在無法收尾的狀態。
+- **Trigger**: after a section 11 downgrade and record-integration, the mission graph still says not ready and nothing marks the node terminal
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
+- **Context**: See BL-0220: no_verdict leaves the phase in REVIEWING and resume refuses.
+
+### Managed-rail failure messages do not say what to do
+- **Id**: BL-0249
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
+- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
+- **Problem**: 受管軌道失敗時看不出該怎麼做：沒說登入失效、沒說哪個席位或主機，授權被釋放後還得人手重新授予。
+- **Impact**: 操作者無法從訊息判斷要重登、換席位還是重新授權。
+- **Trigger**: a managed-rail failure omits the auth failure, the seat or host, and that the released grant must be re-granted by hand
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/managed-rail-failure-messages-not-actionable.md
+- **Context**: provider readiness, scorecard, and grant release each name a gap the operator cannot act on from the message alone.
+
+### autoCompactWindow and context budget must be aligned by hand
+- **Id**: BL-0250
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: peer
+- **Reporter**: codepower twgs-revival
+- **Report**: 01M59WNDJSZG3Y6YTERWD9DF4J
+- **Reply**: 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V
+- **Problem**: 自動壓縮視窗與情境預算要在兩處手動對齊，數字對不上時沒有任何消費者會發現。
+- **Impact**: 提醒與壓縮時機會錯開，而且沒有檢查會把不一致叫出來。
+- **Trigger**: a 1M-token window with nothing configured, or the two recommended values drift apart across the two files
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
+- **Context**: Two suggestions: print the recommended pair on every such SessionStart, or one command that writes both.

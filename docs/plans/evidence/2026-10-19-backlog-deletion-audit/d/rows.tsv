@@ -1,0 +1,90 @@
+f2955b99e	dev-flow stage model inconsistent (band cannot say stage)	A	stage-graph 出貨：scripts/stage-advance.js、check-stage-vocab.js、stage-graph eval v10 SHIP（CHANGELOG 3.0.0-alpha 段）
+f2955b99e	OpenCode Go Responses transport + x-opencode-session	A	5e2bc59c6 (2026-09-22)；scripts/qualification-review-provider.js:619 header、:682 status incomplete
+f2955b99e	Dev mode layer 3 marketplace clone as symlink spike	A	a2b91aef3 (2026-10-06) dev-setup 改註冊 directory marketplace，stale 問題由另法解掉（未走 symlink）
+f2955b99e	Managed rail codex bwrap containment spike	A	v2.36.63 (CHANGELOG:1414) codex cleanroom tier；scripts/lib/cleanroom-launch.sh 有 codex profile
+f2955b99e	CI tests workflow red: dispatch-detached-campaign-authority	A	a68570165 (2026-09-23) 測試只解析 stdout JSON，根因與列的症狀相符
+f2955b99e	suite oracle lock: killed run leaves next refused	未確認	08-28 d96bc3f0d 已關 worker fd；但列的第二例發生在 09-04 之後，找不到對應修正；601ae2c6b 只間接相關；殘留是 .owner 殘影訊息
+f2955b99e	Promote depth-0 hetero-run watcher to dispatch-watch script	未確認	沒有名為 dispatch-watch 的腳本；替代物 wait-dispatch-results.js(v2.36.32)、watch-foreman.js(07-14 早於列)、level-front-door.md:463 SendMessage 喚醒；是否等價無法判定
+f2955b99e	dispatch-review raw-log deviation: echoed prompt template passes as verdict	A	d8e171a7e (v2.34.33, 2026-08-21) dispatch-review.sh:620-621 template-echo 行判定
+f2955b99e	probe-runner-coverage parallel-only flake	A	03aaf6b25 (2026-09-24) printf|grep -q 在 pipefail 下 SIGPIPE 才是根因，已修
+f2955b99e	next-touch-validation.test.sh un-versioned Mission state	A	e2ecf00f1 (2026-08-09) 測試自建 campaign ledger；run.sh 內 fixture 化註解 :66-68
+f2955b99e	Shared sealed zero-diff validator (title)	A	src/engine/sealed-zero-diff-validator.js (dc02e22af 08-05)+hooks/tests/sealed-zero-diff-validator-parity.test.sh；dispatch-contract.js:11 引用；codex live-spend probe 已帶 --model (probe-engine-capability.sh:385)
+f2955b99e	sidecar 夾帶：verify_pass=false 非阻塞、reviewer SHIP 下收斂 (codepower 2026-07-24)	未確認	只存在 sidecar docs/backlog/shared-sealed-zero-diff-validator.md；列標題不涵蓋；engine 目前行為未驗；來源 codepower 舊版 engine
+f2955b99e	sidecar 夾帶：campaign-contract fresh 路徑 Work Order 自鎖 (codepower 2026-07-31)	未確認	同上；autopilot-engine.js:4220 起仍有 hasActiveRootWorkOrders 邏輯，是否已解未驗
+f2955b99e	peer-addressing.md says message rows live forever; spec says 7 days	D	commit 訊息稱 obsolete；references/peer-addressing.md 經 1899c6dab (09-29) 改寫後已無該永久儲存措辭
+f2955b99e	cost-tracker/cost-fuse pricing table no fable row	A	03dadd3fd (merge cost-pricing-5.5, 10-12) hooks/cost-tracker-lib.js:32-34 fable-5-1/fable-5 列；來源註明 claude-api skill price table
+f2955b99e	import-aa-capabilities test host-pinned /tmp in worktree	A	12c7c2d83 release 3.0.0-alpha.4 (CHANGELOG:134) 空 .git 目錄不再當 repo
+f2955b99e	rejected AUTOPILOT_LIVE_DIR override falls through	A	95c63b52d (2026-10-05) 明示的 LIVE_DIR 只會被遵守或拒絕
+f2955b99e	mods live band shows no phase for in-progress campaign	A	648056aec、368bfa0ce、f9c913639 (10-04..06) job model 帶 campaign phase；stage-advance 寫入端已出貨
+f2955b99e	check-guidance-eval.js hard-wires -sg-change pack ids	A	265aa2a71 (2026-10-08) 由 arm manifest 推 pack id
+1ca2a808b	calendar-teeth-negative instant2 expiry ceiling	A	04b003ad6 / merge 0595c3249 沿用來源列 TTL
+1ca2a808b	Pre-existing red suite autopilot-cli.test.sh	A	04b003ad6 / 0595c3249 hermetic repo 移除 .git/autopilot 主機狀態
+1ca2a808b	Full-suite reds at 6e91be30: instant2, statusline-live-tee T2	A	instant2 同上；statusline-live-tee T2 由 003c4c6bd (10-12 17:54) 修，早於刪列
+1ca2a808b	Six hooks read only /dev/stdin (ENXIO)	A	merge c000cd913 六支 hook 改讀 fd 0 + hooks/stdin-socket.test.js
+05cfafb33	hetero-review-loop seat gap leaves generation out of chain	A	c71967225 / merge f776a36ac seat gap 記為 aborted
+05cfafb33	Packet reviewers flag sibling-packet files as missing	A	c71967225 collect 寫 packet-scope.md；後續 af76b1c83
+05cfafb33	hetero-review-loop collect seat gap strands generation 1	A	同 c71967225（與第 1 列同一缺陷的重複列）
+1fa088210	BL-0104 Population B switch suite stale-entry flake	A	merge 0cf71fa8d 只判 tracked 檔 (git ls-files)；CHANGELOG 同 commit
+1fa088210	BL-0141 l5 brief lint warns when marker after rails	A	merge a70b54be0 b5f687cc7
+1fa088210	BL-0149 Live pane plan-review seat as author	A	merge 9b2ae8bc1 AUTOPILOT_DISPATCH_ROLE + 6h 折疊
+1fa088210	BL-0151 Three suites fail from linked worktree	A	merge 5874423d1 修 Case 1；另兩個在 worktree 實測綠（訊息記載）
+549528c8d	BL-0003 probe-unknown memory dir from worktree	A	merge be0b5e53e
+549528c8d	BL-0119 completeness-scan mktemp templates / --files	A	merge 4e0e97ee6；CHANGELOG:359
+549528c8d	BL-0128 repo-identity blames git version	A	merge 69e1c2bf5
+549528c8d	BL-0137 withLock busy-wait	A	merge dd009a535
+549528c8d	BL-0143 two dispatch identity tests weak	A	merge 7fe4ca984
+af7519af3	BL-0102 plan-review terminal ticket silent 0-call	A	merge 554171da8 ticket_session_already_terminal
+af7519af3	BL-0105 cost-fuse exemption prefix/session collisions	A	merge 86fbf09ef
+af7519af3	BL-0127 residue sweep integration_ref HEAD	A	merge bfbd8026f decc9ba74
+af7519af3	BL-0132 legacy-parity --range skips rows	A	merge bfbd8026f 8439fbdd8
+af7519af3	BL-0135 session-id scrub needs setsid	A	merge bfbd8026f 7aad8e510
+af7519af3	BL-0139 bash-launch guard misses launch shapes	A	merge c028552be fad548485（後續形狀另列 BL-0185/0190）
+af7519af3	BL-0140 context-budget/depth0-gate tests leak tmp dirs	A	merge 673a2c724 diff 含 context-budget*.test.js、depth0-delegate-gate.test.js 等
+af7519af3	BL-0150 Codex author failures omit transport_status	A	merge e0e27b84e 1faaa12f2
+af7519af3	BL-0152 caller-session filter branch has no test	D	commit 訊息：非真缺口；mission-routing-campaign-bridge.test.sh:653/:675 以 CLAUDE_CODE_SESSION_ID 驅動該分支（本稽核已讀測試確認）
+af7519af3	BL-0182 engine-qualify-verdict-stability KR7 red only in full suite	A	merge f3f9ee828 673d7f744 snapshot 保留 origin/* refs
+195f9a4f7	BL-0098 park does not consume recurrence budget, no test	A	merge 541ee6a75 c6aa47efb
+195f9a4f7	BL-0101 v2.36.112 review follow-ups	A	大半 a5d82ac17 (10-14)；剩 intake file cap 測試 = campaign-repair-at-file-cap Stage F 已釘 (test:459)；列內明寫 declined 的三項屬有意放棄
+195f9a4f7	BL-0103 v2.36.114 review follow-ups	A	merge 0135a898c + 541ee6a75 (Stage G CLI stderr、colon)
+195f9a4f7	BL-0120 cost-digest --tree follow-ups	A	merge 5cedde9cd aa190734e
+195f9a4f7	BL-0159 completeness-scan follow-ups after BL-0119	A	merge 5cedde9cd fbca7b193；sidecar 三項逐條對應
+2f2c1a128	BL-0112 eval campaigns fail fast on auth/quota	A	merge f7521028c 62ed52fc7
+2f2c1a128	BL-0113 eval campaigns pin runner version	A	merge f7521028c 62ed52fc7
+2f2c1a128	BL-0183 cost-fuse exemption misses quoted rail paths	A	merge a07ce239d
+2f2c1a128	BL-0186 status server reads config from autopilotHome	A	merge a07ce239d
+2f2c1a128	BL-0188 onboard quality-gate template scans directory	A	merge b5cd82c78
+506c0b0e8	BL-0088 run.sh TIMEOUT marker collides with 124/137	A	merge a87f5c15e 0b96aa792
+506c0b0e8	BL-0100 run.sh group INT deferred	A	merge a87f5c15e
+506c0b0e8	BL-0184 scrub case 1b needs setsid	A	merge a87f5c15e
+5a30fb704	BL-0096 archive rewriter rewrites unsealed frozen evidence	A	merge a13005a24 06e9341bb .frozen-evidence 標記；兩處標記已就位；後續風險另列 BL-0191
+5a30fb704	BL-0129 mission-terminal-rollover reads live registry	A	merge a13005a24
+5a30fb704	BL-0153 pkill/pgrep self-match guard gaps	A	merge c39ffdf82
+5a30fb704	BL-0155 review-candidate repair branch numbering ignores remote	A	merge a13005a24 d3b10a467
+5a30fb704	BL-0185 bash-launch guard still misses shapes	A	merge c39ffdf82 36d4e01c3（字串形式另列 BL-0190）
+e43d8c2b3	BL-0097 dispatch-author forwards 3 qc_panel notes	A	merge 26be2f2de
+e43d8c2b3	BL-0114 pre-existing red suites: mods spike artifacts	D	commit 訊息+references/mods.md 新增：repo 根 claude plugin test 非支援入口，改用 mods/live/run-tests.sh
+e43d8c2b3	BL-0138 resolve-review-loop alias table follow-ups	A	merge 26be2f2de
+8d27d66e7	BL-0133 sealed-docs list covers part of sha-bound files	A	merge f1eeeaec8 f32eda6bd
+8d27d66e7	BL-0134 fifteen sealed files mismatch manifest digest	A	merge f1eeeaec8 還原 14 檔，審查者重算 110 pins 0 不符（15 vs 14 的差異訊息未解釋，但 pins 全綠）
+5245f0111	BL-0162 restore KR7 byte guard reviewer exam	A	merge 39d43aa68 6c2de65dc
+5245f0111	BL-0166 exam effort label not checked	A	merge 39d43aa68 c3800f5ec
+5245f0111	BL-0168 usage block truncated exam	A	merge 39d43aa68 d0083aa22
+7c82382a6	BL-0008 Qwen3.8-Max-Preview truncated as /l6 verification author	D	9d3b6f2a0 (同日 10-16，owner instruction) 席位改為 Qwen3.8-Max，Preview 不在任何設定；commit 理由成立
+7c82382a6	BL-0020 PEER-REPORTED openclaw agy flash/low implementer no-go	C	理由只說自家設定無此席位；peer 回報 Reply: none 從未回覆；agy -p 5 分鐘自停／長 brief no_op 事實只在此列，無處保存；觸發條件(下次 agy implementer 考核、consumer 設定)無人追
+7c82382a6	BL-0040 engine-qualify-impl.test.js single unreproducible red	D	commit 訊息：solo 10/10 綠；輸出保存半件 08-23 已做；七週未重現（證據偏弱）
+e05a1edc3	BL-0031 lint hands diffs for fixture literals	A	scripts/scan-fixture-literals.js + dispatch-hetero.sh advisory，同 commit
+e05a1edc3	BL-0039 v2.34.37 cut list items 1-6	A	同 commit：stop_bounded 斷言、truncation_cause、startOfUtcDayMsOf、nowArgToMs、instant3/4 訊息
+e05a1edc3	BL-0039 sidecar panel addendum (7)(8) instant2 fixture 以 opaque 重錨 / filter 不驗 engine-runner-role	C	e05a1edc3 未碰 instant2；04b003ad6 只改 TTL；sidecar 同 commit 被刪，兩項無處追
+e05a1edc3	BL-0059 test-integrity L0 early exit 0	A	同 commit scripts/lib/test-integrity-l1.py early_exit
+061cc11c7	BL-0026 per-hook x per-harness support matrix with verification dates	C	矩陣出貨(hook-harness-matrix.js)但全部儲存格未驗證；只有 1 筆 packaged 證據；--check 未進任何 gate；列的 trigger(Codex Stop/SessionEnd live-fire 未驗)無人追；owner 來源
+061cc11c7	BL-0034 local-deployment.js own TLS transport rule	A	同 commit 移植 resolve-endpoint.sh 政策 + local-deployment-transport-parity.test.js
+061cc11c7	BL-0196 run-skill-onoff-eval.sh empty files field shifts columns	A	同 commit US 分隔
+4e86b6658	BL-0205 context-budget T1/T2 per model (PEER)	A	同 commit hooks/context-budget.js per_model + hooks/context-budget-per-model.test.js；peer 要求已實作
+4e86b6658	BL-0117 PEER dev-flow foreground-wait advice	C-已還原	誤切(commit 只該刪 BL-0205)；53eafe87d 還原，現仍在 BACKLOG
+4e86b6658	BL-0122 find what rewrites t7-config-rename fixture	C-已還原	53eafe87d 還原；之後 merge a8dac5e62 (10-19) 合法關閉
+4e86b6658	BL-0123 mods/live recent groups keyboard	C-已還原	53eafe87d 還原，現仍在 BACKLOG
+4e86b6658	BL-0124 autocompact users never learn autoCompactWindow	C-已還原	53eafe87d 還原，現仍在 BACKLOG
+4e86b6658	BL-0144 fleet dispatch carries no lineage	C-已還原	53eafe87d 還原，現仍在 BACKLOG
+4e86b6658	BL-0201 incremental re-review unusable with real seats	C-已還原	53eafe87d 還原；之後 a1cc180cb / merge 6c5929433 (10-19) 關閉（非本稽核範圍）
+4e86b6658	BL-0202 appendix repeats old problem per seat	C-已還原	53eafe87d 還原；之後 e034a53cb/closeout4 (10-19) 刪（非本稽核範圍）
+4e86b6658	BL-0203 returned fix deletes/renames file misleads seats	C-已還原	53eafe87d 還原；之後 a1cc180cb / 6c5929433 (10-19) 關閉（非本稽核範圍）

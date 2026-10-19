@@ -3,10 +3,17 @@
 . "$(dirname "$0")/lib.sh"
 export HOME="$TEST_TMP/home"
 mkdir -p "$HOME"
+export XDG_RUNTIME_DIR="$TEST_TMP/xdg"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+export AUTOPILOT_STRIKE_WRITER=off
 SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 . "$(dirname "$0")/lib/engine-qualify-setup.sh"
 # RED at 48d012322: FAIL exit-codes-merged got 2 for codes 0,1,3,4,5 (pairwise uniq 1); missing and schema seat cases got 2; emit-record stdout lines 0. Usage (2) and bare no_verdict (1) already matched.
 # RED at eaf8c9eef: corpus mismatch exits 0 (expected 2), stdout 6932 bytes, stderr names neither seat-corpus-1 nor reviewer-known-bad-clean-v2.reviewer-metamorphic-v6, and both --store and --raw-dir were created. effort=default and the 0/1/2/3/4/5 stdout matrix already passed.
+# RED at 891119040: owner/brain/verification_author/implementer/consult/discuss/foreman wrong corpus_version exits 0 (expected 2); seat.role disagreeing with the subcommand was untested; a headless throw (consult without --execute) exits 2. Reviewer mismatch already exits 2.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -139,8 +146,7 @@ assert_exit_code "$RUN_RC" "2" "seat file disagreeing with --effort is exit 2"
 
 # --- emit-record ---
 assert_file_exists "$PASS_OUT" "passed exam produced stdout"
-QMOD="$REPO_ROOT/scripts/lib/qualification-met"
-QMOD="${QMOD}rics.js"
+QMOD="$REPO_ROOT/scripts/lib/qualification-metrics.js"
 node -e '
 const fs = require("fs");
 const q = require(process.argv[1]);
@@ -246,5 +252,168 @@ if (failed.verdict.status !== "failed") { console.error("failed status " + faile
 if (passed.verdict.status === failed.verdict.status) { console.error("verdicts identical"); process.exit(1); }
 ' "$PASS_OUT" "$FAIL_OUT"
 assert_eq "$?" "0" "printed record verdict.status distinguishes qualified from failed"
+
+# --- seat.role disagrees with the subcommand: exit 2, no store ---
+ROLE_SEAT="$TEST_TMP/seat-role.json"
+node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role="owner"; fs.writeFileSync(process.argv[2], JSON.stringify(s));' "$SEAT" "$ROLE_SEAT"
+ROLE_STORE="$TEST_TMP/role-store"
+ROLE_RAW="$TEST_TMP/role-raw"
+run_q "$TEST_TMP/role.out" reviewer --seat-file "$ROLE_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL" \
+  --store "$ROLE_STORE" --raw-dir "$ROLE_RAW" --emit-record
+assert_exit_code "$RUN_RC" "2" "seat.role disagreeing with the subcommand exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/role.out" | tr -d ' ')" "0" "role disagreement prints no record"
+assert_file_absent "$ROLE_STORE" "role disagreement does not create --store"
+assert_file_absent "$ROLE_RAW" "role disagreement does not create --raw-dir"
+
+# Corpus strings are the ones buildV2Record copies from row.corpus_version.
+exam_corpus_for() {
+  node - "$REPO_ROOT" "$1" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const role = process.argv[3];
+if (role === 'owner') {
+  process.stdout.write('owner-intent-control-v1.owner-intent-control-metamorphic-v1');
+} else if (role === 'brain') {
+  const g = require(path.join(root, 'evals/brain-eval-generator.js'));
+  process.stdout.write(`${g.CORPUS.methodology_version}.${g.GENERATOR_VERSION}`);
+} else if (role === 'verification_author') {
+  const g = require(path.join(root, 'evals/va-eval-generator.js'));
+  process.stdout.write(`${g.CORPUS.corpus_version}.${g.GENERATOR_VERSION}`);
+} else if (role === 'implementer') {
+  const g = require(path.join(root, 'evals/impl-eval-generator.js'));
+  process.stdout.write(`${g.CORPUS.corpus_version}.${g.GENERATOR_VERSION}`);
+} else if (role === 'consult') {
+  const g = require(path.join(root, 'evals/consult-eval-generator.js'));
+  process.stdout.write(`${g.CORPUS.corpus_version}.${g.GENERATOR_VERSION}`);
+} else if (role === 'discuss') {
+  const g = require(path.join(root, 'evals/discuss-eval-generator.js'));
+  process.stdout.write(`${g.CORPUS.corpus_version}.${g.GENERATOR_VERSION}`);
+} else {
+  process.stderr.write('unknown role\n');
+  process.exit(1);
+}
+NODE
+}
+
+dir_snapshot() {
+  python3 - "$1" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+if not os.path.exists(root):
+    sys.exit(0)
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    for name in sorted(filenames):
+        path = os.path.join(dirpath, name)
+        if os.path.islink(path):
+            continue
+        digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        print(f"{path}\t{digest}")
+PY
+}
+
+# Wrong corpus_version: exit 2 before any exam write. brain, verification_author,
+# implementer, consult, and discuss have no headless stub that finishes a sitting
+# (implementer is the live rail; consult/discuss refuse without a paid broker).
+# Foreman test mode emits no row.corpus_version, so the compared value is the
+# missing row field and a matching pass cannot be stubbed.
+for role in owner brain verification_author implementer consult discuss foreman; do
+  if [[ "$role" == "foreman" ]]; then
+    EXAM_VALUE=""
+  else
+    EXAM_VALUE="$(exam_corpus_for "$role")"
+  fi
+  MIS_PATH="$TEST_TMP/seat-$role-mis.json"
+  node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role=process.argv[2]; s.corpus_version="seat-corpus-1"; fs.writeFileSync(process.argv[3], JSON.stringify(s));' "$SEAT" "$role" "$MIS_PATH"
+  ST="$TEST_TMP/store-$role-mis"
+  RW="$TEST_TMP/raw-$role-mis"
+  mkdir -p "$ST" "$RW"
+  printf 'kept\n' >"$ST/marker" 
+  printf 'kept\n' >"$RW/marker"
+  BEFORE_ST="$(dir_snapshot "$ST")"
+  BEFORE_RW="$(dir_snapshot "$RW")"
+  EXTRA=()
+  if [[ "$role" != "implementer" && "$role" != "foreman" ]]; then
+    EXTRA=(--panel-cmd "$PASS_PANEL" "${PANEL_BINDS[@]}")
+  fi
+  run_q "$TEST_TMP/$role-mis.out" "$role" --seat-file "$MIS_PATH" \
+    --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+    --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+    --task-class code_review --domain repository --language en --tool diff_read \
+    "${EXTRA[@]}" --store "$ST" --raw-dir "$RW" --emit-record
+  assert_exit_code "$RUN_RC" "2" "$role corpus mismatch exits 2"
+  assert_eq "$(wc -c <"$TEST_TMP/$role-mis.out" | tr -d ' ')" "0" "$role corpus mismatch prints no record"
+  assert_contains "$(cat "$ERR")" "seat-corpus-1" "$role corpus mismatch names the seat corpus_version"
+  if [[ "$role" == "foreman" ]]; then
+    assert_contains "$(cat "$ERR")" "undefined" "foreman corpus mismatch spells the missing row corpus_version"
+  else
+    assert_contains "$(cat "$ERR")" "$EXAM_VALUE" "$role corpus mismatch spells the exam corpus_version"
+  fi
+  assert_eq "$(dir_snapshot "$ST")" "$BEFORE_ST" "$role corpus mismatch leaves --store unchanged"
+  assert_eq "$(dir_snapshot "$RW")" "$BEFORE_RW" "$role corpus mismatch leaves --raw-dir unchanged"
+done
+
+# Matching corpus where a stub can finish or can prove the check passed.
+# Owner reuses the reviewer panel stub: the exam runs and the record hashes the exam value.
+OWNER_CORPUS="$(exam_corpus_for owner)"
+OWN_SEAT="$TEST_TMP/seat-owner.json"
+node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role="owner"; s.corpus_version=process.argv[2]; fs.writeFileSync(process.argv[3], JSON.stringify(s));' "$SEAT" "$OWNER_CORPUS" "$OWN_SEAT"
+OWN_OUT="$TEST_TMP/owner-match.out"
+run_q "$OWN_OUT" owner --seat-file "$OWN_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL" \
+  --store "$STORE-owner" --raw-dir "$RAW-owner" --emit-record
+if [[ "$RUN_RC" != "0" && "$RUN_RC" != "1" ]]; then
+  fail "owner matching corpus should reach an exam outcome, got $RUN_RC ($(cat "$ERR"))"
+fi
+node -e '
+const fs = require("fs");
+const rec = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim());
+if (rec.seat.corpus_version !== process.argv[2]) {
+  console.error("seat.corpus_version " + rec.seat.corpus_version);
+  process.exit(1);
+}
+' "$OWN_OUT" "$OWNER_CORPUS"
+assert_eq "$?" "0" "owner matching corpus record uses the exam corpus_version"
+
+# Consult and discuss: a matching corpus passes the pre-exam check and then the
+# missing --execute guard throws. Headless maps that throw to exit 3. No store write.
+for role in consult discuss; do
+  MATCH="$(exam_corpus_for "$role")"
+  MATCH_SEAT="$TEST_TMP/seat-$role-match.json"
+  node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.role=process.argv[2]; s.corpus_version=process.argv[3]; fs.writeFileSync(process.argv[4], JSON.stringify(s));' "$SEAT" "$role" "$MATCH" "$MATCH_SEAT"
+  ST="$TEST_TMP/store-$role-match"
+  RW="$TEST_TMP/raw-$role-match"
+  run_q "$TEST_TMP/$role-match.out" "$role" --seat-file "$MATCH_SEAT" \
+    --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+    --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+    --task-class code_review --domain repository --language en --tool diff_read \
+    "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL" \
+    --store "$ST" --raw-dir "$RW" --emit-record
+  assert_exit_code "$RUN_RC" "3" "$role matching corpus then missing --execute exits 3"
+  assert_eq "$(wc -c <"$TEST_TMP/$role-match.out" | tr -d ' ')" "0" "$role throw prints no record"
+  assert_file_absent "$ST" "$role throw does not create --store"
+  assert_file_absent "$RW" "$role throw does not create --raw-dir"
+  if grep -q 'differs from exam corpus_version' "$ERR"; then
+    fail "$role matching corpus was rejected as a mismatch"
+  fi
+done
+
+# The same throw without --seat-file/--emit-record stays exit 2.
+run_q "$TEST_TMP/consult-bare-throw.out" consult \
+  --engine eng-review --model eng-review-exact --model-version 2026-07-26 \
+  --runner cc-shim --runner-version 1.0.0 --family openai \
+  --harness-version reviewer-harness-v2 --effort high \
+  --prompt-config-hash "$HASH_A" --semantic-fingerprint "$HASH_B" \
+  --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL"
+assert_exit_code "$RUN_RC" "2" "non-headless consult throw still exits 2"
 
 finalize_test

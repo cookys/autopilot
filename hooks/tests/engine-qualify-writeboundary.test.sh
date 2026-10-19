@@ -173,11 +173,21 @@ OUT="$SNAP_DIR/exam.out"
 ERR="$SNAP_DIR/exam.err"
 fs_snapshot "$BEFORE"
 set +e
-strace -f -o "$TRACE" -e trace=file \
+if command -v strace >/dev/null 2>&1; then
+  strace -f -o "$TRACE" -e trace=file \
+    "$SCRIPT" "${SEAT_ARGS[@]}" --panel-cmd "$PASS_PANEL" \
+    --store "$STORE" --raw-dir "$RAW" --emit-record \
+    >"$OUT" 2>"$ERR"
+  EXAM_RC=$?
+  STRACE_RAN=1
+else
+  echo "SKIP strace is not installed"
   "$SCRIPT" "${SEAT_ARGS[@]}" --panel-cmd "$PASS_PANEL" \
-  --store "$STORE" --raw-dir "$RAW" --emit-record \
-  >"$OUT" 2>"$ERR"
-EXAM_RC=$?
+    --store "$STORE" --raw-dir "$RAW" --emit-record \
+    >"$OUT" 2>"$ERR"
+  EXAM_RC=$?
+  STRACE_RAN=0
+fi
 set -e
 fs_snapshot "$AFTER"
 EXAM_VIOLATIONS="$(boundary_violations "$BEFORE" "$AFTER" "$STORE" "$RAW")"
@@ -188,14 +198,16 @@ assert_exit_code "$EXAM_RC" "0" "confined headless exam passed"
 if [[ -d "$HOME/.autopilot" ]]; then
   fail "temp HOME has .autopilot after the confined exam"
 fi
-if [[ ! -s "$TRACE" ]]; then
-  fail "process-level trace is empty"
-fi
-for forbidden in "$REAL_AUTOPILOT" "$REAL_CLAUDE" "$REAL_RUN_AUTOPILOT"; do
-  if grep -F -q -- "$forbidden" "$TRACE"; then
-    fail "process referenced $forbidden"
+if [[ "$STRACE_RAN" == 1 ]]; then
+  if [[ ! -s "$TRACE" ]]; then
+    fail "process-level trace is empty"
   fi
-done
+  for forbidden in "$REAL_AUTOPILOT" "$REAL_CLAUDE" "$REAL_RUN_AUTOPILOT"; do
+    if grep -F -q -- "$forbidden" "$TRACE"; then
+      fail "process referenced $forbidden"
+    fi
+  done
+fi
 
 # --- ingest compatibility (llm-playground). Skip when the importer is absent. ---
 INGEST="/home/cookys/projects/llm-playground/scripts/eval/ingest-qualification-record.py"

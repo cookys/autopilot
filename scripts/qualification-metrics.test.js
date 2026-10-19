@@ -471,7 +471,10 @@ test('no other script or hook requires the metrics module (whole-tree scan)', ()
   const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js',
     // P3 write side: uses only recordIdV1 / strikeId / validateRecord, never admission or ordering.
     'scripts/qualification-send-queue.js', 'scripts/qualification-send-queue.test.js', 'scripts/lib/qualification-record-v2.js',
-    'scripts/lib/qualification-trust.js', 'scripts/qualification-trust.test.js']);
+    'scripts/lib/qualification-trust.js', 'scripts/qualification-trust.test.js',
+    // emit-record validates the emitted record with validateRecord and recordIdV1 (write side only, never admission or ordering), same class as the existing send-queue entries.
+    'scripts/engine-qualify.js', 'platforms/codex/plugin/scripts/engine-qualify.js',
+    'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh']);
   const hits = [];
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

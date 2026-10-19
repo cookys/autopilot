@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 'use strict';
+// EQ_HEADLESS_LEGACY_ROW is a test-only seam. Set to 1, --emit-record drops
+// transcript_hash and producer so buildV2Record returns null and the process
+// exits 5. Production callers must leave it unset.
 
 const fs = require('fs');
 const crypto = require('crypto');
@@ -364,7 +367,7 @@ function loadSeatFile(filePath) {
 }
 
 function metricsLibPath() {
-  return path.join(__dirname, 'lib', 'qualification-' + 'metrics.js');
+  return path.join(__dirname, 'lib', 'qualification-metrics.js');
 }
 
 // validateRecord({semantic:true}) runs checkRecordSemantics. That module is not
@@ -5791,30 +5794,73 @@ function buildEmittedRow(row, effortCheck) {
   return { ...row, effort_check: effortCheck };
 }
 
-// recordIdV1 hashes row.corpus_version, which reviewer/owner set from
-// oracle.methodology_version (`${static methodology}.${generator version}`).
-// That string is known from the pinned assets, before runQualification writes
-// a row or a raw dir. Kept out of runQualification so its source pin stays put.
+// recordIdV1 hashes row.corpus_version (what buildV2Record copies onto
+// seat.corpus_version). Reviewer and owner take it from the pinned oracle
+// methodology plus the generator version. Brain, verification_author,
+// implementer, consult, and discuss take it from the same corpus constant
+// and generator version the row builder interpolates. Those are known before
+// the exam. Foreman emits no row.corpus_version; that comparison waits until
+// after the run. Kept out of runQualification so its source pin stays put.
+function examCorpusVersionBeforeRun(role) {
+  if (role === 'reviewer' || role === 'owner') {
+    const staticOracle = role === 'owner'
+      ? verifyPinnedOwnerEvaluationAssets()
+      : verifyPinnedEvaluationAssets();
+    return role === 'owner'
+      ? `${staticOracle.methodology_version}.${OWNER_GENERATOR_VERSION}`
+      : `${staticOracle.methodology_version}.${GENERATOR_VERSION}`;
+  }
+  if (role === 'brain') {
+    return `${BRAIN_CORPUS.methodology_version}.${BRAIN_GENERATOR_VERSION}`;
+  }
+  if (role === 'verification_author') {
+    return `${VA_CORPUS.corpus_version}.${VA_GENERATOR_VERSION}`;
+  }
+  if (role === 'implementer') {
+    return `${implGenerator.CORPUS.corpus_version}.${implGenerator.GENERATOR_VERSION}`;
+  }
+  if (role === 'consult' || role === 'discuss') {
+    qualificationAssetSeals.checkAssetSeals(role);
+    const { generator } = loadSealedConsultDiscussModules(role);
+    return `${generator.CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`;
+  }
+  return null;
+}
+
+function rejectCorpusMismatch(seatVersion, examCorpusVersion) {
+  process.stderr.write(
+    `engine-qualify: seat file corpus_version ${seatVersion} differs from exam corpus_version ${examCorpusVersion}\n`,
+  );
+  process.exit(2);
+}
+
 function assertSeatCorpusMatchesExam(options) {
   if (options.corpusVersion === undefined) return;
   const role = options.role || 'reviewer';
-  if (role !== 'reviewer' && role !== 'owner') return;
-  let staticOracle;
+  let examCorpusVersion;
   try {
-    staticOracle = role === 'owner'
-      ? verifyPinnedOwnerEvaluationAssets()
-      : verifyPinnedEvaluationAssets();
+    examCorpusVersion = examCorpusVersionBeforeRun(role);
   } catch (error) {
     usage(2, `qualification precondition failed: ${error.message}`);
   }
-  const examCorpusVersion = role === 'owner'
-    ? `${staticOracle.methodology_version}.${OWNER_GENERATOR_VERSION}`
-    : `${staticOracle.methodology_version}.${GENERATOR_VERSION}`;
+  if (examCorpusVersion === null) return;
   if (options.corpusVersion !== examCorpusVersion) {
-    process.stderr.write(
-      `engine-qualify: seat file corpus_version ${options.corpusVersion} differs from exam corpus_version ${examCorpusVersion}\n`,
-    );
-    process.exit(2);
+    rejectCorpusMismatch(options.corpusVersion, examCorpusVersion);
+  }
+}
+
+// Foreman (and any role whose row corpus is not a pre-exam constant): the
+// value recordIdV1 would hash is row.corpus_version. Compare it before
+// --emit-record writes stdout. These roles do not write --store or --raw-dir
+// until a row exists; a mismatch exits here with neither written.
+function assertProducedCorpusMatchesSeat(options, runResult) {
+  if (options.corpusVersion === undefined) return;
+  const role = options.role || 'reviewer';
+  if (examCorpusVersionBeforeRun(role) !== null) return;
+  const row = runResult && runResult.row;
+  const examCorpusVersion = row ? row.corpus_version : undefined;
+  if (options.corpusVersion !== examCorpusVersion) {
+    rejectCorpusMismatch(options.corpusVersion, examCorpusVersion);
   }
 }
 
@@ -5830,8 +5876,13 @@ function main() {
   try {
     runResult = runQualification(options);
   } catch (error) {
+    if (headless) {
+      process.stderr.write(`engine-qualify: ${error.message}\n`);
+      process.exit(3);
+    }
     usage(2, error.message);
   }
+  assertProducedCorpusMatchesSeat(options, runResult);
   const verdict = {
     ...runResult.verdict,
     evaluation_passed: runResult.qualified,

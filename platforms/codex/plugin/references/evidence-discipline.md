@@ -1299,3 +1299,32 @@ actually scans a newly added mod.
 Preventing artifact: `mods/live/ui-lint.test.js` now scans every `mods/*` source through one shared list
 (`modSources()`), with a scan-level control that plants a violation in a copy of the viewer pane; the
 render-level `buttonFindings` in the viewer test stays as the other layer.
+
+## 61. A manual repro outside the suite writes into the operator's real store
+
+2026-10-19. Someone reproduced `dispatch-hetero.sh` by hand with a fake runner and without
+`ENGINE_CAPABILITY_DIR`, and two fake strikes (events 81 and 82) landed in `~/.autopilot`. The pollution
+check in `run.sh` and the test-run guard protect test runs only; this was not run inside a test.
+
+Rule: a guard that lives in the test harness does not cover the same code path run by hand. The rail
+itself must refuse to write the real store when it is handed a test-double runner and no isolated store.
+
+Preventing artifact: the rail guard in merge 64d26312a, with
+`hooks/tests/dispatch-hetero-real-store-guard.test.sh`. Evidence of the two rows:
+`docs/plans/evidence/2026-10-19-strike-fixture-residue/`.
+
+## 62. A test run in the main checkout resets the developer's branch
+
+2026-10-19. `task-status-input.test.sh` was run in the main checkout, its fixture build failed, `REPO`
+stayed an empty string, and `git -C "" reset --hard HEAD~1` acted on the current directory: the main
+checkout's develop moved back one commit (restored by fast-forward, nothing lost).
+
+Rule: a destructive git command in a test must prove its target lives under the test tmp dir first, and
+the post-merge suite runs only in a throwaway worktree, never in the main checkout.
+
+Preventing artifact: `require_under_test_tmp` in `hooks/tests/lib.sh` (merge 0be6405da), with
+`hooks/tests/test-tmp-guard.test.sh`.
+
+The same day a merge (517fbe910) inserted a new function into a protected region, and
+`check-supersession-anchors` went red on develop, because the pre-merge checklist did not include
+`check-canonical-invariants.sh`. Rule: run it before every lane merge. Fix: 3f6719d1c.

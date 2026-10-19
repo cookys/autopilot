@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0253 -->
+<!-- next-id: BL-0258 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -308,12 +308,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: Second round is in progress: retry text also names feature gaps.
+- **Trigger**: Owner decides whether to write the plan that makes the per-turn gate a formal mechanism.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/backlog/t14-long-horizon-per-turn-verification-gate.md
-- **Context**: Plan docs/plans/2026-10-19-t14-gate-round2.md. Owner card d-768a4c10.
+- **Context**: second experiment SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). Next: make the per-turn gate (retry carries violations plus feature gaps) a formal mechanism; needs a new plan, owner to decide.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -1223,3 +1223,76 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: the second-generation review of the roundtable work
 - **Pointer**: docs/backlog/roundtable-follow-ups.md
 - **Context**: Four deferred points: a three-process reclaim/release race, leftover lock files, duplicate skipped-seat rows, and USAGE lagging parseCli. Detail is in the Pointer.
+
+### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
+- **Id**: BL-0253
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: peer
+- **Reporter**: codepower
+- **Report**: 01M5AMCPARPY10G4GYCJAKT80X
+- **Reply**: 2026-10-20 01M5AMDBG5B1ZDDVFD1CPTKM3Y
+- **Problem**: agy 一點四點二在無頭模式輸出很大（約六千詞元以上）時，會印出成功信封，但行程不結束，要等外面逾時。一點二點一不會。
+- **Impact**: 派工審查的 agy 席可能一直等行程結束，審查因此卡住。
+- **Trigger**: when codepower confirms a fix or workaround on their side, or the first agy review seat run that hangs after a closed envelope
+- **Trigger-Type**: peer
+- **Effort**: S
+- **Source**: PEER-REPORTED codepower 2026-10-20
+- **Pointer**: docs/backlog/agy-142-headless-envelope-no-exit.md
+- **Context**: Probably affects the agy review seat, which waits for process exit. Suggested forced_exit after a closed SUCCESS envelope. Detail is in the Pointer.
+
+### t14 batch driver does not re-run infra failures and cannot see mid-run OAuth expiry
+- **Id**: BL-0254
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 批次驅動在基礎設施失敗後沒有依計畫重跑，而且登入只在每次開始前檢查，跑到一半過期不會停機。
+- **Impact**: 失敗樣本不會補跑，中途登入失效被當成一般錯誤繼續跑。
+- **Trigger**: before any further run of the t14 gate batch driver
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: t14 second experiment batch, 2026-10-20
+- **Pointer**: docs/backlog/t14-batch-driver-infra-rerun-oauth.md
+- **Context**: G-15 runner_timeout and C-16 runner_error were left at attempt 1. Depth-0 did not supplement this batch. Detail is in the Pointer.
+
+### Rename campaignControl.initial_state (persisted wire field, needs a design decision)
+- **Id**: BL-0255
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 活動控制有一個已寫入線路的初始狀態欄位，名稱與用意不符。改名要遷移或乾淨的大版本切割，這次修正批次刻意留下。
+- **Impact**: 名稱繼續留在持久資料裡，以後改名成本更高。
+- **Trigger**: the owner decides whether to migrate the persisted field or cut it in a clean major
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: bluefix merge d0d87b1c4, owner d-15632582
+- **Pointer**: docs/backlog/campaign-control-initial-state-rename.md
+- **Context**: Left out of the bluefix batch as a design decision. No compatibility shim. Detail is in the Pointer.
+
+### RUN_LEDGER_MAX_ROTATIONS reads the sweep environment with unclear intent
+- **Id**: BL-0256
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 帳本輪替上限會讀掃測時的環境變數，預設四次。掃測環境是否該影響正式輪替還不清楚。
+- **Impact**: 未決定就改，正式輪替可能跟著掃測設定走。
+- **Trigger**: the owner decides whether sweep-time environment values should influence ledger rotation
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: bluefix merge d0d87b1c4
+- **Pointer**: docs/backlog/run-ledger-max-rotations-sweep-env.md
+- **Context**: Left out of bluefix d0d87b1c4. Default is 4. Detail is in the Pointer.
+
+### BL-0039 notes 7 and 8: re-anchor the instant2 fixture and add a filter check
+- **Id**: BL-0257
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 某條待辦的兩則附註還沒做：測試夾具要重新定錨，篩選也沒檢查引擎、執行器或角色。旁註已隨提交刪除。
+- **Impact**: 夾具若漂移，負向測試可能不再測到原本要擋的情況。
+- **Trigger**: next change to that test's instant2 fixture, or when the capability-evidence producer contract is tightened
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: backlog deletion audit section C-3, commit e05a1edc3
+- **Pointer**: docs/backlog/bl0039-notes-instant2-filter.md
+- **Context**: Notes 7 and 8 survived the body fix; the sidecar was deleted. Detail is in the Pointer.

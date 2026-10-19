@@ -413,6 +413,7 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - BL-0083: `terminal_status` is enforced as a closed enum when a terminal receipt is validated and when a Work Order is classified or written as a tombstone (a status such as `succeeded` no longer reads as terminal and keeps blocking), the never-produced `attached` disposition is gone, and `work-order.js` now states what its digests guarantee (integrity) versus what they do not (attestation) under the confused-controller threat model.
 
 - BL-0082: orphan adoption now re-observes the persisted runner identity and refuses an absent, partial, live or unknowable one (a dead controller no longer implies a dead leaf), and `reconstructOwnedInventory` re-reads rows Git no longer corroborates: a stale `active` on an unregistered worktree is dropped, an unregistered path on disk is unknown residue, and a branch that moved past its recorded tip is re-checked for unique commits. Worktrees created but never registered still need a write-ahead intent row (BL-0082 stays open for that).
+- t14s7: BL-0055 second experiment closed as SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29, M3 26/29 vs 0/29); report archived, five BACKLOG rows added (BL-0253 to BL-0257).
 
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 

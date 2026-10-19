@@ -6,6 +6,7 @@ mkdir -p "$HOME"
 SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 . "$(dirname "$0")/lib/engine-qualify-setup.sh"
 # RED at 48d012322: FAIL exit-codes-merged got 2 for codes 0,1,3,4,5 (pairwise uniq 1); missing and schema seat cases got 2; emit-record stdout lines 0. Usage (2) and bare no_verdict (1) already matched.
+# RED at eaf8c9eef: corpus mismatch exits 0 (expected 2), stdout 6932 bytes, stderr names neither seat-corpus-1 nor reviewer-known-bad-clean-v2.reviewer-metamorphic-v6, and both --store and --raw-dir were created. effort=default and the 0/1/2/3/4/5 stdout matrix already passed.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -21,7 +22,7 @@ cat >"$SEAT" <<EOF
   "role": "reviewer",
   "effort": "high",
   "prompt_config_hash": "$HASH_A",
-  "corpus_version": "seat-corpus-1"
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6"
 }
 EOF
 
@@ -171,5 +172,79 @@ fi
 if [[ -d "$HOME/.autopilot/qualification-outbox" ]]; then
   fail "headless run enqueued qualification-outbox"
 fi
+
+# Exam methodology corpus hashed into record_id (row.corpus_version / seat.corpus_version).
+EXAM_CORPUS="reviewer-known-bad-clean-v2.reviewer-metamorphic-v6"
+
+# --- corpus mismatch: exit 2, both values on stderr, empty stdout, no store/raw ---
+MIS_SEAT="$TEST_TMP/seat-mismatch.json"
+node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.corpus_version="seat-corpus-1"; fs.writeFileSync(process.argv[2], JSON.stringify(s));' "$SEAT" "$MIS_SEAT"
+MIS_STORE="$TEST_TMP/mismatch-store"
+MIS_RAW="$TEST_TMP/mismatch-raw"
+run_q "$TEST_TMP/mismatch.out" reviewer --seat-file "$MIS_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL" \
+  --store "$MIS_STORE" --raw-dir "$MIS_RAW" --emit-record
+assert_exit_code "$RUN_RC" "2" "corpus mismatch exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/mismatch.out" | tr -d ' ')" "0" "corpus mismatch prints no record"
+assert_contains "$(cat "$ERR")" "seat-corpus-1" "corpus mismatch stderr names the seat file corpus_version"
+assert_contains "$(cat "$ERR")" "$EXAM_CORPUS" "corpus mismatch stderr spells the exam corpus_version"
+assert_file_absent "$MIS_STORE" "corpus mismatch does not create --store"
+assert_file_absent "$MIS_RAW" "corpus mismatch does not create --raw-dir"
+
+# --- matching corpus: the passed record hashes the exam value ---
+node -e '
+const fs = require("fs");
+const rec = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim());
+if (rec.seat.corpus_version !== process.argv[2]) {
+  console.error("seat.corpus_version " + rec.seat.corpus_version);
+  process.exit(1);
+}
+' "$PASS_OUT" "$EXAM_CORPUS"
+assert_eq "$?" "0" "matching corpus record seat.corpus_version is the exam value"
+
+# --- effort=default reaches a normal outcome and the record ---
+DEF_SEAT="$TEST_TMP/seat-default.json"
+node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); s.effort="default"; fs.writeFileSync(process.argv[2], JSON.stringify(s));' "$SEAT" "$DEF_SEAT"
+DEF_OUT="$TEST_TMP/default.out"
+run_q "$DEF_OUT" reviewer --seat-file "$DEF_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  "${PANEL_BINDS[@]}" --panel-cmd "$PASS_PANEL" \
+  --store "$STORE-default" --raw-dir "$RAW-default" --emit-record
+assert_exit_code "$RUN_RC" "0" "effort=default headless exam reaches the normal passed outcome"
+node -e '
+const fs = require("fs");
+const q = require(process.argv[1]);
+const raw = fs.readFileSync(process.argv[2], "utf8").trim();
+const lines = raw.split("\n").filter((l) => l.length);
+if (lines.length !== 1) { console.error("stdout lines " + lines.length); process.exit(1); }
+const rec = JSON.parse(lines[0]);
+if (rec.seat.effort !== "default") { console.error("effort " + rec.seat.effort); process.exit(1); }
+const id = q.recordIdV1(rec.producer, rec.transcript_hash, rec.seat, rec.seat.corpus_version, rec.administered_at);
+if (rec.record_id !== id) { console.error("record_id mismatch"); process.exit(1); }
+' "$QMOD" "$DEF_OUT"
+assert_eq "$?" "0" "effort=default record has seat.effort default and a valid record_id"
+
+# --- emit-record stdout matrix: 0 and 1 print one record; 2, 3, 4, 5 print nothing ---
+stdout_lines() { wc -l <"$1" | tr -d ' '; }
+assert_eq "$(stdout_lines "$PASS_OUT")" "1" "exit 0 prints exactly one record"
+assert_eq "$(stdout_lines "$FAIL_OUT")" "1" "exit 1 prints exactly one record"
+assert_eq "$(wc -c <"$USE_OUT" | tr -d ' ')" "0" "exit 2 prints nothing on stdout"
+assert_eq "$(wc -c <"$NV_OUT" | tr -d ' ')" "0" "exit 3 no_verdict prints nothing on stdout"
+assert_eq "$(wc -c <"$BAD_OUT" | tr -d ' ')" "0" "exit 4 invalid seat prints nothing on stdout"
+assert_eq "$(wc -c <"$LEG_OUT" | tr -d ' ')" "0" "exit 5 invalid record prints nothing on stdout"
+node -e '
+const fs = require("fs");
+const passed = JSON.parse(fs.readFileSync(process.argv[1], "utf8").trim());
+const failed = JSON.parse(fs.readFileSync(process.argv[2], "utf8").trim());
+if (passed.verdict.status !== "qualified") { console.error("passed status " + passed.verdict.status); process.exit(1); }
+if (failed.verdict.status !== "failed") { console.error("failed status " + failed.verdict.status); process.exit(1); }
+if (passed.verdict.status === failed.verdict.status) { console.error("verdicts identical"); process.exit(1); }
+' "$PASS_OUT" "$FAIL_OUT"
+assert_eq "$?" "0" "printed record verdict.status distinguishes qualified from failed"
 
 finalize_test

@@ -35,7 +35,7 @@ cat >"$SEAT" <<EOF
   "role": "reviewer",
   "effort": "high",
   "prompt_config_hash": "$HASH_A",
-  "corpus_version": "seat-corpus-1"
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6"
 }
 EOF
 

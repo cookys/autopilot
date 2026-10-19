@@ -5791,6 +5791,33 @@ function buildEmittedRow(row, effortCheck) {
   return { ...row, effort_check: effortCheck };
 }
 
+// recordIdV1 hashes row.corpus_version, which reviewer/owner set from
+// oracle.methodology_version (`${static methodology}.${generator version}`).
+// That string is known from the pinned assets, before runQualification writes
+// a row or a raw dir. Kept out of runQualification so its source pin stays put.
+function assertSeatCorpusMatchesExam(options) {
+  if (options.corpusVersion === undefined) return;
+  const role = options.role || 'reviewer';
+  if (role !== 'reviewer' && role !== 'owner') return;
+  let staticOracle;
+  try {
+    staticOracle = role === 'owner'
+      ? verifyPinnedOwnerEvaluationAssets()
+      : verifyPinnedEvaluationAssets();
+  } catch (error) {
+    usage(2, `qualification precondition failed: ${error.message}`);
+  }
+  const examCorpusVersion = role === 'owner'
+    ? `${staticOracle.methodology_version}.${OWNER_GENERATOR_VERSION}`
+    : `${staticOracle.methodology_version}.${GENERATOR_VERSION}`;
+  if (options.corpusVersion !== examCorpusVersion) {
+    process.stderr.write(
+      `engine-qualify: seat file corpus_version ${options.corpusVersion} differs from exam corpus_version ${examCorpusVersion}\n`,
+    );
+    process.exit(2);
+  }
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const headless = Boolean(options.seatFile || options.emitRecord);
@@ -5798,6 +5825,7 @@ function main() {
     if (!options.store) usage(2, '--store is required with --seat-file or --emit-record');
     headlessScratchParent = path.join(path.resolve(expandTilde(options.store)), 'scratch');
   }
+  assertSeatCorpusMatchesExam(options);
   let runResult;
   try {
     runResult = runQualification(options);

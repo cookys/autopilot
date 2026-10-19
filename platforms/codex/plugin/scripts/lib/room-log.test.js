@@ -251,6 +251,158 @@ test('validation rejects bad room id, bad kind, and empty text', () => {
   }
 });
 
+// # RED at 9c64ad8da: stale reclaim unlinked by path after the stat, so a lock
+// recreated in that window was deleted; a torn tail was concatenated onto the
+// next row; roomsDir fell back to "/"; writeSync was attempted at most twice.
+test('stale reclaim keeps a lock recreated before removal and seqs stay unique', () => {
+  const s = scratch();
+  try {
+    const { append, readAll, roomPath } = load();
+    const room = 'race-room';
+    const dir = path.join(s.dir, room);
+    fs.mkdirSync(dir, { recursive: true });
+    const lock = path.join(dir, 'room.jsonl.lock');
+    fs.writeFileSync(lock, 'stale-token');
+    const old = new Date(Date.now() - 10000);
+    fs.utimesSync(lock, old, old);
+    const freshToken = `fresh-${process.pid}-${Date.now()}`;
+    let committed = false;
+    const row = append(room, {
+      from: 'owner', kind: 'say', text: 'after race', reply_to: null,
+    }, s.env, {
+      afterStaleJudgement(lockFile) {
+        fs.unlinkSync(lockFile);
+        fs.writeFileSync(lockFile, freshToken);
+        const now = new Date();
+        fs.utimesSync(lockFile, now, now);
+      },
+      onContended(lockFile) {
+        assert.equal(fs.readFileSync(lockFile, 'utf8'), freshToken);
+        const file = roomPath(room, s.env);
+        const competitor = {
+          ts: new Date().toISOString(),
+          room,
+          seq: 1,
+          from: 'ns/courier/competitor',
+          kind: 'say',
+          text: 'held the fresh lock',
+          reply_to: null,
+        };
+        fs.appendFileSync(file, `${JSON.stringify(competitor)}\n`);
+        fs.unlinkSync(lockFile);
+        committed = true;
+      },
+    });
+    assert.equal(committed, true);
+    assert.equal(row.seq, 2);
+    const rows = readAll(room, s.env);
+    assert.equal(rows.length, 2);
+    assertSeqExact(rows);
+    assert.equal(fs.existsSync(lock), false);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('eight writers times 25 rows yield seq 1..200 when a stale lock is already present', async () => {
+  const s = scratch();
+  try {
+    const room = 'stale-atomic-room';
+    const dir = path.join(s.dir, room);
+    fs.mkdirSync(dir, { recursive: true });
+    const lock = path.join(dir, 'room.jsonl.lock');
+    fs.writeFileSync(lock, 'already-stale');
+    const old = new Date(Date.now() - 10000);
+    fs.utimesSync(lock, old, old);
+    const kids = [];
+    for (let i = 0; i < 8; i++) {
+      kids.push(spawnNode([__filename], {
+        ...s.env,
+        ROOM_LOG_WORKER: 'append',
+        ROOM_LOG_ROOM: room,
+        ROOM_LOG_N: '25',
+      }));
+    }
+    const done = await Promise.all(kids);
+    for (const d of done) assert.equal(d.code, 0, d.stderr);
+    const { readAll } = load();
+    const rows = readAll(room, s.env);
+    assert.equal(rows.length, 200);
+    assertSeqExact(rows);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('append repairs a torn tail so the new row is readable and the fragment counts', () => {
+  const s = scratch();
+  try {
+    const { append, readAll, roomPath } = load();
+    const room = 'torn-room';
+    const dir = path.join(s.dir, room);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = roomPath(room, s.env);
+    const first = {
+      ts: 't', room, seq: 1, from: 'owner', kind: 'say', text: 'whole', reply_to: null,
+    };
+    fs.writeFileSync(file, `${JSON.stringify(first)}\n{"seq":99,"text":"tor`);
+    const row = append(room, { from: 'owner', kind: 'say', text: 'after torn', reply_to: null }, s.env);
+    assert.equal(row.seq, 2);
+    assert.equal(row.text, 'after torn');
+    const rows = readAll(room, s.env);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1].text, 'after torn');
+    assert.equal(rows.malformed, 1);
+    const raw = fs.readFileSync(file, 'utf8');
+    assert.equal(raw.endsWith('\n'), true);
+    assert.equal(raw.includes('{"seq":99,"text":"tor\n'), true);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('roomsDir throws when AUTOPILOT_ROOMS_DIR, HOME, and USERPROFILE are unset', () => {
+  const { roomsDir } = load();
+  assert.throws(
+    () => roomsDir({}),
+    (err) => {
+      assert.match(err.message, /AUTOPILOT_ROOMS_DIR/);
+      assert.match(err.message, /HOME/);
+      assert.match(err.message, /USERPROFILE/);
+      return true;
+    },
+  );
+  const home = path.join(os.tmpdir(), 'room-log-home');
+  assert.doesNotThrow(() => roomsDir({ HOME: home }));
+  assert.equal(roomsDir({ HOME: home }), path.join(home, '.autopilot', 'rooms'));
+});
+
+test('append writes the whole row when each write call accepts at most 3 bytes', () => {
+  const s = scratch();
+  try {
+    const { append, roomPath } = load();
+    let calls = 0;
+    const text = 'partial-write 討論 row that is longer than six bytes';
+    const row = append('short-write', {
+      from: 'owner', kind: 'say', text, reply_to: null,
+    }, s.env, {
+      writeSync(fd, buf, offset, length) {
+        calls += 1;
+        const n = Math.min(3, length);
+        return fs.writeSync(fd, buf, offset, n);
+      },
+    });
+    assert.equal(row.text, text);
+    const raw = fs.readFileSync(roomPath('short-write', s.env), 'utf8');
+    const lines = raw.split('\n').filter((l) => l.length);
+    assert.equal(lines.length, 1);
+    assert.deepEqual(JSON.parse(lines[0]).text, text);
+    assert.ok(calls >= 4, `expected a short-write loop, calls=${calls}`);
+  } finally {
+    s.cleanup();
+  }
+});
+
 test('a stale lock file does not block append', () => {
   const s = scratch();
   try {

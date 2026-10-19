@@ -4881,7 +4881,8 @@
       "default": null,
       "readers": [
         "scripts/lib/room-log.js",
-        "scripts/roundtable-window.js"
+        "scripts/roundtable-window.js",
+        "mods/roundtable/register.ts"
       ],
       "doc": "docs/plans/2026-09-19-roundtable.md",
       "relates": [],

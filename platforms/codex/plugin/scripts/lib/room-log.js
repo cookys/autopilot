@@ -5,6 +5,7 @@
 // AUTOPILOT_ROOMS_DIR replaces the rooms directory (default $HOME/.autopilot/rooms).
 // Node built-ins only. Node >= 20.10.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,7 +20,10 @@ function sleepMs(ms) {
 function roomsDir(env) {
   const e = env || process.env;
   if (e.AUTOPILOT_ROOMS_DIR) return e.AUTOPILOT_ROOMS_DIR;
-  const home = e.HOME || e.USERPROFILE || '/';
+  const home = e.HOME || e.USERPROFILE;
+  if (!home) {
+    throw new Error('AUTOPILOT_ROOMS_DIR is unset and neither HOME nor USERPROFILE is set');
+  }
   return path.join(home, '.autopilot', 'rooms');
 }
 
@@ -91,30 +95,99 @@ function nextSeq(rows) {
   return max + 1;
 }
 
-function acquireLock(lockFile) {
+function writeAll(fd, buf, writeSync) {
+  const write = writeSync || fs.writeSync;
+  let off = 0;
+  while (off < buf.length) {
+    const n = write(fd, buf, off, buf.length - off);
+    if (!Number.isInteger(n) || n <= 0) throw new Error('room log short write');
+    off += n;
+  }
+}
+
+function holderToken() {
+  return `${process.pid}.${crypto.randomBytes(8).toString('hex')}`;
+}
+
+// Put parked back at lockFile only when that path is free. link fails with
+// EEXIST instead of overwriting. If the path is taken, drop parked: the mover
+// lost the lock, and the path's holder stays the only one.
+function restoreOrDrop(parked, lockFile) {
+  try {
+    fs.linkSync(parked, lockFile);
+  } catch {
+    try { fs.unlinkSync(parked); } catch { /* already gone */ }
+    return;
+  }
+  try { fs.unlinkSync(parked); } catch { /* canonical name still holds the inode */ }
+}
+
+function releaseLock(lockFile, token) {
+  const parked = `${lockFile}.release-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  try { fs.renameSync(lockFile, parked); } catch { return; }
+  let cur = null;
+  try { cur = fs.readFileSync(parked, 'utf8'); } catch { /* raced away */ }
+  if (cur === token) {
+    try { fs.unlinkSync(parked); } catch { /* already gone */ }
+    return;
+  }
+  restoreOrDrop(parked, lockFile);
+}
+
+function acquireLock(lockFile, hooks) {
+  const token = holderToken();
   const start = Date.now();
+  const busyMs = (hooks && hooks.maxBusyMs) || 15000;
   for (;;) {
     try {
       const fd = fs.openSync(lockFile, 'wx');
+      try {
+        writeAll(fd, Buffer.from(token, 'utf8'));
+      } catch (err) {
+        try { fs.closeSync(fd); } catch { /* ignore */ }
+        try { fs.unlinkSync(lockFile); } catch { /* ignore */ }
+        throw err;
+      }
       fs.closeSync(fd);
-      return;
+      return token;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
-      let age = 0;
-      try { age = Date.now() - fs.statSync(lockFile).mtimeMs; } catch { continue; }
-      if (age >= STALE_MS) {
-        try { fs.unlinkSync(lockFile); } catch { /* lost the race */ }
+      let judged;
+      try { judged = fs.statSync(lockFile); } catch { continue; }
+      if (Date.now() - judged.mtimeMs < STALE_MS) {
+        if (Date.now() - start > busyMs) throw new Error(`room log lock busy: ${lockFile}`);
+        if (hooks && typeof hooks.onContended === 'function') hooks.onContended(lockFile);
+        sleepMs(15 + Math.floor(Math.random() * 20));
         continue;
       }
-      if (Date.now() - start > 15000) {
-        throw new Error(`room log lock busy: ${lockFile}`);
+      let judgedToken;
+      try { judgedToken = fs.readFileSync(lockFile, 'utf8'); } catch { continue; }
+      let again;
+      try { again = fs.statSync(lockFile); } catch { continue; }
+      if (again.ino !== judged.ino || Date.now() - again.mtimeMs < STALE_MS) continue;
+      if (hooks && typeof hooks.afterStaleJudgement === 'function') {
+        hooks.afterStaleJudgement(lockFile, { token: judgedToken, ino: again.ino, mtimeMs: again.mtimeMs });
       }
-      sleepMs(15 + Math.floor(Math.random() * 20));
+      const parked = `${lockFile}.reclaim-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+      try { fs.renameSync(lockFile, parked); } catch { continue; }
+      let parkedStat;
+      let parkedToken;
+      try {
+        parkedStat = fs.statSync(parked);
+        parkedToken = fs.readFileSync(parked, 'utf8');
+      } catch {
+        continue;
+      }
+      if (parkedStat.ino === again.ino && parkedToken === judgedToken) {
+        try { fs.unlinkSync(parked); } catch { /* reclaimed by name */ }
+        continue;
+      }
+      restoreOrDrop(parked, lockFile);
     }
   }
 }
 
-function append(room, fields, env) {
+function append(room, fields, env, hooks) {
   assertRoom(room);
   const kind = fields && fields.kind;
   if (!KINDS.has(kind)) throw new Error(`invalid kind: ${JSON.stringify(kind)}`);
@@ -126,7 +199,7 @@ function append(room, fields, env) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = path.join(dir, 'room.jsonl');
   const lockFile = path.join(dir, 'room.jsonl.lock');
-  acquireLock(lockFile);
+  const token = acquireLock(lockFile, hooks);
   try {
     let existing = '';
     try { existing = fs.readFileSync(file, 'utf8'); } catch (err) {
@@ -148,17 +221,17 @@ function append(room, fields, env) {
     const line = `${JSON.stringify(stored)}\n`;
     const fd = fs.openSync(file, 'a');
     try {
-      const buf = Buffer.from(line, 'utf8');
-      const n = fs.writeSync(fd, buf, 0, buf.length);
-      if (n !== buf.length) {
-        fs.writeSync(fd, buf, n, buf.length - n);
+      const writeSync = hooks && hooks.writeSync;
+      if (existing.length > 0 && !existing.endsWith('\n')) {
+        writeAll(fd, Buffer.from('\n', 'utf8'), writeSync);
       }
+      writeAll(fd, Buffer.from(line, 'utf8'), writeSync);
     } finally {
       fs.closeSync(fd);
     }
     return stored;
   } finally {
-    try { fs.unlinkSync(lockFile); } catch { /* already gone */ }
+    releaseLock(lockFile, token);
   }
 }
 

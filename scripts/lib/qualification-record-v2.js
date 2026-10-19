@@ -24,10 +24,51 @@ function evidenceSummary(ev) {
   };
 }
 
+function daysInMonth(year, month) {
+  if (month === 2) return ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 29 : 28;
+  return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+// Same gate as llm-playground v2_record_from_row, written from the owner's rule (the Python regex
+// was not on this host): YYYY-MM-DDTHH:MM:SS(.f 1-9)?(Z|+HH:MM|-HH:MM) or date-only YYYY-MM-DD.
+// Impossible calendar dates throw. Non-strings stay null. Output is UTC, millisecond precision, .000 dropped.
 function tsUtc(v) {
   if (typeof v !== 'string') return null;
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t).toISOString().replace(/\.(\d{3})Z$/, (m, ms) => (ms === '000' ? 'Z' : `.${ms}Z`)) : null;
+  const bad = () => { throw new Error(`tsUtc: rejected ${JSON.stringify(v)}`); };
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (dateOnly) {
+    const y = Number(dateOnly[1]);
+    const mo = Number(dateOnly[2]);
+    const d = Number(dateOnly[3]);
+    if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) bad();
+    return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}T00:00:00Z`;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-](\d{2}):(\d{2}))$/.exec(v);
+  if (!m) bad();
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const h = Number(m[4]);
+  const mi = Number(m[5]);
+  const s = Number(m[6]);
+  const frac = m[7] || '';
+  const zone = m[8];
+  if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo) || h > 23 || mi > 59 || s > 59) bad();
+  let offMin = 0;
+  if (zone !== 'Z') {
+    const oh = Number(m[9]);
+    const om = Number(m[10]);
+    if (oh > 23 || om > 59) bad();
+    offMin = (zone[0] === '-' ? -1 : 1) * (oh * 60 + om);
+  }
+  const ms3 = frac ? Number((frac + '000').slice(0, 3)) : 0;
+  const dt = new Date(0);
+  dt.setUTCFullYear(y, mo - 1, d);
+  dt.setUTCHours(h, mi - offMin, s, ms3);
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  const base = `${p(dt.getUTCFullYear(), 4)}-${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}T${p(dt.getUTCHours())}:${p(dt.getUTCMinutes())}:${p(dt.getUTCSeconds())}`;
+  const milli = dt.getUTCMilliseconds();
+  return milli === 0 ? `${base}Z` : `${base}.${p(milli, 3)}Z`;
 }
 
 /** @returns {object|null} schema-2 record, or null for a legacy row. */
@@ -85,4 +126,4 @@ function buildStrikeSubmission(record, reason) {
   };
 }
 
-module.exports = { buildV2Record, buildStrikeSubmission, evidenceSummary };
+module.exports = { buildV2Record, buildStrikeSubmission, evidenceSummary, tsUtc };

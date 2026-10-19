@@ -7,12 +7,14 @@
 //   node scripts/qualification-send-queue.js flush   [--force]
 //   node scripts/qualification-send-queue.js status  [--json]
 //
-// Outbox: ~/.autopilot/qualification-outbox/outbox.jsonl (AUTOPILOT_OUTBOX_DIR overrides). Append-only event log,
+// Outbox: ~/.autopilot/qualification-outbox/outbox.jsonl (AUTOPILOT_OUTBOX_DIR overrides) and outbox.meta.json
+// (enqueue_enabled_at, written once). Append-only event log,
 // one line per event {event: enqueued|sent|acked|rejected|failed|retired, id, kind, payload_sha256, ts, line_crc};
 // every append is ONE write of one line under 4096 B (a bigger payload goes to outbox.d/<id>.json, renamed in, and
 // the line carries its sha256). Lock: the repo's PID lock with stale-holder breaker (scripts/lib/jsonl-store.js);
 // Node has no flock, and this lock gives the same single-writer guarantee with crash recovery.
 // flush: quarantines a torn/crc-bad line to outbox.jsonl.corrupt (loud warning, other lines untouched), then for each
+// outbox.meta.json sits next to the log and is never an orphan: the sweep only unlinks files inside outbox.d.
 // un-acked id: asks the transport for an ack, else sends once, polls again. Ack = the registry's DEFAULT branch holds
 // the record bytes (never a bot branch, never an open PR). Permanent rejection -> `rejected`, never resent.
 // `retired` only after `acked`; compaction rewrites atomically without fully retired ids. Failure -> `failed` + backoff.
@@ -43,6 +45,7 @@ function paths(dir) {
   return {
     dir, log: path.join(dir, 'outbox.jsonl'), d: path.join(dir, 'outbox.d'),
     lock: path.join(dir, '.lock'), corrupt: path.join(dir, 'outbox.jsonl.corrupt'),
+    meta: path.join(dir, 'outbox.meta.json'),
   };
 }
 
@@ -153,6 +156,38 @@ function appendEvent(p, obj) {
 
 function trim(s) { return String(s === undefined ? '' : s).replace(/\s+/g, ' ').slice(0, 300); }
 
+function readMeta(p) {
+  try {
+    const o = JSON.parse(fs.readFileSync(p.meta, 'utf8'));
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return { corrupt: true };
+    return { ok: o };
+  } catch (e) {
+    if (e.code === 'ENOENT') return { absent: true };
+    return { corrupt: true };
+  }
+}
+
+function writeMetaAtomic(p, obj) {
+  const tmp = path.join(p.dir, `.outbox.meta.json.tmp.${process.pid}`);
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try {
+    fs.writeSync(fd, JSON.stringify(obj));
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, p.meta);
+  fs.chmodSync(p.meta, 0o600);
+  fsyncDir(p.dir);
+}
+
+/** First successful append records enqueue_enabled_at once. A corrupt meta file is rewritten. */
+function noteEnqueueEnabled(p) {
+  const cur = readMeta(p);
+  if (cur.ok && typeof cur.ok.enqueue_enabled_at === 'string' && cur.ok.enqueue_enabled_at) return;
+  const next = cur.ok ? { ...cur.ok } : {};
+  next.enqueue_enabled_at = nowIso();
+  writeMetaAtomic(p, next);
+}
+
 // ── enqueue ──
 function idOf(kind, payload) {
   if (kind === 'record') return payload && payload.record_id;
@@ -199,6 +234,7 @@ function enqueue(kind, payload, { env = process.env } = {}) {
         if (b[0] !== 10) fs.appendFileSync(p.log, '\n');
       }
     } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    noteEnqueueEnabled(p);
     appendEvent(p, head);
     failpoint('after-enqueue');
     return { status: 'enqueued', id };
@@ -227,7 +263,20 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
     const state = fold(events);
     for (const s of state.values()) {
       if (s.retired || s.rejected || !s.enqueued) continue;
-      const rej = async (code, message) => { appendEvent(p, { event: 'rejected', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256, code, message: trim(message) }); out.rejected += 1; };
+      const rej = async (code, message, extra) => {
+        const ev = { event: 'rejected', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256, code, message: trim(message) };
+        if (s.kind === 'record' && payload && typeof payload === 'object') {
+          const es = payload.evidence_store;
+          const th = es && typeof es === 'object' && typeof es.transcript_hash === 'string' && es.transcript_hash
+            ? es.transcript_hash : payload.transcript_hash;
+          if (typeof th === 'string' && th) ev.transcript_hash = th;
+        }
+        if (extra && typeof extra.existing_transcript_hash === 'string' && extra.existing_transcript_hash) {
+          ev.existing_transcript_hash = extra.existing_transcript_hash;
+        }
+        appendEvent(p, ev);
+        out.rejected += 1;
+      };
       const ackIt = async (commit) => {
         failpoint('before-ack');
         if (!s.acked) appendEvent(p, { event: 'acked', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256, commit });
@@ -249,7 +298,7 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
         if (a.state !== 'acked' && inBackoff) { out.backoff_skipped += 1; continue; }
         if (a.state !== 'acked' && !s.sent) {
           const r = await transport.send(item);
-          if (r.status === 'rejected') { await rej(r.code || 'REJECTED', r.message); continue; }
+          if (r.status === 'rejected') { await rej(r.code || 'REJECTED', r.message, r); continue; }
           if (r.status !== 'sent' && r.status !== 'noop') { fail(r.message || `transport status ${r.status}`); continue; }
           failpoint('after-send');
           appendEvent(p, { event: 'sent', id: s.id, kind: s.kind, payload_sha256: s.payload_sha256 });
@@ -289,21 +338,37 @@ function status({ env = process.env, nowMs = Date.now() } = {}) {
   const { events, bad } = readLog(p);
   const pending = [];
   const rejected = [];
+  const already_ingested = [];
   for (const s of fold(events).values()) {
-    if (s.rejected) { rejected.push({ id: s.id, kind: s.kind, code: s.rejected.code, message: s.rejected.message }); continue; }
+    if (s.rejected) {
+      const code = s.rejected.code;
+      const th = s.rejected.transcript_hash;
+      const ex = s.rejected.existing_transcript_hash;
+      if (code === 'SECONDARY_KEY_COLLISION' && typeof th === 'string' && th && th === ex) {
+        already_ingested.push({ id: s.id, kind: s.kind, code, transcript_hash: th });
+        continue;
+      }
+      rejected.push({ id: s.id, kind: s.kind, code, message: s.rejected.message });
+      continue;
+    }
     if (!s.enqueued || s.retired) continue;
     const age = Math.floor((nowMs - Date.parse(s.enqueued.ts)) / 1000);
     pending.push({ id: s.id, kind: s.kind, age_s: Number.isFinite(age) ? age : null, sent: !!s.sent, acked: !!s.acked, failures: s.failures, last_error: s.last_error || null, stale_24h: age > STALE_S });
   }
   let quarantinedBytes = 0;
   try { quarantinedBytes = fs.statSync(p.corrupt).size; } catch { /* none */ }
-  return { dir: p.dir, pending, rejected, stale_24h: pending.filter((x) => x.stale_24h), unreadable_lines: bad.length, quarantined_bytes: quarantinedBytes };
+  const meta = readMeta(p);
+  const enqueue_enabled_at = meta.ok && typeof meta.ok.enqueue_enabled_at === 'string' ? meta.ok.enqueue_enabled_at : null;
+  return { dir: p.dir, pending, rejected, already_ingested, enqueue_enabled_at, stale_24h: pending.filter((x) => x.stale_24h), unreadable_lines: bad.length, quarantined_bytes: quarantinedBytes };
 }
 
 function statusLines(st) {
-  const l = [`qualification outbox: ${st.pending.length} pending, ${st.rejected.length} rejected, ${st.stale_24h.length} older than 24h`];
+  const ingested = st.already_ingested || [];
+  const l = [`qualification outbox: ${st.pending.length} pending, ${st.rejected.length} rejected, ${st.stale_24h.length} older than 24h, ${ingested.length} already_ingested`];
   for (const x of st.pending) l.push(`  pending ${x.kind} ${x.id.slice(0, 12)} age=${x.age_s}s sent=${x.sent} failures=${x.failures}${x.stale_24h ? ' STALE>24h' : ''}`);
   for (const x of st.rejected) l.push(`  rejected ${x.kind} ${x.id.slice(0, 12)} ${x.code}: ${x.message || ''}`);
+  for (const x of ingested) l.push(`  already_ingested ${x.kind} ${x.id.slice(0, 12)} ${x.code}`);
+  if (st.enqueue_enabled_at) l.push(`  enqueue_enabled_at ${st.enqueue_enabled_at}`);
   if (st.unreadable_lines) l.push(`  WARNING ${st.unreadable_lines} unreadable line(s) in the log; run flush to quarantine`);
   if (st.quarantined_bytes) l.push(`  note: outbox.jsonl.corrupt holds ${st.quarantined_bytes} B of quarantined lines`);
   return l;
@@ -341,6 +406,44 @@ function gitTransport(opts) {
     return r.stdout.trim().replace(`${remote}/`, '');
   };
   const qualDir = `benchmarks/qualification/${workspace}`;
+
+  function existingTranscriptHash(message) {
+    const found = String(message || '').match(/[0-9a-fA-F]{12}/);
+    if (!found) return undefined;
+    const prefix = found[0].toLowerCase();
+    const root = path.join(repo, 'benchmarks', 'qualification');
+    let hit;
+    const walk = (dir) => {
+      if (hit) return;
+      let ents;
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const ent of ents) {
+        if (hit) return;
+        const fp = path.join(dir, ent.name);
+        if (ent.isDirectory()) walk(fp);
+        else if (ent.isFile() && ent.name.endsWith('.json')) {
+          try {
+            const rec = JSON.parse(fs.readFileSync(fp, 'utf8'));
+            if (rec && typeof rec.record_id === 'string' && rec.record_id.toLowerCase().startsWith(prefix)
+              && typeof rec.transcript_hash === 'string' && rec.transcript_hash) hit = rec.transcript_hash;
+          } catch { /* skip an unreadable record */ }
+        }
+      }
+    };
+    try { walk(root); } catch { return undefined; }
+    return hit;
+  }
+
+  function rejectedFromIngest(j) {
+    const out = { status: 'rejected', code: j && j.code, message: j && j.message };
+    if (j && j.code === 'SECONDARY_KEY_COLLISION') {
+      try {
+        const h = existingTranscriptHash(j.message);
+        if (h) out.existing_transcript_hash = h;
+      } catch { /* omit the field */ }
+    }
+    return out;
+  }
 
   function expected(item) {   // what the ingest would write for this payload, computed in a scratch root (no network, no repo write)
     let tmp;
@@ -424,7 +527,7 @@ function gitTransport(opts) {
       // make sure a PR exists; different content -> conflict (never a force push).
       if (git(['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}/${bot}`]).status === 0) {
         const ex = expected(item);
-        if (ex.rejected) return { status: 'rejected', code: ex.rejected.code, message: ex.rejected.message };
+        if (ex.rejected) return rejectedFromIngest(ex.rejected);
         if (holds(`${remote}/${bot}`, item, ex) !== 'same') {
           return { status: 'rejected', code: 'BOT_BRANCH_CONFLICT', message: `${bot} on ${remote} holds different content for this id` };
         }
@@ -447,7 +550,7 @@ function gitTransport(opts) {
         const r = ingest(['--kind', item.kind, '--workspace', workspace, '--root', path.join(repo, 'benchmarks', 'qualification'), pf]);
         let j = null;
         try { j = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* below */ }
-        if (r.status === 3 && j) return { status: 'rejected', code: j.code, message: j.message };
+        if (r.status === 3 && j) return rejectedFromIngest(j);
         if (r.status !== 0 || !j) return { status: 'error', message: `ingest exit ${r.status}: ${trim(r.stderr || r.stdout)}` };
         if (j.status === 'noop') return { status: 'noop' };   // already on the default branch
         must(git(['add', '-A', '--', 'benchmarks/qualification']), 'git add');
@@ -483,7 +586,12 @@ function transportFromConfig(env = process.env) {
 /** Hook for engine-scorecard `record`: queue a completed administration when qualification_outbox.enqueue is on. */
 function enqueueScorecardRow(row, { env = process.env } = {}) {
   if (!readOutboxConfig(env).enqueue) return { status: 'off' };
-  const record = require('./lib/qualification-record-v2.js').buildV2Record(row);
+  let record;
+  try {
+    record = require('./lib/qualification-record-v2.js').buildV2Record(row);
+  } catch (e) {
+    return { status: 'ts_rejected', message: e.message };
+  }
   if (!record) return { status: 'legacy_shape' };
   return enqueue('record', record, { env });
 }

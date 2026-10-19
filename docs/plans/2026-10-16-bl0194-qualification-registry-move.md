@@ -33,6 +33,12 @@ Options: (1) the new version wins, consistent with current autopilot seat identi
 
 Reconcile state cited here, not from a repo file: 0 pending outbox ids. The scorecard has 200 rows against 31 registry records, so the store diff is not 0. The full scratch report `RECONCILE.md` is not in the repo.
 
+### Addendum 2026-10-20
+
+1. Row split: on an install where qualification_outbox.enqueue is on, a row that carries a transcript_hash and whose administration time is later than enqueue_enabled_at (recorded once in outbox.meta.json) belongs to the sender; the importer and pull must not touch it. When enqueue is off, every row belongs to the importer.
+2. Reconciliation count: send-queue status reports already_ingested separately; an id counts as already_ingested only when the registry rejected it with SECONDARY_KEY_COLLISION and the payload transcript_hash equals the existing record transcript_hash. It is neither pending nor rejected. A different transcript_hash stays rejected for a human.
+3. tsUtc parity: the Node tsUtc and the Python v2_record_from_row use the same gate: only YYYY-MM-DDTHH:MM:SS(.f)?(Z|+-HH:MM) and date-only YYYY-MM-DD, impossible calendar dates rejected, output UTC at millisecond precision with .000 dropped. Note that the Python regex was not available when this was written and the rule follows the owner's description; the llm-playground side must be checked against it.
+
 ## 0. Thesis
 llm-playground model intake is where a qualification exam is administered. Intake calls autopilot `scripts/engine-qualify.sh` under the P5 headless contract and commits the schema-2 record itself. llm-playground is the only registry of exam records. The authoritative store is, per workspace, `benchmarks/qualification/<ws>/<record>.json` (one file per record) and `benchmarks/qualification/<ws>/strikes.jsonl`. autopilot keeps local evidence for an exam this install administered, local strikes, a user pin, and a cache of the feed. The P3 outbox and its transport exist and default to off. The historical split (autopilot scorecard plus a hand import, a feed with no speed or cost, a stale cache fetched 2026-09-03) is what P1–P4a already replaced on the publish side; this revision replaces who administers the exam and how a feed row is trusted. Shipped consult result A2/B1 remains: one registry, snapshot-built defaults. C1's old reading (metrics never affect admission) does not.
 
@@ -138,6 +144,8 @@ R3 (2026-10-19): Rewrote the thesis, the trust rules, KR4, the write path, and t
 R4 (2026-10-19): plan review g1 CONDITIONAL, five blockers reinforced. R2 confirm contract is in the Revision trust paragraph, section 2, section 5, and the P6 row (one `open-decision.js` card per batch, `confirmations.jsonl`, headless rows stay absent, digest change re-confirms, gate and invariants still bind). R4 gate reuse is in section 2 and the P6 row (`parseFeed` on wire bytes, shared age function extracted from `checkSnapshotAge`, advertised digest never compared, whole-document rejection). R5 P5 contract is in section 4 and the P5 row (exit codes 0–5, seat schema, schema-2 record and `recordIdV1`, temp-home write boundary). R9 threat model is in section 8, and the old claim that a hostile document does not change admission is gone. R10 named red-before-green controls are in the P5 and P6 negative-control cells, including confirmation bypass, a second prompt or confirmation, auto still requiring adopt, off-mode feed influence, merged exit codes, and a stray write. The two non-blocking R2 and R9 notes are folded into those same places.
 
 R5 (2026-10-19): plan review g2 CONDITIONAL, generation cap reached, depth-0 adjudication accepted three blockers and reinforced them.
+
+R6 (2026-10-20): Addendum 2026-10-20 was added after the 7840hs llm-playground parity report, with depth-0 agreement and no change to the frozen rubric.
 
 ## Appendix A. Cross-repo alignment (P1 review x P2 reader, 2026-10-16)
 - `record_id`: the legacy basis is kept, with an idempotency secondary key. Only rows carrying `transcript_hash` have a recomputable `v1:` id. A legacy row keeps its `evidence_id` / `row_digest` id and is never recomputed. The secondary key is compared only when BOTH sides carry `administered_at`; a legacy row against a new row compares by `evidence_id`.

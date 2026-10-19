@@ -39,3 +39,4 @@ No adjudication of true or false positives. Checker sources were not modified.
    exit 0 (0 broken)
 
 Harness directive: no git commit in this session. The commit is left to the harness.
+The replay was not rerun after this repair because tightening rule (a) can only add reports, never remove them, and the verdict (false-positive rate far above 5 percent, mode stays warn) cannot move toward block from added reports.

@@ -3,6 +3,7 @@
 # N cases are violations the precise rules must still report.
 # F cases are synthetic false positives the precise rules must not report.
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
+# RED at c65144649: N7 N8 F5 failed on the unmodified base.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -161,5 +162,51 @@ run_case "$repo"
 f4b=0
 if has_kind deleted_line; then f4b=0; else f4b=1; fi
 if [ "$f4a" = 1 ] && [ "$f4b" = 1 ]; then report F4 1; else report F4 0; fi
+
+# ── N7 delete the test and a same-directory helper; product stays ──────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo hi\n' > "$repo/scripts/foo.sh"
+printf 'echo helper\n' > "$repo/tests/foo.sh"
+printf 'assert_eq "$(bash "$REPO_ROOT/scripts/foo.sh")" "hi" "runs"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/foo.test.sh tests/foo.sh
+git -C "$repo" commit -qm "delete test and same-dir helper"
+run_case "$repo"
+if has_kind deleted_line && has_text 'tests/foo.test.sh'; then report N7 1; else report N7 0; fi
+
+# ── N8 same basename stem under fixtures; product stays ────────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/fixtures" "$repo/scripts"
+printf 'module.exports = 1;\n' > "$repo/scripts/foo.js"
+printf 'module.exports = 1;\n' > "$repo/fixtures/foo.js"
+printf 'const assert = require("assert");\nassert.equal(1, 1);\n' > "$repo/tests/foo.test.js"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/foo.test.js fixtures/foo.js
+git -C "$repo" commit -qm "delete test and fixture twin"
+run_case "$repo"
+if has_kind deleted_line; then report N8 1; else report N8 0; fi
+
+# ── F5 quoted $REPO_ROOT invocation co-deletes the script; a comment does not
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo other\n' > "$repo/scripts/other-name.sh"
+printf 'bash "$REPO_ROOT/scripts/other-name.sh"\nassert_eq 1 1 "ok"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/foo.test.sh scripts/other-name.sh
+git -C "$repo" commit -qm "delete test and invoked script"
+run_case "$repo"
+if has_kind deleted_line; then f5a=0; else f5a=1; fi
+
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo other\n' > "$repo/scripts/other-name.sh"
+printf '# bash "$REPO_ROOT/scripts/other-name.sh"\nassert_eq 1 1 "ok"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/foo.test.sh scripts/other-name.sh
+git -C "$repo" commit -qm "comment mention only"
+run_case "$repo"
+if has_kind deleted_line; then f5b=1; else f5b=0; fi
+if [ "$f5a" = 1 ] && [ "$f5b" = 1 ]; then report F5 1; else report F5 0; fi
 
 finalize_test

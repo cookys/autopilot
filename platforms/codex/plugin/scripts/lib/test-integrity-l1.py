@@ -1593,7 +1593,8 @@ _TAUTOLOGY = {
 _SHELL_SOURCE = re.compile(
     r"(?:^|[\n;&|(`]|then\b|else\b|elif\b|do\b)\s*(?:source|\.)\s+([\"']?)([^\"'\s;|&]+)\1"
 )
-_SHELL_SCRIPTS_INVOKED = re.compile(r"(?:^|[\s\"'`])(scripts/[A-Za-z0-9_./-]+)")
+# A slash, quote, or other non-identifier may precede scripts/ (bash "$REPO_ROOT/scripts/x.sh").
+_SHELL_SCRIPTS_INVOKED = re.compile(r"(?:^|[^A-Za-z0-9_])(scripts/[A-Za-z0-9_./-]+)")
 _JS_REL_IMPORT = re.compile(
     r"""(?:require\s*\(\s*|from\s+|import\s+)(['"])(\.[^'"]+)\1"""
 )
@@ -1655,8 +1656,28 @@ def product_basenames_for_test(test_path):
     return candidates
 
 
+def _content_without_comment_lines(content):
+    """Drop lines whose first non-blank character is #. A comment mention is not a reference."""
+    kept = []
+    for line in content.splitlines():
+        if line.strip().startswith("#"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _is_product_target(path, test_path_regexes, surface_path_regexes):
+    """A target is a product file: not a test path and not an integrity-surface path."""
+    if matches_patterns(path, test_path_regexes):
+        return False
+    if matches_patterns(path, surface_path_regexes):
+        return False
+    return True
+
+
 def _referenced_product_paths(test_path, content, lang_key):
     """Product paths a deleted test's old content sources, requires, or imports."""
+    content = _content_without_comment_lines(content)
     refs = []
     if lang_key == "shell":
         for match in _SHELL_SOURCE.finditer(content):
@@ -1675,9 +1696,15 @@ def _referenced_product_paths(test_path, content, lang_key):
     return refs
 
 
-def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_paths):
-    """Rule (a): a deleted test is exempt when its target is deleted in the same range."""
-    deleted = {path for path in deleted_paths if path != test_path}
+def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_paths, test_path_regexes, surface_path_regexes):
+    """Rule (a): a deleted test is exempt when its product target is deleted in the same range.
+
+    Tests, helpers, and fixtures (test-path or surface-path matches) are not targets.
+    """
+    deleted = [
+        path for path in deleted_paths
+        if path != test_path and _is_product_target(path, test_path_regexes, surface_path_regexes)
+    ]
     wanted = product_basenames_for_test(test_path)
     for path in deleted:
         if os.path.basename(path) in wanted:
@@ -2143,7 +2170,9 @@ def main():
             old_text = shown.stdout or "" if shown.returncode == 0 else ""
             # Rule (a): co-deleted target exempts the whole file. Otherwise every
             # deleted line is still reported, same as before this precision pass.
-            if deleted_test_target_also_deleted(old_path, lang_key, old_text, deleted_paths):
+            if deleted_test_target_also_deleted(
+                old_path, lang_key, old_text, deleted_paths, test_path_regexes, surface_path_regexes
+            ):
                 continue
             for hunk in info.get("hunks", []):
                 old_current = hunk["old_start"]

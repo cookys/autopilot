@@ -10,6 +10,7 @@
 #     (foo.test.sh -> foo.sh, test_foo.py -> foo.py, foo_test.go -> foo.go, also
 #     dropping a leading test- or test_), or a product file the deleted test's
 #     old content sources/requires/imports that is deleted in the same range.
+#     Tests, helpers, and fixtures do not count as targets.
 #     If the test file is deleted and no target is deleted, every deleted line
 #     of that file is still reported.
 # (b) Otherwise deleted_line is reported only when the assertion-class line count

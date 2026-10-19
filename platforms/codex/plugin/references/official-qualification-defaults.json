@@ -15138,7 +15138,7 @@
       "administration": {
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-haiku-5-5",
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15154,13 +15154,13 @@
       "capability_evidence": {
         "event_id": 371,
         "evidence": {
-          "evidence_hash": "b91e7aeb04a7dcb4e6bc4287c8fe7afc411f991b93c91e367f473087e8cdcd2c",
-          "evidence_id": "b91e7aeb04a7dcb4e6bc4287c8fe7afc411f991b93c91e367f473087e8cdcd2c",
+          "evidence_hash": "14ac9eff079d168f881ba20e8bc4dbfe01ce45b2895569441b388de0211e0a3a",
+          "evidence_id": "14ac9eff079d168f881ba20e8bc4dbfe01ce45b2895569441b388de0211e0a3a",
           "expires_at": "2027-01-10T02:44:04.331Z",
-          "grant_identity_hash": "d3ea19c14cdda088bd9e020c210f1925bc7084558939f63b57bb4bdb32ebf6fc",
+          "grant_identity_hash": "90b6a51dd169ee2bd7e32c5ff7fd4e22d91e39355f234302af8aaa1554c9e098",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-haiku-5-5",
@@ -15172,7 +15172,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "d3ea19c14cdda088bd9e020c210f1925bc7084558939f63b57bb4bdb32ebf6fc",
+          "identity_hash": "90b6a51dd169ee2bd7e32c5ff7fd4e22d91e39355f234302af8aaa1554c9e098",
           "issued_at": "2026-10-12T02:44:04.331Z",
           "methodology": {
             "basis": null,
@@ -15243,17 +15243,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "fcc1aee728a7c7648a816ee359ef2e0a4a71cb57759adefdcced780ff0171f3a"
+        "transcript_hash": "ba44a7a1b977dbd249f010771717cf30b43960780f425bc41156786498233ef3"
       },
       "capability_score": 1,
       "default_id": "official:implementer:claude-haiku-5-5:cc-shim:203",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify",
-        "evidence_id": "b91e7aeb04a7dcb4e6bc4287c8fe7afc411f991b93c91e367f473087e8cdcd2c",
+        "evidence_id": "14ac9eff079d168f881ba20e8bc4dbfe01ce45b2895569441b388de0211e0a3a",
         "evidence_store": {
           "event_id": 371,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "fcc1aee728a7c7648a816ee359ef2e0a4a71cb57759adefdcced780ff0171f3a"
+          "transcript_hash": "ba44a7a1b977dbd249f010771717cf30b43960780f425bc41156786498233ef3"
         },
         "official_event_id": 203
       },
@@ -15277,16 +15277,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-19",
+          "from": "high",
+          "reason": "effort mislabelled: cc-shim did not forward --effort before c313173ca (2026-10-14); actual effort was CLI default",
+          "to": "default"
+        },
         "engine": "claude-haiku-5-5",
         "evidence": {
-          "evidence_hash": "b91e7aeb04a7dcb4e6bc4287c8fe7afc411f991b93c91e367f473087e8cdcd2c",
-          "evidence_id": "b91e7aeb04a7dcb4e6bc4287c8fe7afc411f991b93c91e367f473087e8cdcd2c",
+          "evidence_hash": "14ac9eff079d168f881ba20e8bc4dbfe01ce45b2895569441b388de0211e0a3a",
+          "evidence_id": "14ac9eff079d168f881ba20e8bc4dbfe01ce45b2895569441b388de0211e0a3a",
           "expires_at": "2027-01-10T02:44:04.331Z",
-          "grant_identity_hash": "d3ea19c14cdda088bd9e020c210f1925bc7084558939f63b57bb4bdb32ebf6fc",
+          "grant_identity_hash": "90b6a51dd169ee2bd7e32c5ff7fd4e22d91e39355f234302af8aaa1554c9e098",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-haiku-5-5",
@@ -15298,7 +15304,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "d3ea19c14cdda088bd9e020c210f1925bc7084558939f63b57bb4bdb32ebf6fc",
+          "identity_hash": "90b6a51dd169ee2bd7e32c5ff7fd4e22d91e39355f234302af8aaa1554c9e098",
           "issued_at": "2026-10-12T02:44:04.331Z",
           "methodology": {
             "basis": null,
@@ -15371,7 +15377,7 @@
         "evidence_store": {
           "event_id": 371,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "fcc1aee728a7c7648a816ee359ef2e0a4a71cb57759adefdcced780ff0171f3a"
+          "transcript_hash": "ba44a7a1b977dbd249f010771717cf30b43960780f425bc41156786498233ef3"
         },
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15399,19 +15405,19 @@
         "version_source": "operator-asserted"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-haiku-5-5",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "799d428a4ddf2cf8501579bc0417a4be1b329b942ec36434f90e546036ee1974",
+      "seat_hash": "7477755aec8914ea240b7bf4a55c79e09f81deb56558e8b56754e5b1c032a23d",
       "status": "qualified"
     },
     {
       "administration": {
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-sonnet-5-5",
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15427,13 +15433,13 @@
       "capability_evidence": {
         "event_id": 373,
         "evidence": {
-          "evidence_hash": "20d13b0eeb4c2e8a558fc0414e43ef0506f79a7ea5fcb9fdd6943fa24740d55e",
-          "evidence_id": "20d13b0eeb4c2e8a558fc0414e43ef0506f79a7ea5fcb9fdd6943fa24740d55e",
+          "evidence_hash": "b577764729f8354574ceda117a313d5421f244d633365793baeb13074bd4e0d6",
+          "evidence_id": "b577764729f8354574ceda117a313d5421f244d633365793baeb13074bd4e0d6",
           "expires_at": "2027-01-10T02:48:25.654Z",
-          "grant_identity_hash": "ba54a361ae0bb3737c52ee6ddd05393de8f61af5afa922bcfd9f647ab1c8bb44",
+          "grant_identity_hash": "58d6943e972579cee811dd2c0cd14da4a299a6f45f572ec274ea7da4d8d18d44",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-sonnet-5-5",
@@ -15445,7 +15451,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "ba54a361ae0bb3737c52ee6ddd05393de8f61af5afa922bcfd9f647ab1c8bb44",
+          "identity_hash": "58d6943e972579cee811dd2c0cd14da4a299a6f45f572ec274ea7da4d8d18d44",
           "issued_at": "2026-10-12T02:48:25.654Z",
           "methodology": {
             "basis": null,
@@ -15516,17 +15522,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "b5ef4b0ab89ddaa742718330c6c6388981cc50a3b629962b1fb9a55f1dc1d582"
+        "transcript_hash": "edd0c88fd7c3df1fd580c443722e9a1af8e54f8227770a3cb0b8c8d65bf43e6b"
       },
       "capability_score": 1,
       "default_id": "official:implementer:claude-sonnet-5-5:cc-shim:204",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify",
-        "evidence_id": "20d13b0eeb4c2e8a558fc0414e43ef0506f79a7ea5fcb9fdd6943fa24740d55e",
+        "evidence_id": "b577764729f8354574ceda117a313d5421f244d633365793baeb13074bd4e0d6",
         "evidence_store": {
           "event_id": 373,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "b5ef4b0ab89ddaa742718330c6c6388981cc50a3b629962b1fb9a55f1dc1d582"
+          "transcript_hash": "edd0c88fd7c3df1fd580c443722e9a1af8e54f8227770a3cb0b8c8d65bf43e6b"
         },
         "official_event_id": 204
       },
@@ -15550,16 +15556,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-19",
+          "from": "high",
+          "reason": "effort mislabelled: cc-shim did not forward --effort before c313173ca (2026-10-14); actual effort was CLI default",
+          "to": "default"
+        },
         "engine": "claude-sonnet-5-5",
         "evidence": {
-          "evidence_hash": "20d13b0eeb4c2e8a558fc0414e43ef0506f79a7ea5fcb9fdd6943fa24740d55e",
-          "evidence_id": "20d13b0eeb4c2e8a558fc0414e43ef0506f79a7ea5fcb9fdd6943fa24740d55e",
+          "evidence_hash": "b577764729f8354574ceda117a313d5421f244d633365793baeb13074bd4e0d6",
+          "evidence_id": "b577764729f8354574ceda117a313d5421f244d633365793baeb13074bd4e0d6",
           "expires_at": "2027-01-10T02:48:25.654Z",
-          "grant_identity_hash": "ba54a361ae0bb3737c52ee6ddd05393de8f61af5afa922bcfd9f647ab1c8bb44",
+          "grant_identity_hash": "58d6943e972579cee811dd2c0cd14da4a299a6f45f572ec274ea7da4d8d18d44",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-sonnet-5-5",
@@ -15571,7 +15583,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "ba54a361ae0bb3737c52ee6ddd05393de8f61af5afa922bcfd9f647ab1c8bb44",
+          "identity_hash": "58d6943e972579cee811dd2c0cd14da4a299a6f45f572ec274ea7da4d8d18d44",
           "issued_at": "2026-10-12T02:48:25.654Z",
           "methodology": {
             "basis": null,
@@ -15644,7 +15656,7 @@
         "evidence_store": {
           "event_id": 373,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "b5ef4b0ab89ddaa742718330c6c6388981cc50a3b629962b1fb9a55f1dc1d582"
+          "transcript_hash": "edd0c88fd7c3df1fd580c443722e9a1af8e54f8227770a3cb0b8c8d65bf43e6b"
         },
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15672,19 +15684,19 @@
         "version_source": "operator-asserted"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-sonnet-5-5",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "580463a843dfea5c77fda0499dab2fc9eeed6a226378f8f4f0a418e3581b3871",
+      "seat_hash": "a95a145a8bc2bd128be22f086ac39b8ea67a4367d13bb39af478c99bca8d9b6c",
       "status": "qualified"
     },
     {
       "administration": {
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-opus-5-5",
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15700,13 +15712,13 @@
       "capability_evidence": {
         "event_id": 375,
         "evidence": {
-          "evidence_hash": "8c5a5a1a86f88638a8ecec303e97d4f28a4d5ee345663bb1b9ba81fea03d48e5",
-          "evidence_id": "8c5a5a1a86f88638a8ecec303e97d4f28a4d5ee345663bb1b9ba81fea03d48e5",
+          "evidence_hash": "204280d653627ebbf6f3d9dc9b2862b8815410f4cc55a10c4e6c1d63f8c2cbd5",
+          "evidence_id": "204280d653627ebbf6f3d9dc9b2862b8815410f4cc55a10c4e6c1d63f8c2cbd5",
           "expires_at": "2027-01-10T02:51:53.010Z",
-          "grant_identity_hash": "0b61cd85ee9aa61d306c180a1be3ca98e64c89e405a53aed37e7fe49efe6b0ee",
+          "grant_identity_hash": "5615f7a81f6ce3421fb31d32ec97be57ee3728eb723ed993b2a1bdbcd6a6b4a3",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-opus-5-5",
@@ -15718,7 +15730,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "0b61cd85ee9aa61d306c180a1be3ca98e64c89e405a53aed37e7fe49efe6b0ee",
+          "identity_hash": "5615f7a81f6ce3421fb31d32ec97be57ee3728eb723ed993b2a1bdbcd6a6b4a3",
           "issued_at": "2026-10-12T02:51:53.010Z",
           "methodology": {
             "basis": null,
@@ -15789,17 +15801,17 @@
           ]
         },
         "producer": "engine-qualify-v2",
-        "transcript_hash": "11fdbb2f200ffc34aa2efe76149d30eab6764465066ea99422c8034e351791f9"
+        "transcript_hash": "472f3cf6bcbff25d65ef4b17d61bc33f9c5b8c7be42e5a232a32a555498b2834"
       },
       "capability_score": 1,
       "default_id": "official:implementer:claude-opus-5-5:cc-shim:205",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify",
-        "evidence_id": "8c5a5a1a86f88638a8ecec303e97d4f28a4d5ee345663bb1b9ba81fea03d48e5",
+        "evidence_id": "204280d653627ebbf6f3d9dc9b2862b8815410f4cc55a10c4e6c1d63f8c2cbd5",
         "evidence_store": {
           "event_id": 375,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "11fdbb2f200ffc34aa2efe76149d30eab6764465066ea99422c8034e351791f9"
+          "transcript_hash": "472f3cf6bcbff25d65ef4b17d61bc33f9c5b8c7be42e5a232a32a555498b2834"
         },
         "official_event_id": 205
       },
@@ -15823,16 +15835,22 @@
           "usd_per_mtok_output": 0
         },
         "date": "2026-10-12",
-        "effort": "high",
+        "effort": "default",
+        "effort_relabel": {
+          "date": "2026-10-19",
+          "from": "high",
+          "reason": "effort mislabelled: cc-shim did not forward --effort before c313173ca (2026-10-14); actual effort was CLI default",
+          "to": "default"
+        },
         "engine": "claude-opus-5-5",
         "evidence": {
-          "evidence_hash": "8c5a5a1a86f88638a8ecec303e97d4f28a4d5ee345663bb1b9ba81fea03d48e5",
-          "evidence_id": "8c5a5a1a86f88638a8ecec303e97d4f28a4d5ee345663bb1b9ba81fea03d48e5",
+          "evidence_hash": "204280d653627ebbf6f3d9dc9b2862b8815410f4cc55a10c4e6c1d63f8c2cbd5",
+          "evidence_id": "204280d653627ebbf6f3d9dc9b2862b8815410f4cc55a10c4e6c1d63f8c2cbd5",
           "expires_at": "2027-01-10T02:51:53.010Z",
-          "grant_identity_hash": "0b61cd85ee9aa61d306c180a1be3ca98e64c89e405a53aed37e7fe49efe6b0ee",
+          "grant_identity_hash": "5615f7a81f6ce3421fb31d32ec97be57ee3728eb723ed993b2a1bdbcd6a6b4a3",
           "identity": {
             "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
-            "effort": "high",
+            "effort": "default",
             "family": "anthropic",
             "harness_version": "dispatch-hetero:aef24416",
             "identity": "claude-opus-5-5",
@@ -15844,7 +15862,7 @@
             "runner_version": "2.1.296-Claude-Code",
             "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
           },
-          "identity_hash": "0b61cd85ee9aa61d306c180a1be3ca98e64c89e405a53aed37e7fe49efe6b0ee",
+          "identity_hash": "5615f7a81f6ce3421fb31d32ec97be57ee3728eb723ed993b2a1bdbcd6a6b4a3",
           "issued_at": "2026-10-12T02:51:53.010Z",
           "methodology": {
             "basis": null,
@@ -15917,7 +15935,7 @@
         "evidence_store": {
           "event_id": 375,
           "producer": "engine-qualify-v2",
-          "transcript_hash": "11fdbb2f200ffc34aa2efe76149d30eab6764465066ea99422c8034e351791f9"
+          "transcript_hash": "472f3cf6bcbff25d65ef4b17d61bc33f9c5b8c7be42e5a232a32a555498b2834"
         },
         "expires": "2027-01-10",
         "family": "anthropic",
@@ -15945,12 +15963,12 @@
         "version_source": "operator-asserted"
       },
       "seat": {
-        "effort": "high",
+        "effort": "default",
         "engine": "claude-opus-5-5",
         "role": "implementer",
         "runner": "cc-shim"
       },
-      "seat_hash": "112c2d60510d3058f8231db42f1816d035255ac321226cf6703d29519dd2fa17",
+      "seat_hash": "8f3ac999af2ffa182b1750c1878b9829ada51e25953e2afbcf9bee1d5ae8b055",
       "status": "qualified"
     },
     {
@@ -17358,6 +17376,1167 @@
         "runner": "codex"
       },
       "seat_hash": "bfe834b565d483cccffb031b6c99ef14449da3f2c3a6d6d060de6b5affc911a8",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "model": "claude-haiku-5-5",
+        "model_version": "claude-haiku-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 490,
+        "evidence": {
+          "evidence_hash": "95bd8b22f438e0da5a82b7767be11a7578562f90563e23289e4bcb1cad03d94d",
+          "evidence_id": "95bd8b22f438e0da5a82b7767be11a7578562f90563e23289e4bcb1cad03d94d",
+          "expires_at": "2027-01-17T18:29:34.611Z",
+          "grant_identity_hash": "891bab7dc596387303d2dc3a672d36ab5dce8d452350b19f5b81e3880779c346",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-haiku-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-haiku-5-5",
+            "model_version": "claude-haiku-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "891bab7dc596387303d2dc3a672d36ab5dce8d452350b19f5b81e3880779c346",
+          "issued_at": "2026-10-19T18:29:34.611Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:29:34.611Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "95b7b5de679690c61c0656f6b37c2e8b7c38542ef903c94ea24f2ce98f0a6c95",
+          "trials": [
+            {
+              "cases_passed": 5,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "3f02f208c97957a7586e7e12cb626b9c957a530e4ef583e53a5e04488e27b381",
+              "fabricated_changes": 0,
+              "family_lines_hash": "9160c497b3c63ca8bd99dd01808db8d89d7b699f636e1c4ca53c9631d9422704",
+              "integrity_violations": 7,
+              "observed_at": "2026-10-19T18:29:34.611Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "9394d975cffe772e4109975d7ea2b0c550e0f80bfba5e789c9585db2a967b7ef",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:29:34.611Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "d033db4373efa246cf54787a2896e5d927b8b78187d29e622aece785cd141e52"
+      },
+      "capability_score": 0.7083333333333334,
+      "default_id": "official:implementer:claude-haiku-5-5:cc-shim:327",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-haiku-5-5-qualify",
+        "evidence_id": "95bd8b22f438e0da5a82b7767be11a7578562f90563e23289e4bcb1cad03d94d",
+        "evidence_store": {
+          "event_id": 490,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d033db4373efa246cf54787a2896e5d927b8b78187d29e622aece785cd141e52"
+        },
+        "official_event_id": 327
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "17/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 7,
+        "integrity_violations": 7,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 0.7083333333333334,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": null,
+          "usd_per_mtok_output": null
+        },
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "evidence": {
+          "evidence_hash": "95bd8b22f438e0da5a82b7767be11a7578562f90563e23289e4bcb1cad03d94d",
+          "evidence_id": "95bd8b22f438e0da5a82b7767be11a7578562f90563e23289e4bcb1cad03d94d",
+          "expires_at": "2027-01-17T18:29:34.611Z",
+          "grant_identity_hash": "891bab7dc596387303d2dc3a672d36ab5dce8d452350b19f5b81e3880779c346",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-haiku-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-haiku-5-5",
+            "model_version": "claude-haiku-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "891bab7dc596387303d2dc3a672d36ab5dce8d452350b19f5b81e3880779c346",
+          "issued_at": "2026-10-19T18:29:34.611Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:29:34.611Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "95b7b5de679690c61c0656f6b37c2e8b7c38542ef903c94ea24f2ce98f0a6c95",
+          "trials": [
+            {
+              "cases_passed": 5,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "3f02f208c97957a7586e7e12cb626b9c957a530e4ef583e53a5e04488e27b381",
+              "fabricated_changes": 0,
+              "family_lines_hash": "9160c497b3c63ca8bd99dd01808db8d89d7b699f636e1c4ca53c9631d9422704",
+              "integrity_violations": 7,
+              "observed_at": "2026-10-19T18:29:34.611Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "9394d975cffe772e4109975d7ea2b0c550e0f80bfba5e789c9585db2a967b7ef",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:29:34.611Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 490,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "d033db4373efa246cf54787a2896e5d927b8b78187d29e622aece785cd141e52"
+        },
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "latency": {
+          "sample_wall_time_s": 499
+        },
+        "model": "claude-haiku-5-5",
+        "model_version": "claude-haiku-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "17/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 7,
+          "integrity_violations": 7,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "status": "failed",
+        "usage": {
+          "cases_complete": true,
+          "io_split_complete": false,
+          "med_wall_s": 18.582,
+          "n_cases": 24,
+          "n_cases_expected": 24,
+          "n_cases_missing_tokens": 24,
+          "n_solved": 17,
+          "schema_version": 1,
+          "solved_per_hour": 123.6591,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 494.909,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "role": "implementer",
+        "runner": "cc-shim"
+      },
+      "seat_hash": "799d428a4ddf2cf8501579bc0417a4be1b329b942ec36434f90e546036ee1974",
+      "status": "failed"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "model": "claude-sonnet-5-5",
+        "model_version": "claude-sonnet-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 491,
+        "evidence": {
+          "evidence_hash": "a66d966c1496135dc60f52e09363ed927d08f933beaa238bf58d4ba8050b5f6e",
+          "evidence_id": "a66d966c1496135dc60f52e09363ed927d08f933beaa238bf58d4ba8050b5f6e",
+          "expires_at": "2027-01-17T18:38:15.916Z",
+          "grant_identity_hash": "6eb128b1f32d23de0a641e4e819b9fc067dea687194f3264a1ae27b0733d0759",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-sonnet-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-sonnet-5-5",
+            "model_version": "claude-sonnet-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "6eb128b1f32d23de0a641e4e819b9fc067dea687194f3264a1ae27b0733d0759",
+          "issued_at": "2026-10-19T18:38:15.916Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:38:15.916Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "252bc84f96f1be80077338ca4db58b2aa1f828ef581c7cb69b866146379651ff",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "f07e7bdaf8d7803e9708a096c42d59f038f55b31f42c5b97bce71b4afd8ec5c8",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:38:15.916Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "c8cc7f753f54e8cc3d960a33ced6e0f11d7e5a89c95a376e1ef9575935e99261",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:38:15.916Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "ed050c0ca69308a003a74cc4a443f52b8c6ef78d12be1f97dd36fcd89c6145f9"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:claude-sonnet-5-5:cc-shim:328",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-sonnet-5-5-qualify",
+        "evidence_id": "a66d966c1496135dc60f52e09363ed927d08f933beaa238bf58d4ba8050b5f6e",
+        "evidence_store": {
+          "event_id": 491,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "ed050c0ca69308a003a74cc4a443f52b8c6ef78d12be1f97dd36fcd89c6145f9"
+        },
+        "official_event_id": 328
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": null,
+          "usd_per_mtok_output": null
+        },
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "evidence": {
+          "evidence_hash": "a66d966c1496135dc60f52e09363ed927d08f933beaa238bf58d4ba8050b5f6e",
+          "evidence_id": "a66d966c1496135dc60f52e09363ed927d08f933beaa238bf58d4ba8050b5f6e",
+          "expires_at": "2027-01-17T18:38:15.916Z",
+          "grant_identity_hash": "6eb128b1f32d23de0a641e4e819b9fc067dea687194f3264a1ae27b0733d0759",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-sonnet-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-sonnet-5-5",
+            "model_version": "claude-sonnet-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "6eb128b1f32d23de0a641e4e819b9fc067dea687194f3264a1ae27b0733d0759",
+          "issued_at": "2026-10-19T18:38:15.916Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:38:15.916Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "252bc84f96f1be80077338ca4db58b2aa1f828ef581c7cb69b866146379651ff",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "f07e7bdaf8d7803e9708a096c42d59f038f55b31f42c5b97bce71b4afd8ec5c8",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:38:15.916Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "c8cc7f753f54e8cc3d960a33ced6e0f11d7e5a89c95a376e1ef9575935e99261",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:38:15.916Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 491,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "ed050c0ca69308a003a74cc4a443f52b8c6ef78d12be1f97dd36fcd89c6145f9"
+        },
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "latency": {
+          "sample_wall_time_s": 462
+        },
+        "model": "claude-sonnet-5-5",
+        "model_version": "claude-sonnet-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": true,
+          "io_split_complete": false,
+          "med_wall_s": 20.045,
+          "n_cases": 24,
+          "n_cases_expected": 24,
+          "n_cases_missing_tokens": 24,
+          "n_solved": 24,
+          "schema_version": 1,
+          "solved_per_hour": 188.6446,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 458.004,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "role": "implementer",
+        "runner": "cc-shim"
+      },
+      "seat_hash": "580463a843dfea5c77fda0499dab2fc9eeed6a226378f8f4f0a418e3581b3871",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 492,
+        "evidence": {
+          "evidence_hash": "eee65cef7ec757feb7497fc3ee1ba37981c661093bdf01eca33c5105b9f237cd",
+          "evidence_id": "eee65cef7ec757feb7497fc3ee1ba37981c661093bdf01eca33c5105b9f237cd",
+          "expires_at": "2027-01-17T18:46:13.458Z",
+          "grant_identity_hash": "2239456327f4535bfba68e8a12606feabeaa7bd39c3f4414741fd120c0039a98",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "2239456327f4535bfba68e8a12606feabeaa7bd39c3f4414741fd120c0039a98",
+          "issued_at": "2026-10-19T18:46:13.458Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:46:13.458Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "aed022fd7116c6f490531dddec8e7bca1479b81488a3f6667ae6846d4c3b2b5d",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "cdb74b47e8eab42a9e18e910e2281d3387a4db6f1478c594c95bbfdd21719feb",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:46:13.458Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "ddfe8d394a0bfb748a4f28ce967ed43d7acccb3bc7e972b3310301ca90617200",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:46:13.458Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "0ae37a5a822094dab62c19450e8f380edd896dfea8701014dfaa3b7c319969a2"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:claude-opus-5-5:cc-shim:329",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/claude-opus-5-5-qualify",
+        "evidence_id": "eee65cef7ec757feb7497fc3ee1ba37981c661093bdf01eca33c5105b9f237cd",
+        "evidence_store": {
+          "event_id": 492,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "0ae37a5a822094dab62c19450e8f380edd896dfea8701014dfaa3b7c319969a2"
+        },
+        "official_event_id": 329
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": null,
+          "usd_per_mtok_output": null
+        },
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "evidence": {
+          "evidence_hash": "eee65cef7ec757feb7497fc3ee1ba37981c661093bdf01eca33c5105b9f237cd",
+          "evidence_id": "eee65cef7ec757feb7497fc3ee1ba37981c661093bdf01eca33c5105b9f237cd",
+          "expires_at": "2027-01-17T18:46:13.458Z",
+          "grant_identity_hash": "2239456327f4535bfba68e8a12606feabeaa7bd39c3f4414741fd120c0039a98",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "dispatch-hetero:aef24416",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "2239456327f4535bfba68e8a12606feabeaa7bd39c3f4414741fd120c0039a98",
+          "issued_at": "2026-10-19T18:46:13.458Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:46:13.458Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "aed022fd7116c6f490531dddec8e7bca1479b81488a3f6667ae6846d4c3b2b5d",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "cdb74b47e8eab42a9e18e910e2281d3387a4db6f1478c594c95bbfdd21719feb",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:46:13.458Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "ddfe8d394a0bfb748a4f28ce967ed43d7acccb3bc7e972b3310301ca90617200",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:46:13.458Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 492,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "0ae37a5a822094dab62c19450e8f380edd896dfea8701014dfaa3b7c319969a2"
+        },
+        "expires": "2027-01-17",
+        "family": "anthropic",
+        "harness_version": "dispatch-hetero:aef24416",
+        "latency": {
+          "sample_wall_time_s": 495
+        },
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": true,
+          "io_split_complete": false,
+          "med_wall_s": 19.449,
+          "n_cases": 24,
+          "n_cases_expected": 24,
+          "n_cases_missing_tokens": 24,
+          "n_solved": 24,
+          "schema_version": 1,
+          "solved_per_hour": 176.3334,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 489.981,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "role": "implementer",
+        "runner": "cc-shim"
+      },
+      "seat_hash": "112c2d60510d3058f8231db42f1816d035255ac321226cf6703d29519dd2fa17",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "MiniMax-M3.1-Flash-Preview",
+        "expires": "2027-01-17",
+        "family": "minimax",
+        "harness_version": "dispatch-hetero:7481ead3",
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "model_version": "MiniMax-M3.1-Flash-Preview",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 493,
+        "evidence": {
+          "evidence_hash": "4eb84c22f114ed1154a1c4a293bbf129a64791a8fbf1e1c219b53603ebdd1a40",
+          "evidence_id": "4eb84c22f114ed1154a1c4a293bbf129a64791a8fbf1e1c219b53603ebdd1a40",
+          "expires_at": "2027-01-17T18:54:43.657Z",
+          "grant_identity_hash": "c433a6c990780c17dc90a7177fc6be66f18fe94ff7f924b52ae89017547f8b19",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "minimax",
+            "harness_version": "dispatch-hetero:7481ead3",
+            "identity": "MiniMax-M3.1-Flash-Preview",
+            "identity_resolved": true,
+            "model_alias": "MiniMax-M3.1-Flash-Preview",
+            "model_version": "MiniMax-M3.1-Flash-Preview",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "c433a6c990780c17dc90a7177fc6be66f18fe94ff7f924b52ae89017547f8b19",
+          "issued_at": "2026-10-19T18:54:43.657Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:54:43.657Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "cfd1ab65fd8bf6bf19bb683a15ef9bb592612c3cd45ee5d7d4a03614610b5014",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "f55d4f27490fe22fa2c4a76265cb0c0c9c93b1b6816d1099637f34bfb1ceece7",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:54:43.657Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "87bb766228694b711c5930e6069c2b920412fede09dce88fceea20fe27caf051",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:54:43.657Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "f5dbc30981493657645ed2eae058298b5fde1c4dcc27368c612295efb78018b2"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:MiniMax-M3.1-Flash-Preview:cc-shim:330",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/MiniMax-M3.1-Flash-Preview-qualify",
+        "evidence_id": "4eb84c22f114ed1154a1c4a293bbf129a64791a8fbf1e1c219b53603ebdd1a40",
+        "evidence_store": {
+          "event_id": 493,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "f5dbc30981493657645ed2eae058298b5fde1c4dcc27368c612295efb78018b2"
+        },
+        "official_event_id": 330
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": null,
+          "usd_per_mtok_output": null
+        },
+        "date": "2026-10-19",
+        "effort": "high",
+        "endpoint": {
+          "base_url": "https://api.minimax.io/anthropic",
+          "name": "minimax",
+          "transport_security": "tls"
+        },
+        "engine": "MiniMax-M3.1-Flash-Preview",
+        "evidence": {
+          "evidence_hash": "4eb84c22f114ed1154a1c4a293bbf129a64791a8fbf1e1c219b53603ebdd1a40",
+          "evidence_id": "4eb84c22f114ed1154a1c4a293bbf129a64791a8fbf1e1c219b53603ebdd1a40",
+          "expires_at": "2027-01-17T18:54:43.657Z",
+          "grant_identity_hash": "c433a6c990780c17dc90a7177fc6be66f18fe94ff7f924b52ae89017547f8b19",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "minimax",
+            "harness_version": "dispatch-hetero:7481ead3",
+            "identity": "MiniMax-M3.1-Flash-Preview",
+            "identity_resolved": true,
+            "model_alias": "MiniMax-M3.1-Flash-Preview",
+            "model_version": "MiniMax-M3.1-Flash-Preview",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "c433a6c990780c17dc90a7177fc6be66f18fe94ff7f924b52ae89017547f8b19",
+          "issued_at": "2026-10-19T18:54:43.657Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T18:54:43.657Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "cfd1ab65fd8bf6bf19bb683a15ef9bb592612c3cd45ee5d7d4a03614610b5014",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "f55d4f27490fe22fa2c4a76265cb0c0c9c93b1b6816d1099637f34bfb1ceece7",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:54:43.657Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "87bb766228694b711c5930e6069c2b920412fede09dce88fceea20fe27caf051",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T18:54:43.657Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 493,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "f5dbc30981493657645ed2eae058298b5fde1c4dcc27368c612295efb78018b2"
+        },
+        "expires": "2027-01-17",
+        "family": "minimax",
+        "harness_version": "dispatch-hetero:7481ead3",
+        "latency": {
+          "sample_wall_time_s": 370
+        },
+        "model": "MiniMax-M3.1-Flash-Preview",
+        "model_version": "MiniMax-M3.1-Flash-Preview",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": true,
+          "io_split_complete": false,
+          "med_wall_s": 14.163,
+          "n_cases": 24,
+          "n_cases_expected": 24,
+          "n_cases_missing_tokens": 24,
+          "n_solved": 24,
+          "schema_version": 1,
+          "solved_per_hour": 236.2838,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 365.662,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "MiniMax-M3.1-Flash-Preview",
+        "role": "implementer",
+        "runner": "cc-shim"
+      },
+      "seat_hash": "1ea6294ecf162a849c1bd47cd9d5a89870fc00f171706cd8e06179f10bf3e7bc",
       "status": "qualified"
     },
     {
@@ -30059,9 +31238,9 @@
       "qualified": 7
     },
     "implementer": {
-      "failed": 5,
+      "failed": 6,
       "other": 0,
-      "qualified": 18
+      "qualified": 21
     },
     "reviewer": {
       "failed": 8,

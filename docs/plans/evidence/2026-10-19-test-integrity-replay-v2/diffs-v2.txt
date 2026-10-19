@@ -1,0 +1,269 @@
+GROUP 0be6405d hooks/tests/task-status-input.test.sh
+diff --git a/hooks/tests/task-status-input.test.sh b/hooks/tests/task-status-input.test.sh
+index 84aea51c4..6bc1c0b9a 100755
+--- a/hooks/tests/task-status-input.test.sh
++++ b/hooks/tests/task-status-input.test.sh
+@@ -24,7 +24,9 @@ PRODUCER="$REPO_ROOT/scripts/write-task-status-input.js"
+ CLI="$REPO_ROOT/bin/autopilot.js"
+ 
+ FX="$TEST_TMP/fx.json"
+-node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" <<'NODE' || fail "fixture build failed"
++# A failed fixture build must exit before any git -C "$REPO": fail() does not
++# exit, and an empty REPO makes git operate on the current directory.
++if ! node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" >"$TEST_TMP/fx.build.out" 2>"$TEST_TMP/fx.build.err" <<'NODE'
+ 'use strict';
+ const fs = require('fs');
+ const path = require('path');
+@@ -47,6 +49,10 @@ fs.writeFileSync(out, JSON.stringify({
+   terminalDigest: f.terminal.receipt_digest, candidate: f.candidate,
+ }));
+ NODE
++then
++  echo "fixture build failed: $(tr '\n' ' ' < "$TEST_TMP/fx.build.err")" >&2
++  exit 1
++fi
+ fx() { node -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(f[process.argv[2]]))' "$FX" "$1"; }
+ REPO="$(fx repo)"
+ TERMINAL_FILE="$(fx terminalFile)"
+@@ -133,10 +139,14 @@ assert_eq "valid" "$(field "$(cat "$TEST_TMP/prior.json")" 'r.evidence.campaigns
+ cp "$WO_BAK" "$WO"
+ 
+ # 5. after the merge, a refresh re-derives product_merged from git (nothing is asserted by the caller)
++# require_under_test_tmp refuses an empty or out-of-tmp REPO so git cannot
++# reset the current directory.
++require_under_test_tmp "$REPO"
+ git -C "$REPO" merge -q --ff-only feat/tsi || fail "fixture merge"
+ env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node "$PRODUCER" --repo "$REPO" --root-run-id "$ROOT_RUN_ID" >/dev/null 2>&1
+ status_task "$ROOT_RUN_ID"
+ assert_eq "true" "$(field "$__OUT" 'r.product_merged')" "post-merge refresh: product_merged true from git"
++require_under_test_tmp "$REPO"
+ git -C "$REPO" reset -q --hard "$(git -C "$REPO" rev-parse HEAD~1)" || fail "fixture reset"
+ 
+ # 6. a receipt the ledger does not pin never binds (tampered body, intact digest)
+
+GROUP 0be6405d hooks/tests/lib.sh
+diff --git a/hooks/tests/lib.sh b/hooks/tests/lib.sh
+index 803306acc..290b2d1da 100755
+--- a/hooks/tests/lib.sh
++++ b/hooks/tests/lib.sh
+@@ -414,6 +414,31 @@ fail() {
+   __TEST_FAIL_MSGS+=("$*")
+ }
+ 
++# require_under_test_tmp <path>
++# Stop a later `git -C "$path"` from falling through to the current directory
++# when setup failed and left the path empty. Exits the process (a subshell
++# call must not continue). Does not run git.
++require_under_test_tmp() {
++  local path="${1-}" real base
++  if [ -z "$path" ]; then
++    echo "require_under_test_tmp: path is empty" >&2
++    exit 1
++  fi
++  if [ ! -d "$path" ]; then
++    echo "require_under_test_tmp: path is not an existing directory: $path" >&2
++    exit 1
++  fi
++  real="$(realpath "$path")" || { echo "require_under_test_tmp: realpath failed for $path" >&2; exit 1; }
++  base="$(realpath "$TEST_TMP")" || { echo "require_under_test_tmp: realpath failed for TEST_TMP" >&2; exit 1; }
++  case "$real" in
++    "$base"/*) ;;
++    *)
++      echo "require_under_test_tmp: realpath $real is not strictly under TEST_TMP ($base)" >&2
++      exit 1
++      ;;
++  esac
++}
++
+ assert_eq() {
+   # assert_eq <actual> <expected> <msg>
+   if [ "$1" = "$2" ]; then
+
+GROUP 0be6405d hooks/tests/lib/task-status-input-fixture.js
+diff --git a/hooks/tests/lib/task-status-input-fixture.js b/hooks/tests/lib/task-status-input-fixture.js
+index 34929c3cc..3a03138bb 100644
+--- a/hooks/tests/lib/task-status-input-fixture.js
++++ b/hooks/tests/lib/task-status-input-fixture.js
+@@ -289,6 +289,9 @@ function buildFixture({ root, scratch, rootRunId }) {
+     minPanelSize: 1,
+     lifecycleReceiptRef: lifecycleRef,
+   }, {
++    // BL-0077: the default admits only with a full work-order fence. This
++    // fixture's intent is a TERMINAL_READY campaign, not effect admission.
++    preEffectAdmit: () => ({ ok: true }),
+     preflight: () => ({ passed: true }),
+     implement: () => ({ ...candidateRef, committed: true }),
+     scopeCheck: () => ({ passed: true }),
+@@ -315,7 +318,9 @@ function buildFixture({ root, scratch, rootRunId }) {
+       final_panel_seat_receipts: [seat],
+     }),
+   });
+-  if (terminal.status !== 'ready') throw new Error(`composition ended ${terminal.status}`);
++  if (terminal.status !== 'ready') {
++    throw new Error(`composition ended ${terminal.status}: ${terminal.reason || terminal.phase || ''}`);
++  }
+ 
+   let control = opened.control;
+   const append = (input) => {
+
+GROUP 749c224f hooks/tests/lib.sh
+diff --git a/hooks/tests/lib.sh b/hooks/tests/lib.sh
+index 3d68f99bf..84e42b3c5 100755
+--- a/hooks/tests/lib.sh
++++ b/hooks/tests/lib.sh
+@@ -177,6 +177,10 @@ HOOK_ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard"
+ mkdir -p "$HOOK_ENGINE_CAPABILITY_DIR" "$HOOK_ENGINE_SCORECARD_DIR"
+ export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
+ export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
++# Hook tests never start the SessionStart price refresh (it would reach the network).
++export AUTOPILOT_PRICES_FETCH=0
++# ...and never read the operator's real price cache: it would make ladder order depend on the host.
++export AUTOPILOT_PRICES_CACHE_DIR="$TEST_TMP/prices-cache"
+ 
+ # The session-mode gate in dispatch-hetero.sh reads ${HOME}/.autopilot/session-mode when this
+ # is unset — i.e. the OPERATOR's markers. A live l5/l6 marker there turned every dispatch test
+
+GROUP 16dd391e hooks/tests/dispatch-hetero-gc.test.sh
+diff --git a/hooks/tests/dispatch-hetero-gc.test.sh b/hooks/tests/dispatch-hetero-gc.test.sh
+deleted file mode 100755
+index 99ab766ca..000000000
+--- a/hooks/tests/dispatch-hetero-gc.test.sh
++++ /dev/null
+@@ -1,647 +0,0 @@
+-#!/usr/bin/env bash
+-# Tests for dispatch-hetero.sh --gc (stale worktree reaper)
+-. "$(dirname "$0")/lib.sh"
+-
+-# --- store isolation (evidence-discipline §9) ---------------------------------
+-# This suite drives real dispatch-hetero.sh runs, whose seat_strike_capture writes
+-# seat strikes through engine-capability-state.js. Without this the writes land in
+-# the OPERATOR's ~/.autopilot/engine-capability/strikes.jsonl — the 2026-08-22
+-# residue incident. Isolate, then ASSERT the real store was untouched at the end.
+-GC_CAP_ISOLATION_DIR="$TEST_TMP/engine-capability-gc"
+-mkdir -p "$GC_CAP_ISOLATION_DIR"
+-export ENGINE_CAPABILITY_DIR="$GC_CAP_ISOLATION_DIR"
+-REAL_CAP_STRIKES="$HOME/.autopilot/engine-capability/strikes.jsonl"
+-REAL_CAP_STRIKES_SIZE_BEFORE=0
+-[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_BEFORE=$(wc -c < "$REAL_CAP_STRIKES")
+-
+-private_orphan_state_dir() {
+-    printf '%s/autopilot-%s' "$TMPDIR" "${UID:-$(id -u)}"
+-}
+-
+-prepare_private_orphan_state_dir() {
+-    local dir
+-    dir="$(private_orphan_state_dir)"
+-    mkdir -m 700 -p "$dir"
+-    chmod 700 "$dir"
+-    printf '%s' "$dir"
+-}
+-
+-# Test 1: Default behavior - reaper disabled (no config or age 0)
+-test_reaper_disabled() {
+-    export TMPDIR="$TEST_TMP/tmp"
+-    mkdir -p "$TMPDIR"
+-    
+-    local scratch="$TEST_TMP/repo-disabled"
+-    git init -q "$scratch"
+-    git -C "$scratch" config user.email "test@example.com"
+-    git -C "$scratch" config user.name "Test User"
+-    git -C "$scratch" commit -q --allow-empty -m "initial"
+-    
+-    # Age 0 disables the reaper. State it in the scratch repo the way every
+-    # other case here does, rather than leaning on the ambient repo having no
+-    # config: since 5c53201f this one dogfoods the reaper at 14, and the
+-    # resolver walks $PWD then $REPO_ROOT, so an unstated age resolves to 14.
+-    # That the DEFAULT is 0 is the resolver's own claim, proved against a
+-    # plugin-shaped root in resolve-worktree-teardown.test.sh.
+-    mkdir -p "$scratch/.claude"
+-    printf -- '- stale_reaper_age_days: 0\n' > "$scratch/.claude/worktree-teardown-config.md"
+-
+-    cd "$scratch"
+-    local output
+-    output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+-    assert_eq 0 $? "reaper disabled exit code"
+-    cd - > /dev/null
+-    assert_contains "$output" "reaper disabled (stale_reaper_age_days=0)" "disabled message"
+GROUP 16dd391e hooks/tests/resolve-worktree-teardown.test.sh
+diff --git a/hooks/tests/resolve-worktree-teardown.test.sh b/hooks/tests/resolve-worktree-teardown.test.sh
+index c6bb1b51b..33b5af125 100755
+--- a/hooks/tests/resolve-worktree-teardown.test.sh
++++ b/hooks/tests/resolve-worktree-teardown.test.sh
+@@ -6,8 +6,8 @@
+ 
+ # The template tier is unreachable from inside this repo. The ladder walks $PWD
+ # then $REPO_ROOT before the template, $REPO_ROOT is derived from the script's
+-# own location, and since 5c53201f this repo dogfoods the reaper at 14 — so
+-# every in-repo call resolves to that instead. A shipped plugin carries no
++# own location, and this repo ships its own .claude/ override — so
++# in-repo calls resolve to that instead. A shipped plugin carries no
+ # .claude/ (checked: the Codex payload has none), so what a consuming project
+ # actually sees is a root holding only what the payload ships. Build that.
+ plugin_shaped_root() {
+@@ -36,8 +36,8 @@ test_default_config() {
+     output=$(resolve_unconfigured)
+ 
+     assert_contains "$output" '"teardown_hook": ""' "default hook should be empty"
+-    assert_contains "$output" '"stale_reaper_age_days": 0' "default age should be 0"
+-    assert_contains "$output" '"reaper_scope": "marker-only"' "default scope should be marker-only"
++    assert_not_contains "$output" 'stale_reaper_age_days' "removed key is not emitted"
++    assert_not_contains "$output" 'reaper_scope' "removed key is not emitted"
+     assert_contains "$output" '"max_leaf_worktrees_per_root": 4' "default leaf budget should be 4"
+     assert_contains "$output" '"source": "template"' "source should be template"
+     
+@@ -45,13 +45,6 @@ test_default_config() {
+     assert_eq 0 $? "JSON should be valid"
+ }
+ 
+-# Test 2: Field query for age
+-test_field_age() {
+-    local age
+-    age=$(resolve_unconfigured --field stale_reaper_age_days)
+-    assert_eq "$age" "0" "default age should be 0"
+-}
+-
+ # Test 3: Field query for hook
+ test_field_hook() {
+     local hook
+@@ -63,46 +56,23 @@ test_field_hook() {
+ test_config_override() {
+     local config="$TEST_TMP/config.md"
+     cat > "$config" << 'EOF'
+-- stale_reaper_age_days: 3
+ - teardown_hook: .claude/hooks/x.sh
+ EOF
+     
+     local output
+     output=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+     
+-    assert_contains "$output" '"stale_reaper_age_days": 3' "should override age"
+     assert_contains "$output" '"teardown_hook": ".claude/hooks/x.sh"' "should override hook"
+ }
+ 
+-# Test 5: Garbage age falls back to 0
+-test_garbage_age_fallback() {
+-    local config="$TEST_TMP/garbage-config.md"
+-    echo '- stale_reaper_age_days: banana' > "$config"
+-    
+GROUP 2210b470 hooks/tests/lib/review-candidate-stub-review.sh
+diff --git a/hooks/tests/lib/review-candidate-stub-review.sh b/hooks/tests/lib/review-candidate-stub-review.sh
+index 8f9cc1d0d..2687cd26e 100755
+--- a/hooks/tests/lib/review-candidate-stub-review.sh
++++ b/hooks/tests/lib/review-candidate-stub-review.sh
+@@ -15,6 +15,15 @@ printf '%s\n' "$model" >> "$RC_LOG"
+ if [ -n "${RC_DIFF_DIR:-}" ] && [ -n "$diff" ] && [ -f "$diff" ]; then
+   cp "$diff" "$RC_DIFF_DIR/$model.diff"
+ fi
++# BL-0146 D4: what the packet around the diff holds (tree listing, delta.diff), kept apart from
++# RC_DIFF_DIR whose every file the driver reads as a seat diff.
++if [ -n "${RC_PACKET_DIR:-}" ] && [ -n "$diff" ] && [ -f "$diff" ]; then
++  pdir="$(dirname "$diff")"
++  mkdir -p "$RC_PACKET_DIR"
++  if [ -d "$pdir/tree" ]; then (cd "$pdir/tree" && find . -type f | sort) > "$RC_PACKET_DIR/$model.tree"; fi
++  if [ -f "$pdir/delta.diff" ]; then cp "$pdir/delta.diff" "$RC_PACKET_DIR/$model.delta"; fi
++  if [ -f "$pdir/spec.md" ]; then cp "$pdir/spec.md" "$RC_PACKET_DIR/$model.spec"; fi
++fi
+ if [ "${RC_VERDICT:-ship}" = "fix" ]; then
+   printf '{"runner":"cc-shim","model":"%s","status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🔴 [rc-001] src/value.txt:1 planted defect: the value is wrong","no_finding_proof":null,"raw_log":null,"error":null,"usage":null}\n' "$model"
+   exit 0
+

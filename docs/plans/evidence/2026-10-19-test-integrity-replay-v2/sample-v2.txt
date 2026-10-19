@@ -1,0 +1,301 @@
+#0 i=0 deleted_line hooks/tests/task-status-input.test.sh:27 m=0be6405d added=SIM nadd=11
+   - node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" <<'NODE' || fail "fixture build failed"
+   + if ! node - "$REPO_ROOT" "$TEST_TMP/fx" "$ROOT_RUN_ID" "$FX" >"$TEST_TMP/fx.build.out" 2>"$TEST_TMP/fx.build.err" <<'NODE'
+#1 i=1 surface_touch hooks/tests/lib.sh:null m=0be6405d added=no nadd=25
+   - hooks/tests/lib.sh
+#2 i=2 surface_touch hooks/tests/lib/task-status-input-fixture.js:null m=0be6405d added=no nadd=6
+   - hooks/tests/lib/task-status-input-fixture.js
+#3 i=9 surface_touch hooks/tests/lib.sh:null m=749c224f added=no nadd=4
+   - hooks/tests/lib.sh
+#4 i=27 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:16 m=16dd391e added=no nadd=0
+   - 
+#5 i=29 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:18 m=16dd391e added=no nadd=0
+   - printf '%s/autopilot-%s' "$TMPDIR" "${UID:-$(id -u)}"
+#6 i=30 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:19 m=16dd391e added=no nadd=0
+   - }
+#7 i=33 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:22 m=16dd391e added=no nadd=0
+   - local dir
+#8 i=34 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:23 m=16dd391e added=no nadd=0
+   - dir="$(private_orphan_state_dir)"
+#9 i=37 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:26 m=16dd391e added=no nadd=0
+   - printf '%s' "$dir"
+#10 i=40 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:29 m=16dd391e added=no nadd=0
+   - # Test 1: Default behavior - reaper disabled (no config or age 0)
+#11 i=44 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:33 m=16dd391e added=no nadd=0
+   - 
+#12 i=45 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:34 m=16dd391e added=no nadd=0
+   - local scratch="$TEST_TMP/repo-disabled"
+#13 i=57 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:46 m=16dd391e added=no nadd=0
+   - mkdir -p "$scratch/.claude"
+#14 i=61 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:50 m=16dd391e added=no nadd=0
+   - local output
+#15 i=63 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:52 m=16dd391e added=no nadd=0
+   - assert_eq 0 $? "reaper disabled exit code"
+#16 i=65 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:54 m=16dd391e added=no nadd=0
+   - assert_contains "$output" "reaper disabled (stale_reaper_age_days=0)" "disabled message"
+#17 i=76 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:65 m=16dd391e added=no nadd=0
+   - git init -q "$scratch"
+#18 i=77 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:66 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.email "test@example.com"
+#19 i=83 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:72 m=16dd391e added=no nadd=0
+   - printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+#20 i=93 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:82 m=16dd391e added=no nadd=0
+   - cat > "$wt_path/.autopilot-worktree" <<EOF
+#21 i=94 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:83 m=16dd391e added=no nadd=0
+   - created_at=$aged_ts
+#22 i=96 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:85 m=16dd391e added=no nadd=0
+   - schema=1
+#23 i=100 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:89 m=16dd391e added=no nadd=0
+   - local output
+#24 i=101 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:90 m=16dd391e added=no nadd=0
+   - output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+#25 i=105 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:94 m=16dd391e added=no nadd=0
+   - assert_contains "$output" "\"reaped\"" "reaped key present"
+#26 i=106 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:95 m=16dd391e added=no nadd=0
+   - assert_contains "$output" "$wt_path" "worktree path in output"
+#27 i=109 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:98 m=16dd391e added=no nadd=0
+   - if [ -d "$wt_path" ]; then
+#28 i=110 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:99 m=16dd391e added=no nadd=0
+   - fail "worktree directory should be removed"
+#29 i=113 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:102 m=16dd391e added=no nadd=0
+   - # Branch should still resolve (detached HEAD kept)
+#30 i=114 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:103 m=16dd391e added=no nadd=0
+   - if ! git -C "$scratch" rev-parse -q --verify "$wt_branch" > /dev/null 2>&1; then
+#31 i=115 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:104 m=16dd391e added=no nadd=0
+   - fail "branch should still exist after reaping"
+#32 i=120 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:109 m=16dd391e added=no nadd=0
+   - 
+#33 i=122 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:111 m=16dd391e added=no nadd=0
+   - test_skip_live_locked() {
+#34 i=129 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:118 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.name "Test User"
+#35 i=132 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:121 m=16dd391e added=no nadd=0
+   - mkdir -p "$scratch/.claude"
+#36 i=137 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:126 m=16dd391e added=no nadd=0
+   - git -C "$scratch" worktree add -q "$wt_path" -b "$wt_branch"
+#37 i=138 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:127 m=16dd391e added=no nadd=0
+   - 
+#38 i=140 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:129 m=16dd391e added=no nadd=0
+   - local aged_ts=$((now - 200000))
+#39 i=145 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:134 m=16dd391e added=no nadd=0
+   - EOF
+#40 i=149 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:138 m=16dd391e added=no nadd=0
+   - exec 200>"$wt_path/.autopilot-worktree.lock"
+#41 i=155 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:144 m=16dd391e added=no nadd=0
+   - for _ in $(seq 1 50); do
+#42 i=165 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:154 m=16dd391e added=no nadd=0
+   - kill $lock_pid 2>/dev/null || true
+#43 i=169 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:158 m=16dd391e added=no nadd=0
+   - assert_contains "$output" '"skipped_live"' "skipped_live key present"
+#44 i=171 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:160 m=16dd391e added=no nadd=0
+   - # Directory should still exist
+#45 i=180 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:169 m=16dd391e added=no nadd=0
+   - test_skip_unmarked() {
+#46 i=182 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:171 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#47 i=183 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:172 m=16dd391e added=no nadd=0
+   - 
+#48 i=184 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:173 m=16dd391e added=no nadd=0
+   - local scratch="$TEST_TMP/repo-unmarked"
+#49 i=185 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:174 m=16dd391e added=no nadd=0
+   - git init -q "$scratch"
+#50 i=186 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:175 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.email "test@example.com"
+#51 i=188 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:177 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#52 i=191 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:180 m=16dd391e added=no nadd=0
+   - printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+#53 i=202 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:191 m=16dd391e added=no nadd=0
+   - 
+#54 i=204 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:193 m=16dd391e added=no nadd=0
+   - if grep -q "\"reaped\":" < <(echo "$output") && echo "$output" | grep -v "\"reaped\": \[\]"; then
+#55 i=217 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:206 m=16dd391e added=no nadd=0
+   - test_skip_unmarked
+#56 i=223 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:212 m=16dd391e added=no nadd=0
+   - 
+#57 i=227 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:216 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.name "Test User"
+#58 i=230 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:219 m=16dd391e added=no nadd=0
+   - mkdir -p "$scratch/.claude"
+#59 i=236 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:225 m=16dd391e added=no nadd=0
+   - 
+#60 i=244 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:233 m=16dd391e added=no nadd=0
+   - 
+#61 i=247 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:236 m=16dd391e added=no nadd=0
+   - output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+#62 i=251 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:240 m=16dd391e added=no nadd=0
+   - 
+#63 i=253 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:242 m=16dd391e added=no nadd=0
+   - if [ ! -d "$wt_path" ]; then
+#64 i=255 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:244 m=16dd391e added=no nadd=0
+   - fi
+#65 i=260 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:249 m=16dd391e added=no nadd=0
+   - # Test 6: Concurrent GC - second should no-op
+#66 i=267 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:256 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.email "test@example.com"
+#67 i=270 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:259 m=16dd391e added=no nadd=0
+   - 
+#68 i=278 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:267 m=16dd391e added=no nadd=0
+   - local now=$(date +%s)
+#69 i=279 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:268 m=16dd391e added=no nadd=0
+   - local aged_ts=$((now - 200000))
+#70 i=290 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:279 m=16dd391e added=no nadd=0
+   - sleep 30
+#71 i=294 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:283 m=16dd391e added=no nadd=0
+   - for _ in $(seq 1 50); do
+#72 i=304 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:293 m=16dd391e added=no nadd=0
+   - 
+#73 i=307 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:296 m=16dd391e added=no nadd=0
+   - 
+#74 i=311 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:300 m=16dd391e added=no nadd=0
+   - # Worktree should still exist since GC was blocked
+#75 i=316 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:305 m=16dd391e added=no nadd=0
+   - 
+#76 i=319 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:308 m=16dd391e added=no nadd=0
+   - # Test 7: Clock backward (future created_at) - should still reap
+#77 i=322 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:311 m=16dd391e added=no nadd=0
+   - mkdir -p "$TMPDIR"
+#78 i=329 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:318 m=16dd391e added=no nadd=0
+   - 
+#79 i=331 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:320 m=16dd391e added=no nadd=0
+   - printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+#80 i=333 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:322 m=16dd391e added=no nadd=0
+   - local wt_path="$scratch/wt-future"
+#81 i=336 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:325 m=16dd391e added=no nadd=0
+   - 
+#82 i=355 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:344 m=16dd391e added=no nadd=0
+   - fail "worktree with future timestamp should be reaped (negative age)"
+#83 i=362 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:351 m=16dd391e added=no nadd=0
+   - test_reap_unmarked_requires_yes() {
+#84 i=365 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:354 m=16dd391e added=no nadd=0
+   - 
+#85 i=369 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:358 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.name "Test User"
+#86 i=371 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:360 m=16dd391e added=no nadd=0
+   - 
+#87 i=373 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:362 m=16dd391e added=no nadd=0
+   - printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+#88 i=376 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:365 m=16dd391e added=no nadd=0
+   - local output
+#89 i=381 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:370 m=16dd391e added=no nadd=0
+   - assert_eq 2 $exit_code "reap-unmarked without --yes exit code"
+#90 i=394 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:383 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.email "test@example.com"
+#91 i=402 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:391 m=16dd391e added=no nadd=0
+   - # Write marker files
+#92 i=404 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:393 m=16dd391e added=no nadd=0
+   - created_at=$(date +%s)
+#93 i=407 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:396 m=16dd391e added=no nadd=0
+   - EOF
+#94 i=413 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:402 m=16dd391e added=no nadd=0
+   - # worktrees; the per-worktree gitdir info/exclude is ignored (verified live).
+#95 i=418 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:407 m=16dd391e added=no nadd=0
+   - .autopilot-worktree.lock
+#96 i=421 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:410 m=16dd391e added=no nadd=0
+   - # Check status - should be empty
+#97 i=424 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:413 m=16dd391e added=no nadd=0
+   - 
+#98 i=430 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:419 m=16dd391e added=no nadd=0
+   - # Test 10: --gc rewrites the signal-handler orphan log before stale enumeration.
+#99 i=435 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:424 m=16dd391e added=no nadd=0
+   - local scratch="$TEST_TMP/repo-orphan-hygiene"
+#100 i=439 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:428 m=16dd391e added=no nadd=0
+   - git -C "$scratch" commit -q --allow-empty -m "initial"
+#101 i=442 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:431 m=16dd391e added=no nadd=0
+   - git -C "$scratch" worktree add -q "$wt_path" -b orphan-retry
+#102 i=444 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:433 m=16dd391e added=no nadd=0
+   - local orphan_dir orphan_log
+#103 i=453 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:442 m=16dd391e added=no nadd=0
+   - cd "$scratch"
+#104 i=455 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:444 m=16dd391e added=no nadd=0
+   - exit_code=$?
+#105 i=458 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:447 m=16dd391e added=no nadd=0
+   - assert_eq 0 "$exit_code" "orphan hygiene exit code"
+#106 i=459 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:448 m=16dd391e added=no nadd=0
+   - if [ -d "$wt_path" ]; then
+#107 i=460 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:449 m=16dd391e added=no nadd=0
+   - fail "registered own-user orphan worktree should be retried and removed"
+#108 i=462 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:451 m=16dd391e added=no nadd=0
+   - __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+#109 i=464 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:453 m=16dd391e added=no nadd=0
+   - assert_file_absent "$orphan_log" "pruned empty orphan log should be removed"
+#110 i=488 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:477 m=16dd391e added=no nadd=0
+   - exit_code=$?
+#111 i=491 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:480 m=16dd391e added=no nadd=0
+   - assert_file_absent "$orphan_log" "absent orphan log stays absent"
+#112 i=493 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:482 m=16dd391e added=no nadd=0
+   - local wt_path="$scratch/wt-orphan-keep"
+#113 i=497 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:486 m=16dd391e added=no nadd=0
+   - local real_git fake_bin
+#114 i=508 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:497 m=16dd391e added=no nadd=0
+   - EOF
+#115 i=517 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:506 m=16dd391e added=no nadd=0
+   - __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+#116 i=518 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:507 m=16dd391e added=no nadd=0
+   - else
+#117 i=524 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:513 m=16dd391e added=no nadd=0
+   - 
+#118 i=534 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:523 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.email test@example.com
+#119 i=535 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:524 m=16dd391e added=no nadd=0
+   - git -C "$scratch" config user.name "Test User"
+#120 i=537 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:526 m=16dd391e added=no nadd=0
+   - wt_path="$scratch/wt-orphan-live"
+#121 i=539 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:528 m=16dd391e added=no nadd=0
+   - orphan_dir="$(prepare_private_orphan_state_dir)"
+#122 i=544 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:533 m=16dd391e added=no nadd=0
+   - lock_pid=$!
+#123 i=547 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:536 m=16dd391e added=no nadd=0
+   - sleep 0.1
+#124 i=568 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:557 m=16dd391e added=no nadd=0
+   - 
+#125 i=572 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:561 m=16dd391e added=no nadd=0
+   - [ -d "$log" ] || fail "failed rewrite must preserve original orphan log"
+#126 i=581 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:570 m=16dd391e added=no nadd=0
+   - 
+#127 i=582 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:571 m=16dd391e added=no nadd=0
+   - rm -rf "$TMPDIR/keep-path"; printf '%s\n' "$TMPDIR/gone" > "$log"
+#128 i=587 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:576 m=16dd391e added=no nadd=0
+   - (. "$REPO_ROOT/scripts/lib/worktree-reap.sh"; ORPHAN_LOG="\$1"; _wt_append_orphan_path "$appended"; : > "$done") >/dev/null 2>&1 &
+#129 i=589 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:578 m=16dd391e added=no nadd=0
+   - chmod +x "$hook"
+#130 i=591 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:580 m=16dd391e added=no nadd=0
+   - for i in {1..100}; do [ -e "$done" ] && break; sleep 0.02; done
+#131 i=593 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:582 m=16dd391e added=no nadd=0
+   - assert_contains "$(cat "$log")" "$appended" "rewrite never loses concurrent writer append"
+#132 i=596 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:585 m=16dd391e added=no nadd=0
+   - test_orphan_log_rewrite_failures_and_concurrent_append
+#133 i=599 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:588 m=16dd391e added=no nadd=0
+   - export TMPDIR="$TEST_TMP/tmp-lock-symlink"; mkdir -p "$TMPDIR"
+#134 i=601 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:590 m=16dd391e added=no nadd=0
+   - local orphan_dir log scratch="$TEST_TMP/repo-lock-symlink"
+#135 i=602 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:591 m=16dd391e added=no nadd=0
+   - local wt_path rc now aged_ts
+#136 i=606 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:595 m=16dd391e added=no nadd=0
+   - 
+#137 i=610 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:599 m=16dd391e added=no nadd=0
+   - assert_eq "$rc" 2 "orphan-log symlink lock fails closed"
+#138 i=611 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:600 m=16dd391e added=no nadd=0
+   - assert_eq "$(cat "$victim")" "$expected" "orphan-log lock open never truncates symlink victim"
+#139 i=612 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:601 m=16dd391e added=no nadd=0
+   - rm -f "${log}.lock" "$log"
+#140 i=621 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:610 m=16dd391e added=no nadd=0
+   - git -C "$scratch" worktree add -q "$wt_path" -b branch-lock-symlink
+#141 i=624 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:613 m=16dd391e added=no nadd=0
+   - ln -s "$victim" "$TMPDIR/.autopilot-gc.lock"
+#142 i=627 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:616 m=16dd391e added=no nadd=0
+   - [ -d "$wt_path" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "GC lock failure must preserve worktree"
+#143 i=629 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:618 m=16dd391e added=no nadd=0
+   - }
+#144 i=650 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:639 m=16dd391e added=no nadd=0
+   - 
+#145 i=655 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:644 m=16dd391e added=no nadd=0
+   - assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+#146 i=656 deleted_line hooks/tests/dispatch-hetero-gc.test.sh:645 m=16dd391e added=no nadd=0
+   - "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
+#147 i=659 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:39 m=16dd391e added=no nadd=6
+   - assert_contains "$output" '"stale_reaper_age_days": 0' "default age should be 0"
+#148 i=665 deleted_line hooks/tests/resolve-worktree-teardown.test.sh:105 m=16dd391e added=no nadd=6
+   - assert_eq "$parsed" "0" "node should parse JSON and extract age"
+#149 i=667 surface_touch hooks/tests/lib/review-candidate-stub-review.sh:null m=2210b470 added=no nadd=9
+   - hooks/tests/lib/review-candidate-stub-review.sh

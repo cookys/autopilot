@@ -1,0 +1,41 @@
+Commands and exit codes (repo root of hands/bl0060b/2).
+
+1. node docs/plans/evidence/2026-10-19-test-integrity-replay-v2/merge-set.js
+   exit 0
+   stdout: merge-set ok git60=60 old_record_shas=40 clean_absent=20 outside=0
+   Cross-check: git rev-list --first-parent --merges -60 a007fa65e returns 60 hashes, newest a007fa65e9558eb0e37d001dc0ed89c7e16d733d.
+   Old replay.json.gz has merge_sha only on violation records (40 distinct). All 40 are inside the git 60. The other 20 merges produced no records in the old replay (ranges_scanned 60, ranges_with_violations 40), so they have no merge_sha to compare. No old merge_sha falls outside the git 60. Not treated as a window mismatch.
+
+2. node scripts/replay-test-integrity.js --count 70 --out docs/plans/evidence/2026-10-19-test-integrity-replay-v2/replay-raw.json
+   exit 0
+   raw report: ranges_scanned 70, ranges_with_violations 12, records 671, counts_by_kind deleted_line 655 surface_touch 16, errors 0.
+   Checker is the worktree HEAD scripts/check-test-integrity.sh (precision-fixed rules).
+
+3. node docs/plans/evidence/2026-10-19-test-integrity-replay-v2/filter-replay.js
+   exit 0
+   stdout: filtered records=668 ranges_with_violations=11 errors=0
+   Wrote replay.json.gz and deleted replay-raw.json. No uncompressed replay.json left.
+   count_requested 60, ranges_scanned 60.
+
+4. node docs/plans/evidence/2026-10-19-test-integrity-replay-v2/stats.js
+   exit 0
+   stdout: stats records=668 groups=16
+   remaining versus old 1101: 668 - 1101 = -433.
+
+5. node docs/plans/evidence/2026-10-19-test-integrity-replay-v2/carryover.js
+   exit 0
+   stdout: carryover group=91 exact=85 of 150
+
+6. node docs/plans/evidence/2026-10-19-test-integrity-replay-v2/sample-v2.js
+   exit 0
+   stdout: sample 150 groups 7
+   Seed 20261019, same LCG Fisher-Yates as the old sample.js, first 150 indexes sorted ascending.
+
+No adjudication of true or false positives. Checker sources were not modified.
+
+7. env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node scripts/check-js-syntax.js < /dev/null
+   exit 0
+8. env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID bash scripts/check-canonical-invariants.sh < /dev/null
+   exit 0 (0 broken)
+
+Harness directive: no git commit in this session. The commit is left to the harness.

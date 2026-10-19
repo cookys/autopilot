@@ -1,0 +1,110 @@
+{
+  "total_remaining_records": 668,
+  "by_kind": {
+    "deleted_line": 655,
+    "surface_touch": 13
+  },
+  "ranges_scanned": 60,
+  "ranges_with_violations": 11,
+  "errors": 0,
+  "old_total": 1101,
+  "remaining_versus_old_1101": -433,
+  "groups": [
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "file": "hooks/tests/dispatch-hetero-gc.test.sh",
+      "kind": "deleted_line",
+      "count": 647
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "count": 7
+    },
+    {
+      "merge_sha": "6fcfed4b19dc9d9fe955665d42d669ff112e8670",
+      "file": ".github/workflows/test.yml",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "a8dac5e62b8fe54b31e94c0aec50495a2ab563b3",
+      "file": "evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "0be6405da288e3d8e9695311b042e53e15be99c6",
+      "file": "hooks/tests/lib.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "0723827736438ae757d801cc3049ebf867165abf",
+      "file": "hooks/tests/lib.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "749c224f4d1fbdd30bc1d9da7059a97a4e2e7240",
+      "file": "hooks/tests/lib.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "6ed65d183f6fbe57f35a7502cf3f9786bc843c98",
+      "file": "hooks/tests/lib/dispatch-review-fixtures.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "9883b63972b6bebbd2d9494ee1c39649d209954f",
+      "file": "hooks/tests/lib/dispatch-review-fixtures.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "6e92b7699ce699d62e0fb2b3ce263ed4e8e5ba7d",
+      "file": "hooks/tests/lib/review-candidate-driver.js",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "2210b4706565a425fbfc22be2e1bae7f98bb1e7f",
+      "file": "hooks/tests/lib/review-candidate-driver.js",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "6e92b7699ce699d62e0fb2b3ce263ed4e8e5ba7d",
+      "file": "hooks/tests/lib/review-candidate-stub-review.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "2210b4706565a425fbfc22be2e1bae7f98bb1e7f",
+      "file": "hooks/tests/lib/review-candidate-stub-review.sh",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "f682db55073fb513dc8a163b63426499e65647d5",
+      "file": "hooks/tests/lib/subagent-budget-fixture.js",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "0be6405da288e3d8e9695311b042e53e15be99c6",
+      "file": "hooks/tests/lib/task-status-input-fixture.js",
+      "kind": "surface_touch",
+      "count": 1
+    },
+    {
+      "merge_sha": "0be6405da288e3d8e9695311b042e53e15be99c6",
+      "file": "hooks/tests/task-status-input.test.sh",
+      "kind": "deleted_line",
+      "count": 1
+    }
+  ]
+}

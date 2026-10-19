@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0055 gate experiment ran 30 pairs on haiku-4-5 and ended FAIL-TRADE (constraints held 1/30 vs 29/30, features built 23/30 vs 17/30); report under docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/.
+
 - BL-0060 precision rules (merge 53dc0ad3f): `scripts/lib/test-integrity-l1.py` now (a) skips a wholly deleted test when the same range deletes the product file it tests, (b) reports `deleted_line` only on a net drop of assertion-class lines, and (c) does not treat a file added in the range as `surface_touch`. Planted controls N1-N8 are reported and false-positive classes F1-F5 are not. A second replay of the same 60 merges found 668 reports in 16 groups, 1 true positive and 15 false positives (93.8%), so the gate stays at `warn`. Evidence in `docs/plans/evidence/2026-10-19-test-integrity-replay-v2/`.
 
 - Affected-suites ownership (merge 8e78c69b8, BL-0050 prerequisite): a seed the combined walk did not attribute now gets its own bounded walk and counts as reached when that walk meets any suite present at head, and a test suite deleted in the range is not itself unreferenced. The selected suites, always-run set and chains are unchanged. Over the last 40 first-parent develop commits mode full drops from 26 to 2; miss-check-wide over 60 merges still finds 0 misses. Evidence in `docs/plans/evidence/2026-10-19-affected-suites-attribution/`.

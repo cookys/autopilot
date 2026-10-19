@@ -222,6 +222,7 @@ class LiveDirRefusedError extends Error {
 }
 
 const warnedOverrides = new Set(); // once per process per override path
+let warnedSsdFallback = false; // once per process for the no-RAM SSD fallback
 
 /**
  * Resolve the live-state base directory. Returns {base, source} where source is one of
@@ -284,10 +285,19 @@ function resolveLiveDir(opts = {}) {
     }
   }
 
-  // Every candidate rejected. Never assume a path is RAM.
-  warn('autopilot: no RAM-backed live-state directory found (findmnt/proc-mounts rejected every '
-    + 'candidate); falling back to ~/.autopilot (SSD). Set AUTOPILOT_LIVE_DIR to override.');
+  // Every candidate rejected. Never assume a path is RAM. Warn once per process, same
+  // latch as warnedOverrides (the message has no path key, so a boolean is enough).
+  if (!warnedSsdFallback) {
+    warnedSsdFallback = true;
+    warn('autopilot: no RAM-backed live-state directory found (findmnt/proc-mounts rejected every '
+      + 'candidate); falling back to ~/.autopilot (SSD). Set AUTOPILOT_LIVE_DIR to override.');
+  }
   return { base: path.join(os.homedir(), '.autopilot'), source: 'ssd-fallback' };
+}
+
+// Tests in this process share the latch. Call this before a case that must observe the first emission.
+function resetSsdFallbackWarningForTests() {
+  warnedSsdFallback = false;
 }
 
 /**
@@ -359,4 +369,5 @@ module.exports = {
   readLive,
   modelFamily,
   DEFAULT_MAX_AGE_MS,
+  resetSsdFallbackWarningForTests,
 };

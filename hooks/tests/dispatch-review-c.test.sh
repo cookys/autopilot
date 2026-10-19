@@ -100,6 +100,29 @@ assert_eq "2" "$EXIT" "preflight failure is exit 2"
 assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "preflight stderr is named"
 assert_eq "0" "$(grep -cx launch "$CR_LAUNCH_LOG")" "failed preflight never calls launch mode"
 
+# RED at e70241da: FAIL preflight failure/success leave no cleanroom preflight temp: expected '1', got '0' (260 passed, 2 failed).
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+OUT="$(TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" CR_PREFLIGHT_RC=2 CR_PREFLIGHT_ERR='userns blocked' \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "isolated preflight failure is exit 2"
+assert_contains "$OUT" 'cleanroom runtime unusable: userns blocked' "isolated preflight stderr is named"
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "preflight failure leaves no cleanroom preflight temp"
+rm -rf "$PF_ISOLATED"
+PF_ISOLATED="$(mktemp -d)"
+: > "$CR_LAUNCH_LOG"
+OUT="$(TMPDIR="$PF_ISOLATED" CR_LAUNCH_LOG="$CR_LAUNCH_LOG" CR_LAUNCH_ARGV="$CR_LAUNCH_ARGV" \
+  AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$CR_PKT" \
+  AUTOPILOT_CLEANROOM_BWRAP="$CR_BWRAP" AUTOPILOT_CLEANROOM_LAUNCHER="$CR_LAUNCHER" \
+  AUTOPILOT_CLEANROOM_CODEX_AUTH="$CR_AUTH" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$CR_CODEX" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "isolated preflight success still reviews"
+assert_eq "0" "$(find "$PF_ISOLATED" -name 'dispatch-review-cleanroom-preflight-*' | wc -l | tr -d ' ')" "preflight success leaves no cleanroom preflight temp"
+rm -rf "$PF_ISOLATED"
+
 # RED at base ceb7c81d: npm-wrapper layout was not a named gate
 CR_BADBIN="$TEST_TMP/codex-npm-wrapper"
 mkdir -p "$CR_BADBIN"

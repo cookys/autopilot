@@ -17,6 +17,7 @@ const { execFileSync } = require('child_process');
 const LIB = path.join(__dirname, 'live-state-dir.js');
 const {
   resolveLiveDir, sanitizeSessionId, readLive, modelFamily,
+  resetSsdFallbackWarningForTests,
 } = require(LIB);
 
 // The shared vector file lives at <repo>/hooks/tests/fixtures/; this test file exists at two depths
@@ -116,6 +117,7 @@ test('resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (lon
 });
 
 test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts ⇒ ssd-fallback', () => {
+  resetSsdFallbackWarningForTests();
   const fixtureDir = mkTmp('procmounts-none-');
   const procMounts = path.join(fixtureDir, 'mounts');
   fs.writeFileSync(procMounts, [
@@ -292,6 +294,7 @@ test('resolveLiveDir: accepted tmpfs override wins over everything else', () => 
 });
 
 test('resolveLiveDir: findmnt PRESENT but rejecting every candidate ⇒ ssd-fallback even when /proc/mounts says tmpfs', () => {
+  resetSsdFallbackWarningForTests();
   // Mutant guard (v2.36.2): `notFound` must be true ONLY for ENOENT. A findmnt that runs and
   // says "not a mount point" (exit 1, no '*' default in the fake) must NOT fall back to
   // /proc/mounts — otherwise a /proc/mounts row claiming tmpfs would accept a candidate
@@ -533,6 +536,46 @@ test('resolveLiveDir: 0777 under private parent accepted and chmod 0700', () => 
   });
   assert.strictEqual(r.source, 'xdg-inferred');
   assert.strictEqual(fs.statSync(cand).mode & 0o777, 0o700);
+});
+
+test('resolveLiveDir: ssd-fallback warning is once per process', () => {
+  // RED at e70241da: AssertionError warnings.length 2 !== 1 (two resolve calls each warned).
+  resetSsdFallbackWarningForTests();
+  const bindir = mkTmp('findmnt-ssd-once-');
+  makeFakeFindmnt(bindir, { '*': 'ext4' });
+  const warnings = [];
+  const baseOpts = {
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('run-user-ssd-once-'),
+    warn: (m) => warnings.push(m),
+  };
+  const first = resolveLiveDir(baseOpts);
+  const second = resolveLiveDir(baseOpts);
+  assert.strictEqual(warnings.length, 1, 'ssd-fallback warning is emitted once per process');
+  assert.strictEqual(first.source, 'ssd-fallback');
+  assert.deepStrictEqual(first, second, 'return value is identical on the suppressed call');
+  assert.match(warnings[0], /falling back to ~\/\.autopilot \(SSD\)/);
+
+  // Negative control: a second module instance does not share the dedup flag, so one call each warns twice.
+  const loadFresh = () => {
+    delete require.cache[require.resolve(LIB)];
+    return require(LIB).resolveLiveDir;
+  };
+  const warnA = [];
+  const warnB = [];
+  const callFresh = (bucket) => loadFresh()({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('run-user-ssd-fresh-'),
+    warn: (m) => bucket.push(m),
+  });
+  const freshA = callFresh(warnA);
+  const freshB = callFresh(warnB);
+  assert.strictEqual(warnA.length, 1);
+  assert.strictEqual(warnB.length, 1);
+  assert.strictEqual(warnA.length + warnB.length, 2, 'dedup state is not shared across module instances');
+  assert.deepStrictEqual(freshA, freshB);
 });
 
 test('modelFamily: positive vectors', () => {

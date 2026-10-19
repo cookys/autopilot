@@ -403,8 +403,10 @@ if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -e
         --bwrap "$CLEANROOM_BWRAP" >/dev/null 2>"$_pf_err" || _pf_rc=$?
       if [ "$_pf_rc" -ne 0 ]; then
         _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
+        rm -f "$_pf_err"
         die_precondition "cleanroom runtime unusable: ${_pf_first}"
       fi
+      rm -f "$_pf_err"
       _codex_lookup="${BIN:-codex}"
       command -v "$_codex_lookup" >/dev/null 2>&1 \
         || die_precondition "codex binary not found: $_codex_lookup"

@@ -9,16 +9,14 @@
  *     admits, denies, lifts, un-admits or creates a seat. `orderAdmittedSeats` returns a
  *     permutation of its input and nothing else.
  *   - The feed's `strike_events` are disclosure: `reconcileStrikeDisclosure` reports differences
- *     and returns the local strikes untouched. A feed `qualified` with no local row admits nothing
- *     (`admissionView` is the local set, always). A row that arrived from the feed is never local
+ *     and returns the local strikes untouched. A row that arrived from the feed is never local
  *     evidence.
+ *   - Admission reads this module only through scripts/lib/qualification-trust.js, and only under
+ *     qualification_feed.trust. This file still does not itself admit, deny, or lift a seat.
  *   - A missing, stale, hostile or unreachable document degrades to today's order. It never throws
  *     into an admission path: `loadMetrics` reports `error`, it does not raise for a fetch failure.
  *
  * Nothing here is signed or attested (ADR-0001); `digest` is a cache key.
- *
- * The admission code (engine-scorecard.js, resolve-review-loop.sh, adopt-qualification-defaults.js)
- * must never require this module; qualification-metrics.test.js enforces that.
  *
  * Node >= 20.10, built-ins only.
  */

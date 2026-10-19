@@ -33,6 +33,7 @@ const {
   canonicalJson,
   sha256,
 } = require('../src/engine/owner-kernel/canonical');
+const qualificationTrust = require('./lib/qualification-trust');
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
@@ -2023,6 +2024,73 @@ function strikeEnforcementMode() {
   return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'enforce' ? 'enforce' : 'shadow';
 }
 
+// Any local scorecard row for this seat — qualified, failed, expired, superseded
+// or revoked — is local evidence. The feed is never consulted for that seat.
+function hasLocalSeatRow(engine, runner, role, effort, seatKind, rows) {
+  const runnerNorm = normRunnerToken(runner);
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    if (row.record_kind === 'supersession') continue;
+    if (!sameEngine(row.engine, engine)) continue;
+    if (normRunnerToken(row.runner) !== runnerNorm) continue;
+    const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
+    if (storedRole !== role) continue;
+    if (seatEffortOf(row) !== effort) continue;
+    if (seatKindOf(row) !== seatKind) continue;
+    return true;
+  }
+  return false;
+}
+
+function feedSeatMatches(seat, engine, runner, role, effort) {
+  if (!seat || typeof seat !== 'object') return false;
+  if (!sameEngine(seat.engine, engine)) return false;
+  if (normRunnerToken(seat.runner) !== normRunnerToken(runner)) return false;
+  const storedRole = normalizeCapabilityRole(seat.role, { allowLegacy: true });
+  if (storedRole !== role) return false;
+  return seatEffortOf(seat) === effort;
+}
+
+// BL-0194 P6 stage B. One overlay, default seat kind only. The brain seat kind
+// and computeSeatProjectionStrict (--require-evidence) never call this.
+// `confirm` is stage C (one open-decision.js card, confirmations.jsonl). Until
+// that stage, confirm admits nothing from the feed, the same as off, and the
+// gate is not called. Feed strike_events are never read; a lifted_by changes nothing.
+function applyFeedAdmission(projection, engine, runner, role, nowMs, effort, storeDir, seatKind, partition) {
+  if (seatKind !== 'default') return null;
+  if (effort === undefined) return null;
+  if (hasLocalSeatRow(engine, runner, role, effort, seatKind, partition.ordinaryRows)) return null;
+  const mode = qualificationTrust.resolveTrustMode();
+  if (mode !== 'auto') return null;
+  const cacheDir = path.join(require('os').homedir(), '.autopilot', 'qualification-feeds');
+  // Absent cache is today's no-feed path: no gate call, no stderr.
+  if (!fs.existsSync(path.join(cacheDir, 'metrics', 'current.json'))) return null;
+  const gated = qualificationTrust.gate(cacheDir, nowMs);
+  if (!gated.ok) return null;
+  const match = qualificationTrust.usableQualificationRows(gated)
+    .find((row) => feedSeatMatches(row.seat, engine, runner, role, effort));
+  if (!match) return null;
+  projection.admission_status = 'qualified';
+  // Baseline instant 0: every local strike of this seat counts. The feed's
+  // administered_at does not reset them.
+  const fold = foldSeatStrikes(
+    seatHashSpellings(engine, runner, role, effort, seatKind), 0, nowMs, storeDir,
+  );
+  projection.strikes_since_pass = fold.strikesSincePass;
+  projection.critical_trigger = fold.criticalTrigger;
+  projection.rejected_strikes = fold.rejected;
+  projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
+  if (projection.critical_trigger
+      || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
+    projection.admission_status = 'requalify_required';
+    return fold.rows;
+  }
+  projection.admission_source = 'feed';
+  projection.feed_record_id = match.record_id;
+  projection.feed_content_digest = match.content_digest;
+  return fold.rows;
+}
+
 // The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
 // read time from the append-only stores — never mutates a stored row.
 // Optional `storeDir` selects the strikes.jsonl directory (defaults to
@@ -2078,6 +2146,11 @@ function computeSeatProjection(
         baseline.provenance.official_event_id === undefined ? 'unknown' : baseline.provenance.official_event_id
       }), which has now accumulated mechanical no-confidence in YOUR environment. Re-adopting the same default cannot clear it — it is the same administration. Re-baseline with a fresh local administration: ${cmd}`;
     }
+  } else {
+    const fedRows = applyFeedAdmission(
+      projection, engine, runner, role, nowMs, effort, storeDir, seatKind, partition,
+    );
+    if (fedRows) activeStrikeRows = fedRows;
   }
 
   return {

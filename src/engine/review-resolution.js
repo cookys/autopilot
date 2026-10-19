@@ -66,10 +66,13 @@ const ADDENDUM_SHA = /^[0-9a-f]{40,64}$/;
  * BL-0146 D3 (owner ruling d-3cf4dc4c, 2026-10-17: the seat is given the list): the spec addendum
  * that carries the earlier round's still-open findings to a seat of an incremental round (plan 2.5).
  *
- * Fixed shape, machine generated, claims only. Each finding line holds exactly: finding id, severity,
- * path:line, claim. No verdict, no reason from the earlier round, no commit message, no author or
- * disposition text: the only free text is the reviewer's own claim, collapsed to one line and capped.
- * Anything that does not fit the shape is refused (throws) rather than sanitised into the addendum.
+ * Fixed shape, machine generated, claims only. Each finding line holds exactly: finding id (or several
+ * ids that share one location, one claim and one severity), severity, path:line, claim. No verdict, no
+ * reason from the earlier round, no commit message, no author or disposition text: the only free text
+ * is the reviewer's own claim, collapsed to one line and capped. Anything that does not fit the shape
+ * is refused (throws) rather than sanitised into the addendum. Rows are merged only when location and
+ * the collapsed claim are identical and every merged row has the same severity; the line lists every
+ * id. Closure still wants one resolutions entry per id.
  *
  * @param {Array<{finding_id, severity, location, claim}>} rows already re-normalized stored findings,
  *   each with its `path:line` location; an empty list yields '' (nothing to carry, no addendum)
@@ -83,10 +86,12 @@ function buildPriorRoundAddendum(rows, heads) {
     throw new TypeError('addendum needs the reviewed head and the new head');
   }
   const seen = new Set();
-  const lines = rows.map((row) => {
+  const groups = [];
+  for (const row of rows) {
     const severity = SEVERITY_NAME.get(row && row.severity);
-    const claim = typeof (row && row.claim) === 'string'
-      ? row.claim.replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim().slice(0, ADDENDUM_CLAIM_MAX) : '';
+    const collapsed = typeof (row && row.claim) === 'string'
+      ? row.claim.replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim() : '';
+    const claim = collapsed.slice(0, ADDENDUM_CLAIM_MAX);
     if (!row || typeof row.finding_id !== 'string' || !ADDENDUM_FINDING_ID.test(row.finding_id)
         || seen.has(row.finding_id) || !severity
         || ADDENDUM_VERDICT_WORDS.test(claim) // guard:addendum_verdict
@@ -94,8 +99,14 @@ function buildPriorRoundAddendum(rows, heads) {
       throw new TypeError('addendum row is malformed');
     }
     seen.add(row.finding_id);
-    return `- [${row.finding_id}] | ${severity} | ${row.location} | ${claim}`;
-  });
+    // Same location, same collapsed claim, same severity: one line. A different severity stays apart.
+    const group = groups.find((item) => item.location === row.location
+      && item.collapsed === collapsed && item.severity === severity);
+    if (group) group.ids.push(row.finding_id);
+    else groups.push({ ids: [row.finding_id], severity, location: row.location, claim, collapsed });
+  }
+  const lines = groups.map((group) => `- [${group.ids.join(', ')}] | ${group.severity} | ${group.location} | ${group.claim}`);
+  const mergedIds = groups.some((group) => group.ids.length > 1);
   return [
     '',
     '== Prior round (machine generated from the stored seat artifacts of round N-1) ==',
@@ -105,6 +116,7 @@ function buildPriorRoundAddendum(rows, heads) {
     ...lines,
     'Required output for each open finding, inside FINDINGS: one JSON object',
     '{"findings": "<your own finding lines separated by \\n, or none>", "resolutions": [{"finding_id": "<id above>", "status": "resolved|still_present|invalid", "evidence": "path:line"}]}',
+    ...(mergedIds ? ['A line that lists several ids needs one resolutions entry per listed id, so every id is answered by every seat.'] : []),
     'Put the whole answer in FINDINGS as the single JSON object and do not also write the findings as separate lines.',
     'Every finding and every evidence must carry path:line.',
     'resolved and invalid need evidence path:line in a file of this packet; an entry without it counts as not answered.',

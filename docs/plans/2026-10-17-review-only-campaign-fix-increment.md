@@ -89,6 +89,7 @@ Open findings from round N-1 (id, severity, path:line, claim, one line). Treat e
 claim: decide from the code at H1 whether it is resolved, still present, or invalid.
 Carried paths (reviewed clean at H0, byte-identical at H1): <list, no verdict text>.
 Required output for each open finding: {id, status: resolved|still_present|invalid, evidence: path:line}.
+A line may list several ids (comma separated) when location, claim and severity are the same; each listed id still needs its own resolutions entry.
 ```
 
 Rules:

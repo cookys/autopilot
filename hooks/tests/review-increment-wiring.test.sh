@@ -170,9 +170,8 @@ function decisionChecks(W, S, tag) {
   // scanned before any seat is dispatched (A8). A claim the scanner reads as narrative, or one carrying
   // verdict words, sends the round to full.
   const addLines = (ok.addendum || '').split('\n').filter((l) => l.startsWith('- ['));
-  r.addendum_lists_every_prior_finding = addLines.length === 2
-    && addLines[0] === '- [prior:s1.rc-001] | critical | src/value.txt:1 | src/value.txt:1 planted defect'
-    && addLines[1] === '- [prior:s2.rc-001] | critical | src/value.txt:1 | src/value.txt:1 planted defect';
+  r.addendum_lists_every_prior_finding = addLines.length === 1
+    && addLines[0] === '- [prior:s1.rc-001, prior:s2.rc-001] | critical | src/value.txt:1 | src/value.txt:1 planted defect';
   const claimed = (claim) => JSON.stringify([{ finding_id: 'rc-001', claim, severity: '🔴', source: 'product-review' }]);
   const other = W.decideReturnIncrement(args(seedRoot('oc', { extraFind: claimed('src/value.txt:1 a different defect') })));
   r.addendum_in_binding = other.mode === 'incremental' && other.binding !== ok.binding;

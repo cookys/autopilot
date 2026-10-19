@@ -1,0 +1,51 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://cookys.github.io/model-dyno/schemas/qualification-seat.schema.json",
+ "title": "qualification seat file for engine-qualify --seat-file. Eight identity fields, strict TOKEN, no extras.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "engine",
+  "model",
+  "model_version",
+  "runner",
+  "role",
+  "effort",
+  "prompt_config_hash",
+  "corpus_version"
+ ],
+ "properties": {
+  "engine": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "model": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "model_version": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "runner": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "role": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "effort": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "prompt_config_hash": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  },
+  "corpus_version": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+  }
+ }
+}

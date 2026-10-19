@@ -106,6 +106,10 @@ const { extractJsonObject } = require('./lib/extract-json-object');
 const qualUsage = require('./lib/qualification-usage');
 const { checkEffortLabel } = require('./lib/qualification-effort-label');
 const { wilsonLower } = require('../src/engine/verification-strength');
+const { validateJsonSchema } = require('./validate-json-schema.js');
+const { buildV2Record } = require('./lib/qualification-record-v2.js');
+// Set only for --seat-file / --emit-record, before any exam scratch or evidence write.
+let headlessScratchParent = null;
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(REPO_ROOT, 'evals', 'capability-evidence-corpus.json');
@@ -252,6 +256,7 @@ const HELP = `Usage:
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
+    [--seat-file <json>] [--emit-record]
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
@@ -308,12 +313,116 @@ Exit codes:
   0 = qualification passed
   1 = qualification failed
   2 = usage/precondition error
+  With --seat-file or --emit-record, 0, 1, and 2 stay for those outcomes and
+  these codes also apply. Without either flag, 3, 4, and 5 are not used, and a
+  no_verdict run stays exit 1 (the 1-versus-3 split is headless only):
+  0 = qualification passed
+  1 = real qualification failure (status failed)
+  2 = usage or precondition error that is not about the seat file
+  3 = no_verdict or an infrastructure failure (the exam could not reach a verdict)
+  4 = seat file missing, unreadable, or schema-invalid
+  5 = emitted record failed validateRecord or checkRecordSemantics
 `;
 
 function usage(code, message = null) {
   if (message) process.stderr.write(`engine-qualify: ${message}\n`);
   (code === 0 ? process.stdout : process.stderr).write(HELP);
   process.exit(code);
+}
+
+function seatFileExit(message) {
+  process.stderr.write(`engine-qualify: ${message}\n`);
+  process.exit(4);
+}
+
+function loadSeatFile(filePath) {
+  const schemaPath = path.join(REPO_ROOT, 'schemas', 'qualification-seat.schema.json');
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath);
+  } catch (error) {
+    seatFileExit(`seat file missing or unreadable: ${error.message}`);
+  }
+  let doc;
+  try {
+    const source = raw.toString('utf8');
+    doc = JSON.parse(source);
+  } catch (error) {
+    seatFileExit(`seat file is not JSON: ${error.message}`);
+  }
+  let schema;
+  try {
+    schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+  } catch (error) {
+    seatFileExit(`seat schema unreadable: ${error.message}`);
+  }
+  const result = validateJsonSchema(schema, doc);
+  if (!result.valid) {
+    seatFileExit(`seat file schema-invalid: ${result.errors.join('; ')}`);
+  }
+  return doc;
+}
+
+function metricsLibPath() {
+  return path.join(__dirname, 'lib', 'qualification-' + 'metrics.js');
+}
+
+// validateRecord({semantic:true}) runs checkRecordSemantics. That module is not
+// required from this file (admission isolation scan). A child process runs both
+// checks and repeats the recordIdV1 predicate.
+function validateEmittedRecord(record) {
+  const child = [
+    'const q = require(process.argv[1]);',
+    'const raw = require("fs").readFileSync(0, "utf8");',
+    'const rec = JSON.parse(raw);',
+    'const validated = q.validateRecord(raw, { semantic: true });',
+    'let semantic = [];',
+    'try {',
+    '  const seat = rec.seat || {};',
+    '  const expected = q.recordIdV1(rec.producer, rec.transcript_hash, seat, seat.corpus_version, rec.administered_at);',
+    '  if (rec.record_id !== expected) semantic = [["RECORD_ID_MISMATCH", "record_id is not the v1 hash of its own fields"]];',
+    '} catch (error) { semantic = [["RECORD_ID_MISMATCH", String(error.message)]]; }',
+    'process.stdout.write(JSON.stringify({ errors: validated.errors.concat(semantic) }));',
+  ].join('\n');
+  const run = spawnSync(process.execPath, ['-e', child, metricsLibPath()], {
+    input: `${JSON.stringify(record)}\n`,
+    encoding: 'utf8',
+  });
+  if (run.status !== 0 || !run.stdout) {
+    return { errors: [['METRICS', (run.stderr || 'record check failed').trim()]] };
+  }
+  return JSON.parse(run.stdout);
+}
+
+function headlessOutcome(runResult) {
+  if (runResult && runResult.qualified === true) return 0;
+  const status = runResult && runResult.row && runResult.row.status;
+  if (status === 'failed') return 1;
+  return 3;
+}
+
+function emitHeadlessRecord(runResult) {
+  let row = runResult.row;
+  if (process.env.EQ_HEADLESS_LEGACY_ROW === '1' && row) {
+    const store = row.evidence_store && typeof row.evidence_store === 'object'
+      ? { ...row.evidence_store }
+      : {};
+    delete store.transcript_hash;
+    delete store.producer;
+    row = { ...row, evidence_store: store };
+  }
+  const record = buildV2Record(row, { originHostClass: 'cloud-api' });
+  if (!record) {
+    process.stderr.write('engine-qualify: emit-record rejected: buildV2Record returned null (legacy row without transcript_hash or producer)\n');
+    process.exit(5);
+  }
+  const checked = validateEmittedRecord(record);
+  const errors = checked.errors || [];
+  if (errors.length > 0) {
+    process.stderr.write(`engine-qualify: emit-record rejected: ${errors.map((entry) => entry.join(':')).join('; ')}\n`);
+    process.exit(5);
+  }
+  process.stdout.write(`${JSON.stringify(record)}\n`);
 }
 
 function token(value, label) {
@@ -361,6 +470,8 @@ function parseArgs(argv) {
     expiresDays: 30,
     store: null,
     emitRow: false,
+    emitRecord: false,
+    seatFile: null,
     plan: false,
     execute: false,
     taskClasses: [],
@@ -391,6 +502,7 @@ function parseArgs(argv) {
     ['--trials', 'trials'],
     ['--expires-days', 'expiresDays'],
     ['--store', 'store'],
+    ['--seat-file', 'seatFile'],
     ['--version-source', 'versionSource'],
     // implementer live-rail only (plan 2026-08-22): no broker transport.
     ['--dispatch-bin', 'dispatchBin'],
@@ -419,6 +531,10 @@ function parseArgs(argv) {
       options.emitRow = true;
       continue;
     }
+    if (arg === '--emit-record') {
+      options.emitRecord = true;
+      continue;
+    }
     if (arg === '--plan') {
       options.plan = true;
       continue;
@@ -439,6 +555,27 @@ function parseArgs(argv) {
     const value = argv[++index];
     if (scalarName) options[scalarName] = value;
     else options[repeatedName].push(value);
+  }
+  if (options.seatFile) {
+    const seat = loadSeatFile(options.seatFile);
+    if (seat.role !== options.role) {
+      usage(2, `--seat-file role ${seat.role} disagrees with subcommand ${options.role}`);
+    }
+    const fromSeat = [
+      ['engine', seat.engine],
+      ['model', seat.model],
+      ['modelVersion', seat.model_version],
+      ['runner', seat.runner],
+      ['effort', seat.effort],
+      ['promptConfigHash', seat.prompt_config_hash],
+    ];
+    for (const [key, value] of fromSeat) {
+      if (options[key] !== undefined && options[key] !== value) {
+        usage(2, `--seat-file ${key} disagrees with the explicit identity flag`);
+      }
+      options[key] = value;
+    }
+    options.corpusVersion = seat.corpus_version;
   }
   // Foreman --plan is a precondition dry-run: asset pins, conformance hash,
   // and the case list. It does not open a panel and does not sit the model.
@@ -2135,8 +2272,12 @@ function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, ra
 }
 
 function resolveEvidenceStore(storeOption) {
-  const requestedDir = storeOption || process.env.ENGINE_CAPABILITY_DIR;
-  const requestedFile = process.env.ENGINE_CAPABILITY_FILE;
+  const confined = headlessScratchParent !== null;
+  const requestedDir = confined ? storeOption : (storeOption || process.env.ENGINE_CAPABILITY_DIR);
+  const requestedFile = confined ? null : process.env.ENGINE_CAPABILITY_FILE;
+  if (confined && !requestedDir) {
+    throw new Error('headless qualification requires --store');
+  }
   let storeDir;
   if (requestedDir) {
     const resolved = path.resolve(expandTilde(requestedDir));
@@ -5652,6 +5793,11 @@ function buildEmittedRow(row, effortCheck) {
 
 function main() {
   const options = parseArgs(process.argv.slice(2));
+  const headless = Boolean(options.seatFile || options.emitRecord);
+  if (headless) {
+    if (!options.store) usage(2, '--store is required with --seat-file or --emit-record');
+    headlessScratchParent = path.join(path.resolve(expandTilde(options.store)), 'scratch');
+  }
   let runResult;
   try {
     runResult = runQualification(options);
@@ -5675,13 +5821,20 @@ function main() {
   if (effortCheck.status === 'mismatch') {
     process.stderr.write(`engine-qualify: WARNING effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}; an emitted row is marked effort_check=mismatch\n`);
   }
+  const exitCode = headless ? headlessOutcome(runResult) : (runResult.qualified ? 0 : 1);
+  if (options.emitRecord) {
+    process.stderr.write(`${JSON.stringify(verdict)}\n`);
+    if (exitCode === 3) process.exit(3);
+    emitHeadlessRecord(runResult);
+    process.exit(exitCode);
+  }
   if (options.emitRow) {
     process.stdout.write(`${JSON.stringify(buildEmittedRow(runResult.row, effortCheck))}\n`);
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(verdict)}\n`);
   }
-  process.exit(runResult.qualified ? 0 : 1);
+  process.exit(exitCode);
 }
 
 

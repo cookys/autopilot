@@ -116,6 +116,15 @@
         "prereg/stage-graph.amend-7-v11.json": "49de15b0341868a388865e7e3c3a851b3ab17e57974f524ad51bedb4536fbb48",
         "../../scripts/check-guidance-eval.js": "23f694fbff9c8bc62b3d0c81264442d53a042961f4c8b0b7dcdf018acc986ddc"
       }
+    },
+    "stage-graph.amend-8-v12-rebase": {
+      "date": "2026-10-19",
+      "effective_from": "v12",
+      "no_counted_cell_had_run": true,
+      "note": "v11 text re-frozen on develop 0badcf2c2 after cppfix changed test-policy.md link format; v11 results kept as record, not used for the cut. Digest is of the as-amended file.",
+      "files": {
+        "prereg/stage-graph.amend-8-v12-rebase.json": "ece9cc4ebea9221671675d2fff3f520dda2359b3574aaab3cf5e7e0e513ce6da"
+      }
     }
   },
   "stage-graph-g67": {

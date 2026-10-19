@@ -19,6 +19,7 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 | Problem | 300 | 正體中文 plain-language problem for the owner: no backticks, file paths or `name:line` |
 | Impact | 160 | what happens if it is never done |
 | Trigger | 240 | one line; for `fired` rows the date replaces the condition |
+| Trigger-Type | — | one line directly under Trigger. `date:YYYY-MM-DD` fires that day · `owner` waits for an owner decision or reply · `event` waits for an external or future event a machine cannot judge · `ready` the trigger already happened, or the work can start now · `peer` waits for an external reporter or a host release. When unsure, choose `event`. Do not guess `ready` |
 | Effort | — | `XS` · `S` · `M` · `L` · `XL`, optional urgent suffix `!` (alias `急`) |
 | Source | 160 | who/what surfaced it |
 | Pointer | 200 | an existing path under `pointer_roots`, or an id matching `id_pattern`; `none` only when the seven legacy fields (Title…Context, not the reporter fields) total ≤ 600 B |
@@ -28,7 +29,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 
 **Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Since…Impact (an Id alone keeps a legacy row at 900 B and counts toward its pointer threshold). Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
 
-**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
+**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Trigger-Type is required for new entries: once a file uses the field (or `required_fields` names it), every entry needs one line `- **Trigger-Type**: <value>` directly under Trigger. A file that never mentions it is unchanged. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
 
 **Opt-in**: Since, Origin, Reporter, Report, Reply, Problem and Impact are read only in a file that opts in — a `<!-- next-id -->` mark, or the field in `required_fields` (Reporter/Report/Reply follow a required Origin). Until then every style parses the entry exactly as the legacy gate did: in a heading or checklist entry such a line is `extra_content`, in a table such a column is ignored, and every check (the pre-push `--range` rule and `check-plan-graduation.js` included) sees that legacy entry. Opting in through `required_fields` is per field: listing Since alone makes Since a read field while an Origin line in the same entry is still `extra_content`; only the next-id mark opts in every field at once. Id keeps its own rule (BL-NNNN only after the same opt-in). A file written by `--to-reporter-fields` carries the mark.
 
@@ -46,6 +47,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 - **Problem**: 最終審查只要有一點意見，整個自動化流程就直接終止，無法暫停等人處理後再接續。
 - **Impact**: 每次都得重跑整個流程，成本高。
 - **Trigger**: next managed campaign whose final panel returns a finding
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED cuda 2026-10-03
 - **Pointer**: docs/backlog/final-panel-parking.md
@@ -59,6 +61,8 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 | bad_id | block | Id not `BL-NNNN` (heading/checklist; only with a next-id mark or Id required) · Id ≥ next-id · next-id mark malformed · BL Ids with no mark while Id is required |
 | duplicate_id | block | two rows share an Id (heading rows: only with a next-id mark or Id required) |
 | bad_since | block | Since is not a real `YYYY-MM-DD` |
+| bad_trigger_type | block | Trigger-Type is not `owner` / `event` / `ready` / `peer` / `date:YYYY-MM-DD` |
+| bad_trigger_date | block | Trigger-Type `date:` is not a real calendar date |
 | bad_origin | block | Origin is not peer/owner/self |
 | bad_reply | block | a Reply part is not `none` / `unknown` / `<date> <pointer>` |
 | peer_field_missing | block | Origin=peer without Reporter/Report/Reply, or their `；` counts differ |
@@ -103,7 +107,7 @@ The archive passes (`check-plan-graduation.js --fix`, `--archive`, `--migrate-ar
 - row: 1200
 ```
 
-`required_fields` may also be a `## Required Fields` section with one bullet per field; only Id, Since, Origin, Problem, Impact are accepted. Other keys: `id_pattern`, `allowlist_path`, `done_retention_days`, `## Pointer roots`, and for table conversion `## Columns` / `## Status map`.
+`required_fields` may also be a `## Required Fields` section with one bullet per field; only Id, Since, Origin, Problem, Impact, and Trigger-Type are accepted. Other keys: `id_pattern`, `allowlist_path`, `done_retention_days`, `## Pointer roots`, and for table conversion `## Columns` / `## Status map`.
 
 ## Styles
 

@@ -254,9 +254,12 @@ function normaliseEffort(fields, entryText) {
 // fixed by editing the field, never by moving prose to a sidecar — they must not make a row
 // "need migration". A rebuilt row carries the reporter fields over verbatim (rowFields in
 // planMigration), so moving one would not shorten them anyway.
+// A missing Trigger-Type is the same kind of hole: the migrator can only move a value that
+// already exists, so a rewrite would leave the gate violation in place. It is not migration.
 const REPORTER_FIELD_CODES = new Set([
   'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',
+  'bad_trigger_type', 'bad_trigger_date',
 ]);
 
 function needsMigration(entry, cfg, repoRoot, now) {
@@ -266,14 +269,14 @@ function needsMigration(entry, cfg, repoRoot, now) {
     (v.code === 'cap_exceeded' && (v.field === 'Title' || v.field === 'Problem' || v.field === 'Impact'))
     || v.code === 'done_not_moved'
     || REPORTER_FIELD_CODES.has(v.code)
-    || (v.code === 'missing_field' && gate.NEW_FIELDS.includes(v.field))
+    || (v.code === 'missing_field' && (gate.NEW_FIELDS.includes(v.field) || v.field === 'Trigger-Type'))
   ));
 }
 
 function renderEntry(title, fields) {
   // A rebuilt row keeps its reporter fields (dropping them would lose the reporter record).
   const order = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
-    'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
+    'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context'];
   const lines = [`### ${title}`];
   for (const k of order) {
     if (fields[k] == null || String(fields[k]).trim() === '') continue;
@@ -807,6 +810,9 @@ function planMigration(text, cfg, repoRoot, opts) {
       Source: source || 'unknown',
       Pointer: pointer,
     };
+    if (fields['Trigger-Type'] != null && String(fields['Trigger-Type']).trim() !== '') {
+      rowFields['Trigger-Type'] = fields['Trigger-Type'];
+    }
     // The reporter record (Id, Origin, Problem, …) is carried over verbatim: the rebuilt row
     // replaces the original, so a field left out here is lost from the backlog.
     for (const k of gate.NEW_FIELDS) {

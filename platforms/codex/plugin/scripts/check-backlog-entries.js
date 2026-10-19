@@ -42,13 +42,15 @@ const crypto = require('crypto');
 const { execFileSync, spawnSync } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
-const KNOWN_FIELDS = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
-const REQUIRED = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer'];
+const KNOWN_FIELDS = ['Title', 'Status', 'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context'];
+const REQUIRED = ['Title', 'Status', 'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer'];
+// Trigger-Type values. `date:` must be a real calendar day; anything else in that shape is bad_trigger_date.
+const TRIGGER_TYPE_WORDS = ['owner', 'event', 'ready', 'peer'];
 // Reporter fields. They never count toward the pointer threshold (R1), and a row carrying any of
 // them gets the larger row cap (R2). `required_fields` may name only REQUIRABLE ones; the peer
 // trio is required by `Origin: peer` itself.
 const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
-const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact'];
+const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact', 'Trigger-Type'];
 const PEER_FIELDS = ['Reporter', 'Report', 'Reply'];
 const ALL_FIELDS = KNOWN_FIELDS.concat(NEW_FIELDS);
 const ORIGINS = ['peer', 'owner', 'self'];
@@ -110,7 +112,7 @@ const CODES = [
   'pointer_missing', 'pointer_unresolved', 'pointer_required',
   'duplicate_title', 'duplicate_id', 'extra_content', 'done_not_moved',
   'unparseable_entry', 'config_raises_cap',
-  'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
+  'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'bad_trigger_type', 'bad_trigger_date', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',
 ];
 
@@ -278,9 +280,24 @@ function fingerprint(style, title) {
   return crypto.createHash('sha256').update(style + ':' + n, 'utf8').digest('hex');
 }
 
+function realCalendarDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso));
+  if (!m) return false;
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return dt.toISOString().slice(0, 10) === m[0];
+}
+
+// null when the value is allowed; otherwise bad_trigger_type or bad_trigger_date.
+function triggerTypeCode(raw) {
+  const v = String(raw).trim();
+  if (TRIGGER_TYPE_WORDS.includes(v)) return null;
+  if (v.startsWith('date:')) return realCalendarDate(v.slice(5)) ? null : 'bad_trigger_date';
+  return 'bad_trigger_type';
+}
+
 function fieldLine(line) {
-  const m = line.match(/^\s*-\s+\*\*([A-Za-z]+)\*\*\s*[:：]\s*(.*)$/)
-    || line.match(/^\s*-\s+([A-Za-z]+)\s*[:：]\s*(.*)$/);
+  const m = line.match(/^\s*-\s+\*\*([A-Za-z]+(?:-[A-Za-z]+)*)\*\*\s*[:：]\s*(.*)$/)
+    || line.match(/^\s*-\s+([A-Za-z]+(?:-[A-Za-z]+)*)\s*[:：]\s*(.*)$/);
   if (!m) return null;
   const name = m[1];
   if (!ALL_FIELDS.includes(name)) return { extra: true, raw: line };
@@ -669,6 +686,12 @@ function withNextIdMark(cfg, text) {
 // The parsers read such a field only once the file opts in: a next-id mark, or the field in
 // `required_fields` (Reporter/Report/Reply also follow a required Origin, since the peer rule
 // reads them together). Otherwise the entry is parsed exactly as the old gate parsed it.
+// Required for new entries: once the file uses Trigger-Type (or required_fields names it),
+// every entry must carry one. A legacy file that never mentions the field is unchanged.
+function triggerTypeRequired(cfg) {
+  return Boolean(cfg && (cfg.trigger_type_adopted || (cfg.required_fields || []).includes('Trigger-Type')));
+}
+
 function fieldOptedIn(cfg, f) {
   if (!cfg) return false;
   if (cfg.next_id_mark) return true;
@@ -765,6 +788,7 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
     });
   }
   for (const f of REQUIRED) {
+    if (f === 'Trigger-Type' && !triggerTypeRequired(cfg)) continue;
     const val = fields[f];
     if (val == null || String(val).trim() === '') {
       if (f === 'Pointer') {
@@ -816,6 +840,24 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
         title,
         field: 'Status',
         detail: String(fields.Status),
+      });
+    }
+  }
+  if (fields['Trigger-Type'] != null && String(fields['Trigger-Type']).trim() !== '') {
+    const code = triggerTypeCode(fields['Trigger-Type']);
+    if (code === 'bad_trigger_date') {
+      vios.push({
+        code: 'bad_trigger_date',
+        title,
+        field: 'Trigger-Type',
+        detail: `${String(fields['Trigger-Type']).trim()} (not a real calendar date)`,
+      });
+    } else if (code === 'bad_trigger_type') {
+      vios.push({
+        code: 'bad_trigger_type',
+        title,
+        field: 'Trigger-Type',
+        detail: `${String(fields['Trigger-Type']).trim()} (expected owner|event|ready|peer|date:YYYY-MM-DD)`,
       });
     }
   }
@@ -904,7 +946,9 @@ function checkNextId(text, entries, cfg) {
 function collectViolations(text, cfg, repoRoot, now, existsFn) {
   const style = cfg.style || 'heading';
   const entries = collectEntries(text, style, cfg);
-  const ecfg = withNextIdMark(cfg, text);
+  const adopted = /(?:^|\n)\s*-\s+(?:\*\*)?Trigger-Type(?:\*\*)?\s*[:：]/u.test(String(text || ''))
+    || /\|[^\n]*Trigger-Type/u.test(String(text || ''));
+  const ecfg = Object.assign({}, withNextIdMark(cfg, text), { trigger_type_adopted: adopted });
   const violations = checkCapsRaised(cfg);
   const titles = new Map();
   const ids = new Map();
@@ -1245,7 +1289,7 @@ function updateAllowlist(allow, allowPath, style, annotated) {
 function miniHeading(fields) {
   const title = fields.Title;
   const keys = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
-    'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
+    'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context'];
   const bullets = keys
     .filter((k) => fields[k] != null)
     .map((k) => `- **${k}**: ${fields[k]}`)
@@ -1264,6 +1308,7 @@ function runSelfTest() {
       Title: 'Gate self-test row',
       Status: 'open',
       Trigger: 'when the fixture runs',
+      'Trigger-Type': 'event',
       Effort: 'S',
       Source: 'self-test',
       Pointer: 'docs/plans/ok.md',
@@ -1442,6 +1487,11 @@ function runSelfTest() {
     );
     add('duplicate_id-heading', 'heading',
       mark(2) + miniHeading(peer) + '\n' + miniHeading({ ...peer, Title: 'Another row' }), ['duplicate_id']);
+    const noType = { ...base, Title: 'Missing trigger type row' };
+    delete noType['Trigger-Type'];
+    add('missing_field-trigger-type', 'heading', miniHeading(base) + '\n' + miniHeading(noType), ['missing_field']);
+    add('bad_trigger_type', 'heading', miniHeading({ ...base, 'Trigger-Type': 'soon' }), ['bad_trigger_type']);
+    add('bad_trigger_date', 'heading', miniHeading({ ...base, 'Trigger-Type': 'date:2026-02-31' }), ['bad_trigger_date']);
     add('bad_since', 'heading', mark(2) + miniHeading({ ...peer, Since: '2026-13-40' }), ['bad_since']);
     add('bad_origin', 'heading', mark(2) + miniHeading({ ...peer, Origin: 'external' }), ['bad_origin']);
     add('bad_reply', 'heading', mark(2) + miniHeading({ ...peer, Reply: 'replied' }), ['bad_reply']);

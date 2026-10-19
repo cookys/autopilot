@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0252 -->
+<!-- next-id: BL-0253 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -694,7 +694,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: original operator 2026-09-19 Phase 0 ("值,先詳細寫成 plan 留 backlog,我們應該多經歷幾輪再來繼續"); restored 2026-10-19; dropped by 5f3aa3b1d
 - **Pointer**: docs/plans/2026-09-19-roundtable.md
-- **Context**: Phase 0 (3 seats, 3 rounds) proved the protocol. Transport was designed on fleet, conflicting with the later rule (discussion via hetero; fleet notifies only), so change plan first. 2026-10-19 owner asked progress; waits on card d-10b6ae78.
+- **Context**: Room-log: utterances append to room.jsonl; windows only read it. Windows A and B built and owner-approved 2026-10-19. Fleet transport excepts hetero discussion; review stays hetero. Skill still waits on its trigger. Detail is in Pointer.
 
 ### roundtable - a non-Claude seat is addressed through the host's switchboard courier handle (Phase 0 finding F1)
 - **Id**: BL-0217
@@ -1208,4 +1208,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PEER-REPORTED openclaw hangar 2026-10-19
 - **Pointer**: docs/backlog/fleet-child-lifetime-parent-contract.md
-- **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable.
+- **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable. On 2026-10-19 fleet 650f649 took effect on aimax395: FLEET_* children and non-TUI Claude sessions become ephemeral and drop ~10s after disconnect. Verify when starting.
+
+### roundtable follow-ups deferred by the second review
+- **Id**: BL-0252
+- **Status**: open
+- **Since**: 2026-10-19
+- **Origin**: self
+- **Problem**: 第二輪審查把四件圓桌後續留到下次再做：三行程鎖競爭、殘留暫存檔、重複系統列，以及用法說明與實際參數不符。
+- **Impact**: 高競爭下仍可能互搶；殘檔與重複列會累積；操作者看 USAGE 會漏掉已接受的參數。
+- **Trigger**: next time room-log.js or roundtable-window.js is touched
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: the second-generation review of the roundtable work
+- **Pointer**: docs/backlog/roundtable-follow-ups.md
+- **Context**: Four deferred points: a three-process reclaim/release race, leftover lock files, duplicate skipped-seat rows, and USAGE lagging parseCli. Detail is in the Pointer.

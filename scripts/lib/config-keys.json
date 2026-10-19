@@ -4872,6 +4872,60 @@
       "doc": null,
       "relates": [],
       "note": "When set to 1, the t14 gate tests refresh docs/plans/evidence/2026-10-19-t14-gate-experiment/s*-red.txt. Default is unset, and the tests leave those files alone. Paths written into the transcripts use the placeholder /tmp/ORCH-GATE-TEST-TMP."
+    },
+    {
+      "name": "AUTOPILOT_ROOMS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/room-log.js",
+        "scripts/roundtable-window.js",
+        "mods/roundtable/register.ts"
+      ],
+      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "relates": [],
+      "note": "Parent of per-room directories. Unset means $HOME/.autopilot/rooms. Read by scripts/lib/room-log.js."
+    },
+    {
+      "name": "ROUNDTABLE_FLEET_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "fleet",
+      "readers": [
+        "scripts/roundtable-window.js"
+      ],
+      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "relates": [],
+      "note": "Executable used for fleet send. Tests point it at a fake. Default is fleet."
+    },
+    {
+      "name": "ROUNDTABLE_TMUX_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "tmux",
+      "readers": [
+        "scripts/roundtable-window.js"
+      ],
+      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "relates": [],
+      "note": "tmux binary for open. Tests inject a fake. Default is tmux."
+    },
+    {
+      "name": "ROUNDTABLE_SEATS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/roundtable-window.js"
+      ],
+      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "relates": [],
+      "note": "Comma-separated courier handles used when --seats is omitted. Else say-row senders other than owner and moderator."
     }
   ]
 }

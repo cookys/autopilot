@@ -28,9 +28,15 @@ const USAGE = `roundtable-window.js — window A (tmux)
       One-line prompt. Enter appends a say from owner and fleet-sends it
       to every seat. A line ending in a backslash continues on the next
       line. An empty line is ignored. Ctrl-D or exit quits.
-  send ROOM TEXT... [--seats h1,h2]
+  send ROOM TEXT...
       Non-interactive append-and-send (what input uses).
+      TEXT is the remaining arguments after ROOM, joined by one space,
+      verbatim. A word that looks like an option is text.
 
+  --help, -h, --no-color, --once, and --seats are read only before the
+  subcommand. A literal -- ends option parsing. tail still accepts --once
+  after ROOM. input still accepts --seats after ROOM. send does not:
+  put --seats before the subcommand.
   --no-color    ANSI off. NO_COLOR does the same.
   Colour is ANSI foreground only. Same roles as window B:
   owner = you are here (38;5;173, nearest to PALETTE.here / claude),
@@ -122,14 +128,45 @@ function parseCli(argv) {
   const rest = [];
   let seats = null;
   let once = false;
+  let options = true;
+  let cmd = null;
+  let roomSeen = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--help' || a === '-h') return { help: true, rest, seats, once };
-    if (a === '--no-color') continue;
-    if (a === '--once') { once = true; continue; }
-    if (a === '--seats') {
+    if (options && a === '--') {
+      options = false;
+      continue;
+    }
+    if (options && cmd === null && (a === '--help' || a === '-h')) {
+      return { help: true, rest, seats, once };
+    }
+    if (options && cmd === null && a === '--no-color') continue;
+    if (options && a === '--once' && !(cmd === 'send' && roomSeen)) {
+      once = true;
+      continue;
+    }
+    if (options && a === '--seats' && cmd !== 'send') {
       seats = argv[i + 1];
       i += 1;
+      continue;
+    }
+    if (options && a === '--seats' && cmd === 'send' && !roomSeen) {
+      seats = argv[i + 1];
+      i += 1;
+      continue;
+    }
+    if (cmd === null) {
+      cmd = a;
+      rest.push(a);
+      continue;
+    }
+    if (!roomSeen) {
+      roomSeen = true;
+      rest.push(a);
+      if (cmd === 'send') {
+        rest.push(...argv.slice(i + 1));
+        break;
+      }
       continue;
     }
     rest.push(a);
@@ -140,6 +177,9 @@ function parseCli(argv) {
 function assertHandle(handle) {
   if (typeof handle !== 'string' || handle.trim() === '') {
     throw new Error('empty seat handle');
+  }
+  if (handle.startsWith('-')) {
+    throw new Error(`rejected seat handle (starts with a dash): ${handle}`);
   }
   if (handle.includes('--local')) {
     throw new Error(`rejected seat handle (host-plus-pane form contains --local): ${handle}`);
@@ -158,20 +198,27 @@ function resolveSeats(room, cliSeats, env) {
     if (env.ROUNDTABLE_SEATS) raw = env.ROUNDTABLE_SEATS;
   }
   let handles;
+  const skipped = [];
   if (raw === null || raw === undefined) {
     const seen = [];
     for (const row of roomLog.readAll(room, env)) {
       if (row.kind !== 'say') continue;
       if (row.from === 'owner' || row.from === 'moderator') continue;
-      if (!seen.includes(row.from)) seen.push(row.from);
+      if (seen.includes(row.from) || skipped.includes(row.from)) continue;
+      try {
+        assertHandle(row.from);
+        seen.push(row.from);
+      } catch {
+        skipped.push(row.from);
+      }
     }
     handles = seen;
   } else {
     handles = String(raw).split(',').map((s) => s.trim());
     if (handles.length === 1 && handles[0] === '') handles = [];
+    for (const h of handles) assertHandle(h);
   }
-  for (const h of handles) assertHandle(h);
-  return handles;
+  return { handles, skipped };
 }
 
 function fleetBin(env) {
@@ -182,7 +229,8 @@ function sendText(room, text, cliSeats, env) {
   if (typeof text !== 'string' || text.length === 0) {
     throw new Error('empty text');
   }
-  const seats = resolveSeats(room, cliSeats, env);
+  const resolved = resolveSeats(room, cliSeats, env);
+  const seats = resolved.handles;
   const row = roomLog.append(room, {
     from: 'owner',
     kind: 'say',
@@ -190,10 +238,27 @@ function sendText(room, text, cliSeats, env) {
     reply_to: null,
     to: seats,
   }, env);
+  for (const value of resolved.skipped) {
+    const note = `skipped seat ${value}`;
+    roomLog.append(room, {
+      from: 'moderator',
+      kind: 'system',
+      text: note,
+      reply_to: row.seq,
+      to: [],
+    }, env);
+  }
+  if (seats.length === 0) {
+    process.stderr.write('row recorded but sent to nobody\n');
+    return 0;
+  }
   const wire = `${room} #${row.seq}\n${text}`;
   const bin = fleetBin(env);
   let failed = false;
   for (const handle of seats) {
+    // fleet send --help is `fleet send [--as-cli] <address> <text...>`.
+    // That usage does not accept `--`, so a dash-leading handle is rejected
+    // by assertHandle and the argv stays send, handle, text.
     const r = spawnSync(bin, ['send', handle, wire], { encoding: 'utf8' });
     const stderr = (r.stderr || '') + (r.error ? r.error.message : '');
     const status = r.error ? (r.status == null ? 'spawn-failed' : r.status) : r.status;
@@ -241,6 +306,7 @@ function cmdTail(room, once, env, argv) {
 }
 
 function cmdOpen(room, env) {
+  roomLog.roomPath(room, env);
   if (!env.TMUX) {
     process.stderr.write('roundtable-window: open must run inside tmux (TMUX is unset). Scrolling is tmux scrollback and copy mode.\n');
     return 2;

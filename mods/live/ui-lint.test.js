@@ -418,7 +418,7 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // Owner ruling 2026-10-17 (the viewer mod): ONE more use, in mods/viewer/show.ts, `$.process.run(gitDiffArgv(args))` - the `show` tool's `git diff` (argument vector, no shell). It is
 // allowed only while gitDiffArgv (viewer/model.ts) forces `--no-ext-diff --no-textconv` after the model's arguments and parseShowInput is a WHITELIST (revisions, --cached, --staged,
 // -U<n>, --unified=<n>; git accepts abbreviated long options, so a blacklist is bypassed by --ext / --textc / --open / --outp).
-// Roundtable window B (2026-10-19): ONE more use, in mods/roundtable/register.ts, `$.process.run(argv, ...)` whose argv is node + scripts/roundtable-window.js + send. The script is the same send as window A. A second use, another file, or a different argv is an offender.
+// Roundtable window B (2026-10-19): ONE more use, in mods/roundtable/register.ts, `$.process.run(argv, ...)` whose argv is node + scripts/roundtable-window.js + send + -- before the room and body. The script is the same send as window A. A second use, another file, or a different argv is an offender.
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
@@ -433,6 +433,7 @@ function roundtableSendOffenders(src) {
   if (!/\$\.process\.run\(argv,/.test(src)) out.push('the one use is not `$.process.run(argv, ...)`')
   if (!src.includes('scripts/roundtable-window.js')) out.push('argv does not name scripts/roundtable-window.js')
   if (!/['"]send['"]/.test(src)) out.push('argv does not pass the send subcommand')
+  if (!/['"]send['"]\s*,\s*['"]--['"]/.test(src)) out.push('argv does not pass -- before the room and body')
   return out
 }
 function viewerDiffOffenders(src) {
@@ -495,6 +496,14 @@ test('process allowlist controls: an alias, a destructuring, a bracket access, a
   assert.ok(processRunOffenders(code(list + "const p = $['process']; p.run(argv, {})"), true).length > 0, 'the only access is not the allowed call')
   assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
   assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
+})
+test('process allowlist, roundtable: the one send argv includes -- before the room; a missing --, a second use, another script and a missing send are each reported (negative controls)', () => {
+  const ok = "const argv = ['node', root + '/scripts/roundtable-window.js', 'send', '--', room, body]\nconst ran = await $.process.run(argv, { timeoutMs: 1 })\n"
+  assert.deepEqual(roundtableSendOffenders(ok), [])
+  assert.ok(roundtableSendOffenders(ok.replace(", '--'", '')).some(s => s.includes('--')), 'missing --')
+  assert.ok(roundtableSendOffenders(ok + '\nawait $.process.run(argv, {})').length > 0, 'a second use')
+  assert.ok(roundtableSendOffenders(ok.replace('scripts/roundtable-window.js', 'scripts/other.js')).length > 0, 'another script')
+  assert.ok(roundtableSendOffenders(ok.replace("'send'", "'tail'")).length > 0, 'missing send')
 })
 test('process allowlist, viewer: show.ts may run exactly one `$.process.run(gitDiffArgv(...))`; a second use, an alias, another argv and another file are each reported (negative controls)', async () => {
   const ok = 'const ran = await $.process.run(gitDiffArgv(req.args))'

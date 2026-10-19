@@ -64,7 +64,7 @@ test('send calls fleet once per seat with one argv text argument', () => {
     const fleet = writeFake(s.dir, 'fleet', fleetFake());
     const text = 'hello 討論 world\nsecond line';
     const r = run(
-      ['send', 'room-a', '--seats', 'ns/courier/a,ns/courier/b', text],
+      ['--seats', 'ns/courier/a,ns/courier/b', 'send', 'room-a', text],
       { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
     );
     assert.equal(r.status, 0, r.stderr);
@@ -103,7 +103,7 @@ test('a non-zero seat exits 1, records a system row, and keeps the owner say', (
       FAIL_STATUS: '3',
       FAIL_STDERR: 'relay refused 討論',
     };
-    const r = run(['send', 'room-b', '--seats', 'ns/courier/ok,ns/courier/bad', 'owner line'], env);
+    const r = run(['--seats', 'ns/courier/ok,ns/courier/bad', 'send', 'room-b', 'owner line'], env);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /ns\/courier\/bad/);
     assert.match(r.stderr, /3/);
@@ -120,7 +120,7 @@ test('a non-zero seat exits 1, records a system row, and keeps the owner say', (
     assert.equal(calls.length, 2);
 
     const r2 = run(
-      ['send', 'room-c', '--seats', 'ns/courier/bad,ns/courier/bad2', 'all down'],
+      ['--seats', 'ns/courier/bad,ns/courier/bad2', 'send', 'room-c', 'all down'],
       { ...env, FAIL_HANDLES: 'ns/courier/bad,ns/courier/bad2' },
     );
     assert.equal(r2.status, 1);
@@ -129,55 +129,34 @@ test('a non-zero seat exits 1, records a system row, and keeps the owner say', (
   }
 });
 
-test('exit 0 is not a detected failure; a status-ignoring copy fails the system-row assertion', () => {
+// Negative control against the real send subcommand: a fake fleet that exits
+// non-zero must leave a system failure row and a non-zero process status.
+// A status-ignoring send would exit 0 with no system row and fail this test.
+test('a fake fleet exiting non-zero for a seat writes a system failure row and the real send exits non-zero', () => {
   const s = scratch();
   try {
     const log = path.join(s.dir, 'argv.log');
     const fleet = writeFake(s.dir, 'fleet', fleetFake());
     const r = run(
-      ['send', 'room-z', '--seats', 'ns/courier/quiet', 'silent'],
-      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+      ['--seats', 'ns/courier/quiet', 'send', 'room-z', 'silent'],
+      {
+        ...s.env,
+        ROUNDTABLE_FLEET_BIN: fleet,
+        FAKE_ARGV_LOG: log,
+        FAIL_HANDLES: 'ns/courier/quiet',
+        FAIL_STATUS: '3',
+        FAIL_STDERR: 'relay refused 討論',
+      },
     );
-    assert.equal(r.status, 0, r.stderr);
+    assert.notEqual(r.status, 0);
     const { readAll } = require('./lib/room-log');
     const rows = readAll('room-z', s.env);
-    assert.equal(rows.some((row) => row.kind === 'system'), false);
-    // The script only knows the fleet process exit status. A fake that exits 0
-    // without delivering is indistinguishable from a real send.
-
-    function failureRowAssertion(outcome, handle, status, stderrText) {
-      const sys = outcome.system.find((row) => row.text.includes(handle)
-        && row.text.includes(String(status))
-        && row.text.includes(stderrText));
-      if (!sys) throw new Error('missing system row for failed seat');
-      if (!outcome.owner) throw new Error('missing owner say');
-      return sys;
-    }
-    // Copy of the send bookkeeping with the status check deleted.
-    function statusIgnoringSend(results) {
-      const outcome = { owner: true, system: [] };
-      for (const result of results) {
-        if (result.status !== 0 && result.status !== 0) {
-          // status is ignored on purpose: the condition above is a no-op
-          // because both sides compare equal only when we record, and we do not.
-        }
-        void result;
-      }
-      return outcome;
-    }
-    const real = {
-      owner: true,
-      system: [{ text: 'send failed ns/courier/bad status 3 stderr relay refused 討論' }],
-    };
-    assert.doesNotThrow(() => failureRowAssertion(real, 'ns/courier/bad', 3, 'relay refused 討論'));
-    const ignored = statusIgnoringSend([
-      { handle: 'ns/courier/ok', status: 0, stderr: '' },
-      { handle: 'ns/courier/bad', status: 3, stderr: 'relay refused 討論' },
-    ]);
-    assert.throws(
-      () => failureRowAssertion(ignored, 'ns/courier/bad', 3, 'relay refused 討論'),
-      /missing system row/,
-    );
+    assert.equal(rows.some((row) => row.kind === 'say' && row.from === 'owner' && row.text === 'silent'), true);
+    const sys = rows.find((row) => row.kind === 'system');
+    assert.ok(sys);
+    assert.match(sys.text, /ns\/courier\/quiet/);
+    assert.match(sys.text, /3/);
+    assert.match(sys.text, /relay refused 討論/);
   } finally {
     s.cleanup();
   }
@@ -203,14 +182,14 @@ test('seats default to say-row handles; --local and empty handles are rejected',
     assert.deepEqual(calls.map((c) => c[1]).sort(), ['ns/courier/seat1']);
 
     const local = run(
-      ['send', 'room-d', '--seats', 'host--local-pane', 'no'],
+      ['--seats', 'host--local-pane', 'send', 'room-d', 'no'],
       { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
     );
     assert.notEqual(local.status, 0);
     assert.match(local.stderr, /--local/);
 
     const empty = run(
-      ['send', 'room-e', '--seats', 'ns/courier/a,', 'no'],
+      ['--seats', 'ns/courier/a,', 'send', 'room-e', 'no'],
       { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
     );
     assert.notEqual(empty.status, 0);
@@ -415,6 +394,196 @@ test('input prompt prints a divider of the column count in foreground only; NO_C
     );
     assert.equal(noColor.includes('\x1b'), false);
     assert.throws(() => assertDividerLine('\u2500'.repeat(columns - 1) + '\n> ', columns));
+  } finally {
+    s.cleanup();
+  }
+});
+
+// # RED at 6edf1678b: node --test scripts/roundtable-window.test.js — send ROOM --help
+// printed usage and exited 0 without calling fleet; --no-color and --seats inside
+// the body were consumed as options (text dropped the words, seats changed).
+test('send body --help is delivered and recorded; it does not print usage', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const r = run(
+      ['--seats', 'ns/courier/a', 'send', 'room-help', '--help'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.includes('roundtable-window.js — window A'), false);
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2].includes('--help'), true);
+    const { readAll } = require('./lib/room-log');
+    const rows = readAll('room-help', s.env);
+    assert.equal(rows[0].text, '--help');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('send body keeps --no-color verbatim in the row and the fleet argv', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const text = 'see --no-color please';
+    const r = run(
+      ['--seats', 'ns/courier/a', 'send', 'room-nc', 'see', '--no-color', 'please'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2].includes(text), true);
+    const { readAll } = require('./lib/room-log');
+    assert.equal(readAll('room-nc', s.env)[0].text, text);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('send body --seats does not change recipients and is kept verbatim', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const text = '--seats ns/courier/evil extra';
+    const r = run(
+      ['--seats', 'ns/courier/a', 'send', 'room-seats', '--seats', 'ns/courier/evil', 'extra'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], 'ns/courier/a');
+    assert.equal(calls[0][2].includes(text), true);
+    const { readAll } = require('./lib/room-log');
+    assert.equal(readAll('room-seats', s.env)[0].text, text);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('send -- ROOM text delivers the text after the end-of-options marker', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const r = run(
+      ['--seats', 'ns/courier/a', 'send', '--', 'room-dd', 'after marker'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const { readAll } = require('./lib/room-log');
+    assert.equal(readAll('room-dd', s.env)[0].text, 'after marker');
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], 'ns/courier/a');
+    assert.equal(calls[0][2].includes('after marker'), true);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('options before the subcommand still apply: --no-color tail ROOM --once', () => {
+  const s = scratch();
+  try {
+    const { append } = require('./lib/room-log');
+    append('room-opt', { from: 'owner', kind: 'say', text: 'plain', reply_to: null }, s.env);
+    const r = run(['--no-color', 'tail', 'room-opt', '--once'], s.env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /plain/);
+    assert.equal(r.stdout.includes('\x1b'), false);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('a seat handle that starts with a dash is rejected', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const r = run(
+      ['--seats', '-ns/courier/a', 'send', 'room-dash', 'nope'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /-/);
+    assert.equal(fs.existsSync(log), false);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('a room.jsonl from value that starts with a dash is not a seat and is named in a system row', () => {
+  const s = scratch();
+  try {
+    const { append, readAll } = require('./lib/room-log');
+    append('room-from', { from: '--to/x', kind: 'say', text: 'bad from', reply_to: null }, s.env);
+    append('room-from', { from: 'ns/courier/ok', kind: 'say', text: 'good', reply_to: null }, s.env);
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const r = run(
+      ['send', 'room-from', 'follow'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepEqual(calls.map((c) => c[1]), ['ns/courier/ok']);
+    const rows = readAll('room-from', s.env);
+    const sys = rows.find((row) => row.kind === 'system');
+    assert.ok(sys);
+    assert.match(sys.text, /skip/i);
+    assert.match(sys.text, /--to\/x/);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('no resolved seats records the row, prints one stderr line, and exits 0', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const r = run(
+      ['send', 'room-empty', 'alone'],
+      { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log },
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim().split('\n').length, 1);
+    assert.match(r.stderr, /recorded/);
+    assert.match(r.stderr, /nobody/);
+    assert.equal(fs.existsSync(log), false);
+    const { readAll } = require('./lib/room-log');
+    const rows = readAll('room-empty', s.env);
+    assert.equal(rows[0].text, 'alone');
+    assert.equal(rows[0].from, 'owner');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('open with a bad room id exits non-zero and does not call tmux', () => {
+  const s = scratch();
+  try {
+    const log = path.join(s.dir, 'tmux.log');
+    const tmux = writeFake(s.dir, 'tmux', `#!/usr/bin/env node
+const fs = require('fs');
+fs.appendFileSync(process.env.TMUX_ARGV_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.exit(0);
+`);
+    const r = run(['open', 'Bad Room'], {
+      ...s.env,
+      TMUX: '/tmp/tmux-fake/default,1,0',
+      ROUNDTABLE_TMUX_BIN: tmux,
+      TMUX_ARGV_LOG: log,
+    });
+    assert.notEqual(r.status, 0);
+    assert.equal(fs.existsSync(log), false);
   } finally {
     s.cleanup();
   }

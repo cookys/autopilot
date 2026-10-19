@@ -1,6 +1,6 @@
 # Plan — roundtable: a room log both windows only read
 
-> Status: **Phase 0 done 2026-09-19 (worth it). Redesign 2026-10-19: room log is the record; windows A and B both approved; skill still waits on BL-0216.** · Owner: cookys (depth-0) · Branch: docs until Phase 1 code ·
+> Status: **Phase 0 done 2026-09-19 (worth it). Redesign 2026-10-19: room log is the record; windows A and B are shipped (`scripts/lib/room-log.js`, `scripts/roundtable-window.js`, `mods/roundtable`); skill still waits on BL-0216.** · Owner: cookys (depth-0) · Branch: implementation landed ·
 > Size: S (Phase 0, done) + M (Phase 1 room log + window A) + M (Phase 2 window B) + L (Phase 3 skill, BL-0216) + S (Phase 4 hangar) · Frame: plan, not review.
 > Raised 2026-09-19: the hetero plan loop fits review, not a discussion the operator sits in. Revised 2026-10-19 around a room log file.
 
@@ -92,11 +92,11 @@ Kinds:
 
 Append rules: one complete line, one `write` of that line plus its newline, under an exclusive lock (a sibling lock file `room.jsonl.lock` in the room directory). `seq` is the current maximum plus one, computed inside the lock after reading the complete lines. Concurrent appenders never interleave bytes. Readers ignore a trailing partial line.
 
-Shared helper (Phase 1, not written in this revision): `scripts/lib/room-log.js`. Window A and the tests use it. Window B reads the same file; it may call the helper or parse the same rules. The file format above is the contract either way.
+Shared helper (shipped): `scripts/lib/room-log.js`. Window A and the tests use it. Window B reads the same file; it may call the helper or parse the same rules. The file format above is the contract either way.
 
 ## 7. File-structure map
 
-**autopilot** (this repo). Nothing in this table is created by the 2026-10-19 docs revision.
+**autopilot** (this repo). Phase 1 and Phase 2 rows below are in the tree (`scripts/lib/room-log.js`, `scripts/roundtable-window.js`, `mods/roundtable/`). Phase 3 and later rows are not added yet.
 
 | File | Responsibility |
 |---|---|
@@ -222,7 +222,7 @@ A real thread or group in the relay would let seats see each other without moder
 
 ## 13. Test / validation
 
-No new test file is added by this docs revision. The table is the contract for Phase 1 and Phase 2.
+The Phase 1 and Phase 2 test files are `scripts/lib/room-log.test.js`, `scripts/roundtable-window.test.js`, `mods/roundtable/roundtable.test.ts`, `mods/roundtable/model.test.js`, `mods/roundtable/lint.test.js`, and the roundtable send allowlist in `mods/live/ui-lint.test.js`. The table is the contract for Phase 1 and Phase 2.
 
 | What | How | Gate |
 |---|---|---|
@@ -264,7 +264,7 @@ No new test file is added by this docs revision. The table is the contract for P
 
 ## 16. Open points
 
-1. **Window B input (Phase 2 spike).** Can the mod pane take text input? Both branches are in §10. The spike decides. Unresolved as of 2026-10-19.
+1. **Window B input (Phase 2 spike).** Resolved: INPUT-WORKS. The pane has an Input; the owner types and presses Enter. The facts are in §10. The display-only branch is not built.
 2. Default round budget 3 / deadline 10 min stayed the Phase 0 order of magnitude. Change it only after another manual room says otherwise.
 
 Phase 0's plan choice and the phone-steering question are closed: the dry run used hangar `docs/plans/peer-advisory-availability.md`, and the owner sits in tmux over ssh (ruling §0). A phone client is not a surface in this revision.
@@ -288,4 +288,5 @@ What Phase 0 changed, still in force (§4, §8, §11):
 ## Review log
 
 - R0 2026-09-19 author: cookys (depth-0) with Claude. No manifest yet — this plan is not entering the hetero plan loop until Phase 0 has run; the point of Phase 0 is to find out whether the shape is right before freezing a rubric for it.
-- R1 2026-10-19 author: cookys with Claude. Rewrite around `room.jsonl`. Windows A and B both owner-approved (card d-e99062da). Fleet is the discussion transport and an explicit exception to hetero; review stays on hetero. Phase 0 evidence kept as history. Skill remains BL-0216. Docs only.
+- R1 2026-10-19 author: cookys with Claude. Rewrite around `room.jsonl`. Windows A and B both owner-approved (card d-e99062da). Fleet is the discussion transport and an explicit exception to hetero; review stays on hetero. Phase 0 evidence kept as history. Skill remains BL-0216. That entry recorded the design before the scripts landed.
+- R2 2026-10-19 author: cookys with Claude. Implementation landed: `scripts/lib/room-log.js`, `scripts/roundtable-window.js`, `mods/roundtable`. Review fixes of rounds 8 and 9 were applied (option parsing stops at the first positional, send text after ROOM is verbatim, dash-leading handles are rejected, a bad derived `from` is skipped, an empty seat list says the row was sent to nobody, `open` checks the room id before tmux, and window B passes `--` before the room and body).

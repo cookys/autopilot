@@ -125,7 +125,7 @@ export async function submitSay($: EngineInterface, text: string): Promise<void>
   }
   state.failure = null
   const root = $.plugin.root.replace(/\/$/, '')
-  const argv = ['node', root + '/scripts/roundtable-window.js', 'send', state.room, body]
+  const argv = ['node', root + '/scripts/roundtable-window.js', 'send', '--', state.room, body]
   let ran: { exitCode: number; stderr?: string }
   try {
     ran = await $.process.run(argv, { timeoutMs: 30_000 })

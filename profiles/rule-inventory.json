@@ -22,7 +22,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "31406df5a67fe2de2967f972380a8ad631af3d9868e0210b02e143acc841f1a7",
+      "sha256": "f3be59cc0a219b60923d29d7572291acbdf62276f66915547c23a9387b9c2e7e",
       "segments": [
         {
           "id": "ceo.discovery-routing",
@@ -250,37 +250,37 @@
           "id": "ceo.profile-session-invariant",
           "category": "core",
           "start_line": 484,
-          "end_line": 489
+          "end_line": 491
         },
         {
           "id": "ceo.profile-runtime-lane",
           "category": "topology",
-          "start_line": 490,
-          "end_line": 490
+          "start_line": 492,
+          "end_line": 492
         },
         {
           "id": "ceo.profile-runtime-evidence",
           "category": "assurance",
-          "start_line": 491,
-          "end_line": 492
+          "start_line": 493,
+          "end_line": 494
         },
         {
           "id": "ceo.profile-runtime-compatibility",
           "category": "topology",
-          "start_line": 493,
-          "end_line": 496
+          "start_line": 495,
+          "end_line": 498
         },
         {
           "id": "ceo.mission-routing",
           "category": "topology",
-          "start_line": 497,
-          "end_line": 518
+          "start_line": 499,
+          "end_line": 520
         }
       ]
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "c782894033c61c34b65f13806f7b51392e8d51a19a714db24fc73047b9307ef5",
+      "sha256": "32dfd77deab1d8e94889ee164905fdb2e9b025c40f2b113eb22485abb255d900",
       "segments": [
         {
           "id": "dev.frontmatter",

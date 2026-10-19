@@ -83,7 +83,7 @@ eq "true" "$(jf d_inc 'j.steps[0].disclosure.incremental.carried.every((e) => /^
 ADDSPEC='j.steps[0].seat_inputs["claude-opus-4-6"].spec'
 DEFSPEC='j.steps[0].seat_inputs["claude-opus-4-6"].spec'
 eq "true" "$(jf d_inc "$ADDSPEC.includes('== Prior round')")" "addendum: an incremental seat's spec carries the prior-round addendum"
-eq "3" "$(jf d_inc "$ADDSPEC.split('\\n').filter((l) => /^- \\[prior:s[123]\\.rc-001\\] \\| critical \\| src\\/value.txt:1 \\| /.test(l)).length")" "addendum: one line per carried finding, id | severity | path:line | claim"
+eq "1" "$(jf d_inc "$ADDSPEC.split('\\n').filter((l) => /^- \\[prior:s1\\.rc-001, prior:s2\\.rc-001, prior:s3\\.rc-001\\] \\| critical \\| src\\/value.txt:1 \\| /.test(l)).length")" "addendum: same location and claim from each seat is one line listing every id"
 eq "false" "$(jf d_inc "/author follow-up|external-2|SHIP-AS-IS|FIX-THEN-SHIP|VERDICT/.test($ADDSPEC.slice($ADDSPEC.indexOf('== Prior round')))")" "A8: the addendum holds no commit message, no verdict, no author text"
 jf d_inc "$ADDSPEC" > "$RC/d_inc.seat-spec.md"
 bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$RC/d_inc.seat-spec.md" >/dev/null 2>&1

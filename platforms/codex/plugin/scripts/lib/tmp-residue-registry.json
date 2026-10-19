@@ -244,6 +244,13 @@
       "reason": "verification worktree parent; marker/lock reapers only"
     },
     {
+      "pattern": "qc-outcome-wt-*",
+      "kind": "worktree",
+      "owner": "scripts/check-test-outcome.js",
+      "retention_days": null,
+      "reason": "detached worktree for the outcome-gate re-run; removed before the checker returns"
+    },
+    {
       "pattern": ".autopilot-suite-run.*.lock",
       "kind": "lock",
       "owner": "hooks/tests/lib/suite-residue-reap.sh",

@@ -307,17 +307,23 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
 function allSuites(tree) { return tree.files.filter(isSuite).sort(); }
 
 // Same invocation run.sh uses for that kind of file: bash for a .sh, node --test for a .test.js.
+// argv's last element is the repo-relative path; runEntry substitutes the absolute path.
+function entryCommand(rel) {
+  if (rel.endsWith('.test.js')) return { cmd: 'node', argv: ['--test', rel] };
+  if (rel.endsWith('.sh')) return { cmd: 'bash', argv: [rel] };
+  return null;
+}
+
 function runEntry(root, rel) {
-  const abs = path.join(root, rel);
-  let cmd, args;
-  if (rel.endsWith('.test.js')) { cmd = 'node'; args = ['--test', abs]; }
-  else if (rel.endsWith('.sh')) { cmd = 'bash'; args = [abs]; }
-  else {
+  const spec = entryCommand(rel);
+  if (!spec) {
     process.stderr.write(`affected-suites: no runner for ${rel} (run.sh runs .sh with bash and .test.js with node --test)\n`);
     process.stdout.write(`rc=1 ${rel}\n`);
     return 1;
   }
-  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
+  const argv = spec.argv.slice();
+  argv[argv.length - 1] = path.join(root, rel);
+  const r = spawnSync(spec.cmd, argv, { cwd: root, stdio: 'inherit' });
   const rc = r.status == null ? 1 : r.status;
   process.stdout.write(`rc=${rc} ${rel}\n`);
   return rc;
@@ -342,6 +348,23 @@ function runSelected(root, doc, alwaysRun) {
   }
   process.stdout.write(`summary: ${entries.length} run, ${failed} failed\n`);
   return { code: failed === 0 ? 0 : 1, results };
+}
+
+// The document main prints for `--base <base> [--head <head>]` (head defaults to HEAD).
+// `runAlways` is the always-run list a full-mode --run still executes; it is not part of the document.
+function computeDoc(root, base, head) {
+  const headRef = head || 'HEAD';
+  const tree = gitTree(root, headRef);
+  const changed = git(root, ['diff', '--name-only', '--no-renames', '-z', base, headRef]).toString('utf8').split('\0').filter(Boolean);
+  const r = select(changed, tree, DEFAULT_MAX_WEAK);
+  const full = r.fullReasons.length > 0;
+  const doc = {
+    schema: 1, mode: full ? 'full' : 'selective', base, head: headRef, changed: changed.slice().sort(),
+    suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
+    chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
+  };
+  Object.defineProperty(doc, 'runAlways', { value: r.alwaysRun, enumerable: false });
+  return doc;
 }
 
 function fullRef(root, ref) {
@@ -414,19 +437,39 @@ function main(argv) {
     } else {
       if (!a.base) { process.stderr.write('need --base <ref> or --files\n'); return 2; }
       headRef = a.head || 'HEAD';
-      tree = gitTree(root, headRef);
-      changed = git(root, ['diff', '--name-only', '--no-renames', '-z', a.base, headRef]).toString('utf8').split('\0').filter(Boolean);
+      baseRef = a.base;
     }
     if (a.listAll) { process.stdout.write(allSuites(tree).join('\n') + '\n'); return 0; }
-    const r = select(changed, tree, a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak);
-    const full = r.fullReasons.length > 0;
-    const doc = {
-      schema: 1, mode: full ? 'full' : 'selective', base: baseRef, head: headRef, changed: changed.slice().sort(),
-      suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
-      chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
-    };
+    let doc;
+    let runAlways;
+    if (!a.useFiles && !a.listAll) {
+      doc = computeDoc(root, a.base, a.head || null);
+      if (a.maxWeak != null) {
+        tree = gitTree(root, doc.head);
+        changed = doc.changed;
+        const r = select(changed, tree, a.maxWeak);
+        const full = r.fullReasons.length > 0;
+        doc = {
+          schema: 1, mode: full ? 'full' : 'selective', base: baseRef, head: headRef, changed: changed.slice().sort(),
+          suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
+          chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
+        };
+        runAlways = r.alwaysRun;
+      } else {
+        runAlways = doc.runAlways;
+      }
+    } else {
+      const r = select(changed, tree, a.maxWeak == null ? DEFAULT_MAX_WEAK : a.maxWeak);
+      const full = r.fullReasons.length > 0;
+      doc = {
+        schema: 1, mode: full ? 'full' : 'selective', base: baseRef, head: headRef, changed: changed.slice().sort(),
+        suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, extra_runners: extraRunners(changed), full_reasons: r.fullReasons, unreferenced: r.unreferenced,
+        chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
+      };
+      runAlways = r.alwaysRun;
+    }
     if (a.run) {
-      const ran = runSelected(root, doc, full ? r.alwaysRun : doc.always_run);
+      const ran = runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run);
       if (a.record) {
         try {
           const headSha = fullRef(root, headRef);
@@ -442,7 +485,8 @@ function main(argv) {
       return ran.code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
-    process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')) + extra);
+    const full = doc.mode === 'full';
+    process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : doc.suites.join('\n') + (doc.suites.length ? '\n' : '')) + extra);
     return 0;
   } catch (e) {
     process.stderr.write(`affected-suites: ${e.message}\n`);
@@ -450,5 +494,5 @@ function main(argv) {
   }
 }
 
-module.exports = { extraRunners, select, mentions, buildGraph, isSuite, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

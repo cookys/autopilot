@@ -376,6 +376,22 @@ async function loadFeed(from, {
   };
 }
 
+// Release-gate age comparison extracted from build-qualification-defaults.js
+// checkSnapshotAge (BL-0194 P6). Pure: no recipe IO and no process exit.
+// A missing or malformed generated_at fails, a timestamp later than now fails,
+// and an age greater than maxDays fails. An age equal to maxDays passes.
+const GENERATED_AT_ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+function generatedAtAge(generatedAt, nowMs, maxDays) {
+  if (typeof generatedAt !== 'string' || !GENERATED_AT_ISO_UTC.test(generatedAt) || Number.isNaN(Date.parse(generatedAt))) {
+    return { ok: false, reason: 'malformed', age_days: null };
+  }
+  const ageDays = (nowMs - Date.parse(generatedAt)) / 86400000;
+  if (ageDays < 0) return { ok: false, reason: 'future', age_days: ageDays };
+  if (ageDays > maxDays) return { ok: false, reason: 'stale', age_days: ageDays };
+  return { ok: true, reason: null, age_days: ageDays };
+}
+
 module.exports = {
   MAX_FEED_BYTES,
   loadFeed,
@@ -387,4 +403,5 @@ module.exports = {
   hasGitMarker,
   assertOutsideGit,
   sha256,
+  generatedAtAge,
 };

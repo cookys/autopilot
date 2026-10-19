@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "per-turn-gate-2026-10-20",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "8f7e25c83fb8b27c59d0192f99bd0c581759bb0b6d54b7f8c5b2a43109110050",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted and folded by depth-0 adjudication (generation cap): one ceiling, 3 attempts total per run id = one initial attempt plus at most two reruns, stated identically in section 1 KR4, P3b and the P4 procedure."
+  },
+  {
+   "fingerprint": "c6cf50119514ccd9f2038fd6f0a63c0fbda61a60617c699b81fd67500da99ea9",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Accepted and folded: P1 preregistration separates evidence consistent with a candidate from evidence that excludes it; provider and auth explanations stay unresolved without a controlled comparison; a third C-only baseline counts as replication evidence, not causal exclusion."
+  }
+ ]
+}

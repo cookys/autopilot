@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-20 | [BL-0055: per-turn gate as a formal autopilot mechanism (opt-in rail adapter, C-group gap investigation, larger-model rerun) — draft, awaiting plan review](../plans/2026-10-20-per-turn-gate.md) | active | — | [plan](../plans/2026-10-20-per-turn-gate.md) |
 | 2026-10-19 | [BL-0055 second experiment: t14 gate retry message carries feature gaps (gate vs control, n=30 each, preregistered) — done, SUCCESS](../plans/2026-10-19-t14-gate-round2.md) | active | — | [plan](../plans/2026-10-19-t14-gate-round2.md) |
 | 2026-10-19 | [BL-0055: t14 per-turn verification gate experiment (gate vs control, n=30 each, preregistered thresholds) — done, verdict FAIL-TRADE](../plans/2026-10-19-t14-per-turn-gate-experiment.md) | active | — | [plan](../plans/2026-10-19-t14-per-turn-gate-experiment.md) |
 | 2026-10-19 | [BL-0050: outcome-shaped quality gate, pre-push re-derives that tests ran green against this diff (opt-in)](../plans/2026-10-19-outcome-quality-gate.md) | active | — | [plan](../plans/2026-10-19-outcome-quality-gate.md) |

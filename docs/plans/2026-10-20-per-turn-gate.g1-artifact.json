@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "per-turn-gate-g1",
+  "logical_plan_id": "per-turn-gate-2026-10-20",
+  "session_id": "e40cc506-6c9a-4bf7-bc9f-8a4187de5604",
+  "session_key": "08e36b5aae07b17ac4fc8f505c2c25a3fb06fabcdd4a99e6a3c35d2a9dc83cbb",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "6976bc396d839d7fb90a09ae20a691ea813caf962d36c0fee739e26a8bfb4d33",
+  "manifest_sha256": "2f19bc7cb4381c6a9ea7aab313740f9ccb8400fcc0bffc9e316b29b3cd9e26fd",
+  "plan_sha256": "7325e987f30d6bded89ca7fc8ac8e7f256b420413cfcdce365f1c1be11c740b7",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "8c24247ddd99a813eb858a6fc914d4d5eac5a6d2db87d2322fb1c79b47a00040"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d5348a90bc9b7d8a478970b816497ea76065eb8bbfd3c4aabffbd5bd67fe8989",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-qcxbub/stdout",
+          "digest": "d5348a90bc9b7d8a478970b816497ea76065eb8bbfd3c4aabffbd5bd67fe8989"
+        },
+        "receipt_digest": "459d4761093df0434967d95ca85736234f773bd4139e8415f2423fae3a53d20b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "aaa081ce97b976028e0641a063d396e51badcf492a2bd22cb3ec43286ba30d70"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d742bb883e7b75165a56412ab76898785a399dde8d06908f26e9b6d85ad63eed",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xkHQLM",
+          "digest": "d742bb883e7b75165a56412ab76898785a399dde8d06908f26e9b6d85ad63eed"
+        },
+        "receipt_digest": "a646479c889af967f6cbc78a9863991c333645de14197f08f607cf921b14cd16"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 validation and P5 promotion dependency",
+      "claim": "P4 does not validate the fresh-process rail mechanism that its result is used to promote.",
+      "evidence": "Section 3.3 selects fresh-process repair redispatch and says P3 and P4 measure its difference from session resume. However, P4 explicitly reuses the experiment harness, whose gate_invoke_cc resumes SESSION_ID. P5 proceeds on that batch's SUCCESS, while section 5 claims P4 establishes survival across the process boundary.",
+      "evidence_reference": "Plan sections 3.3, 4 P4 and P5, and 5; supplied run-orchestration-eval.sh gate_invoke_cc",
+      "repair": "Freeze a P4 execution contract that actually exercises fresh-process repair in G with a comparable C arm, including its hashes and decision rule; alternatively restrict the existing P4 result to resumed-session validation and require separate rail-effect evidence before promotion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "88b18b8b4204652a4396621710b2898dab3b8d05c1ecc0ce6840bbb67b2b5859"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 infra rerun implementation and sample accounting",
+      "claim": "The frozen infra rerun rule has no assigned driver implementation or acceptance test.",
+      "evidence": "Section 1 requires up to three infra reruns and an attempt-based 10 percent ceiling. P4 invokes the same harness, but the supplied runner executes one run and only classifies failures. No phase assigns a batch-driver change implementing replacement attempts, preserving attempt history, or enforcing the ceiling. The plan also mixes a target of 30 valid runs with validity at 27 and does not state how absolute-count verdict thresholds apply to an incomplete batch.",
+      "evidence_reference": "Plan section 1 P4 KR4, section 4 P4 procedure, and section 6 allowed surfaces; supplied run-orchestration-eval.sh failure classification",
+      "repair": "Assign the BL-0254 driver implementation or verified prerequisite explicitly. Freeze attempt accounting, retry exhaustion behavior, valid-row selection, and whether fewer than 30 valid rows always means INCONCLUSIVE. Require a seeded infra-failure test demonstrating the actual driver follows those rules before P4 starts.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b5d07b0efd7cc898a078297560c2c22caa916681138fc6a0369f211eb0634a04"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 depth-0 escalation after gate exhaustion",
+      "claim": "The retry caps do not explicitly bound the different-engine repair path after exhaustion.",
+      "evidence": "Section 3.5 permits depth-0 to repair with a different engine after gate_exhausted. The later turn-versus-round paragraph scopes the six-retry budget to that dispatch. The plan does not require successor dispatches to inherit the exhausted budget or specify when different-engine repairs must terminate in an owner card.",
+      "evidence_reference": "Plan sections 3.5 and 3.9 turn-versus-round paragraph",
+      "repair": "Define one cumulative run or lineage budget across different-engine redispatches, forbid resetting it through a new dispatch, and require an owner card when that finite escalation allowance is exhausted.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "35bfc1f5ec6191957898124c24ae2352d004a3e1eabdb3e3d2983cef5ed3062b"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 investigation dependency and promotion eligibility",
+      "claim": "Promotion is not conditioned on completing the C-arm investigation.",
+      "evidence": "The phase order makes P5 depend only on P4 SUCCESS and P6 depend on P4 and P5 when run. Section 5 expressly allows P4 when P1 fails closed and KR3 remains unmet. Consequently, P4 SUCCESS and P5 precision can reach the default-decision card without P1's investigation being completed.",
+      "evidence_reference": "Plan section 4 phase order and P6 acceptance; section 5 P1 fail-closed paragraph",
+      "repair": "Allow P4 research to proceed independently if desired, but make completion of P1's evidence table and discriminating test an explicit prerequisite for P5 promotion eligibility and any P6 proposal to change the default.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "62bca68fd34e9ed70adcd6f274c8b07a507998ed9dfffc1f31feb06e4bedb457"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Document section ordering and review-log boundary",
+      "claim": "Design material is misplaced inside the phases section, and substantive plan material continues after the review log.",
+      "evidence": "The heading 3.9 appears after section 4 and its phase procedures. After Review log, the draft continues with frozen phrases, implementation mapping, document acceptance, file boundaries, and operational instructions.",
+      "evidence_reference": "Plan heading 3.9 following section 4; paragraphs following Review log",
+      "repair": "Move section 3.9 into Design before section 4, relocate substantive trailing paragraphs into their corresponding numbered sections, and leave the review log as the final section.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f9c252c17bea08580cb31aaba9b13fce0e63d4ef8cdb37cbedb4d11839d2a56e"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/plans/2026-10-20-per-turn-gate.md section 0 (Thesis) evidence recap block",
+      "claim": "R1 (evidence faithful) requires the plan to state the two infra failures from round 2 alongside n, M1/M2/M3 per arm, Fisher p, verdicts, and the unexplained C-arm drop",
+      "evidence": "Section 0 'Numbers this plan is allowed to repeat' enumerates n=30 (round 1), n effectively 29 valid (round 2), M1/M2/M3 per arm, Fisher p 1.99e-10, FAIL-TRADE then SUCCESS verdicts, seven stuck-export G runs, four exhausted G runs (G-04 G-26 G-28 G-30), snapshot cells, cost band 0.065 to 0.099 USD/run, wall time 6.5 to 7.5 hours, but does not pin a count of 'two infra failures'",
+      "evidence_reference": "Section 0 'Numbers this plan is allowed to repeat' paragraph; only later mentions of infra failures are KR4 'Infra failures are re-run, at most 3 times each' and P1 candidate 5 'the OAuth session that expired mid-batch in the second experiment (C-16 attempt 1), which may also have degraded earlier runs' which is one incident, not a total count",
+      "repair": "Add one line in the section 0 evidence recap stating that round 2 had two infra failures (with the second failure identified if the report names it), treated as a report fact like the seven-export count and the four exhausted ids; no design change, evidence-recap addition only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "87800769ab9e5c0f6d965f4a8b738dc670fe15cb898df15fa3fb07d24374eef1"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/plans/2026-10-20-per-turn-gate.md section 1 KR1 self-reference and P4 procedure re-run ownership",
+      "claim": "R8 (validation frozen) requires the P4 decision rule location to be unambiguous and the infra-failure rerun rule to be tied to the driver (BL-0254) that actually implements it",
+      "evidence": "Section 1 KR1 reads 'P4 applies the decision rule frozen in section 4, copied from experiment 2 KR1 through KR4, plus the ceiling clause.' Section 4 of this plan is the Phases table (P0-P6) and contains no decision rule; the rule lives under section 1's 'P4 decision rule, frozen now' subhead. Section 4's P4 row itself states 'Decision rule is section 1, not a new one.', contradicting the section 1 reference. Separately, KR4 sets 'Infra failures are re-run, at most 3 times each' but does not name the driver that implements the loop or cite BL-0254; the run-orchestration-eval.sh harness at evals/orchestration/run-orchestration-eval.sh classifies failures but does not contain a re-run-on-infra-failure loop itself.",
+      "evidence_reference": "Section 1 KR1 sentence; section 1 'P4 decision rule, frozen now' subhead with KR1 through KR4; section 4 P4 row 'Decision rule is section 1, not a new one.'; KR4 (validity) bullet 'Infra failures are re-run, at most 3 times each'; the failure_class/failure_cause classification block in run-orchestration-eval.sh which records infra_fail but never re-invokes a run",
+      "repair": "Change 'section 4' to 'section 1' (or 'KR1 through KR4 below in this section') in the two self-references inside section 1 so the decision-rule location resolves to itself. Add one sentence to KR4 or to the P4 procedure naming BL-0254 (or whichever driver owns the rerun loop) as the enforcing component so the 'at most 3 times each' rule has an implementation owner before the first P4 pair runs.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3c08861471049bb14b8184a1ff9f04632d6620ac5801959c5128b6834c6e11c9"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "f9c252c17bea08580cb31aaba9b13fce0e63d4ef8cdb37cbedb4d11839d2a56e",
+      "rubric_id": "R10",
+      "affected_surface": "Document section ordering and review-log boundary",
+      "claim": "Design material is misplaced inside the phases section, and substantive plan material continues after the review log.",
+      "evidence_reference": "Plan heading 3.9 following section 4; paragraphs following Review log",
+      "disposition": null
+    },
+    {
+      "fingerprint": "87800769ab9e5c0f6d965f4a8b738dc670fe15cb898df15fa3fb07d24374eef1",
+      "rubric_id": "R1",
+      "affected_surface": "docs/plans/2026-10-20-per-turn-gate.md section 0 (Thesis) evidence recap block",
+      "claim": "R1 (evidence faithful) requires the plan to state the two infra failures from round 2 alongside n, M1/M2/M3 per arm, Fisher p, verdicts, and the unexplained C-arm drop",
+      "evidence_reference": "Section 0 'Numbers this plan is allowed to repeat' paragraph; only later mentions of infra failures are KR4 'Infra failures are re-run, at most 3 times each' and P1 candidate 5 'the OAuth session that expired mid-batch in the second experiment (C-16 attempt 1), which may also have degraded earlier runs' which is one incident, not a total count",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3c08861471049bb14b8184a1ff9f04632d6620ac5801959c5128b6834c6e11c9",
+      "rubric_id": "R8",
+      "affected_surface": "docs/plans/2026-10-20-per-turn-gate.md section 1 KR1 self-reference and P4 procedure re-run ownership",
+      "claim": "R8 (validation frozen) requires the P4 decision rule location to be unambiguous and the infra-failure rerun rule to be tied to the driver (BL-0254) that actually implements it",
+      "evidence_reference": "Section 1 KR1 sentence; section 1 'P4 decision rule, frozen now' subhead with KR1 through KR4; section 4 P4 row 'Decision rule is section 1, not a new one.'; KR4 (validity) bullet 'Infra failures are re-run, at most 3 times each'; the failure_class/failure_cause classification block in run-orchestration-eval.sh which records infra_fail but never re-invokes a run",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-19T19:00:21.911Z"
+}

@@ -15,6 +15,7 @@ SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 # RED at eaf8c9eef: corpus mismatch exits 0 (expected 2), stdout 6932 bytes, stderr names neither seat-corpus-1 nor reviewer-known-bad-clean-v2.reviewer-metamorphic-v6, and both --store and --raw-dir were created. effort=default and the 0/1/2/3/4/5 stdout matrix already passed.
 # RED at 891119040: owner/brain/verification_author/implementer/consult/discuss/foreman wrong corpus_version exits 0 (expected 2); seat.role disagreeing with the subcommand was untested; a headless throw (consult without --execute) exits 2. Reviewer mismatch already exits 2.
 # RED at 4140e208f: a schema-valid foreman seat whose corpus_version is the pinned corpus hash plus generator version still exits 2; stderr names undefined because the sitting row has no corpus_version.
+# RED at df6502222: foreman test-mode --emit-row has no corpus_version, so buildV2Record cannot hash the same value the pre-exam check compared; a mutated copy of a pinned foreman asset does not exit 2.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -360,7 +361,7 @@ for role in owner brain verification_author implementer consult discuss foreman;
   assert_eq "$(wc -c <"$TEST_TMP/$role-mis.out" | tr -d ' ')" "0" "$role corpus mismatch prints no record"
   assert_contains "$(cat "$ERR")" "seat-corpus-1" "$role corpus mismatch names the seat corpus_version"
   assert_contains "$(cat "$ERR")" "$EXAM_VALUE" "$role corpus mismatch spells the exam corpus_version"
-  if grep -q 'undefined' "$ERR"; then
+  if grep -E '^engine-qualify: seat file corpus_version .* differs from exam corpus_version .*undefined' "$ERR"; then
     fail "$role corpus mismatch mentions undefined"
   fi
   assert_eq "$(dir_snapshot "$ST")" "$BEFORE_ST" "$role corpus mismatch leaves --store unchanged"
@@ -417,7 +418,7 @@ assert_eq "$(wc -c <"$TEST_TMP/foreman-match.out" | tr -d ' ')" "0" "foreman tes
 if grep -q 'differs from exam corpus_version' "$ERR"; then
   fail "foreman matching corpus was rejected as a mismatch"
 fi
-if grep -q 'undefined' "$ERR"; then
+if grep -E '^engine-qualify: seat file corpus_version .* differs from exam corpus_version .*undefined' "$ERR"; then
   fail "foreman matching corpus mentions undefined"
 fi
 assert_eq "$(dir_snapshot "$FM_ST")" "$BEFORE_FM_ST" "foreman matching corpus leaves --store unchanged"
@@ -445,6 +446,79 @@ for role in consult discuss; do
     fail "$role matching corpus was rejected as a mismatch"
   fi
 done
+
+# Foreman test mode is inadmissible, so --emit-record still exits 3 with an empty
+# stdout. --emit-row prints the row the record builder would consume. That row's
+# corpus_version is the value compared before the exam, and buildV2Record hashes it.
+FM_ROW_OUT="$TEST_TMP/foreman-row.out"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-row
+run_q "$FM_ROW_OUT" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$TEST_TMP/store-foreman-row" --raw-dir "$TEST_TMP/raw-foreman-row" --emit-row
+unset AUTOPILOT_QUALIFY_SEED
+node -e '
+const fs = require("fs");
+const path = require("path");
+const root = process.argv[1];
+const q = require(path.join(root, "scripts/lib/qualification-metrics.js"));
+const { buildV2Record } = require(path.join(root, "scripts/lib/qualification-record-v2.js"));
+const row = JSON.parse(fs.readFileSync(process.argv[2], "utf8").trim());
+const expected = process.argv[3];
+if (row.corpus_version !== expected) {
+  console.error("row.corpus_version " + row.corpus_version);
+  process.exit(1);
+}
+const rec = buildV2Record(row, { originHostClass: "cloud-api" });
+if (!rec) {
+  console.error("buildV2Record returned null");
+  process.exit(1);
+}
+if (rec.seat.corpus_version !== row.corpus_version) {
+  console.error("seat.corpus_version " + rec.seat.corpus_version);
+  process.exit(1);
+}
+const id = q.recordIdV1(rec.producer, rec.transcript_hash, rec.seat, rec.seat.corpus_version, rec.administered_at);
+if (rec.record_id !== id) {
+  console.error("record_id " + rec.record_id + " vs " + id);
+  process.exit(1);
+}
+' "$REPO_ROOT" "$FM_ROW_OUT" "$FOREMAN_CORPUS"
+assert_eq "$?" "0" "foreman test-mode row corpus_version matches the seat and recordIdV1"
+
+# A mutated copy of a pinned foreman asset must exit 2 before any store write.
+# The copy is the only tree that changes; the worktree evals stay as they are.
+PIN_COPY="$TEST_TMP/foreman-pin-root"
+mkdir -p "$PIN_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js foreman-asset-pins.json; do
+  cp "$REPO_ROOT/evals/$asset" "$PIN_COPY/evals/$asset"
+done
+printf '\n' >>"$PIN_COPY/evals/foreman-eval-generator.js"
+PINNED_GEN="$(node -e 'process.stdout.write(require(process.argv[1]).generator)' "$PIN_COPY/evals/foreman-asset-pins.json")"
+COMPUTED_GEN="$(sha256sum "$PIN_COPY/evals/foreman-eval-generator.js" | awk '{print $1}')"
+PIN_ST="$TEST_TMP/store-foreman-pin"
+PIN_RW="$TEST_TMP/raw-foreman-pin"
+mkdir -p "$PIN_ST" "$PIN_RW"
+printf 'kept\n' >"$PIN_ST/marker"
+printf 'kept\n' >"$PIN_RW/marker"
+BEFORE_PIN_ST="$(dir_snapshot "$PIN_ST")"
+BEFORE_PIN_RW="$(dir_snapshot "$PIN_RW")"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-pin
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$PIN_COPY"
+run_q "$TEST_TMP/foreman-pin.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$PIN_ST" --raw-dir "$PIN_RW" --emit-record
+unset AUTOPILOT_QUALIFY_SEED
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+assert_exit_code "$RUN_RC" "2" "mutated foreman pin asset exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-pin.out" | tr -d ' ')" "0" "foreman pin mismatch prints no record"
+assert_contains "$(cat "$ERR")" "$PINNED_GEN" "foreman pin mismatch stderr names the pinned hash"
+assert_contains "$(cat "$ERR")" "$COMPUTED_GEN" "foreman pin mismatch stderr names the computed hash"
+assert_eq "$(dir_snapshot "$PIN_ST")" "$BEFORE_PIN_ST" "foreman pin mismatch leaves --store unchanged"
+assert_eq "$(dir_snapshot "$PIN_RW")" "$BEFORE_PIN_RW" "foreman pin mismatch leaves --raw-dir unchanged"
 
 # The same throw without --seat-file/--emit-record stays exit 2.
 run_q "$TEST_TMP/consult-bare-throw.out" consult \

@@ -111,10 +111,18 @@ async function adopt($: EngineInterface, room: string): Promise<void> {
 }
 
 // Append is the window A script. The runner is the engine's; a failed exit is shown and never treated as success.
+function keepDraft(text: string): void {
+  // The host clears its field on submit; put the submitted text back unless a newer draft arrived in flight.
+  if (state.draft === '' || state.draft === text) state.draft = text
+}
+
 export async function submitSay($: EngineInterface, text: string): Promise<void> {
   const body = text.trim()
-  state.draft = ''
-  if (state.room === null || body === '') { void $.ui.invalidate('ui.render'); return }
+  if (state.room === null || body === '') {
+    state.draft = ''
+    void $.ui.invalidate('ui.render')
+    return
+  }
   state.failure = null
   const root = $.plugin.root.replace(/\/$/, '')
   const argv = ['node', root + '/scripts/roundtable-window.js', 'send', state.room, body]
@@ -123,16 +131,21 @@ export async function submitSay($: EngineInterface, text: string): Promise<void>
     ran = await $.process.run(argv, { timeoutMs: 30_000 })
   } catch (err) {
     state.failure = String(err)
+    keepDraft(text)
     void $.ui.invalidate('ui.render')
     return
   }
   if (ran.exitCode !== 0) {
     const errText = (ran.stderr || '').trim()
     state.failure = errText !== '' ? errText : 'exit ' + ran.exitCode
+    keepDraft(text)
     void $.ui.invalidate('ui.render')
     return
   }
+  // Success clears only the submitted text; a draft typed while the send was in flight stays.
+  if (state.draft === text) state.draft = ''
   await pollRoundtable($)
+  void $.ui.invalidate('ui.render')
 }
 
 export async function startRoundtable($: EngineInterface): Promise<void> {

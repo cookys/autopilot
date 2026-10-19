@@ -39,6 +39,7 @@ type World = {
   live: number
   chain: number
   throwRt: boolean
+  throwRun: boolean
   exitCode: number
   stderr: string
 }
@@ -46,7 +47,7 @@ type World = {
 function world(on: On): World {
   const w: World = {
     files: { [LOG]: LOG_TEXT }, env: { HOME: '/home/u', AUTOPILOT_ROOMS_DIR: ROOMS, AUTOPILOT_LOCALE: 'zh-TW' },
-    opens: [], runs: [], invalidates: 0, logs: [], commands: [], tools: [], live: 0, chain: 0, throwRt: false,
+    opens: [], runs: [], invalidates: 0, logs: [], commands: [], tools: [], live: 0, chain: 0, throwRt: false, throwRun: false,
     exitCode: 1, stderr: 'boom-fail\n',
   }
   on('env.get', (_$, e) => ({ value: w.env[e.name] }))
@@ -83,6 +84,7 @@ function world(on: On): World {
   })
   on('process.run', (_$, e) => {
     w.runs.push({ argv: [...e.argv], exitCode: w.exitCode, stderr: w.stderr })
+    if (w.throwRun) throw new Error('runner-blew')
     return { value: { exitCode: w.exitCode, stdout: '', stderr: w.stderr, isStdoutTruncated: false, isStderrTruncated: false } }
   })
   return w
@@ -154,4 +156,79 @@ test('submit failure shows the stderr as a broken line and does not claim succes
   expect(fail?.props?.color).toBe(PALETTE.broken)
   expect(textOf(tree)).not.toContain('已送出')
   await again.unmount()
+})
+
+async function draftValue($: any): Promise<{ value: string; tree: Node }> {
+  const win = await mount($)
+  const tree = (await win.drawn()) as Node
+  const inputs = find(tree, 'Input')
+  const value = String(inputs[0]?.props?.value ?? '')
+  await win.unmount()
+  return { value, tree }
+}
+
+// # RED at 11ff68c0f: non-zero and thrown sends left Input value "" (expected "keep-me" / "keep-throw") because submitSay cleared state.draft before the run.
+test('a non-zero send keeps the submitted draft and shows the failure', async ($, on) => {
+  const w = world(on)
+  w.exitCode = 3
+  w.stderr = 'seat-down\n'
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const win = await mount($)
+  const before = w.invalidates
+  await win.input({ key: 'say', text: 'keep-me' })
+  await win.unmount()
+  expect(w.runs.length).toBe(1)
+  expect(w.invalidates).toBeGreaterThan(before)
+  const { value, tree } = await draftValue($)
+  expect(value).toBe('keep-me')
+  expect(textOf(tree)).toContain('seat-down')
+  const fail = find(tree, 'Text').find(t => textOf(t).includes('seat-down'))
+  expect(fail?.props?.color).toBe(PALETTE.broken)
+})
+
+test('a thrown send keeps the submitted draft and shows the failure', async ($, on) => {
+  const w = world(on)
+  w.throwRun = true
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const win = await mount($)
+  await win.input({ key: 'say', text: 'keep-throw' })
+  await win.unmount()
+  expect(w.runs.length).toBe(1)
+  const { value, tree } = await draftValue($)
+  expect(value).toBe('keep-throw')
+  expect(textOf(tree)).toContain('process.run')
+  const fail = find(tree, 'Text').find(t => textOf(t).includes('process.run'))
+  expect(fail?.props?.color).toBe(PALETTE.broken)
+})
+
+test('a successful send clears the draft', async ($, on) => {
+  const w = world(on)
+  w.exitCode = 0
+  w.stderr = ''
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const win = await mount($)
+  await win.input({ key: 'say', text: 'sent-ok' })
+  await win.unmount()
+  expect(w.runs.length).toBe(1)
+  expect(w.runs[0].exitCode).toBe(0)
+  const { value } = await draftValue($)
+  expect(value).toBe('')
+})
+
+test('empty text and no room clear the draft and do not send', async ($, on) => {
+  const w = world(on)
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  const bare = await mount($)
+  await bare.input({ key: 'say', text: '   ' })
+  await bare.unmount()
+  expect(w.runs.length).toBe(0)
+  expect((await draftValue($)).value).toBe('')
+  const noroom = await mount($)
+  await noroom.input({ key: 'say', text: 'orphan' })
+  await noroom.unmount()
+  expect(w.runs.length).toBe(0)
+  expect((await draftValue($)).value).toBe('')
 })

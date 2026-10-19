@@ -798,7 +798,10 @@
       "group": "dispatch",
       "default": "auto",
       "readers": [
-        "scripts/lib/qualification-trust.js"
+        "scripts/lib/qualification-trust.js",
+        "scripts/lib/qualification-confirm.js",
+        "scripts/qualification-feed-trust.js",
+        "scripts/engine-scorecard.js"
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],

@@ -34,6 +34,7 @@ const {
   sha256,
 } = require('../src/engine/owner-kernel/canonical');
 const qualificationTrust = require('./lib/qualification-trust');
+const qualificationConfirm = require('./lib/qualification-confirm');
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
@@ -2051,17 +2052,19 @@ function feedSeatMatches(seat, engine, runner, role, effort) {
   return seatEffortOf(seat) === effort;
 }
 
-// BL-0194 P6 stage B. One overlay, default seat kind only. The brain seat kind
+// BL-0194 P6. One overlay, default seat kind only. The brain seat kind
 // and computeSeatProjectionStrict (--require-evidence) never call this.
-// `confirm` is stage C (one open-decision.js card, confirmations.jsonl). Until
-// that stage, confirm admits nothing from the feed, the same as off, and the
-// gate is not called. Feed strike_events are never read; a lifted_by changes nothing.
+// `auto` uses a gate-passed row. `confirm` uses that row only when
+// confirmations.jsonl matches record_id, content digest, and the seat.
+// An unconfirmed row is the no-feed projection and writes nothing here.
+// This function never opens a card. Feed strike_events are never read;
+// a lifted_by changes nothing.
 function applyFeedAdmission(projection, engine, runner, role, nowMs, effort, storeDir, seatKind, partition) {
   if (seatKind !== 'default') return null;
   if (effort === undefined) return null;
   if (hasLocalSeatRow(engine, runner, role, effort, seatKind, partition.ordinaryRows)) return null;
   const mode = qualificationTrust.resolveTrustMode();
-  if (mode !== 'auto') return null;
+  if (mode !== 'auto' && mode !== 'confirm') return null;
   const cacheDir = path.join(require('os').homedir(), '.autopilot', 'qualification-feeds');
   // Absent cache is today's no-feed path: no gate call, no stderr.
   if (!fs.existsSync(path.join(cacheDir, 'metrics', 'current.json'))) return null;
@@ -2070,6 +2073,11 @@ function applyFeedAdmission(projection, engine, runner, role, nowMs, effort, sto
   const match = qualificationTrust.usableQualificationRows(gated)
     .find((row) => feedSeatMatches(row.seat, engine, runner, role, effort));
   if (!match) return null;
+  let confirmation = null;
+  if (mode === 'confirm') {
+    confirmation = qualificationConfirm.matchingConfirmation(cacheDir, match);
+    if (!confirmation) return null;
+  }
   projection.admission_status = 'qualified';
   // Baseline instant 0: every local strike of this seat counts. The feed's
   // administered_at does not reset them.
@@ -2088,6 +2096,7 @@ function applyFeedAdmission(projection, engine, runner, role, nowMs, effort, sto
   projection.admission_source = 'feed';
   projection.feed_record_id = match.record_id;
   projection.feed_content_digest = match.content_digest;
+  if (confirmation) projection.feed_confirmation_card = confirmation.card_id;
   return fold.rows;
 }
 

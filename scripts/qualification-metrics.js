@@ -56,6 +56,22 @@ async function main() {
     if (!opts.from) { process.stderr.write('fetch requires --from\n'); process.exit(2); }
     const r = await lib.fetchMetrics(opts.from, { cacheDir, now });
     process.stdout.write(`${JSON.stringify(r.ok ? { ok: true, manifest: r.manifest } : { ok: false, error: r.error }, null, 2)}\n`);
+    if (r.ok) {
+      try {
+        const qualificationTrust = require('./lib/qualification-trust.js');
+        if (qualificationTrust.resolveTrustMode() === 'confirm') {
+          const qualificationConfirm = require('./lib/qualification-confirm.js');
+          const synced = qualificationConfirm.sync({
+            cacheDir,
+            cwd: process.cwd(),
+            nowMs: Number.isNaN(Date.parse(now)) ? Date.now() : Date.parse(now),
+          });
+          if (!synced.ok) process.stderr.write(`qualification-feed trust: sync failed: ${synced.reason}\n`);
+        }
+      } catch (error) {
+        process.stderr.write(`qualification-feed trust: sync failed: ${error.message}\n`);
+      }
+    }
     return;
   }
   if (opts.command === 'status') {

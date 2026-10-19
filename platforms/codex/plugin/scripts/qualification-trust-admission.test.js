@@ -8,11 +8,11 @@
 // feed-lifts-local-strike: strike fold on the feed path removed; a local critical strike still projected qualified. Reverted.
 // pin-wins-over-feed: the pin branch in resolveLiveTuple was skipped; preferred_tuple.engine was null instead of the pin. Reverted.
 // gate-failure-is-no-feed: recorded-digest comparison skipped; a tampered cache admitted the seat. Reverted.
-// confirm-admits-nothing-yet: confirm fell through to the auto overlay and admitted the seat. Reverted.
+// confirm-admits-nothing-yet: confirm admitted with no confirmation line; stdout differed from no-feed. Reverted.
 // default-is-auto: a missing config was treated as off; the seat stayed no_record. Reverted.
 //
 // BL-0194 P6 stage B. Temp HOME, temp config, temp cache, temp scorecard store.
-// No network. Confirm mode admits nothing until the later stage.
+// No network. Confirm with no confirmation line matches the no-feed projection.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

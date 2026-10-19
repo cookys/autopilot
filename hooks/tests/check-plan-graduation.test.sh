@@ -1604,10 +1604,15 @@ set +e
 out="$(node "$GATE" --repo-root "$d" --fix --json --receipt "$d/ro/nested/receipt.json" 2>"$d/err")"
 rc=$?
 set +e
-assert_neq "$rc" "0" "a failed receipt write exits non-zero"
-assert_contains "$out" '"ok":false' "a failed receipt write prints JSON ok false"
-assert_contains "$out" 'receipt' "the error field names the receipt failure"
-assert_eq "$(cat "$d/docs/BACKLOG.md")" "$before" "a failed receipt write leaves BACKLOG unchanged"
+# chmod 555 does not block root, same as the undeletable-sidecar guard above.
+if [ "$(id -u)" != "0" ]; then
+  assert_neq "$rc" "0" "a failed receipt write exits non-zero"
+  assert_contains "$out" '"ok":false' "a failed receipt write prints JSON ok false"
+  assert_contains "$out" 'receipt' "the error field names the receipt failure"
+  assert_eq "$(cat "$d/docs/BACKLOG.md")" "$before" "a failed receipt write leaves BACKLOG unchanged"
+else
+  echo "SKIP: receipt-write-failure case skipped (running as root; chmod 555 does not block root)"
+fi
 
 # --receipt without --fix is a usage error.
 d="$(fixture_repo receipt-without-fix)"

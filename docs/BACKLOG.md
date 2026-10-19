@@ -616,12 +616,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
 - **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
-- **Trigger**: llm-playground 回報 intake 流程，再加上 owner 確認新的 P3／P4b 範圍
+- **Trigger**: llm-playground 回報 intake 流程後，由 owner 確認新的 P5–P7 範圍。
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
-- **Context**: P1-P4a merged on both sides, feed v2 live; owner direction 2026-10-19 moves exam to llm-playground model intake; P3 transport and P4b await re-planning.
+- **Context**: Exam moves to llm-playground intake after SWE34, via engine-qualify headless. Trust auto/confirm/off (default auto). P5–P7; P3 optional, off; P4b is a residual pull.
 
 
 ### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）

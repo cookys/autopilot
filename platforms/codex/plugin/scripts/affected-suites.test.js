@@ -464,3 +464,120 @@ test('--record without --run exits 2, names --run, writes nothing; default path 
     assert.match(ok.stdout, new RegExp(`record: ${rec.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`));
   } finally { r.cleanup(); }
 });
+
+// # RED at 06bfd321a: 4 fail — helper glob still selects b.test.sh; mirror seed still selects engine.test.sh; prose plans/evidence still selects plans-loop.test.sh; real tree dev-setup selected 545.
+test('BL-0213 helper extensionless directory glob does not select every suite that sources the helper', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/lib.sh': '#!/usr/bin/env bash\nfor f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$DEST/"; done\n',
+    'hooks/tests/a.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\nbash "$ROOT/scripts/x.sh"\n',
+    'hooks/tests/b.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\n',
+    'scripts/x.sh': 'echo x\n',
+    'scripts/y.sh': 'echo y\n',
+    'hooks/tests/y.test.sh': '#!/usr/bin/env bash\nbash "$ROOT/scripts/y.sh"\n',
+  });
+  try {
+    const x = r.select(r.change({ 'scripts/x.sh': 'echo x2\n' }));
+    assert.ok(x.suites.includes('hooks/tests/a.test.sh'));
+    assert.ok(!x.suites.includes('hooks/tests/b.test.sh'));
+    const lib = filesSelect(r.dir, ['hooks/tests/lib.sh']);
+    assert.ok(lib.suites.includes('hooks/tests/a.test.sh'));
+    assert.ok(lib.suites.includes('hooks/tests/b.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite own extensionless directory glob still selects that suite', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/suite-glob.test.sh': '#!/usr/bin/env bash\nfor f in "$ROOT"/scripts/*; do bash "$f"; done\n',
+    'scripts/z.sh': 'echo z\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/z.sh': 'echo z2\n' }));
+    assert.ok(out.suites.includes('hooks/tests/suite-glob.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 helper glob with an extension still selects a suite that sources the helper', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/lib.sh': '#!/usr/bin/env bash\nfor f in "$REPO_ROOT"/scripts/*.sh; do bash "$f"; done\n',
+    'hooks/tests/helper-ext.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\n',
+    'scripts/w.sh': 'echo w\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/w.sh': 'echo w2\n' }));
+    assert.ok(out.suites.includes('hooks/tests/helper-ext.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a platforms mirror seed matches only a literal repo-relative path', () => {
+  const mirror = 'platforms/codex/plugin/src/engine/res.js';
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/engine/res.js': 'module.exports = 1;\n',
+    [mirror]: 'module.exports = 1;\n',
+    'src/engine/engine.js': "const res = require('./res');\nmodule.exports = res;\n",
+    'hooks/tests/engine.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/src/engine/engine.js"\n',
+    'hooks/tests/mirror-path.test.sh': `#!/usr/bin/env bash\necho ${mirror}\n`,
+  });
+  try {
+    const onlyMirror = filesSelect(r.dir, [mirror]);
+    assert.ok(!onlyMirror.suites.includes('hooks/tests/engine.test.sh'));
+    assert.ok(onlyMirror.suites.includes('hooks/tests/mirror-path.test.sh'));
+    const source = filesSelect(r.dir, ['src/engine/res.js']);
+    assert.ok(source.suites.includes('hooks/tests/engine.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 prose category directory names do not select a suite that only names the category', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plans-loop.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/evidence/; do echo "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({
+      'docs/plans/p.md': '# edited\n',
+      'scripts/other.js': 'console.log("changed");\n',
+    }));
+    assert.ok(!out.suites.includes('hooks/tests/plans-loop.test.sh'));
+    assert.ok(out.suites.includes('hooks/tests/other.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite that names a prose file by basename is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plan-name.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/docs/plans/p.md"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'docs/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/plan-name.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a dated evidence directory still selects the suite that names it', () => {
+  const data = 'docs/plans/evidence/2026-01-01-x/data.json';
+  const r = makeRepo({
+    ...LAYOUT,
+    [data]: '{}\n',
+    'hooks/tests/dated-evidence.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/evidence/2026-01-01-x/; do cat "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ [data]: '{"a":1}\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/dated-evidence.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 real tree: dev-setup, codex review-resolution mirror, and a docs plan stay under the fan-in bounds', () => {
+  const run = (file) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
+  const dev = run('scripts/dev-setup.sh');
+  assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
+  assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
+  const mirror = run('platforms/codex/plugin/src/engine/review-resolution.js');
+  assert.ok(mirror.suites.length < 80, `mirror selected ${mirror.suites.length}`);
+  const plan = run('docs/plans/2026-10-17-review-only-campaign-fix-increment.md');
+  assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
+});

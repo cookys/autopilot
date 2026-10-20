@@ -57,6 +57,13 @@
 //      and does not force full. An empty list is never returned for a change that could matter.
 //   5. A fixed always-run list (ALWAYS_RUN, with a reason each) is added to every selective result
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
+//   6. An extensionless directory glob in a shared test helper (a non-suite .sh directly under
+//      hooks/tests/) creates no glob edge; globs with an extension, and every glob in a suite, stay.
+//   7. A platforms/ mirror seed matches only a code file whose text contains that seed's full
+//      repo-relative path; basename, bare-name, directory-segment and glob edges are not used.
+//   8. For a prose seed only, the category directory names plans, evidence, backlog, projects and adr
+//      are skipped like GENERIC_DIRS, including a glob whose directory has no more specific segment;
+//      a deeper specific directory name and a basename mention stay.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -179,6 +186,8 @@ const RE_EXT = /[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[A-Za-z0-9]{1,12}\b/g;
 const RE_SEG = /\/([A-Za-z0-9_][A-Za-z0-9_.\-]*)(?=[\/"'\s)}\]$]|$)/g;
 const RE_BARE = /(?:^|[\/'"`])([A-Za-z0-9_][A-Za-z0-9_\-]*)(?=['"`)\/\s,;:]|$)/gm;
 const RE_GLOB = /((?:"?\$\{?[A-Za-z_]\w*\}?"?)?[A-Za-z0-9_.\-\/]*)\/\*(\.[A-Za-z0-9]+)?/g;
+// A literal repo-relative platforms/ path. Used only when the seed is a mirror.
+const RE_MIRROR_PATH = /platforms\/[A-Za-z0-9_./\-]+/g;
 // "$REPO_ROOT"/scripts/* and $REPO_ROOT/scripts/*.sh both mean the repo-relative directory scripts.
 const globDir = (d) => d.replace(/^"?\$\{?\w+\}?"?/, '').replace(/^\/+/, '').replace(/^\.\//, '');
 
@@ -187,17 +196,22 @@ const RE_REQ = /(?:require\(\s*|import\s+[^'"\n]*?from\s+|import\(\s*|import\s+)
 const RE_SRC = /(?:^|[;&|(]|\bthen\b|\bdo\b)[ \t]*(?:source|\.)[ \t]+["']?([^\s"';)]+)/gm;
 
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), globs = [], strong = new Set(), segs = new Set();
+  const exts = new Set(), bares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
   for (const m of text.matchAll(RE_BARE)) bares.add(m[1]);
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
-  return { exts, bares, globs, strong, segs };
+  for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
+  return { exts, bares, globs, strong, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
+// Category folders under docs/. Skipped only for a prose seed; other data files keep GENERIC_DIRS alone.
+const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr']);
+// A non-suite .sh directly under hooks/tests/: shared helper, not a suite.
+const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
 const stripComments = (t) => t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
@@ -209,21 +223,34 @@ function buildGraph(tree) {
     const t = tree.read(f);
     if (t != null) refs.set(f, mentions(stripComments(t)));
   }
-  const byExt = new Map(), byBare = new Map(), bySeg = new Map(); // token -> Set(referrer)
+  const byExt = new Map(), byBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
     for (const t of r.exts) add(byExt, t, f);
     for (const t of r.bares) add(byBare, t, f);
     for (const t of r.segs) add(bySeg, t, f);
+    for (const t of r.paths) add(byPath, t, f);
   }
   const globRefs = []; // {file, dir, ext}
-  for (const [f, r] of refs) for (const g of r.globs) globRefs.push({ file: f, ...g });
-  return { refs, byExt, byBare, bySeg, globRefs };
+  for (const [f, r] of refs) {
+    for (const g of r.globs) {
+      // A helper that iterates a whole extensionless directory does not depend on any one file in it.
+      if (isSharedTestHelper(f) && !g.ext) continue;
+      globRefs.push({ file: f, ...g });
+    }
+  }
+  return { refs, byExt, byBare, bySeg, byPath, globRefs };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
 function referrersOf(graph, p) {
   const out = new Map();
+  // A mirror is a byte copy. Match the full path only; the source file's basename is a different seed.
+  if (MIRROR.test(p)) {
+    for (const f of graph.byPath.get(p) || []) out.set(f, 'weak');
+    out.delete(p);
+    return out;
+  }
   const bareP = base(p).replace(/\.[^.]+$/, '');
   const kind = (f) => (graph.refs.get(f).strong.has(bareP) ? 'strong' : 'weak');
   const b = base(p);
@@ -237,11 +264,15 @@ function referrersOf(graph, p) {
     const parts = p.split('/').slice(0, -1);
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
+      if (isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
       for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
     }
   }
   for (const g of graph.globRefs) {
-    if (g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file)) out.set(g.file, 'weak');
+    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
+    // docs/plans/* names the category, not one plan. A glob that also names a specific directory stays.
+    if (isProse(p) && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
+    out.set(g.file, 'weak');
   }
   out.delete(p);
   return out;

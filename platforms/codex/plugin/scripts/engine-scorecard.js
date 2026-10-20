@@ -451,6 +451,11 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
     failValidation(`invalid status '${row.status}'`);
   }
 
+  // Legacy rows have no evidence block, so the evidence timestamp gate never
+  // sees qualified_at / expires. Date-only strings are valid tsUtc input;
+  // absent or non-string fields stay optional.
+  rejectImpossibleRowDateFields(row);
+
   if (!row.cost || typeof row.cost !== 'object' || Array.isArray(row.cost)) {
     failValidation('cost must be an object');
   }
@@ -471,6 +476,7 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
   }
 
   if (row.evidence !== undefined) {
+    rejectImpossibleEvidenceTimestamps(row.evidence);
     let evidence;
     try {
       evidence = compileCapabilityEvidence(row.evidence);
@@ -518,6 +524,46 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
     if (evidence.source === 'internal_eval') {
       verifyEvidenceStoreAnchor(row, capabilityRowsOverride || readCapabilityEvidenceRows());
     }
+  }
+}
+
+// Reject calendar-impossible qualified_at / expires before they are stored.
+function rejectImpossibleRowDateFields(row) {
+  if (!row || typeof row !== 'object') return;
+  const { tsUtc } = require('./lib/qualification-record-v2.js');
+  for (const field of ['qualified_at', 'expires']) {
+    const value = row[field];
+    if (typeof value !== 'string') continue;
+    try {
+      tsUtc(value);
+    } catch {
+      failValidation(`invalid ${field} '${value}'`);
+    }
+  }
+}
+
+// compileCapabilityEvidence rewrites a calendar-impossible stamp through Date
+// (2026-02-30T00:00:00Z becomes 2 March). Reject the submitted value first, with
+// the same gate as qualification-record-v2 tsUtc, before that rewrite.
+function rejectImpossibleEvidenceTimestamps(evidence) {
+  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return;
+  const { tsUtc } = require('./lib/qualification-record-v2.js');
+  const check = (value, field) => {
+    if (typeof value !== 'string') return;
+    try {
+      tsUtc(value);
+    } catch {
+      failValidation(`invalid ${field} '${value}'`);
+    }
+  };
+  check(evidence.issued_at, 'evidence.issued_at');
+  check(evidence.observed_at, 'evidence.observed_at');
+  check(evidence.expires_at, 'evidence.expires_at');
+  if (Array.isArray(evidence.trials)) {
+    evidence.trials.forEach((trial, index) => {
+      if (!trial || typeof trial !== 'object' || Array.isArray(trial)) return;
+      check(trial.observed_at, `evidence.trials[${index}].observed_at`);
+    });
   }
 }
 
@@ -2328,7 +2374,6 @@ function cmdRecord(args) {
     : fs.readFileSync(0, 'utf8');
   const parsed = parseJsonObject(raw, 'record input');
 
-  const submittedEvidence = parsed.evidence && typeof parsed.evidence === 'object' ? { ...parsed.evidence } : null;
   validateRecordRow(parsed);
 
   const stored = { ...parsed };
@@ -2342,28 +2387,8 @@ function cmdRecord(args) {
     return row;
   });
 
-  enqueueForRegistry(queueRowForOutbox(writtenRow, submittedEvidence));
+  enqueueForRegistry(writtenRow);
   process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
-}
-
-// The compiled receipt rewrites an impossible calendar day (2026-02-30 -> March 2). The outbox gate
-// must see the submitted stamp so tsUtc can reject it instead of queueing the rolled instant.
-function queueRowForOutbox(writtenRow, submittedEvidence) {
-  if (!submittedEvidence || !writtenRow.evidence || typeof writtenRow.evidence !== 'object') return writtenRow;
-  const stamp = submittedEvidence.observed_at || submittedEvidence.issued_at;
-  try {
-    require('./lib/qualification-record-v2.js').tsUtc(stamp);
-    return writtenRow;
-  } catch {
-    return {
-      ...writtenRow,
-      evidence: {
-        ...writtenRow.evidence,
-        observed_at: submittedEvidence.observed_at,
-        issued_at: submittedEvidence.issued_at,
-      },
-    };
-  }
 }
 
 // BL-0194 P3: the local scorecard write above stays (legacy path until P4b); when qualification_outbox.enqueue is on

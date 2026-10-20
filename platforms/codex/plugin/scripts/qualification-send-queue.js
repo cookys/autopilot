@@ -14,7 +14,9 @@
 // the line carries its sha256). Lock: the repo's PID lock with stale-holder breaker (scripts/lib/jsonl-store.js);
 // Node has no flock, and this lock gives the same single-writer guarantee with crash recovery.
 // flush: quarantines a torn/crc-bad line to outbox.jsonl.corrupt (loud warning, other lines untouched), then for each
-// outbox.meta.json sits next to the log and is never an orphan: the sweep only unlinks files inside outbox.d.
+// outbox.meta.json sits next to the log and is never an orphan. The sweep unlinks stray
+// meta temp files named by metaTmpBasename (META_TMP_PREFIX + pid) in the outbox directory and files inside outbox.d.
+// It never unlinks outbox.meta.json or outbox.jsonl.
 // un-acked id: asks the transport for an ack, else sends once, polls again. Ack = the registry's DEFAULT branch holds
 // the record bytes (never a bot branch, never an open PR). Permanent rejection -> `rejected`, never resent.
 // `retired` only after `acked`; compaction rewrites atomically without fully retired ids. Failure -> `failed` + backoff.
@@ -167,8 +169,14 @@ function readMeta(p) {
   }
 }
 
+const META_TMP_PREFIX = '.outbox.meta.json.tmp.';
+
+function metaTmpBasename(pid = process.pid) {
+  return `${META_TMP_PREFIX}${pid}`;
+}
+
 function writeMetaAtomic(p, obj) {
-  const tmp = path.join(p.dir, `.outbox.meta.json.tmp.${process.pid}`);
+  const tmp = path.join(p.dir, metaTmpBasename());
   const fd = fs.openSync(tmp, 'w', 0o600);
   try {
     fs.writeSync(fd, JSON.stringify(obj));
@@ -179,12 +187,29 @@ function writeMetaAtomic(p, obj) {
   fsyncDir(p.dir);
 }
 
-/** First successful append records enqueue_enabled_at once. A corrupt meta file is rewritten. */
+function earliestEnqueuedTs(p) {
+  const { events } = readLog(p);
+  let best = null;
+  let bestMs = Infinity;
+  for (const e of events) {
+    if (!e || e.event !== 'enqueued' || typeof e.ts !== 'string' || !e.ts) continue;
+    const ms = Date.parse(e.ts);
+    if (!Number.isFinite(ms) || ms >= bestMs) continue;
+    bestMs = ms;
+    best = e.ts;
+  }
+  return best;
+}
+
+/** First successful append records enqueue_enabled_at once. A corrupt meta file is rewritten.
+ *  Absent or corrupt meta with events already in the log uses the earliest enqueued ts
+ *  (this runs before the append of the enqueue in progress). An empty log stamps now. */
 function noteEnqueueEnabled(p) {
   const cur = readMeta(p);
   if (cur.ok && typeof cur.ok.enqueue_enabled_at === 'string' && cur.ok.enqueue_enabled_at) return;
   const next = cur.ok ? { ...cur.ok } : {};
-  next.enqueue_enabled_at = nowIso();
+  const fromLog = cur.ok ? null : earliestEnqueuedTs(p);
+  next.enqueue_enabled_at = fromLog || nowIso();
   writeMetaAtomic(p, next);
 }
 
@@ -335,6 +360,12 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
         try { fs.unlinkSync(path.join(p.d, n)); out.orphans_removed = (out.orphans_removed || 0) + 1; } catch { /* raced away */ }
       }
     }
+    let rootNames = [];
+    try { rootNames = fs.readdirSync(p.dir); } catch { /* dir vanished */ }
+    for (const n of rootNames) {
+      if (!n.startsWith(META_TMP_PREFIX)) continue;
+      try { fs.unlinkSync(path.join(p.dir, n)); out.orphans_removed = (out.orphans_removed || 0) + 1; } catch { /* raced away */ }
+    }
   } finally { store.releaseLock(p.lock); }
   return out;
 }
@@ -414,11 +445,32 @@ function gitTransport(opts) {
   };
   const qualDir = `benchmarks/qualification/${workspace}`;
 
+  function idCandidates(message) {
+    const out = [];
+    const re = /(?:v\d+:)?[0-9a-fA-F]{12,}/gi;
+    const text = String(message || '');
+    let m;
+    while ((m = re.exec(text))) out.push(m[0]);
+    return out;
+  }
+
+  function recordIdMatches(recordId, candidate) {
+    const rec = String(recordId).toLowerCase();
+    const cand = String(candidate).toLowerCase();
+    if (rec === cand) return true;
+    const strip = (s) => s.replace(/^v\d+:/, '');
+    const recBody = strip(rec);
+    const candBody = strip(cand);
+    if (candBody.length > 0 && candBody === recBody) return true;
+    if (/^[0-9a-f]{12,}$/.test(candBody) && recBody.startsWith(candBody)) return true;
+    return false;
+  }
+
   function existingTranscriptHash(message) {
-    const found = String(message || '').match(/[0-9a-fA-F]{12}/);
-    if (!found) return undefined;
-    const prefix = found[0].toLowerCase();
+    const candidates = idCandidates(message);
+    if (!candidates.length) return undefined;
     const root = path.join(repo, 'benchmarks', 'qualification');
+    const matches = (recordId) => candidates.some((cand) => recordIdMatches(recordId, cand));
     let hit;
     const walk = (dir) => {
       if (hit) return;
@@ -431,7 +483,7 @@ function gitTransport(opts) {
         else if (ent.isFile() && ent.name.endsWith('.json')) {
           try {
             const rec = JSON.parse(fs.readFileSync(fp, 'utf8'));
-            if (rec && typeof rec.record_id === 'string' && rec.record_id.toLowerCase().startsWith(prefix)
+            if (rec && typeof rec.record_id === 'string' && matches(rec.record_id)
               && typeof rec.transcript_hash === 'string' && rec.transcript_hash) hit = rec.transcript_hash;
           } catch { /* skip an unreadable record */ }
         }
@@ -632,6 +684,6 @@ async function main(argv) {
   return 2;
 }
 
-module.exports = { enqueueScorecardRow, outboxDir, enqueue, flush, status, statusLines, gitTransport, assertPushAllowed, readOutboxConfig, crc32, makeLine, parseLine, idOf, BOT_PREFIX };
+module.exports = { enqueueScorecardRow, outboxDir, enqueue, flush, status, statusLines, gitTransport, assertPushAllowed, readOutboxConfig, crc32, makeLine, parseLine, idOf, BOT_PREFIX, META_TMP_PREFIX, metaTmpBasename };
 
 if (require.main === module) main(process.argv.slice(2)).then((c) => process.exit(c), (e) => { process.stderr.write(`${e.stack || e}\n`); process.exit(1); });

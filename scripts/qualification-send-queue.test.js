@@ -2,6 +2,8 @@
 /*
 # RED at 45b1c5fff: new cases 8 fail / 1 pass (exit 1). enqueue_enabled_at absent from status; first enqueue writes no meta; ts_rejected missing (buildV2Record returns null); SECONDARY_KEY_COLLISION stays in rejected with no already_ingested array; old rejected line still parses but already_ingested is undefined. The pre-set sentinel case passed only because the base never reads outbox.meta.json.
 # RED at 5a93aadcf: record stderr is the legacy_shape line (no ts_rejected) for observed_at 2026-02-30; flush summary.already_ingested is undefined (equal-hash rejected count stays on rejected; different-hash already_ingested !== 0). exit 1.
+# RED at 8b89f4d5e: record still exits 0 with ts_rejected on stderr (store written); absent/corrupt meta stamp now (2026-10-20T02:05:50Z) not the earliest enqueued ts; flush orphans_removed undefined for .outbox.meta.json.tmp; v1:/v2: transcript hash undefined. 6 fail. exit 1.
+# RED at 3cbbb4c18: 13-hex, 40-hex, 63-hex and v2:40 prefix candidates return undefined (12-hex and 64-hex pass; a non-prefix 13-hex finds nothing). exit 1.
 */
 // Run: node --test scripts/qualification-send-queue.test.js
 //
@@ -267,15 +269,24 @@ test('scorecard hook: off by default, one entry when qualification_outbox.enqueu
   assert.equal(sq.enqueueScorecardRow(legacy, { env: on }).status, 'legacy_shape');
 });
 
-test('record writes the local scorecard row and reports ts_rejected on stderr', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-rec-'));
-  const store = path.join(home, 'score');
-  const outbox = path.join(home, 'ob');
-  const cfg = path.join(home, 'cfg.json');
-  fs.mkdirSync(store, { recursive: true });
-  fs.writeFileSync(cfg, JSON.stringify({ qualification_outbox: { enqueue: true } }));
+function recordEnv(home, store, outbox, cfg) {
+  const env = {
+    ...process.env,
+    HOME: home,
+    AUTOPILOT_CONFIG_FILE: cfg,
+    AUTOPILOT_OUTBOX_DIR: outbox,
+    ENGINE_SCORECARD_DIR: store,
+    ENGINE_CAPABILITY_DIR: store,
+    AUTOPILOT_STRIKE_WRITER: 'off',
+  };
+  delete env.AUTOPILOT_SESSION_ID;
+  delete env.CLAUDE_CODE_SESSION_ID;
+  return env;
+}
+
+function externalPriorRow(observedAt) {
   const hash = 'ab'.repeat(32);
-  const row = {
+  return {
     engine: 'grok-4.6', runner: 'grok', family: 'f', role: 'reviewer', effort: 'default',
     model_version: 'v1', version_source: 'manual', corpus_version: null,
     harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: hash,
@@ -291,7 +302,7 @@ test('record writes the local scorecard row and reports ts_rejected on stderr', 
         runner_version: 'rv1', harness_version: 'h1', effort: 'default', prompt_config_hash: hash,
         semantic_fingerprint: hash, containment_fingerprint: hash, identity_resolved: false,
       },
-      issued_at: '2026-03-02T00:00:00Z', observed_at: '2026-02-30T00:00:00Z', expires_at: '2026-04-02T00:00:00Z',
+      issued_at: '2026-03-02T00:00:00.000Z', observed_at: observedAt, expires_at: '2026-04-02T00:00:00.000Z',
       methodology: {
         kind: 'external_prior', name: 'ext', version: '1', corpus_version: null, corpus_manifest_hash: null, thresholds: null,
         basis: { cohort: 'c', cohort_hash: hash, observation_hash: hash, dimensions: ['x'], applicability: [] },
@@ -299,28 +310,46 @@ test('record writes the local scorecard row and reports ts_rejected on stderr', 
       trials: [], revocation: null, supersedes: null,
     },
   };
+}
+
+test('record rejects an impossible evidence date and writes nothing', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-rec-'));
+  const store = path.join(home, 'score');
+  const outbox = path.join(home, 'ob');
+  const cfg = path.join(home, 'cfg.json');
+  fs.mkdirSync(store, { recursive: true });
+  fs.writeFileSync(cfg, JSON.stringify({ qualification_outbox: { enqueue: true } }));
+  const row = externalPriorRow('2026-02-30T00:00:00Z');
   const file = path.join(home, 'row.json');
   fs.writeFileSync(file, JSON.stringify(row));
-  const env = {
-    ...process.env,
-    HOME: home,
-    AUTOPILOT_CONFIG_FILE: cfg,
-    AUTOPILOT_OUTBOX_DIR: outbox,
-    ENGINE_SCORECARD_DIR: store,
-    ENGINE_CAPABILITY_DIR: store,
-    AUTOPILOT_STRIKE_WRITER: 'off',
-  };
-  delete env.AUTOPILOT_SESSION_ID;
-  delete env.CLAUDE_CODE_SESSION_ID;
-  const r = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record', '--file', file], { env, encoding: 'utf8' });
-  assert.equal(r.status, 0, r.stderr || r.stdout);
-  assert.match(r.stderr, /ts_rejected/);
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record', '--file', file], {
+    env: recordEnv(home, store, outbox, cfg), encoding: 'utf8',
+  });
+  assert.notEqual(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stderr, /observed_at/);
   assert.match(r.stderr, /2026-02-30T00:00:00Z/);
+  assert.ok(!fs.existsSync(path.join(store, 'scorecard.jsonl')));
+  assert.ok(!fs.existsSync(path.join(outbox, 'outbox.jsonl')));
+});
+
+test('record accepts a toISOString evidence timestamp', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-rec-ok-'));
+  const store = path.join(home, 'score');
+  const outbox = path.join(home, 'ob');
+  const cfg = path.join(home, 'cfg.json');
+  fs.mkdirSync(store, { recursive: true });
+  fs.writeFileSync(cfg, JSON.stringify({ qualification_outbox: { enqueue: true } }));
+  const observed = new Date('2026-03-01T00:00:00.000Z').toISOString();
+  const row = externalPriorRow(observed);
+  const file = path.join(home, 'row.json');
+  fs.writeFileSync(file, JSON.stringify(row));
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record', '--file', file], {
+    env: recordEnv(home, store, outbox, cfg), encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
   const lines = fs.readFileSync(path.join(store, 'scorecard.jsonl'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 1);
-  const stored = JSON.parse(lines[0]);
-  assert.equal(stored.engine, 'grok-4.6');
-  assert.ok(!fs.existsSync(path.join(outbox, 'outbox.jsonl')));
+  assert.equal(JSON.parse(lines[0]).evidence.observed_at, observed);
 });
 
 function isoCase() {
@@ -376,6 +405,46 @@ test('a corrupt outbox.meta.json is repaired on enqueue', () => {
   assert.equal(sq.enqueue('record', makeRecord(1), { env: t.env }).status, 'enqueued');
   const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
   assert.match(meta.enqueue_enabled_at, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+function plantEnqueuedLog(sq, dir, stamps) {
+  fs.mkdirSync(dir, { recursive: true });
+  const body = stamps.map((ts, i) => sq.makeLine({
+    event: 'enqueued', id: `${i}`.padStart(64, 'a'), kind: 'record', payload_sha256: 'cd'.repeat(32), ts,
+  })).join('');
+  fs.writeFileSync(path.join(dir, 'outbox.jsonl'), body);
+}
+
+test('absent meta with existing enqueued events uses the earliest enqueued ts', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const early = '2020-01-02T03:04:05.000Z';
+  const late = '2024-05-06T07:08:09.000Z';
+  plantEnqueuedLog(sq, t.dir, [late, early]);
+  assert.equal(sq.enqueue('record', makeRecord(1), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  assert.equal(meta.enqueue_enabled_at, early);
+});
+
+test('corrupt meta with existing enqueued events uses the earliest enqueued ts', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const early = '2019-11-11T11:11:11.000Z';
+  plantEnqueuedLog(sq, t.dir, ['2021-01-01T00:00:00.000Z', early]);
+  fs.writeFileSync(path.join(t.dir, 'outbox.meta.json'), '{not json', { mode: 0o600 });
+  assert.equal(sq.enqueue('record', makeRecord(2), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  assert.equal(meta.enqueue_enabled_at, early);
+});
+
+test('fresh enqueue with no prior enqueued event stamps the current time', () => {
+  const t = isoCase();
+  const sq = loadSq();
+  const before = Date.now();
+  assert.equal(sq.enqueue('record', makeRecord(3), { env: t.env }).status, 'enqueued');
+  const meta = JSON.parse(fs.readFileSync(path.join(t.dir, 'outbox.meta.json'), 'utf8'));
+  const ms = Date.parse(meta.enqueue_enabled_at);
+  assert.ok(ms >= before - 1000 && ms <= Date.now() + 1000);
 });
 
 test('enqueueScorecardRow returns ts_rejected instead of throwing on a bad timestamp', () => {
@@ -817,6 +886,25 @@ test('assertPushAllowed sees through leading -c / -C pairs', () => {
   assert.throws(() => sq.assertPushAllowed('origin', ['-C', '/x', '-c', 'a=b', 'push', 'origin', 'HEAD:main']), /refusing push/);
 });
 
+test('flush removes .outbox.meta.json.tmp crash leftovers and leaves the real meta file', async () => {
+  const t = fresh();
+  const sq = loadSq();
+  const env = { AUTOPILOT_OUTBOX_DIR: t.dir };
+  sq.enqueue('record', makeRecord(1), { env });
+  const metaPath = path.join(t.dir, 'outbox.meta.json');
+  const before = fs.readFileSync(metaPath, 'utf8');
+  const tmpName = sq.metaTmpBasename(4242);
+  fs.writeFileSync(path.join(t.dir, tmpName), '{"enqueue_enabled_at":"1999-01-01T00:00:00.000Z"}');
+  const r = await sq.flush({
+    transport: { async findAck() { return { state: 'pending' }; }, async send() { return { status: 'sent' }; } },
+    env, warn() {},
+  });
+  assert.equal(r.orphans_removed, 1);
+  assert.ok(!fs.existsSync(path.join(t.dir, tmpName)));
+  assert.equal(fs.readFileSync(metaPath, 'utf8'), before);
+  assert.ok(fs.existsSync(path.join(t.dir, 'outbox.jsonl')));
+});
+
 test('orphan payload files and stray temp files are removed by flush; live payloads stay', async () => {
   const t = fresh();
   const sq = loadSq();
@@ -830,6 +918,86 @@ test('orphan payload files and stray temp files are removed by flush; live paylo
   const r = await sq.flush({ transport: { async findAck() { return { state: 'pending' }; }, async send() { return { status: 'sent' }; } }, env, warn() {} });
   assert.equal(r.orphans_removed, 2);
   assert.deepEqual(fs.readdirSync(d), [`${big.record_id}.json`]);
+});
+
+async function transcriptHashFor(message, records) {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'qsq-hash-'));
+  const dir = path.join(repo, 'benchmarks', 'qualification', 'cookys');
+  fs.mkdirSync(dir, { recursive: true });
+  records.forEach((rec, i) => fs.writeFileSync(path.join(dir, `r${i}.json`), JSON.stringify(rec)));
+  const sq = loadSq();
+  const tr = sq.gitTransport({
+    repo,
+    defaultBranch: 'master',
+    openPr: false,
+    git: () => ({ status: 0, stdout: 'x\n', stderr: '' }),
+    gh: () => ({ status: 0, stdout: '[]', stderr: '' }),
+    ingest: () => ({ status: 3, stdout: `${JSON.stringify({ code: 'SECONDARY_KEY_COLLISION', message })}\n`, stderr: '' }),
+  });
+  const sent = await tr.send({ id: 'f'.repeat(64), kind: 'record', payload: { record_id: 'f'.repeat(64) } });
+  return sent.existing_transcript_hash;
+}
+
+test('existingTranscriptHash matches a plain 12-hex message', async () => {
+  const id = `${'abc123def456'}${'a'.repeat(52)}`;
+  const hash = '11'.repeat(32);
+  const got = await transcriptHashFor(`prior record ${id.slice(0, 12)} already ingested`, [
+    { record_id: id, transcript_hash: hash },
+  ]);
+  assert.equal(got, hash);
+});
+
+test('existingTranscriptHash matches a v1:-prefixed message', async () => {
+  const body = `${'b'.repeat(64)}`;
+  const hash = '22'.repeat(32);
+  const got = await transcriptHashFor(`collision on V1:${body}`, [
+    { record_id: `v1:${body}`, transcript_hash: hash },
+  ]);
+  assert.equal(got, hash);
+});
+
+test('existingTranscriptHash matches a v2:-prefixed message', async () => {
+  const body = `${'c'.repeat(64)}`;
+  const hash = '33'.repeat(32);
+  const got = await transcriptHashFor(`see v2:${body.slice(0, 12)}`, [
+    { record_id: `v2:${body}`, transcript_hash: hash },
+  ]);
+  assert.equal(got, hash);
+});
+
+test('existingTranscriptHash matches nothing when the message has no id', async () => {
+  const got = await transcriptHashFor('no identifier in this rejection', [
+    { record_id: 'd'.repeat(64), transcript_hash: '44'.repeat(32) },
+  ]);
+  assert.equal(got, undefined);
+});
+
+for (const n of [12, 13, 40, 63, 64]) {
+  test(`existingTranscriptHash prefix-matches a ${n}-hex candidate body`, async () => {
+    const full = 'ab'.repeat(32);
+    const hash = '55'.repeat(32);
+    const cand = full.slice(0, n);
+    const got = await transcriptHashFor(`collision ${cand} seen`, [
+      { record_id: full, transcript_hash: hash },
+    ]);
+    assert.equal(got, hash);
+  });
+}
+
+test('existingTranscriptHash prefix-matches a v2: 40-hex candidate', async () => {
+  const body = 'cd'.repeat(32);
+  const hash = '66'.repeat(32);
+  const got = await transcriptHashFor(`collision v2:${body.slice(0, 40)}`, [
+    { record_id: `v2:${body}`, transcript_hash: hash },
+  ]);
+  assert.equal(got, hash);
+});
+
+test('existingTranscriptHash finds nothing for a 13-hex candidate that is not a prefix', async () => {
+  const got = await transcriptHashFor('collision 0123456789abc seen', [
+    { record_id: 'ff'.repeat(32), transcript_hash: '77'.repeat(32) },
+  ]);
+  assert.equal(got, undefined);
 });
 
 test('workspace comes from qualification_outbox.workspace (default cookys)', () => {

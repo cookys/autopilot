@@ -1316,13 +1316,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-20
 - **Origin**: self
-- **Problem**: 下次改到該驗證腳本時，整合執行檢查仍用手拼出合併清單，沒有呼叫合併意圖的建構函式。清單結構升到第二版時，這裡寫死的版號曾經落後；常數已補，重複的結構還在。
+- **Problem**: 下次接觸驗證的整合執行檢查仍用手重組合併清單，沒有呼叫合併意圖的建構函式。結構升到第二版時，寫死的一曾經漂過一次；常數已修正，重複的結構還在。
 - **Impact**: 結構再改時，手組的那份會再漂一次，驗證會對錯的清單形狀放行或誤報。
 - **Trigger**: 下次改到該檔時
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: reds3 lane, 2026-10-20
-- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
+- **Pointer**: scripts/next-touch-validation.js
 - **Context**: scripts/next-touch-validation.js still hand-builds the manifest; the schema-2 constant was patched, the copy remains.
 
 ### orchestration-eval-gate test reads BASE_SHA 3a72a54dc that is not in develop history
@@ -1336,5 +1336,5 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: reds3 lane, 2026-10-20
-- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
+- **Pointer**: hooks/tests/orchestration-eval-gate.test.sh
 - **Context**: hooks/tests/orchestration-eval-gate.test.sh git-shows BASE_SHA 3a72a54dc, which is not an ancestor of develop.

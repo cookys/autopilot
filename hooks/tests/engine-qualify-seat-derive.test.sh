@@ -197,6 +197,18 @@ if (s.engine !== "seat" || s.model !== "seat" || s.effort !== "seat") process.ex
 ' "$PRE_D"
 assert_eq "$?" "0" "explicit flags win and are sourced as flag"
 
+# A repeated scope flag overrides the pinned value and is sourced as flag.
+PRE_DOM="$TEST_TMP/preview-domain.json"
+run_q "$PRE_DOM" seat-preview --seat-file "$SEAT" --domain custom-domain
+assert_exit_code "$RUN_RC" "0" "seat-preview with --domain override"
+"$NODE_BIN" -e '
+const doc = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (doc.argv.domain.join(",") !== "custom-domain") process.exit(2);
+if (doc.sources.domain !== "flag") process.exit(3);
+if (doc.sources["task-class"] !== "pinned") process.exit(4);
+' "$PRE_DOM"
+assert_eq "$?" "0" "repeated --domain overrides the pins value and source is flag"
+
 # --- (e) seat-preview schema, identity, exits, no writes ---
 PRE_E="$TEST_TMP/preview-e.json"
 PRE_EJ="$TEST_TMP/preview-e-json.json"
@@ -281,7 +293,7 @@ assert_eq "$?" "0" "seat-preview parameters equal the administered record"
 FAMILY_OUT="$TEST_TMP/family-pairs.out"
 "$NODE_BIN" -e '
 const fs = require("fs");
-const { familyForHeadlessModel } = require(process.argv[1]);
+const { familyOfEngine } = require(process.argv[1]);
 const doc = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const EXIT2_EXCEPTIONS = [
   // { model: "<id>", family: "<official family>", reason: "<why --family is required>" },
@@ -297,7 +309,7 @@ for (const row of doc.defaults) {
   if (seen.has(key)) continue;
   seen.add(key);
   compared += 1;
-  const derived = familyForHeadlessModel(model);
+  const derived = familyOfEngine(model);
   const exception = EXIT2_EXCEPTIONS.find((item) => item.model === model && item.family === family);
   if (exception) {
     if (derived !== "unknown") {
@@ -311,7 +323,7 @@ for (const row of doc.defaults) {
     failures.push(model + " official=" + family + " derived=" + derived);
   }
 }
-const named = familyForHeadlessModel("MiniMax-M3.1-Flash");
+const named = familyOfEngine("MiniMax-M3.1-Flash");
 if (named !== "minimax") {
   failures.push("named MiniMax-M3.1-Flash -> " + named + " (want minimax)");
 }
@@ -321,10 +333,56 @@ if (failures.length) {
   process.exit(1);
 }
 process.stdout.write("compared " + compared + " implementer model/family pairs\n");
-' "$REPO_ROOT/scripts/lib/headless-seat-derive.js" \
+' "$REPO_ROOT/scripts/lib/stage-write.js" \
   "$REPO_ROOT/references/official-qualification-defaults.json" \
   >"$FAMILY_OUT"
 assert_eq "$?" "0" "MiniMax-M3.1-Flash derives minimax and every implementer official pair matches"
 assert_contains "$(cat "$FAMILY_OUT")" "compared " "official-pair comparison ran"
+
+# --- missing scope flag is the one named, not always --task-class ---
+run_q "$TEST_TMP/scope-flag.out" seat-preview --seat-file "$REV" \
+  --family openai --task-class bounded_implementation
+assert_exit_code "$RUN_RC" "2" "non-implementer with a missing scope field exits 2"
+SCOPE_LINE="$(head -n 1 "$TEST_TMP/err.txt")"
+assert_contains "$SCOPE_LINE" "--domain" "first missing scope flag is --domain"
+assert_not_contains "$SCOPE_LINE" "--task-class" "the error does not name a scope flag that was passed"
+
+# --- pins file errors name the pins file and the reason, not harness-version ---
+"$NODE_BIN" -e '
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { loadPins } = require(process.argv[1]);
+function check(label, dir, prepare, needle) {
+  prepare(dir);
+  let error;
+  try { loadPins(dir); } catch (e) { error = e; }
+  if (!error) { console.error(label + " did not throw"); process.exit(1); }
+  const reason = String(error.reason || error.message);
+  const file = path.join(dir, "references", "qualification-headless-pins.json");
+  if (!reason.includes(file)) { console.error(label + " reason missing file: " + reason); process.exit(2); }
+  if (!reason.includes(needle)) { console.error(label + " reason missing " + needle + ": " + reason); process.exit(3); }
+  if (reason.includes("harness-version") || error.field === "harness-version") {
+    console.error(label + " names harness-version: " + reason + " field=" + error.field);
+    process.exit(4);
+  }
+}
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "pins-err-"));
+const missing = path.join(root, "missing");
+fs.mkdirSync(missing);
+check("unreadable", missing, () => {}, "missing or unreadable");
+const bad = path.join(root, "bad");
+fs.mkdirSync(path.join(bad, "references"), { recursive: true });
+check("malformed", bad, (dir) => {
+  fs.writeFileSync(path.join(dir, "references", "qualification-headless-pins.json"), "{");
+}, "not JSON");
+const extra = path.join(root, "extra");
+fs.mkdirSync(path.join(extra, "references"), { recursive: true });
+check("unknown-key", extra, (dir) => {
+  fs.writeFileSync(path.join(dir, "references", "qualification-headless-pins.json"),
+    JSON.stringify({ note: "n", roles: {}, extra: true }));
+}, "unknown key extra");
+' "$REPO_ROOT/scripts/lib/headless-seat-derive.js"
+assert_eq "$?" "0" "unreadable, malformed, and unknown-key pins errors name the pins file"
 
 finalize_test

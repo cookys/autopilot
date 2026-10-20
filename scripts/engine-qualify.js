@@ -264,15 +264,19 @@ const HELP = `Usage:
   With --seat-file, identity fields that were not passed as flags are derived
   before any exam write (a flag always wins):
     runner-version        scripts/lib/runner-binary.js (fail closed; no "unknown")
-    family                familyOfEngine on the model id; "unknown" exits 2 and
+    family                familyOfEngine (scripts/lib/stage-write.js) on the model
+                          id: named vendors (minimax/abab, kimi/moonshot, glm/zhipu,
+                          grok/composer, gpt/codex/o1/o3/o4, claude/opus/sonnet/haiku,
+                          qwen/qwq) before gemini/bison/flash; "unknown" exits 2 and
                           tells the caller to pass --family
     semantic-fingerprint  the implementer constant EXPECTED_IMPL_CORPUS_HASH
     harness-version, containment-fingerprint, task-class, domain, language, tool
                           references/qualification-headless-pins.json
   Headless derivation is only pinned for the implementer role. Any other role
-  that still needs a derived field exits 2 and tells the caller to pass the
-  flags explicitly. A missing, malformed, or unknown-key pins file exits 2 and
-  names the field. Seat file missing or schema-invalid stays exit 4.
+  that still needs a pinned field exits 2 and names the first missing scope
+  flag (task-class, then domain, language, tool). A pins file that is unreadable,
+  malformed, or has an unknown key exits 2 and names that pins file and the
+  reason. Seat file missing or schema-invalid stays exit 4.
 
   scripts/engine-qualify.sh seat-preview --seat-file <f> [--json]
     [the same identity flags the real run accepts]

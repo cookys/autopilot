@@ -8,23 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { resolveRunnerVersion } = require('./runner-binary');
-
-// familyOfEngine (stage-write.js) tests /gemini|flash|bison/ before minimax, so
-// MiniMax-M3.1-Flash is classed google. A rail test pins that order; headless
-// derivation uses this order instead. Vendor tokens are tested before the
-// generic flash class. Unknown still means the caller must pass --family.
-function familyForHeadlessModel(model) {
-  const e = String(model || '').toLowerCase();
-  if (/minimax|abab/.test(e)) return 'minimax';
-  if (/glm|zhipu/.test(e)) return 'zhipu';
-  if (/kimi|moonshot/.test(e)) return 'moonshot';
-  if (/qwen|qwq/.test(e)) return 'alibaba';
-  if (/grok|composer/.test(e)) return 'xai';
-  if (/claude|opus|sonnet|haiku/.test(e)) return 'anthropic';
-  if (/gpt|codex|o1|o3|o4/.test(e)) return 'openai';
-  if (/gemini|flash|bison/.test(e)) return 'google';
-  return 'unknown';
-}
+const { familyOfEngine } = require('./stage-write');
 
 const PINS_NAME = 'qualification-headless-pins.json';
 const TOP_KEYS = new Set(['note', 'roles']);
@@ -49,41 +33,45 @@ function pinsPath(repoRoot) {
   return path.join(repoRoot, 'references', PINS_NAME);
 }
 
+function failPins(file, reason) {
+  fail(path.basename(file), `${file}: ${reason}`);
+}
+
 function loadPins(repoRoot) {
   const file = pinsPath(repoRoot);
   let raw;
   try {
     raw = fs.readFileSync(file, 'utf8');
   } catch (error) {
-    fail('harness-version', `pins file missing or unreadable (${file}): ${error.message}`);
+    failPins(file, `missing or unreadable: ${error.message}`);
   }
   let doc;
   try {
     doc = JSON.parse(raw);
   } catch (error) {
-    fail('harness-version', `pins file is not JSON (${file}): ${error.message}`);
+    failPins(file, `not JSON: ${error.message}`);
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
-    fail('harness-version', `pins file malformed (${file}): expected an object`);
+    failPins(file, 'malformed: expected an object');
   }
   for (const key of Object.keys(doc)) {
     if (!TOP_KEYS.has(key)) {
-      fail('harness-version', `pins file has unknown key ${key}`);
+      failPins(file, `unknown key ${key}`);
     }
   }
   if (typeof doc.note !== 'string' || doc.note.length === 0) {
-    fail('harness-version', 'pins file missing note');
+    failPins(file, 'missing note');
   }
   if (!doc.roles || typeof doc.roles !== 'object' || Array.isArray(doc.roles)) {
-    fail('harness-version', 'pins file missing roles');
+    failPins(file, 'missing roles');
   }
   for (const [role, body] of Object.entries(doc.roles)) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      fail('harness-version', `pins file role ${role} is malformed`);
+      failPins(file, `role ${role} is malformed`);
     }
     for (const key of Object.keys(body)) {
       if (!ROLE_KEYS.includes(key)) {
-        fail('harness-version', `pins file role ${role} has unknown key ${key}`);
+        failPins(file, `role ${role} has unknown key ${key}`);
       }
     }
     for (const key of ROLE_KEYS) {
@@ -106,6 +94,23 @@ function onlyImplementer(field) {
     field,
     `--${field} headless derivation is only pinned for the implementer role (pass the flags explicitly)`,
   );
+}
+
+const SCOPE_FLAGS = [
+  ['taskClasses', 'task-class'],
+  ['domains', 'domain'],
+  ['languages', 'language'],
+  ['tools', 'tool'],
+];
+
+function firstMissingScopeFlag(options, explicit) {
+  for (const [prop, flag] of SCOPE_FLAGS) {
+    if (!explicit.has(prop) || !options[prop] || options[prop].length === 0) return flag;
+  }
+  if (!explicit.has('harnessVersion')) return 'harness-version';
+  if (!explicit.has('containmentFingerprint')) return 'containment-fingerprint';
+  if (!explicit.has('semanticFingerprint')) return 'semantic-fingerprint';
+  return 'task-class';
 }
 
 /**
@@ -141,7 +146,7 @@ function deriveHeadlessSeat(options, explicit, { repoRoot, semanticFingerprint }
   }
 
   if (!explicit.has('family')) {
-    const family = familyForHeadlessModel(options.model);
+    const family = familyOfEngine(options.model);
     if (!family || family === 'unknown') {
       fail('family', `--family is unknown for model ${options.model}; pass --family`);
     }
@@ -167,9 +172,9 @@ function deriveHeadlessSeat(options, explicit, { repoRoot, semanticFingerprint }
 
   let pins = null;
   if (missingPin) {
-    if (options.role !== 'implementer') onlyImplementer('task-class');
+    if (options.role !== 'implementer') onlyImplementer(firstMissingScopeFlag(options, explicit));
     pins = loadPins(repoRoot);
-    if (!pins.roles.implementer) onlyImplementer('task-class');
+    if (!pins.roles.implementer) onlyImplementer(firstMissingScopeFlag(options, explicit));
   }
   const rolePins = pins ? pins.roles.implementer : null;
 
@@ -216,7 +221,6 @@ function deriveHeadlessSeat(options, explicit, { repoRoot, semanticFingerprint }
 
 module.exports = {
   deriveHeadlessSeat,
-  familyForHeadlessModel,
   loadPins,
   pinsPath,
 };

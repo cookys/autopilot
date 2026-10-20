@@ -1322,7 +1322,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: reds3 lane, 2026-10-20
-- **Pointer**: scripts/next-touch-validation.js
+- **Pointer**: docs/backlog/next-touch-validation-manual-manifest.md
 - **Context**: scripts/next-touch-validation.js still hand-builds the manifest; the schema-2 constant was patched, the copy remains.
 
 ### orchestration-eval-gate test reads BASE_SHA 3a72a54dc that is not in develop history
@@ -1336,5 +1336,5 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: reds3 lane, 2026-10-20
-- **Pointer**: hooks/tests/orchestration-eval-gate.test.sh
+- **Pointer**: docs/backlog/orchestration-eval-gate-base-sha.md
 - **Context**: hooks/tests/orchestration-eval-gate.test.sh git-shows BASE_SHA 3a72a54dc, which is not an ancestor of develop.

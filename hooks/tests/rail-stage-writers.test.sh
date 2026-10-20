@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 73d4402c8: familyOfEngine mirrors resolve-review-loop.sh family_of: expected 'ok', got 'MiniMax-M3.1-Flash: sh=google js=google want=minimax'. gemini-3.7-flash-high was not in the failure (sh=google js=google, want google). Suite: 50 passed, 1 failed.
 # hooks/tests/rail-stage-writers.test.sh — plan docs/plans/2026-10-06-dev-flow-stage-graph.md section 2.7 Writers, phase P3 (KR2).
 #
 # Each rail runs with its existing stub transport against a temp session marker and the test asserts the marker's

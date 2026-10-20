@@ -31,14 +31,16 @@ let failed = false;
 
 function familyOfEngine(engine) {
   const e = String(engine || '').toLowerCase();
+  // Named vendors before the generic flash class. MiniMax-M3.1-Flash is minimax;
+  // gemini/bison/flash stay google. No deepseek arm: this table has none.
+  if (/minimax|abab/.test(e)) return 'minimax';
+  if (/kimi|moonshot/.test(e)) return 'moonshot';
+  if (/glm|zhipu/.test(e)) return 'zhipu';
+  if (/grok|composer/.test(e)) return 'xai';
   if (/gpt|codex|o1|o3|o4/.test(e)) return 'openai';
   if (/claude|opus|sonnet|haiku/.test(e)) return 'anthropic';
   if (/qwen|qwq/.test(e)) return 'alibaba';
   if (/gemini|flash|bison/.test(e)) return 'google';
-  if (/grok|composer/.test(e)) return 'xai';
-  if (/minimax|abab/.test(e)) return 'minimax';
-  if (/glm|zhipu/.test(e)) return 'zhipu';
-  if (/kimi|moonshot/.test(e)) return 'moonshot';
   return 'unknown';
 }
 

@@ -17,9 +17,16 @@ HARNESS="$EVAL_DIR/run-orchestration-eval.sh"
 # sha1 bf6c918118bcd7152096b978cf45592f0eb75d77). The old pin 3a72a54dc was a
 # shadow commit not on develop.
 # RED at ff8c02e73: unmodified test git-show of 3a72a54dcaf2df27ed82a9d8a42bd776c93b23b5 exited 128 (path exists on disk, but not in that commit).
-# Negative control: ORCH_GATE_TEST_BASE_SHA_OVERRIDE=0123456789abcdef0123456789abcdef01234567 exits 1 at the ancestry guard: "BASE_SHA is not an ancestor of HEAD so git show on it would break in a fresh clone or after gc".
-# ORCH_GATE_TEST_BASE_SHA_OVERRIDE is empty by default and exists only so the
-# negative control can point BASE_SHA at an unreachable sha without editing.
+# RED at 2d9d42a6a: ORCH_GATE_TEST_BASE_SHA_OVERRIDE=e03c02dfe819c7eb04fec27ad2b063f4d3450c10 (parent of f7f8f902a) replaced the pinned BASE_SHA and the suite stayed green ("BASE_SHA ancestry green: e03c02dfe…").
+# Negative control: reachable parent exits 1 immediately ("ORCH_GATE_TEST_BASE_SHA_OVERRIDE is for the negative control only and must not be reachable"); unreachable 0123456789abcdef0123456789abcdef01234567 exits 1 at the ancestry guard ("BASE_SHA is not an ancestor of HEAD so git show on it would break in a fresh clone or after gc"); unset stays green on the pin.
+# ORCH_GATE_TEST_BASE_SHA_OVERRIDE is empty by default. A non-empty value is a
+# negative control only: if it is an ancestor of HEAD the run fails immediately
+# and must not replace the pin. A non-empty value that is not an ancestor is
+# still assigned so the ancestry guard below fails with its existing message.
+if [ -n "${ORCH_GATE_TEST_BASE_SHA_OVERRIDE:-}" ] && git -C "$REPO_ROOT" merge-base --is-ancestor "$ORCH_GATE_TEST_BASE_SHA_OVERRIDE" HEAD; then
+  fail "ORCH_GATE_TEST_BASE_SHA_OVERRIDE is for the negative control only and must not be reachable"
+  exit 1
+fi
 BASE_SHA="${ORCH_GATE_TEST_BASE_SHA_OVERRIDE:-f7f8f902a7ac05524df3a7a28dfd984a140baad9}"
 if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$BASE_SHA" HEAD; then
   fail "BASE_SHA is not an ancestor of HEAD so git show on it would break in a fresh clone or after gc"

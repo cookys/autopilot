@@ -1672,9 +1672,7 @@ function validateIntegratedExecution(receipt, bundle, args, repoInfo, frozen) {
       || bundle.allowed_path_prefixes.some((prefix) => !validatePathPrefix(prefix))) {
     fail('INTEGRATION_AUTHORITY_INVALID', 'integrated allowed_path_prefixes are invalid');
   }
-  const manifest = {
-    schema_version: mergeIntent.SCHEMA_VERSION,
-    artifact_type: mergeIntent.ARTIFACT_TYPE,
+  const composed = mergeIntent.composeMergeIntentManifest({
     repo: repoInfo.repo,
     root_run_id: bundle.campaign_id,
     edges: [{
@@ -1693,11 +1691,9 @@ function validateIntegratedExecution(receipt, bundle, args, repoInfo, frozen) {
     forbidden_reverse_edges: [{
       source_ref: 'refs/heads/develop', target_ref: bundle.candidate_ref,
     }],
-    preservation_policy: {
-      allowed_path_prefixes: [...new Set(bundle.allowed_path_prefixes)].sort(),
-    },
-  };
-  if (receipt.manifest_seal !== canonicalDigest(manifest)) {
+    allowed_path_prefixes: bundle.allowed_path_prefixes,
+  });
+  if (receipt.manifest_seal !== composed.seal) {
     fail('MERGE_RECEIPT_INVALID', 'integrated receipt manifest is not the authorized intent');
   }
   return { source_worktree: source, target_worktree: target, edge, receipt };

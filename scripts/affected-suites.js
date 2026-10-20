@@ -76,11 +76,14 @@
 //      name.ext mention stay.
 //  10. JavaScript comments are stripped by a string-aware scan: single-quoted, double-quoted and
 //      template literals are copied through (backslash escapes honoured; ${} in a template is still
-//      scanned). Full-line // and # comments and real slash-star blocks are removed. An unterminated
-//      block comment is removed only through the closing marker, or, when none exists, only to the
-//      end of that line — never to end of file. A line whose first non-blank character is * is a
-//      comment only while the scan is inside a block. Shell and other non-JS files still drop
-//      full-line # and // comments only.
+//      scanned). A // comment, line-leading or trailing, is removed through the end of its line
+//      before any slash-star on that line is considered. A slash-star starts a block comment only
+//      when it is the first non-blank character on its line (a line-leading JSDoc block still goes).
+//      A slash-star later on the line, including inside split(/[/*]/), stays as text: over-selection
+//      is safer than dropping a require. An unterminated line-leading block is removed only through
+//      the closing marker, or, when none exists, only to the end of that line — never to end of file.
+//      A line whose first non-blank character is * is a comment only while the scan is inside a block.
+//      Shell and other non-JS files still drop full-line # and // comments only.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -231,8 +234,9 @@ const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr
 const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
-// Full-line # and // only. Trailing // stays: a URL may contain it. JavaScript uses a string-aware
-// scan so a slash-star inside a quote is not a comment. A star line is dropped only inside a block.
+// Full-line # and //, plus a trailing // through end of line, so a slash-star inside that comment
+// is never a block start. A slash-star starts a block only when it is the first non-blank on its
+// line. Anywhere else, including a regexp, it stays text. A star line is dropped only inside a block.
 function stripJsComments(src) {
   const n = src.length;
   let i = 0;
@@ -253,11 +257,11 @@ function stripJsComments(src) {
         while (i < n && src[i] !== '\n') i++;
         continue;
       }
-      if (lineStart && c === '/' && src[i + 1] === '/') {
+      if (c === '/' && src[i + 1] === '/') {
         while (i < n && src[i] !== '\n') i++;
         continue;
       }
-      if (c === '/' && src[i + 1] === '*') {
+      if (lineStart && c === '/' && src[i + 1] === '*') {
         const close = src.indexOf('*/', i + 2);
         if (close === -1) {
           while (i < n && src[i] !== '\n') i++;

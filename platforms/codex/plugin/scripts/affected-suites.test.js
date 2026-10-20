@@ -623,8 +623,6 @@ test('BL-0213 a generic stem mention alone does not select a suite', () => {
   } finally { r.cleanup(); }
 });
 
-
-
 // # RED at 2536401a2: comment-only.test.sh still selected; b8bdd61f3 selected 228 (bound 120).
 test('BL-0213 a name only in a star-comment line or a block comment does not create an edge', () => {
   const r = makeRepo({
@@ -655,12 +653,17 @@ test('BL-0213 a helper call that reads a named file as data still creates a weak
   } finally { r.cleanup(); }
 });
 
-test('BL-0213 real tree: dev-setup, mirror, plan, and the two merge file lists stay under the fan-in bounds', () => {
-  // --files counts on this tree, total_suites 625: dev-setup.sh 39, review-resolution mirror 22,
-  // docs plan 12, b8bdd61f3 275, 3765302f3 83. Half of total_suites is the merge bound (312 at this
-  // size): headroom above 275, and 83 is far under. Adjust the fraction as the repo grows.
-  // dev-setup < 150, mirror < 80 and plan < 60 stay at the round-1 caps (measured 39, 22, 12).
-  const names = (rev) => execFileSync('git', ['diff', '--name-only', `${rev}^1`, rev], { cwd: REAL_ROOT, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+test('BL-0213 real tree: dev-setup, mirror, plan, and the three merges stay under per-revision bounds', () => {
+  // --files on this tree (round 1 caps kept): dev-setup.sh measured 39, bound 150;
+  // review-resolution mirror measured 22, bound 80; docs plan measured 12, bound 60.
+  // Merges use --base <rev>^1 --head <rev> (the mode that produced the counts below), each
+  // bound a fraction of stats.total_suites so it grows with the repo.
+  // d997355a9 measured 102, bound 0.25 * total_suites (~156). Headroom is for a few restored
+  // requires; a slip back toward 300 fails this bound.
+  // b8bdd61f3 measured 269, bound 0.5 * total_suites (~312). This merge touches engine core,
+  // so half the list is the ceiling; it still rejects "nearly every suite".
+  // 3765302f3 measured 83, bound 0.2 * total_suites (~125). A small diff; 0.2 turns red well
+  // before the old shared 0.5 cap, where a regression to 300 would have stayed green.
   const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
   const dev = run(['scripts/dev-setup.sh']);
   assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
@@ -669,10 +672,11 @@ test('BL-0213 real tree: dev-setup, mirror, plan, and the two merge file lists s
   assert.ok(mirror.suites.length < 80, `mirror selected ${mirror.suites.length}`);
   const plan = run(['docs/plans/2026-10-17-review-only-campaign-fix-increment.md']);
   assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
-  for (const rev of ['b8bdd61f3', '3765302f3']) {
-    const out = run(names(rev));
-    const cap = out.stats.total_suites * 0.5;
-    assert.ok(out.stats.selected < cap, `${rev} selected ${out.stats.selected} of ${out.stats.total_suites}`);
+  const bounds = { d997355a9: 0.25, b8bdd61f3: 0.5, '3765302f3': 0.2 };
+  for (const [rev, fraction] of Object.entries(bounds)) {
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--base', `${rev}^1`, '--head', rev, '--json'], { stdio: 'pipe' }).toString());
+    const cap = out.stats.total_suites * fraction;
+    assert.ok(out.stats.selected < cap, `${rev} selected ${out.stats.selected} of ${out.stats.total_suites} (cap ${cap})`);
   }
 });
 
@@ -725,5 +729,45 @@ test('BL-0213 a star line outside a block comment still creates an edge', () => 
   try {
     const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
     assert.ok(out.suites.includes('hooks/tests/star-line.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// # RED at f46f0a761: regexp slash-star drops the later require (splitter.test.sh absent); trailing // see /* does the same (noted.test.sh absent). Line-leading JSDoc already created no edge.
+test('BL-0213 a slash-star inside a regexp literal does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/splitter.js': "const parts = split(/[/*]/);\nconst t = require('./needed.js');\n*/\n",
+    'hooks/tests/splitter.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/splitter.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/splitter.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a slash-star inside a trailing line comment does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/noted.js': "const x = 1; // see /*\nconst t = require('./needed.js');\n*/\n",
+    'hooks/tests/noted.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/noted.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/noted.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a name mentioned only inside a line-leading JSDoc block creates no edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/documented.js': '/**\n * see scripts/target.js\n */\nconst x = 1;\n',
+    'hooks/tests/documented.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/documented.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/documented.test.sh'));
   } finally { r.cleanup(); }
 });

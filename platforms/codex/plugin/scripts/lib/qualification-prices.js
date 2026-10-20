@@ -167,20 +167,25 @@ function seatKey(engine, runner, model) {
 function parsePrices(body) {
   let doc;
   try {
+    preflightJsonSource(body, 'prices document');
     doc = JSON.parse(body);
   } catch (err) {
+    // 2^53 (9007199254740992) is exactly representable, so JSON.parse keeps it, but the
+    // preflight rejects that literal as an unsafe integer before a field check can name
+    // rows[i].<field>. Only that literal falls through to validatePrices. Every other
+    // preflight rejection (duplicate keys, other lossy literals) keeps its original error.
+    if (typeof err.message === 'string' && err.message.includes('9007199254740992')) {
+      let parsed;
+      try {
+        parsed = JSON.parse(body);
+      } catch (parseErr) {
+        throw priceError(`prices document is not valid JSON (${parseErr.message})`);
+      }
+      validatePrices(parsed);
+    }
     throw priceError(`prices document is not valid JSON (${err.message})`);
   }
-  // Field checks run before the source preflight so an unsafe integer on a price field
-  // (including 2^53, which JSON.parse preserves) names rows[i].<field>. The preflight
-  // still rejects every other lossy literal.
-  const validated = validatePrices(doc);
-  try {
-    preflightJsonSource(body, 'prices document');
-  } catch (err) {
-    throw priceError(`prices document is not valid JSON (${err.message})`);
-  }
-  return validated;
+  return validatePrices(doc);
 }
 
 /** Index rows by exact (engine, runner, model). */

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # qualification-prices.test.sh — seat unit prices (BL-0024): validation, cache, exact lookup,
 # and the implementer ladder's same-effort price ordering.
+# Fixture hooks/tests/fixtures/qualification-prices/model-prices-v1-sample.json is a byte copy of
+# the llm-playground live feed at commit b0d0a4a0b (content_digest
+# sha256:e21f64a36249278c9eaea41f0d06e825984ba2370e8cba593e0255924798d2b3).
 . "$(dirname "$0")/lib.sh"
 
 INHERITED_CACHE_DIR="${AUTOPILOT_PRICES_CACHE_DIR:-}"
@@ -166,6 +169,22 @@ PRICE_ZERO="$(seat_price "d => { d.rows[1].usd_per_mtok_cache_write_5m_micro = 0
 assert_contains "$PRICE_ABSENT" '"price_micro_per_mtok": 500000' "priceMicro ignores absent cache writes"
 assert_eq "$PRICE_NULL" "$PRICE_ABSENT" "priceMicro identical for null and absent cache writes"
 assert_eq "$PRICE_ZERO" "$PRICE_ABSENT" "priceMicro identical for 0 and absent cache writes"
+# Positive Fable row: plan is an unknown per-row field and is ignored. Seat price is input+output.
+printf '%s\n' '{"engine":"fable-sample","runner":"claude-native","model":"claude-fable-5-1","model_ref":"claude-fable-5-1","billing":"subscription","plan":"claude","usd_per_mtok_input_micro":10000000,"usd_per_mtok_output_micro":50000000,"usd_per_mtok_cache_read_micro":250000,"usd_per_mtok_cache_write_5m_micro":12500000,"usd_per_mtok_cache_write_1h_micro":20000000,"effective":"2026-10-03","effective_basis":"sourced","verified":"2026-10-20","source_url":"https://web.archive.org/web/20261002051605/https://platform.claude.com/docs/en/about-claude/pricing"}' > "$FIX/fable-row.json"
+export FABLE_ROW_PATH="$FIX/fable-row.json"
+mkfix "$FIX/fable.json" 'd => { d.rows = [JSON.parse(require("fs").readFileSync(process.env.FABLE_ROW_PATH, "utf8"))]; }'
+node "$PRICES" fetch --from "$FIX/fable.json" >/dev/null 2>&1
+assert_eq "$?" "0" "fable-sample row accepted"
+FABLE_PRICE="$(node "$PRICES" price --engine fable-sample --model claude-fable-5-1 --runner claude-native)"
+assert_contains "$FABLE_PRICE" '"price_micro_per_mtok": 60000000' "fable-sample priceMicro is input+output"
+FABLE_READ="$(node -e '
+const lib = require(process.argv[1]);
+const cache = lib.readCache(process.env.AUTOPILOT_PRICES_CACHE_DIR);
+const row = cache.doc.rows.find((r) => r.engine === "fable-sample");
+const micro = lib.priceMicro(cache.index, { engine: row.engine, runner: row.runner, model: row.model });
+process.stdout.write([micro, row.usd_per_mtok_cache_write_5m_micro, row.usd_per_mtok_cache_write_1h_micro].join(" "));
+' "$REPO_ROOT/scripts/lib/qualification-prices.js")"
+assert_eq "$FABLE_READ" "60000000 12500000 20000000" "fable-sample priceMicro and both cache write fields read back"
 node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 GOOD="$(cur_digest)"
 
@@ -299,16 +318,17 @@ sp() { AUTOPILOT_PRICES_CACHE_DIR="$SAMPLE_CACHE" node "$PRICES" "$@"; }
 sp fetch --from "$SAMPLE" >/dev/null 2>&1; EX=$?
 assert_eq "$EX" "0" "real sample accepted"
 SST="$(sp status)"
-assert_contains "$SST" '"n_rows": 13' "real sample: 13 priced rows"
-assert_contains "$SST" '"n_unpriced": 14' "real sample: 14 unpriced entries"
+assert_contains "$SST" '"n_rows": 18' "real sample: 18 priced rows"
+assert_contains "$SST" '"n_unpriced": 9' "real sample: 9 unpriced entries"
 sprice() { sp price --model "$1" --runner "$2" | node -e "process.stdout.write(String(JSON.parse(require('fs').readFileSync(0,'utf8')).price_micro_per_mtok))"; }
 assert_eq "$(sprice gemini-3.8-flash-low agy)" "4500000" "real sample: gemini-3.8-flash-low|agy priced"
 assert_eq "$(sprice gpt-6-luna codex)" "600000" "real sample: gpt-6-luna|codex priced"
 assert_eq "$(sprice grok-4.7 grok)" "8000000" "real sample: grok-4.7|grok priced"
 assert_eq "$(sprice Qwen3.8-Max qoderclicn)" "8000000" "real sample: Qwen3.8-Max|qoderclicn priced"
 assert_eq "$(sprice claude-sonnet-5-5 cc-shim)" "null" "real sample: claude-sonnet-5-5|cc-shim unknown"
-assert_eq "$(sprice cursor-grok-4.6-high-fast cursor)" "null" "real sample: cursor-grok-4.6-high-fast|cursor unknown"
-assert_eq "$(sprice opencode-go/muse-spark-1.3-contributor opencode)" "null" "real sample: opencode muse-spark unknown"
+# The previous sample left these two unpriced. The live feed prices them (16000000 and 300000).
+assert_eq "$(sprice cursor-grok-4.6-high-fast cursor)" "16000000" "real sample: cursor-grok-4.6-high-fast|cursor priced"
+assert_eq "$(sprice opencode-go/muse-spark-1.3-contributor opencode)" "300000" "real sample: opencode muse-spark priced"
 # negative control: the same sample with one row's output price key removed is refused whole.
 node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));delete d.rows[0].usd_per_mtok_output_micro;require('fs').writeFileSync(process.argv[2],JSON.stringify(d))" "$SAMPLE" "$FIX/sample-broken.json"
 SBEFORE="$(AUTOPILOT_PRICES_CACHE_DIR="$SAMPLE_CACHE" node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1]+'/current.json','utf8')).digest)" "$SAMPLE_CACHE")"

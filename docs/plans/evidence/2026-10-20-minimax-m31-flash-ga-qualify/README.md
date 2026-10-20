@@ -38,3 +38,7 @@ The sweep progress line printed `row-parse-error` for the seat. This is cosmetic
 - `implementer/MiniMax-M3.1-Flash-qualify/` — the bundle: `qualify-out.json`, `record-out.json`, `probe-receipts.jsonl`, error logs, and `raw/`.
 
 No credentials are included.
+
+## Preview retirement and event 330 identity
+
+The official source for the Preview retirement is https://platform.minimax.io/docs/guides/pricing-token-plan , the Note at the start of its Available models section, which reads: "MiniMax-M3.1-Flash-Preview has been retired. Requests using the old name are now served by MiniMax-M3.1-Flash." That Note carries no date. llm-playground@7840hs re-fetched the page on 2026-10-20 and confirmed the Note is still there. It only proves that NOW the old name is answered by GA; it cannot prove which version answered event 330 (2026-10-19 18:28Z). Therefore event 330 keeps its Preview label and stays unmapped, and GA is always event 331. Owner chose "GA sits a separate exam" (event 331 already landed in 79273896e) and the peer agreed 330 stays unmapped.

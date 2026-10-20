@@ -451,6 +451,11 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
     failValidation(`invalid status '${row.status}'`);
   }
 
+  // Legacy rows have no evidence block, so the evidence timestamp gate never
+  // sees qualified_at / expires. Date-only strings are valid tsUtc input;
+  // absent or non-string fields stay optional.
+  rejectImpossibleRowDateFields(row);
+
   if (!row.cost || typeof row.cost !== 'object' || Array.isArray(row.cost)) {
     failValidation('cost must be an object');
   }
@@ -525,6 +530,20 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
 // compileCapabilityEvidence rewrites a calendar-impossible stamp through Date
 // (2026-02-30T00:00:00Z becomes 2 March). Reject the submitted value first, with
 // the same gate as qualification-record-v2 tsUtc, before that rewrite.
+function rejectImpossibleRowDateFields(row) {
+  if (!row || typeof row !== 'object') return;
+  const { tsUtc } = require('./lib/qualification-record-v2.js');
+  for (const field of ['qualified_at', 'expires']) {
+    const value = row[field];
+    if (typeof value !== 'string') continue;
+    try {
+      tsUtc(value);
+    } catch {
+      failValidation(`invalid ${field} '${value}'`);
+    }
+  }
+}
+
 function rejectImpossibleEvidenceTimestamps(evidence) {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return;
   const { tsUtc } = require('./lib/qualification-record-v2.js');

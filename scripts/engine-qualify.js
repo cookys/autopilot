@@ -268,6 +268,12 @@ const HELP = `Usage:
     [--version-source runtime|operator-asserted]   (CLI transports observe no
       runtime model id — pass operator-asserted so the row says so)
 
+  scripts/engine-qualify.sh corpus-version [--role <role>]
+    Print the current corpus_version for every qualification role, or one role,
+    as JSON. Runs no exam and writes no files. Call it when a seat file needs
+    the live version, including after the foreman asset pins move.
+    corpus-version --help prints this usage text and exits 0.
+
   implementer is LIVE-RAIL: no panel/remote broker transport — cases dispatch
   through scripts/dispatch-hetero.sh (plan 2026-08-22-implementer-qualification-
   suite). Implementer-only flags:
@@ -5813,14 +5819,27 @@ const FOREMAN_PIN_ASSETS = Object.freeze([
   ['conformance', 'evals/foreman-harness-conformance.js'],
 ]);
 
+// Named sentinel for the test-mode-only asset root. Exam paths still write the
+// same stderr line and exit 2; corpus-version reads this object instead of the
+// message text. Set only for the duration of that refusal.
+class ForemanAssetRootOutsideTestModeError extends Error {
+  constructor() {
+    super('AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode');
+    this.name = 'ForemanAssetRootOutsideTestModeError';
+    this.code = 'FOREMAN_ASSET_ROOT_OUTSIDE_TEST_MODE';
+  }
+}
+let foremanAssetRootSentinel = null;
+
 function verifyPinnedForemanEvaluationAssets(overrides = {}) {
   // The env root is a test seam for this verifier only. It must not redirect
   // the exam's own requires. Outside AUTOPILOT_QUALIFY_SEED it is refused.
+  foremanAssetRootSentinel = null;
   const testMode = Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
   if (!testMode && process.env.AUTOPILOT_FOREMAN_ASSET_ROOT !== undefined) {
-    process.stderr.write(
-      'engine-qualify: AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode\n',
-    );
+    const error = new ForemanAssetRootOutsideTestModeError();
+    foremanAssetRootSentinel = error;
+    process.stderr.write(`engine-qualify: ${error.message}\n`);
     process.exit(2);
   }
   const root = overrides.root
@@ -5986,8 +6005,125 @@ function assertProducedCorpusMatchesSeat(options, runResult) {
   }
 }
 
+const CORPUS_VERSION_ROLES = Object.freeze([
+  'reviewer', 'owner', 'implementer', 'foreman', 'brain', 'consult', 'discuss', 'verification_author',
+]);
+
+// Reads one role's corpus_version. captureExit is only for the all-roles
+// print: a pin verifier's process.exit must not skip the other roles.
+// The exam paths keep calling examCorpusVersionBeforeRun directly.
+function readCorpusVersion(role, captureExit) {
+  if (!captureExit) {
+    try {
+      return { version: examCorpusVersionBeforeRun(role) };
+    } catch (error) {
+      return { thrown: error };
+    }
+  }
+  const originalExit = process.exit;
+  const originalWrite = process.stderr.write;
+  const chunks = [];
+  process.stderr.write = (chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+    return true;
+  };
+  process.exit = (code) => {
+    const error = new Error('__corpus_version_exit__');
+    error.exitCode = code === undefined ? 0 : Number(code);
+    throw error;
+  };
+  try {
+    const version = examCorpusVersionBeforeRun(role);
+    return { version };
+  } catch (error) {
+    if (error && error.message === '__corpus_version_exit__') {
+      const stderrRaw = chunks.join('');
+      return {
+        exitCode: error.exitCode,
+        stderrRaw,
+        error: stderrRaw.trim() || `exit ${error.exitCode}`,
+      };
+    }
+    return { thrown: error, error: `qualification precondition failed: ${error.message}` };
+  } finally {
+    process.exit = originalExit;
+    process.stderr.write = originalWrite;
+  }
+}
+
+function corpusVersionCommand(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usage(0);
+  }
+  let role = null;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--role') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) {
+        process.stderr.write('engine-qualify: missing value for --role\n');
+        process.exit(2);
+      }
+      role = value;
+      index += 1;
+      continue;
+    }
+    // Accepted and ignored. The subcommand never creates these paths.
+    if (arg === '--store' || arg === '--raw-dir') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) {
+        process.stderr.write(`engine-qualify: missing value for ${arg}\n`);
+        process.exit(2);
+      }
+      index += 1;
+      continue;
+    }
+    process.stderr.write(`engine-qualify: unknown argument: ${arg}\n`);
+    process.exit(2);
+  }
+  if (role !== null && !CORPUS_VERSION_ROLES.includes(role)) {
+    process.stderr.write(`engine-qualify: unknown role: ${role}\n`);
+    process.exit(2);
+  }
+  const roles = role === null ? CORPUS_VERSION_ROLES : [role];
+  const captureExit = role === null;
+  const out = {};
+  let failed = false;
+  for (const name of roles) {
+    const result = readCorpusVersion(name, captureExit);
+    if (!captureExit && result.thrown) {
+      usage(2, `qualification precondition failed: ${result.thrown.message}`);
+    }
+    if (result.version === null || result.version === undefined) {
+      if (!captureExit) {
+        process.stderr.write(`engine-qualify: unknown role: ${name}\n`);
+        process.exit(2);
+      }
+      const message = result.error || `unknown role: ${name}`;
+      if (foremanAssetRootSentinel instanceof ForemanAssetRootOutsideTestModeError
+        || foremanAssetRootSentinel?.code === 'FOREMAN_ASSET_ROOT_OUTSIDE_TEST_MODE') {
+        out[name] = { error: message || foremanAssetRootSentinel.message };
+        foremanAssetRootSentinel = null;
+        failed = true;
+        continue;
+      }
+      out[name] = { error: message };
+      failed = true;
+      continue;
+    }
+    out[name] = result.version;
+  }
+  process.stdout.write(`${JSON.stringify(out)}\n`);
+  process.exit(failed ? 2 : 0);
+}
+
 function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'corpus-version') {
+    corpusVersionCommand(argv.slice(1));
+    return;
+  }
+  const options = parseArgs(argv);
   const headless = Boolean(options.seatFile || options.emitRecord);
   if (headless) {
     if (!options.store) usage(2, '--store is required with --seat-file or --emit-record');
@@ -6458,6 +6594,8 @@ module.exports = {
   runConsultQualification,
   runDiscussQualification,
   runImplQualification,
+  corpusVersionCommand,
+  examCorpusVersionBeforeRun,
   runQualification,
   runVaQualification,
   sandboxArguments,

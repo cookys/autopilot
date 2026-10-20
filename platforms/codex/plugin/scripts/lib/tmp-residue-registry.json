@@ -52,6 +52,13 @@
       "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
     },
     {
+      "pattern": "dispatch-wdog-tok-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "live wall-timeout watchdog token (plus .sleeppid/.fired siblings). Must not look like a hetero-* name: a lockless hetero-* file is reaped by suite_residue_reap and that would silently disarm the wall timeout"
+    },
+    {
       "pattern": "pi-rpc-session-*",
       "kind": "scratch",
       "owner": "scripts/lib/pi-rpc-run.js",

@@ -321,7 +321,7 @@ assert_r2_cgroup_kill_failure_detached_real_path() {
 assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
   eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
-  local tok="$TEST_TMP/hetero-wdog-tok-r6neg"
+  local tok="$TEST_TMP/dispatch-wdog-tok-r6neg"
   : > "$tok"
   WATCHDOG_TOKEN_FILE="$tok"
   WATCHDOG_PID=""
@@ -393,7 +393,7 @@ WRAP
 assert_r6_cancel_kills_when_cmdline_has_tag() {
   eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
-  local tok="$TEST_TMP/hetero-wdog-tok-r6pos"
+  local tok="$TEST_TMP/dispatch-wdog-tok-r6pos"
   : > "$tok"
   local tag="${tok##*/}"
   WATCHDOG_TOKEN_FILE="$tok"
@@ -498,7 +498,7 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
 _r3_assert_no_leftover_watchdog() {
   local tmpdir="$1" label="$2"
   local f tag sp cmd
-  for f in "$tmpdir"/hetero-wdog-tok-*.sleeppid; do
+  for f in "$tmpdir"/dispatch-wdog-tok-*.sleeppid; do
     [ -e "$f" ] || continue
     tag="$(basename "${f%.sleeppid}")"
     sp="$(cat "$f" 2>/dev/null || true)"

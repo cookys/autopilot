@@ -1790,6 +1790,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_FOREMAN_ASSET_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/engine-qualify.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Test mode only (honoured when AUTOPILOT_QUALIFY_SEED is set). Points verifyPinnedForemanEvaluationAssets at a fixture tree instead of the repo evals pins. A non-test run that finds this key set exits 2; it is never silently ignored and does not redirect the exam."
+    },
+    {
       "name": "AUTOPILOT_FOREMAN_GUARD_DIR",
       "kind": "env",
       "audience": "internal",

@@ -117,6 +117,58 @@ node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
 node "$PRICES" fetch --from "http://127.0.0.1:1/x.json" >/dev/null 2>&1
 assert_eq "$?" "1" "http fetch URL refused"
 
+# --- optional cache-write TTL fields (5m and 1h); seat unit price ignores them -------------------
+# RED at f787be55cc087dbb87c21c5564e1d015e955c545:
+# On the unmodified reader, positive-only 5m/1h rows, future_field, a top-level unknown, and the
+# cancelled usd_per_mtok_cache_write_micro name (value -1) were already accepted. priceMicro was
+# already identical for absent / null / 0. Negative, fractional, and string values were accepted
+# (exit 0, stderr did not name rows[2].usd_per_mtok_cache_write_5m_micro or
+# rows[2].usd_per_mtok_cache_write_1h_micro) and replaced the cache. 9007199254740992 was already
+# rejected by the JSON preflight (exit 1) but the message did not name the row field, and the cache
+# digest stayed on the previously accepted illegal string document.
+# Negative control: the CACHE_WRITE_FIELDS loop was removed after it landed; the same illegal-value
+# cases went red again; the loop was restored in this edit. RED base remains f787be55.
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+GOOD="$(cur_digest)"
+accept_doc() { # <name> <mutator>
+  mkfix "$FIX/ok.json" "$2"
+  node "$PRICES" fetch --from "$FIX/ok.json" >/dev/null 2>&1
+  assert_eq "$?" "0" "accept: $1"
+}
+reject_names() { # <name> <mutator> <needle>
+  mkfix "$FIX/bad.json" "$2"
+  node "$PRICES" fetch --from "$FIX/bad.json" >/dev/null 2>"$FIX/err.txt"
+  assert_eq "$?" "1" "reject: $1"
+  assert_contains "$(cat "$FIX/err.txt")" "$3" "error names $3 ($1)"
+  assert_eq "$(cur_digest)" "$GOOD" "reject keeps previous cache: $1"
+}
+accept_doc "5m positive integer only" "d => { d.rows[2].usd_per_mtok_cache_write_5m_micro = 1250000; }"
+accept_doc "1h positive integer only" "d => { d.rows[2].usd_per_mtok_cache_write_1h_micro = 2000000; }"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+GOOD="$(cur_digest)"
+for cw in usd_per_mtok_cache_write_5m_micro usd_per_mtok_cache_write_1h_micro; do
+  reject_names "$cw negative" "d => { d.rows[2].$cw = -1; }" "rows[2].$cw"
+  reject_names "$cw fractional" "d => { d.rows[2].$cw = 1.5; }" "rows[2].$cw"
+  reject_names "$cw string" "d => { d.rows[2].$cw = '5'; }" "rows[2].$cw"
+  reject_names "$cw at 2^53" "d => { d.rows[2].$cw = 9007199254740992; }" "rows[2].$cw"
+done
+accept_doc "per-row unknown field ignored" "d => { d.rows[2].future_field = -1; }"
+accept_doc "top-level unknown field ignored" "d => { d.future_field = { bad: true }; }"
+accept_doc "old cache_write name ignored even when invalid" "d => { d.rows[2].usd_per_mtok_cache_write_micro = -1; }"
+seat_price() { # <mutator>
+  mkfix "$FIX/cw.json" "$1"
+  node "$PRICES" fetch --from "$FIX/cw.json" >/dev/null 2>&1
+  node "$PRICES" price --model seat-cheap --runner agy
+}
+PRICE_ABSENT="$(seat_price "d => d")"
+PRICE_NULL="$(seat_price "d => { d.rows[1].usd_per_mtok_cache_write_5m_micro = null; d.rows[1].usd_per_mtok_cache_write_1h_micro = null; }")"
+PRICE_ZERO="$(seat_price "d => { d.rows[1].usd_per_mtok_cache_write_5m_micro = 0; d.rows[1].usd_per_mtok_cache_write_1h_micro = 0; }")"
+assert_contains "$PRICE_ABSENT" '"price_micro_per_mtok": 500000' "priceMicro ignores absent cache writes"
+assert_eq "$PRICE_NULL" "$PRICE_ABSENT" "priceMicro identical for null and absent cache writes"
+assert_eq "$PRICE_ZERO" "$PRICE_ABSENT" "priceMicro identical for 0 and absent cache writes"
+node "$PRICES" fetch --from "$FIX/good.json" >/dev/null 2>&1
+GOOD="$(cur_digest)"
+
 # --- price lookup: exact, null when unknown (no row or a null side); assumed basis is still priced ----------------------------------------
 assert_contains "$(node "$PRICES" price --model seat-cheap --runner agy)" '"price_micro_per_mtok": 500000' "price = input+output"
 assert_contains "$(node "$PRICES" price --model seat-sub --runner agy)" '"billing": "subscription"' "subscription row priced, flagged"

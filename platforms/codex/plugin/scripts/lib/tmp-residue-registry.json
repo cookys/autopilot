@@ -56,7 +56,7 @@
       "kind": "scratch",
       "owner": "scripts/dispatch-hetero.sh",
       "retention_days": null,
-      "reason": "live wall-timeout watchdog token (plus .sleeppid/.fired siblings). Must not look like a hetero-* name: a lockless hetero-* file is reaped by suite_residue_reap and that would silently disarm the wall timeout"
+      "reason": "live wall-timeout watchdog token (plus .sleeppid/.fired/.cancel siblings). The .cancel sibling is the explicit cancel marker; a missing token alone must not disarm the wall timeout. Must not look like a hetero-* name: a lockless hetero-* file is reaped by suite_residue_reap and that would silently disarm the wall timeout"
     },
     {
       "pattern": "pi-rpc-session-*",

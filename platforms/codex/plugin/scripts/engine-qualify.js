@@ -104,6 +104,7 @@ const {
 } = require('./engine-capability-state');
 const {
   normalizeOptions: normalizeBrokerOptions,
+  redactSecrets,
 } = require('./qualification-case-broker');
 const { extractJsonObject } = require('./lib/extract-json-object');
 const qualUsage = require('./lib/qualification-usage');
@@ -293,6 +294,11 @@ const HELP = `Usage:
   4 seat file missing or schema-invalid.
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
+      Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
+      non-pass case whose dispatch status is not committed: dispatch_error_class,
+      dispatch_error, agent_log_tail (last 40 lines, secrets redacted, 8 KiB cap)
+      and agent_log_path. An integrity_violation row also adds
+      integrity_violation_details, each {type, path} only — never the canary value.
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
       --price-source <manual|measured> [--price-ref <text>]]   (all four required together;
       without them cost stays source=unknown and usage.usd_per_solved is null)
@@ -316,7 +322,7 @@ const HELP = `Usage:
     [--endpoint <name>]         (--runner cc-shim ONLY: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
       through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
       routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
-      the emitted row discloses endpoint {name, base_url, transport_security})
+      the emitted row discloses endpoint {name, transport_security}; base_url stays on the rail only)
   implementer --expires-days caps at 90 (its schema ceiling); all other roles
   keep the flat 30-day cap.
 
@@ -3850,7 +3856,11 @@ function runImplQualification(options) {
   }
 
   if (options.rawDir && options.endpointBinding) {
-    const { token_env: _omit, ...disclosed } = options.endpointBinding;
+    // Name and transport only. base_url stays inside the process for the rail.
+    const disclosed = {
+      name: options.endpointBinding.name,
+      transport_security: options.endpointBinding.transport_security,
+    };
     fs.writeFileSync(
       path.join(options.rawDir, 'impl-endpoint.json'),
       `${JSON.stringify(disclosed, null, 2)}\n`,
@@ -3915,9 +3925,9 @@ function runImplQualification(options) {
     // Disclosure, not identity: the seat identity/scope hashes are unchanged (the same
     // model over the same rail is the same seat wherever it is served from); this says
     // WHICH deployment and over WHAT transport the administration actually ran.
+    // base_url is not part of the record; the rail still receives it as ANTHROPIC_BASE_URL.
     row.endpoint = {
       name: options.endpointBinding.name,
-      base_url: options.endpointBinding.base_url,
       transport_security: options.endpointBinding.transport_security,
     };
   }
@@ -3964,6 +3974,122 @@ function runImplQualification(options) {
   });
 }
 
+const IMPL_LOG_TAIL_LINES = 40;
+const IMPL_LOG_TAIL_BYTES = 8 * 1024;
+
+// redactSecrets already masks sk-..., Bearer, and token=. This extra pass
+// catches an sk-ant- key that somehow survived, without changing redactSecrets.
+function redactLedgerText(text) {
+  return redactSecrets(text).replace(/\bsk-ant-[A-Za-z0-9_-]+/gu, '[redacted]');
+}
+
+function capUtf8Tail(text, maxBytes) {
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.length <= maxBytes) return text;
+  return buf.subarray(buf.length - maxBytes).toString('utf8').replace(/^\uFFFD/u, '');
+}
+
+function canaryNeedles(token) {
+  if (typeof token !== 'string' || token.length === 0) return [];
+  return [
+    token,
+    Buffer.from(token, 'utf8').toString('base64'),
+    Buffer.from(token, 'utf8').toString('hex'),
+    [...token].reverse().join(''),
+  ].filter((needle) => needle.length > 0);
+}
+
+function maskCanaryText(text, token) {
+  let out = String(text);
+  for (const needle of canaryNeedles(token)) {
+    if (out.includes(needle)) out = out.split(needle).join('[redacted]');
+  }
+  return out;
+}
+
+function rawDispatchError(dispatchJson, spawnMessage) {
+  if (dispatchJson && dispatchJson.error != null && String(dispatchJson.error) !== '') {
+    return String(dispatchJson.error);
+  }
+  return spawnMessage || '';
+}
+
+function rawDispatchErrorClass(dispatchJson, rawError) {
+  if (dispatchJson && typeof dispatchJson.error_class === 'string' && dispatchJson.error_class !== '') {
+    return dispatchJson.error_class;
+  }
+  return rawError;
+}
+
+function agentLogTail(dispatchJson) {
+  const text = readAgentLog(dispatchJson);
+  if (!text) return '';
+  const lines = text.split('\n');
+  return capUtf8Tail(redactLedgerText(lines.slice(-IMPL_LOG_TAIL_LINES).join('\n')), IMPL_LOG_TAIL_BYTES);
+}
+
+// Violation strings from buildCollection / repoHygieneViolations. Store type
+// and path only; never the raw message (it can carry a canary encoding).
+function integrityViolationDetails(collection, canaryToken) {
+  const violations = collection && Array.isArray(collection.integrity_violations)
+    ? collection.integrity_violations : [];
+  const changed = collection && Array.isArray(collection.changed_paths) ? collection.changed_paths : [];
+  const details = [];
+  for (const raw of violations) {
+    const text = String(raw);
+    let type = text;
+    let filePath = '';
+    if (text.startsWith('manifest_violation:')) {
+      type = 'manifest';
+      filePath = text.slice('manifest_violation:'.length);
+    } else if (text.startsWith('test_bytes_changed:')) {
+      type = 'test-bytes';
+      filePath = text.slice('test_bytes_changed:'.length);
+    } else if (text.startsWith('unexpected_ref:')) {
+      type = 'unexpected_ref';
+      filePath = text.slice('unexpected_ref:'.length);
+    } else if (text.startsWith('canary_')) {
+      const rest = text.slice('canary_'.length);
+      const splitAt = rest.lastIndexOf('_');
+      const kind = splitAt >= 0 ? rest.slice(0, splitAt) : 'value';
+      const transform = splitAt >= 0 ? rest.slice(splitAt + 1) : rest;
+      type = kind === 'value' ? transform : kind;
+      if (changed.length === 1) filePath = changed[0];
+    } else if (text.includes(':')) {
+      const splitAt = text.indexOf(':');
+      type = text.slice(0, splitAt);
+      filePath = text.slice(splitAt + 1);
+    }
+    type = maskCanaryText(type, canaryToken);
+    filePath = maskCanaryText(filePath, canaryToken);
+    if (type.includes('[redacted]') && type !== '[redacted]') type = '[redacted]';
+    if (filePath.includes('[redacted]')) filePath = '[redacted]';
+    details.push({ type, path: filePath });
+  }
+  return details;
+}
+
+function recordImplCaseEvidence(ledgerRow, exchange, { outcome, dispatchJson, spawnMessage, collection, canaryToken }) {
+  if (outcome !== 'pass' && ledgerRow.dispatch_status !== 'committed') {
+    const rawError = rawDispatchError(dispatchJson, spawnMessage);
+    ledgerRow.dispatch_error = redactLedgerText(rawError);
+    ledgerRow.dispatch_error_class = redactLedgerText(rawDispatchErrorClass(dispatchJson, rawError));
+    const logPath = dispatchJson && typeof dispatchJson.agent_log === 'string' ? dispatchJson.agent_log : '';
+    // Path is a locator, not the log body. Mask a canary that landed in the
+    // path; do not run the token-run redactor or a long directory name vanishes.
+    ledgerRow.agent_log_path = logPath ? maskCanaryText(logPath, canaryToken) : '';
+    ledgerRow.agent_log_tail = agentLogTail(dispatchJson);
+  }
+  if (outcome === 'integrity_violation') {
+    ledgerRow.integrity_violation_details = integrityViolationDetails(collection, canaryToken);
+  }
+  if (!exchange) return;
+  exchange.outcome = outcome;
+  for (const key of ['dispatch_error_class', 'dispatch_error', 'agent_log_tail', 'agent_log_path', 'integrity_violation_details']) {
+    if (Object.prototype.hasOwnProperty.call(ledgerRow, key)) exchange[key] = ledgerRow[key];
+  }
+}
+
 // The dispatch log is the client's own stdout. Read it only to notice a tool
 // call that stayed text. A missing or huge log yields no warning, never a pass.
 function readAgentLog(dispatchJson) {
@@ -4008,6 +4134,9 @@ function runImplCase(context) {
     outcome: null,
   };
   let observation = { infra: null, dispatcher_called: false };
+  let dispatchJson = null;
+  let collection = null;
+  let spawnMessage = '';
   try {
     const baseSha = implGenerator.materializeExamRepo(caseSpec, repoDir);
     const promptDir = path.join(repoDir, '.impl-exam');
@@ -4071,7 +4200,7 @@ function runImplCase(context) {
     const spawnFailed = Boolean(run.error) && !timedOut;
     ledgerRow.dispatcher_called = !spawnFailed;
     observation.dispatcher_called = ledgerRow.dispatcher_called;
-    let dispatchJson = null;
+    spawnMessage = run.error ? String(run.error.message) : '';
     if (run.stdout) {
       try { dispatchJson = JSON.parse(run.stdout.trim().split('\n').filter(Boolean).pop()); } catch { dispatchJson = null; }
     }
@@ -4096,17 +4225,21 @@ function runImplCase(context) {
     // the candidate stalled; the check must not rest on that coincidence.
     const harnessOwned = spawnFailed || (run.status === 2 && !timedOut);
     const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
-    ledgerRow.scored_sha = collectionResult.collection && collectionResult.collection.scored_sha;
+    collection = collectionResult.collection;
+    ledgerRow.scored_sha = collection && collection.scored_sha;
     const outcome = implGrader.classifyCase(caseSpec, {
       infra: null,
       dispatcher_called: observation.dispatcher_called,
       harness_owned_evidence: harnessOwned,
       dispatch_json: dispatchJson,
-      collection: collectionResult.collection,
+      collection,
       collection_threw: collectionResult.collection_threw,
       oracle: collectionResult.oracle,
     });
     ledgerRow.outcome = outcome;
+    recordImplCaseEvidence(ledgerRow, rawExchanges[rawExchanges.length - 1], {
+      outcome, dispatchJson, spawnMessage, collection, canaryToken,
+    });
     if (usageRecords) {
       // Rail-reported usage only (dispatch-hetero's `usage`, parsed from the harness
       // event stream): codex reports a total with no in/out split, cc-shim/plain/kimi/
@@ -4139,6 +4272,15 @@ function runImplCase(context) {
   } catch (error) {
     ledgerRow.outcome = 'infra_fail';
     ledgerRow.error = String(error && error.message);
+    const exchange = rawExchanges.length > 0 && rawExchanges[rawExchanges.length - 1].case_id === caseSpec.case_id
+      ? rawExchanges[rawExchanges.length - 1] : null;
+    recordImplCaseEvidence(ledgerRow, exchange, {
+      outcome: 'infra_fail',
+      dispatchJson,
+      spawnMessage: spawnMessage || ledgerRow.error,
+      collection,
+      canaryToken,
+    });
     ledger.push(ledgerRow);
     return { outcome: 'infra_fail', administration_abort: 'infra_abort' };
   } finally {

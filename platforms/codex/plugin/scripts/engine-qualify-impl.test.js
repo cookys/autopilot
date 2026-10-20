@@ -426,7 +426,7 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
 
 // ── 12. --endpoint: exam resolves the dispatch env through resolve-endpoint.sh ──
 //        (the same named-endpoint definition daily routing uses), replaces the raw
-//        passthrough, and discloses {name, base_url, transport_security} on the row.
+//        passthrough, and discloses {name, transport_security} on the row (no base_url).
 {
   const seen = path.join(tempRoot, 'fake-env-seen.txt');
   const saved = {};
@@ -451,13 +451,18 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
   equal(ep.qualified, true, '--endpoint honest candidate still qualifies');
-  equal(ep.row.endpoint, { name: 'examlan', base_url: 'http://10.7.7.7:8001', transport_security: 'plaintext_private' }, 'row discloses the resolved endpoint + transport');
+  equal(ep.row.endpoint, { name: 'examlan', transport_security: 'plaintext_private' }, 'row discloses name + transport only');
+  check(!('base_url' in (ep.row.endpoint || {})), 'row endpoint has no base_url key');
   check(!('token_env' in (ep.row.endpoint || {})), 'row endpoint carries no token_env');
+  const rowSerialized = JSON.stringify(ep.row);
+  check(!rowSerialized.includes('http://') && !rowSerialized.includes('https://'), 'serialized row has no http(s) URL');
   const seenLines = fs.readFileSync(seen, 'utf8').split('\n');
   equal(seenLines[0], 'http://10.7.7.7:8001', 'rail received the RESOLVED base_url, not the ambient ANTHROPIC_BASE_URL');
   equal(seenLines[1], 'exam-lan-bearer', 'rail received the named endpoint bearer, not the ambient token');
-  const disclosed = JSON.parse(fs.readFileSync(path.join(rawE, 'impl-endpoint.json'), 'utf8'));
-  equal(disclosed, { name: 'examlan', base_url: 'http://10.7.7.7:8001', transport_security: 'plaintext_private' }, 'raw/impl-endpoint.json mirrors the disclosure without the token');
+  const endpointFile = fs.readFileSync(path.join(rawE, 'impl-endpoint.json'), 'utf8');
+  const disclosed = JSON.parse(endpointFile);
+  equal(disclosed, { name: 'examlan', transport_security: 'plaintext_private' }, 'raw/impl-endpoint.json is name + transport only');
+  check(!endpointFile.includes('base_url') && !endpointFile.includes('http://') && !endpointFile.includes('https://'), 'impl-endpoint.json has no base_url and no http(s) URL');
   // the emitted row (with the additive endpoint key) still passes the real record binding
   const recE = spawnSync(process.execPath, [path.join(__dirname, 'engine-scorecard.js'), 'record'], {
     input: JSON.stringify(ep.row),
@@ -513,6 +518,130 @@ check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allo
   const rev = spawnSync(process.execPath, [path.join(__dirname, 'engine-qualify.js'), 'reviewer', '--endpoint', 'x', '--panel-cmd', 'true'], { env: process.env, encoding: 'utf8' });
   equal(rev.status, 2, '--endpoint on a non-implementer role exits 2');
   check(/implementer-only/.test(rev.stderr), 'non-implementer refusal names implementer-only');
+}
+
+function readJsonl(file) {
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+}
+function filesUnder(dir) {
+  const out = [];
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...filesUnder(p));
+    else out.push(p);
+  }
+  return out;
+}
+function withTempHome(fn) {
+  const home = fs.mkdtempSync(path.join(tempRoot, 'home-'));
+  // The rail's allowlist env keeps HOME and drops the parent git identity.
+  // A temp HOME must carry its own user, or every deviant commit becomes no_op.
+  fs.writeFileSync(path.join(home, '.gitconfig'), '[user]\n  name = Exam Test\n  email = exam-test@example.com\n');
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  try { return fn(home); } finally {
+    if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved;
+  }
+}
+
+// # RED at 83539bfe4: endpoint row still {name, base_url: http://10.7.7.7:8001, transport_security}; AssertionError at engine-qualify-impl.test.js:454 exit 1. Later ledger assertions not reached (script aborts); base has no dispatch_error_class, agent_log_tail, or integrity_violation_details.
+// Ledger evidence: engine_unavailable keeps a redacted dispatch error and log tail.
+// Exit 2 is the harness-owned rail status classifyCase already maps to
+// engine_unavailable; the stub does not change that classification.
+{
+  const FAKE = 'sk-ant-api03-FAKEFAKEFAKEFAKEFAKE1234';
+  const logPath = path.join(tempRoot, 'stub-unavailable.log');
+  const stub = path.join(tempRoot, 'stub-unavailable.js');
+  fs.writeFileSync(stub, `'use strict';
+const fs = require('fs');
+const token = ${JSON.stringify(FAKE)};
+fs.writeFileSync(${JSON.stringify(logPath)}, '529 overloaded\\n' + token + '\\n');
+process.stdout.write(JSON.stringify({
+  status: 'engine_unavailable',
+  error: '529 overloaded ' + token,
+  agent_log: ${JSON.stringify(logPath)},
+  commit: null,
+}) + '\\n');
+process.exit(2);
+`);
+  const wrapper = path.join(tempRoot, 'disp-unavailable.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${stub} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  withTempHome(() => {
+    const storeU = fs.mkdtempSync(path.join(tempRoot, 'store-unavail-'));
+    const rawU = fs.mkdtempSync(path.join(tempRoot, 'raw-unavail-'));
+    process.env.AUTOPILOT_QUALIFY_SEED = 'unavail-seed';
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'unavail-seed');
+    let result;
+    try {
+      result = runImplQualification({
+        ...baseOptions(storeU), dispatchBin: wrapper, rawDir: rawU, testTruncateAfterCases: 1,
+      });
+    } finally {
+      delete process.env.AUTOPILOT_QUALIFY_SEED;
+    }
+    const ledger = readJsonl(path.join(rawU, 'impl-dispatch-ledger.jsonl'));
+    const exchanges = readJsonl(path.join(rawU, 'impl-exchanges.jsonl'));
+    equal(ledger.length, 1, 'unavailable stub records one ledger row');
+    equal(ledger[0].outcome, 'engine_unavailable', 'outcome stays engine_unavailable (scoring unchanged)');
+    equal(exchanges[0].outcome, 'engine_unavailable', 'exchange outcome matches the ledger');
+    check(typeof ledger[0].dispatch_error_class === 'string' && ledger[0].dispatch_error_class.length > 0, 'dispatch_error_class is non-empty');
+    check(String(ledger[0].agent_log_tail).includes('529 overloaded'), 'agent_log_tail keeps the 529 line');
+    check(ledger[0].agent_log_path === logPath, 'agent_log_path is the log path');
+    equal(exchanges[0].dispatch_error_class, ledger[0].dispatch_error_class, 'exchange copies dispatch_error_class');
+    equal(exchanges[0].agent_log_tail, ledger[0].agent_log_tail, 'exchange copies agent_log_tail');
+    const blob = filesUnder(rawU).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    check(!blob.includes(FAKE), 'fake sk-ant token is absent from every raw-dir file');
+    check(result.qualified === false, 'engine_unavailable does not qualify');
+  });
+}
+
+// Canary integrity rows keep type + path and never the token or its encodings.
+{
+  withTempHome(() => {
+    const storeC = fs.mkdtempSync(path.join(tempRoot, 'store-canary-raw-'));
+    const rawC = fs.mkdtempSync(path.join(tempRoot, 'raw-canary-'));
+    const seed = 'canary-ledger-seed';
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), seed);
+    fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'canary-leaker');
+    process.env.AUTOPILOT_QUALIFY_SEED = seed;
+    const wrapper = path.join(tempRoot, 'disp.sh');
+    let result;
+    try {
+      result = runImplQualification({ ...baseOptions(storeC), dispatchBin: wrapper, rawDir: rawC });
+    } finally {
+      delete process.env.AUTOPILOT_QUALIFY_SEED;
+    }
+    equal(result.qualified, false, 'canary-leaker still does not qualify');
+    equal(result.row.status, 'failed', 'canary-leaker row status stays failed');
+    const ledger = readJsonl(path.join(rawC, 'impl-dispatch-ledger.jsonl'));
+    const exchanges = readJsonl(path.join(rawC, 'impl-exchanges.jsonl'));
+    const hit = ledger.find((row) => row.outcome === 'integrity_violation' && Array.isArray(row.integrity_violation_details)
+      && row.integrity_violation_details.some((d) => d.type === 'literal' && d.path === 'src/version.js'));
+    check(hit, 'ledger has integrity_violation_details {type:literal, path:src/version.js}');
+    const mirrored = exchanges.find((row) => row.case_id === hit.case_id);
+    equal(mirrored.integrity_violation_details, hit.integrity_violation_details, 'exchange copies integrity_violation_details');
+    const gen = require(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'));
+    const byteHash = (v) => crypto.createHash('sha256').update(v).digest('hex');
+    const genHash = byteHash(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js')));
+    const corpusHash = byteHash(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json')));
+    const runNonce = byteHash(`impl-seed:${seed}`);
+    const admin = gen.generateAdministration({
+      adminSeed: byteHash(`impl-admin:${runNonce}:${genHash}`),
+      oracleKey: byteHash(`impl-oracle-key:${runNonce}:${corpusHash}`),
+    });
+    const token = admin.canary_token;
+    const needles = [
+      token,
+      Buffer.from(token, 'utf8').toString('base64'),
+      Buffer.from(token, 'utf8').toString('hex'),
+      [...token].reverse().join(''),
+    ];
+    const blob = filesUnder(rawC).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    for (const needle of needles) {
+      check(needle.length > 0 && !blob.includes(needle), 'raw-dir does not contain the canary or an encoding of it');
+    }
+  });
 }
 
 const grader = require(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'));

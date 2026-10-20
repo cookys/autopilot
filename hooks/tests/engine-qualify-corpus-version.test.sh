@@ -98,6 +98,7 @@ EOF
 }
 match_role reviewer
 match_role owner
+match_role discuss
 
 # 3. Unknown role.
 UNK_OUT="$TEST_TMP/unknown.out"
@@ -145,6 +146,32 @@ assert_eq "$?" "0" "pin mismatch replaces only the foreman value with an error"
 unset AUTOPILOT_QUALIFY_SEED
 unset AUTOPILOT_FOREMAN_ASSET_ROOT
 
+# 4b. Outside test mode, AUTOPILOT_FOREMAN_ASSET_ROOT is the verifier sentinel.
+# All-roles still prints the other seven values and exits 2.
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$PIN_COPY"
+ROOT_OUT="$TEST_TMP/foreman-root-all.json"
+run_cv "$ROOT_OUT"
+assert_exit_code "$RUN_RC" "2" "non-test-mode asset root in all-roles exits 2"
+node -e '
+const fs = require("fs");
+const roles = ["reviewer","owner","implementer","foreman","brain","consult","discuss","verification_author"];
+const token = /^[A-Za-z0-9._:-]{1,128}$/;
+const body = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (!body.foreman || typeof body.foreman !== "object" || typeof body.foreman.error !== "string" || !body.foreman.error) {
+  console.error("foreman entry " + JSON.stringify(body.foreman));
+  process.exit(1);
+}
+for (const role of roles) {
+  if (role === "foreman") continue;
+  if (typeof body[role] !== "string" || !token.test(body[role])) {
+    console.error(role + " " + JSON.stringify(body[role]));
+    process.exit(1);
+  }
+}
+' "$ROOT_OUT"
+assert_eq "$?" "0" "non-test-mode asset root replaces only the foreman value with an error"
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+
 # 5. Write boundary: --store and --raw-dir are not created; HOME is unchanged.
 WB_STORE="$TEST_TMP/should-not-exist-store"
 WB_RAW="$TEST_TMP/should-not-exist-raw"
@@ -156,5 +183,20 @@ assert_file_absent "$WB_STORE" "corpus-version does not create --store"
 assert_file_absent "$WB_RAW" "corpus-version does not create --raw-dir"
 AFTER_HOME="$(home_snapshot)"
 assert_eq "$AFTER_HOME" "$BEFORE_HOME" "corpus-version leaves the temp HOME unchanged"
+
+# 6. corpus-version --help prints usage and writes nothing.
+HELP_STORE="$TEST_TMP/help-should-not-exist-store"
+HELP_RAW="$TEST_TMP/help-should-not-exist-raw"
+HELP_BEFORE="$(home_snapshot)"
+HELP_OUT="$TEST_TMP/help.out"
+run_cv "$HELP_OUT" --help --store "$HELP_STORE" --raw-dir "$HELP_RAW"
+assert_exit_code "$RUN_RC" "0" "corpus-version --help exits 0"
+assert_contains "$(cat "$HELP_OUT")" "corpus-version" "corpus-version --help names the subcommand"
+if [[ ! -s "$HELP_OUT" ]]; then
+  fail "corpus-version --help printed empty stdout"
+fi
+assert_file_absent "$HELP_STORE" "corpus-version --help does not create --store"
+assert_file_absent "$HELP_RAW" "corpus-version --help does not create --raw-dir"
+assert_eq "$(home_snapshot)" "$HELP_BEFORE" "corpus-version --help leaves the temp HOME unchanged"
 
 finalize_test

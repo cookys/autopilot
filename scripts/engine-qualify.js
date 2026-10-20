@@ -260,10 +260,6 @@ const HELP = `Usage:
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
     [--seat-file <json>] [--emit-record]
-    corpus-version [--role <role>]   (print the current corpus_version for every
-      qualification role, or one role, as JSON; no exam and no file writes.
-      Call it when a seat file needs the live version, including after the
-      foreman asset pins move)
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
@@ -271,6 +267,12 @@ const HELP = `Usage:
       without them cost stays source=unknown and usage.usd_per_solved is null)
     [--version-source runtime|operator-asserted]   (CLI transports observe no
       runtime model id — pass operator-asserted so the row says so)
+
+  scripts/engine-qualify.sh corpus-version [--role <role>]
+    Print the current corpus_version for every qualification role, or one role,
+    as JSON. Runs no exam and writes no files. Call it when a seat file needs
+    the live version, including after the foreman asset pins move.
+    corpus-version --help prints this usage text and exits 0.
 
   implementer is LIVE-RAIL: no panel/remote broker transport — cases dispatch
   through scripts/dispatch-hetero.sh (plan 2026-08-22-implementer-qualification-
@@ -5817,14 +5819,27 @@ const FOREMAN_PIN_ASSETS = Object.freeze([
   ['conformance', 'evals/foreman-harness-conformance.js'],
 ]);
 
+// Named sentinel for the test-mode-only asset root. Exam paths still write the
+// same stderr line and exit 2; corpus-version reads this object instead of the
+// message text. Set only for the duration of that refusal.
+class ForemanAssetRootOutsideTestModeError extends Error {
+  constructor() {
+    super('AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode');
+    this.name = 'ForemanAssetRootOutsideTestModeError';
+    this.code = 'FOREMAN_ASSET_ROOT_OUTSIDE_TEST_MODE';
+  }
+}
+let foremanAssetRootSentinel = null;
+
 function verifyPinnedForemanEvaluationAssets(overrides = {}) {
   // The env root is a test seam for this verifier only. It must not redirect
   // the exam's own requires. Outside AUTOPILOT_QUALIFY_SEED it is refused.
+  foremanAssetRootSentinel = null;
   const testMode = Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
   if (!testMode && process.env.AUTOPILOT_FOREMAN_ASSET_ROOT !== undefined) {
-    process.stderr.write(
-      'engine-qualify: AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode\n',
-    );
+    const error = new ForemanAssetRootOutsideTestModeError();
+    foremanAssetRootSentinel = error;
+    process.stderr.write(`engine-qualify: ${error.message}\n`);
     process.exit(2);
   }
   const root = overrides.root
@@ -6037,6 +6052,9 @@ function readCorpusVersion(role, captureExit) {
 }
 
 function corpusVersionCommand(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usage(0);
+  }
   let role = null;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -6082,11 +6100,12 @@ function corpusVersionCommand(argv) {
         process.exit(2);
       }
       const message = result.error || `unknown role: ${name}`;
-      if (message.includes('AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode')) {
-        process.stderr.write(result.stderrRaw && result.stderrRaw.endsWith('\n')
-          ? result.stderrRaw
-          : `${message}\n`);
-        process.exit(2);
+      if (foremanAssetRootSentinel instanceof ForemanAssetRootOutsideTestModeError
+        || foremanAssetRootSentinel?.code === 'FOREMAN_ASSET_ROOT_OUTSIDE_TEST_MODE') {
+        out[name] = { error: message || foremanAssetRootSentinel.message };
+        foremanAssetRootSentinel = null;
+        failed = true;
+        continue;
       }
       out[name] = { error: message };
       failed = true;
@@ -6576,6 +6595,7 @@ module.exports = {
   runDiscussQualification,
   runImplQualification,
   corpusVersionCommand,
+  examCorpusVersionBeforeRun,
   runQualification,
   runVaQualification,
   sandboxArguments,

@@ -3528,7 +3528,10 @@ _watchdog_signal_worker() {
 
 _arm_worker_watchdog() {
   local secs="$1"
-  WATCHDOG_TOKEN_FILE="$(mktemp -t hetero-wdog-tok-XXXXXX)"
+  # Prefix must not match any test-lockgated glob (hetero-*). suite_residue_reap
+  # deletes lockless hetero-* names and would remove this token mid-run, so the
+  # sleeper exits at "[ -f "$tok" ] || exit 0" and the wall timeout never fires.
+  WATCHDOG_TOKEN_FILE="$(mktemp -t dispatch-wdog-tok-XXXXXX)"
   : > "$WATCHDOG_TOKEN_FILE"
   local tok="$WATCHDOG_TOKEN_FILE"
   local tag="${tok##*/}"

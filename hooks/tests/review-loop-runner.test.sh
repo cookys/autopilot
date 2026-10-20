@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-# Hermetic: an empty config override pins the resolver's built-in default reviewer (gpt-5.5)
-# so this asserts the runner's capture plumbing, not the repo's live dogfood roster
-# (Board decision A → MiniMax-M3). Roster-flip-proof.
+# Hermetic: an empty config override pins the resolver's built-in default reviewer
+# (DEF_REV_ENGINE in scripts/resolve-review-loop.sh) so this asserts the runner's
+# capture plumbing, not the repo's live dogfood roster (Board decision A → MiniMax-M3).
+# The expected name is read from that assignment, not hardcoded: a shipped-default
+# change must not silently rot this assertion (f3f539d99 moved gpt-5.5 → gpt-6.1-sol
+# and left a stale reviewer=gpt-5.5 check red). Roster-flip-proof.
 EMPTY_CFG="$TEST_TMP/empty-review-loop.md"; : > "$EMPTY_CFG"
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/missing-scorecard" "$EMPTY_CFG" <<'NODE'
 const path = require('path');
@@ -28,7 +31,10 @@ NODE
 assert_eq "0" "$EXIT" "review-loop JS capture process exits 0"
 assert_contains "$OUT" "status=0" "review-loop runner preserves child exit 0"
 assert_contains "$OUT" "parse=ok" "review-loop runner parses JSON"
-assert_contains "$OUT" "reviewer=gpt-5.5" "review-loop runner captures reviewer engine"
+# Single source of truth: the shipped default lives only in the resolver.
+DEF_REV="$(sed -n 's/^DEF_REV_ENGINE="\([^"]*\)".*/\1/p' "$REPO_ROOT/scripts/resolve-review-loop.sh" | head -n 1)"
+[ -n "$DEF_REV" ] || fail "DEF_REV_ENGINE assignment missing or empty in scripts/resolve-review-loop.sh"
+assert_contains "$OUT" "reviewer=${DEF_REV}" "review-loop runner captures reviewer engine"
 assert_contains "$OUT" "qualified=false" "review-loop runner captures fail-closed scorecard state"
 assert_contains "$OUT" "fallback=[]" "review-loop runner captures empty scorecard ladder"
 

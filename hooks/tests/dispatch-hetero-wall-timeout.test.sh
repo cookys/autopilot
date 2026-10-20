@@ -347,6 +347,129 @@ assert_r6_no_bare_pid_fallback() {
   wait "$helper" 2>/dev/null || true
 }
 
+# A concurrent suite_residue_reap must not delete the live watchdog token.
+# The token used to be mktemp -t hetero-wdog-tok-*, which matches the
+# test-lockgated pattern hetero-*; a lockless reap then disarms the wall
+# timeout while the manifest still says timeout_enforced.
+# RED at f63cffef4f43dcc1e5831bcb04feb32590b30286:
+# FAIL dispatch took 24s (want <19s); missing result JSON (outer timeout killed
+# the dispatcher; worker-containment reported the scope Killed, no timed_out JSON);
+# token name hetero-wdog-tok-XXXSAMPLE matches test-lockgated hetero-*;
+# EXIT:1 (26 passed, 4 failed).
+assert_reap_does_not_disarm_wall_timeout() {
+  if ! declare -F suite_residue_reap >/dev/null 2>&1; then
+    # shellcheck source=lib/suite-residue-reap.sh
+    . "$REPO_ROOT/hooks/tests/lib/suite-residue-reap.sh"
+  fi
+  local priv="$TEST_TMP/wdog-reap-priv"
+  local stub="$TEST_TMP/grok-reap" pidfile="$TEST_TMP/reap.pid" runs="$TEST_TMP/runs-reap"
+  local outf="$TEST_TMP/reap.out"
+  mkdir -p "$priv" "$runs"
+  install_sleep_stub "$stub"
+  : > "$pidfile"
+  : > "$outf"
+  local start now elapsed dpid stubpid=""
+  start="$(date +%s)"
+  (
+    cd "$SBX" && timeout --foreground 25 env TMPDIR="$priv" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-reap --prompt-file "$PROMPT" --timeout 4s
+  ) >"$outf" 2>&1 &
+  dpid=$!
+  local i=0 token=""
+  while [ "$i" -lt 100 ]; do
+    token=""
+    for f in "$priv"/*wdog-tok-*; do
+      [ -e "$f" ] || continue
+      case "$f" in
+        *.sleeppid|*.fired) continue ;;
+      esac
+      token="$f"
+      break
+    done
+    [ -n "$token" ] && break
+    if ! kill -0 "$dpid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.05
+    i=$((i + 1))
+  done
+  if [ -z "$token" ]; then
+    kill "$dpid" 2>/dev/null || true
+    wait "$dpid" 2>/dev/null || true
+    stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+    [ -n "$stubpid" ] && kill "$stubpid" 2>/dev/null || true
+    wait "$stubpid" 2>/dev/null || true
+    fail "assert_reap_does_not_disarm_wall_timeout: watchdog token never appeared (out: $(cat "$outf"))"
+    return
+  fi
+  # Private TMPDIR has no .autopilot-suite-run.*.lock, so the reap sees no other live run.
+  ( TMPDIR="$priv" suite_residue_reap >/dev/null )
+  local w=0
+  while [ "$w" -lt 22 ]; do
+    kill -0 "$dpid" 2>/dev/null || break
+    sleep 1
+    w=$((w + 1))
+  done
+  if kill -0 "$dpid" 2>/dev/null; then
+    kill "$dpid" 2>/dev/null || true
+  fi
+  wait "$dpid" 2>/dev/null || true
+  now="$(date +%s)"; elapsed=$((now - start))
+  local out json
+  out="$(cat "$outf")"
+  json="$(last_json "$out")"
+  [ "$elapsed" -lt 19 ] || fail "assert_reap_does_not_disarm_wall_timeout: dispatch took ${elapsed}s (want <19s = 4s timeout + ~15s grace)"
+  [ -n "$json" ] || fail "assert_reap_does_not_disarm_wall_timeout: missing result JSON (out: $out)"
+  if [ -n "$json" ]; then
+    assert_eq "$(json_get "$json" timed_out)" "true" "reap-vs-watchdog timed_out"
+  fi
+  stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+  [ -n "$stubpid" ] || fail "assert_reap_does_not_disarm_wall_timeout: stub did not write pidfile"
+  if [ -n "$stubpid" ] && pid_alive "$stubpid"; then
+    fail "assert_reap_does_not_disarm_wall_timeout: stub pid $stubpid still alive"
+  fi
+  [ -n "$stubpid" ] && kill "$stubpid" 2>/dev/null || true
+  [ -n "$stubpid" ] && wait "$stubpid" 2>/dev/null || true
+}
+
+# The mktemp -t prefix must not match any test-lockgated registry glob.
+# _SRR_PATTERNS is required to stay equal to those entries; this catches a
+# rename back into a reaped namespace (hetero-* and the rest).
+assert_watchdog_token_prefix_avoids_test_lockgated() {
+  local line prefix rc sample
+  line="$(grep -E 'mktemp[[:space:]]+-t[[:space:]]+[^[:space:]]*wdog-tok-' "$SCRIPT" | head -n 1)"
+  prefix="$(printf '%s\n' "$line" | sed -n 's/.*mktemp[[:space:]]\{1,\}-t[[:space:]]\{1,\}\([^[:space:]"]*\).*/\1/p' | sed 's/X\{3,\}$//')"
+  [ -n "$prefix" ] || fail "assert_watchdog_token_prefix_avoids_test_lockgated: could not extract token prefix from: ${line:-<none>}"
+  sample="${prefix}SAMPLE"
+  rc=0
+  node - "$REPO_ROOT/scripts/lib/tmp-residue-registry.json" "$sample" <<'NODE' || rc=$?
+const fs = require('fs');
+const reg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const name = process.argv[3];
+function globToReg(g) {
+  let s = '^';
+  for (const c of g) {
+    if (c === '*') s += '.*';
+    else if (c === '?') s += '.';
+    else s += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(s + '$');
+}
+const hits = [];
+for (const e of reg.entries) {
+  if (e.kind !== 'test-lockgated') continue;
+  if (globToReg(e.pattern).test(name)) hits.push(e.pattern);
+}
+if (hits.length) {
+  console.error('token name ' + name + ' matches test-lockgated: ' + hits.join(','));
+  process.exit(1);
+}
+NODE
+  [ "$rc" -eq 0 ] || fail "assert_watchdog_token_prefix_avoids_test_lockgated: prefix ${prefix} matches a test-lockgated pattern"
+}
+
 assert_r1_grok_enforced_timeout_kills
 assert_r1_second_rail_enforced
 assert_r1_default_not_enforced
@@ -356,5 +479,7 @@ assert_setsid_wait_path_enforced_timeout_kills
 assert_setsid_wait_path_term_ignore_kills
 assert_detached_path_enforced_timeout_kills
 assert_r6_no_bare_pid_fallback
+assert_reap_does_not_disarm_wall_timeout
+assert_watchdog_token_prefix_avoids_test_lockgated
 
 finalize_test

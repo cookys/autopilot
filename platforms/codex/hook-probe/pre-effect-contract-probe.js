@@ -22,13 +22,13 @@ function writeFile(file, value, mode = 0o700) {
 }
 
 function run(command, args, options = {}) {
-  return spawnSync(command, args, {
-    cwd: options.cwd,
-    env: options.env,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: options.timeout || 30000,
-  });
+  const opts = { cwd: options.cwd, env: options.env, encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'], shell: false, timeout: options.timeout || 30000 };
+  if (command === 'git') return spawnSync('git', args, opts);
+  if (command === 'codex') return spawnSync('codex', args, opts);
+  if (command === 'bash') return spawnSync('bash', args, opts);
+  throw new Error(
+    `run(): refusing to execute disallowed command: ${command}`);
 }
 
 function parseArgs(argv) {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BL-0260 (peer row, Report 01M5AT5WE6C2JE2J3P87S04TKM) is closed. The reporter was answered on 2026-10-20 by fleet message 01M5BMP7NAQWRD460V1M1YHC5J. Owner decision: M3.1 Flash GA is qualified as its own seat, event 331, qualified 24/24, see 79273896e. Event 330 keeps its Preview label and does not join. The official Preview retirement note carries no date; the source is recorded in the GA evidence README.
+- BL-0259 closed, the local record now rejects dates that do not exist, see a897bad44.
 - gradfix (917067dca): `check-plan-graduation --fix` now deletes only rows that are really done and writes a receipt per deleted row; a row pointing at an unshipped plan is kept.
 - closeout5 (7cc36db49): restored the two roundtable rows dropped by the v2.36.78 cleanup as BL-0216 and BL-0217.
 - t14r2 (794622aee): BL-0055 round 2 pre-registered; the retry gate can name feature gaps.

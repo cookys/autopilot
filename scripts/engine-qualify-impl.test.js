@@ -69,6 +69,13 @@ for (const trial of admin.trials) for (const c of trial.cases) if (c.branch === 
 if (!target) { process.stdout.write(JSON.stringify({ status: 'failure', commit: null, error: 'unknown branch' }) + '\\n'); process.exit(1); }
 
 const mode = fs.readFileSync(${JSON.stringify(path.join(tempRoot, 'fake-mode.txt'))}, 'utf8').trim() || 'honest';
+if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode === 'unavailable_worker_text') {
+  const body = { status: 'engine_unavailable', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: null, files_changed: 0, worktree: null, error: 'engine unavailable' };
+  if (mode === 'unavailable_structured') body.provider_error = { source: 'harness_structured', runner: 'cc-shim', http_status: 529, field: 'api_error_status' };
+  if (mode === 'unavailable_worker_text') body.provider_error = { source: 'worker_text', runner: 'cc-shim', http_status: 529, field: 'api_error_status' };
+  emit(body);
+  process.exit(1);
+}
 const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // Record the cc-shim env the rail received so the --endpoint binding test can prove the
 // resolver's base_url (and not the ambient env) reached the dispatch.
@@ -113,6 +120,10 @@ const commit = spawnSync('git', ['-C', wt, 'commit', '--quiet', ...(allowEmpty ?
 if (commit.status !== 0) { spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt]); emit({ status: 'no_op', commit: null }); process.exit(0); }
 const sha = spawnSync('git', ['-C', wt, 'rev-parse', 'HEAD'], { env, encoding: 'utf8' }).stdout.trim();
 spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt], { env, encoding: 'utf8' });
+if (mode === 'unavailable_structured_commit') {
+  emit({ status: 'engine_unavailable', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: sha, files_changed: Object.keys(files).length, worktree: null, error: 'engine unavailable', provider_error: { source: 'harness_structured', runner: 'cc-shim', http_status: 529, field: 'api_error_status' } });
+  process.exit(1);
+}
 emit({ status: 'committed', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: sha, files_changed: Object.keys(files).length, insertions: 0, deletions: 0, worktree: null, agent_log: null, error: null });
 `);
 
@@ -767,6 +778,60 @@ equal(grader.unparsedToolCallWarning(
 equal(grader.unparsedToolCallWarning('I updated src/rate.js and left the tree clean.'), null,
   'plain prose is not an unparsed tool call');
 equal(grader.unparsedToolCallWarning(''), null, 'an empty log is not a warning');
+
+// G2-F9 structured provider_error (d-8e9de3b3).
+// RED at 740f48841: structured engine_unavailable scored row.status 'failed', not no_verdict (AssertionError actual 'failed' expected 'no_verdict').
+function runTrunc(mode, seed, truncate) {
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-pe-'));
+  const wrapper = path.join(tempRoot, `disp-${seed}.sh`);
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${fakeDispatcher} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), seed);
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), mode);
+  process.env.AUTOPILOT_QUALIFY_SEED = seed;
+  try {
+    return runImplQualification({
+      ...baseOptions(store),
+      dispatchBin: wrapper,
+      testTruncateAfterCases: truncate,
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+}
+
+{
+  const pe = runTrunc('unavailable_structured', 'pe-structured', null);
+  equal(pe.row.status, 'no_verdict', 'structured engine_unavailable aborts with no_verdict');
+  equal(pe.row.administration_outcome, 'infra_abort', 'structured engine_unavailable is infra_abort');
+  equal(pe.verdict.dispatch_ledger.length, 2, 'cap 2 stops the administration on the second case');
+  equal(pe.verdict.dispatch_ledger.map((row) => row.outcome), ['engine_unavailable', 'engine_unavailable'],
+    'both structured cases are engine_unavailable');
+}
+{
+  const plain = runTrunc('unavailable_plain', 'pe-plain', 2);
+  equal(plain.verdict.administration_outcome, 'completed', 'engine_unavailable without provider_error does not abort');
+  equal(plain.started_cases, 2, 'both plain cases run');
+  equal(plain.row.status, 'failed', 'plain engine_unavailable is scored, not no_verdict');
+  check(plain.verdict.reason.includes('contract_violation') && !plain.verdict.reason.includes('engine_unavailable'),
+    'text-less engine_unavailable exit 1 stays contract_violation');
+}
+{
+  const committed = runTrunc('unavailable_structured_commit', 'pe-commit', 2);
+  equal(committed.verdict.administration_outcome, 'completed', 'a new commit is never abort-class');
+  equal(committed.started_cases, 2, 'two committed cases do not trip the cap');
+  equal(committed.row.status, 'failed', 'committed provider_error is scored, not an infra abort');
+  check(!committed.verdict.reason.includes('engine_unavailable'),
+    'provider_error plus a new commit is not engine_unavailable');
+}
+{
+  const worker = runTrunc('unavailable_worker_text', 'pe-worker', 2);
+  equal(worker.verdict.administration_outcome, 'completed', 'worker_text source is not harness-owned');
+  equal(worker.started_cases, 2, 'both worker_text cases run');
+  equal(worker.row.status, 'failed', 'worker_text is scored, not no_verdict');
+  check(worker.verdict.reason.includes('contract_violation') && !worker.verdict.reason.includes('engine_unavailable'),
+    'provider_error source worker_text stays contract_violation');
+}
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

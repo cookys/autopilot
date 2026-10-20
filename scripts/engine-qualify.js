@@ -4247,11 +4247,19 @@ function runImplCase(context) {
     });
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
-    // Harness-owned evidence = spawn failure or the rail's own precondition
-    // exit (2). A timeout kill is NOT harness-owned even when the killed
+    // Harness-owned evidence = spawn failure, the rail's own precondition
+    // exit (2), or a dispatch JSON engine_unavailable whose provider_error
+    // source is harness_structured (CLI-derived HTTP status, not worker text).
+    // A timeout kill is NOT harness-owned even when the killed
     // child's TERM trap exits 2 (dispatch-hetero's abort_dispatch does) —
     // the candidate stalled; the check must not rest on that coincidence.
-    const harnessOwned = spawnFailed || (run.status === 2 && !timedOut);
+    const structuredProvider = Boolean(dispatchJson
+      && dispatchJson.status === 'engine_unavailable'
+      && dispatchJson.provider_error
+      && typeof dispatchJson.provider_error === 'object'
+      && !Array.isArray(dispatchJson.provider_error)
+      && dispatchJson.provider_error.source === 'harness_structured');
+    const harnessOwned = spawnFailed || (run.status === 2 && !timedOut) || structuredProvider;
     const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
     collection = collectionResult.collection;
     ledgerRow.scored_sha = collection && collection.scored_sha;

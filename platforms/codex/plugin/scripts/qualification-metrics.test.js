@@ -467,6 +467,27 @@ test('under auto a cached qualification admits the seat it qualifies', async () 
   assert.equal(doc.baseline_event_id, null);
 });
 
+// Whole-tree scan of scripts/ and hooks/. `own` is the allowlist of legitimate readers.
+// A missing tree (the negative-control fixture has scripts/ and no hooks/) contributes no hits.
+function metricsRequireHits(root, own) {
+  const hits = [];
+  const walk = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (ent.name !== 'node_modules' && ent.name !== 'fixtures') walk(full); continue; }
+      if (!ent.isFile()) continue;
+      const rel = path.relative(root, full);
+      if (own.has(rel)) continue;
+      if (/qualification-metrics/.test(fs.readFileSync(full, 'utf8'))) hits.push(rel);
+    }
+  };
+  walk(path.join(root, 'scripts'));
+  walk(path.join(root, 'hooks'));
+  return hits;
+}
+
+// # RED at 7d6975c9f: whole-tree scan fail — actual ['scripts/lib/qualification-prices.js'] expected [] (1 fail, 44 pass, 1 skipped, exit 1)
 test('no other script or hook requires the metrics module (whole-tree scan)', () => {
   const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js',
     // P3 write side: uses only recordIdV1 / strikeId / validateRecord, never admission or ordering.
@@ -474,21 +495,19 @@ test('no other script or hook requires the metrics module (whole-tree scan)', ()
     'scripts/lib/qualification-trust.js', 'scripts/qualification-trust.test.js',
     // emit-record validates the emitted record with validateRecord and recordIdV1 (write side only, never admission or ordering), same class as the existing send-queue entries.
     'scripts/engine-qualify.js', 'platforms/codex/plugin/scripts/engine-qualify.js',
-    'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh']);
-  const hits = [];
-  const walk = (dir) => {
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, ent.name);
-      if (ent.isDirectory()) { if (ent.name !== 'node_modules' && ent.name !== 'fixtures') walk(full); continue; }
-      if (!ent.isFile()) continue;
-      const rel = path.relative(REPO, full);
-      if (own.has(rel)) continue;
-      if (/qualification-metrics/.test(fs.readFileSync(full, 'utf8'))) hits.push(rel);
-    }
-  };
-  walk(path.join(REPO, 'scripts'));
-  walk(path.join(REPO, 'hooks'));
-  assert.deepEqual(hits, []);
+    'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh',
+    // prices uses only DEFAULT_MAX_AGE_S and describeAges for freshness warnings, never admission or ordering of metrics.
+    'scripts/lib/qualification-prices.js']);
+  assert.deepEqual(metricsRequireHits(REPO, own), []);
+});
+
+test('whole-tree scan reports an unregistered requirer and ignores an allowlisted path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qm-scan-'));
+  const rel = 'scripts/unregistered-requirer.js';
+  fs.mkdirSync(path.join(root, 'scripts'));
+  fs.writeFileSync(path.join(root, rel), "require('./qualification-metrics.js');\n");
+  assert.deepEqual(metricsRequireHits(root, new Set()), [rel]);
+  assert.deepEqual(metricsRequireHits(root, new Set([rel])), []);
 });
 
 test('a malformed feed URL returns ok:false instead of throwing', async () => {

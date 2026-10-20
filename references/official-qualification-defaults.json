@@ -18541,6 +18541,300 @@
     },
     {
       "administration": {
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "date": "2026-10-19",
+        "effort": "high",
+        "engine": "MiniMax-M3.1-Flash",
+        "expires": "2027-01-17",
+        "family": "minimax",
+        "harness_version": "dispatch-hetero:7481ead3",
+        "model": "MiniMax-M3.1-Flash",
+        "model_version": "MiniMax-M3.1-Flash",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 494,
+        "evidence": {
+          "evidence_hash": "0558d65636454f79a6c40db68ceedc2afaf9a9cb0fd546b1e8b75d0b058596ac",
+          "evidence_id": "0558d65636454f79a6c40db68ceedc2afaf9a9cb0fd546b1e8b75d0b058596ac",
+          "expires_at": "2027-01-17T20:01:54.179Z",
+          "grant_identity_hash": "0216ea5beea6aad5ed20e6b1749c72b4eefa18a76c2bda24316589c01a09a4df",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "minimax",
+            "harness_version": "dispatch-hetero:7481ead3",
+            "identity": "MiniMax-M3.1-Flash",
+            "identity_resolved": true,
+            "model_alias": "MiniMax-M3.1-Flash",
+            "model_version": "MiniMax-M3.1-Flash",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "0216ea5beea6aad5ed20e6b1749c72b4eefa18a76c2bda24316589c01a09a4df",
+          "issued_at": "2026-10-19T20:01:54.179Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T20:01:54.179Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "699b07d2e5dd7e9e266b872d465292c3253a83b475ad501a1936b8f4648fafe2",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "89024f77b4bfa6c16d23948e0e3b212dad2141acf0f7fe19684a5ab2742e3bbc",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T20:01:54.179Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "eab0745f4b4530d9b3c303638146fbf51698139edeb5704aba8866648925984e",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T20:01:54.179Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "c7e6ebb421d91b40f1610827346d85a47a8532705a9f7287caaf29ba07d2388b"
+      },
+      "capability_score": 1,
+      "default_id": "official:implementer:MiniMax-M3.1-Flash:cc-shim:331",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-20-minimax-m31-flash-ga-qualify/implementer/MiniMax-M3.1-Flash-qualify",
+        "evidence_id": "0558d65636454f79a6c40db68ceedc2afaf9a9cb0fd546b1e8b75d0b058596ac",
+        "evidence_store": {
+          "event_id": 494,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "c7e6ebb421d91b40f1610827346d85a47a8532705a9f7287caaf29ba07d2388b"
+        },
+        "official_event_id": 331
+      },
+      "quality": {
+        "contract_violations": 0,
+        "corpus_pass": "24/24",
+        "fabricated_changes": 0,
+        "false_pass_critical": 0,
+        "integrity_violations": 0,
+        "oracle_misses": 0,
+        "repeated_trials": 2
+      },
+      "role": "implementer",
+      "row": {
+        "capability_score": 1,
+        "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": null,
+          "usd_per_mtok_output": null
+        },
+        "date": "2026-10-19",
+        "effort": "high",
+        "endpoint": {
+          "base_url": "https://api.minimax.io/anthropic",
+          "name": "minimax",
+          "transport_security": "tls"
+        },
+        "engine": "MiniMax-M3.1-Flash",
+        "evidence": {
+          "evidence_hash": "0558d65636454f79a6c40db68ceedc2afaf9a9cb0fd546b1e8b75d0b058596ac",
+          "evidence_id": "0558d65636454f79a6c40db68ceedc2afaf9a9cb0fd546b1e8b75d0b058596ac",
+          "expires_at": "2027-01-17T20:01:54.179Z",
+          "grant_identity_hash": "0216ea5beea6aad5ed20e6b1749c72b4eefa18a76c2bda24316589c01a09a4df",
+          "identity": {
+            "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+            "effort": "high",
+            "family": "minimax",
+            "harness_version": "dispatch-hetero:7481ead3",
+            "identity": "MiniMax-M3.1-Flash",
+            "identity_resolved": true,
+            "model_alias": "MiniMax-M3.1-Flash",
+            "model_version": "MiniMax-M3.1-Flash",
+            "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+            "runner": "cc-shim",
+            "runner_version": "2.1.303-Claude-Code",
+            "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+          },
+          "identity_hash": "0216ea5beea6aad5ed20e6b1749c72b4eefa18a76c2bda24316589c01a09a4df",
+          "issued_at": "2026-10-19T20:01:54.179Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+            "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+            "kind": "impl_dispatch",
+            "name": "impl-live-rail",
+            "thresholds": {
+              "max_contract_violations": 0,
+              "max_fabricated_changes": 0,
+              "max_integrity_violations": 0,
+              "max_oracle_misses": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-19T20:01:54.179Z",
+          "revocation": null,
+          "role": "implementer",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "repository"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "bounded_implementation"
+            ],
+            "tool_surface": [
+              "git_commit"
+            ]
+          },
+          "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:implementer-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "699b07d2e5dd7e9e266b872d465292c3253a83b475ad501a1936b8f4648fafe2",
+          "trials": [
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "89024f77b4bfa6c16d23948e0e3b212dad2141acf0f7fe19684a5ab2742e3bbc",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T20:01:54.179Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-1"
+            },
+            {
+              "cases_passed": 12,
+              "cases_total": 12,
+              "contract_violations": 0,
+              "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+              "dispatch_ledger_hash": "eab0745f4b4530d9b3c303638146fbf51698139edeb5704aba8866648925984e",
+              "fabricated_changes": 0,
+              "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+              "integrity_violations": 0,
+              "observed_at": "2026-10-19T20:01:54.179Z",
+              "oracle_misses": 0,
+              "trial_id": "trial-2"
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 494,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "c7e6ebb421d91b40f1610827346d85a47a8532705a9f7287caaf29ba07d2388b"
+        },
+        "expires": "2027-01-17",
+        "family": "minimax",
+        "harness_version": "dispatch-hetero:7481ead3",
+        "latency": {
+          "sample_wall_time_s": 646
+        },
+        "model": "MiniMax-M3.1-Flash",
+        "model_version": "MiniMax-M3.1-Flash",
+        "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+        "qualified_at": "2026-10-19",
+        "quality": {
+          "contract_violations": 0,
+          "corpus_pass": "24/24",
+          "fabricated_changes": 0,
+          "false_pass_critical": 0,
+          "integrity_violations": 0,
+          "oracle_misses": 0,
+          "repeated_trials": 2
+        },
+        "role": "implementer",
+        "runner": "cc-shim",
+        "runner_version": "2.1.303-Claude-Code",
+        "status": "qualified",
+        "usage": {
+          "cases_complete": true,
+          "io_split_complete": false,
+          "med_wall_s": 22.664,
+          "n_cases": 24,
+          "n_cases_expected": 24,
+          "n_cases_missing_tokens": 24,
+          "n_solved": 24,
+          "schema_version": 1,
+          "solved_per_hour": 134.9429,
+          "tok_per_solved": null,
+          "total_tokens": null,
+          "total_wall_s": 640.271,
+          "usage_complete": false,
+          "usd_per_solved": null
+        },
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "MiniMax-M3.1-Flash",
+        "role": "implementer",
+        "runner": "cc-shim"
+      },
+      "seat_hash": "cf92923c92aca6d27f3cc6767870391970359348c44d418d44aecfce56b59fe8",
+      "status": "qualified"
+    },
+    {
+      "administration": {
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "date": "2026-08-16",
         "effort": "default",
@@ -31240,7 +31534,7 @@
     "implementer": {
       "failed": 6,
       "other": 0,
-      "qualified": 21
+      "qualified": 22
     },
     "reviewer": {
       "failed": 8,

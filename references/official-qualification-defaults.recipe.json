@@ -459,6 +459,11 @@
       "event_id": 330,
       "role": "implementer",
       "evidence_bundle": "docs/plans/evidence/2026-10-20-cc-shim-effort-resit/implementer/MiniMax-M3.1-Flash-Preview-qualify"
+    },
+    {
+      "event_id": 331,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-20-minimax-m31-flash-ga-qualify/implementer/MiniMax-M3.1-Flash-qualify"
     }
   ]
 }

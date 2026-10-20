@@ -17,6 +17,7 @@ SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 # RED at 4140e208f: a schema-valid foreman seat whose corpus_version is the pinned corpus hash plus generator version still exits 2; stderr names undefined because the sitting row has no corpus_version.
 # RED at df6502222: foreman test-mode --emit-row has no corpus_version, so buildV2Record cannot hash the same value the pre-exam check compared; a mutated copy of a pinned foreman asset does not exit 2.
 # RED at 06b8b6c85: a non-test-mode run with AUTOPILOT_FOREMAN_ASSET_ROOT set exits 3 and starts the foreman sitting; a missing or non-JSON pin file is reported as a qualification precondition failure; a live row corpus_version is overwritten instead of exiting 2.
+# RED at 3abca8f0b: JSON null and [] exit 2 as "qualification precondition failed" (null throws on index; [] mismatches a pin) instead of the unreadable-or-invalid-JSON message that names the pin path.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -586,6 +587,7 @@ run_q "$TEST_TMP/foreman-asset-root-nontest.out" foreman --seat-file "$FM_SEAT" 
   --store "$NTEST_ST" --raw-dir "$NTEST_RW" --emit-record
 unset AUTOPILOT_FOREMAN_ASSET_ROOT
 assert_exit_code "$RUN_RC" "2" "non-test-mode AUTOPILOT_FOREMAN_ASSET_ROOT exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-asset-root-nontest.out" | tr -d ' ')" "0" "non-test-mode asset root prints no record"
 assert_contains "$(cat "$ERR")" "AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode" "non-test-mode asset root names the test-mode limit"
 if grep -q 'foreman sitting start' "$ERR"; then
   fail "non-test-mode asset root started a sitting"
@@ -601,15 +603,25 @@ for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability
   cp "$REPO_ROOT/evals/$asset" "$MISS_COPY/evals/$asset"
 done
 MISS_PIN="$MISS_COPY/evals/foreman-asset-pins.json"
+MISS_ST="$TEST_TMP/store-foreman-missing-pin"
+MISS_RW="$TEST_TMP/raw-foreman-missing-pin"
+mkdir -p "$MISS_ST" "$MISS_RW"
+printf 'kept\n' >"$MISS_ST/marker"
+printf 'kept\n' >"$MISS_RW/marker"
+BEFORE_MISS_ST="$(dir_snapshot "$MISS_ST")"
+BEFORE_MISS_RW="$(dir_snapshot "$MISS_RW")"
 export AUTOPILOT_QUALIFY_SEED=foreman-headless-missing-pin
 export AUTOPILOT_FOREMAN_ASSET_ROOT="$MISS_COPY"
 run_q "$TEST_TMP/foreman-missing-pin.out" foreman --seat-file "$FM_SEAT" \
   --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
   --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
   --task-class code_review --domain repository --language en --tool diff_read \
-  --store "$TEST_TMP/store-foreman-missing-pin" --raw-dir "$TEST_TMP/raw-foreman-missing-pin" --emit-record
+  --store "$MISS_ST" --raw-dir "$MISS_RW" --emit-record
 assert_exit_code "$RUN_RC" "2" "missing foreman pin file exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-missing-pin.out" | tr -d ' ')" "0" "missing foreman pin file prints no record"
 assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $MISS_PIN" "missing foreman pin file names the path"
+assert_eq "$(dir_snapshot "$MISS_ST")" "$BEFORE_MISS_ST" "missing foreman pin file leaves --store unchanged"
+assert_eq "$(dir_snapshot "$MISS_RW")" "$BEFORE_MISS_RW" "missing foreman pin file leaves --raw-dir unchanged"
 
 BAD_COPY="$TEST_TMP/foreman-bad-json-pin"
 mkdir -p "$BAD_COPY/evals"
@@ -618,17 +630,88 @@ for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability
 done
 BAD_PIN="$BAD_COPY/evals/foreman-asset-pins.json"
 printf 'not-json\n' >"$BAD_PIN"
+BAD_ST="$TEST_TMP/store-foreman-bad-json"
+BAD_RW="$TEST_TMP/raw-foreman-bad-json"
+mkdir -p "$BAD_ST" "$BAD_RW"
+printf 'kept\n' >"$BAD_ST/marker"
+printf 'kept\n' >"$BAD_RW/marker"
+BEFORE_BAD_ST="$(dir_snapshot "$BAD_ST")"
+BEFORE_BAD_RW="$(dir_snapshot "$BAD_RW")"
 export AUTOPILOT_QUALIFY_SEED=foreman-headless-bad-json
 export AUTOPILOT_FOREMAN_ASSET_ROOT="$BAD_COPY"
 run_q "$TEST_TMP/foreman-bad-json.out" foreman --seat-file "$FM_SEAT" \
   --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
   --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
   --task-class code_review --domain repository --language en --tool diff_read \
-  --store "$TEST_TMP/store-foreman-bad-json" --raw-dir "$TEST_TMP/raw-foreman-bad-json" --emit-record
+  --store "$BAD_ST" --raw-dir "$BAD_RW" --emit-record
 unset AUTOPILOT_QUALIFY_SEED
 unset AUTOPILOT_FOREMAN_ASSET_ROOT
 assert_exit_code "$RUN_RC" "2" "non-JSON foreman pin file exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-bad-json.out" | tr -d ' ')" "0" "non-JSON foreman pin file prints no record"
 assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $BAD_PIN" "non-JSON foreman pin file names the path"
+assert_eq "$(dir_snapshot "$BAD_ST")" "$BEFORE_BAD_ST" "non-JSON foreman pin file leaves --store unchanged"
+assert_eq "$(dir_snapshot "$BAD_RW")" "$BEFORE_BAD_RW" "non-JSON foreman pin file leaves --raw-dir unchanged"
+
+# JSON null and [] are parsed values, not invalid JSON text. Both must still
+# exit 2 from the verifier, name the pin file, and write nothing.
+# RED at 3abca8f0b: JSON null and [] exit 2 as "qualification precondition failed" (null throws on index; [] mismatches a pin) instead of the unreadable-or-invalid-JSON message that names the pin path.
+NULL_COPY="$TEST_TMP/foreman-null-pin"
+mkdir -p "$NULL_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js foreman-asset-pins.json; do
+  cp "$REPO_ROOT/evals/$asset" "$NULL_COPY/evals/$asset"
+done
+NULL_PIN="$NULL_COPY/evals/foreman-asset-pins.json"
+printf 'null\n' >"$NULL_PIN"
+NULL_ST="$TEST_TMP/store-foreman-null-pin"
+NULL_RW="$TEST_TMP/raw-foreman-null-pin"
+mkdir -p "$NULL_ST" "$NULL_RW"
+printf 'kept\n' >"$NULL_ST/marker"
+printf 'kept\n' >"$NULL_RW/marker"
+BEFORE_NULL_ST="$(dir_snapshot "$NULL_ST")"
+BEFORE_NULL_RW="$(dir_snapshot "$NULL_RW")"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-null-pin
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$NULL_COPY"
+run_q "$TEST_TMP/foreman-null-pin.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$NULL_ST" --raw-dir "$NULL_RW" --emit-record
+unset AUTOPILOT_QUALIFY_SEED
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+assert_exit_code "$RUN_RC" "2" "JSON null foreman pin file exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-null-pin.out" | tr -d ' ')" "0" "JSON null foreman pin file prints no record"
+assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $NULL_PIN" "JSON null foreman pin file names the path"
+assert_eq "$(dir_snapshot "$NULL_ST")" "$BEFORE_NULL_ST" "JSON null foreman pin file leaves --store unchanged"
+assert_eq "$(dir_snapshot "$NULL_RW")" "$BEFORE_NULL_RW" "JSON null foreman pin file leaves --raw-dir unchanged"
+
+ARR_COPY="$TEST_TMP/foreman-array-pin"
+mkdir -p "$ARR_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js foreman-asset-pins.json; do
+  cp "$REPO_ROOT/evals/$asset" "$ARR_COPY/evals/$asset"
+done
+ARR_PIN="$ARR_COPY/evals/foreman-asset-pins.json"
+printf '[]\n' >"$ARR_PIN"
+ARR_ST="$TEST_TMP/store-foreman-array-pin"
+ARR_RW="$TEST_TMP/raw-foreman-array-pin"
+mkdir -p "$ARR_ST" "$ARR_RW"
+printf 'kept\n' >"$ARR_ST/marker"
+printf 'kept\n' >"$ARR_RW/marker"
+BEFORE_ARR_ST="$(dir_snapshot "$ARR_ST")"
+BEFORE_ARR_RW="$(dir_snapshot "$ARR_RW")"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-array-pin
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$ARR_COPY"
+run_q "$TEST_TMP/foreman-array-pin.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$ARR_ST" --raw-dir "$ARR_RW" --emit-record
+unset AUTOPILOT_QUALIFY_SEED
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+assert_exit_code "$RUN_RC" "2" "JSON array foreman pin file exits 2"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-array-pin.out" | tr -d ' ')" "0" "JSON array foreman pin file prints no record"
+assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $ARR_PIN" "JSON array foreman pin file names the path"
+assert_eq "$(dir_snapshot "$ARR_ST")" "$BEFORE_ARR_ST" "JSON array foreman pin file leaves --store unchanged"
+assert_eq "$(dir_snapshot "$ARR_RW")" "$BEFORE_ARR_RW" "JSON array foreman pin file leaves --raw-dir unchanged"
 
 # A live row that already carries corpus_version must not be overwritten.
 # The stub is the only way the CLI returns a row; the real runner does not.

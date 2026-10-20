@@ -5814,13 +5814,38 @@ const FOREMAN_PIN_ASSETS = Object.freeze([
 ]);
 
 function verifyPinnedForemanEvaluationAssets(overrides = {}) {
+  // The env root is a test seam for this verifier only. It must not redirect
+  // the exam's own requires. Outside AUTOPILOT_QUALIFY_SEED it is refused.
+  const testMode = Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
+  if (!testMode && process.env.AUTOPILOT_FOREMAN_ASSET_ROOT !== undefined) {
+    process.stderr.write(
+      'engine-qualify: AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode\n',
+    );
+    process.exit(2);
+  }
   const root = overrides.root
-    || process.env.AUTOPILOT_FOREMAN_ASSET_ROOT
+    || (testMode && process.env.AUTOPILOT_FOREMAN_ASSET_ROOT)
     || path.join(__dirname, '..');
   const pinPath = overrides.pinPath || path.join(root, 'evals/foreman-asset-pins.json');
-  const pins = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+  let pins;
+  try {
+    pins = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+  } catch (error) {
+    process.stderr.write(
+      `engine-qualify: foreman pin file unreadable or invalid JSON: ${pinPath}\n`,
+    );
+    process.exit(2);
+  }
   for (const [name, rel] of FOREMAN_PIN_ASSETS) {
-    const computed = byteHash(fs.readFileSync(path.join(root, rel)));
+    const assetPath = path.join(root, rel);
+    let bytes;
+    try {
+      bytes = fs.readFileSync(assetPath);
+    } catch (error) {
+      process.stderr.write(`engine-qualify: foreman asset unreadable: ${assetPath}\n`);
+      process.exit(2);
+    }
+    const computed = byteHash(bytes);
     const pinned = pins[name];
     if (computed !== pinned) {
       process.stderr.write(
@@ -5834,19 +5859,34 @@ function verifyPinnedForemanEvaluationAssets(overrides = {}) {
 
 // Headless foreman sittings return no scorecard row. --emit-record / --emit-row
 // hash row.corpus_version, so the row carries the same value compared above.
-// Only when that pre-exam value was stored (a seat file). A live row, if one
-// already exists, keeps every other field. A sitting that returned no row
-// gets a row only in AUTOPILOT_QUALIFY_SEED test mode, and that row is marked
-// engine-qualify:foreman-test-seed. A real run with no row stays without one
-// so headless treats it as no_verdict and writes no registry record.
+// Only when that pre-exam value was stored (a seat file). A live row that
+// already carries corpus_version keeps it; a mismatch with the pre-exam value
+// exits 2 before --emit-record writes --store or --raw-dir. A live row with
+// no corpus_version receives the pre-exam value. A sitting that returned no
+// row gets a row only when AUTOPILOT_QUALIFY_SEED is set (options.test_mode is
+// assigned only in that same case, so the env check is the whole condition),
+// and that row is marked engine-qualify:foreman-test-seed. A real run with no
+// row stays without one so headless treats it as no_verdict and writes no
+// registry record.
 function foremanResultWithExamCorpus(result, options) {
   const version = options && options.examCorpusVersion;
   if (version === undefined || version === null) return result;
   const base = result && typeof result === 'object' ? result : {};
   const prior = base.row && typeof base.row === 'object' ? base.row : null;
-  if (prior) return { ...base, row: { ...prior, corpus_version: version } };
-  const testSeed = (options && options.test_mode === true)
-    || Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
+  if (prior) {
+    if (Object.prototype.hasOwnProperty.call(prior, 'corpus_version')
+      && prior.corpus_version !== undefined && prior.corpus_version !== null) {
+      if (prior.corpus_version !== version) {
+        process.stderr.write(
+          `engine-qualify: row corpus_version ${prior.corpus_version} differs from exam corpus_version ${version}\n`,
+        );
+        process.exit(2);
+      }
+      return base;
+    }
+    return { ...base, row: { ...prior, corpus_version: version } };
+  }
+  const testSeed = Boolean(process.env.AUTOPILOT_QUALIFY_SEED);
   if (!testSeed) return base;
   const observedAt = timestamp();
   return {

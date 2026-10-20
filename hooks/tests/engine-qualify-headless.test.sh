@@ -16,6 +16,7 @@ SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 # RED at 891119040: owner/brain/verification_author/implementer/consult/discuss/foreman wrong corpus_version exits 0 (expected 2); seat.role disagreeing with the subcommand was untested; a headless throw (consult without --execute) exits 2. Reviewer mismatch already exits 2.
 # RED at 4140e208f: a schema-valid foreman seat whose corpus_version is the pinned corpus hash plus generator version still exits 2; stderr names undefined because the sitting row has no corpus_version.
 # RED at df6502222: foreman test-mode --emit-row has no corpus_version, so buildV2Record cannot hash the same value the pre-exam check compared; a mutated copy of a pinned foreman asset does not exit 2.
+# RED at 06b8b6c85: a non-test-mode run with AUTOPILOT_FOREMAN_ASSET_ROOT set exits 3 and starts the foreman sitting; a missing or non-JSON pin file is reported as a qualification precondition failure; a live row corpus_version is overwritten instead of exiting 2.
 
 STORE="$TEST_TMP/headless-store"
 RAW="$TEST_TMP/headless-raw"
@@ -560,6 +561,120 @@ assert_contains "$(cat "$ERR")" "$PINNED_GEN" "foreman pin mismatch stderr names
 assert_contains "$(cat "$ERR")" "$COMPUTED_GEN" "foreman pin mismatch stderr names the computed hash"
 assert_eq "$(dir_snapshot "$PIN_ST")" "$BEFORE_PIN_ST" "foreman pin mismatch leaves --store unchanged"
 assert_eq "$(dir_snapshot "$PIN_RW")" "$BEFORE_PIN_RW" "foreman pin mismatch leaves --raw-dir unchanged"
+
+# Non-test mode must refuse the asset-root seam before any sitting. A copy of
+# the real pins would otherwise verify and the exam would run (exit 3).
+REAL_COPY="$TEST_TMP/foreman-real-root"
+mkdir -p "$REAL_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js foreman-asset-pins.json; do
+  cp "$REPO_ROOT/evals/$asset" "$REAL_COPY/evals/$asset"
+done
+NTEST_ST="$TEST_TMP/store-foreman-asset-root"
+NTEST_RW="$TEST_TMP/raw-foreman-asset-root"
+mkdir -p "$NTEST_ST" "$NTEST_RW"
+printf 'kept\n' >"$NTEST_ST/marker"
+printf 'kept\n' >"$NTEST_RW/marker"
+BEFORE_NTEST_ST="$(dir_snapshot "$NTEST_ST")"
+BEFORE_NTEST_RW="$(dir_snapshot "$NTEST_RW")"
+unset AUTOPILOT_QUALIFY_SEED
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$REAL_COPY"
+run_q "$TEST_TMP/foreman-asset-root-nontest.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --panel-cmd true \
+  --store "$NTEST_ST" --raw-dir "$NTEST_RW" --emit-record
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+assert_exit_code "$RUN_RC" "2" "non-test-mode AUTOPILOT_FOREMAN_ASSET_ROOT exits 2"
+assert_contains "$(cat "$ERR")" "AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode" "non-test-mode asset root names the test-mode limit"
+if grep -q 'foreman sitting start' "$ERR"; then
+  fail "non-test-mode asset root started a sitting"
+fi
+assert_eq "$(dir_snapshot "$NTEST_ST")" "$BEFORE_NTEST_ST" "non-test-mode asset root leaves --store unchanged"
+assert_eq "$(dir_snapshot "$NTEST_RW")" "$BEFORE_NTEST_RW" "non-test-mode asset root leaves --raw-dir unchanged"
+
+# Missing and non-JSON pin files exit 2 from the verifier and name the file.
+# Both use a temporary copy; the worktree evals stay as they are.
+MISS_COPY="$TEST_TMP/foreman-missing-pin"
+mkdir -p "$MISS_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js; do
+  cp "$REPO_ROOT/evals/$asset" "$MISS_COPY/evals/$asset"
+done
+MISS_PIN="$MISS_COPY/evals/foreman-asset-pins.json"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-missing-pin
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$MISS_COPY"
+run_q "$TEST_TMP/foreman-missing-pin.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$TEST_TMP/store-foreman-missing-pin" --raw-dir "$TEST_TMP/raw-foreman-missing-pin" --emit-record
+assert_exit_code "$RUN_RC" "2" "missing foreman pin file exits 2"
+assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $MISS_PIN" "missing foreman pin file names the path"
+
+BAD_COPY="$TEST_TMP/foreman-bad-json-pin"
+mkdir -p "$BAD_COPY/evals"
+for asset in foreman-eval-generator.js foreman-eval-grader.js foreman-capability-evidence-corpus.json foreman-harness-conformance.js foreman-asset-pins.json; do
+  cp "$REPO_ROOT/evals/$asset" "$BAD_COPY/evals/$asset"
+done
+BAD_PIN="$BAD_COPY/evals/foreman-asset-pins.json"
+printf 'not-json\n' >"$BAD_PIN"
+export AUTOPILOT_QUALIFY_SEED=foreman-headless-bad-json
+export AUTOPILOT_FOREMAN_ASSET_ROOT="$BAD_COPY"
+run_q "$TEST_TMP/foreman-bad-json.out" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --store "$TEST_TMP/store-foreman-bad-json" --raw-dir "$TEST_TMP/raw-foreman-bad-json" --emit-record
+unset AUTOPILOT_QUALIFY_SEED
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+assert_exit_code "$RUN_RC" "2" "non-JSON foreman pin file exits 2"
+assert_contains "$(cat "$ERR")" "foreman pin file unreadable or invalid JSON: $BAD_PIN" "non-JSON foreman pin file names the path"
+
+# A live row that already carries corpus_version must not be overwritten.
+# The stub is the only way the CLI returns a row; the real runner does not.
+ROW_STUB="$TEST_TMP/foreman-row-require.js"
+cat >"$ROW_STUB" <<'STUB'
+const Module = require('module');
+const orig = Module.prototype.require;
+Module.prototype.require = function (id) {
+  const exported = orig.apply(this, arguments);
+  if (typeof id === 'string' && id.indexOf('foreman-eval-runner') !== -1 && exported && typeof exported === 'object') {
+    exported.runForemanQualification = function () {
+      return {
+        qualified: false,
+        verdict: { role: 'foreman', graded: false, evidence: null },
+        row: { corpus_version: 'live-row-corpus', engine: 'e' },
+      };
+    };
+  }
+  return exported;
+};
+STUB
+ROW_ST="$TEST_TMP/store-foreman-row"
+ROW_RW="$TEST_TMP/raw-foreman-row"
+mkdir -p "$ROW_ST" "$ROW_RW"
+printf 'kept\n' >"$ROW_ST/marker"
+printf 'kept\n' >"$ROW_RW/marker"
+BEFORE_ROW_ST="$(dir_snapshot "$ROW_ST")"
+BEFORE_ROW_RW="$(dir_snapshot "$ROW_RW")"
+unset AUTOPILOT_QUALIFY_SEED
+unset AUTOPILOT_FOREMAN_ASSET_ROOT
+set +e
+node --require "$ROW_STUB" "$REPO_ROOT/scripts/engine-qualify.js" foreman --seat-file "$FM_SEAT" \
+  --runner-version 1.0.0 --family openai --harness-version reviewer-harness-v2 \
+  --semantic-fingerprint "$HASH_B" --containment-fingerprint "$HASH_C" \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --panel-cmd true \
+  --store "$ROW_ST" --raw-dir "$ROW_RW" --emit-record \
+  >"$TEST_TMP/foreman-row.out" 2>"$ERR"
+ROW_RC=$?
+set -e
+assert_exit_code "$ROW_RC" "2" "live row corpus_version mismatch exits 2"
+assert_contains "$(cat "$ERR")" "live-row-corpus" "live row mismatch names the row corpus_version"
+assert_contains "$(cat "$ERR")" "$FOREMAN_CORPUS" "live row mismatch names the exam corpus_version"
+assert_eq "$(wc -c <"$TEST_TMP/foreman-row.out" | tr -d ' ')" "0" "live row mismatch prints no record"
+assert_eq "$(dir_snapshot "$ROW_ST")" "$BEFORE_ROW_ST" "live row mismatch leaves --store unchanged"
+assert_eq "$(dir_snapshot "$ROW_RW")" "$BEFORE_ROW_RW" "live row mismatch leaves --raw-dir unchanged"
 
 # The same throw without --seat-file/--emit-record stays exit 2.
 run_q "$TEST_TMP/consult-bare-throw.out" consult \

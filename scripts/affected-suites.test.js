@@ -632,3 +632,45 @@ test('BL-0213 real tree: b8bdd61f3 and 3765302f3 file lists stay under the measu
   const seat = run(names('3765302f3'));
   assert.ok(seat.suites.length < 280, `3765302f3 selected ${seat.suites.length}`);
 });
+
+// # RED at 2536401a2: comment-only.test.sh still selected; b8bdd61f3 selected 228 (bound 120).
+test('BL-0213 a name only in a star-comment line or a block comment does not create an edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/comment-only.js': '/**\n * see scripts/target.js in a star line\n */\nconst x = 1;\n/* block scripts/target.js */\n * scripts/target.js\n',
+    'scripts/real-user.js': "const t = require('./target.js');\n",
+    'hooks/tests/comment-only.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/comment-only.js"\n',
+    'hooks/tests/real-user.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/real-user.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/comment-only.test.sh'));
+    assert.ok(out.suites.includes('hooks/tests/real-user.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a helper call that reads a named file as data still creates a weak edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/reader.js': "function fileContains(rel, needle) { return false; }\nif (fileContains('scripts/target.js', 'marker')) console.log(1);\n",
+    'hooks/tests/reader.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/reader.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/reader.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 real tree: b8bdd61f3 and 3765302f3 stay under the round-3 comment-strip bound', () => {
+  // Measured on this tree with --files of each merge's name list: 223 and 78.
+  // 223 stays because decisions-sidecar.js reads src/engine/autopilot-engine.js as data.
+  // Margin is modest and still under the round-2 bound of 280.
+  const names = (rev) => execFileSync('git', ['diff', '--name-only', `${rev}^1`, rev], { cwd: REAL_ROOT, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  const b8 = run(names('b8bdd61f3'));
+  assert.ok(b8.suites.length < 250, `b8bdd61f3 selected ${b8.suites.length}`);
+  const seat = run(names('3765302f3'));
+  assert.ok(seat.suites.length < 100, `3765302f3 selected ${seat.suites.length}`);
+});

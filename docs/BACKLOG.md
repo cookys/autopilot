@@ -650,7 +650,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
 - **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Top fan-in: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
+- **Context**: Round 3 (2026-10-20), mode selective, stats.selected: d997355a9 97, b8bdd61f3 204, 3765302f3 78. JS block and star comments no longer create edges (check-plan-graduation.js no longer refers to docs/scripts-inventory.md; that file is not readFileSync'd). Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (weak explicit path, ~142 suites). Left: several scripts mention the bare word run, which still weakly matches hooks/tests/run.sh; pruning that word is not safe.
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
 - **Id**: BL-0214

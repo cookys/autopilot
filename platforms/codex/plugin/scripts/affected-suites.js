@@ -67,6 +67,7 @@
 //   9. A weak bare-name edge to a JavaScript file is not created when that stem is shared by two or
 //      more code files and the mention has no slash (a backtick or quote around index, common, codex).
 //      A stem that names one code file, a strong require or source, and any slash or name.ext mention stay.
+//  10. JavaScript block comments (/* */) and lines whose first non-blank character is * never create an edge; a string argument that names a file still does.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -217,14 +218,24 @@ const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr
 const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
-const stripComments = (t) => t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
+// Full-line # and // only. Trailing comments stay: a URL or a string may contain them.
+// JavaScript also drops /* */ blocks and JSDoc continuation lines (first non-blank char is *).
+const stripComments = (t, file) => {
+  let s = t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
+  const ext = String(file || '').split('.').pop();
+  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') {
+    s = s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\*[\s\S]*$/g, '');
+    s = s.replace(/^[ \t]*\*.*$/gm, '');
+  }
+  return s;
+};
 
 function buildGraph(tree) {
   const codeFiles = tree.files.filter((f) => isCode(f) && (isSuite(f) || !NOT_PROPAGATING.test(f)));
   const refs = new Map(); // file -> mentions
   for (const f of codeFiles) {
     const t = tree.read(f);
-    if (t != null) refs.set(f, mentions(stripComments(t)));
+    if (t != null) refs.set(f, mentions(stripComments(t, f)));
   }
   const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };

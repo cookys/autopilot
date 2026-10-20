@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 73d4402c8: familyOfEngine mirrors resolve-review-loop.sh family_of: expected 'ok', got 'MiniMax-M3.1-Flash: sh=google js=google want=minimax'. gemini-3.7-flash-high was not in the failure (sh=google js=google, want google). Suite: 50 passed, 1 failed.
 # hooks/tests/rail-stage-writers.test.sh — plan docs/plans/2026-10-06-dev-flow-stage-graph.md section 2.7 Writers, phase P3 (KR2).
 #
 # Each rail runs with its existing stub transport against a temp session marker and the test asserts the marker's
@@ -35,11 +36,16 @@ sed -n '/^family_of() {/,/^}/p' "$REPO_ROOT/scripts/resolve-review-loop.sh" >"$F
 PARITY=$(node -e '
 const { familyOfEngine } = require(process.argv[1]);
 const { spawnSync } = require("child_process");
-const models = ["gpt-5.5","codex-max","o3-mini","claude-opus-4","sonnet","haiku","Qwen3-Max","qwq","gemini-3-pro","flash","grok-4","composer-2","MiniMax-M2","abab7","glm-5","zhipu-x","kimi-k2","moonshot-v1","mystery","x",""];
+const models = ["gpt-5.5","codex-max","o3-mini","claude-opus-4","sonnet","haiku","Qwen3-Max","qwq","gemini-3-pro","flash","grok-4","composer-2","MiniMax-M2","abab7","glm-5","zhipu-x","kimi-k2","moonshot-v1","mystery","x","","MiniMax-M3.1-Flash","gemini-3.7-flash-high"];
+// RED before the vendor-first reorder (unfixed family_of and familyOfEngine, both google):
+// MiniMax-M3.1-Flash sh=google js=google (want minimax); gemini-3.7-flash-high sh=google js=google (want google).
+const want = { "MiniMax-M3.1-Flash": "minimax", "gemini-3.7-flash-high": "google" };
 let bad = [];
 for (const m of models) {
   const sh = spawnSync("bash", ["-c", `. "$1"; family_of "$2"`, "_", process.argv[2], m], { encoding: "utf8" }).stdout.trim();
-  if (sh !== familyOfEngine(m)) bad.push(`${m}: sh=${sh} js=${familyOfEngine(m)}`);
+  const js = familyOfEngine(m);
+  if (sh !== js) bad.push(`${m}: sh=${sh} js=${js}`);
+  if (want[m] && (sh !== want[m] || js !== want[m])) bad.push(`${m}: sh=${sh} js=${js} want=${want[m]}`);
 }
 console.log(bad.length ? bad.join("; ") : "ok");
 ' "$REPO_ROOT/scripts/lib/stage-write.js" "$FAMILY_SH")

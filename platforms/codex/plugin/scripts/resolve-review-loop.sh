@@ -750,15 +750,16 @@ case "$DENSITY_SCALING_CFG" in on|off) ;; *) DENSITY_SCALING_CFG="off" ;; esac
 # Map an engine name → vendor family (for the decorrelation overlap warning).
 family_of() {
   local e; e="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  # Same order as familyOfEngine: named vendors, then gemini/bison/flash.
   case "$e" in
+    *minimax*|*abab*)                        echo minimax ;;
+    *kimi*|*moonshot*)                       echo moonshot ;;
+    *glm*|*zhipu*)                           echo zhipu ;;
+    *grok*|*composer*)                       echo xai ;;
     *gpt*|*codex*|*o1*|*o3*|*o4*)            echo openai ;;
     *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
     *qwen*|*qwq*)                            echo alibaba ;;
     *gemini*|*flash*|*bison*)                echo google ;;
-    *grok*|*composer*)                       echo xai ;;
-    *minimax*|*abab*)                        echo minimax ;;
-    *glm*|*zhipu*)                           echo zhipu ;;
-    *kimi*|*moonshot*)                       echo moonshot ;;
     *)                                       echo unknown ;;
   esac
 }

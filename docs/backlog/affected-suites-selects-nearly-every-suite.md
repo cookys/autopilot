@@ -17,3 +17,11 @@ Run 1 (`0270c58cc..d997355a9`): 546 of 616 suites. Always-run is 15. Top fan-in:
 Run 2 (`d997355a9..b8bdd61f3`): 588 of 617. Top fan-in: the Codex mirror of `review-resolution.js` 380 (`src/engine/autopilot-engine.js` carries 378); a docs plan 202; `scripts/session-mode.js` 48.
 
 The outcome gate needs a run record. A selection of 500+ suites has no feasible record, so each push reports no record. The ordinary quality-flow test step would run the same set.
+
+## Round 5 detail (moved from BACKLOG Context)
+
+Round 5 (2026-10-20), mode selective via --base rev^1 --head rev, stats.selected: d997355a9 102, b8bdd61f3 269, 3765302f3 83 (unchanged from round 4; was 97, 204, 78 before that). A slash-star starts a block comment only as the first non-blank on its line, so a regexp or a trailing // no longer erases a later require; counts did not move. Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (190 on the b8 chain). Largest b8 hops: review-resolution.js 252, autopilot-engine.js 250. Left: bare word run still weakly matches hooks/tests/run.sh (64 on d997, via dev-setup.test.sh); pruning that word is not safe. Extensionless hooks/tests helper globs still create no edge.
+
+## Follow-up
+
+When a regex literal on one line contains adjacent escaped slashes (for example the literal slash-backslash-slash-backslash-slash form used to match a double slash), the double-slash stripping eats the rest of that line, including a require that follows; no such pattern exists in the tree today; source: selfix g3 review b7aed995.

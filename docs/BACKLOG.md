@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0262 -->
+<!-- next-id: BL-0264 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -650,7 +650,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
 - **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Round 5 (2026-10-20), mode selective via --base rev^1 --head rev, stats.selected: d997355a9 102, b8bdd61f3 269, 3765302f3 83 (unchanged from round 4; was 97, 204, 78 before that). A slash-star starts a block comment only as the first non-blank on its line, so a regexp or a trailing // no longer erases a later require; counts did not move. Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (190 on the b8 chain). Largest b8 hops: review-resolution.js 252, autopilot-engine.js 250. Left: bare word run still weakly matches hooks/tests/run.sh (64 on d997, via dev-setup.test.sh); pruning that word is not safe. Extensionless hooks/tests helper globs still create no edge.
+- **Context**: Selected 102 / 269 / 83 on merges d997355a9, b8bdd61f3, 3765302f3. Main cause: decisions-sidecar.js reads src/engine/autopilot-engine.js as data (fileContains).
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
 - **Id**: BL-0214
@@ -1310,3 +1310,31 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero-review p6trust g2
 - **Pointer**: docs/backlog/p6-trust-followups.md
 - **Context**: Four small follow-ups. Automating the extra answer step needs eval evidence before skill text changes.
+
+### validateIntegratedExecution rebuilds the merge manifest by hand instead of calling the merge-intent builder
+- **Id**: BL-0262
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 下次接觸驗證的整合執行檢查仍用手重組合併清單，沒有呼叫合併意圖的建構函式。結構升到第二版時，寫死的一曾經漂過一次；常數已修正，重複的結構還在。
+- **Impact**: 結構再改時，手組的那份會再漂一次，驗證會對錯的清單形狀放行或誤報。
+- **Trigger**: 下次改到該檔時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: reds3 lane, 2026-10-20
+- **Pointer**: docs/backlog/next-touch-validation-manual-manifest.md
+- **Context**: scripts/next-touch-validation.js still hand-builds the manifest; the schema-2 constant was patched, the copy remains.
+
+### orchestration-eval-gate test reads BASE_SHA 3a72a54dc that is not in develop history
+- **Id**: BL-0263
+- **Status**: open
+- **Since**: 2026-10-20
+- **Origin**: self
+- **Problem**: 編排評估閘的測試用一個不在開發線歷史裡的提交去讀檔。全新複製或垃圾回收之後那個物件不在，測試因而失敗。
+- **Impact**: 乾淨的工作區跑該測試會直接失敗，無法判斷閘本身有沒有壞。
+- **Trigger**: 下次改到該檔時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: reds3 lane, 2026-10-20
+- **Pointer**: docs/backlog/orchestration-eval-gate-base-sha.md
+- **Context**: hooks/tests/orchestration-eval-gate.test.sh git-shows BASE_SHA 3a72a54dc, which is not an ancestor of develop.

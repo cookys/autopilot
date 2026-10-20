@@ -20,6 +20,14 @@
     "source": {
      "type": "object"
     },
+    "supersedes": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "pattern": "^[0-9a-f]{64}$",
+     "title": "plan 078 D4: record_id of the committed legacy record this relabelled record replaces (old file untouched; load_records drops it)"
+    },
     "verdict": {
      "type": "object"
     },

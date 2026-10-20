@@ -276,31 +276,42 @@ function gitExec(args, env) {
 
 // Parent of the common git dir is the main checkout (worktrees and clones included).
 // A parity clone whose own sibling is not llm-playground follows a local origin.
+// Returns null when `start` is not a git checkout (tarball export); callers skip.
 function defaultLpRoot() {
-  const main = mainCheckout(REPO);
+  return lpRootBeside(REPO);
+}
+
+function lpRootBeside(start) {
+  const main = mainCheckout(start);
+  if (main == null) return null;
   const sibling = path.join(path.dirname(main), 'llm-playground');
-  if (isGitRepo(sibling)) return sibling;
+  if (isRepoTop(sibling)) return sibling;
   let origin = '';
   try {
     origin = gitExec(['-C', main, 'remote', 'get-url', 'origin']).toString('utf8').trim();
   } catch { /* no origin */ }
   if (origin && path.isAbsolute(origin) && fs.existsSync(origin)) {
-    try {
-      return path.join(path.dirname(mainCheckout(origin)), 'llm-playground');
-    } catch { /* origin is not a checkout */ }
+    const originMain = mainCheckout(origin);
+    if (originMain) return path.join(path.dirname(originMain), 'llm-playground');
   }
   return sibling;
 }
 
 function mainCheckout(start) {
-  const raw = gitExec(['-C', start, 'rev-parse', '--git-common-dir']).toString('utf8').trim();
-  return path.dirname(path.resolve(start, raw));
+  try {
+    const raw = gitExec(['-C', start, 'rev-parse', '--git-common-dir']).toString('utf8').trim();
+    if (!raw) return null;
+    return path.dirname(path.resolve(start, raw));
+  } catch {
+    return null;
+  }
 }
 
-function isGitRepo(root) {
+function isRepoTop(root) {
+  if (typeof root !== 'string' || root === '') return false;
   try {
-    gitExec(['-C', root, 'rev-parse', '--is-inside-work-tree']);
-    return true;
+    const top = gitExec(['-C', root, 'rev-parse', '--show-toplevel']).toString('utf8').trim();
+    return fs.realpathSync(top) === fs.realpathSync(root);
   } catch {
     return false;
   }
@@ -315,11 +326,25 @@ function refExists(root, ref) {
   }
 }
 
+function rejectEmptyLpEnv(env) {
+  if (env.QUALIFICATION_LP_ROOT === '') {
+    throw new Error('QUALIFICATION_LP_ROOT is set but empty');
+  }
+  if (env.QUALIFICATION_LP_REF === '') {
+    throw new Error('QUALIFICATION_LP_REF is set but empty');
+  }
+}
+
 // Compare REPO/schemas blobs to `git show ref:schemas/<name>` (never the other work tree).
-// explicit: a missing repo or ref throws. Otherwise returns { skip } with root and ref.
+// Root must be that repo's top level (realpath of --show-toplevel). explicit: a missing
+// repo, a non-top directory, or a missing ref throws. Otherwise returns { skip } with root and ref.
+// An empty root or ref throws before any git -C.
 function compareVendoredSchemas(root, ref, explicit) {
-  if (!isGitRepo(root) || !refExists(root, ref)) {
-    const message = `llm-playground git ref unavailable: root=${root} ref=${ref}`;
+  if (root === '') throw new Error('QUALIFICATION_LP_ROOT is set but empty');
+  if (ref === '') throw new Error('QUALIFICATION_LP_REF is set but empty');
+  if (!isRepoTop(root) || !refExists(root, ref)) {
+    const why = isRepoTop(root) ? '' : ' (not the repository top level)';
+    const message = `llm-playground git ref unavailable: root=${root} ref=${ref}${why}`;
     if (explicit) throw new Error(message);
     return { skip: message };
   }
@@ -353,12 +378,20 @@ function initSchemaRepo(home, bodies) {
   return root;
 }
 
+function qualificationSchemaParity(env = process.env, start = REPO) {
+  rejectEmptyLpEnv(env);
+  const rootExplicit = env.QUALIFICATION_LP_ROOT !== undefined;
+  const refExplicit = env.QUALIFICATION_LP_REF !== undefined;
+  const root = rootExplicit ? env.QUALIFICATION_LP_ROOT : (start === REPO ? defaultLpRoot() : lpRootBeside(start));
+  const ref = refExplicit ? env.QUALIFICATION_LP_REF : 'origin/master';
+  if (root == null) {
+    return { skip: `llm-playground root unresolved: autopilot checkout is not a git checkout (${start})` };
+  }
+  return compareVendoredSchemas(root, ref, rootExplicit || refExplicit);
+}
+
 test('vendored schemas are byte-identical to the llm-playground P1 copy when it is present', (t) => {
-  const rootExplicit = process.env.QUALIFICATION_LP_ROOT !== undefined;
-  const refExplicit = process.env.QUALIFICATION_LP_REF !== undefined;
-  const root = rootExplicit ? process.env.QUALIFICATION_LP_ROOT : defaultLpRoot();
-  const ref = refExplicit ? process.env.QUALIFICATION_LP_REF : 'origin/master';
-  const result = compareVendoredSchemas(root, ref, rootExplicit || refExplicit);
+  const result = qualificationSchemaParity();
   if (result && result.skip) { t.skip(result.skip); return; }
 });
 
@@ -388,6 +421,62 @@ test('negative control: byte-identical committed schemas pass the parity helper'
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('empty QUALIFICATION_LP_ROOT fails before any git -C', () => {
+  assert.throws(
+    () => qualificationSchemaParity({ QUALIFICATION_LP_ROOT: '' }),
+    { message: 'QUALIFICATION_LP_ROOT is set but empty' },
+  );
+  assert.throws(
+    () => compareVendoredSchemas('', 'HEAD', true),
+    { message: 'QUALIFICATION_LP_ROOT is set but empty' },
+  );
+});
+
+test('empty QUALIFICATION_LP_REF fails before any git -C', () => {
+  assert.throws(
+    () => qualificationSchemaParity({ QUALIFICATION_LP_REF: '' }),
+    { message: 'QUALIFICATION_LP_REF is set but empty' },
+  );
+  assert.throws(
+    () => compareVendoredSchemas('/tmp', '', false),
+    { message: 'QUALIFICATION_LP_REF is set but empty' },
+  );
+});
+
+test('a subdirectory of a git repo is not a schema root: non-explicit skips, explicit fails', () => {
+  const home = tmp('home');
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'qm-lp-outer-'));
+  gitTemp(outer, home, ['init', '-b', 'main']);
+  const sub = path.join(outer, 'not-the-root');
+  fs.mkdirSync(sub);
+  try {
+    const skipped = compareVendoredSchemas(sub, 'HEAD', false);
+    assert.match(skipped.skip, /not the repository top level/);
+    assert.match(skipped.skip, new RegExp(`root=${sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(skipped.skip, /ref=HEAD/);
+    assert.throws(
+      () => compareVendoredSchemas(sub, 'HEAD', true),
+      /not the repository top level/,
+    );
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(outer, { recursive: true, force: true });
+  }
+});
+
+test('main checkout lookup returns null on a non-git directory and parity skips instead of throwing', () => {
+  const dir = tmp('notgit');
+  try {
+    assert.equal(mainCheckout(dir), null);
+    assert.equal(lpRootBeside(dir), null);
+    const skipped = qualificationSchemaParity({}, dir);
+    assert.match(skipped.skip, /not a git checkout/);
+    assert.match(skipped.skip, new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 

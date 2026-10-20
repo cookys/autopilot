@@ -151,7 +151,7 @@ Backlog candidates(G1+G2 裁決產物):AST structural-distance metric + template
 
 ## Addendum (2026-10-20) — G2-F9 harness-owned evidence includes a harness structured provider-error field
 
-Owner decision d-8e9de3b3, option A. The administration cap still aborts (no verdict) only on harness-owned `engine_unavailable` evidence. That evidence now also includes a dispatch result whose status is `engine_unavailable` and whose additive `provider_error.source` is `harness_structured`. The field is filled only from structured output the harness reads off the CLI, never from prose the worker printed. A model that prints "429" or "529 overloaded" stays `contract_violation`.
+Owner decision d-8e9de3b3, option A. The administration cap still aborts (no verdict) only on harness-owned `engine_unavailable` evidence. That evidence now also includes a dispatch result whose status is `engine_unavailable` and whose additive `provider_error.source` is `harness_structured`. The field is filled only from structured output the harness reads off the CLI, never from prose the worker printed. A model that prints "429" or "529 overloaded" stays `contract_violation`. The dispatch JSON also carries `error_category`, copied from classify-error text matching, and the ledger stores that string as `dispatch_error_class`. `error_category` is text-derived and diagnostic only; it must never decide harness-owned, which continues to use only `provider_error` with source `harness_structured`.
 
 | Runner | Structured provider-error field |
 | --- | --- |

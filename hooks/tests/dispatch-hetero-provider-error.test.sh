@@ -48,6 +48,18 @@ assert_no_provider_key() {
   ' "$json" || fail "$label"
 }
 
+assert_error_category() {
+  local json="$1" expected="$2" label="$3"
+  node -e '
+    const o = JSON.parse(process.argv[1]);
+    const exp = process.argv[2] === "null" ? null : process.argv[2];
+    if (!Object.prototype.hasOwnProperty.call(o, "error_category") || o.error_category !== exp) {
+      console.error("error_category", JSON.stringify(o.error_category));
+      process.exit(1);
+    }
+  ' "$json" "$expected" || fail "$label"
+}
+
 run_cc() {
   local stub="$1" branch="$2"
   local bindir="$TEST_TMP/bin-$branch"
@@ -145,5 +157,33 @@ OUT="$(cd "$SBX" && AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$ENGINE_C
 JSON="$(last_json "$OUT")"
 assert_no_provider_key "$JSON" "agy text 529 does not gain provider_error"
 assert_contains "$JSON" '"status": "question_suspected"' "agy stdout is not the classified log, so text 529 stays question_suspected"
+
+# f. classify-error text category is diagnostic on the dispatch JSON.
+# Plain cc-shim bytes (not a structured envelope) so CLASSIFIED_ERROR is overloaded
+# and provider_error stays absent. Unclassifiable text leaves error_category null.
+# # RED at 0e85be316: no error_category key yet (TypeError / missing key).
+STUB_OL="$TEST_TMP/claude-overloaded-text"
+cat > "$STUB_OL" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'server overloaded'
+exit 1
+EOF
+chmod +x "$STUB_OL"
+OUT="$(run_cc "$STUB_OL" feat/pe-ol)"
+JSON="$(last_json "$OUT")"
+assert_error_category "$JSON" overloaded "plain overloaded text sets error_category"
+assert_no_provider_key "$JSON" "plain overloaded text has no provider_error"
+
+STUB_UNK="$TEST_TMP/claude-unclassifiable"
+cat > "$STUB_UNK" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'zzznoclass zzznoclass'
+exit 1
+EOF
+chmod +x "$STUB_UNK"
+OUT="$(run_cc "$STUB_UNK" feat/pe-unk)"
+JSON="$(last_json "$OUT")"
+assert_error_category "$JSON" null "unclassifiable failure has null error_category"
+assert_no_provider_key "$JSON" "unclassifiable failure has no provider_error"
 
 finalize_test

@@ -890,6 +890,15 @@ emit() { # status commit files ins del worktree error
     provider_error_fields="$(printf ', "provider_error": {"source":"harness_structured","runner":"%s","http_status":%s,"field":"%s"}' \
       "$(_flat_json_escape "$PROVIDER_ERROR_RUNNER")" "$PROVIDER_ERROR_STATUS" "$(_flat_json_escape "$PROVIDER_ERROR_FIELD")")"
   fi
+  # error_category is classify-error TEXT matching (CLASSIFIED_ERROR). Diagnostic
+  # only: it must never decide harness-owned. Harness-owned continues to use only
+  # provider_error with source harness_structured. Empty, unset, and the "unknown"
+  # sentinel (no text match) stay null. Paths that emit before classification
+  # therefore publish null.
+  local error_category_json="null"
+  if [ -n "${CLASSIFIED_ERROR:-}" ] && [ "$CLASSIFIED_ERROR" != "unknown" ]; then
+    error_category_json="\"$(_flat_json_escape "$CLASSIFIED_ERROR")\""
+  fi
   local timeout_fields=""
   local emit_timeout_secs=""
   local timed_out_json="false" timeout_enforced_json="false"
@@ -906,7 +915,7 @@ emit() { # status commit files ins del worktree error
   if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
     zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -917,7 +926,7 @@ emit() { # status commit files ins del worktree error
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json"
 }
 
 check_session_mode_gate() {

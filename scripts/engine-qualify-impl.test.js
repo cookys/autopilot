@@ -69,10 +69,11 @@ for (const trial of admin.trials) for (const c of trial.cases) if (c.branch === 
 if (!target) { process.stdout.write(JSON.stringify({ status: 'failure', commit: null, error: 'unknown branch' }) + '\\n'); process.exit(1); }
 
 const mode = fs.readFileSync(${JSON.stringify(path.join(tempRoot, 'fake-mode.txt'))}, 'utf8').trim() || 'honest';
-if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode === 'unavailable_worker_text') {
+if (mode === 'unavailable_structured' || mode === 'unavailable_plain' || mode === 'unavailable_worker_text' || mode === 'unavailable_error_category') {
   const body = { status: 'engine_unavailable', runner: 'fake', model: 'fake', branch, base: 'HEAD', commit: null, files_changed: 0, worktree: null, error: 'engine unavailable' };
   if (mode === 'unavailable_structured') body.provider_error = { source: 'harness_structured', runner: 'cc-shim', http_status: 529, field: 'api_error_status' };
   if (mode === 'unavailable_worker_text') body.provider_error = { source: 'worker_text', runner: 'cc-shim', http_status: 529, field: 'api_error_status' };
+  if (mode === 'unavailable_error_category') body.error_category = 'overloaded';
   emit(body);
   process.exit(1);
 }
@@ -831,6 +832,42 @@ function runTrunc(mode, seed, truncate) {
   equal(worker.row.status, 'failed', 'worker_text is scored, not no_verdict');
   check(worker.verdict.reason.includes('contract_violation') && !worker.verdict.reason.includes('engine_unavailable'),
     'provider_error source worker_text stays contract_violation');
+}
+
+// error_category fills dispatch_error_class. Diagnostic only.
+// # RED at 0e85be316: rawDispatchErrorClass still reads dispatchJson.category, so dispatch_error_class stays null.
+{
+  const store = fs.mkdtempSync(path.join(tempRoot, 'store-ec-'));
+  const raw = fs.mkdtempSync(path.join(tempRoot, 'raw-ec-'));
+  const wrapper = path.join(tempRoot, 'disp-ec.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${fakeDispatcher} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'pe-error-category');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'unavailable_error_category');
+  process.env.AUTOPILOT_QUALIFY_SEED = 'pe-error-category';
+  let cat;
+  try {
+    cat = runImplQualification({
+      ...baseOptions(store), dispatchBin: wrapper, rawDir: raw, testTruncateAfterCases: 2,
+    });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+  // NEGATIVE CONTROL: engine_unavailable + error_category overloaded + no provider_error, exit 1.
+  // Not harness-owned (scored, no infra abort). dispatch_error_class stays overloaded.
+  // A completed administration's verdict has no dispatch_ledger; the raw ledger does.
+  // The no-verdict return (infra abort) is the path that puts dispatch_ledger on the verdict
+  // and skips the raw-dir write.
+  // Probe (reverted) on two cases: harnessOwned ||= dispatchJson.error_category === 'overloaded'
+  // failed the administration_outcome assertion with actual 'infra_abort' expected 'completed'.
+  // The provider_error-only check keeps this case scored.
+  equal(cat.verdict.administration_outcome, 'completed', 'error_category alone does not infra-abort');
+  equal(cat.started_cases, 2, 'both error_category cases run');
+  equal(cat.row.status, 'failed', 'error_category alone is scored, not no_verdict');
+  const ledger = readJsonl(path.join(raw, 'impl-dispatch-ledger.jsonl'));
+  equal(ledger[0].dispatch_error_class, 'overloaded', 'error_category overloaded fills dispatch_error_class');
+  check(cat.verdict.reason.includes('contract_violation') && !cat.verdict.reason.includes('engine_unavailable'),
+    'error_category overloaded without provider_error stays contract_violation');
 }
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);

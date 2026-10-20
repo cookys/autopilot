@@ -296,7 +296,7 @@ const HELP = `Usage:
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
       Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
       non-pass case whose dispatch status is not committed: dispatch_error_class
-      (the dispatch JSON category, or null when that field is absent — never the
+      (the dispatch JSON error_category, or null when that field is absent — never the
       free-text error), dispatch_error, agent_log_tail (last 40 lines after the
       canary in literal/base64/hex/reversed form, the endpoint base_url and its
       host, and any http(s) URL are masked; secrets redacted; 8 KiB cap)
@@ -4018,9 +4018,12 @@ function rawDispatchError(dispatchJson, spawnMessage) {
   return spawnMessage || '';
 }
 
+// error_category comes from classify-error TEXT matching. Diagnostic only: it
+// must never be used to decide harness-owned. Harness-owned continues to use
+// only provider_error with source harness_structured.
 function rawDispatchErrorClass(dispatchJson) {
-  if (dispatchJson && typeof dispatchJson.category === 'string' && dispatchJson.category !== '') {
-    return dispatchJson.category;
+  if (dispatchJson && typeof dispatchJson.error_category === 'string' && dispatchJson.error_category !== '') {
+    return dispatchJson.error_category;
   }
   return null;
 }

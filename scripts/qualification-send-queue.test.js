@@ -3,6 +3,7 @@
 # RED at 45b1c5fff: new cases 8 fail / 1 pass (exit 1). enqueue_enabled_at absent from status; first enqueue writes no meta; ts_rejected missing (buildV2Record returns null); SECONDARY_KEY_COLLISION stays in rejected with no already_ingested array; old rejected line still parses but already_ingested is undefined. The pre-set sentinel case passed only because the base never reads outbox.meta.json.
 # RED at 5a93aadcf: record stderr is the legacy_shape line (no ts_rejected) for observed_at 2026-02-30; flush summary.already_ingested is undefined (equal-hash rejected count stays on rejected; different-hash already_ingested !== 0). exit 1.
 # RED at 8b89f4d5e: record still exits 0 with ts_rejected on stderr (store written); absent/corrupt meta stamp now (2026-10-20T02:05:50Z) not the earliest enqueued ts; flush orphans_removed undefined for .outbox.meta.json.tmp; v1:/v2: transcript hash undefined. 6 fail. exit 1.
+# RED at 3cbbb4c18: 13-hex, 40-hex, 63-hex and v2:40 prefix candidates return undefined (12-hex and 64-hex pass; a non-prefix 13-hex finds nothing). exit 1.
 */
 // Run: node --test scripts/qualification-send-queue.test.js
 //
@@ -892,7 +893,7 @@ test('flush removes .outbox.meta.json.tmp crash leftovers and leaves the real me
   sq.enqueue('record', makeRecord(1), { env });
   const metaPath = path.join(t.dir, 'outbox.meta.json');
   const before = fs.readFileSync(metaPath, 'utf8');
-  const tmpName = '.outbox.meta.json.tmp.4242';
+  const tmpName = sq.metaTmpBasename(4242);
   fs.writeFileSync(path.join(t.dir, tmpName), '{"enqueue_enabled_at":"1999-01-01T00:00:00.000Z"}');
   const r = await sq.flush({
     transport: { async findAck() { return { state: 'pending' }; }, async send() { return { status: 'sent' }; } },
@@ -967,6 +968,34 @@ test('existingTranscriptHash matches a v2:-prefixed message', async () => {
 test('existingTranscriptHash matches nothing when the message has no id', async () => {
   const got = await transcriptHashFor('no identifier in this rejection', [
     { record_id: 'd'.repeat(64), transcript_hash: '44'.repeat(32) },
+  ]);
+  assert.equal(got, undefined);
+});
+
+for (const n of [12, 13, 40, 63, 64]) {
+  test(`existingTranscriptHash prefix-matches a ${n}-hex candidate body`, async () => {
+    const full = 'ab'.repeat(32);
+    const hash = '55'.repeat(32);
+    const cand = full.slice(0, n);
+    const got = await transcriptHashFor(`collision ${cand} seen`, [
+      { record_id: full, transcript_hash: hash },
+    ]);
+    assert.equal(got, hash);
+  });
+}
+
+test('existingTranscriptHash prefix-matches a v2: 40-hex candidate', async () => {
+  const body = 'cd'.repeat(32);
+  const hash = '66'.repeat(32);
+  const got = await transcriptHashFor(`collision v2:${body.slice(0, 40)}`, [
+    { record_id: `v2:${body}`, transcript_hash: hash },
+  ]);
+  assert.equal(got, hash);
+});
+
+test('existingTranscriptHash finds nothing for a 13-hex candidate that is not a prefix', async () => {
+  const got = await transcriptHashFor('collision 0123456789abc seen', [
+    { record_id: 'ff'.repeat(32), transcript_hash: '77'.repeat(32) },
   ]);
   assert.equal(got, undefined);
 });

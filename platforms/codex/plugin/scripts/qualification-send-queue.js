@@ -15,7 +15,7 @@
 // Node has no flock, and this lock gives the same single-writer guarantee with crash recovery.
 // flush: quarantines a torn/crc-bad line to outbox.jsonl.corrupt (loud warning, other lines untouched), then for each
 // outbox.meta.json sits next to the log and is never an orphan. The sweep unlinks stray
-// `.outbox.meta.json.tmp.<pid>` crash leftovers in the outbox directory and files inside outbox.d.
+// meta temp files named by metaTmpBasename (META_TMP_PREFIX + pid) in the outbox directory and files inside outbox.d.
 // It never unlinks outbox.meta.json or outbox.jsonl.
 // un-acked id: asks the transport for an ack, else sends once, polls again. Ack = the registry's DEFAULT branch holds
 // the record bytes (never a bot branch, never an open PR). Permanent rejection -> `rejected`, never resent.
@@ -169,8 +169,14 @@ function readMeta(p) {
   }
 }
 
+const META_TMP_PREFIX = '.outbox.meta.json.tmp.';
+
+function metaTmpBasename(pid = process.pid) {
+  return `${META_TMP_PREFIX}${pid}`;
+}
+
 function writeMetaAtomic(p, obj) {
-  const tmp = path.join(p.dir, `.outbox.meta.json.tmp.${process.pid}`);
+  const tmp = path.join(p.dir, metaTmpBasename());
   const fd = fs.openSync(tmp, 'w', 0o600);
   try {
     fs.writeSync(fd, JSON.stringify(obj));
@@ -357,7 +363,7 @@ async function flush({ transport, env = process.env, force = false, nowMs = Date
     let rootNames = [];
     try { rootNames = fs.readdirSync(p.dir); } catch { /* dir vanished */ }
     for (const n of rootNames) {
-      if (!n.startsWith('.outbox.meta.json.tmp.')) continue;
+      if (!n.startsWith(META_TMP_PREFIX)) continue;
       try { fs.unlinkSync(path.join(p.dir, n)); out.orphans_removed = (out.orphans_removed || 0) + 1; } catch { /* raced away */ }
     }
   } finally { store.releaseLock(p.lock); }
@@ -456,7 +462,7 @@ function gitTransport(opts) {
     const recBody = strip(rec);
     const candBody = strip(cand);
     if (candBody.length > 0 && candBody === recBody) return true;
-    if (/^[0-9a-f]{12}$/.test(candBody) && recBody.startsWith(candBody)) return true;
+    if (/^[0-9a-f]{12,}$/.test(candBody) && recBody.startsWith(candBody)) return true;
     return false;
   }
 
@@ -678,6 +684,6 @@ async function main(argv) {
   return 2;
 }
 
-module.exports = { enqueueScorecardRow, outboxDir, enqueue, flush, status, statusLines, gitTransport, assertPushAllowed, readOutboxConfig, crc32, makeLine, parseLine, idOf, BOT_PREFIX };
+module.exports = { enqueueScorecardRow, outboxDir, enqueue, flush, status, statusLines, gitTransport, assertPushAllowed, readOutboxConfig, crc32, makeLine, parseLine, idOf, BOT_PREFIX, META_TMP_PREFIX, metaTmpBasename };
 
 if (require.main === module) main(process.argv.slice(2)).then((c) => process.exit(c), (e) => { process.stderr.write(`${e.stack || e}\n`); process.exit(1); });

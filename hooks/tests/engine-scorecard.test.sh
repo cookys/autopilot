@@ -918,11 +918,10 @@ OUT25="$(mktemp -d)"
 HOME25="$(mktemp -d)"
 ISO_OK="$(node -e "process.stdout.write(new Date('2026-03-01T12:34:56.789Z').toISOString())")"
 score_ev() {
-  local evidence_json="$1"
-  local errfile="$2"
+  local errfile="$1"
   HOME="$HOME25" AUTOPILOT_OUTBOX_DIR="$OUT25" ENGINE_SCORECARD_DIR="$TESTDIR" \
     AUTOPILOT_STRIKE_WRITER=off \
-    node "$CLI" record --file "$3" >/dev/null 2>"$errfile"
+    node "$CLI" record --file "$2" >/dev/null 2>"$errfile"
 }
 write_ev() {
   local evidence_json="$1"
@@ -936,7 +935,7 @@ ev25_bad() {
   local rowf="$TESTDIR/row25.json"
   local errf="$TESTDIR/err25.txt"
   write_ev "$evidence_json" "$rowf"
-  score_ev "$evidence_json" "$errf" "$rowf"; ec=$?
+  score_ev "$errf" "$rowf"; ec=$?
   if [ "$ec" != "0" ] && grep -F -q "$needle" "$errf" && [ ! -f "$TESTDIR/scorecard.jsonl" ] && [ ! -f "$OUT25/outbox.jsonl" ]; then
     ok "25: $name rejected, store and outbox unchanged"
   else
@@ -951,7 +950,7 @@ ev25_bad "trial observed_at" '{"issued_at":"2026-03-02T00:00:00.000Z","observed_
 row_ok="$TESTDIR/row25-ok.json"
 err_ok="$TESTDIR/err25-ok.txt"
 write_ev "{\"observed_at\":\"$ISO_OK\"}" "$row_ok"
-score_ev "{\"observed_at\":\"$ISO_OK\"}" "$err_ok" "$row_ok"; ec_ok=$?
+score_ev "$err_ok" "$row_ok"; ec_ok=$?
 if ! grep -F -q "invalid evidence.observed_at" "$err_ok"; then
   ok "25: toISOString observed_at is not rejected by the calendar gate (exit=$ec_ok)"
 else

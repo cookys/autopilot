@@ -527,9 +527,7 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
   }
 }
 
-// compileCapabilityEvidence rewrites a calendar-impossible stamp through Date
-// (2026-02-30T00:00:00Z becomes 2 March). Reject the submitted value first, with
-// the same gate as qualification-record-v2 tsUtc, before that rewrite.
+// Reject calendar-impossible qualified_at / expires before they are stored.
 function rejectImpossibleRowDateFields(row) {
   if (!row || typeof row !== 'object') return;
   const { tsUtc } = require('./lib/qualification-record-v2.js');
@@ -544,6 +542,9 @@ function rejectImpossibleRowDateFields(row) {
   }
 }
 
+// compileCapabilityEvidence rewrites a calendar-impossible stamp through Date
+// (2026-02-30T00:00:00Z becomes 2 March). Reject the submitted value first, with
+// the same gate as qualification-record-v2 tsUtc, before that rewrite.
 function rejectImpossibleEvidenceTimestamps(evidence) {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return;
   const { tsUtc } = require('./lib/qualification-record-v2.js');

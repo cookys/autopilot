@@ -260,6 +260,10 @@ const HELP = `Usage:
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
     [--seat-file <json>] [--emit-record]
+    corpus-version [--role <role>]   (print the current corpus_version for every
+      qualification role, or one role, as JSON; no exam and no file writes.
+      Call it when a seat file needs the live version, including after the
+      foreman asset pins move)
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
@@ -5986,8 +5990,121 @@ function assertProducedCorpusMatchesSeat(options, runResult) {
   }
 }
 
+const CORPUS_VERSION_ROLES = Object.freeze([
+  'reviewer', 'owner', 'implementer', 'foreman', 'brain', 'consult', 'discuss', 'verification_author',
+]);
+
+// Reads one role's corpus_version. captureExit is only for the all-roles
+// print: a pin verifier's process.exit must not skip the other roles.
+// The exam paths keep calling examCorpusVersionBeforeRun directly.
+function readCorpusVersion(role, captureExit) {
+  if (!captureExit) {
+    try {
+      return { version: examCorpusVersionBeforeRun(role) };
+    } catch (error) {
+      return { thrown: error };
+    }
+  }
+  const originalExit = process.exit;
+  const originalWrite = process.stderr.write;
+  const chunks = [];
+  process.stderr.write = (chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+    return true;
+  };
+  process.exit = (code) => {
+    const error = new Error('__corpus_version_exit__');
+    error.exitCode = code === undefined ? 0 : Number(code);
+    throw error;
+  };
+  try {
+    const version = examCorpusVersionBeforeRun(role);
+    return { version };
+  } catch (error) {
+    if (error && error.message === '__corpus_version_exit__') {
+      const stderrRaw = chunks.join('');
+      return {
+        exitCode: error.exitCode,
+        stderrRaw,
+        error: stderrRaw.trim() || `exit ${error.exitCode}`,
+      };
+    }
+    return { thrown: error, error: `qualification precondition failed: ${error.message}` };
+  } finally {
+    process.exit = originalExit;
+    process.stderr.write = originalWrite;
+  }
+}
+
+function corpusVersionCommand(argv) {
+  let role = null;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--role') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) {
+        process.stderr.write('engine-qualify: missing value for --role\n');
+        process.exit(2);
+      }
+      role = value;
+      index += 1;
+      continue;
+    }
+    // Accepted and ignored. The subcommand never creates these paths.
+    if (arg === '--store' || arg === '--raw-dir') {
+      const value = argv[index + 1];
+      if (!value || value.startsWith('--')) {
+        process.stderr.write(`engine-qualify: missing value for ${arg}\n`);
+        process.exit(2);
+      }
+      index += 1;
+      continue;
+    }
+    process.stderr.write(`engine-qualify: unknown argument: ${arg}\n`);
+    process.exit(2);
+  }
+  if (role !== null && !CORPUS_VERSION_ROLES.includes(role)) {
+    process.stderr.write(`engine-qualify: unknown role: ${role}\n`);
+    process.exit(2);
+  }
+  const roles = role === null ? CORPUS_VERSION_ROLES : [role];
+  const captureExit = role === null;
+  const out = {};
+  let failed = false;
+  for (const name of roles) {
+    const result = readCorpusVersion(name, captureExit);
+    if (!captureExit && result.thrown) {
+      usage(2, `qualification precondition failed: ${result.thrown.message}`);
+    }
+    if (result.version === null || result.version === undefined) {
+      if (!captureExit) {
+        process.stderr.write(`engine-qualify: unknown role: ${name}\n`);
+        process.exit(2);
+      }
+      const message = result.error || `unknown role: ${name}`;
+      if (message.includes('AUTOPILOT_FOREMAN_ASSET_ROOT is limited to test mode')) {
+        process.stderr.write(result.stderrRaw && result.stderrRaw.endsWith('\n')
+          ? result.stderrRaw
+          : `${message}\n`);
+        process.exit(2);
+      }
+      out[name] = { error: message };
+      failed = true;
+      continue;
+    }
+    out[name] = result.version;
+  }
+  process.stdout.write(`${JSON.stringify(out)}\n`);
+  process.exit(failed ? 2 : 0);
+}
+
 function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'corpus-version') {
+    corpusVersionCommand(argv.slice(1));
+    return;
+  }
+  const options = parseArgs(argv);
   const headless = Boolean(options.seatFile || options.emitRecord);
   if (headless) {
     if (!options.store) usage(2, '--store is required with --seat-file or --emit-record');
@@ -6458,6 +6575,7 @@ module.exports = {
   runConsultQualification,
   runDiscussQualification,
   runImplQualification,
+  corpusVersionCommand,
   runQualification,
   runVaQualification,
   sandboxArguments,

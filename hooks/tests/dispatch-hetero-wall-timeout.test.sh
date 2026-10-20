@@ -597,4 +597,71 @@ assert_clean_finish_leaves_no_watchdog_residue() {
 assert_vanished_token_still_enforces_timeout
 assert_clean_finish_leaves_no_watchdog_residue
 
+# Case C: runner dies on TERM; a same-group child of the setsid --wait session
+# ignores TERM. The parent must wait out the grace so the watchdog's KILL runs.
+# RED at be4be70b0: dispatch returned in under 12s (cancel marker aborted the grace; reap killed the child early)
+assert_case_c_term_ignoring_group_member_killed() {
+  command -v setsid >/dev/null 2>&1 || fail "assert_case_c: setsid missing"
+  grep -q -- --wait < <(setsid --help 2>&1) || fail "assert_case_c: setsid --wait unsupported"
+  local home="$TEST_TMP/wdog-case-c-home" priv="$TEST_TMP/wdog-case-c-priv"
+  local hide="$TEST_TMP/hide-cgroup-case-c"
+  local stub="$TEST_TMP/grok-case-c" childpidfile="$priv/case-c-child.pid"
+  local runs="$TEST_TMP/runs-case-c"
+  mkdir -p "$home" "$priv" "$hide" "$runs"
+  cat > "$hide/systemd-run" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$hide/systemd-run"
+  cat > "$stub" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--list-models" ]; then
+  echo "cursor-grok-4.6-low - Grok 4.6 (low)"
+  exit 0
+fi
+case " $* " in *" __autopilot_probe__ "*)
+  echo "Error: unknown effort level '__autopilot_probe__'" >&2
+  exit 1 ;;
+esac
+# Same process group as this runner (the setsid session). trap '' TERM.
+# HUP is ignored too: session-leader exit would otherwise SIGHUP the group
+# and hide a missing SIGKILL. The loop stays in this shell so a killed
+# sleep grandchild cannot end the member that ignores TERM.
+bash -c 'trap "" TERM HUP; echo $$ > "$1"; while :; do sleep 1; done' bash "${HETERO_TEST_CHILD_PIDFILE}" &
+sleep 120
+exit 0
+EOF
+  chmod +x "$stub"
+  : > "$childpidfile"
+  local start now elapsed out childpid=""
+  start="$(date +%s)"
+  out="$(cd "$SBX" && timeout --foreground 25 env HOME="$home" TMPDIR="$priv" PATH="$hide:$PATH" \
+    AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    HETERO_TEST_CHILD_PIDFILE="$childpidfile" \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-case-c --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
+  now="$(date +%s)"; elapsed=$((now - start))
+  childpid="$(cat "$childpidfile" 2>/dev/null || true)"
+  # 3s timeout + 10s grace. Under ~12s means the parent cancelled the watchdog
+  # and reap_container killed the child immediately; the grace KILL never ran.
+  [ "$elapsed" -ge 12 ] || fail "assert_case_c: took ${elapsed}s (want >=12s; grace KILL did not run)"
+  [ "$elapsed" -lt 22 ] || fail "assert_case_c: took ${elapsed}s (want <22s = 3s timeout + 10s grace + slack)"
+  local json; json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_case_c: missing result JSON (out: $out)"
+  if [ -n "$json" ]; then
+    assert_eq "true" "$(json_get "$json" timed_out)" "case-c timed_out"
+    assert_eq "true" "$(json_get "$json" timeout_enforced)" "case-c timeout_enforced"
+  fi
+  [ -n "$childpid" ] || fail "assert_case_c: child did not write pidfile"
+  if [ -n "$childpid" ] && kill -0 "$childpid" 2>/dev/null; then
+    fail "assert_case_c: TERM-ignoring child $childpid still alive after dispatch"
+  fi
+  if [ -n "$childpid" ]; then
+    kill -KILL "$childpid" 2>/dev/null || true
+    wait "$childpid" 2>/dev/null || true
+  fi
+}
+
+assert_case_c_term_ignoring_group_member_killed
+
 finalize_test

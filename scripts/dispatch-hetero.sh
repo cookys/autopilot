@@ -3358,7 +3358,7 @@ _cancel_worker_watchdog() {
   if [ -n "$tok" ]; then
     # Marker first: the watchdog must see an explicit cancel before the token
     # disappears. A missing token alone is not a cancel.
-    : > "${tok}.cancel"
+    : > "${tok}.cancel" 2>/dev/null || true
     rm -f "$tok" "${tok}.fired" 2>/dev/null || true
     if [ -f "${tok}.sleeppid" ]; then
       sp="$(cat "${tok}.sleeppid" 2>/dev/null || true)"
@@ -3561,7 +3561,7 @@ _arm_worker_watchdog() {
     fi
     if [ ! -f "$tok" ]; then
       if _watchdog_worker_alive; then
-        echo "watchdog token vanished without cancel; enforcing timeout" >&3
+        echo "watchdog token vanished without cancel; enforcing timeout" >&3 2>/dev/null || true
       else
         exit 0
       fi
@@ -3603,12 +3603,15 @@ _wait_worker_with_watchdog() {
   wait "$rp"
   AGENT_EXIT=$?
   if [ -n "${WATCHDOG_TOKEN_FILE:-}" ] && [ -f "${WATCHDOG_TOKEN_FILE}.fired" ]; then
+    # Fired means TERM was sent and the watchdog is inside its grace window.
+    # Do not cancel it: the grace loop exits on the cancel marker and would
+    # skip KILL, leaving a group member that ignores TERM alive until a later reap.
     WORKER_TIMED_OUT=1
-    : > "${WATCHDOG_TOKEN_FILE}.cancel"
-    rm -f "${WATCHDOG_TOKEN_FILE}" 2>/dev/null || true
-    wait "${WATCHDOG_PID}" 2>/dev/null || true
-    WATCHDOG_PID=""
+    if [ -n "${WATCHDOG_PID:-}" ]; then
+      wait "${WATCHDOG_PID}" 2>/dev/null || true
+    fi
     rm -f "${WATCHDOG_TOKEN_FILE}" "${WATCHDOG_TOKEN_FILE}.fired" "${WATCHDOG_TOKEN_FILE}.sleeppid" "${WATCHDOG_TOKEN_FILE}.cancel" 2>/dev/null || true
+    WATCHDOG_PID=""
     WATCHDOG_TOKEN_FILE=""
   else
     _cancel_worker_watchdog

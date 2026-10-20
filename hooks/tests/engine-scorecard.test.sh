@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 8b89f4d5e: case 25 impossible dates exit 1 with "missing schema_version..." and do not name 2026-02-30 / evidence.issued_at / evidence.expires_at / evidence.trials[0].observed_at (4 fail). toISOString case passed. exit 1.
 # Independent depth-0 adversarial harness for scripts/engine-scorecard.js
 # (NOT the implementer's self-test — that one was discarded as broken/false-green.
 #  Written fresh by the dispatching session per the delegate-self-test rule.)
@@ -908,6 +909,54 @@ NODE
 [ "$agy_evidence_check" = "true:true:true" ] \
   && ok "24: agy dispatch usage is measured without merging historical transcripts" \
   || bad "24: agy evidence-class check=$agy_evidence_check"
+
+# 25: impossible calendar timestamps are rejected by name; store and outbox stay empty.
+# A toISOString stamp is not rejected as a bad timestamp.
+reset
+OUT25="$(mktemp -d)"
+HOME25="$(mktemp -d)"
+ISO_OK="$(node -e "process.stdout.write(new Date('2026-03-01T12:34:56.789Z').toISOString())")"
+score_ev() {
+  local evidence_json="$1"
+  local errfile="$2"
+  HOME="$HOME25" AUTOPILOT_OUTBOX_DIR="$OUT25" ENGINE_SCORECARD_DIR="$TESTDIR" \
+    AUTOPILOT_STRIKE_WRITER=off \
+    node "$CLI" record --file "$3" >/dev/null 2>"$errfile"
+}
+write_ev() {
+  local evidence_json="$1"
+  local dest="$2"
+  node -e 'const fs=require("fs"); const ev=JSON.parse(process.argv[1]); fs.writeFileSync(process.argv[2], JSON.stringify({engine:"e",runner:"r",family:"f",role:"reviewer",model_version:"v1",version_source:"manual",corpus_version:"c",harness_version:"h",runner_version:"rv",prompt_config_hash:"sha256:x",date:"2026-06-30",quality:{corpus_pass:"10/10"},capability_score:0.1,cost:{source:"manual"},latency:{sample_wall_time_s:0},status:"failed",qualified_at:"2026-03-02",expires:"2026-04-02",evidence:ev}));' "$evidence_json" "$dest"
+}
+ev25_bad() {
+  local name="$1"
+  local evidence_json="$2"
+  local needle="$3"
+  local rowf="$TESTDIR/row25.json"
+  local errf="$TESTDIR/err25.txt"
+  write_ev "$evidence_json" "$rowf"
+  score_ev "$evidence_json" "$errf" "$rowf"; ec=$?
+  if [ "$ec" != "0" ] && grep -F -q "$needle" "$errf" && [ ! -f "$TESTDIR/scorecard.jsonl" ] && [ ! -f "$OUT25/outbox.jsonl" ]; then
+    ok "25: $name rejected, store and outbox unchanged"
+  else
+    bad "25: $name exit=$ec err=$(tr '\n' ' ' < "$errf") store=$([ -f "$TESTDIR/scorecard.jsonl" ] && echo yes || echo no)"
+  fi
+  rm -f "$TESTDIR/scorecard.jsonl" "$TESTDIR/.lock" "$errf"
+}
+ev25_bad "observed_at" '{"observed_at":"2026-02-30T00:00:00Z"}' "2026-02-30T00:00:00Z"
+ev25_bad "issued_at" '{"issued_at":"2026-02-30T00:00:00.000Z"}' "evidence.issued_at"
+ev25_bad "expires_at" '{"expires_at":"2026-04-31T00:00:00Z"}' "evidence.expires_at"
+ev25_bad "trial observed_at" '{"issued_at":"2026-03-02T00:00:00.000Z","observed_at":"2026-03-02T00:00:00.000Z","expires_at":"2026-04-02T00:00:00.000Z","trials":[{"observed_at":"2026-02-30T00:00:00Z"}]}' "evidence.trials[0].observed_at"
+row_ok="$TESTDIR/row25-ok.json"
+err_ok="$TESTDIR/err25-ok.txt"
+write_ev "{\"observed_at\":\"$ISO_OK\"}" "$row_ok"
+score_ev "{\"observed_at\":\"$ISO_OK\"}" "$err_ok" "$row_ok"; ec_ok=$?
+if ! grep -F -q "invalid evidence.observed_at" "$err_ok"; then
+  ok "25: toISOString observed_at is not rejected by the calendar gate (exit=$ec_ok)"
+else
+  bad "25: toISOString observed_at rejected: $(tr '\n' ' ' < "$err_ok")"
+fi
+rm -rf "$OUT25" "$HOME25"
 
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"

@@ -2,13 +2,13 @@
 
 BL-0213. Code: scripts/affected-suites.js
 
-Top three fan-in sources: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
+Round 4 (2026-10-20) `--files` counts on this tree: scripts/dev-setup.sh 39 suites, codex mirror of review-resolution.js 22, docs/plans/2026-10-17-review-only-campaign-fix-increment.md 12. Round 1's caps were 484, 380 and 202.
 
-Round 3 (2026-10-20) measured `node scripts/affected-suites.js --json` on the three merges. Mode selective. stats.selected: d997355a9 97, b8bdd61f3 204, 3765302f3 78.
+Round 4 (2026-10-20) measured `node scripts/affected-suites.js --base <rev>^1 --head <rev> --json`. Mode selective. stats.selected: d997355a9 102, b8bdd61f3 269, 3765302f3 83. The rise from round 3 (97, 204, 78) is restored edges: a slash-star inside a string no longer erases later requires, and a platforms/ mirror no longer makes a source stem generic.
 
-JavaScript block comments and lines whose first non-blank character is `*` no longer create edges. `scripts/check-plan-graduation.js` named `docs/scripts-inventory.md` only in JSDoc and `//` comments; after the strip that hop is gone, and the file does not `readFileSync` that path. `src/status/decisions-sidecar.js` still weakly names `src/engine/autopilot-engine.js` because `fileContains` reads that path as data (~142 suites). That edge stays.
+On b8bdd61f3 the largest hops are src/engine/review-resolution.js (252, bare name, now that the codex mirror is not a second stem) and src/engine/autopilot-engine.js (250). `src/status/decisions-sidecar.js` still weakly names `src/engine/autopilot-engine.js` because `fileContains` reads that path as data (190 suites on that chain). That edge stays. `scripts/check-plan-graduation.js` named `docs/scripts-inventory.md` only in JSDoc and `//` comments; that hop stays gone. A star line creates an edge only inside a block comment.
 
-Left in place: a bare word `run` in several scripts still matches `hooks/tests/run.sh`. Dropping every bare `run` would also drop a real extensionless invocation, so those hops stay.
+Left in place: a bare word `run` in several scripts still matches `hooks/tests/run.sh` (64 suites on d997355a9, via hooks/tests/dev-setup.test.sh). Dropping every bare `run` would also drop a real extensionless invocation, so those hops stay. An extensionless directory glob in a hooks/tests helper still creates no edge.
 
 Closeout4 ran `node scripts/affected-suites.js --json` on two merges (2026-10-19).
 

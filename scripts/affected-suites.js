@@ -59,15 +59,28 @@
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
 //   6. An extensionless directory glob in a shared test helper (a non-suite .sh directly under
 //      hooks/tests/) creates no glob edge; globs with an extension, and every glob in a suite, stay.
+//      Known trade-off: a helper that executes files through such a glob (rather than symlinking
+//      them) is missed; the suites that execute a script by explicit name stay covered.
 //   7. A platforms/ mirror seed matches only a code file whose text contains that seed's full
 //      repo-relative path; basename, bare-name, directory-segment and glob edges are not used.
-//   8. For a prose seed only, the category directory names plans, evidence, backlog, projects and adr
-//      are skipped like GENERIC_DIRS, including a glob whose directory has no more specific segment;
-//      a deeper specific directory name and a basename mention stay.
+//   8. For a prose seed whose path starts with docs/, the category directory names plans, evidence,
+//      backlog, projects and adr are skipped like GENERIC_DIRS. Only an extensionless glob whose
+//      directory has no more specific segment is skipped; a glob with an extension (docs/plans/*.md)
+//      keeps its edge. A deeper specific directory name and a basename mention stay. The same
+//      category names on a seed outside docs/ are not skipped.
 //   9. A weak bare-name edge to a JavaScript file is not created when that stem is shared by two or
 //      more code files and the mention has no slash (a backtick or quote around index, common, codex).
-//      A stem that names one code file, a strong require or source, and any slash or name.ext mention stay.
-//  10. JavaScript block comments (/* */) and lines whose first non-blank character is * never create an edge; a string argument that names a file still does.
+//      Stem counts ignore non-propagating paths (platforms/ mirrors, evals/, docs/, website/, and the
+//      rest of NOT_PROPAGATING), so a codex mirror does not make a source file look generic.
+//      A stem that names one propagating code file, a strong require or source, and any slash or
+//      name.ext mention stay.
+//  10. JavaScript comments are stripped by a string-aware scan: single-quoted, double-quoted and
+//      template literals are copied through (backslash escapes honoured; ${} in a template is still
+//      scanned). Full-line // and # comments and real slash-star blocks are removed. An unterminated
+//      block comment is removed only through the closing marker, or, when none exists, only to the
+//      end of that line — never to end of file. A line whose first non-blank character is * is a
+//      comment only while the scan is inside a block. Shell and other non-JS files still drop
+//      full-line # and // comments only.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -218,16 +231,90 @@ const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr
 const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
-// Full-line # and // only. Trailing comments stay: a URL or a string may contain them.
-// JavaScript also drops /* */ blocks and JSDoc continuation lines (first non-blank char is *).
-const stripComments = (t, file) => {
-  let s = t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
-  const ext = String(file || '').split('.').pop();
-  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') {
-    s = s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\*[\s\S]*$/g, '');
-    s = s.replace(/^[ \t]*\*.*$/gm, '');
+// Full-line # and // only. Trailing // stays: a URL may contain it. JavaScript uses a string-aware
+// scan so a slash-star inside a quote is not a comment. A star line is dropped only inside a block.
+function stripJsComments(src) {
+  const n = src.length;
+  let i = 0;
+  let out = '';
+  let lineStart = true;
+  function append(ch) {
+    out += ch;
+    if (ch === '\n') lineStart = true;
+    else if (ch !== ' ' && ch !== '\t' && ch !== '\r') lineStart = false;
   }
-  return s;
+  function scan(stop) {
+    let brace = 0;
+    while (i < n) {
+      const c = src[i];
+      if (stop === '}' && c === '}' && brace === 0) return;
+      if (lineStart && (c === ' ' || c === '\t' || c === '\r')) { append(c); i++; continue; }
+      if (lineStart && c === '#') {
+        while (i < n && src[i] !== '\n') i++;
+        continue;
+      }
+      if (lineStart && c === '/' && src[i + 1] === '/') {
+        while (i < n && src[i] !== '\n') i++;
+        continue;
+      }
+      if (c === '/' && src[i + 1] === '*') {
+        const close = src.indexOf('*/', i + 2);
+        if (close === -1) {
+          while (i < n && src[i] !== '\n') i++;
+          continue;
+        }
+        let sawNl = false;
+        for (let k = i; k < close + 2; k++) if (src[k] === '\n') sawNl = true;
+        i = close + 2;
+        if (sawNl) lineStart = true;
+        continue;
+      }
+      if (c === '\'' || c === '"') { copyQuoted(c); continue; }
+      if (c === '`') { copyTemplate(); continue; }
+      if (c === '{') { append(c); i++; brace++; continue; }
+      if (c === '}') { append(c); i++; if (brace > 0) brace--; continue; }
+      append(c); i++;
+    }
+  }
+  function copyQuoted(quote) {
+    append(quote); i++;
+    while (i < n) {
+      const c = src[i];
+      if (c === '\\') {
+        append(c); i++;
+        if (i < n) { append(src[i]); i++; }
+        continue;
+      }
+      append(c); i++;
+      if (c === quote || c === '\n') return;
+    }
+  }
+  function copyTemplate() {
+    append('`'); i++;
+    while (i < n) {
+      const c = src[i];
+      if (c === '\\') {
+        append(c); i++;
+        if (i < n) { append(src[i]); i++; }
+        continue;
+      }
+      if (c === '`') { append(c); i++; return; }
+      if (c === '$' && src[i + 1] === '{') {
+        append('$'); append('{'); i += 2;
+        scan('}');
+        if (i < n && src[i] === '}') { append('}'); i++; }
+        continue;
+      }
+      append(c); i++;
+    }
+  }
+  scan(null);
+  return out;
+}
+const stripComments = (t, file) => {
+  const ext = String(file || '').split('.').pop();
+  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') return stripJsComments(t);
+  return t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
 };
 
 function buildGraph(tree) {
@@ -249,7 +336,7 @@ function buildGraph(tree) {
   // A stem that names two or more code files cannot be pinned to one JavaScript file by a bare word.
   const stemCount = new Map();
   for (const f of tree.files) {
-    if (!isCode(f)) continue;
+    if (!isCode(f) || NOT_PROPAGATING.test(f)) continue;
     const stem = base(f).replace(/\.[^.]+$/, '');
     stemCount.set(stem, (stemCount.get(stem) || 0) + 1);
   }
@@ -295,14 +382,15 @@ function referrersOf(graph, p) {
     const parts = p.split('/').slice(0, -1);
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
-      if (isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
+      if (p.startsWith('docs/') && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
       for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
     }
   }
   for (const g of graph.globRefs) {
     if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
-    // docs/plans/* names the category, not one plan. A glob that also names a specific directory stays.
-    if (isProse(p) && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
+    // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
+    // A glob that also names a specific directory stays. Category names apply only under docs/.
+    if (p.startsWith('docs/') && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
     out.set(g.file, 'weak');
   }
   out.delete(p);

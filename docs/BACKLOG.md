@@ -650,7 +650,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
 - **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Round 3 (2026-10-20), mode selective, stats.selected: d997355a9 97, b8bdd61f3 204, 3765302f3 78. JS block and star comments no longer create edges (check-plan-graduation.js no longer refers to docs/scripts-inventory.md; that file is not readFileSync'd). Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (weak explicit path, ~142 suites). Left: several scripts mention the bare word run, which still weakly matches hooks/tests/run.sh; pruning that word is not safe.
+- **Context**: Round 4 (2026-10-20), mode selective, stats.selected: d997355a9 102, b8bdd61f3 269, 3765302f3 83 (was 97, 204, 78). Restored: string slash-star no longer erases a later require; platforms/ mirrors are not counted as a second stem. Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (190 on the b8 chain). Largest b8 hops: review-resolution.js 252, autopilot-engine.js 250. Left: bare word run still weakly matches hooks/tests/run.sh (64 on d997, via dev-setup.test.sh); pruning that word is not safe. Extensionless hooks/tests helper globs still create no edge.
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
 - **Id**: BL-0214

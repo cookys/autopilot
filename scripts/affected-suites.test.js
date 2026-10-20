@@ -559,27 +559,29 @@ test('BL-0213 a suite that names a prose file by basename is still selected', ()
 });
 
 test('BL-0213 a dated evidence directory still selects the suite that names it', () => {
-  const data = 'docs/plans/evidence/2026-01-01-x/data.json';
+  const note = 'docs/plans/evidence/2026-01-01-x/note.md';
   const r = makeRepo({
     ...LAYOUT,
-    [data]: '{}\n',
+    [note]: '# note\n',
     'hooks/tests/dated-evidence.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/evidence/2026-01-01-x/; do cat "$f"; done\n',
   });
   try {
-    const out = r.select(r.change({ [data]: '{"a":1}\n', 'scripts/other.js': 'console.log("c");\n' }));
+    const out = r.select(r.change({ [note]: '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
     assert.ok(out.suites.includes('hooks/tests/dated-evidence.test.sh'));
   } finally { r.cleanup(); }
 });
 
-test('BL-0213 real tree: dev-setup, codex review-resolution mirror, and a docs plan stay under the fan-in bounds', () => {
-  const run = (file) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
-  const dev = run('scripts/dev-setup.sh');
-  assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
-  assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
-  const mirror = run('platforms/codex/plugin/src/engine/review-resolution.js');
-  assert.ok(mirror.suites.length < 80, `mirror selected ${mirror.suites.length}`);
-  const plan = run('docs/plans/2026-10-17-review-only-campaign-fix-increment.md');
-  assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
+test('BL-0213 a prose category name outside docs/ still selects the suite that names it', () => {
+  const note = 'website/plans/p.md';
+  const r = makeRepo({
+    ...LAYOUT,
+    [note]: '# p\n',
+    'hooks/tests/site-plan.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/plans/p.md"\n',
+  });
+  try {
+    const out = r.select(r.change({ [note]: '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/site-plan.test.sh'));
+  } finally { r.cleanup(); }
 });
 
 // # RED at 78a293f6a: generic-stem "index" still selected word-index.test.sh; b8bdd61f3 file list selected 461.
@@ -621,24 +623,14 @@ test('BL-0213 a generic stem mention alone does not select a suite', () => {
   } finally { r.cleanup(); }
 });
 
-test('BL-0213 real tree: b8bdd61f3 and 3765302f3 file lists stay under the measured fan-in', () => {
-  // Honest counts on this tree are 228 and 247. The remainder is require/source plus an explicit
-  // path (decisions-sidecar.js reads src/engine/autopilot-engine.js; check-plan-graduation.js names
-  // docs/scripts-inventory.md). Margin above those counts, still far below 451 and 286.
-  const names = (rev) => execFileSync('git', ['diff', '--name-only', `${rev}^1`, rev], { cwd: REAL_ROOT, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
-  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
-  const b8 = run(names('b8bdd61f3'));
-  assert.ok(b8.suites.length < 280, `b8bdd61f3 selected ${b8.suites.length}`);
-  const seat = run(names('3765302f3'));
-  assert.ok(seat.suites.length < 280, `3765302f3 selected ${seat.suites.length}`);
-});
+
 
 // # RED at 2536401a2: comment-only.test.sh still selected; b8bdd61f3 selected 228 (bound 120).
 test('BL-0213 a name only in a star-comment line or a block comment does not create an edge', () => {
   const r = makeRepo({
     ...LAYOUT,
     'scripts/target.js': 'module.exports = 1;\n',
-    'scripts/comment-only.js': '/**\n * see scripts/target.js in a star line\n */\nconst x = 1;\n/* block scripts/target.js */\n * scripts/target.js\n',
+    'scripts/comment-only.js': '/**\n * see scripts/target.js in a star line\n */\nconst x = 1;\n/* block scripts/target.js */\n',
     'scripts/real-user.js': "const t = require('./target.js');\n",
     'hooks/tests/comment-only.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/comment-only.js"\n',
     'hooks/tests/real-user.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/real-user.js"\n',
@@ -663,14 +655,75 @@ test('BL-0213 a helper call that reads a named file as data still creates a weak
   } finally { r.cleanup(); }
 });
 
-test('BL-0213 real tree: b8bdd61f3 and 3765302f3 stay under the round-3 comment-strip bound', () => {
-  // Measured on this tree with --files of each merge's name list: 223 and 78.
-  // 223 stays because decisions-sidecar.js reads src/engine/autopilot-engine.js as data.
-  // Margin is modest and still under the round-2 bound of 280.
+test('BL-0213 real tree: dev-setup, mirror, plan, and the two merge file lists stay under the fan-in bounds', () => {
+  // --files counts on this tree, total_suites 625: dev-setup.sh 39, review-resolution mirror 22,
+  // docs plan 12, b8bdd61f3 275, 3765302f3 83. Half of total_suites is the merge bound (312 at this
+  // size): headroom above 275, and 83 is far under. Adjust the fraction as the repo grows.
+  // dev-setup < 150, mirror < 80 and plan < 60 stay at the round-1 caps (measured 39, 22, 12).
   const names = (rev) => execFileSync('git', ['diff', '--name-only', `${rev}^1`, rev], { cwd: REAL_ROOT, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
   const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
-  const b8 = run(names('b8bdd61f3'));
-  assert.ok(b8.suites.length < 250, `b8bdd61f3 selected ${b8.suites.length}`);
-  const seat = run(names('3765302f3'));
-  assert.ok(seat.suites.length < 100, `3765302f3 selected ${seat.suites.length}`);
+  const dev = run(['scripts/dev-setup.sh']);
+  assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
+  assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
+  const mirror = run(['platforms/codex/plugin/src/engine/review-resolution.js']);
+  assert.ok(mirror.suites.length < 80, `mirror selected ${mirror.suites.length}`);
+  const plan = run(['docs/plans/2026-10-17-review-only-campaign-fix-increment.md']);
+  assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
+  for (const rev of ['b8bdd61f3', '3765302f3']) {
+    const out = run(names(rev));
+    const cap = out.stats.total_suites * 0.5;
+    assert.ok(out.stats.selected < cap, `${rev} selected ${out.stats.selected} of ${out.stats.total_suites}`);
+  }
+});
+
+// # RED at 966a3c917: string slash-star wipes the later require; mirror stem count drops the bare name; docs/plans/*.md is skipped as a category glob; dated evidence uses a json seed.
+test('BL-0213 a slash-star inside a JS string does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/holder.js': "const g = 'scripts/*';\nconst h = dir + '/*';\nconst t = require('./needed.js');\nconst glob = 'docs/**/*.md';\nconst later = 'hooks/tests/**/*.test.sh';\n",
+    'hooks/tests/holder.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/holder.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/holder.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a bare name still selects when the only duplicate stem is a platforms mirror', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/engine/review-resolution.js': 'module.exports = 1;\n',
+    'platforms/codex/plugin/src/engine/review-resolution.js': 'module.exports = 1;\n',
+    'hooks/tests/review-resolution.test.sh': '#!/usr/bin/env bash\nfor m in "review-resolution"; do node "$ROOT/src/engine/$m.js"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/engine/review-resolution.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/review-resolution.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a docs plan glob with an extension still selects the suite that lints it', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plan-glob.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/*.md; do bash "$ROOT/scripts/lint-plan.sh" "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ 'docs/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/plan-glob.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a star line outside a block comment still creates an edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/star-line.js': 'const x = 1;\n * scripts/target.js\n',
+    'hooks/tests/star-line.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/star-line.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/star-line.test.sh'));
+  } finally { r.cleanup(); }
 });

@@ -650,7 +650,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
 - **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Top fan-in: scripts/dev-setup.sh 484 suites (hooks/tests/lib.sh carries 477); codex mirror of review-resolution.js 380 (src/engine/autopilot-engine.js carries 378); docs/plans/2026-10-17-review-only-campaign-fix-increment.md 202.
+- **Context**: Round 5 (2026-10-20), mode selective via --base rev^1 --head rev, stats.selected: d997355a9 102, b8bdd61f3 269, 3765302f3 83 (unchanged from round 4; was 97, 204, 78 before that). A slash-star starts a block comment only as the first non-blank on its line, so a regexp or a trailing // no longer erases a later require; counts did not move. Kept: decisions-sidecar.js fileContains('src/engine/autopilot-engine.js') is a real data read (190 on the b8 chain). Largest b8 hops: review-resolution.js 252, autopilot-engine.js 250. Left: bare word run still weakly matches hooks/tests/run.sh (64 on d997, via dev-setup.test.sh); pruning that word is not safe. Extensionless hooks/tests helper globs still create no edge.
 
 ### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
 - **Id**: BL-0214

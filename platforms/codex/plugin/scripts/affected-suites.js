@@ -57,6 +57,33 @@
 //      and does not force full. An empty list is never returned for a change that could matter.
 //   5. A fixed always-run list (ALWAYS_RUN, with a reason each) is added to every selective result
 //      that has a non-prose change: tests that scan the repo by content, which no graph can see.
+//   6. An extensionless directory glob in a shared test helper (a non-suite .sh directly under
+//      hooks/tests/) creates no glob edge; globs with an extension, and every glob in a suite, stay.
+//      Known trade-off: a helper that executes files through such a glob (rather than symlinking
+//      them) is missed; the suites that execute a script by explicit name stay covered.
+//   7. A platforms/ mirror seed matches only a code file whose text contains that seed's full
+//      repo-relative path; basename, bare-name, directory-segment and glob edges are not used.
+//   8. For a prose seed whose path starts with docs/, the category directory names plans, evidence,
+//      backlog, projects and adr are skipped like GENERIC_DIRS. Only an extensionless glob whose
+//      directory has no more specific segment is skipped; a glob with an extension (docs/plans/*.md)
+//      keeps its edge. A deeper specific directory name and a basename mention stay. The same
+//      category names on a seed outside docs/ are not skipped.
+//   9. A weak bare-name edge to a JavaScript file is not created when that stem is shared by two or
+//      more code files and the mention has no slash (a backtick or quote around index, common, codex).
+//      Stem counts ignore non-propagating paths (platforms/ mirrors, evals/, docs/, website/, and the
+//      rest of NOT_PROPAGATING), so a codex mirror does not make a source file look generic.
+//      A stem that names one propagating code file, a strong require or source, and any slash or
+//      name.ext mention stay.
+//  10. JavaScript comments are stripped by a string-aware scan: single-quoted, double-quoted and
+//      template literals are copied through (backslash escapes honoured; ${} in a template is still
+//      scanned). A // comment, line-leading or trailing, is removed through the end of its line
+//      before any slash-star on that line is considered. A slash-star starts a block comment only
+//      when it is the first non-blank character on its line (a line-leading JSDoc block still goes).
+//      A slash-star later on the line, including inside split(/[/*]/), stays as text: over-selection
+//      is safer than dropping a require. An unterminated line-leading block is removed only through
+//      the closing marker, or, when none exists, only to the end of that line — never to end of file.
+//      A line whose first non-blank character is * is a comment only while the scan is inside a block.
+//      Shell and other non-JS files still drop full-line # and // comments only.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -179,6 +206,8 @@ const RE_EXT = /[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[A-Za-z0-9]{1,12}\b/g;
 const RE_SEG = /\/([A-Za-z0-9_][A-Za-z0-9_.\-]*)(?=[\/"'\s)}\]$]|$)/g;
 const RE_BARE = /(?:^|[\/'"`])([A-Za-z0-9_][A-Za-z0-9_\-]*)(?=['"`)\/\s,;:]|$)/gm;
 const RE_GLOB = /((?:"?\$\{?[A-Za-z_]\w*\}?"?)?[A-Za-z0-9_.\-\/]*)\/\*(\.[A-Za-z0-9]+)?/g;
+// A literal repo-relative platforms/ path. Used only when the seed is a mirror.
+const RE_MIRROR_PATH = /platforms\/[A-Za-z0-9_./\-]+/g;
 // "$REPO_ROOT"/scripts/* and $REPO_ROOT/scripts/*.sh both mean the repo-relative directory scripts.
 const globDir = (d) => d.replace(/^"?\$\{?\w+\}?"?/, '').replace(/^\/+/, '').replace(/^\.\//, '');
 
@@ -187,61 +216,186 @@ const RE_REQ = /(?:require\(\s*|import\s+[^'"\n]*?from\s+|import\(\s*|import\s+)
 const RE_SRC = /(?:^|[;&|(]|\bthen\b|\bdo\b)[ \t]*(?:source|\.)[ \t]+["']?([^\s"';)]+)/gm;
 
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), globs = [], strong = new Set(), segs = new Set();
+  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
-  for (const m of text.matchAll(RE_BARE)) bares.add(m[1]);
+  for (const m of text.matchAll(RE_BARE)) (m[0].startsWith('/') ? slashBares : bares).add(m[1]);
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
-  return { exts, bares, globs, strong, segs };
+  for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
+  return { exts, bares, slashBares, globs, strong, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
+// Category folders under docs/. Skipped only for a prose seed; other data files keep GENERIC_DIRS alone.
+const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr']);
+// A non-suite .sh directly under hooks/tests/: shared helper, not a suite.
+const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
-const stripComments = (t) => t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
+// Full-line # and //, plus a trailing // through end of line, so a slash-star inside that comment
+// is never a block start. A slash-star starts a block only when it is the first non-blank on its
+// line. Anywhere else, including a regexp, it stays text. A star line is dropped only inside a block.
+function stripJsComments(src) {
+  const n = src.length;
+  let i = 0;
+  let out = '';
+  let lineStart = true;
+  function append(ch) {
+    out += ch;
+    if (ch === '\n') lineStart = true;
+    else if (ch !== ' ' && ch !== '\t' && ch !== '\r') lineStart = false;
+  }
+  function scan(stop) {
+    let brace = 0;
+    while (i < n) {
+      const c = src[i];
+      if (stop === '}' && c === '}' && brace === 0) return;
+      if (lineStart && (c === ' ' || c === '\t' || c === '\r')) { append(c); i++; continue; }
+      if (lineStart && c === '#') {
+        while (i < n && src[i] !== '\n') i++;
+        continue;
+      }
+      if (c === '/' && src[i + 1] === '/') {
+        while (i < n && src[i] !== '\n') i++;
+        continue;
+      }
+      if (lineStart && c === '/' && src[i + 1] === '*') {
+        const close = src.indexOf('*/', i + 2);
+        if (close === -1) {
+          while (i < n && src[i] !== '\n') i++;
+          continue;
+        }
+        let sawNl = false;
+        for (let k = i; k < close + 2; k++) if (src[k] === '\n') sawNl = true;
+        i = close + 2;
+        if (sawNl) lineStart = true;
+        continue;
+      }
+      if (c === '\'' || c === '"') { copyQuoted(c); continue; }
+      if (c === '`') { copyTemplate(); continue; }
+      if (c === '{') { append(c); i++; brace++; continue; }
+      if (c === '}') { append(c); i++; if (brace > 0) brace--; continue; }
+      append(c); i++;
+    }
+  }
+  function copyQuoted(quote) {
+    append(quote); i++;
+    while (i < n) {
+      const c = src[i];
+      if (c === '\\') {
+        append(c); i++;
+        if (i < n) { append(src[i]); i++; }
+        continue;
+      }
+      append(c); i++;
+      if (c === quote || c === '\n') return;
+    }
+  }
+  function copyTemplate() {
+    append('`'); i++;
+    while (i < n) {
+      const c = src[i];
+      if (c === '\\') {
+        append(c); i++;
+        if (i < n) { append(src[i]); i++; }
+        continue;
+      }
+      if (c === '`') { append(c); i++; return; }
+      if (c === '$' && src[i + 1] === '{') {
+        append('$'); append('{'); i += 2;
+        scan('}');
+        if (i < n && src[i] === '}') { append('}'); i++; }
+        continue;
+      }
+      append(c); i++;
+    }
+  }
+  scan(null);
+  return out;
+}
+const stripComments = (t, file) => {
+  const ext = String(file || '').split('.').pop();
+  if (ext === 'js' || ext === 'mjs' || ext === 'cjs') return stripJsComments(t);
+  return t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
+};
 
 function buildGraph(tree) {
   const codeFiles = tree.files.filter((f) => isCode(f) && (isSuite(f) || !NOT_PROPAGATING.test(f)));
   const refs = new Map(); // file -> mentions
   for (const f of codeFiles) {
     const t = tree.read(f);
-    if (t != null) refs.set(f, mentions(stripComments(t)));
+    if (t != null) refs.set(f, mentions(stripComments(t, f)));
   }
-  const byExt = new Map(), byBare = new Map(), bySeg = new Map(); // token -> Set(referrer)
+  const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
     for (const t of r.exts) add(byExt, t, f);
     for (const t of r.bares) add(byBare, t, f);
+    for (const t of r.slashBares) add(bySlashBare, t, f);
     for (const t of r.segs) add(bySeg, t, f);
+    for (const t of r.paths) add(byPath, t, f);
   }
+  // A stem that names two or more code files cannot be pinned to one JavaScript file by a bare word.
+  const stemCount = new Map();
+  for (const f of tree.files) {
+    if (!isCode(f) || NOT_PROPAGATING.test(f)) continue;
+    const stem = base(f).replace(/\.[^.]+$/, '');
+    stemCount.set(stem, (stemCount.get(stem) || 0) + 1);
+  }
+  const genericStems = new Set([...stemCount].filter(([, n]) => n >= 2).map(([s]) => s));
   const globRefs = []; // {file, dir, ext}
-  for (const [f, r] of refs) for (const g of r.globs) globRefs.push({ file: f, ...g });
-  return { refs, byExt, byBare, bySeg, globRefs };
+  for (const [f, r] of refs) {
+    for (const g of r.globs) {
+      // A helper that iterates a whole extensionless directory does not depend on any one file in it.
+      if (isSharedTestHelper(f) && !g.ext) continue;
+      globRefs.push({ file: f, ...g });
+    }
+  }
+  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
 function referrersOf(graph, p) {
   const out = new Map();
+  // A mirror is a byte copy. Match the full path only; the source file's basename is a different seed.
+  if (MIRROR.test(p)) {
+    for (const f of graph.byPath.get(p) || []) out.set(f, 'weak');
+    out.delete(p);
+    return out;
+  }
   const bareP = base(p).replace(/\.[^.]+$/, '');
   const kind = (f) => (graph.refs.get(f).strong.has(bareP) ? 'strong' : 'weak');
   const b = base(p);
   for (const f of graph.byExt.get(b) || []) out.set(f, kind(f));
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
-    for (const f of graph.byBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
+    const jsTarget = extOf(p) === 'js' || extOf(p) === 'mjs' || extOf(p) === 'cjs';
+    const generic = jsTarget && graph.genericStems.has(bare);
+    for (const f of graph.byBare.get(bare) || []) {
+      if (out.has(f)) continue;
+      const k = kind(f);
+      if (generic && k !== 'strong') continue;
+      out.set(f, k);
+    }
+    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
   }
   if (!isCode(p)) {
     // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it
     const parts = p.split('/').slice(0, -1);
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
+      if (p.startsWith('docs/') && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
       for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
     }
   }
   for (const g of graph.globRefs) {
-    if (g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file)) out.set(g.file, 'weak');
+    if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
+    // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
+    // A glob that also names a specific directory stays. Category names apply only under docs/.
+    if (p.startsWith('docs/') && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
+    out.set(g.file, 'weak');
   }
   out.delete(p);
   return out;

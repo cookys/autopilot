@@ -464,3 +464,310 @@ test('--record without --run exits 2, names --run, writes nothing; default path 
     assert.match(ok.stdout, new RegExp(`record: ${rec.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`));
   } finally { r.cleanup(); }
 });
+
+// # RED at 06bfd321a: 4 fail — helper glob still selects b.test.sh; mirror seed still selects engine.test.sh; prose plans/evidence still selects plans-loop.test.sh; real tree dev-setup selected 545.
+test('BL-0213 helper extensionless directory glob does not select every suite that sources the helper', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/lib.sh': '#!/usr/bin/env bash\nfor f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$DEST/"; done\n',
+    'hooks/tests/a.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\nbash "$ROOT/scripts/x.sh"\n',
+    'hooks/tests/b.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\n',
+    'scripts/x.sh': 'echo x\n',
+    'scripts/y.sh': 'echo y\n',
+    'hooks/tests/y.test.sh': '#!/usr/bin/env bash\nbash "$ROOT/scripts/y.sh"\n',
+  });
+  try {
+    const x = r.select(r.change({ 'scripts/x.sh': 'echo x2\n' }));
+    assert.ok(x.suites.includes('hooks/tests/a.test.sh'));
+    assert.ok(!x.suites.includes('hooks/tests/b.test.sh'));
+    const lib = filesSelect(r.dir, ['hooks/tests/lib.sh']);
+    assert.ok(lib.suites.includes('hooks/tests/a.test.sh'));
+    assert.ok(lib.suites.includes('hooks/tests/b.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite own extensionless directory glob still selects that suite', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/suite-glob.test.sh': '#!/usr/bin/env bash\nfor f in "$ROOT"/scripts/*; do bash "$f"; done\n',
+    'scripts/z.sh': 'echo z\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/z.sh': 'echo z2\n' }));
+    assert.ok(out.suites.includes('hooks/tests/suite-glob.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 helper glob with an extension still selects a suite that sources the helper', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/lib.sh': '#!/usr/bin/env bash\nfor f in "$REPO_ROOT"/scripts/*.sh; do bash "$f"; done\n',
+    'hooks/tests/helper-ext.test.sh': '#!/usr/bin/env bash\nsource "$ROOT/hooks/tests/lib.sh"\n',
+    'scripts/w.sh': 'echo w\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/w.sh': 'echo w2\n' }));
+    assert.ok(out.suites.includes('hooks/tests/helper-ext.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a platforms mirror seed matches only a literal repo-relative path', () => {
+  const mirror = 'platforms/codex/plugin/src/engine/res.js';
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/engine/res.js': 'module.exports = 1;\n',
+    [mirror]: 'module.exports = 1;\n',
+    'src/engine/engine.js': "const res = require('./res');\nmodule.exports = res;\n",
+    'hooks/tests/engine.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/src/engine/engine.js"\n',
+    'hooks/tests/mirror-path.test.sh': `#!/usr/bin/env bash\necho ${mirror}\n`,
+  });
+  try {
+    const onlyMirror = filesSelect(r.dir, [mirror]);
+    assert.ok(!onlyMirror.suites.includes('hooks/tests/engine.test.sh'));
+    assert.ok(onlyMirror.suites.includes('hooks/tests/mirror-path.test.sh'));
+    const source = filesSelect(r.dir, ['src/engine/res.js']);
+    assert.ok(source.suites.includes('hooks/tests/engine.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 prose category directory names do not select a suite that only names the category', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plans-loop.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/evidence/; do echo "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({
+      'docs/plans/p.md': '# edited\n',
+      'scripts/other.js': 'console.log("changed");\n',
+    }));
+    assert.ok(!out.suites.includes('hooks/tests/plans-loop.test.sh'));
+    assert.ok(out.suites.includes('hooks/tests/other.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite that names a prose file by basename is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plan-name.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/docs/plans/p.md"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'docs/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/plan-name.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a dated evidence directory still selects the suite that names it', () => {
+  const note = 'docs/plans/evidence/2026-01-01-x/note.md';
+  const r = makeRepo({
+    ...LAYOUT,
+    [note]: '# note\n',
+    'hooks/tests/dated-evidence.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/evidence/2026-01-01-x/; do cat "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ [note]: '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/dated-evidence.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a prose category name outside docs/ still selects the suite that names it', () => {
+  const note = 'website/plans/p.md';
+  const r = makeRepo({
+    ...LAYOUT,
+    [note]: '# p\n',
+    'hooks/tests/site-plan.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/plans/p.md"\n',
+  });
+  try {
+    const out = r.select(r.change({ [note]: '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/site-plan.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// # RED at 78a293f6a: generic-stem "index" still selected word-index.test.sh; b8bdd61f3 file list selected 461.
+test('BL-0213 a suite that shells out to a uniquely named extensionless script is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/only-once.sh': 'echo once\n',
+    'hooks/tests/only-once.test.sh': '#!/usr/bin/env bash\nbash "only-once"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/only-once.sh': 'echo twice\n' }));
+    assert.ok(out.suites.includes('hooks/tests/only-once.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite that requires a same-stem file with a path is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/a/index.js': 'module.exports = 1;\n',
+    'src/b/index.js': 'module.exports = 2;\n',
+    'hooks/tests/path-index.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/src/a/index"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/a/index.js': 'module.exports = 3;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/path-index.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a generic stem mention alone does not select a suite', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/a/index.js': 'module.exports = 1;\n',
+    'src/b/index.js': 'module.exports = 2;\n',
+    'hooks/tests/word-index.test.sh': '#!/usr/bin/env bash\necho "index"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/a/index.js': 'module.exports = 3;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/word-index.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// # RED at 2536401a2: comment-only.test.sh still selected; b8bdd61f3 selected 228 (bound 120).
+test('BL-0213 a name only in a star-comment line or a block comment does not create an edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/comment-only.js': '/**\n * see scripts/target.js in a star line\n */\nconst x = 1;\n/* block scripts/target.js */\n',
+    'scripts/real-user.js': "const t = require('./target.js');\n",
+    'hooks/tests/comment-only.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/comment-only.js"\n',
+    'hooks/tests/real-user.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/real-user.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/comment-only.test.sh'));
+    assert.ok(out.suites.includes('hooks/tests/real-user.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a helper call that reads a named file as data still creates a weak edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/reader.js': "function fileContains(rel, needle) { return false; }\nif (fileContains('scripts/target.js', 'marker')) console.log(1);\n",
+    'hooks/tests/reader.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/reader.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/reader.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 real tree: dev-setup, mirror, plan, and the three merges stay under per-revision bounds', () => {
+  // --files on this tree (round 1 caps kept): dev-setup.sh measured 39, bound 150;
+  // review-resolution mirror measured 22, bound 80; docs plan measured 12, bound 60.
+  // Merges use --base <rev>^1 --head <rev> (the mode that produced the counts below), each
+  // bound a fraction of stats.total_suites so it grows with the repo.
+  // d997355a9 measured 102, bound 0.25 * total_suites (~156). Headroom is for a few restored
+  // requires; a slip back toward 300 fails this bound.
+  // b8bdd61f3 measured 269, bound 0.5 * total_suites (~312). This merge touches engine core,
+  // so half the list is the ceiling; it still rejects "nearly every suite".
+  // 3765302f3 measured 83, bound 0.2 * total_suites (~125). A small diff; 0.2 turns red well
+  // before the old shared 0.5 cap, where a regression to 300 would have stayed green.
+  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  const dev = run(['scripts/dev-setup.sh']);
+  assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
+  assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
+  const mirror = run(['platforms/codex/plugin/src/engine/review-resolution.js']);
+  assert.ok(mirror.suites.length < 80, `mirror selected ${mirror.suites.length}`);
+  const plan = run(['docs/plans/2026-10-17-review-only-campaign-fix-increment.md']);
+  assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
+  const bounds = { d997355a9: 0.25, b8bdd61f3: 0.5, '3765302f3': 0.2 };
+  for (const [rev, fraction] of Object.entries(bounds)) {
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--base', `${rev}^1`, '--head', rev, '--json'], { stdio: 'pipe' }).toString());
+    const cap = out.stats.total_suites * fraction;
+    assert.ok(out.stats.selected < cap, `${rev} selected ${out.stats.selected} of ${out.stats.total_suites} (cap ${cap})`);
+  }
+});
+
+// # RED at 966a3c917: string slash-star wipes the later require; mirror stem count drops the bare name; docs/plans/*.md is skipped as a category glob; dated evidence uses a json seed.
+test('BL-0213 a slash-star inside a JS string does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/holder.js': "const g = 'scripts/*';\nconst h = dir + '/*';\nconst t = require('./needed.js');\nconst glob = 'docs/**/*.md';\nconst later = 'hooks/tests/**/*.test.sh';\n",
+    'hooks/tests/holder.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/holder.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/holder.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a bare name still selects when the only duplicate stem is a platforms mirror', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/engine/review-resolution.js': 'module.exports = 1;\n',
+    'platforms/codex/plugin/src/engine/review-resolution.js': 'module.exports = 1;\n',
+    'hooks/tests/review-resolution.test.sh': '#!/usr/bin/env bash\nfor m in "review-resolution"; do node "$ROOT/src/engine/$m.js"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/engine/review-resolution.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/review-resolution.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a docs plan glob with an extension still selects the suite that lints it', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'docs/plans/p.md': '# plan\n',
+    'hooks/tests/plan-glob.test.sh': '#!/usr/bin/env bash\nfor f in docs/plans/*.md; do bash "$ROOT/scripts/lint-plan.sh" "$f"; done\n',
+  });
+  try {
+    const out = r.select(r.change({ 'docs/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("c");\n' }));
+    assert.ok(out.suites.includes('hooks/tests/plan-glob.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a star line outside a block comment still creates an edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/star-line.js': 'const x = 1;\n * scripts/target.js\n',
+    'hooks/tests/star-line.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/star-line.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/star-line.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// # RED at f46f0a761: regexp slash-star drops the later require (splitter.test.sh absent); trailing // see /* does the same (noted.test.sh absent). Line-leading JSDoc already created no edge.
+test('BL-0213 a slash-star inside a regexp literal does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/splitter.js': "const parts = split(/[/*]/);\nconst t = require('./needed.js');\n*/\n",
+    'hooks/tests/splitter.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/splitter.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/splitter.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a slash-star inside a trailing line comment does not erase a later require', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/needed.js': 'module.exports = 1;\n',
+    'scripts/noted.js': "const x = 1; // see /*\nconst t = require('./needed.js');\n*/\n",
+    'hooks/tests/noted.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/noted.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/needed.js': 'module.exports = 2;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/noted.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a name mentioned only inside a line-leading JSDoc block creates no edge', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/target.js': 'module.exports = 1;\n',
+    'scripts/documented.js': '/**\n * see scripts/target.js\n */\nconst x = 1;\n',
+    'hooks/tests/documented.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/documented.js"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/target.js': 'module.exports = 2;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/documented.test.sh'));
+  } finally { r.cleanup(); }
+});

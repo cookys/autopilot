@@ -3,10 +3,13 @@
 # RED at d7ce15a9e: unmodified harness has no gate_enforce_wants_retry; the NC6 mutant step exited 1 with "gate_enforce_wants_retry missing" before any enforce retry could run.
 # RED at f8f1ec90e: gate_error kept calling the model (stub calls=5); later turn_0N.md files were still written.
 # RED at bcc58516a: --gate-retry-feedback is an unknown argument; the feature-gap retry case exited 2 before any retry file was written.
+# RED at 42b604197: test-identity-guard reported this suite as git-invoking without lib.sh.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$(dirname "$0")/lib.sh"
+set -euo pipefail
 EVAL_DIR="$REPO_ROOT/evals/orchestration"
 HARNESS="$EVAL_DIR/run-orchestration-eval.sh"
 BASE_SHA="3a72a54dcaf2df27ed82a9d8a42bd776c93b23b5"

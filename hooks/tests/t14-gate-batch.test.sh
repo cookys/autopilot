@@ -3,10 +3,13 @@
 # RED at 6a6373eed: driver and analyzer were absent; the test exited 1 with "missing evals/orchestration/run-t14-gate-batch.js" before any batch or verdict check ran.
 # RED at f8f1ec90e: lying row counted valid_runs.c=1 with no mismatches key; resume never compared --pairs (schedule reused, exit 0).
 # RED at bcc58516a: --retry-feedback is not recorded; the default header, row, and G-only argv check exited 1.
+# RED at 42b604197: test-identity-guard reported this suite as git-invoking without lib.sh.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$(dirname "$0")/lib.sh"
+set -euo pipefail
 EVAL_DIR="$REPO_ROOT/evals/orchestration"
 DRIVER="$EVAL_DIR/run-t14-gate-batch.js"
 ANALYZER="$EVAL_DIR/analyze-t14-gate.js"

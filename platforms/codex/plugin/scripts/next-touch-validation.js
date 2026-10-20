@@ -1673,8 +1673,8 @@ function validateIntegratedExecution(receipt, bundle, args, repoInfo, frozen) {
     fail('INTEGRATION_AUTHORITY_INVALID', 'integrated allowed_path_prefixes are invalid');
   }
   const manifest = {
-    schema_version: 1,
-    artifact_type: 'merge_intent_manifest',
+    schema_version: mergeIntent.SCHEMA_VERSION,
+    artifact_type: mergeIntent.ARTIFACT_TYPE,
     repo: repoInfo.repo,
     root_run_id: bundle.campaign_id,
     edges: [{

@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawnSync, execFileSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const LIB_PATH = path.join(__dirname, 'lib', 'qualification-metrics.js');
@@ -264,12 +264,143 @@ test('record_id / entry_id / strike_id match the cross-language parity fixture',
   }
 });
 
+const VENDORED_SCHEMA_NAMES = ['qualification-feed-v2.schema.json', 'qualification-record.schema.json'];
+
+function gitExec(args, env) {
+  return execFileSync('git', args, {
+    env: env || process.env,
+    encoding: 'buffer',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+// Parent of the common git dir is the main checkout (worktrees and clones included).
+// A parity clone whose own sibling is not llm-playground follows a local origin.
+function defaultLpRoot() {
+  const main = mainCheckout(REPO);
+  const sibling = path.join(path.dirname(main), 'llm-playground');
+  if (isGitRepo(sibling)) return sibling;
+  let origin = '';
+  try {
+    origin = gitExec(['-C', main, 'remote', 'get-url', 'origin']).toString('utf8').trim();
+  } catch { /* no origin */ }
+  if (origin && path.isAbsolute(origin) && fs.existsSync(origin)) {
+    try {
+      return path.join(path.dirname(mainCheckout(origin)), 'llm-playground');
+    } catch { /* origin is not a checkout */ }
+  }
+  return sibling;
+}
+
+function mainCheckout(start) {
+  const raw = gitExec(['-C', start, 'rev-parse', '--git-common-dir']).toString('utf8').trim();
+  return path.dirname(path.resolve(start, raw));
+}
+
+function isGitRepo(root) {
+  try {
+    gitExec(['-C', root, 'rev-parse', '--is-inside-work-tree']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function refExists(root, ref) {
+  try {
+    gitExec(['-C', root, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Compare REPO/schemas blobs to `git show ref:schemas/<name>` (never the other work tree).
+// explicit: a missing repo or ref throws. Otherwise returns { skip } with root and ref.
+function compareVendoredSchemas(root, ref, explicit) {
+  if (!isGitRepo(root) || !refExists(root, ref)) {
+    const message = `llm-playground git ref unavailable: root=${root} ref=${ref}`;
+    if (explicit) throw new Error(message);
+    return { skip: message };
+  }
+  for (const name of VENDORED_SCHEMA_NAMES) {
+    const shown = gitExec(['-C', root, 'show', `${ref}:schemas/${name}`]);
+    const vendored = fs.readFileSync(path.join(REPO, 'schemas', name));
+    assert.ok(Buffer.isBuffer(shown) && vendored.equals(shown), name);
+  }
+  return null;
+}
+
+function gitTemp(cwd, home, args) {
+  const env = {
+    ...process.env,
+    HOME: home,
+    GIT_CONFIG_GLOBAL: path.join(home, 'nonexistent-gitconfig'),
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
+  gitExec(['-C', cwd, ...args], env);
+}
+
+function initSchemaRepo(home, bodies) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qm-lp-'));
+  gitTemp(root, home, ['init', '-b', 'main']);
+  fs.mkdirSync(path.join(root, 'schemas'));
+  for (const name of VENDORED_SCHEMA_NAMES) {
+    fs.writeFileSync(path.join(root, 'schemas', name), bodies[name]);
+  }
+  gitTemp(root, home, ['add', 'schemas']);
+  gitTemp(root, home, ['-c', 'user.name=qm-test', '-c', 'user.email=qm-test@example.com', 'commit', '-m', 'schemas']);
+  return root;
+}
+
 test('vendored schemas are byte-identical to the llm-playground P1 copy when it is present', (t) => {
-  const root = process.env.QUALIFICATION_LP_ROOT || '/home/cookys/projects/llm-playground-bl0194-p1';
-  const names = ['qualification-feed-v2.schema.json', 'qualification-record.schema.json'];
-  if (!names.every((n) => fs.existsSync(path.join(root, 'schemas', n)))) { t.skip('llm-playground checkout not present'); return; }
-  for (const n of names) {
-    assert.ok(fs.readFileSync(path.join(REPO, 'schemas', n)).equals(fs.readFileSync(path.join(root, 'schemas', n))), n);
+  const rootExplicit = process.env.QUALIFICATION_LP_ROOT !== undefined;
+  const refExplicit = process.env.QUALIFICATION_LP_REF !== undefined;
+  const root = rootExplicit ? process.env.QUALIFICATION_LP_ROOT : defaultLpRoot();
+  const ref = refExplicit ? process.env.QUALIFICATION_LP_REF : 'origin/master';
+  const result = compareVendoredSchemas(root, ref, rootExplicit || refExplicit);
+  if (result && result.skip) { t.skip(result.skip); return; }
+});
+
+/*
+# RED at a58e9c4a9: old body with QUALIFICATION_LP_ROOT pointed at a different-content temp repo skipped once schemas/ was absent from that work tree ("llm-playground checkout not present"); with those different bytes present it read the work tree and failed the equality assert. It never compared git show.
+*/
+test('negative control: committed schema bytes that differ from the vendored copies fail', () => {
+  const home = tmp('home');
+  const bodies = {};
+  for (const name of VENDORED_SCHEMA_NAMES) bodies[name] = Buffer.from(`different-from-vendored:${name}\n`);
+  const root = initSchemaRepo(home, bodies);
+  try {
+    assert.throws(() => compareVendoredSchemas(root, 'HEAD', true), { message: VENDORED_SCHEMA_NAMES[0] });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('negative control: byte-identical committed schemas pass the parity helper', () => {
+  const home = tmp('home');
+  const bodies = {};
+  for (const name of VENDORED_SCHEMA_NAMES) bodies[name] = fs.readFileSync(path.join(REPO, 'schemas', name));
+  const root = initSchemaRepo(home, bodies);
+  try {
+    assert.equal(compareVendoredSchemas(root, 'main', true), null);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('negative control: an explicit non-repo root fails and a non-explicit one skips', () => {
+  const root = tmp('notgit');
+  const ref = 'origin/master';
+  try {
+    assert.throws(() => compareVendoredSchemas(root, ref, true), new RegExp(`root=${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ref=${ref}`));
+    const skipped = compareVendoredSchemas(root, ref, false);
+    assert.match(skipped.skip, new RegExp(`root=${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(skipped.skip, new RegExp(`ref=${ref}`));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

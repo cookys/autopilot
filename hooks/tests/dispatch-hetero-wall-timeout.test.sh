@@ -88,6 +88,9 @@ fi
 if [ "${HETERO_TEST_IGNORE_TERM:-0}" = "1" ]; then
   trap '' TERM
 fi
+if [ -n "${HETERO_TEST_TERM_LOG:-}" ]; then
+  trap 'echo TERM >> "$HETERO_TEST_TERM_LOG"' TERM
+fi
 if [ "${HETERO_TEST_BUSYLOOP:-0}" = "1" ]; then
   while :; do sleep 1; done
 fi
@@ -383,7 +386,7 @@ assert_reap_does_not_disarm_wall_timeout() {
     for f in "$priv"/*wdog-tok-*; do
       [ -e "$f" ] || continue
       case "$f" in
-        *.sleeppid|*.fired) continue ;;
+        *.sleeppid|*.fired|*.cancel) continue ;;
       esac
       token="$f"
       break
@@ -481,5 +484,117 @@ assert_detached_path_enforced_timeout_kills
 assert_r6_no_bare_pid_fallback
 assert_reap_does_not_disarm_wall_timeout
 assert_watchdog_token_prefix_avoids_test_lockgated
+
+# Case A: an unregistered rm of the token must not disarm the wall timeout.
+# The test deletes dispatch-wdog-tok-* itself (not via _cancel_worker_watchdog).
+# RED at a405d179a: FAIL dispatch took 20s (want <16s); missing result JSON (outer timeout Killed the scope; worker still sleeping); vanished-token line not in stderr; EXIT:1
+
+assert_vanished_token_still_enforces_timeout() {
+  local priv="$TEST_TMP/wdog-vanish-priv" home="$TEST_TMP/wdog-vanish-home"
+  local stub="$TEST_TMP/grok-vanish" pidfile="$TEST_TMP/vanish.pid" runs="$TEST_TMP/runs-vanish"
+  local outf="$TEST_TMP/vanish.out"
+  mkdir -p "$priv" "$home" "$runs"
+  install_sleep_stub "$stub"
+  : > "$pidfile"
+  : > "$outf"
+  local start now elapsed dpid token="" stubpid=""
+  start="$(date +%s)"
+  (
+    cd "$SBX" && timeout --foreground 20 env HOME="$home" TMPDIR="$priv" \
+      AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-vanish --prompt-file "$PROMPT" --timeout 3s
+  ) >"$outf" 2>&1 &
+  dpid=$!
+  local i=0
+  while [ "$i" -lt 100 ]; do
+    token=""
+    for f in "$priv"/dispatch-wdog-tok-*; do
+      [ -e "$f" ] || continue
+      case "$f" in
+        *.sleeppid|*.fired|*.cancel) continue ;;
+      esac
+      token="$f"
+      break
+    done
+    [ -n "$token" ] && break
+    if ! kill -0 "$dpid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.05
+    i=$((i + 1))
+  done
+  if [ -z "$token" ]; then
+    kill "$dpid" 2>/dev/null || true
+    wait "$dpid" 2>/dev/null || true
+    stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+    [ -n "$stubpid" ] && kill "$stubpid" 2>/dev/null || true
+    [ -n "$stubpid" ] && wait "$stubpid" 2>/dev/null || true
+    fail "assert_vanished_token_still_enforces_timeout: watchdog token never appeared (out: $(cat "$outf"))"
+    return
+  fi
+  rm -f "$token"
+  local w=0
+  while [ "$w" -lt 18 ]; do
+    kill -0 "$dpid" 2>/dev/null || break
+    sleep 1
+    w=$((w + 1))
+  done
+  if kill -0 "$dpid" 2>/dev/null; then
+    kill "$dpid" 2>/dev/null || true
+  fi
+  wait "$dpid" 2>/dev/null || true
+  now="$(date +%s)"; elapsed=$((now - start))
+  local out json
+  out="$(cat "$outf")"
+  json="$(last_json "$out")"
+  # 3s timeout + 10s grace. Startup sits inside this bound.
+  [ "$elapsed" -lt 16 ] || fail "assert_vanished_token_still_enforces_timeout: dispatch took ${elapsed}s (want <16s = 3s timeout + 10s grace + slack)"
+  [ -n "$json" ] || fail "assert_vanished_token_still_enforces_timeout: missing result JSON (out: $out)"
+  if [ -n "$json" ]; then
+    assert_eq "true" "$(json_get "$json" timed_out)" "vanished-token timed_out"
+    assert_eq "true" "$(json_get "$json" timeout_enforced)" "vanished-token timeout_enforced"
+  fi
+  assert_contains "$out" "watchdog token vanished without cancel; enforcing timeout" "vanished-token stderr line"
+  stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+  [ -n "$stubpid" ] || fail "assert_vanished_token_still_enforces_timeout: stub did not write pidfile"
+  if [ -n "$stubpid" ] && pid_alive "$stubpid"; then
+    fail "assert_vanished_token_still_enforces_timeout: stub pid $stubpid still alive"
+    kill "$stubpid" 2>/dev/null || true
+    wait "$stubpid" 2>/dev/null || true
+  fi
+}
+
+# Case B: a runner that finishes inside the timeout is not signalled and
+# leaves no watchdog token, cancel marker, fired stamp, or sleeppid.
+assert_clean_finish_leaves_no_watchdog_residue() {
+  local priv="$TEST_TMP/wdog-clean-priv" home="$TEST_TMP/wdog-clean-home"
+  local stub="$TEST_TMP/grok-clean" pidfile="$TEST_TMP/clean.pid" runs="$TEST_TMP/runs-clean"
+  local termlog="$TEST_TMP/clean-term.log"
+  mkdir -p "$priv" "$home" "$runs"
+  install_sleep_stub "$stub"
+  : > "$pidfile"
+  : > "$termlog"
+  local start now elapsed out json left
+  start="$(date +%s)"
+  out="$(cd "$SBX" && env HOME="$home" TMPDIR="$priv" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=1 HETERO_TEST_TERM_LOG="$termlog" \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-clean --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
+  now="$(date +%s)"; elapsed=$((now - start))
+  [ "$elapsed" -lt 20 ] || fail "assert_clean_finish_leaves_no_watchdog_residue: took ${elapsed}s (runner sleeps 1s inside a 30s timeout)"
+  json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_clean_finish_leaves_no_watchdog_residue: missing JSON: $out"
+  assert_eq "no_op" "$(json_get "$json" status)" "clean-finish status"
+  assert_eq "false" "$(json_get "$json" timed_out)" "clean-finish timed_out"
+  assert_not_contains "$out" "wall timeout" "clean-finish must not report a wall timeout"
+  assert_not_contains "$(cat "$termlog" 2>/dev/null || true)" "TERM" "clean-finish worker was signalled"
+  left="$(find "$priv" -name 'dispatch-wdog-tok-*' -print 2>/dev/null || true)"
+  [ -z "$left" ] || fail "assert_clean_finish_leaves_no_watchdog_residue: residue left in TMPDIR: $left"
+}
+
+assert_vanished_token_still_enforces_timeout
+assert_clean_finish_leaves_no_watchdog_residue
 
 finalize_test

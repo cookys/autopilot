@@ -266,13 +266,24 @@ function buildMergeIntent(input, adapters = {}) {
     return edge;
   });
 
-  const manifest = {
-    schema_version: SCHEMA_VERSION,
-    artifact_type: ARTIFACT_TYPE,
+  return composeMergeIntentManifest({
     repo,
     root_run_id: input.root_run_id,
     edges,
     forbidden_reverse_edges: forbidden,
+    allowed_path_prefixes: allowedPathPrefixes,
+  });
+}
+
+function composeMergeIntentManifest(resolved) {
+  const allowedPathPrefixes = [...new Set(resolved.allowed_path_prefixes)].sort();
+  const manifest = {
+    schema_version: SCHEMA_VERSION,
+    artifact_type: ARTIFACT_TYPE,
+    repo: resolved.repo,
+    root_run_id: resolved.root_run_id,
+    edges: resolved.edges,
+    forbidden_reverse_edges: resolved.forbidden_reverse_edges,
     preservation_policy: { allowed_path_prefixes: allowedPathPrefixes },
   };
   return { manifest, seal: canonicalDigest(manifest) };
@@ -935,6 +946,7 @@ module.exports = {
   MergeIntentError,
   SCHEMA_VERSION,
   buildMergeIntent,
+  composeMergeIntentManifest,
   dirtyProof,
   preflightMergeIntent,
   sealMergeIntent,

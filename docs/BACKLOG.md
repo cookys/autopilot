@@ -1311,20 +1311,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/p6-trust-followups.md
 - **Context**: Four small follow-ups. Automating the extra answer step needs eval evidence before skill text changes.
 
-### validateIntegratedExecution rebuilds the merge manifest by hand instead of calling the merge-intent builder
-- **Id**: BL-0262
-- **Status**: open
-- **Since**: 2026-10-20
-- **Origin**: self
-- **Problem**: 下次接觸驗證的整合執行檢查仍用手重組合併清單，沒有呼叫合併意圖的建構函式。結構升到第二版時，寫死的一曾經漂過一次；常數已修正，重複的結構還在。
-- **Impact**: 結構再改時，手組的那份會再漂一次，驗證會對錯的清單形狀放行或誤報。
-- **Trigger**: 下次改到該檔時
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: reds3 lane, 2026-10-20
-- **Pointer**: docs/backlog/next-touch-validation-manual-manifest.md
-- **Context**: scripts/next-touch-validation.js still hand-builds the manifest; the schema-2 constant was patched, the copy remains.
-
 ### orchestration-eval-gate test reads BASE_SHA 3a72a54dc that is not in develop history
 - **Id**: BL-0263
 - **Status**: open

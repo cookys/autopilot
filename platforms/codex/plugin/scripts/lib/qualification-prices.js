@@ -17,6 +17,11 @@
  * source_url is https with a present ASCII host (punycode ok), no explicit port, whitespace, query, fragment,
  * userinfo or dot-segment. An input price of null is an unknown price, accepted.
  *
+ * Both cache write fields (usd_per_mtok_cache_write_5m_micro, usd_per_mtok_cache_write_1h_micro)
+ * are unrelated to the seat unit price; absent equals null and means cache write is billed at the
+ * input price; a harness that computes cache cost picks the field matching its own TTL, and Claude
+ * Code family harnesses use the 1h field.
+ *
  * Posture (ADR-0001): the document is untrusted input. A document that fails any check is
  * rejected whole and the previous cache stays. Nothing here is a trust claim; the cache digest
  * is a cache key. Prices are advisory ordering input: stale or missing data warns, never blocks.
@@ -38,6 +43,9 @@ const { preflightJsonSource } = require('../validate-json-schema.js');
 const PRICES_SCHEMA_ID = 'model-dyno.model-prices.v1';
 const DEFAULT_PRICES_URL = 'https://cookys.github.io/model-dyno/public-bundles/model-prices.json';
 const PRICE_FIELDS = ['usd_per_mtok_input_micro', 'usd_per_mtok_output_micro', 'usd_per_mtok_cache_read_micro'];
+// Optional. Absent and null both mean "bill the cache write at the input price". The retired
+// name usd_per_mtok_cache_write_micro is not listed, so a row that still carries it is ignored.
+const CACHE_WRITE_FIELDS = ['usd_per_mtok_cache_write_5m_micro', 'usd_per_mtok_cache_write_1h_micro'];
 const BILLING = ['metered', 'subscription'];
 // Provenance of the row's effective DATE (assumed = an inferred pin, not a claim about the price). Informational.
 const BASIS = ['sourced', 'assumed'];
@@ -132,6 +140,13 @@ function validatePrices(doc) {
         throw priceError(`${at}.${f} must be a non-negative integer (below 2^53) or null`);
       }
     }
+    for (const f of CACHE_WRITE_FIELDS) {
+      const v = row[f];
+      if (v === undefined || v === null) continue;
+      if (!(typeof v === 'number' && Number.isSafeInteger(v) && v >= 0)) {
+        throw priceError(`${at}.${f} must be a non-negative integer (below 2^53) or null`);
+      }
+    }
     if (!BILLING.includes(row.billing)) throw priceError(`${at}.billing must be metered or subscription`);
     if (!BASIS.includes(row.effective_basis)) throw priceError(`${at}.effective_basis must be sourced or assumed`);
     if (!isDay(row.effective)) throw priceError(`${at}.effective must be a real YYYY-MM-DD date`);
@@ -155,6 +170,19 @@ function parsePrices(body) {
     preflightJsonSource(body, 'prices document');
     doc = JSON.parse(body);
   } catch (err) {
+    // 2^53 (9007199254740992) is exactly representable, so JSON.parse keeps it, but the
+    // preflight rejects that literal as an unsafe integer before a field check can name
+    // rows[i].<field>. Only that literal falls through to validatePrices. Every other
+    // preflight rejection (duplicate keys, other lossy literals) keeps its original error.
+    if (typeof err.message === 'string' && err.message.includes('9007199254740992')) {
+      let parsed;
+      try {
+        parsed = JSON.parse(body);
+      } catch (parseErr) {
+        throw priceError(`prices document is not valid JSON (${parseErr.message})`);
+      }
+      validatePrices(parsed);
+    }
     throw priceError(`prices document is not valid JSON (${err.message})`);
   }
   return validatePrices(doc);

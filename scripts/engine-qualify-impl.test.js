@@ -585,7 +585,8 @@ process.exit(2);
     equal(ledger.length, 1, 'unavailable stub records one ledger row');
     equal(ledger[0].outcome, 'engine_unavailable', 'outcome stays engine_unavailable (scoring unchanged)');
     equal(exchanges[0].outcome, 'engine_unavailable', 'exchange outcome matches the ledger');
-    check(typeof ledger[0].dispatch_error_class === 'string' && ledger[0].dispatch_error_class.length > 0, 'dispatch_error_class is non-empty');
+    equal(ledger[0].dispatch_error_class, null, 'dispatch_error_class is null when dispatch JSON has no category');
+    check(String(ledger[0].dispatch_error).includes('529 overloaded'), 'dispatch_error contains 529 overloaded');
     check(String(ledger[0].agent_log_tail).includes('529 overloaded'), 'agent_log_tail keeps the 529 line');
     check(ledger[0].agent_log_path === logPath, 'agent_log_path is the log path');
     equal(exchanges[0].dispatch_error_class, ledger[0].dispatch_error_class, 'exchange copies dispatch_error_class');
@@ -640,6 +641,121 @@ process.exit(2);
     const blob = filesUnder(rawC).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
     for (const needle of needles) {
       check(needle.length > 0 && !blob.includes(needle), 'raw-dir does not contain the canary or an encoding of it');
+    }
+  });
+}
+
+// # RED at 5507381c0: URL test AssertionError "agent_log_tail masks URLs with <url>" at engine-qualify-impl.test.js (exit 1); raw tail still had http://10.7.7.7:8001. Canary four-forms check was not red on that base: redactSecrets' 20-char run already rewrote literal, base64, hex, and reversed to [redacted] (leaked=0).
+// Ledger free-text must not write the endpoint base_url, its host, or any other http(s) URL.
+{
+  const baseUrl = 'http://10.7.7.7:8001';
+  const logPath = path.join(tempRoot, 'stub-url-leak.log');
+  const stub = path.join(tempRoot, 'stub-url-leak.js');
+  const leakLine = `POST ${baseUrl}/v1/messages status 529\nsee http://example.test/x\n`;
+  fs.writeFileSync(stub, `'use strict';
+const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(logPath)}, ${JSON.stringify(leakLine)});
+process.stdout.write(JSON.stringify({
+  status: 'failure',
+  error: ${JSON.stringify(leakLine)},
+  agent_log: ${JSON.stringify(logPath)},
+  commit: null,
+}) + '\\n');
+process.exit(1);
+`);
+  const wrapper = path.join(tempRoot, 'disp-url-leak.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${stub} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  const saved = {};
+  for (const k of ['AUTOPILOT_ENDPOINT_EXAMLAN_URL', 'AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN', 'AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT']) saved[k] = process.env[k];
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_URL = baseUrl;
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TOKEN = 'exam-lan-bearer';
+  process.env.AUTOPILOT_ENDPOINT_EXAMLAN_TRANSPORT = 'plaintext-private';
+  withTempHome(() => {
+    const storeL = fs.mkdtempSync(path.join(tempRoot, 'store-url-leak-'));
+    const rawL = fs.mkdtempSync(path.join(tempRoot, 'raw-url-leak-'));
+    process.env.AUTOPILOT_QUALIFY_SEED = 'url-leak-seed';
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'url-leak-seed');
+    try {
+      runImplQualification({
+        ...baseOptions(storeL),
+        dispatchBin: wrapper,
+        runner: 'cc-shim',
+        endpoint: 'examlan',
+        rawDir: rawL,
+        testTruncateAfterCases: 1,
+      });
+    } finally {
+      delete process.env.AUTOPILOT_QUALIFY_SEED;
+    }
+    const ledger = readJsonl(path.join(rawL, 'impl-dispatch-ledger.jsonl'));
+    equal(ledger.length, 1, 'url-leak stub records one ledger row');
+    check(String(ledger[0].agent_log_tail).includes('<url>'), 'agent_log_tail masks URLs with <url>');
+    check(String(ledger[0].dispatch_error).includes('<url>'), 'dispatch_error masks URLs with <url>');
+    const blob = filesUnder(rawL).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    check(!blob.includes('http://') && !blob.includes('https://'), 'raw-dir has no http:// or https://');
+    check(!blob.includes('10.7.7.7'), 'raw-dir has no endpoint host 10.7.7.7');
+  });
+  for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+}
+
+// Free-text ledger fields must not keep the canary in literal, base64, hex, or reversed form.
+{
+  const logPath = path.join(tempRoot, 'stub-canary-leak.log');
+  const stub = path.join(tempRoot, 'stub-canary-leak.js');
+  fs.writeFileSync(stub, `'use strict';
+const fs = require('fs');
+const token = process.env.QUALIFY_CANARY_TOKEN || '';
+const forms = [
+  token,
+  Buffer.from(token, 'utf8').toString('base64'),
+  Buffer.from(token, 'utf8').toString('hex'),
+  [...token].reverse().join(''),
+].join('\\n');
+fs.writeFileSync(${JSON.stringify(logPath)}, forms + '\\n');
+process.stdout.write(JSON.stringify({
+  status: 'failure',
+  error: forms,
+  agent_log: ${JSON.stringify(logPath)},
+  commit: null,
+}) + '\\n');
+process.exit(1);
+`);
+  const wrapper = path.join(tempRoot, 'disp-canary-leak.sh');
+  fs.writeFileSync(wrapper, `#!/usr/bin/env bash\nexec ${process.execPath} ${stub} "$@"\n`);
+  fs.chmodSync(wrapper, 0o755);
+  withTempHome(() => {
+    const storeK = fs.mkdtempSync(path.join(tempRoot, 'store-canary-leak-'));
+    const rawK = fs.mkdtempSync(path.join(tempRoot, 'raw-canary-leak-'));
+    const seed = 'canary-freetext-seed';
+    fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), seed);
+    process.env.AUTOPILOT_QUALIFY_SEED = seed;
+    try {
+      runImplQualification({
+        ...baseOptions(storeK), dispatchBin: wrapper, rawDir: rawK, testTruncateAfterCases: 1,
+      });
+    } finally {
+      delete process.env.AUTOPILOT_QUALIFY_SEED;
+    }
+    const gen = require(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'));
+    const byteHash = (v) => crypto.createHash('sha256').update(v).digest('hex');
+    const genHash = byteHash(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js')));
+    const corpusHash = byteHash(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json')));
+    const runNonce = byteHash(`impl-seed:${seed}`);
+    const admin = gen.generateAdministration({
+      adminSeed: byteHash(`impl-admin:${runNonce}:${genHash}`),
+      oracleKey: byteHash(`impl-oracle-key:${runNonce}:${corpusHash}`),
+    });
+    const token = admin.canary_token;
+    const needles = [
+      token,
+      Buffer.from(token, 'utf8').toString('base64'),
+      Buffer.from(token, 'utf8').toString('hex'),
+      [...token].reverse().join(''),
+    ];
+    const blob = filesUnder(rawK).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+    for (const needle of needles) {
+      check(needle.length > 0 && !blob.includes(needle), 'raw-dir does not contain a free-text canary form');
     }
   });
 }

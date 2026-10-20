@@ -295,10 +295,14 @@ const HELP = `Usage:
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
       Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
-      non-pass case whose dispatch status is not committed: dispatch_error_class,
-      dispatch_error, agent_log_tail (last 40 lines, secrets redacted, 8 KiB cap)
-      and agent_log_path. An integrity_violation row also adds
-      integrity_violation_details, each {type, path} only — never the canary value.
+      non-pass case whose dispatch status is not committed: dispatch_error_class
+      (the dispatch JSON category, or null when that field is absent — never the
+      free-text error), dispatch_error, agent_log_tail (last 40 lines after the
+      canary in literal/base64/hex/reversed form, the endpoint base_url and its
+      host, and any http(s) URL are masked; secrets redacted; 8 KiB cap)
+      and agent_log_path (canary masked; a file path, so URLs are left as-is).
+      An integrity_violation row also adds integrity_violation_details, each
+      {type, path} only — never the canary value.
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
       --price-source <manual|measured> [--price-ref <text>]]   (all four required together;
       without them cost stays source=unknown and usage.usd_per_solved is null)
@@ -4014,18 +4018,40 @@ function rawDispatchError(dispatchJson, spawnMessage) {
   return spawnMessage || '';
 }
 
-function rawDispatchErrorClass(dispatchJson, rawError) {
-  if (dispatchJson && typeof dispatchJson.error_class === 'string' && dispatchJson.error_class !== '') {
-    return dispatchJson.error_class;
+function rawDispatchErrorClass(dispatchJson) {
+  if (dispatchJson && typeof dispatchJson.category === 'string' && dispatchJson.category !== '') {
+    return dispatchJson.category;
   }
-  return rawError;
+  return null;
 }
 
-function agentLogTail(dispatchJson) {
+// Full base_url, then host:port, then host, then any other http(s) URL.
+function maskLedgerUrls(text, baseUrl) {
+  let out = String(text);
+  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+    out = out.split(baseUrl).join('<url>');
+    try {
+      const parsed = new URL(baseUrl);
+      const hostPort = parsed.host;
+      const host = parsed.hostname;
+      if (hostPort && hostPort !== host) out = out.split(hostPort).join('<url>');
+      if (host) out = out.split(host).join('<url>');
+    } catch (_e) { /* full-string mask above still applied */ }
+  }
+  return out.replace(/https?:\/\/\S+/gu, '<url>');
+}
+
+function redactLedgerFreeText(text, canaryToken, baseUrl) {
+  return redactLedgerText(maskLedgerUrls(maskCanaryText(text, canaryToken), baseUrl));
+}
+
+function agentLogTail(dispatchJson, canaryToken, baseUrl) {
   const text = readAgentLog(dispatchJson);
   if (!text) return '';
-  const lines = text.split('\n');
-  return capUtf8Tail(redactLedgerText(lines.slice(-IMPL_LOG_TAIL_LINES).join('\n')), IMPL_LOG_TAIL_BYTES);
+  // Mask the whole log first so a canary or URL cannot straddle the line or byte cap.
+  const masked = redactLedgerFreeText(text, canaryToken, baseUrl);
+  const lines = masked.split('\n');
+  return capUtf8Tail(lines.slice(-IMPL_LOG_TAIL_LINES).join('\n'), IMPL_LOG_TAIL_BYTES);
 }
 
 // Violation strings from buildCollection / repoHygieneViolations. Store type
@@ -4069,16 +4095,18 @@ function integrityViolationDetails(collection, canaryToken) {
   return details;
 }
 
-function recordImplCaseEvidence(ledgerRow, exchange, { outcome, dispatchJson, spawnMessage, collection, canaryToken }) {
+function recordImplCaseEvidence(ledgerRow, exchange, { outcome, dispatchJson, spawnMessage, collection, canaryToken, baseUrl }) {
   if (outcome !== 'pass' && ledgerRow.dispatch_status !== 'committed') {
     const rawError = rawDispatchError(dispatchJson, spawnMessage);
-    ledgerRow.dispatch_error = redactLedgerText(rawError);
-    ledgerRow.dispatch_error_class = redactLedgerText(rawDispatchErrorClass(dispatchJson, rawError));
+    ledgerRow.dispatch_error = redactLedgerFreeText(rawError, canaryToken, baseUrl);
+    const rawClass = rawDispatchErrorClass(dispatchJson);
+    ledgerRow.dispatch_error_class = rawClass == null ? null : redactLedgerFreeText(rawClass, canaryToken, baseUrl);
     const logPath = dispatchJson && typeof dispatchJson.agent_log === 'string' ? dispatchJson.agent_log : '';
     // Path is a locator, not the log body. Mask a canary that landed in the
     // path; do not run the token-run redactor or a long directory name vanishes.
+    // A filesystem path is not URL-masked.
     ledgerRow.agent_log_path = logPath ? maskCanaryText(logPath, canaryToken) : '';
-    ledgerRow.agent_log_tail = agentLogTail(dispatchJson);
+    ledgerRow.agent_log_tail = agentLogTail(dispatchJson, canaryToken, baseUrl);
   }
   if (outcome === 'integrity_violation') {
     ledgerRow.integrity_violation_details = integrityViolationDetails(collection, canaryToken);
@@ -4239,6 +4267,7 @@ function runImplCase(context) {
     ledgerRow.outcome = outcome;
     recordImplCaseEvidence(ledgerRow, rawExchanges[rawExchanges.length - 1], {
       outcome, dispatchJson, spawnMessage, collection, canaryToken,
+      baseUrl: options.endpointBinding ? options.endpointBinding.base_url : '',
     });
     if (usageRecords) {
       // Rail-reported usage only (dispatch-hetero's `usage`, parsed from the harness
@@ -4280,6 +4309,7 @@ function runImplCase(context) {
       spawnMessage: spawnMessage || ledgerRow.error,
       collection,
       canaryToken,
+      baseUrl: options.endpointBinding ? options.endpointBinding.base_url : '',
     });
     ledger.push(ledgerRow);
     return { outcome: 'infra_fail', administration_abort: 'infra_abort' };

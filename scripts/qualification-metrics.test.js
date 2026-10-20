@@ -618,3 +618,30 @@ expectRed('n_pass + n_timeout check removed: the manifest fixture is no longer r
   const r = m.validateMetrics(fx('pass-plus-timeout-exceeds-attempts.invalid.json'));
   assert.equal(r.errors[0] && r.errors[0][0], 'DERIVED_MISMATCH');
 });
+
+// # RED at b4b7ea528: (a) supersedes null and (b) 64 lowercase hex both fail deepEqual: actual [['SCHEMA','$ must match exactly one oneOf branch; matched 0']] expected []; (c) invalid values rejected; (d) omitted accepted.
+const HEX64 = 'a'.repeat(64);
+function legacyWith(supersedes, present) {
+  const doc = fxJson('record-legacy.valid.json');
+  if (present) doc.supersedes = supersedes;
+  return JSON.stringify(doc);
+}
+
+test('schema-1 record: supersedes null is accepted', () => {
+  assert.deepEqual(lib.validateRecord(legacyWith(null, true)).errors, []);
+});
+
+test('schema-1 record: supersedes 64 lowercase hex is accepted', () => {
+  assert.deepEqual(lib.validateRecord(legacyWith(HEX64, true)).errors, []);
+});
+
+test('schema-1 record: invalid supersedes values are rejected', () => {
+  for (const bad of ['g'.repeat(64), 'a'.repeat(63), 'A'.repeat(64), 1]) {
+    const errors = lib.validateRecord(legacyWith(bad, true)).errors;
+    assert.ok(errors.length > 0, `expected reject for ${JSON.stringify(bad)}`);
+  }
+});
+
+test('schema-1 record: omitted supersedes stays accepted', () => {
+  assert.deepEqual(lib.validateRecord(legacyWith(undefined, false)).errors, []);
+});

@@ -708,14 +708,15 @@ function metricsRequireHits(root, own) {
 }
 
 // # RED at 7d6975c9f: whole-tree scan fail — actual ['scripts/lib/qualification-prices.js'] expected [] (1 fail, 44 pass, 1 skipped, exit 1)
+// # RED at 6654de964b0da2b654af5cc3b9ba2d92aef48d72: whole-tree scan fail — actual ['hooks/tests/engine-qualify-seat-derive.test.sh'] expected [] (1 fail, 57 pass, exit 1)
 test('no other script or hook requires the metrics module (whole-tree scan)', () => {
   const own = new Set(['scripts/qualification-metrics.js', 'scripts/lib/qualification-metrics.js', 'scripts/qualification-metrics.test.js',
     // P3 write side: uses only recordIdV1 / strikeId / validateRecord, never admission or ordering.
     'scripts/qualification-send-queue.js', 'scripts/qualification-send-queue.test.js', 'scripts/lib/qualification-record-v2.js',
     'scripts/lib/qualification-trust.js', 'scripts/qualification-trust.test.js',
-    // emit-record validates the emitted record with validateRecord and recordIdV1 (write side only, never admission or ordering), same class as the existing send-queue entries.
+    // emit-record validates the emitted record with validateRecord and recordIdV1 (write side only, never admission or ordering), same class as the existing send-queue entries. The seat-derive hook test uses only validateRecord on emit-record output, same write-side class.
     'scripts/engine-qualify.js', 'platforms/codex/plugin/scripts/engine-qualify.js',
-    'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh',
+    'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh', 'hooks/tests/engine-qualify-seat-derive.test.sh',
     // prices uses only DEFAULT_MAX_AGE_S and describeAges for freshness warnings, never admission or ordering of metrics.
     'scripts/lib/qualification-prices.js']);
   assert.deepEqual(metricsRequireHits(REPO, own), []);

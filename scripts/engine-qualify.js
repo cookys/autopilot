@@ -260,6 +260,33 @@ const HELP = `Usage:
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
     [--seat-file <json>] [--emit-record]
+
+  With --seat-file, identity fields that were not passed as flags are derived
+  before any exam write (a flag always wins):
+    runner-version        scripts/lib/runner-binary.js (fail closed; no "unknown")
+    family                familyOfEngine on the model id; "unknown" exits 2 and
+                          tells the caller to pass --family
+    semantic-fingerprint  the implementer constant EXPECTED_IMPL_CORPUS_HASH
+    harness-version, containment-fingerprint, task-class, domain, language, tool
+                          references/qualification-headless-pins.json
+  Headless derivation is only pinned for the implementer role. Any other role
+  that still needs a derived field exits 2 and tells the caller to pass the
+  flags explicitly. A missing, malformed, or unknown-key pins file exits 2 and
+  names the field. Seat file missing or schema-invalid stays exit 4.
+
+  scripts/engine-qualify.sh seat-preview --seat-file <f> [--json]
+    [the same identity flags the real run accepts]
+  Runs the same parse and derivation, prints one JSON document on stdout, and
+  exits without sitting an exam and without writing anything. Output is JSON
+  by default; --json is accepted and identical.
+  Schema: an object with role, corpus_version, argv, and sources.
+  argv and sources use these keys: engine, model, model-version, runner,
+  runner-version, family, harness-version, effort, prompt-config-hash,
+  semantic-fingerprint, containment-fingerprint, task-class, domain, language,
+  tool. task-class, domain, language, and tool are arrays.
+  Each sources value is one of "flag", "seat", "derived", "pinned".
+  seat-preview exit codes: 0 success, 2 derivation or precondition failure,
+  4 seat file missing or schema-invalid.
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
     [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
@@ -466,15 +493,45 @@ function positiveInteger(value, label, minimum = 1) {
   return parsed;
 }
 
+function seatPreviewDocument(options) {
+  const sources = options.headlessSources || {};
+  return {
+    role: options.role,
+    corpus_version: options.corpusVersion,
+    argv: {
+      engine: options.engine,
+      model: options.model,
+      'model-version': options.modelVersion,
+      runner: options.runner,
+      'runner-version': options.runnerVersion,
+      family: options.family,
+      'harness-version': options.harnessVersion,
+      effort: options.effort,
+      'prompt-config-hash': options.promptConfigHash,
+      'semantic-fingerprint': options.semanticFingerprint,
+      'containment-fingerprint': options.containmentFingerprint,
+      'task-class': options.taskClasses,
+      domain: options.domains,
+      language: options.languages,
+      tool: options.tools,
+    },
+    sources,
+  };
+}
+
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss', 'foreman']
+  // seat-preview is its own subcommand. Kept out of the corpus-version dispatch.
+  const seatPreview = argv[0] === 'seat-preview';
+  if (!seatPreview && !['reviewer', 'owner', 'brain', 'verification_author', 'implementer', 'consult', 'discuss', 'foreman']
     .includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
+  const explicit = new Set();
   const options = {
-    role: argv[0],
+    role: seatPreview ? null : argv[0],
+    seatPreview,
     trials: 2,
     expiresDays: 30,
     store: null,
@@ -556,6 +613,11 @@ function parseArgs(argv) {
       options.execute = true;
       continue;
     }
+    if (arg === '--json') {
+      if (!options.seatPreview) usage(2, 'unknown argument: --json');
+      options.json = true;
+      continue;
+    }
     if (['-h', '--help'].includes(arg)) usage(0);
     const scalarName = scalar.get(arg);
     const repeatedName = repeated.get(arg);
@@ -564,10 +626,14 @@ function parseArgs(argv) {
     const value = argv[++index];
     if (scalarName) options[scalarName] = value;
     else options[repeatedName].push(value);
+    explicit.add(scalarName || repeatedName);
   }
+  if (options.seatPreview && !options.seatFile) usage(2, '--seat-file is required');
   if (options.seatFile) {
     const seat = loadSeatFile(options.seatFile);
-    if (seat.role !== options.role) {
+    if (options.seatPreview) {
+      options.role = seat.role;
+    } else if (seat.role !== options.role) {
       usage(2, `--seat-file role ${seat.role} disagrees with subcommand ${options.role}`);
     }
     const fromSeat = [
@@ -585,15 +651,24 @@ function parseArgs(argv) {
       options[key] = value;
     }
     options.corpusVersion = seat.corpus_version;
+    try {
+      const { deriveHeadlessSeat } = require('./lib/headless-seat-derive');
+      deriveHeadlessSeat(options, explicit, {
+        repoRoot: REPO_ROOT,
+        semanticFingerprint: EXPECTED_IMPL_CORPUS_HASH,
+      });
+    } catch (error) {
+      usage(2, error.reason || error.message);
+    }
   }
   // Foreman --plan is a precondition dry-run: asset pins, conformance hash,
   // and the case list. It does not open a panel and does not sit the model.
-  if (options.role === 'foreman' && options.plan) {
+  if (!options.seatPreview && options.role === 'foreman' && options.plan) {
     return options;
   }
   // A salted foreman sitting is the inadmissible puppet administration from
   // spec §9.6. It does not open a panel and does not require an engine identity.
-  if (options.role === 'foreman' && process.env.AUTOPILOT_QUALIFY_SEED) {
+  if (!options.seatPreview && options.role === 'foreman' && process.env.AUTOPILOT_QUALIFY_SEED) {
     options.test_mode = true;
     return options;
   }
@@ -642,6 +717,7 @@ function parseArgs(argv) {
     options.containmentFingerprint,
     '--containment-fingerprint',
   );
+  if (options.seatPreview) return options;
   options.panelReadOnlyBinds = options.panelReadOnlyBinds.map(
     (value) => parseReadOnlyBind(value),
   );
@@ -6124,6 +6200,10 @@ function main() {
     return;
   }
   const options = parseArgs(argv);
+  if (options.seatPreview) {
+    process.stdout.write(`${JSON.stringify(seatPreviewDocument(options))}\n`);
+    process.exit(0);
+  }
   const headless = Boolean(options.seatFile || options.emitRecord);
   if (headless) {
     if (!options.store) usage(2, '--store is required with --seat-file or --emit-record');

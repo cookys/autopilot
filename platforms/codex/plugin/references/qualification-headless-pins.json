@@ -1,0 +1,13 @@
+{
+  "note": "harness_version, containment_fingerprint, and the scope fields task_class, domain, language, and tool are pinned configuration. runner-version, family, and the semantic fingerprint are derived at run time (scripts/lib/runner-binary.js, familyOfEngine on the model id, and EXPECTED_IMPL_CORPUS_HASH in scripts/engine-qualify.js). prompt_config_hash comes from the seat file. Prompt and semantic hashes are not stored in this file.",
+  "roles": {
+    "implementer": {
+      "task_class": ["bounded_implementation"],
+      "domain": ["repository"],
+      "language": ["en"],
+      "tool": ["git_commit"],
+      "harness_version": "dispatch-hetero:7481ead3",
+      "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd"
+    }
+  }
+}

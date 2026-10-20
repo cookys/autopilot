@@ -581,3 +581,54 @@ test('BL-0213 real tree: dev-setup, codex review-resolution mirror, and a docs p
   const plan = run('docs/plans/2026-10-17-review-only-campaign-fix-increment.md');
   assert.ok(plan.suites.length < 60, `plan selected ${plan.suites.length}`);
 });
+
+// # RED at 78a293f6a: generic-stem "index" still selected word-index.test.sh; b8bdd61f3 file list selected 461.
+test('BL-0213 a suite that shells out to a uniquely named extensionless script is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/only-once.sh': 'echo once\n',
+    'hooks/tests/only-once.test.sh': '#!/usr/bin/env bash\nbash "only-once"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'scripts/only-once.sh': 'echo twice\n' }));
+    assert.ok(out.suites.includes('hooks/tests/only-once.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a suite that requires a same-stem file with a path is still selected', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/a/index.js': 'module.exports = 1;\n',
+    'src/b/index.js': 'module.exports = 2;\n',
+    'hooks/tests/path-index.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/src/a/index"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/a/index.js': 'module.exports = 3;\n' }));
+    assert.ok(out.suites.includes('hooks/tests/path-index.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 a generic stem mention alone does not select a suite', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'src/a/index.js': 'module.exports = 1;\n',
+    'src/b/index.js': 'module.exports = 2;\n',
+    'hooks/tests/word-index.test.sh': '#!/usr/bin/env bash\necho "index"\n',
+  });
+  try {
+    const out = r.select(r.change({ 'src/a/index.js': 'module.exports = 3;\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/word-index.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('BL-0213 real tree: b8bdd61f3 and 3765302f3 file lists stay under the measured fan-in', () => {
+  // Honest counts on this tree are 228 and 247. The remainder is require/source plus an explicit
+  // path (decisions-sidecar.js reads src/engine/autopilot-engine.js; check-plan-graduation.js names
+  // docs/scripts-inventory.md). Margin above those counts, still far below 451 and 286.
+  const names = (rev) => execFileSync('git', ['diff', '--name-only', `${rev}^1`, rev], { cwd: REAL_ROOT, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean);
+  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  const b8 = run(names('b8bdd61f3'));
+  assert.ok(b8.suites.length < 280, `b8bdd61f3 selected ${b8.suites.length}`);
+  const seat = run(names('3765302f3'));
+  assert.ok(seat.suites.length < 280, `3765302f3 selected ${seat.suites.length}`);
+});

@@ -64,6 +64,9 @@
 //   8. For a prose seed only, the category directory names plans, evidence, backlog, projects and adr
 //      are skipped like GENERIC_DIRS, including a glob whose directory has no more specific segment;
 //      a deeper specific directory name and a basename mention stay.
+//   9. A weak bare-name edge to a JavaScript file is not created when that stem is shared by two or
+//      more code files and the mention has no slash (a backtick or quote around index, common, codex).
+//      A stem that names one code file, a strong require or source, and any slash or name.ext mention stay.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync } = require('child_process');
@@ -196,15 +199,15 @@ const RE_REQ = /(?:require\(\s*|import\s+[^'"\n]*?from\s+|import\(\s*|import\s+)
 const RE_SRC = /(?:^|[;&|(]|\bthen\b|\bdo\b)[ \t]*(?:source|\.)[ \t]+["']?([^\s"';)]+)/gm;
 
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
+  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
-  for (const m of text.matchAll(RE_BARE)) bares.add(m[1]);
+  for (const m of text.matchAll(RE_BARE)) (m[0].startsWith('/') ? slashBares : bares).add(m[1]);
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
-  return { exts, bares, globs, strong, segs, paths };
+  return { exts, bares, slashBares, globs, strong, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
@@ -223,14 +226,23 @@ function buildGraph(tree) {
     const t = tree.read(f);
     if (t != null) refs.set(f, mentions(stripComments(t)));
   }
-  const byExt = new Map(), byBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
+  const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
     for (const t of r.exts) add(byExt, t, f);
     for (const t of r.bares) add(byBare, t, f);
+    for (const t of r.slashBares) add(bySlashBare, t, f);
     for (const t of r.segs) add(bySeg, t, f);
     for (const t of r.paths) add(byPath, t, f);
   }
+  // A stem that names two or more code files cannot be pinned to one JavaScript file by a bare word.
+  const stemCount = new Map();
+  for (const f of tree.files) {
+    if (!isCode(f)) continue;
+    const stem = base(f).replace(/\.[^.]+$/, '');
+    stemCount.set(stem, (stemCount.get(stem) || 0) + 1);
+  }
+  const genericStems = new Set([...stemCount].filter(([, n]) => n >= 2).map(([s]) => s));
   const globRefs = []; // {file, dir, ext}
   for (const [f, r] of refs) {
     for (const g of r.globs) {
@@ -239,7 +251,7 @@ function buildGraph(tree) {
       globRefs.push({ file: f, ...g });
     }
   }
-  return { refs, byExt, byBare, bySeg, byPath, globRefs };
+  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
@@ -257,7 +269,15 @@ function referrersOf(graph, p) {
   for (const f of graph.byExt.get(b) || []) out.set(f, kind(f));
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
-    for (const f of graph.byBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
+    const jsTarget = extOf(p) === 'js' || extOf(p) === 'mjs' || extOf(p) === 'cjs';
+    const generic = jsTarget && graph.genericStems.has(bare);
+    for (const f of graph.byBare.get(bare) || []) {
+      if (out.has(f)) continue;
+      const k = kind(f);
+      if (generic && k !== 'strong') continue;
+      out.set(f, k);
+    }
+    for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
   }
   if (!isCode(p)) {
     // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it

@@ -5830,6 +5830,10 @@ function verifyPinnedForemanEvaluationAssets(overrides = {}) {
   let pins;
   try {
     pins = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+    // null, arrays, and JSON primitives parse, then throw or mis-compare below.
+    if (pins === null || typeof pins !== 'object' || Array.isArray(pins)) {
+      throw new Error('not a plain object');
+    }
   } catch (error) {
     process.stderr.write(
       `engine-qualify: foreman pin file unreadable or invalid JSON: ${pinPath}\n`,

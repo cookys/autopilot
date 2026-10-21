@@ -652,6 +652,7 @@ Most operators never need this; `end`, `return` and `repair` are the normal exit
 | Symptom | Likely cause and fix |
 |---|---|
 | `campaign_contract_unreadable` right away | Relative paths. They resolve against `--cwd`. Use absolute paths. |
+| A controller Work Order attach or recovery is refused with `controller_worktree_unique` ("requires adoption") | The controller worktree registered in the Work Order has a committed change whose tree differs from its base, so the range is externally produced from the controller's point of view. Adopt it with `node bin/autopilot.js engine review-candidate --campaign-contract <file> --campaign-seal <file> --spec-file <file> ...`. The input is a sealed adoption contract: write the contract with an adoption section whose `head_sha` is the worktree tip and whose `branch` is that worktree's branch (section 2), then seal it with `node scripts/implementation-campaign-check.js seal` as in section 3. |
 | Seal says `repo_identity: does not match canonical repository identity` | The identity must be `git-common-dir:` plus the real path of the git common directory (not the worktree path, not a symlink). Use the script in section 3. |
 | Seal says `--mission-mode X does not match authoritative project mode Y` | Pass the repository's actual governance mode; with no governance file it is `off`. |
 | Seal says `adoption: max_repair_generations must be 0` or `... must be absent` | Remove `strict_dispatch`, `unit_class`, `mission_runtime`; set `max_repair_generations` to 0. |

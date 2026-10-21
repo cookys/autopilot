@@ -47,7 +47,7 @@ const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
 const DEFAULTS = { mode: 'remind', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400 };
-const LANE_RE = /^Lane:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]*$/;
+const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
 const ACK_MIN_REASON = 8;
@@ -481,7 +481,8 @@ function run(payload) {
       + `Counts: lane dispatches ${c.laneDispatches}, lane turns ${c.laneTurns}, root turns in last 60 min ${c.hourTurns}. `
       + `${laneNote}${ackNote}To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief `
       + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
-      + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off.`,
+      + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off.`
+      + headerDenialSuffix(brief, input.model, { engineBy: 'other', laneBy: 'self', includeLane: laneMissing }),
   });
 }
 

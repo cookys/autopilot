@@ -20,6 +20,7 @@ const BASE_AUTOPILOT_CONTEXT = `You have **Autopilot** lifecycle skills. Before 
 If uncertain, invoke the skill — it will guide you. Autopilot sets the rules and runs them standalone.`;
 
 const path = require('path');
+const { sessionStartBriefHeaderLine } = require('../../../hooks/lib/brief-header-template.js');
 const OPEN_DECISION_JS = path.join(__dirname, '..', '..', '..', 'scripts', 'open-decision.js');
 function shellQuotePath(p) {
   if (/^[A-Za-z0-9_/.:@%+=,-]+$/.test(p)) return p;
@@ -65,7 +66,8 @@ function buildBaseContext(cwd = process.cwd()) {
 Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --question ... and write the card id (d- + 8 hex) in the reply.
 When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.
 To show the owner a file or a diff, use the show tool; do not paste the content.
-Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.${openDecisionCardLine(cwd)}`;
+Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.
+${sessionStartBriefHeaderLine()}${openDecisionCardLine(cwd)}`;
 }
 
 // Appended to a trimmed recovery body. Counted inside the room left for that body.

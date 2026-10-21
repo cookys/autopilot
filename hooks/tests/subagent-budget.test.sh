@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 48aa19a3fdc8eb21ab3a1036dbc7a32a6a61e0ef: 198 passed, 2 failed — Engine-without-Lane deny had no three-line template and no "This brief is still missing:".
 # Test for hooks/subagent-budget.js - per-lane relay and turn ceilings on Agent dispatch (plan
 # docs/plans/2026-10-18-subagent-budget-gate.md, KR1-KR7). Everything lives under TEST_TMP: HOME,
 # the live-state dir (AUTOPILOT_LIVE_DIR from lib.sh), the panel store and the decision ledger
@@ -374,6 +375,17 @@ fire lr1 'Engine: sonnet\ngo' "" NONE
 assert_contains "$__RUN_STDOUT" "$LR_DENY" "LR no transcript_path: Engine: without Lane: denied"
 fire lr1 'Engine: sonnet\nLane: x\ngo' "" NONE; expect_silent "LR no transcript_path with Lane: stays fail-open"
 fire lr1 'Task: x\ngo' "" NONE; expect_silent "LR no transcript_path non-Engine stays fail-open"
+
+# hdrhint: Engine present, Lane absent (autopilot dispatch) lists Lane and the three-line template.
+HDR_TMPL='Engine: <model>\nRole: <role>\nLane: <slug>'
+fire lr1 'Engine: sonnet\nRole: worker\ngo'
+assert_contains "$__RUN_STDOUT" "$LR_DENY" "hdrhint engine-without-lane denied"
+assert_contains "$__RUN_STDOUT" "$HDR_TMPL" "hdrhint engine-without-lane has the template"
+assert_contains "$__RUN_STDOUT" "This brief is still missing:" "hdrhint engine-without-lane lists what is missing"
+assert_contains "$__RUN_STDOUT" "Lane:" "hdrhint engine-without-lane lists Lane"
+# Negative: all three lines stay allowed. Role alone is not a deny.
+expect_allow lr1 'Engine: sonnet\nRole: worker\nLane: hdrhint-ok\ngo' "" "hdrhint complete brief stays allowed"
+expect_allow lr1 'Engine: sonnet\nLane: hdrhint-ok\ngo' "" "hdrhint missing only Role is not denied"
 
 # ---- KR7: latency, 200 transcripts x 300 turns, second call warm ---------------------------------------------------------
 mk s12 "$(node -e 'const a=[];for(let i=0;i<200;i++)a.push({id:"p"+i,brief:["Lane: lat"+i],turns:300,ageMs:4800000});console.log(JSON.stringify(a))')"

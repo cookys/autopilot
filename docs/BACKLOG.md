@@ -1435,11 +1435,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-22
 - **Origin**: self
-- **Problem**: 剛出貨的指引文字發現了兩處用詞缺陷。
+- **Problem**: 剛出貨的決策卡指引發現兩處用詞缺陷：一處把表格切開，一處標題與內文互相矛盾。
 - **Impact**: 這段文字在與新評測一起修訂之前，會一直是錯的或有誤導。
 - **Trigger**: the next revision of level-front-door.md or multi-agent-portability.md, which needs its own eval row
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: dship review 2026-10-22
 - **Pointer**: docs/backlog/decision-card-text-defects-frozen-by-eval.md
-- **Context**: Both defects (split Sugar table; heading versus Stop-block body) stay frozen until a new pack, arm and eval.
+- **Context**: (a) level-front-door.md: card paragraph splits the Sugar table between /l3 and /l4 rows. (b) multi-agent-portability.md: heading says no conflict, body says owner-question-guard returns a Stop block. Any edit needs a new pack, arm and eval.

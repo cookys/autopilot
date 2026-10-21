@@ -910,7 +910,10 @@ setup_grok() {
   echo "see docs/installation.md § Grok Build and src/harness/capabilities/grok.json."
 }
 
-# Report-only. Never install. A non-zero --check is a WARN, not a failure.
+# Report-only. Never install. status() counts only WARN and FAIL, so INFO does not
+# raise WARNINGS. Exit 0: every line OK. Exit 3 (no drift, at least one target not
+# installed): INFO, except a line that begins with "hint:" which stays WARN.
+# Any other non-zero exit: WARN.
 report_token_discipline() {
   if ! have_cmd node; then
     status WARN "tokens" "node not found; token-discipline blocks not checked"
@@ -918,17 +921,22 @@ report_token_discipline() {
   fi
   local out td_status=0 line level
   out="$(node "$REPO_DIR/scripts/install-token-discipline.js" --check 2>&1)" || td_status=$?
-  level="OK"
-  if [[ "$td_status" -ne 0 ]]; then
-    level="WARN"
-  fi
+  token_level() {
+    if [[ "$td_status" -eq 0 ]]; then
+      printf 'OK'
+    elif [[ "$td_status" -eq 3 ]]; then
+      if [[ "$1" == hint:* ]]; then printf 'WARN'; else printf 'INFO'; fi
+    else
+      printf 'WARN'
+    fi
+  }
   if [[ -z "$out" ]]; then
-    status "$level" "tokens" "token-discipline --check exit $td_status"
+    status "$(token_level "")" "tokens" "token-discipline --check exit $td_status"
     return 0
   fi
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    status "$level" "tokens" "$line"
+    status "$(token_level "$line")" "tokens" "$line"
   done <<< "$out"
 }
 

@@ -349,6 +349,8 @@ read -r m_small b_small c_small <<< "$(measure "$LIB" 1500 full)"
 assert_eq "$m_small" "1500" "budget: a small note is carried whole"
 assert_eq "$c_small" "nocut" "budget: a small note is not marked cut"
 # negative control: the old fixed 2200 cap -> the budget assertions must go red
+# Mutants are required from TEST_TMP, so the shared buffer module must sit beside them.
+cp "$REPO_ROOT/scripts/lib/autocompact-window.js" "$TEST_TMP/autocompact-window.js"
 sed -e 's/model: 4000 }/model: 2200 }/' -e 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/' "$LIB" > "$TEST_TMP/mut-fixed.js"
 read -r m_mut _ _ <<< "$(measure "$TEST_TMP/mut-fixed.js" 12000 full)"
 if [ "$m_mut" -lt 3500 ]; then assert_eq 1 1 "negative control: fixed 2200 cap carries only $m_mut bytes (budget test goes red)"; else assert_eq "$m_mut" "<3500" "negative control: fixed cap not red"; fi

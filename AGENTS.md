@@ -88,7 +88,7 @@ Codex and OpenCode do not receive the SessionStart injection, so they must read 
 | What to work on next, /next, highest priority | `autopilot:next` |
 | Compare two implementations, feature parity check | `autopilot:audit` |
 
-**Owner decision cards.** Open with `node scripts/open-decision.js open --question <q>` (optional `--background`, repeatable `--option <label>::<description>`, `--recommendation`, `--why`, `--blocks`, `--not-authorized`, `--source`, `--root-run-id`). Close with `node scripts/open-decision.js close --id <id>`. List with `node scripts/open-decision.js show`. Write the card id in the reply; when the owner answers with a line starting `[待決回覆]`, act on the answer.
+**Owner decision cards.** Open with `node scripts/open-decision.js open --question <q>` (optional `--background`, repeatable `--option <label>::<description>`, `--recommendation`, `--why`, `--blocks`, `--not-authorized`, `--source`, `--root-run-id`). Close with `node scripts/open-decision.js close --id <id>`. List with `node scripts/open-decision.js show`. Write the card id in the reply; when the owner answers with a message whose first line is `[待決回覆]`, act on the answer.
 
 **Dispatch rails.** Selection table: [references/hetero-dispatch.md](references/hetero-dispatch.md).
 

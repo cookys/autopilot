@@ -9,7 +9,7 @@ DOC="$REPO_ROOT/docs/token-discipline.md"
 LINE="Cross-harness token discipline (advisory only): read ${DOC}."
 SHOW='To show the owner a file or a diff, use the show tool; do not paste the content.'
 OPEN="Anything that needs the owner's decision or answer: open a card with node ${REPO_ROOT}/scripts/open-decision.js open --question ... and write the card id (d- + 8 hex) in the reply."
-PENDING='When the owner answers in the live panel, a message starting with [待決回覆] arrives: act on the answers; the cards close automatically.'
+PENDING='When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.'
 
 run_hook session-start.js
 assert_exit_code "$__RUN_EXIT" 0 "session-start exits 0"

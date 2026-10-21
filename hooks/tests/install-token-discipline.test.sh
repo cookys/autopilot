@@ -113,12 +113,12 @@ assert_eq "$EC" "0" "uninstall of block-only files exits 0"
 assert_file_absent "$CODEX_D/AGENTS.md" "uninstall deletes block-only Codex file"
 assert_file_absent "$HOME_D/.gemini/GEMINI.md" "uninstall deletes block-only agy file"
 
-# --check: 0 consistent, 1 after hand edit, 1 when not installed
+# --check: 0 consistent, 1 after hand edit, 3 when not installed
 BASE="$(new_home)"
 HOME_D="$BASE/home"
 CODEX_D="$BASE/codex"
 OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
-assert_eq "$EC" "1" "--check exits 1 when not installed"
+assert_eq "$EC" "3" "--check exits 3 when not installed"
 run_it "$HOME_D" "$CODEX_D" install >/dev/null
 OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
 assert_eq "$EC" "0" "--check exits 0 when consistent"

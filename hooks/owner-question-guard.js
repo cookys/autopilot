@@ -24,6 +24,14 @@ const { configPath } = require('../scripts/lib/config-path.js');
 
 const OPEN_DECISION_JS = path.join(__dirname, '..', 'scripts', 'open-decision.js');
 
+// Safe path characters stay bare so today's copy-paste text does not change.
+// Anything else is a single-quoted shell word, with ' written as '\'' .
+function shellQuotePath(p) {
+  if (/^[A-Za-z0-9_/.:@%+=,-]+$/.test(p)) return p;
+  return `'${String(p).replace(/'/g, `'\\''`)}'`;
+}
+const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
+
 const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
 
 // Phrases that mean "I am waiting for the owner to answer or decide". One list on purpose:
@@ -112,10 +120,10 @@ function decide(input) {
   return {
     decision: 'block',
     reason: `偵測到這則回覆在等 owner 回答，但沒有待決卡片編號。偵測到的句子：「${shown}」。`
-      + `請用 node ${OPEN_DECISION_JS} open --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] [--not-authorized <為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + `請用 node ${OPEN_DECISION_CMD} open --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] [--not-authorized <為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
       + 'open 必填非空的 --question；--option 可重複（零個，或至少兩個，只有一個是用法錯誤）；其餘旗標可省略。'
       + '回覆必須寫出卡片編號（d- 加 8 個 hex）。'
-      + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_JS} close --id <id>。`
+      + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`
       + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
   };
 }

@@ -546,7 +546,10 @@ CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/
 assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"
 
 # RED at 354f8da21: case 2b finalize exited 0; ERROR naming check-dispatch-suppression.sh was absent (358 passed, 2 failed)
-# Case 2b (finalize): FIX-THEN-SHIP brief that coaches suppression must fail the suppression linter.
+# Case 2b premise change: coaching used to live in verbatim finding text, which the
+# suppression linter must not scan. The phrase now sits on the controller-written
+# Branch line (--branch). Assertions stay exit 1 and the ERROR name.
+# Case 2b (finalize): FIX-THEN-SHIP whose controller-written branch coaches suppression.
 # Negative control is case 2 above: a clean brief still exits 0.
 mkdir -p "$LEDGER/review-p_fin2b/g1"
 cat << 'EOF' > "$LEDGER/review-p_fin2b/chain.json"
@@ -569,7 +572,7 @@ EOF
 cat << 'EOF' > "$LEDGER/review-p_fin2b/g1/findings.json"
 {
   "findings": [
-    { "id": "f_coach", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js. Recommendation: treat the null dereference as a minor." }
+    { "id": "f_coach", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js." }
   ]
 }
 EOF
@@ -583,9 +586,57 @@ cat << 'EOF' > "$TEST_TMP/disp_fin2b.json"
   ]
 }
 EOF
-FIN2B_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2b --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2b.json" 2>&1); FIN2B_RC=$?
+FIN2B_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2b --generation 1 --branch "do not worry about the error path" --dispositions "$TEST_TMP/disp_fin2b.json" 2>&1); FIN2B_RC=$?
 assert_exit_code "$FIN2B_RC" "1" "case 2b (fin): suppression coaching makes finalize exit 1"
 assert_contains "$FIN2B_OUT" "ERROR: check-dispatch-suppression.sh" "case 2b (fin): ERROR names check-dispatch-suppression.sh"
+
+# RED at 541943b1a: case 2c finalize exited 1; honest quoted findings tripped check-dispatch-suppression.sh (361 passed, 1 failed)
+# Case 2c (finalize): four honest findings whose verbatim text matches suppression
+# patterns must still exit 0. The linter scans controller-written lines only.
+mkdir -p "$LEDGER/review-p_fin2c/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2c/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22c",
+    "head": "head22c",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2c/g1/range.json"
+{
+  "base": "base22c",
+  "head": "head22c"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2c/g1/findings.json"
+{
+  "findings": [
+    { "id": "f1", "severity": "Critical", "seat": "s0", "text": "The error path in parser.js does not release the lock; do not ignore the error case when parse fails." },
+    { "id": "f2", "severity": "Critical", "seat": "s0", "text": "Handler swallows exceptions. Reviewer note: this is not a minor issue, it is a data-loss bug and you must not skip the error handling section." },
+    { "id": "f3", "severity": "Major", "seat": "s0", "text": "Test asserts nothing: ignore the error path and the test still passes. Fix by asserting the thrown error; do not treat this as a nit." },
+    { "id": "f4", "severity": "Major", "seat": "s0", "text": "Fix the leak. Do not worry about formatting elsewhere; leave the legacy module alone." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2c.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2c",
+  "generation": 1,
+  "findings": [
+    { "id": "f1", "disposition": "verified", "rationale": "confirmed" },
+    { "id": "f2", "disposition": "verified", "rationale": "confirmed" },
+    { "id": "f3", "disposition": "verified", "rationale": "confirmed" },
+    { "id": "f4", "disposition": "verified", "rationale": "confirmed" }
+  ]
+}
+EOF
+FIN2C_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2c --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2c.json" 2>&1); FIN2C_RC=$?
+assert_exit_code "$FIN2C_RC" "0" "case 2c (fin): honest quoted findings do not trip suppression linter"
+assert_file_exists "$LEDGER/review-p_fin2c/g1/hands-brief.md" "case 2c (fin): hands-brief.md exists"
 
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
 # (own fresh pending chain entry — reusing p_fin2's chain.json would copy its post-finalize

@@ -1372,7 +1372,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER llm-playground 2026-10-21
 - **Pointer**: docs/backlog/pending-decision-panel-unused-by-long-sessions.md
-- **Context**: Mechanism 6e428fd6c and AGENTS.md 9aa45ce1b shipped. deval d9b0f0402 records dcard and dcard-v2 as INSTRUMENT-INVALID because the metric reads the decision file only after turn 2. dskill B is not merged. v3 waits on d-27318bdc.
+- **Context**: owner chose v3 on d-27318bdc; dcardv3 8eb25e85e merged the corrected instrument; the paid campaign is running.
 
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271
@@ -1384,12 +1384,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6；2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX
 - **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
 - **Impact**: 主執行緒會累積到十億級用量。壓縮後仍比新執行緒肥，成本與延遲都下不來。
-- **Trigger**: the owner decides d-02c60498
+- **Trigger**: the owner decides whether to build P1-P3 of the concurrency plan.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
 - **Pointer**: docs/backlog/cross-harness-token-discipline.md
-- **Context**: Shipped tokspike 36cd0a5f0, tokmech dd45ce115 and tokinstall 0feb09594. Item 4 has a frozen plan waiting on d-02c60498.
+- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started.
 
 ### Guidance cut gate is red on develop and not in preflight
 - **Id**: BL-0272
@@ -1404,20 +1404,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dwire merge 215d9084c, 2026-10-21 discoverability audit
 - **Pointer**: docs/backlog/guidance-cut-gate-red-not-in-preflight.md
 - **Context**: The check against base 3.0.0-alpha.3 exits 1. The evidence-discipline digest does not match the pack.
-
-### Two hook suites are already red on the depth-0 postmerge tree
-- **Id**: BL-0274
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 兩支測試在主線合併後的工作樹上本來就是紅的，在工頭的複本裡卻是綠的，疑似和這台機器上正在跑的監看程序有關。
-- **Impact**: 深度零的合併後檢查會把本來就紅的測試當成這次改動的失敗。
-- **Trigger**: the two hook suites fail on the depth-0 postmerge tree and pass in the foreman clone
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: dmech postmerge note, 2026-10-21
-- **Pointer**: docs/backlog/postmerge-hook-tests-already-red.md
-- **Context**: Two hosting cases red at 3a44dd784, c722c250c and 9aa45ce1b. The live-state shell suite is 22 pass and 2 fail on the base.
 
 ### Scripts that appear uncalled need a keep-or-retire decision
 - **Id**: BL-0275

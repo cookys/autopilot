@@ -44,6 +44,10 @@
 #        require()d from the assembled scratch plugin, so its whole require graph must resolve; any failure is infra_fail/plugin_script_unresolvable
 #        and the runner is never started. The g67 rows set it from the prereg; default off = no check)
 #      ONOFF_PACKS_DIR (override packs dir; tests) · ONOFF_STATE_BASE (tmpfs base for per-cell state; none writable = exit 2) · ONOFF_SHM_DIR (default /dev/shm)
+# Optional second turn (only when tasks/<id>/turn2.sh is executable; every other task emits the
+# same row as before). turn2.sh runs in the cell repo and prints the follow-up prompt, or nothing
+# (row.turn2 = skipped_no_card, b_ markers false). Otherwise the same claude -p flags resume the
+# session id from the first system/init event. Stub: ONOFF_TURN=1 then ONOFF_TURN=2 <prompt-file>.
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
 
@@ -291,31 +295,97 @@ if [ -n "${ONOFF_REQUIRE_PLUGIN_SCRIPTS:-}" ]; then
   [ -z "$PREFLIGHT_FAIL" ] || echo "preflight: $PREFLIGHT_FAIL" >> "$OUT_DIR/preflight.log"
 fi
 
+# One model turn. $1 prompt file, $2 transcript path, $3 "1" or "2", $4 resume session id (turn 2, cc only).
+run_model_turn() {
+  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}"
+  if [ "$RUNNER" = "cc" ]; then
+    (
+      cd "$TEMP_REPO"
+      export HOME="$SCRATCH_HOME"
+      export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
+      if [ -n "$resume" ]; then
+        timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --resume "$resume" \
+          --plugin-dir "$SCRATCH_PLUGIN" \
+          --setting-sources project --strict-mcp-config --dangerously-skip-permissions \
+          --output-format stream-json --verbose < "$prompt"
+      else
+        timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" \
+          --plugin-dir "$SCRATCH_PLUGIN" \
+          --setting-sources project --strict-mcp-config --dangerously-skip-permissions \
+          --output-format stream-json --verbose < "$prompt"
+      fi
+    ) > "$dest" 2>> "$RAW_ERR"
+  else
+    (
+      cd "$TEMP_REPO"
+      export HOME="$SCRATCH_HOME"
+      export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
+      export ONOFF_ARM="$ARM" ONOFF_TASK="$TASK_ID" ONOFF_PLUGIN_DIR="$SCRATCH_PLUGIN"
+      export ONOFF_TURN="$turn_n"
+      timeout "$TIMEOUT_LIMIT" "$ONOFF_STUB_BIN" "$prompt"
+    ) > "$dest" 2>> "$RAW_ERR"
+  fi
+}
+
 set +e
+RESUME_UNAVAILABLE=0
+TURN2_STATE=""
+: > "$RAW_ERR"
 if [ -n "$PREFLIGHT_FAIL" ]; then
-  : > "$TRANSCRIPT"; : > "$RAW_ERR"; RUN_EXIT=0   # the agent is never started
+  : > "$TRANSCRIPT"; RUN_EXIT=0   # the agent is never started
 elif [ "$RUNNER" = "cc" ]; then
-  (
-    cd "$TEMP_REPO"
-    export HOME="$SCRATCH_HOME"
-    export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
-    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" \
-      --plugin-dir "$SCRATCH_PLUGIN" \
-      --setting-sources project --strict-mcp-config --dangerously-skip-permissions \
-      --output-format stream-json --verbose < "$PROMPT_FILE"
-  ) > "$TRANSCRIPT" 2> "$RAW_ERR"
+  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 ""
   RUN_EXIT=$?
 else
   [ -n "${ONOFF_STUB_BIN:-}" ] || { echo "ERROR: ONOFF_STUB_BIN not set for stub runner" >&2; exit 2; }
-  (
-    cd "$TEMP_REPO"
-    # stub runs under the SAME isolation exports as cc, so the tests exercise them
-    export HOME="$SCRATCH_HOME"
-    export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
-    export ONOFF_ARM="$ARM" ONOFF_TASK="$TASK_ID" ONOFF_PLUGIN_DIR="$SCRATCH_PLUGIN"
-    timeout "$TIMEOUT_LIMIT" "$ONOFF_STUB_BIN" "$PROMPT_FILE"
-  ) > "$TRANSCRIPT" 2> "$RAW_ERR"
+  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 ""
   RUN_EXIT=$?
+fi
+
+# Second turn is opt-in: an executable turn2.sh. Tasks without one keep the single transcript.
+if [ -z "$PREFLIGHT_FAIL" ] && [ -x "$TASK_DIR/turn2.sh" ]; then
+  TURN1_FILE="$OUT_DIR/transcript.turn1.jsonl"
+  TURN2_FILE="$OUT_DIR/transcript.turn2.jsonl"
+  cp "$TRANSCRIPT" "$TURN1_FILE"
+  : > "$TURN2_FILE"
+  TURN2_PROMPT_BODY=$(cd "$TEMP_REPO" && bash "$TASK_DIR/turn2.sh" 2>> "$RAW_ERR")
+  TURN2_SH_EXIT=$?
+  if [ "$TURN2_SH_EXIT" -ne 0 ]; then
+    RUN_EXIT=$TURN2_SH_EXIT
+    TURN2_STATE=ran
+  elif [ -z "$(printf '%s' "$TURN2_PROMPT_BODY" | tr -d '[:space:]')" ]; then
+    TURN2_STATE=skipped_no_card
+    cp "$TURN1_FILE" "$TRANSCRIPT"
+  else
+    TURN2_STATE=ran
+    TURN2_PROMPT="$OUT_DIR/prompt.turn2.md"
+    printf '%s\n' "$TURN2_PROMPT_BODY" > "$TURN2_PROMPT"
+    if [ "$RUNNER" = "cc" ]; then
+      SESSION_ID=$(node -e '
+        let sid="";
+        try {
+          for (const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")) {
+            let j; try { j=JSON.parse(l); } catch { continue; }
+            if (j && j.type==="system" && j.subtype==="init" && typeof j.session_id==="string" && j.session_id) { sid=j.session_id; break; }
+          }
+        } catch {}
+        process.stdout.write(sid);
+      ' "$TURN1_FILE")
+      if [ -z "$SESSION_ID" ]; then
+        RESUME_UNAVAILABLE=1
+      else
+        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID"
+        RUN2_EXIT=$?
+        [ "$RUN_EXIT" -eq 0 ] && RUN_EXIT=$RUN2_EXIT
+      fi
+    else
+      run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 ""
+      RUN2_EXIT=$?
+      [ "$RUN_EXIT" -eq 0 ] && RUN_EXIT=$RUN2_EXIT
+    fi
+    cat "$TURN1_FILE" "$TURN2_FILE" > "$TRANSCRIPT"
+  fi
+  export TRANSCRIPT_TURN1="$TURN1_FILE" TRANSCRIPT_TURN2="$TURN2_FILE" DCARD_TURN2="$TURN2_STATE"
 fi
 set -e
 END_TIME=$(date +%s)
@@ -325,12 +395,14 @@ MARKERS_OUT="$OUT_DIR/markers.env"
 set +e
 (
   cd "$TEMP_REPO"
-  TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
+  TRANSCRIPT="$TRANSCRIPT" TRANSCRIPT_TURN1="${TRANSCRIPT_TURN1:-}" TRANSCRIPT_TURN2="${TRANSCRIPT_TURN2:-}" \
+  DCARD_TURN2="${DCARD_TURN2:-}" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
   QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
     bash "$TASK_DIR/markers.sh"
   # optional second marker file (P1W rows add markers to a task without touching its markers.sh)
   if [ -f "$TASK_DIR/markers-extra.sh" ]; then
-    TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
+    TRANSCRIPT="$TRANSCRIPT" TRANSCRIPT_TURN1="${TRANSCRIPT_TURN1:-}" TRANSCRIPT_TURN2="${TRANSCRIPT_TURN2:-}" \
+    DCARD_TURN2="${DCARD_TURN2:-}" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
     QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
       bash "$TASK_DIR/markers-extra.sh"
   fi
@@ -363,6 +435,8 @@ QUOTA_RE='(usage limit|weekly limit|rate limit|limit reached|hit your limit|quot
 failure_class="null"; failure_cause="null"; STOPPED_BY_TIMEOUT=0
 if [ -n "$PREFLIGHT_FAIL" ]; then
   failure_class='"infra_fail"'; failure_cause='"plugin_script_unresolvable"'
+elif [ "$RESUME_UNAVAILABLE" -eq 1 ]; then
+  failure_class='"infra_fail"'; failure_cause='"resume_unavailable"'
 elif [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
     && [ -s "$TRANSCRIPT" ] && [ "$MARKERS_EXIT" -eq 0 ]; then
   # stage-graph-g67: the markers only need the first minutes, so the per-cell timeout is the registered stop, not a failure.
@@ -420,6 +494,10 @@ if [ -n "$ARM_MANIFEST" ]; then
   ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$ARM_SHA")
 fi
 [ "$STOPPED_BY_TIMEOUT" -eq 0 ] || ARM_SHA_FIELD="$ARM_SHA_FIELD,\"stopped_by_timeout\":true"
+# turn2 is emitted only for tasks that ship an executable turn2.sh (other rows stay byte-identical).
+if [ -n "$TURN2_STATE" ]; then
+  ARM_SHA_FIELD="$ARM_SHA_FIELD,\"turn2\":\"$TURN2_STATE\""
+fi
 RESULT_JSON="$OUT_DIR/result.json"
 printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s%s}\n' \
   "$TASK_ID" "$ARM" "$MODEL" "$RUNNER" "$runner_version_clean" "$REP" \

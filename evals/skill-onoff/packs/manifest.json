@@ -4088,6 +4088,219 @@
       "fixture-scripts-dcard/src/status/scope-key.js": "f8537dde6412414295274af6c3325b3c256c9345f64a314b9d72ebf07a7d876f",
       "fixture-scripts-dcard/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
       "fixture-scripts-dcard/src/status/task-status.js": "e6cf2adc45bf2446b21421857ad459e536bded722643909d4bab7ceafd2dada7"
+    },
+    "ceo-agent-dcard-base2": {
+      "ceo-agent-dcard-base2/SKILL.md": "f3be59cc0a219b60923d29d7572291acbdf62276f66915547c23a9387b9c2e7e",
+      "ceo-agent-dcard-base2/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-dcard-base2/references/depth0-control-loop.md": "c6afedebfb9fcc7c3bf89a7c1be8138a2bb15b0facfb6af13423a11227bb706e",
+      "ceo-agent-dcard-base2/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-dcard-base2/references/level-front-door.md": "d0339e507fd84eafa9ebd27b2c73987b81ee16d5ad3c5b530be1446d48588c74",
+      "ceo-agent-dcard-base2/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-dcard-base2/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "ceo-agent-dcard-change2": {
+      "ceo-agent-dcard-change2/SKILL.md": "b10b94ac7ef347496f8769090a2e267bc425752a9b80844e7f1dd31ad12c1a9a",
+      "ceo-agent-dcard-change2/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-dcard-change2/references/depth0-control-loop.md": "62c3c7020693630d0082e577dc2b7365d8fde325a726e17d67e4ae8f3d0918ad",
+      "ceo-agent-dcard-change2/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-dcard-change2/references/level-front-door.md": "461cafbf496823fe3df6076b81f7771aabfb5231ccff945c9147755372b68cce",
+      "ceo-agent-dcard-change2/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-dcard-change2/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "dev-flow-dcard-base2": {
+      "dev-flow-dcard-base2/SKILL.md": "32dfd77deab1d8e94889ee164905fdb2e9b025c40f2b113eb22485abb255d900",
+      "dev-flow-dcard-base2/references/card-relocated.md": "4ef8e196c20e1072efae1cc3c3551e6609d90de6345b8b275fa2165f0111f230",
+      "dev-flow-dcard-base2/references/context-continuation.md": "1f9604780eabae5eda9f7d9679bcdcf51ed21a9187e548792630389e1db2f764",
+      "dev-flow-dcard-base2/references/hetero-loops.md": "62bf0ffe13db1f3b2bca2c12e540e661d16eb0c6cab22ad8d2890c0da1e50302",
+      "dev-flow-dcard-base2/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-dcard-base2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-dcard-base2/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-dcard-base2/references/stage-graph.md": "a9a3adb183161b5377b6d45ba2584818061b1113662fbb6577604fbd878010ba"
+    },
+    "dev-flow-dcard-change2": {
+      "dev-flow-dcard-change2/SKILL.md": "0880d25ba5edf94f861f78acb43d971be5e9cfc06d51e733f0fafb421a7f1e62",
+      "dev-flow-dcard-change2/references/card-relocated.md": "4ef8e196c20e1072efae1cc3c3551e6609d90de6345b8b275fa2165f0111f230",
+      "dev-flow-dcard-change2/references/context-continuation.md": "1f9604780eabae5eda9f7d9679bcdcf51ed21a9187e548792630389e1db2f764",
+      "dev-flow-dcard-change2/references/hetero-loops.md": "62bf0ffe13db1f3b2bca2c12e540e661d16eb0c6cab22ad8d2890c0da1e50302",
+      "dev-flow-dcard-change2/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-dcard-change2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-dcard-change2/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-dcard-change2/references/stage-graph.md": "a9a3adb183161b5377b6d45ba2584818061b1113662fbb6577604fbd878010ba"
+    },
+    "engine-onboarding-dcard-base2": {
+      "engine-onboarding-dcard-base2/SKILL.md": "ab8a1c0d64b7da2cd7cf512a71ac0d8e7247845824d2e569af7b9a6132791aac",
+      "engine-onboarding-dcard-base2/references/local-model-team-recipe.md": "a8f2171ee3216d47bcd311383ae577e081462ff7521349b7c62003643e37a76c",
+      "engine-onboarding-dcard-base2/references/role-and-harness-governance.md": "f33843309e402d3deee604cdde482d1fd2d573d4e4d01a883d07c614eb2a08bb"
+    },
+    "engine-onboarding-dcard-change2": {
+      "engine-onboarding-dcard-change2/SKILL.md": "cbde85517fe7a17df02f0d7b0ea77691f4e00f5fda1e787fb3ca574d514de134",
+      "engine-onboarding-dcard-change2/references/local-model-team-recipe.md": "a8f2171ee3216d47bcd311383ae577e081462ff7521349b7c62003643e37a76c",
+      "engine-onboarding-dcard-change2/references/role-and-harness-governance.md": "f33843309e402d3deee604cdde482d1fd2d573d4e4d01a883d07c614eb2a08bb"
+    },
+    "harness-maintenance-dcard-base2": {
+      "harness-maintenance-dcard-base2/SKILL.md": "ed97e2e02392174400822d94b05623a4398d0e10ccb5b6d1e74b70837884901d"
+    },
+    "harness-maintenance-dcard-change2": {
+      "harness-maintenance-dcard-change2/SKILL.md": "66ab749168c132ad8670af8f2ff34b874e5ce28d9bd3615adc76207e8463f64e"
+    },
+    "hetero-review-dcard-base2": {
+      "hetero-review-dcard-base2/SKILL.md": "99b1c954f7b92fc5ef99f1da5be05bf643c28395f7d712f9bb0a960b45d86adb",
+      "hetero-review-dcard-base2/references/code-loop.md": "23f04723f4afbba8e68fb2e72285bda7dedc1e829d7352587aa1347df0b305f2",
+      "hetero-review-dcard-base2/references/plan-loop.md": "6ce48d5708afbd4c1c2fc4463e8e3c9ecb430d4b4c5a99ded378c4a16a064b40"
+    },
+    "hetero-review-dcard-change2": {
+      "hetero-review-dcard-change2/SKILL.md": "392b6d8cf9f09d07e987c723863adb64a840a49c387ee7faa505cc434ba40493",
+      "hetero-review-dcard-change2/references/code-loop.md": "23f04723f4afbba8e68fb2e72285bda7dedc1e829d7352587aa1347df0b305f2",
+      "hetero-review-dcard-change2/references/plan-loop.md": "6ce48d5708afbd4c1c2fc4463e8e3c9ecb430d4b4c5a99ded378c4a16a064b40"
+    },
+    "l5-dcard-base2": {
+      "l5-dcard-base2/SKILL.md": "d7ee28674f264a2526ceca0bd361a7dce3f119dd4227e8faae8da4d88e828ce9",
+      "l5-dcard-base2/references/hetero-impl-loop.md": "fb3d8d7fc69db19b202221de65d28e17ad69b82f25cd7ede44cb11d61fa22c8b"
+    },
+    "l5-dcard-change2": {
+      "l5-dcard-change2/SKILL.md": "d7ee28674f264a2526ceca0bd361a7dce3f119dd4227e8faae8da4d88e828ce9",
+      "l5-dcard-change2/references/hetero-impl-loop.md": "08111f8d3bac5f6b2bb1c74b738e603e3bce385db1c333c674f7dd2bb51c4cbc"
+    },
+    "quality-pipeline-dcard-base2": {
+      "quality-pipeline-dcard-base2/SKILL.md": "c21e6a0bfb6eebd60d1e8970ed696480645c7263630fa21faac49cc63eb3523e",
+      "quality-pipeline-dcard-base2/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-dcard-base2/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-dcard-base2/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-dcard-base2/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-dcard-base2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-dcard-base2/references/test-integrity-gate.md": "de2b4f90bb1d1aafc02a07e35ee28b235c5910a86aa343b7044ec15528540459",
+      "quality-pipeline-dcard-base2/references/test-policy.md": "035c789662c05fd8e0d27fd2944281564cbff207804fd41d4dcaa31070b987d9"
+    },
+    "quality-pipeline-dcard-change2": {
+      "quality-pipeline-dcard-change2/SKILL.md": "c58e074c44e6eebec6c6a84a45652b0f707f42340da9d69a2a05b1cd60eee7e0",
+      "quality-pipeline-dcard-change2/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-dcard-change2/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-dcard-change2/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-dcard-change2/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-dcard-change2/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-dcard-change2/references/test-integrity-gate.md": "de2b4f90bb1d1aafc02a07e35ee28b235c5910a86aa343b7044ec15528540459",
+      "quality-pipeline-dcard-change2/references/test-policy.md": "035c789662c05fd8e0d27fd2944281564cbff207804fd41d4dcaa31070b987d9"
+    },
+    "test-strategy-dcard-base2": {
+      "test-strategy-dcard-base2/SKILL.md": "ab21d8631f0e881eabe68df213de42354a8763dbc8aa2d9e3aa754e20b357366"
+    },
+    "test-strategy-dcard-change2": {
+      "test-strategy-dcard-change2/SKILL.md": "abd8135b1ab521950389f9e59e12a6ef37c4526d8a355e17e62f8e7a6c3c5c3f"
+    },
+    "dcard-files-base2": {
+      "dcard-files-base2/references/hetero-dispatch.md": "8d05dd021c57e8b68a9cce904525c9d4938e47f563d857ed8b7a1d72d64185cd",
+      "dcard-files-base2/references/multi-agent-portability.md": "b3e081f5764d17e49a56df62db4999b295386bdf83b50f638de26817f70a4fe3"
+    },
+    "dcard-files-change2": {
+      "dcard-files-change2/references/hetero-dispatch.md": "1cb8423210ce211009fc9464d1a81f5106283d90582df15f58254c90e541be3d",
+      "dcard-files-change2/references/multi-agent-portability.md": "0efa4395b64a47bed88c9cde1d20a0dac46b8dbfa986b10f24b9998b9fb02dea"
+    },
+    "dcard-hooks-3955": {
+      "dcard-hooks-3955/hooks/_shared/secret-patterns.js": "6e346778e58a6e030cbb2fd16299a6fa4b3e1466ec2bdcd3522b7f1b4d90460f",
+      "dcard-hooks-3955/hooks/advisory-relay.js": "b74c350ac13b3189168389bc4f71bdc0b3bd4d8e471033b6b5b5c2d3c507f5b9",
+      "dcard-hooks-3955/hooks/ask-decision.js": "dbeb9f9644dc755c56dd7f9a4559ef7ab3cab9afa3e1f0e310f37509f962fcea",
+      "dcard-hooks-3955/hooks/audit-log.js": "1d31f6dfe05848ba09534a9afcc01ba098a1f4ffe156dbde7bab2e21d1ad93ce",
+      "dcard-hooks-3955/hooks/awaiting-owner.js": "c9dfe78ad34b6feb1b248e1b615b50034341621bf3efcfb104e0258a31449766",
+      "dcard-hooks-3955/hooks/hooks.json": "f29a493c1c74bc7469613c3413bb1d2d24dd7c13b62a57f95b91e51688aa6105",
+      "dcard-hooks-3955/hooks/live-session-lib.js": "6234c723971367e26afb0a455add63782eb54dcc366925614037b1a1d2230060",
+      "dcard-hooks-3955/hooks/merge-task-status-lib.js": "1ae605290140395e823aef44212ee2508e9072cfc18bd17c37ec50bac4bd2fd5",
+      "dcard-hooks-3955/hooks/owner-question-guard.js": "6e9b769fecda8883c39363e1ceb9192956769e4c0250d59e0c6c85daea0e0cc7",
+      "dcard-hooks-3955/hooks/runs-watch-autostart.js": "54920b94b9b27f3525f37a2f04d1390e6285b944481716e4ef1599a3b1d9af4f",
+      "dcard-hooks-3955/hooks/session-start.js": "d778f04bb8ac16bc3efa05b138ae4ad4889f0df64741c1fd4b1384d57052b6db",
+      "dcard-hooks-3955/hooks/state-checkpoint-lib.js": "18f0dd2632fe00b395f4e3021e441b9fbefee7a142ae73ede6bca9ebe4c662eb",
+      "dcard-hooks-3955/hooks/transcript-reader-lib.js": "a7348b64cc3009c7054479aa1dbd2cca180e2a826d3548894cb960e0bdf35ff7",
+      "dcard-hooks-3955/scripts/check-plan-graduation.js": "c1a82753eb6dad1cf9824b8d032cd627371a78524b04891d1811548e7ee4298d",
+      "dcard-hooks-3955/scripts/cost-digest.js": "0648689a7a2b51eceb1af209988fb1f612de22a07b4b9a0bd09edcad76cd0a96",
+      "dcard-hooks-3955/scripts/implementation-campaign-check.js": "2e4020216917d82bb065f9adeeb7e7f150b408e3efbb5e99a79684c6f96739fe",
+      "dcard-hooks-3955/scripts/lib/autocompact-window.js": "355d6c9e65e7390c0ce242a683c53e8b49c58f89826a64846d9834b745ca3e01",
+      "dcard-hooks-3955/scripts/lib/brain-spend.js": "caefc252ce20ad59a660198f5f5220820b0533a013963121b6c9edbf58084a6e",
+      "dcard-hooks-3955/scripts/lib/compaction-handoff.js": "62ab96831b956e902f53ebfc0d8ec0d2cd04776bfd792ab03c2ac599323effe0",
+      "dcard-hooks-3955/scripts/lib/config-audit.js": "1e0ba23676b56b9599657f338c746556082a0aa386d55bc8e197381803ba1863",
+      "dcard-hooks-3955/scripts/lib/config-path.js": "ff2e02f2bee1175eccd8c5ec5ad8339ed83b9c5ce997da965c0d830da82e615b",
+      "dcard-hooks-3955/scripts/lib/jsonl-store.js": "cd22086da91ec46a94feac05513bef26010c04e4ced9bf35b6df4aa99f9d5076",
+      "dcard-hooks-3955/scripts/lib/live-state-dir.js": "e47c3daae4ead44c7a64186a441dc5360cad9cfde0a02a31877174374cc8e7cb",
+      "dcard-hooks-3955/scripts/lib/load-source.js": "32b15b40181437756e4374a4e5b0d5864d5d8dfe56e5ceedeb25bc01ba300038",
+      "dcard-hooks-3955/scripts/lib/qualification-asset-seals.js": "7bb72d5af0bdddb31a8daab9713927536ca83e1bb955ecd3b44e42dbba7974d3",
+      "dcard-hooks-3955/scripts/lib/sealed-docs.js": "57a559fb2ed74df0333f07ffdf03eb71348d337c311202cfbee986a97133c267",
+      "dcard-hooks-3955/scripts/lib/semver.js": "76bec0072107db625b635602fa761bcecf3a4c932fcee1e67fcd3ded9d0379b5",
+      "dcard-hooks-3955/scripts/lifecycle-residue-receipt.js": "bc61d2c13af327e8ae972773651bcc3736f4eebc1d7faad204a1d1d0fd0f4a7e",
+      "dcard-hooks-3955/scripts/mission-execution-graph-check.js": "c6e52a613d7e37448a7926fcd5cb18cc5d95cefd09174ece5413f4659bf632b7",
+      "dcard-hooks-3955/scripts/mission-routing-admission.js": "d961e2b5b0b36ac14ba860fa291af4221f537aad3b8a5071500e06a3237660f8",
+      "dcard-hooks-3955/scripts/mission-terminal-reconcile.js": "d262007bdb949518d877d9f2d86c20275664940bcb8dc175468a39b405a982fa",
+      "dcard-hooks-3955/scripts/open-decision.js": "6af35c3bbe26c22629bd32d37a21acca17f466be74cf88142a4f55f3308926a0",
+      "dcard-hooks-3955/scripts/qc-evidence-status.js": "e359fe1b1bb5e49da55fad0cf2670c901750db46e455f3c3469c557e1d6ac23d",
+      "dcard-hooks-3955/scripts/render-review-page.js": "b958b028744d1eb6ee02bb4bb5a4029d9b9c8c8ace23ee5547fd1cdcb221e905",
+      "dcard-hooks-3955/scripts/resolve-repo-placement.js": "1ca3e7fcacef69762dd91187c0954ab60d2be600f2d7bd02ca40c22180b7f38f",
+      "dcard-hooks-3955/scripts/session-mode.js": "8905858029f3a2434db0a762e08dd03cefbf6586751a32de3ebf638c2db47a5b",
+      "dcard-hooks-3955/scripts/stage-graph.js": "23b2e711f3c89dc3d3449170a21c3c7e2409ce13faad788d268b72b416cee89f",
+      "dcard-hooks-3955/scripts/validate-json-schema.js": "4dfaeac32ab846713412adbce56b8c2cb9aa93012da57a71b0e6201b9081d1c9",
+      "dcard-hooks-3955/src/engine/authenticated-control.js": "39a953e8a153648f2b5f0302dc95d8c08a3f3ffba2aaff41e9286b2468691e70",
+      "dcard-hooks-3955/src/engine/campaign-composition.js": "8cadc332328afe31ff157b25dd146eca6a5599a44ab3870a9aed8ca853baf22a",
+      "dcard-hooks-3955/src/engine/campaign-dispatch-projection.js": "3386f2937ac12dfe0991d8ec0fe68cfa874d4b81540612bfc0aeba22ae801a75",
+      "dcard-hooks-3955/src/engine/campaign-verification.js": "1f17625abb265a5911520004993501f3fed3ff63ca1913811008d00f54356a32",
+      "dcard-hooks-3955/src/engine/controller-execution.js": "cd3ca243687f31bc33ae7250d0a9a5615f58b08f1e6a78a8764c545032c6cc40",
+      "dcard-hooks-3955/src/engine/implementation-campaign.js": "c5d840208acd937c856115871425a90c4aacd20ce92e1a427a7b60180d6d5f1c",
+      "dcard-hooks-3955/src/engine/mission-campaign-identity.js": "618f0cdb2b6ee3238f5b16091c8616f19f82a0c6ac58842480ff332a2f170705",
+      "dcard-hooks-3955/src/engine/mission-convergence.js": "4b1eb3df0e9b9967762e3d6f455fdf92dba0afe933ab978980f319241db40d61",
+      "dcard-hooks-3955/src/engine/mission-execution-graph.js": "4085ddd3fb8e2efae93551314c535ad9a447e092888cfb9cff8cf501134f0cba",
+      "dcard-hooks-3955/src/engine/mission-policy.js": "75da93f0b5a6a870ef7fb16a9263ff23fb1df7d9c39f66924f3cf7d1e119a1be",
+      "dcard-hooks-3955/src/engine/owner-kernel/actions.js": "44e9da4efd602d0417e85a9d9c2cabd76466e716ba309f779207945371431cba",
+      "dcard-hooks-3955/src/engine/owner-kernel/canonical.js": "71cce05cbcf26156e14eaf160cc4d4f5eb45a4a613f884973d4457694f7b0c68",
+      "dcard-hooks-3955/src/engine/owner-kernel/errors.js": "1593c4b74746ce292d4eabb1db3631221b26f028bc4defd6150acde25f8aa80e",
+      "dcard-hooks-3955/src/engine/owner-kernel/policy.js": "1ae2ede9be3bbfbc474f4e86e85eddf56540f708f81566662fa1b29c53210cb2",
+      "dcard-hooks-3955/src/engine/sealed-zero-diff-validator.js": "6c0981723d9472c8f02c75442de5008d05b26e1f01428d61dac9244a8a4c408e",
+      "dcard-hooks-3955/src/engine/work-order.js": "e1b09e9e3aafbd6ab1c8062e8f51cf55e24a902160f81cbc3c24be08fdfbd3b5",
+      "dcard-hooks-3955/src/hooks/handlers/session-start.js": "ea3a715ca76dcdd323a630a109ae866de60c6568f3a02a4c340fe0f88868eec2",
+      "dcard-hooks-3955/src/lib/common.js": "d103d0ee9a6b023aeef191bad04224266ada0baa727fbd9f716d6e8c90f9b23e",
+      "dcard-hooks-3955/src/mission/interface.js": "7716f5f0c67cf1c280a2e2dbaef57dc6fdbf7e1a432bae6db60aa73a1c47349d",
+      "dcard-hooks-3955/src/status/autostart-gate.js": "98ce809d3e3480c7ede7ddddfcadc3bab63d7ab1933da3a938c4d77d2f1d298a",
+      "dcard-hooks-3955/src/status/code-fingerprint.js": "bc3bf6e8987780484012085417a890ace340b9da7a4bc12c18d6101680f02bb4",
+      "dcard-hooks-3955/src/status/compare-input.js": "402501f7579143b2764ae9c0e730d884995e26b1aa10003df4cb3fae4c680b68",
+      "dcard-hooks-3955/src/status/decision-input.js": "41c87ffe0416f94260117678d2ba1b753a14ab0a1758adfa84e2912c92d54779",
+      "dcard-hooks-3955/src/status/decisions-sidecar.js": "b1dbe3907d43bfe9d9d647f55bb87976c59a4012ca2e627a18d6e59b0fc775b3",
+      "dcard-hooks-3955/src/status/foreman-activity.js": "2b22fcb70bcb300dd97f89747fc7b37899c8e61eba113285f2b57789c3204965",
+      "dcard-hooks-3955/src/status/live-pointer.js": "63c969cff041091758dcd8c15575a3b08c7e5300098afccf6abfc729b1e39a01",
+      "dcard-hooks-3955/src/status/load-source.js": "ecbca7a8f43398afd20c04a031589b43be7d17ee31c8f8a728ad6bceeff1a3ef",
+      "dcard-hooks-3955/src/status/phase-input.js": "6e7db926ab74130dfd94d3b7f334f71d1137bc9d0cd64b67c6b2018c5b56aa05",
+      "dcard-hooks-3955/src/status/planned-input.js": "76da9a5502bdff8ad6d339889d191e62449d27327d4b3abee34bc67996dafd15",
+      "dcard-hooks-3955/src/status/project-key.js": "ff8eaa48e555244b90eccd77d612533998f07f9f294512796638dffdf913e853",
+      "dcard-hooks-3955/src/status/qc-fact.js": "528671c10a6ad1b727ecf547de21dcb1c8f0a00888af5b9f2191e713efc39b77",
+      "dcard-hooks-3955/src/status/residue.js": "19f4957570c822ee83aa57c093ab4713327efaa368c04d4723289ce2aa96c693",
+      "dcard-hooks-3955/src/status/review-input.js": "1084e781deabc929156ed73bab426939a1587ec4664c40e2c16a9f6fa0620d4c",
+      "dcard-hooks-3955/src/status/review-server.js": "9f6d596a58e04e68c312f0b17db8c2a745267fd563450d51d80646f4d27c6df9",
+      "dcard-hooks-3955/src/status/runs-fields.js": "0d106990f88bdb3b9588b51c59cddac38027d28285dfb5c8c6d69b79644f0097",
+      "dcard-hooks-3955/src/status/runs-watch.js": "add3104ea746dbc570c2201137c2f49261bba6949e423d0abae6076f6db62731",
+      "dcard-hooks-3955/src/status/scope-key.js": "f8537dde6412414295274af6c3325b3c256c9345f64a314b9d72ebf07a7d876f",
+      "dcard-hooks-3955/src/status/sources-manifest.js": "b04a2bc2531f091a6ffd53d5a6ac8807f64382d9ac40301b1aa1e97710643f61",
+      "dcard-hooks-3955/src/status/spend-history.js": "b6b467e60a7a83b40b0bcadd9f4be7b17350a3bb3c85cda57ea3abd7d0d23b36",
+      "dcard-hooks-3955/src/status/stage-walk.js": "44a1f17bfebdc0dae2c9411a538a9d8638d46d7a92b25a7cfda7478890c5473d",
+      "dcard-hooks-3955/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
+      "dcard-hooks-3955/src/status/task-status.js": "e6cf2adc45bf2446b21421857ad459e536bded722643909d4bab7ceafd2dada7",
+      "dcard-hooks-3955/src/status/turn-effective.js": "5140c4ae406a10749c58dbbfabaedac9f8c8ee0cad59d005687906b4ff0ca5aa",
+      "dcard-hooks-3955/src/status/watch-inputs.js": "4a57f5226d485e3b758255d9eb74da8551d226898d0e7e18fbe8f1e68f4269f8",
+      "dcard-hooks-3955/src/status/work-order-progress.js": "bd1518d185843f93cd8962bf971557f6738ed620cc9e65bac85f8686c5d904e5"
+    },
+    "fixture-scripts-dcard2": {
+      "fixture-scripts-dcard2/hooks/_shared/secret-patterns.js": "6e346778e58a6e030cbb2fd16299a6fa4b3e1466ec2bdcd3522b7f1b4d90460f",
+      "fixture-scripts-dcard2/scripts/lib/jsonl-store.js": "cd22086da91ec46a94feac05513bef26010c04e4ced9bf35b6df4aa99f9d5076",
+      "fixture-scripts-dcard2/scripts/lifecycle-residue-receipt.js": "bc61d2c13af327e8ae972773651bcc3736f4eebc1d7faad204a1d1d0fd0f4a7e",
+      "fixture-scripts-dcard2/scripts/open-decision.js": "6af35c3bbe26c22629bd32d37a21acca17f466be74cf88142a4f55f3308926a0",
+      "fixture-scripts-dcard2/src/engine/authenticated-control.js": "39a953e8a153648f2b5f0302dc95d8c08a3f3ffba2aaff41e9286b2468691e70",
+      "fixture-scripts-dcard2/src/engine/campaign-composition.js": "8cadc332328afe31ff157b25dd146eca6a5599a44ab3870a9aed8ca853baf22a",
+      "fixture-scripts-dcard2/src/engine/campaign-verification.js": "1f17625abb265a5911520004993501f3fed3ff63ca1913811008d00f54356a32",
+      "fixture-scripts-dcard2/src/engine/controller-execution.js": "cd3ca243687f31bc33ae7250d0a9a5615f58b08f1e6a78a8764c545032c6cc40",
+      "fixture-scripts-dcard2/src/engine/implementation-campaign.js": "c5d840208acd937c856115871425a90c4aacd20ce92e1a427a7b60180d6d5f1c",
+      "fixture-scripts-dcard2/src/engine/mission-campaign-identity.js": "618f0cdb2b6ee3238f5b16091c8616f19f82a0c6ac58842480ff332a2f170705",
+      "fixture-scripts-dcard2/src/engine/mission-convergence.js": "4b1eb3df0e9b9967762e3d6f455fdf92dba0afe933ab978980f319241db40d61",
+      "fixture-scripts-dcard2/src/engine/owner-kernel/canonical.js": "71cce05cbcf26156e14eaf160cc4d4f5eb45a4a613f884973d4457694f7b0c68",
+      "fixture-scripts-dcard2/src/engine/sealed-zero-diff-validator.js": "6c0981723d9472c8f02c75442de5008d05b26e1f01428d61dac9244a8a4c408e",
+      "fixture-scripts-dcard2/src/engine/work-order.js": "e1b09e9e3aafbd6ab1c8062e8f51cf55e24a902160f81cbc3c24be08fdfbd3b5",
+      "fixture-scripts-dcard2/src/lib/common.js": "d103d0ee9a6b023aeef191bad04224266ada0baa727fbd9f716d6e8c90f9b23e",
+      "fixture-scripts-dcard2/src/mission/interface.js": "7716f5f0c67cf1c280a2e2dbaef57dc6fdbf7e1a432bae6db60aa73a1c47349d",
+      "fixture-scripts-dcard2/src/status/project-key.js": "ff8eaa48e555244b90eccd77d612533998f07f9f294512796638dffdf913e853",
+      "fixture-scripts-dcard2/src/status/scope-key.js": "f8537dde6412414295274af6c3325b3c256c9345f64a314b9d72ebf07a7d876f",
+      "fixture-scripts-dcard2/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
+      "fixture-scripts-dcard2/src/status/task-status.js": "e6cf2adc45bf2446b21421857ad459e536bded722643909d4bab7ceafd2dada7"
     }
   },
   "pack_meta": {
@@ -9977,6 +10190,106 @@
       "kind": "scripts",
       "source": "scripts/open-decision.js",
       "ref": "1912ff81efa8798de1d35266f9bc8e117293deae"
+    },
+    "ceo-agent-dcard-base2": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "ceo-agent-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.EosHHVtoZ3/skills/ceo-agent",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "dev-flow-dcard-base2": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "dev-flow-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.LGTb2BTuaH/skills/dev-flow",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "engine-onboarding-dcard-base2": {
+      "kind": "skill",
+      "source": "engine-onboarding",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "engine-onboarding-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.V3cGEvJpQI/skills/engine-onboarding",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "harness-maintenance-dcard-base2": {
+      "kind": "skill",
+      "source": "harness-maintenance",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "harness-maintenance-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.iGAkbXCF4k/skills/harness-maintenance",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "hetero-review-dcard-base2": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "hetero-review-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.dAi0Q4mPes/skills/hetero-review",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "l5-dcard-base2": {
+      "kind": "skill",
+      "source": "l5",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "l5-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.mm4kenL4Lu/skills/l5",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "quality-pipeline-dcard-base2": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "quality-pipeline-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.Hcb3wfPUPX/skills/quality-pipeline",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "test-strategy-dcard-base2": {
+      "kind": "skill",
+      "source": "test-strategy",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "test-strategy-dcard-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.pcRtvFudJz/skills/test-strategy",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "dcard-files-base2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.wvypFD6Kns",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "dcard-files-change2": {
+      "kind": "dir",
+      "source": "/tmp/tmp.RHAnCCKlu1",
+      "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4"
+    },
+    "dcard-hooks-3955": {
+      "kind": "dir",
+      "source": "/tmp/onoff-dcard-stage-FuJvgK",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
+    },
+    "fixture-scripts-dcard2": {
+      "kind": "scripts",
+      "source": "scripts/open-decision.js",
+      "ref": "3955ea75bf83f4d60d149add37107c73a1299944"
     }
   }
 }

@@ -6,7 +6,9 @@
 'use strict';
 const fs = require('fs');
 
-const args = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const scoreMode = argv[0] === 'score';
+const args = scoreMode ? argv.slice(1) : argv;
 const val = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
 const preregPath = val('--prereg');
 const resultsPath = val('--results');
@@ -34,7 +36,10 @@ const controlReps = control && Number.isInteger(control.reps) ? control.reps : P
 const done = (code, verdict, report) => {
   report.verdict = verdict;
   if (secondary.length) report.secondary = secondaryCounts();
-  if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
+  if (scoreMode) {
+    const gateVerdict = verdict === 'PASS' ? 'SHIP' : verdict === 'FAIL' ? 'NOT-SHIP' : verdict;
+    console.log(JSON.stringify({ verdict: gateVerdict, reasons: [verdict], counts: report.counts || {}, secondary: report.secondary || null }));
+  } else if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else console.log(`${P.row}: ${verdict}\n${JSON.stringify(report.counts || {})}${report.secondary ? `\nsecondary ${JSON.stringify(report.secondary)}` : ''}`);
   process.exit(code);
 };
@@ -124,6 +129,19 @@ if (control) {
   const off = count(OFF, control.tasks, controlReps);
   ctl = { on_false_positive: on, off_false_positive: off, pass: on <= control.max_on_false_positive && on <= off + 1 };
   counts.control = ctl;
+}
+const nc = P.negative_control;
+if (nc && rows.some((r) => r.arm === nc.arm)) {
+  const nReps = Number.isInteger(nc.reps) ? nc.reps : P.reps;
+  const mustFalse = Array.isArray(nc.all_false) ? nc.all_false : [];
+  const task = nc.task;
+  let bad = 0;
+  for (let rep = 1; rep <= nReps; rep++) {
+    const r = rows.find((x) => x.arm === nc.arm && x.task_id === task && x.rep === rep && (x.failure_class === null || x.failure_class === undefined));
+    if (!r || mustFalse.some((m) => !r.markers || r.markers[m] !== false)) bad++;
+  }
+  counts.negative_control = { arm: nc.arm, bad };
+  if (bad) done(5, 'INSTRUMENT-INVALID (negative control: nohook must show m_hook_card false and b_close_by_hook false in every cell)', { counts });
 }
 const pass = counts.on >= T.on_min && counts.off <= T.off_max && (!ctl || ctl.pass);
 done(pass ? 0 : 3, pass ? 'PASS' : 'FAIL', { counts });

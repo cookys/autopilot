@@ -2,8 +2,20 @@
   "schema_version": 1,
   "arm": "nohook",
   "skills": {
-    "ceo-agent": "ceo-agent-dcard-base"
+    "ceo-agent": "ceo-agent-dcard-base2",
+    "dev-flow": "dev-flow-dcard-base2",
+    "engine-onboarding": "engine-onboarding-dcard-base2",
+    "harness-maintenance": "harness-maintenance-dcard-base2",
+    "hetero-review": "hetero-review-dcard-base2",
+    "l5": "l5-dcard-base2",
+    "quality-pipeline": "quality-pipeline-dcard-base2",
+    "test-strategy": "test-strategy-dcard-base2"
   },
-  "files": "dcard-hooks-empty",
-  "fixture_scripts": "fixture-scripts-dcard"
+  "files": [
+    "dcard-files-base2",
+    "dcard-hooks-empty"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-dcard2"
+  ]
 }

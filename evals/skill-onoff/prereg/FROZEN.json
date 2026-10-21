@@ -547,5 +547,183 @@
       "tasks/qs-s6-release-preflight/repo/README.md": "77c89fc95151d1e2bc36fc0a03a00ca2ddf14e52a3f54be9ec206824c98cdd33",
       "tasks/qs-s6-release-preflight/task.md": "03a26939ddf3956191bd632ebdea61eba62b503148ecae096c55ce5f6bcbd78a"
     }
+  },
+  "dcard": {
+    "frozen_at": "2026-10-21",
+    "stamped": true,
+    "note": "sha256 of the dcard pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "ceo-agent-dcard-base2": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 7,
+        "digest_sha256": "29ca38917ea358389ef7fb8e0a7a192631f8b382dfb761957f3b75ff11c63618"
+      },
+      "ceo-agent-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.EosHHVtoZ3/skills/ceo-agent",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 7,
+        "digest_sha256": "e6f67a0f1aec74ee69cd89dfafaa044474a591555f44c550456fa8b04c158a9f"
+      },
+      "dev-flow-dcard-base2": {
+        "kind": "skill",
+        "source": "dev-flow",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 8,
+        "digest_sha256": "a1c54a3fcdd5e248ce2a65b754972b1dbe4345afd71f0d952b848e54513b3d4f"
+      },
+      "dev-flow-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.LGTb2BTuaH/skills/dev-flow",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 8,
+        "digest_sha256": "1d50b653aee17aefbae42f31fc74857774c22c7d19bc664c3afee14b1d924ccb"
+      },
+      "engine-onboarding-dcard-base2": {
+        "kind": "skill",
+        "source": "engine-onboarding",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 3,
+        "digest_sha256": "a6f354d9972e80dc6829c16a1197778b8d7e353af3633d1a6638994321c508a0"
+      },
+      "engine-onboarding-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.V3cGEvJpQI/skills/engine-onboarding",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 3,
+        "digest_sha256": "569a270c5135c6f1c3a719ed5e1cbff111991972bdab45e355054150cc634c40"
+      },
+      "harness-maintenance-dcard-base2": {
+        "kind": "skill",
+        "source": "harness-maintenance",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 1,
+        "digest_sha256": "965b09840306b48ba9a47404dbdc6fedc2cb7fab95bc6409567dfb5cfc2aaabc"
+      },
+      "harness-maintenance-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.iGAkbXCF4k/skills/harness-maintenance",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 1,
+        "digest_sha256": "ff2e4b47bd90d6a779e412ea3d6fcaaccbefac1ceeae5779778ef1a2e218e647"
+      },
+      "hetero-review-dcard-base2": {
+        "kind": "skill",
+        "source": "hetero-review",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 3,
+        "digest_sha256": "a2e26c06118f9146667b959abbea0f28a7114dd31764127006a6028b0df33d22"
+      },
+      "hetero-review-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.dAi0Q4mPes/skills/hetero-review",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 3,
+        "digest_sha256": "89dae07d1ac031ad0ab0e50f6b99297b3d9300d7660d6a43f8dee5b3c3ef6493"
+      },
+      "l5-dcard-base2": {
+        "kind": "skill",
+        "source": "l5",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 2,
+        "digest_sha256": "a6df9433184b2a0ac7a881ddb855e70a73056e0ce99b5fae06eed8df08593e5e"
+      },
+      "l5-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.mm4kenL4Lu/skills/l5",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 2,
+        "digest_sha256": "8657a0b10d5c8467ce7cbda0eb2790ca255fc3d446015a68f63ac44f9e2cfd9a"
+      },
+      "quality-pipeline-dcard-base2": {
+        "kind": "skill",
+        "source": "quality-pipeline",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 8,
+        "digest_sha256": "5356495127a942af00772361139820da48d0e8fffca639f9c1823e6a73ab0bb3"
+      },
+      "quality-pipeline-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.Hcb3wfPUPX/skills/quality-pipeline",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 8,
+        "digest_sha256": "b98c6d5fae29c79095561bdf234271adf03d39a74e72dd6374d0c4034f0329c6"
+      },
+      "test-strategy-dcard-base2": {
+        "kind": "skill",
+        "source": "test-strategy",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 1,
+        "digest_sha256": "e75427ff5fc7289c117e88d6a5a434f5aa71850e4d1146b7308e56c9a1dc34aa"
+      },
+      "test-strategy-dcard-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.pcRtvFudJz/skills/test-strategy",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 1,
+        "digest_sha256": "6f4b02345e7c1629502f143855542fe16f4b49fd8ea97f9d0d0e201863fd4536"
+      },
+      "dcard-files-base2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.wvypFD6Kns",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 2,
+        "digest_sha256": "549bb5da27573b2dab40f3dfb6a7f291ab7d3c4c0b689dc779b7386a4b1ae4bf"
+      },
+      "dcard-files-change2": {
+        "kind": "dir",
+        "source": "/tmp/tmp.RHAnCCKlu1",
+        "ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+        "files": 2,
+        "digest_sha256": "3e54adcef4c757be9a64e19e52d0fe5a9629f2a89d395a4a9716ba60814f2d31"
+      },
+      "dcard-hooks-3955": {
+        "kind": "dir",
+        "source": "/tmp/onoff-dcard-stage-FuJvgK",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 83,
+        "digest_sha256": "e9980d9dc374ca812d3625cd2414447d3a127a220e47815ded040c08f09f96c4"
+      },
+      "dcard-hooks-empty": {
+        "kind": "dir",
+        "source": "/tmp/onoff-dcard-empty-vzrfUy",
+        "ref": "1912ff81e",
+        "files": 1,
+        "digest_sha256": "557c0787d0f7e77b7506191722d718da6d55e2d3cf1d5f598573a5c8e3363033"
+      },
+      "fixture-scripts-dcard2": {
+        "kind": "scripts",
+        "source": "scripts/open-decision.js",
+        "ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+        "files": 20,
+        "digest_sha256": "d251ec80d173d3ad6792e0786b87003b0d1691056c4117898d9eb7ebed407c83"
+      }
+    },
+    "files": {
+      "arms/dcard/base.json": "f7265db21b3ba871552bd1db5e5ae864f1ece6c29ac455d39172478929826b56",
+      "arms/dcard/change.json": "3e0b69a478bf0339a89dcf1adfa6e721b0673c2b5669fc01ed6f6cc6973b5cbb",
+      "arms/dcard/nohook.json": "0f2ce1b456b2801576e03bf327b7222e3c08a2694cd615cbc67650ccbffa1767",
+      "build-dcard-hook-pack.js": "a58edd9bf24526ec7c3079f515d0f01b42543ae223929f27c510c72e622b5ec8",
+      "lib-dcard/dcard-markers.sh": "4a9d3bace5a6864842ca9affcad06e972b3e82db54ccec676118d0fc283caa94",
+      "lib-dcard/p1w-markers.sh": "b2f5b6ba1ce1d17dd5771373980160e3ecc7d1f2624f6b371900d2e5f4eee50b",
+      "lib/dcard-markers.sh": "3bbf2f55187f33b0bfdfbb30a85ab899c10559916d7cf7aecbccbb5c5796ab1c",
+      "run-dcard-campaign.js": "cad1a2e1607c9abb55e02cdf804f178af1290340e734d2229477153b667ad9c6",
+      "score-dcard.js": "636b3de22282343181ce7126229ec6874286896dbfea7695df83825e6f96387a",
+      "tasks/a2-within-doa/init-repo.sh": "cb9cbc79d511abd9c03c3f631c791bed99b298ae24956f5c86b5f0db082a7ca4",
+      "tasks/a2-within-doa/markers.sh": "23f6e90bf1616f33aac4ebd3dba023b12016eef0828be5f74cb2e359b77b2f6b",
+      "tasks/a2-within-doa/repo/README.md": "9ec154bc2dca5b60992f727e1f245d493dff1ebe2d0eb78aae914f00846c282b",
+      "tasks/a2-within-doa/repo/lib/text.js": "3411a94d5b01bd0a00137123e83552ac9ca99f68a71cee1d7882a5751be30587",
+      "tasks/a2-within-doa/repo/run-tests.sh": "a14dd5c9af343e7844173f499c44d058695c8c1a93f31bed7f8a51223584a4b0",
+      "tasks/a2-within-doa/task.md": "769f69200db08a040fdc5a5274549d436aa3634ffd9bd709a82ae5f297a23e42",
+      "tasks/dcard-owner-decision/init-repo.sh": "853a2c4487ed8a681e12072a4fe889c6799a7fec9691b6e920743c15f9ff5135",
+      "tasks/dcard-owner-decision/markers.sh": "1d414a674a03efd1df85ea63ac044e27d4993ba6219589c38e9776c1b5e392cf",
+      "tasks/dcard-owner-decision/repo/README.md": "9ec154bc2dca5b60992f727e1f245d493dff1ebe2d0eb78aae914f00846c282b",
+      "tasks/dcard-owner-decision/repo/lib/text.js": "3411a94d5b01bd0a00137123e83552ac9ca99f68a71cee1d7882a5751be30587",
+      "tasks/dcard-owner-decision/repo/run-tests.sh": "a14dd5c9af343e7844173f499c44d058695c8c1a93f31bed7f8a51223584a4b0",
+      "tasks/dcard-owner-decision/task.md": "01ae76544e2373e61c8147d2369e114338f551044d54a297165249297bb1c9d3",
+      "tasks/dcard-owner-decision/turn2.sh": "197af73e3922dcefb300293f30bde5f48a4f31f6487a3883cbb8556eefc39caf"
+    }
   }
 }

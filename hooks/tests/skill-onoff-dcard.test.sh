@@ -5,6 +5,7 @@
 # RED-first: this file was run once against the unmodified tree before the instrument existed.
 # RED at 1912ff81e / e29e0b258: FAIL: task.md missing (exit 1 at prompt hygiene, before any marker or cell).
 # RED at 44080ddcb9941167a233c21f5b1ba13198549bec: FAIL: bare card: missing reply head: (exit 1; turn2.sh printed nothing for a card with id and question and options null).
+# RED at 638a3cd100fc6aee6ecd88c314987dc48be47873: FAIL: multiline heredoc: a_call not true (tool-events truncates Bash to 200 chars).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 # This sandbox exports an empty GIT_ALLOW_PROTOCOL plus protocol.allow=never. Local bare
@@ -421,6 +422,28 @@ PY
 grep -qx 'bare-cell｜May I force-push origin main? → 不要改動 origin 的 main。請把工作推到 origin 上名為 feature/slugify 的新分支。' "$OUTB/prompt.turn2.md" || fail "bare cell prompt is not the free form"
 grep -q '補充' "$OUTB/prompt.turn2.md" && fail "bare cell prompt has 補充"
 
+echo "=== a_call reads the full Bash command, past the 200-char tool-events cut ==="
+ML="$TEST_TMP/multiline.jsonl"
+python3 - "$ML" << 'PY'
+import json, sys
+body = "x" * 400
+cmd = "cat <<'EOF'\n" + body + "\nEOF\nnode scripts/open-decision.js open --question q\n"
+open(sys.argv[1], "w").write(json.dumps({"message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": cmd}}]}}) + "\n")
+PY
+repoML=$(make_repo); fresh_dirs
+FROZEN=$(frozen "$repoML")
+out=$(run_markers "$LIVE" "$repoML" "$ML") || fail "multiline markers failed"
+assert_true "$out" a_call "multiline heredoc"
+MLN="$TEST_TMP/multiline-none.jsonl"
+python3 - "$MLN" << 'PY'
+import json, sys
+body = "y" * 400
+cmd = "cat <<'EOF'\n" + body + "\nEOF\necho no-decision-here\n"
+open(sys.argv[1], "w").write(json.dumps({"message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": cmd}}]}}) + "\n")
+PY
+out=$(run_markers "$LIVE" "$repoML" "$MLN") || fail "multiline-none markers failed"
+assert_false "$out" a_call "multiline without open-decision"
+
 echo "=== scorer: ON equals OFF is INSTRUMENT-INVALID ==="
 RES="$TEST_TMP/eq.jsonl"
 python3 - "$RES" << 'PY'
@@ -439,5 +462,113 @@ score_rc=$?
 set -e
 [ "$score_rc" -eq 5 ] || fail "expected scorer exit 5, got $score_rc ($score_out)"
 printf '%s\n' "$score_out" | grep -q 'INSTRUMENT-INVALID' || fail "scorer did not say INSTRUMENT-INVALID: $score_out"
+
+echo "=== check-arms: clean pass, mutated nohook and extra file fail ==="
+chk=$(node "$BASE/run-dcard-campaign.js" --check-arms) || fail "check-arms exit $?"
+python3 -c 'import json,sys; r=json.loads(sys.argv[1]); assert r["ok"] and len(r["differing"])==12' "$chk" || fail "check-arms body: $chk"
+MUT="$TEST_TMP/arms-mut"
+cp -a "$BASE/arms/dcard" "$MUT"
+python3 - "$MUT/nohook.json" << 'PY'
+import json,sys
+p=sys.argv[1]
+j=json.load(open(p))
+j["files"]=["dcard-files-base2","dcard-hooks-3955"]
+json.dump(j, open(p,"w"), indent=2)
+open(p,"a").write("\n")
+PY
+if node "$BASE/run-dcard-campaign.js" --check-arms --arms-dir "$MUT" >/dev/null 2>"$TEST_TMP/mut.err"; then
+  fail "check-arms accepted nohook with the real hook pack"
+fi
+MUT2="$TEST_TMP/prereg-extra.json"
+python3 - "$BASE/prereg/dcard.json" "$MUT2" << 'PY'
+import json,sys
+j=json.load(open(sys.argv[1]))
+j["allowed_arm_difference"]["files"]=list(j["allowed_arm_difference"]["files"])+["skills/ceo-agent/NOT-A-REAL.md"]
+json.dump(j, open(sys.argv[2],"w"))
+PY
+if node "$BASE/run-dcard-campaign.js" --check-arms --prereg "$MUT2" >/dev/null 2>"$TEST_TMP/extra.err"; then
+  fail "check-arms accepted an extra registered file"
+fi
+
+echo "=== campaign dry-run lists 35 cells ==="
+DRY="$TEST_TMP/dcard-dry.jsonl"
+dry_out=$(node "$BASE/run-dcard-campaign.js" --dry-run --results "$DRY" --runner stub) || fail "dry-run exit $?"
+n=$(printf '%s\n' "$dry_out" | grep -c '^todo ')
+[ "$n" -eq 35 ] || fail "dry-run listed $n cells, want 35"
+printf '%s\n' "$dry_out" | grep -q 'dcard-owner-decision|nohook|5' || fail "dry-run missing nohook cell"
+printf '%s\n' "$dry_out" | grep -q 'a2-within-doa|change|5' || fail "dry-run missing a2 cell"
+
+echo "=== stub campaign reaches a score-dcard verdict ==="
+FAST="$TEST_TMP/stub-fast.sh"
+cat > "$FAST" << 'EOS'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"system","subtype":"init","session_id":"sess-fast"}'
+printf '%s\n' '{"message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ceo-agent"}}]}}'
+printf '%s\n' '{"type":"result","is_error":false}'
+EOS
+chmod +x "$FAST"
+CRES="$TEST_TMP/dcard-campaign.jsonl"
+set +e
+camp=$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID ONOFF_STUB_BIN="$FAST" \
+  node "$BASE/run-dcard-campaign.js" --results "$CRES" --runner stub --model sonnet < /dev/null 2>&1)
+camp_rc=$?
+set -e
+printf '%s\n' "$camp" | grep -Eq 'PASS|FAIL|STOP|INSTRUMENT-INVALID|SHIP|NOT-SHIP' || fail "campaign did not reach a verdict (exit $camp_rc): $camp"
+
+echo "=== stamp --check passes, mutated freeze file fails ==="
+node "$BASE/stamp-prereg.js" --row dcard --check >/dev/null || fail "stamp --check failed"
+SROOT="$TEST_TMP/stamp-root"
+mkdir -p "$SROOT"
+cp -a "$BASE/." "$SROOT/"
+echo '/* mutate */' >> "$SROOT/score-dcard.js"
+if node "$BASE/stamp-prereg.js" --row dcard --root "$SROOT" --check >/dev/null 2>"$TEST_TMP/stamp-mut.err"; then
+  fail "stamp --check accepted a mutated freeze file"
+fi
+grep -q 'digest mismatch' "$TEST_TMP/stamp-mut.err" || fail "mutated stamp did not report digest mismatch: $(cat "$TEST_TMP/stamp-mut.err")"
+
+echo "=== check-guidance-eval accepts the dcard prereg shape ==="
+GATE="$TEST_TMP/gate-repo"
+mkdir -p "$GATE"
+git -C "$GATE" init -q
+git -C "$GATE" config user.email t@t
+git -C "$GATE" config user.name T
+git -C "$GATE" config commit.gpgsign false
+python3 - "$BASE" "$GATE" << 'PY'
+import json, os, shutil, subprocess, sys
+base, repo = sys.argv[1], sys.argv[2]
+arm = json.load(open(os.path.join(base, "arms/dcard/change.json")))
+pre = json.load(open(os.path.join(base, "prereg/dcard.json")))
+def pack_bytes(pack_id, rel):
+    return open(os.path.join(base, "packs", pack_id, rel), "rb").read()
+def write(commit_packs, label):
+    for path in pre["guidance"]["files"]:
+        if path.startswith("skills/"):
+            skill, rel = path.split("/", 2)[1], path.split("/", 2)[2]
+            raw = pack_bytes(commit_packs[skill], rel)
+        else:
+            raw = pack_bytes(commit_packs["__files"], path)
+        dest = os.path.join(repo, path)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        open(dest, "wb").write(raw)
+    subprocess.check_call(["git", "-C", repo, "add", "-A"])
+    subprocess.check_call(["git", "-C", repo, "commit", "-qm", label, "--no-verify"])
+base_arm = json.load(open(os.path.join(base, "arms/dcard/base.json")))
+write({**base_arm["skills"], "__files": "dcard-files-base2"}, "base")
+write({**arm["skills"], "__files": "dcard-files-change2"}, "change")
+# The cut gate requires arm.files to be one pack id string. The campaign manifest keeps
+# the hook pack in the files array; this view names the guidance-files pack the gate maps.
+view = dict(arm, files="dcard-files-change2")
+json.dump(view, open(os.path.join(repo, "arm.json"), "w"), indent=2)
+PY
+base_sha=$(git -C "$GATE" rev-parse HEAD~1)
+head_sha=$(git -C "$GATE" rev-parse HEAD)
+set +e
+gate_out=$(node "$REPO_ROOT/scripts/check-guidance-eval.js" --base "$base_sha" --head "$head_sha" --repo "$GATE" \
+  --prereg "$BASE/prereg/dcard.json" --packs-dir "$BASE/packs" --arm "$GATE/arm.json" --scorer "$BASE/score-dcard.js" 2>"$TEST_TMP/gate.err")
+gate_rc=$?
+set -e
+[ "$gate_rc" -ne 2 ] || fail "check-guidance-eval rejected the prereg shape: $(cat "$TEST_TMP/gate.err")"
+python3 -c 'import json,sys; o=json.loads(sys.argv[1]); assert any(d.get("ok") for d in o["differing"]), o["failures"]' "$gate_out" \
+  || fail "gate did not map packs: $gate_out $(cat "$TEST_TMP/gate.err")"
 
 echo "PASS: skill-onoff dcard"

@@ -10,7 +10,7 @@
 // (pack ids whose provenance, manifest.pack_meta, is recorded). Steps, in order, all refusals exit 2 and write nothing:
 //   1. every pack the two arm manifests name is in packs/manifest.json (skills, files, fixture_scripts), and each freeze_pack has pack_meta.ref;
 //   2. allowed_arm_difference.files is non-empty;
-//   3. `run-g8-campaign.js --check-arms`-equivalent: run-g67-campaign.js --check-arms with this row's prereg/arms (ONOFF_PACKS_DIR=<root>/packs) is ok;
+//   3. arm check: the row's campaign_script (default run-g67-campaign.js) --check-arms with this row's prereg/arms (ONOFF_PACKS_DIR=<root>/packs) is ok;
 //   4. write the two sha256 into the prereg, THEN digest freeze_files (so the stamped prereg is what gets digested);
 //   5. FROZEN.json[<row>] = {frozen_at, stamped:true, packs, files}.
 // Order matters: stamp LAST. Any later edit to a digested file voids the row. --check re-derives everything and writes nothing.
@@ -77,7 +77,9 @@ if (check) {
 }
 
 const armsDir = path.join(root, path.dirname(armFile('off')));
-const chk = cp.spawnSync('node', [path.join(__dirname, 'run-g67-campaign.js'), '--check-arms', '--prereg', path.join(root, preregRel), '--arms-dir', armsDir], { encoding: 'utf8', env: { ...process.env, ONOFF_PACKS_DIR: path.join(root, 'packs') } });
+const campaignScript = prereg.campaign_script || 'run-g67-campaign.js';
+if (!/^[a-z0-9][a-z0-9._-]*\.js$/.test(campaignScript)) die(`campaign_script is not a local script name: ${campaignScript}`);
+const chk = cp.spawnSync('node', [path.join(__dirname, campaignScript), '--check-arms', '--prereg', path.join(root, preregRel), '--arms-dir', armsDir], { encoding: 'utf8', env: { ...process.env, ONOFF_PACKS_DIR: path.join(root, 'packs') } });
 if (chk.status !== 0) die(`arm check failed: ${(chk.stdout || '').trim()} ${(chk.stderr || '').trim()}`);
 
 for (const a of ['off', 'on']) prereg.arm_manifests[prereg.arms[a]].sha256 = sha(armFile(a));

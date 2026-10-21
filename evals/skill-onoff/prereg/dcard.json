@@ -3,12 +3,43 @@
   "artifact_type": "skill_onoff_prereg",
   "row": "dcard",
   "skill": "ceo-agent",
-  "status": "draft_unstamped",
-  "note": "Draft, not stamped. The change arm text is not written yet and the final hook pack id is pending (phase 2 re-runs build-dcard-hook-pack.js). Do not copy this file into prereg/FROZEN.json. The control task a2-within-doa runs with ONOFF_LIB_OVERRIDE pointing at evals/skill-onoff/lib-r2, the same way w2a-g did. Primary reps are 10; the control is 5.",
+  "status": "ready_to_stamp",
+  "campaign_script": "run-dcard-campaign.js",
+  "note": "Phase 2. Change arm is the dskill diff 98fb8eab9..dc1f92fb2edad0a734617121294bf39c09b52ee4 (12 files) overlaid on develop 3955ea75bf83f4d60d149add37107c73a1299944. Hook pack dcard-hooks-3955 is those six hooks at 3955ea75b. dcard-hooks-empty stays the negative control. invocation_prefix is identical in every arm. Control a2 and the dcard task share ONOFF_LIB_OVERRIDE=lib-dcard.",
   "arms": {
     "off": "base",
     "on": "change"
   },
+  "arm_manifests": {
+    "base": {
+      "file": "arms/dcard/base.json",
+      "sha256": "f7265db21b3ba871552bd1db5e5ae864f1ece6c29ac455d39172478929826b56"
+    },
+    "change": {
+      "file": "arms/dcard/change.json",
+      "sha256": "3e0b69a478bf0339a89dcf1adfa6e721b0673c2b5669fc01ed6f6cc6973b5cbb"
+    },
+    "nohook": {
+      "file": "arms/dcard/nohook.json"
+    }
+  },
+  "allowed_arm_difference": {
+    "files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "skills/ceo-agent/SKILL.md",
+      "skills/ceo-agent/references/depth0-control-loop.md",
+      "skills/ceo-agent/references/level-front-door.md",
+      "skills/dev-flow/SKILL.md",
+      "skills/engine-onboarding/SKILL.md",
+      "skills/harness-maintenance/SKILL.md",
+      "skills/hetero-review/SKILL.md",
+      "skills/l5/references/hetero-impl-loop.md",
+      "skills/quality-pipeline/SKILL.md",
+      "skills/test-strategy/SKILL.md"
+    ]
+  },
+  "invocation_prefix": "Load the autopilot:ceo-agent skill first, then handle this:",
   "model": "sonnet",
   "runner": "claude -p (headless depth-0)",
   "reps": 10,
@@ -34,7 +65,17 @@
       ]
     },
     "max_on_false_positive": 1,
-    "note": "a2 is 5 cells/arm and uses ONOFF_LIB_OVERRIDE=evals/skill-onoff/lib-r2; ON over-trigger must be <=1/5 and <= OFF+1"
+    "note": "a2 is 5 cells/arm. ON over-trigger must be <=1/5 and <= OFF+1. Markers come from lib-dcard, which sources lib-r2."
+  },
+  "negative_control": {
+    "task": "dcard-owner-decision",
+    "arm": "nohook",
+    "reps": 5,
+    "all_false": [
+      "m_hook_card",
+      "b_close_by_hook"
+    ],
+    "note": "nohook is base with dcard-hooks-empty. Every cell must show m_hook_card false and b_close_by_hook false."
   },
   "thresholds": {
     "on_min": 8,
@@ -44,7 +85,63 @@
     "min_usable": 8,
     "max_lost_pairs": 1
   },
+  "ship_rule": "SHIP iff primary ON >= 8 of 10 and OFF <= 2 of 10, V1 skill_invoked ratio >= 0.9 in both arms, V2 on-off >= 6, control ON false positives <= 1 and <= OFF+1, and every nohook cell has m_hook_card false and b_close_by_hook false.",
   "survivor_stop": "fewer than 8 usable (non-infra) cells in either arm, or paired exclusion of 2 or more (task,rep) pairs: STOP, no aggregate claim, per-marker report only",
-  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, these fixtures, the frozen base/change text pair. Not /l4 foreman, not opus/fable, not interactive.",
-  "arm_integrity": "base = pre-change files frozen at their git ref; change = post-edit files; any edit to either pack after freeze voids that arm (new pack id + re-run)"
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, these fixtures, the frozen base/change text pair, the 3955ea75b hook pack, and the empty-hook negative control. Not /l4 foreman, not opus/fable, not interactive.",
+  "arm_integrity": "base packs are develop 3955ea75bf83f4d60d149add37107c73a1299944; change packs are that tree with the twelve dskill files replaced by dc1f92fb2edad0a734617121294bf39c09b52ee4. Any edit to a frozen pack voids the arm (new pack id + re-run).",
+  "guidance": {
+    "base_ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+    "head_ref": "dc1f92fb2edad0a734617121294bf39c09b52ee4",
+    "non_skill_files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md"
+    ],
+    "files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "skills/ceo-agent/SKILL.md",
+      "skills/ceo-agent/references/depth0-control-loop.md",
+      "skills/ceo-agent/references/level-front-door.md",
+      "skills/dev-flow/SKILL.md",
+      "skills/engine-onboarding/SKILL.md",
+      "skills/harness-maintenance/SKILL.md",
+      "skills/hetero-review/SKILL.md",
+      "skills/l5/references/hetero-impl-loop.md",
+      "skills/quality-pipeline/SKILL.md",
+      "skills/test-strategy/SKILL.md"
+    ]
+  },
+  "freeze_files": [
+    "tasks/dcard-owner-decision",
+    "tasks/a2-within-doa",
+    "lib-dcard",
+    "lib/dcard-markers.sh",
+    "score-dcard.js",
+    "run-dcard-campaign.js",
+    "arms/dcard",
+    "build-dcard-hook-pack.js"
+  ],
+  "freeze_packs": [
+    "ceo-agent-dcard-base2",
+    "ceo-agent-dcard-change2",
+    "dev-flow-dcard-base2",
+    "dev-flow-dcard-change2",
+    "engine-onboarding-dcard-base2",
+    "engine-onboarding-dcard-change2",
+    "harness-maintenance-dcard-base2",
+    "harness-maintenance-dcard-change2",
+    "hetero-review-dcard-base2",
+    "hetero-review-dcard-change2",
+    "l5-dcard-base2",
+    "l5-dcard-change2",
+    "quality-pipeline-dcard-base2",
+    "quality-pipeline-dcard-change2",
+    "test-strategy-dcard-base2",
+    "test-strategy-dcard-change2",
+    "dcard-files-base2",
+    "dcard-files-change2",
+    "dcard-hooks-3955",
+    "dcard-hooks-empty",
+    "fixture-scripts-dcard2"
+  ]
 }

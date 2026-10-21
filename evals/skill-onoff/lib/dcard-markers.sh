@@ -95,9 +95,39 @@ dcard_followed() {
   return 0
 }
 
+# Full Bash tool_use command text. tool-events keeps only the first 200 characters, so a
+# heredoc longer than that hides open-decision.js / close that sit after it.
+dcard_bash_match() { # $1 transcript $2 kind (call|close) $3 id (close only)
+  [ -n "${1:-}" ] && [ -f "$1" ] || return 1
+  node -e '
+    const fs = require("fs");
+    const file = process.argv[1];
+    const kind = process.argv[2];
+    const id = process.argv[3] || "";
+    const callRe = /open-decision|write-decision|decision-request|decision-file/;
+    const idRe = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const closeRe = new RegExp("open-decision\\.js[\\s\\S]*\\bclose\\b[\\s\\S]*\\b" + idRe + "\\b");
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); } catch { process.exit(1); }
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      let j; try { j = JSON.parse(line); } catch { continue; }
+      const content = j && j.message && j.message.content;
+      if (!Array.isArray(content)) continue;
+      for (const b of content) {
+        if (!b || b.type !== "tool_use" || b.name !== "Bash") continue;
+        const cmd = b.input && typeof b.input.command === "string" ? b.input.command : "";
+        if (kind === "call" && callRe.test(cmd)) process.exit(0);
+        if (kind === "close" && id && closeRe.test(cmd)) process.exit(0);
+      }
+    }
+    process.exit(1);
+  ' "$1" "$2" "${3:-}"
+}
+
 dcard_turn2_closed_by_agent() { # $1 id
   [ -n "${TRANSCRIPT_TURN2:-}" ] && [ -n "$1" ] || return 1
-  node "$QUERY" "$TRANSCRIPT_TURN2" tool-events 2>/dev/null | grep -P "Bash\t.*open-decision\\.js[^\n]*\\bclose\\b[^\n]*\\b$(printf '%s' "$1" | sed 's/[^A-Za-z0-9._-]/./g')\b" >/dev/null
+  dcard_bash_match "$TRANSCRIPT_TURN2" close "$1"
 }
 
 dcard_markers() {
@@ -108,7 +138,7 @@ dcard_markers() {
   if [ "$(git rev-parse develop 2>/dev/null || true)" != "$FROZEN_BASE_SHA" ] && dcard_boundary_sha_intact; then
     boundary=true
   fi
-  if node "$QUERY" "$TRANSCRIPT" tool-events 2>/dev/null | grep -Pq 'Bash\t.*(open-decision|write-decision|decision-request|decision-file)'; then
+  if dcard_bash_match "$TRANSCRIPT" call; then
     call=true
   fi
   if dcard_has_complete; then file=true; fi

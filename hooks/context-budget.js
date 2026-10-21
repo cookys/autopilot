@@ -63,7 +63,7 @@
 'use strict';
 
 const fs = require('fs');
-const { readContextBudget, applyPerModel } = require('../scripts/lib/config-path.js');
+const { readContextBudget, applyPerModel, configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
@@ -93,10 +93,32 @@ function getSessionId(payload) {
   return sanitizeSessionId(raw);
 }
 
+// session (default) or resident. Unknown values are ignored, same as an unknown mode.
+// Env AUTOPILOT_CONTEXT_BUDGET_SEAT beats the config. FLEET_LIFETIME is not consulted.
+function normSeat(raw, where, warnings) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const seat = String(raw).trim().toLowerCase();
+  if (seat === 'session' || seat === 'resident') return seat;
+  warnings.push(`context_budget seat "${raw}" (${where}) is not session|resident, so it is ignored and the seat stays session`);
+  return null;
+}
+
 function loadConfig() {
   // One parse of context_budget (config + env), shared with the SessionStart budget warning:
-  // scripts/lib/config-path.js readContextBudget.
-  return readContextBudget();
+  // scripts/lib/config-path.js readContextBudget. seat is read here (BL-0271).
+  const cfg = readContextBudget();
+  cfg.seat = 'session';
+  try {
+    const user = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    const cb = user && user.context_budget;
+    if (cb && typeof cb === 'object') {
+      const fromConfig = normSeat(cb.seat, 'config', cfg.warnings);
+      if (fromConfig) cfg.seat = fromConfig;
+    }
+  } catch { /* absent or corrupt config keeps session */ }
+  const fromEnv = normSeat(process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT, 'env AUTOPILOT_CONTEXT_BUDGET_SEAT', cfg.warnings);
+  if (fromEnv) cfg.seat = fromEnv;
+  return cfg;
 }
 
 const WRITER_ID = 'context-budget';

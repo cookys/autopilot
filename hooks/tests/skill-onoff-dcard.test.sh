@@ -204,7 +204,31 @@ assert_false "$out" b_close_by_hook "skipped turn2"
 unset DCARD_TURN2
 
 echo "=== packs present ==="
-for id in dcard-hooks-develop dcard-hooks-empty ceo-agent-dcard-base fixture-scripts-dcard; do
+# Ids come from arms/dcard*/*.json (skills, files, fixture_scripts). ONOFF_PACKS_DIR
+# overrides the pack root so a temp copy can be broken without touching real packs.
+PACKS_DIR="${ONOFF_PACKS_DIR:-$BASE/packs}"
+mapfile -t PACK_IDS < <(node -e '
+  const fs=require("fs"), path=require("path");
+  const arms=path.join(process.argv[1],"arms");
+  const ids=new Set();
+  const add=(v)=>{ if(typeof v==="string" && v) ids.add(v); };
+  for(const d of fs.readdirSync(arms)){
+    if(!d.startsWith("dcard")) continue;
+    const dir=path.join(arms,d);
+    if(!fs.statSync(dir).isDirectory()) continue;
+    for(const name of fs.readdirSync(dir)){
+      if(!name.endsWith(".json")) continue;
+      const j=JSON.parse(fs.readFileSync(path.join(dir,name),"utf8"));
+      if(j.skills && typeof j.skills==="object") for(const v of Object.values(j.skills)) add(v);
+      for(const k of ["files","fixture_scripts"]) if(Array.isArray(j[k])) for(const v of j[k]) add(v);
+    }
+  }
+  if(!ids.size){ console.error("no pack ids"); process.exit(1); }
+  for(const id of [...ids].sort()) console.log(id);
+' "$BASE") || fail "derive pack ids"
+[ "${#PACK_IDS[@]}" -gt 0 ] || fail "no pack ids"
+for id in "${PACK_IDS[@]}"; do
+  [ -d "$PACKS_DIR/$id" ] || fail "pack dir missing $id"
   node -e '
     const fs=require("fs"),crypto=require("crypto"),path=require("path");
     const packs=process.argv[1], key=process.argv[2];
@@ -217,27 +241,44 @@ for id in dcard-hooks-develop dcard-hooks-empty ceo-agent-dcard-base fixture-scr
       const got=crypto.createHash("sha256").update(fs.readFileSync(path.join(packs,rel))).digest("hex");
       if(got!==digest){console.error("digest mismatch "+rel); process.exit(1);}
     }
-  ' "$BASE/packs" "$id" || fail "pack verify $id"
+  ' "$PACKS_DIR" "$id" || fail "pack verify $id"
 done
-node -e '
-  const fs=require("fs");
-  const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
-  if(!j.hooks || Object.keys(j.hooks).length!==0){console.error("empty pack hooks not empty"); process.exit(1);}
-' "$BASE/packs/dcard-hooks-empty/hooks/hooks.json" || fail "empty pack is not empty"
-# closure: every packed hook loads
-node << NODE || fail "hook closure"
-const fs=require("fs"), path=require("path");
-const root=path.join("$BASE","packs","dcard-hooks-develop");
-const hooks=fs.readdirSync(path.join(root,"hooks")).filter(n=>n.endsWith(".js"));
-if(!hooks.length){console.error("no hooks"); process.exit(1);}
-for(const n of hooks){
-  try { require(path.join(root,"hooks",n)); }
-  catch(e){
-    const msg=String(e && e.message || e);
-    if(e.code==="MODULE_NOT_FOUND" || /Cannot find module/.test(msg)){ console.error(n+": "+msg); process.exit(1); }
+EMPTY_HOOK_PACK=$(node -e '
+  const fs=require("fs"), path=require("path");
+  const packs=process.argv[1];
+  const ids=process.argv.slice(2);
+  const found=[];
+  for(const id of ids){
+    const p=path.join(packs,id,"hooks","hooks.json");
+    if(!fs.existsSync(p)) continue;
+    const j=JSON.parse(fs.readFileSync(p,"utf8"));
+    if(j.hooks && Object.keys(j.hooks).length===0) found.push(id);
   }
-}
-NODE
+  if(found.length!==1){ console.error("expected one empty hook pack, got "+found.join(",")); process.exit(1); }
+  process.stdout.write(found[0]);
+' "$PACKS_DIR" "${PACK_IDS[@]}") || fail "empty pack is not empty"
+# closure: every hook of each referenced hook pack loads
+node -e '
+  const fs=require("fs"), path=require("path");
+  const packs=process.argv[1];
+  const ids=process.argv.slice(2);
+  let saw=0;
+  for(const id of ids){
+    const dir=path.join(packs,id,"hooks");
+    if(!fs.existsSync(dir)) continue;
+    const hooks=fs.readdirSync(dir).filter(n=>n.endsWith(".js"));
+    if(!hooks.length) continue;
+    saw++;
+    for(const n of hooks){
+      try { require(path.join(dir,n)); }
+      catch(e){
+        const msg=String(e && e.message || e);
+        if(e.code==="MODULE_NOT_FOUND" || /Cannot find module/.test(msg)){ console.error(id+"/"+n+": "+msg); process.exit(1); }
+      }
+    }
+  }
+  if(!saw){ console.error("no referenced hook pack had a .js hook"); process.exit(1); }
+' "$PACKS_DIR" "${PACK_IDS[@]}" || fail "hook closure"
 # builder rejects a hook name that is not in hooks.json
 if node "$BASE/build-dcard-hook-pack.js" --ref 1912ff81e --hooks nope-not-a-hook.js >/dev/null 2>"$TEST_TMP/bogus.err"; then
   fail "builder accepted a bogus hook"
@@ -324,7 +365,7 @@ r=json.load(open(sys.argv[1]))
 if r["markers"].get("m_hook_card") is not False: raise SystemExit(r["markers"])
 PY
 # empty pack must not contain the real hook; the cell plugin is gone after cleanup, so check the pack
-if grep -q 'ask-decision.js' "$BASE/packs/dcard-hooks-empty/hooks/hooks.json"; then
+if grep -q 'ask-decision.js' "$PACKS_DIR/$EMPTY_HOOK_PACK/hooks/hooks.json"; then
   fail "empty pack still contains ask-decision"
 fi
 

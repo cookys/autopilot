@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0270 -->
+<!-- next-id: BL-0278 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -666,22 +666,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/verify-codex-marketplace-remove-and-hook-dedupe.md
 - **Context**: Check (a) that "codex plugin marketplace remove" exists and works so --uninstall clears the derived dev marketplace registration, and (b) whether a user-level and a plugin-level hook with the same name are de-duplicated.
 
-### PEER-REPORTED (cuda): count a dispatch branch as integrated when its patch-id or diff matches
-- **Id**: BL-0215
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: cuda revival.3d
-- **Report**: 01M59TJ90DWG5XVE6JS78CZ6Z7
-- **Reply**: 2026-10-19 01M59TMBZ32K3YSC7Q707QWV1Q
-- **Problem**: 殘留清理只用提交祖先關係判斷分支有沒有併入。派工候選常在改過後才被採用，例如讀過差異或去掉鎖定檔後採用，採用後的提交和候選不同，所以永遠被判成沒併入，只能閒置十四天後封存。cuda 一天清出二十條這種分支。
-- **Impact**: 分支列表一直堆積；封存前那段時間分不出是真的沒併入，還是已經被採用。
-- **Trigger**: the next residue sweep that lists unintegrated hetero branches whose patch-id or diff already landed on the target
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: fleet msg 01M59TJ90DWG5XVE6JS78CZ6Z7; replied 01M59TMBZ32K3YSC7Q707QWV1Q
-- **Pointer**: docs/backlog/count-dispatch-branch-integrated-by-patch-id.md
-
 ### roundtable Phase 1 - the /roundtable skill, distilled from several manual rooms
 - **Id**: BL-0216
 - **Status**: open
@@ -1125,23 +1109,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/final-panel-seat-transport-failure-no-reason.md
 - **Context**: See BL-0223: a red campaign_verification keeps only digests, so the failing command is lost.
 
-### Work-order "requires adoption" names no command or flow
-- **Id**: BL-0247
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: codepower twgs-revival
-- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
-- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
-- **Problem**: 工作單丟出需要採納時，沒有寫要跑哪道指令，也沒有說明採納流程。
-- **Impact**: 遇到這則訊息的人不知道下一步，只能自己猜指令。
-- **Trigger**: the work-order throw says the controller worktree requires adoption, and nothing documents the command or the flow
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
-- **Pointer**: docs/backlog/work-order-requires-adoption-undocumented.md
-- **Context**: Message text is in the work-order module. No adoption command is named next to the throw.
-
 ### Mission stays not ready after a section 11 downgrade
 - **Id**: BL-0248
 - **Status**: open
@@ -1176,7 +1143,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-failure-messages-not-actionable.md
 - **Context**: provider readiness, scorecard, and grant release each name a gap the operator cannot act on from the message alone.
 
-### autoCompactWindow and context budget must be aligned by hand
+### One command that writes the autocompact window and the context budget
 - **Id**: BL-0250
 - **Status**: open
 - **Since**: 2026-10-19
@@ -1184,14 +1151,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: codepower twgs-revival
 - **Report**: 01M59WNDJSZG3Y6YTERWD9DF4J
 - **Reply**: 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V
-- **Problem**: 自動壓縮視窗與情境預算要在兩處手動對齊，數字對不上時沒有任何消費者會發現。
-- **Impact**: 提醒與壓縮時機會錯開，而且沒有檢查會把不一致叫出來。
-- **Trigger**: a 1M-token window with nothing configured, or the two recommended values drift apart across the two files
-- **Trigger-Type**: ready
+- **Problem**: 每次工作階段開始的對齊檢查與完整提示已經出貨。剩下的是一道指令同時把兩處的建議值寫好，這件事還沒做。
+- **Impact**: 兩處仍得各自手改。對不齊時會被提醒，但沒有一道指令一次寫好。
+- **Trigger**: the owner asks for one command that writes both recommended values
+- **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
 - **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
-- **Context**: Two suggestions: print the recommended pair on every such SessionStart, or one command that writes both.
+- **Context**: Alignment check and full prompt shipped in merge e993e0fc0. The one-command writer is not built.
 
 ### Child processes must declare lifetime and parent to fleet (FLEET_LIFETIME / FLEET_PARENT / FLEET_ROLE contract)
 - **Id**: BL-0251
@@ -1389,3 +1356,121 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: landdocs 2026-10-21 empty-range finding
 - **Pointer**: docs/backlog/hetero-collect-empty-range.md
+
+### Pending owner-decision panel is unused by long-running sessions
+- **Id**: BL-0270
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: peer
+- **Reporter**: llm-playground lead (c4140)
+- **Report**: 01M5EQF6YGW98MRG4TBW90YS2W
+- **Reply**: 2026-10-21 01M5EQFP73V0Z6FFQQ3YEFF9ZS
+- **Problem**: 長時間運行的工作階段幾乎不用待決面板。開啟、回答與關閉的機制已經出貨，技能說明還沒有依開關實驗改寫。
+- **Impact**: 技能沒改之前，其他代理仍不知道何時該開待決卡，面板繼續閒置。
+- **Trigger**: skill text for the ceo, dev-flow and level-3-to-6 skills waits on the eval on/off result
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER llm-playground 2026-10-21
+- **Pointer**: docs/backlog/pending-decision-panel-unused-by-long-sessions.md
+- **Context**: Mechanism merge 6e428fd6c. AGENTS.md merge 9aa45ce1b. Skill text remains.
+
+### Cross-harness token discipline for resident seats
+- **Id**: BL-0271
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: peer
+- **Reporter**: llm-playground claude-4 (c4140)；llm-playground claude-4 (c4140)
+- **Report**: 01M5EWE5D6HT343H26BCXSHBPM；01M5EX8WGH1FT9MJDXYNQ2WGWN
+- **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6
+- **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
+- **Impact**: 主執行緒會累積到十億級用量。壓縮後仍比新執行緒肥，成本與延遲都下不來。
+- **Trigger**: the owner decides whether to adopt the five rules and to spike the named settings
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PEER llm-playground claude-4 2026-10-21
+- **Pointer**: docs/backlog/cross-harness-token-discipline.md
+- **Context**: Resident seats cannot change thread. Codex setting names are unverified.
+
+### Guidance cut gate is red on develop and not in preflight
+- **Id**: BL-0272
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 指引裁切檢查在開發主線上是紅的，也沒接進合併前檢查。它一定要指定基準，而合併前檢查沒有固定的舊版基準。
+- **Impact**: 摘要與評測包不一致時，合併前檢查現在不會擋下。
+- **Trigger**: after the second-phase pack covers every manifest file that differs from the 2.x baseline
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: dwire merge 215d9084c, 2026-10-21 discoverability audit
+- **Pointer**: docs/backlog/guidance-cut-gate-red-not-in-preflight.md
+- **Context**: The check against base 3.0.0-alpha.3 exits 1. The evidence-discipline digest does not match the pack.
+
+### Dispatch-suppression scans only the hands-brief fixed fields
+- **Id**: BL-0273
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 派工壓制檢查只掃簡報裡由控制者填的固定欄位。審查發現被逐字引用時會被誤擋，而簡報沒有控制者的自由文字欄。
+- **Impact**: 真正該檢查的重派說明與審查提示目前都沒掃到，壓制規則等於沒接上。
+- **Trigger**: scan the depth-0 redispatch prompt file and the reviewer prompt, which can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: dwire merge 215d9084c, 2026-10-21
+- **Pointer**: docs/backlog/dispatch-suppression-fixed-fields-only.md
+- **Context**: Merge 215d9084c. Four honest findings were all blocked. The brief has no controller free text.
+
+### Two hook suites are already red on the depth-0 postmerge tree
+- **Id**: BL-0274
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 兩支測試在主線合併後的工作樹上本來就是紅的，在工頭的複本裡卻是綠的，疑似和這台機器上正在跑的監看程序有關。
+- **Impact**: 深度零的合併後檢查會把本來就紅的測試當成這次改動的失敗。
+- **Trigger**: the two hook suites fail on the depth-0 postmerge tree and pass in the foreman clone
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: dmech postmerge note, 2026-10-21
+- **Pointer**: docs/backlog/postmerge-hook-tests-already-red.md
+- **Context**: Two hosting cases red at 3a44dd784, c722c250c and 9aa45ce1b. The live-state shell suite is 22 pass and 2 fail on the base.
+
+### Scripts that appear uncalled need a keep-or-retire decision
+- **Id**: BL-0275
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: owner
+- **Problem**: 有幾支腳本在盤點裡幾乎沒有呼叫者。有的檔頭說會被品質面板用，實際只有另一支腳本用；有的所屬計畫已經歸檔。
+- **Impact**: 沒人決定留或撤之前，這些腳本會繼續放著，之後的人分不出是備用還是廢棄。
+- **Trigger**: the owner decides, for each script, whether to wire it or retire it
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: 2026-10-21 discoverability audit
+- **Pointer**: docs/backlog/uncalled-scripts-keep-or-retire.md
+- **Context**: A missing caller is not a reason to delete. Each script's purpose, caller and suggestion are in the sidecar.
+
+### Review deferrals from 2026-10-21
+- **Id**: BL-0276
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 當天的審查留下幾件小修：待決卡路徑含空白會壞、範圍走訪沒有共用、缺第二個範圍的隔離測試、注入文字與實際比對不符，以及檢查與判定的已知邊界。
+- **Impact**: 含空白的路徑、第二個範圍，或只改縮排的分支，會得到錯的結果或看不出原因的錯誤。
+- **Trigger**: the deferred review items from 2026-10-21 can be picked up now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: dmech, dwire and bl215 reviews, 2026-10-21
+- **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
+- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries.
+
+### Remaining entry gaps from the 2026-10-21 discoverability audit
+- **Id**: BL-0277
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: owner
+- **Problem**: 盤點還有幾個入口沒教完。派工樹只有一行說明，工頭派工自述還沒接上第五級，警告格式號稱會在工作階段開始時用但沒有掛上，任務的多數子命令也沒有入口。
+- **Impact**: 功能在，但其他代理仍不知道這些入口何時該用。
+- **Trigger**: the remaining entry gaps named in the 2026-10-21 audit can be taught now
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: 2026-10-21 discoverability audit
+- **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
+- **Context**: Detail in remaining-discoverability-entry-gaps.md. Roundtable stays on BL-0216 and task-card on BL-0243.

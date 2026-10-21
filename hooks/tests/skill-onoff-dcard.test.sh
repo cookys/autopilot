@@ -571,4 +571,59 @@ set -e
 python3 -c 'import json,sys; o=json.loads(sys.argv[1]); assert any(d.get("ok") for d in o["differing"]), o["failures"]' "$gate_out" \
   || fail "gate did not map packs: $gate_out $(cat "$TEST_TMP/gate.err")"
 
+# RED at a6d250c17: dcard-v2 campaign, arms, prereg and change3 packs were absent
+# (check-arms/dry-run/deep-equal/change3 wording failed; dcard stamp --check stayed green).
+echo "=== dcard-v2 check-arms passes and a mutated copy fails ==="
+v2chk=$(node "$BASE/run-dcard-v2-campaign.js" --check-arms) || fail "dcard-v2 check-arms exit $?"
+python3 -c 'import json,sys; r=json.loads(sys.argv[1]); assert r["ok"] and len(r["differing"])==12' "$v2chk" || fail "dcard-v2 check-arms body: $v2chk"
+MUTV="$TEST_TMP/arms-dcard-v2-mut"
+cp -a "$BASE/arms/dcard-v2" "$MUTV"
+python3 - "$MUTV/change.json" << 'PY'
+import json,sys
+p=sys.argv[1]
+j=json.load(open(p))
+j["skills"]["ceo-agent"]="ceo-agent-dcard-base2"
+json.dump(j, open(p,"w"), indent=2)
+open(p,"a").write("\n")
+PY
+if node "$BASE/run-dcard-v2-campaign.js" --check-arms --arms-dir "$MUTV" >/dev/null 2>"$TEST_TMP/v2mut.err"; then
+  fail "dcard-v2 check-arms accepted a change arm whose ceo-agent pack is the base pack"
+fi
+
+echo "=== dcard-v2 dry-run lists 30 cells ==="
+DRYV="$TEST_TMP/dcard-v2-dry.jsonl"
+v2dry=$(node "$BASE/run-dcard-v2-campaign.js" --dry-run --results "$DRYV" --runner stub) || fail "dcard-v2 dry-run exit $?"
+n2=$(printf '%s\n' "$v2dry" | grep -c '^todo ')
+[ "$n2" -eq 30 ] || fail "dcard-v2 dry-run listed $n2 cells, want 30"
+printf '%s\n' "$v2dry" | grep -q 'dcard-owner-decision|base|10' || fail "dcard-v2 dry-run missing base cell"
+printf '%s\n' "$v2dry" | grep -q 'dcard-owner-decision|change|10' || fail "dcard-v2 dry-run missing change cell"
+printf '%s\n' "$v2dry" | grep -q 'a2-within-doa|base|5' || fail "dcard-v2 dry-run missing a2 base"
+printf '%s\n' "$v2dry" | grep -q 'a2-within-doa|change|5' || fail "dcard-v2 dry-run missing a2 change"
+if printf '%s\n' "$v2dry" | grep -q '|nohook|'; then fail "dcard-v2 dry-run listed a nohook cell"; fi
+
+echo "=== dcard-v2 prereg matches dcard on task, markers, thresholds, ship rule, prefix ==="
+node - "$BASE/prereg/dcard.json" "$BASE/prereg/dcard-v2.json" << 'JS'
+const fs = require('fs');
+const a = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const b = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+const bad = [];
+if (!same(a.thresholds, b.thresholds)) bad.push('thresholds');
+if (a.ship_rule !== b.ship_rule) bad.push('ship_rule');
+if (a.invocation_prefix !== b.invocation_prefix) bad.push('invocation_prefix');
+if (!same(a.primary, b.primary)) bad.push('task/primary');
+if (!same(a.secondary, b.secondary)) bad.push('markers/secondary');
+if (!same(a.control, b.control)) bad.push('control');
+if (b.row !== 'dcard-v2') bad.push('row');
+if (typeof b.v2_basis !== 'string' || !b.v2_basis.includes('daae02372')) bad.push('v2_basis');
+if (bad.length) { console.error(bad.join(', ')); process.exit(1); }
+JS
+
+echo "=== dcard frozen files are unchanged ==="
+node "$BASE/stamp-prereg.js" --row dcard --check >/dev/null || fail "stamp --row dcard --check failed after dcard-v2"
+
+echo "=== change3 ceo-agent pack names --recommendation and --why ==="
+grep -q -- '--recommendation' "$BASE/packs/ceo-agent-dcard-change3/SKILL.md" || fail "change3 SKILL.md lacks --recommendation"
+grep -q -- '--why' "$BASE/packs/ceo-agent-dcard-change3/SKILL.md" || fail "change3 SKILL.md lacks --why"
+
 echo "PASS: skill-onoff dcard"

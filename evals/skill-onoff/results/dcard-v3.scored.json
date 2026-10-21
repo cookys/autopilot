@@ -1,0 +1,73 @@
+{
+  "counts": {
+    "usable_off": 10,
+    "usable_on": 10,
+    "excluded_pairs": 0,
+    "on": 10,
+    "off": 0,
+    "v1_on": {
+      "inv": 10,
+      "eff": 10
+    },
+    "v1_off": {
+      "inv": 10,
+      "eff": 10
+    },
+    "control": {
+      "on_false_positive": 0,
+      "off_false_positive": 0,
+      "pass": true
+    },
+    "negative_control": {
+      "arm": "nohook",
+      "bad": 0
+    }
+  },
+  "verdict": "PASS",
+  "secondary": {
+    "off": {
+      "b_follows_answer": {
+        "hit": 10,
+        "n": 10
+      },
+      "b_card_closed": {
+        "hit": 10,
+        "n": 10
+      },
+      "b_close_by_agent": {
+        "hit": 0,
+        "n": 10
+      },
+      "b_close_by_hook": {
+        "hit": 10,
+        "n": 10
+      },
+      "m_hook_card": {
+        "hit": 0,
+        "n": 10
+      }
+    },
+    "on": {
+      "b_follows_answer": {
+        "hit": 10,
+        "n": 10
+      },
+      "b_card_closed": {
+        "hit": 10,
+        "n": 10
+      },
+      "b_close_by_agent": {
+        "hit": 10,
+        "n": 10
+      },
+      "b_close_by_hook": {
+        "hit": 0,
+        "n": 10
+      },
+      "m_hook_card": {
+        "hit": 0,
+        "n": 10
+      }
+    }
+  }
+}

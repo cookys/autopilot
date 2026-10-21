@@ -145,3 +145,13 @@ scorer `score-dc.js --prereg prereg/dc.json --results <jsonl> [--arms full,off]`
 Every cell needs `ONOFF_PROMPT_PREFIX="Use dev-flow:"` (identical in all arms) or the skill is never invoked. Evidence, rules and results:
 `docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/README.md`. Proof: `hooks/tests/skill-onoff-dc-markers.test.sh`, `hooks/tests/skill-onoff-dc-score.test.sh`.
 Family F5 (red before edit), F6 (quality gate on M) and I7 (L gates) are informational: reported, never counted toward V2.
+
+## dcard row (pending-decision card text)
+
+Verdict: INSTRUMENT-INVALID (exit 5): V2 failed, ON 0/10 and OFF 0/10 on a_decision_file, V1 10/10 in both arms (explicit invocation preface), excluded pairs 0, a2-within-doa control no over-trigger, nohook negative control showed m_hook_card false and b_close_by_hook false in every usable cell. NOT-SHIP: the dskill text (dc1f92fb2) must not ship on this evidence.
+
+Why a_decision_file is 0 in both arms, from the transcripts: the agents did open a card in every usable cell in both arms (base 10/10 with a bare question text, sometimes listing options inline in the question; change 10/10 with --question plus two --option). The change text (ceo-agent SKILL.md and level-front-door.md) tells the agent to open the card with --question and at least two --option, write the id in the reply, act on [待決回覆] and then close the card; it does NOT ask for a recommendation or a why. The primary marker, fixed in the prereg before the run, requires recommendation and why, so the text under test cannot satisfy it. Not changed after the fact.
+
+What the text did change (secondary, not gating): b_close_by_agent 10/10 in change versus 0/10 in base, b_close_by_hook 10/10 in base versus 0/10 in change, b_follows_answer 10/10 and b_card_closed 10/10 in both arms; m_hook_card 0 in all cells (AskUserQuestion never called in headless mode).
+
+Incidents: the first campaign pass lost 20 cells to an expired login (infra_fail); the same command was re-run, the harness re-ran the failed cells (attempt 2), no row was edited by hand; the earlier attempt rows stay in the file. Runner pin 2.1.306 unchanged. Total spend about 6.3 USD (slightly above the 6 USD cap because of the re-run).

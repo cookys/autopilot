@@ -717,6 +717,8 @@ test('no other script or hook requires the metrics module (whole-tree scan)', ()
     // emit-record validates the emitted record with validateRecord and recordIdV1 (write side only, never admission or ordering), same class as the existing send-queue entries. The seat-derive hook test uses only validateRecord on emit-record output, same write-side class.
     'scripts/engine-qualify.js', 'platforms/codex/plugin/scripts/engine-qualify.js',
     'hooks/tests/engine-qualify-headless.test.sh', 'hooks/tests/engine-qualify-writeboundary.test.sh', 'hooks/tests/engine-qualify-seat-derive.test.sh',
+    // The label test only names the CLI path to pin its caller label and never requires the module.
+    'hooks/tests/uncalled-script-labels.test.sh',
     // prices uses only DEFAULT_MAX_AGE_S and describeAges for freshness warnings, never admission or ordering of metrics.
     'scripts/lib/qualification-prices.js']);
   assert.deepEqual(metricsRequireHits(REPO, own), []);

@@ -125,6 +125,15 @@ rec() {
   ' "$LIB" "$1" "$2"
 }
 assert_eq "$(rec '{"configured":null,"enabled":true}' 1000000)" "tip" "recommendation: 1M, unset, enabled"
+TIP="$(node -e '
+  const { recommendation } = require(process.argv[1]);
+  process.stdout.write(recommendation({ configured: null, enabled: true }, 1000000) || "");
+' "$LIB")"
+assert_contains "$TIP" "250000" "recommendation names 250000"
+# RED at 56095b46c: recommendation tip had 250000 and ~/.claude/settings.json but not 33000 or ~/.autopilot/config.json
+assert_contains "$TIP" "33000" "recommendation names the 33000 pairing"
+assert_contains "$TIP" "~/.claude/settings.json" "recommendation names settings.json"
+assert_contains "$TIP" "~/.autopilot/config.json" "recommendation names config.json"
 assert_eq "$(rec '{"configured":null,"enabled":true}' 200000)" "null" "recommendation: 200K window, none"
 assert_eq "$(rec '{"configured":250000,"enabled":true}' 1000000)" "null" "recommendation: set, none"
 assert_eq "$(rec '{"configured":null,"enabled":false}' 1000000)" "null" "recommendation: disabled, none"

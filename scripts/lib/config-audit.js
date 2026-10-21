@@ -30,10 +30,9 @@
 const fs = require('fs');
 const path = require('path');
 const { configPath, readContextBudget } = require('./config-path.js');
+const { AUTOCOMPACT_BUFFER } = require('./autocompact-window.js');
 
 const CURRENT_SCHEMA = 1;
-// Claude Code compacts at autoCompactWindow minus this buffer (same constant as compaction-handoff.js).
-const AUTOCOMPACT_BUFFER = 33_000;
 const REGISTRY = path.join(__dirname, 'config-keys.json');
 
 function loadRegistry(file) {
@@ -146,7 +145,7 @@ function contradictions(opts, userCfg, findings) {
       findings.push({ rule: 't2_gap_over_window', key: 'context_budget.t2', detail: `t2 ${b.t2} + gap ${b.gap} = ${b.t2 + b.gap} is above the compaction point ${compactAt} (autoCompactWindow ${win.configured} - ${AUTOCOMPACT_BUFFER})`, suggestion: `autoCompactWindow ${b.t2 + b.gap + AUTOCOMPACT_BUFFER} or lower t2/gap` });
     }
   } else if (win.configured === null && !(win.per_model && Object.keys(win.per_model).length) && !(Number.isFinite(opts.contextWindow) && opts.contextWindow < 1_000_000)) {
-    findings.push({ rule: 'no_autocompact_window', key: 'autoCompactWindow', detail: 'no auto-compact window is set: a 1M-window session compacts only near 1M, and T2 then asks you to stop and /clear', suggestion: 'set "autoCompactWindow": 250000 in ~/.claude/settings.json or run /autocompact' });
+    findings.push({ rule: 'no_autocompact_window', key: 'autoCompactWindow', detail: 'no auto-compact window is set: a 1M-window session compacts only near 1M, and T2 then asks you to stop and /clear', suggestion: `set "autoCompactWindow": 250000 in ~/.claude/settings.json or run /autocompact; keep context_budget.t2 plus context_budget.gap at most autoCompactWindow minus ${AUTOCOMPACT_BUFFER} in ~/.autopilot/config.json` });
   }
 }
 

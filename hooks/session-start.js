@@ -207,6 +207,26 @@ function configAuditBlock(homeDir) {
   }
 }
 
+// Ordinary SessionStart (not the version-update notice): show only a t2+gap vs autoCompactWindow mismatch.
+// At most 2 lines, nothing at all when the pair fits. Off with update_check / AUTOPILOT_UPDATE_CHECK=0
+// or AUTOPILOT_CONFIG_PAIR_CHECK=0. Any failure yields '' so SessionStart output is unchanged.
+function configPairBlock(homeDir) {
+  try {
+    if (process.env.AUTOPILOT_CONFIG_PAIR_CHECK === '0') return '';
+    if (readOptOutFlag(homeDir)) return '';
+    const lib = require('../scripts/lib/config-audit.js');
+    const audited = lib.audit({ home: homeDir, projectDir: process.env.CLAUDE_PROJECT_DIR });
+    const lines = lib.formatLines({
+      findings: (audited.findings || []).filter((f) => f && f.rule === 't2_gap_over_window'),
+    });
+    if (!lines.length) return '';
+    const clip = (l) => (l.length > 200 ? `${l.slice(0, 197)}...` : l);
+    return `[Autopilot config pair]\n- ${clip(lines[0])}`;
+  } catch {
+    return '';
+  }
+}
+
 // Seat unit prices (BL-0024): refresh the local price cache in a DETACHED child, at most once per 24 h
 // (scripts/qualification-prices.js fetch --if-stale-hours 24), so the dispatch path itself never touches the
 // network. Never waits, never prints, never blocks the session: any failure is swallowed (the child's own
@@ -596,6 +616,13 @@ function run() {
       updateNotice = updateNoticeCandidate(pluginRoot, homeDir, source, currentVersionTuple);
     } catch {
       updateNotice = '';
+    }
+    // Version-update SessionStart already printed the finding inside configAuditBlock. Do not print it again.
+    if (!updateNotice) {
+      try {
+        const pair = configPairBlock(homeDir);
+        if (pair) updateNotice = pair;
+      } catch { /* advisory only */ }
     }
 
     // Any source: t2 + gap must fit under window - 33000, else compaction comes before the T2 handoff reminder (with auto-compact set T2 never asks to stop). One line, no changes made.

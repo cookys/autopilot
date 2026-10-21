@@ -137,6 +137,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | Setting | What it does | Default | Environment variable |
 |---|---|---|---|
 | `update_check` (config.json) | false stops the "Autopilot updated" notice at session start. | `true` | `AUTOPILOT_UPDATE_CHECK`: Set to "0" to stop the update notice (either this or update_check: false switches it off). |
+| `AUTOPILOT_CONFIG_PAIR_CHECK` | Set to "0" to stop the ordinary-session reminder when context_budget.t2 plus gap is above autoCompactWindow minus 33000. The same reminder is also off when `update_check` is false or `AUTOPILOT_UPDATE_CHECK` is "0". | on | |
 | `config_schema_version` (config.json) | The config.json format version you last reviewed. Missing counts as 0; the current version is 1. Autopilot never writes it. | `0` (missing) | none |
 
 ### Config check on upgrade
@@ -149,6 +150,8 @@ On the SessionStart that announces a new Autopilot version, and whenever you run
 - defaults that changed since your `config_schema_version`. After reading them, set `"config_schema_version": 1` in the file to stop seeing the listing.
 
 At SessionStart the report is at most 5 lines and is switched off together with the update notice (`update_check: false` or `AUTOPILOT_UPDATE_CHECK=0`).
+
+On every other SessionStart, only a `t2 + gap` above `autoCompactWindow - 33000` mismatch is shown (at most 2 lines). Nothing is printed when that pair fits. `AUTOPILOT_CONFIG_PAIR_CHECK=0` switches that reminder off, and so do `update_check: false` and `AUTOPILOT_UPDATE_CHECK=0`. The version-update SessionStart still uses only the block above, so the finding is not printed twice.
 
 ## Residue cleanup
 

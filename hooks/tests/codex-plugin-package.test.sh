@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 895b778d3: extra hooks/lib file made --check exit 1 with no "drift:" line; removing a missing brief-head.js left --check exit 0 (sandbox lib file is payload.txt). 133 passed, 3 failed.
 # RED at f52f04b9256a4403b90dc4aba306c0871d335cc3: FAIL requiring mirrored session-start.js succeeds (expected 0, got 1); Cannot find module '../../../hooks/lib/brief-header-template.js'
 . "$(dirname "$0")/lib.sh"
 
@@ -556,6 +557,17 @@ assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra baselin
 assert_contains "$OUT" "profiles/baselines/stale.json" \
   "sync-codex-plugin-skills --check names the extra baseline"
 rm "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
+
+printf 'extra lib\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/extra-not-in-source.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra hooks/lib file"
+assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for an extra hooks/lib file"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/extra-not-in-source.js"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects a missing hooks/lib file"
+assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for a missing hooks/lib file"
+cp "$SYNC_SANDBOX/hooks/lib/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
 
 printf 'stale hook\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?

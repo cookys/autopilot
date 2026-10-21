@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # RED at ae262ac9: suite missing; group-S hooks do not enqueue; advisory-relay.js absent
+# RED at 895b778d3: unwritable scope close: stderr fail-open: 'fail-open' not found in output (hook exit 0, 103 passed, 1 failed).
 # advisory-relay + group-S Stop queue (ha-p2). Isolated HOME / TMPDIR / XDG_RUNTIME_DIR / AUTOPILOT_LIVE_DIR.
 . "$(dirname "$0")/lib.sh"
 
@@ -548,5 +549,25 @@ if node -e '
 else
   fail "show and close --id use projectScopeFiles"
 fi
+
+# Unwritable scope directory: closeDecisionById cannot write the lock. The hook must still exit 0 and say fail-open.
+UNW_REPO="$TEST_TMP/dec-unwritable"
+mkdir -p "$UNW_REPO"
+git -C "$UNW_REPO" init -q
+UNW_FILE="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const { openDecision } = require(process.argv[1]);
+  const r = openDecision({ cwd: process.argv[2], question: "unwritable?" });
+  if (r.status !== "ok") { process.stderr.write((r.message || "open failed") + "\n"); process.exit(2); }
+  process.stdout.write(r.file + "\n" + r.id + "\n");
+' "$REPO_ROOT/scripts/open-decision.js" "$UNW_REPO")"
+UNW_PATH="$(printf '%s\n' "$UNW_FILE" | sed -n '1p')"
+UNW_ID="$(printf '%s\n' "$UNW_FILE" | sed -n '2p')"
+UNW_DIR="$(dirname "$UNW_PATH")"
+chmod a-w "$UNW_DIR"
+UNW_PROMPT="$(printf '[待決回覆]\n%s｜unwritable → x\n' "$UNW_ID")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-unwritable",cwd:process.argv[1],prompt:process.argv[2]}))' "$UNW_REPO" "$UNW_PROMPT")"
+chmod u+w "$UNW_DIR"
+assert_eq 0 "$__RUN_EXIT" "unwritable scope close: exit 0"
+assert_contains "$__RUN_STDERR" "fail-open" "unwritable scope close: stderr fail-open"
 
 finalize_test

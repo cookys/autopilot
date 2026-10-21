@@ -25,8 +25,8 @@ AGY_SLEEP_PAT='sleep 8641[7]'
 
 cleanup_agy_sleeper() {
   local pids
-  pids="$(pgrep -f "$AGY_SLEEP_PAT" || true)"
-  if [ -n "$pids" ]; then
+  pids="$(pgrep -f "$AGY_SLEEP_PAT" || true) $(pgrep -f 'sleep 8641[9]' || true)"
+  if [ -n "${pids// /}" ]; then
     # shellcheck disable=SC2086
     kill -9 $pids 2>/dev/null || true
   fi
@@ -64,6 +64,35 @@ assert_contains "$HANG_OUT" '"status": "runner_failed"' "agy outer timeout is ru
 sleep 0.5
 HANG_LEFT="$(pgrep -f "$AGY_SLEEP_PAT" || true)"
 assert_eq "" "$HANG_LEFT" "no fake agy sleeper remains after timeout plus grace"
+
+# --- case 1b: sleeper that ignores both TERM and HUP is still reaped by KILL ---
+BOTH_SLEEP_SECS=86419
+BOTH_SLEEP_PAT='sleep 8641[9]'
+STUB_AGY_BOTH="$TEST_TMP/runner-agy-term-hup"
+cat > "$STUB_AGY_BOTH" <<EOF
+#!/usr/bin/env bash
+trap '' TERM HUP
+exec sleep $BOTH_SLEEP_SECS
+EOF
+chmod +x "$STUB_AGY_BOTH"
+
+BOTH_START=$(date +%s)
+set +e
+BOTH_OUT="$(timeout 30s env DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
+  "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_AGY_BOTH" --timeout 3s 2>&1)"
+BOTH_EXIT=$?
+set -e
+BOTH_ELAPSED=$(( $(date +%s) - BOTH_START ))
+
+assert_eq "0" "$([[ "$BOTH_ELAPSED" -le 20 ]] && echo 0 || echo "$BOTH_ELAPSED")" \
+  "agy TERM+HUP sleeper returns within timeout+grace+buffer (elapsed=${BOTH_ELAPSED}s exit=${BOTH_EXIT})"
+assert_eq "3" "$BOTH_EXIT" "agy TERM+HUP outer timeout exits 3 (runner_failed)"
+assert_contains "$BOTH_OUT" '"transport_status": "timeout"' "agy TERM+HUP outer timeout maps to transport_status timeout"
+assert_contains "$BOTH_OUT" '"status": "runner_failed"' "agy TERM+HUP outer timeout is runner_failed"
+
+sleep 0.5
+BOTH_LEFT="$(pgrep -f "$BOTH_SLEEP_PAT" || true)"
+assert_eq "" "$BOTH_LEFT" "no fake agy sleeper remains after TERM+HUP timeout plus grace"
 
 # --- case 2: a normally exiting fake agy is still authored ---
 STUB_AGY_OK="$TEST_TMP/runner-agy-ok"

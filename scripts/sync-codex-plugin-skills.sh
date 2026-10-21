@@ -582,6 +582,35 @@ is_expected_doc_file() {
   return 1
 }
 
+# hooks/lib only. Recursive relative paths, sorted. hooks/_shared stays on the
+# top-level name check in check_exact_directory_entries.
+check_mirrored_file_list() {
+  local rel="$1"
+  local src="$REPO/$rel"
+  local dst="$PLUGIN/$rel"
+  local status=0
+  local path
+  if [ ! -d "$src" ] || [ ! -d "$dst" ]; then
+    echo "drift: missing directory platforms/codex/plugin/$rel"
+    return 1
+  fi
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    echo "drift: missing file platforms/codex/plugin/$rel/$path"
+    status=1
+  done < <(comm -23 \
+    <(cd "$src" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort) \
+    <(cd "$dst" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort))
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    echo "drift: extra file platforms/codex/plugin/$rel/$path"
+    status=1
+  done < <(comm -13 \
+    <(cd "$src" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort) \
+    <(cd "$dst" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort))
+  return "$status"
+}
+
 check_doc_extras() {
   local docs_dir="$PLUGIN/docs"
   local rel
@@ -623,6 +652,7 @@ if [ "$MODE" = "check" ]; then
   check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
   check_exact_directory_entries "hooks" "_shared" "dirty-protected-paths.js" "hooks.json" \
     "lib" "orchestrator-edit-gate-lib.js" "post-compact.js" "pre-effect.js" || STATUS=1
+  check_mirrored_file_list "hooks/lib" || STATUS=1
   check_plugin_manifest || STATUS=1
   check_doc_extras || STATUS=1
 

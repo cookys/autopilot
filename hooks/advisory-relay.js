@@ -54,11 +54,19 @@ function closeDecideReply(payload) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
-  for (const id of ids) {
-    for (const file of files) {
-      const r = closeDecisionById(file, id);
-      if (r && r.status !== 'absent') break;
+  try {
+    for (const id of ids) {
+      for (const file of files) {
+        const r = closeDecisionById(file, id);
+        // closeDecisionById swallows write failures as status error. Surface them
+        // on the same fail-open path as a throw from the close loop.
+        if (r && r.status === 'error') throw new Error(r.message || 'close failed');
+        if (r && r.status !== 'absent') break;
+      }
     }
+  } catch (e) {
+    process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
+    return;
   }
 }
 

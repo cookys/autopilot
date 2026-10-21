@@ -3367,7 +3367,7 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "Seconds the agy author runner is given after the outer timeout before it is killed."
+      "summary": "Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30."
     },
     {
       "name": "AUTOPILOT_AUTHOR_MAX_TOKENS",

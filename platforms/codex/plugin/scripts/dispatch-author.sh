@@ -1422,15 +1422,22 @@ else
   # agy ignores SIGTERM, and its own --print-timeout is the only limit today
   # unless an outer timeout escalates to KILL. GNU timeout exits 124 on TERM
   # timeout and 137 when the kill-after grace has to send KILL. Map that 137
-  # back to 124 so this branch reports transport_status timeout. Other runners
-  # are unchanged (still no kill-after).
+  # back to 124 only after the deadline has elapsed, so an early SIGKILL (OOM
+  # or an external kill) is not reported as transport_status timeout. Other
+  # runners are unchanged (still no kill-after). Grace must be a positive
+  # integer: timeout -k 0 does not send KILL.
   AUTHOR_KILL_GRACE_SECS="${AUTOPILOT_AUTHOR_KILL_GRACE_SECS:-30}"
-  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[0-9]+$ ]] || AUTHOR_KILL_GRACE_SECS=30
+  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[1-9][0-9]*$ ]] || AUTHOR_KILL_GRACE_SECS=30
   set +e
+  AGY_TIMEOUT_START=$SECONDS
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
   if [[ "$RUNNER_EXIT" -eq 137 ]]; then
-    RUNNER_EXIT=124
+    AGY_TIMEOUT_ELAPSED=$((SECONDS - AGY_TIMEOUT_START))
+    if AGY_TIMEOUT_LIMIT="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" \
+      && [[ "$AGY_TIMEOUT_ELAPSED" -ge "$AGY_TIMEOUT_LIMIT" ]]; then
+      RUNNER_EXIT=124
+    fi
   fi
   set -e
   rm -rf "$RUN_SH"

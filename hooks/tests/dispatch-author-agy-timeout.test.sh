@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # RED at 6d00e2687ebfad4e80fe10ebe8c9793621edbf1f: TERM-ignoring sleeper ran out the 30s outer wrapper (elapsed=30s exit=124) with no transport_status timeout — agy branch had no outer timeout.
+# RED at ab0876bdbc3572ae989ec289d5ac33e985f055c7: early self-SIGKILL is not transport_status timeout: unexpected '"transport_status": "timeout"' in output (runner exited 124). Grace 0 stayed green on uutils timeout 0.8.0.
 # Outer timeout + kill grace for the agy branch of dispatch-author.sh.
 # agy ignores SIGTERM; the outer `timeout -k` must still reap a sleeper that traps TERM.
 . "$(dirname "$0")/lib.sh"
@@ -104,5 +105,53 @@ assert_eq "0" "$FRESH_EXIT" "fresh HOME with no .gemini exits 0"
 assert_contains "$FRESH_OUT" '"status": "authored"' "fresh HOME with no .gemini returns authored"
 test -d "$FRESH_HOME/.gemini/antigravity-cli/log"
 test -d "$FRESH_HOME/.gemini/antigravity-cli/crashes"
+
+# --- case 4: grace 0 falls back to a positive grace (KILL still escalates) ---
+# TIMEOUT is 2s so the 30s fallback grace is what must be bounded. The sleeper
+# ignores TERM and would outlast the ~45s outer wrapper if grace 0 disabled KILL.
+GRACE0_SLEEP_SECS=120
+GRACE0_SLEEP_PAT='sleep 12[0]'
+STUB_AGY_GRACE0="$TEST_TMP/runner-agy-grace0"
+cat > "$STUB_AGY_GRACE0" <<EOF
+#!/usr/bin/env bash
+trap '' TERM
+exec sleep $GRACE0_SLEEP_SECS
+EOF
+chmod +x "$STUB_AGY_GRACE0"
+
+GRACE0_START=$(date +%s)
+set +e
+GRACE0_OUT="$(timeout 45s env DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=0 \
+  "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_AGY_GRACE0" --timeout 2s 2>&1)"
+GRACE0_EXIT=$?
+set -e
+GRACE0_ELAPSED=$(( $(date +%s) - GRACE0_START ))
+
+assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt "$GRACE0_SLEEP_SECS" ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
+  "grace 0 falls back to a positive grace and returns before the sleeper finishes (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
+assert_eq "3" "$GRACE0_EXIT" "grace 0 fallback still exits 3 within the outer wrapper (elapsed=${GRACE0_ELAPSED}s)"
+assert_contains "$GRACE0_OUT" '"transport_status": "timeout"' "grace 0 fallback maps to transport_status timeout"
+assert_contains "$GRACE0_OUT" '"status": "runner_failed"' "grace 0 fallback is runner_failed"
+
+sleep 0.5
+GRACE0_LEFT="$(pgrep -f "$GRACE0_SLEEP_PAT" || true)"
+assert_eq "" "$GRACE0_LEFT" "no fake agy sleeper remains after grace 0 fallback kill"
+
+# --- case 5: early SIGKILL is not a timeout ---
+STUB_AGY_KILL="$TEST_TMP/runner-agy-self-kill"
+cat > "$STUB_AGY_KILL" <<'EOF'
+#!/usr/bin/env bash
+kill -9 $$
+exit 0
+EOF
+chmod +x "$STUB_AGY_KILL"
+
+set +e
+KILL_OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
+  "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_AGY_KILL" --timeout 30s 2>&1)"
+KILL_EXIT=$?
+set -e
+assert_neq "0" "$KILL_EXIT" "early self-SIGKILL dispatch exit is non-zero (exit=${KILL_EXIT})"
+assert_not_contains "$KILL_OUT" '"transport_status": "timeout"' "early self-SIGKILL is not transport_status timeout"
 
 finalize_test

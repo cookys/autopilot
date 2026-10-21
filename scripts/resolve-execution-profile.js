@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// no runtime caller, owner runs it by hand. Execution profile is shadow/advisory. The only callers are hooks/tests/execution-profile.test.sh and hooks/tests/profile-context-isolation.test.sh.
+// no runtime caller, owner runs it by hand. Execution profile is shadow/advisory. Callers: hooks/tests/execution-profile.test.sh. project-config-template/governance-config.md mentions it.
 
 const fs = require('fs');
 const {

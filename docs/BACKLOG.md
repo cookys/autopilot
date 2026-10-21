@@ -1435,11 +1435,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-22
 - **Origin**: owner
-- **Problem**: 九支腳本已標明誰在用。還有四件後續會改到指引檔，這次沒做。
+- **Problem**: 十支腳本已標明誰在用。還有四件後續這次沒做，兩件要先評測，一件要負責人決定，一件被已封印的圖擋住，並非四件都改指引。
 - **Impact**: 指引仍沒寫何時、由誰去跑，之後的人還是會猜。
 - **Trigger**: the owner accepts an eval for the guidance follow-ups in the sidecar
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: BL-0275 relabel, 2026-10-22
 - **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
-- **Context**: Four items deferred because each edits a guidance manifest. See the sidecar.
+- **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin.

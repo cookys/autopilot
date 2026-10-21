@@ -18,8 +18,9 @@
  * drift, and 3 when nothing has drifted but at least one target is not installed
  * (drift wins over 3). A config.toml hint does not change that exit code.
  * --dry-run prints what would be written and writes nothing.
- * compact_token_budget is hinted wherever it appears. The other three ignored
- * keys are hinted only at the top level.
+ * compact_token_budget is hinted as a bare key, a dotted key
+ * (profiles.x.compact_token_budget), or a field inside an inline table.
+ * The other three ignored keys are hinted only as top-level keys.
  *
  * Contract: this header.
  */
@@ -152,7 +153,17 @@ function targetsFor(harness) {
   return targets;
 }
 
+function fileUsesCrlf(text) {
+  return text.includes('\r\n') && !text.replace(/\r\n/g, '').includes('\n');
+}
+
+function withNewlines(text, crlf) {
+  const lf = text.replace(/\r\n/g, '\n');
+  return crlf ? lf.replace(/\n/g, '\r\n') : lf;
+}
+
 function locateBlock(text) {
+  if (countOf(text, BEGIN) > 1 || countOf(text, END) > 1) return { kind: 'drift' };
   const beginAt = text.indexOf(BEGIN);
   const endAt = text.indexOf(END);
   if (beginAt === -1 && endAt === -1) return { kind: 'absent' };
@@ -170,11 +181,12 @@ function locateBlock(text) {
 
 function withBlock(existing, block) {
   const found = locateBlock(existing);
-  if (found.kind === 'present') return found.before + block + found.after;
   if (found.kind === 'drift') return null;
-  if (existing.length === 0) return block;
-  const sep = existing.endsWith('\n') ? '' : '\n';
-  return existing + sep + block;
+  const rendered = withNewlines(block, fileUsesCrlf(existing));
+  if (found.kind === 'present') return found.before + rendered + found.after;
+  if (existing.length === 0) return rendered;
+  if (existing.endsWith('\n')) return existing + rendered;
+  return existing + (fileUsesCrlf(existing) ? '\r\n' : '\n') + rendered;
 }
 
 function withoutBlock(existing) {
@@ -232,7 +244,7 @@ function uninstallOne(target, dryRun) {
   }
   const next = withoutBlock(existing);
   if (next === null) fail(`marked block in ${target.file} is malformed; refusing to rewrite it`);
-  const empty = next.trim() === '';
+  const empty = next === '';
   if (dryRun) {
     process.stdout.write(empty
       ? `dry-run: would delete ${target.file}\n`
@@ -266,8 +278,11 @@ function hintFindings(toml) {
     }
     const key = line.match(/^([A-Za-z0-9_.-]+)\s*=/);
     if (!key) continue;
-    if (key[1] === DEPRECATED_KEY) {
-      hits.push({ key: key[1], section });
+    const deprecated = key[1] === DEPRECATED_KEY
+      || key[1].endsWith(`.${DEPRECATED_KEY}`)
+      || new RegExp(`(?:^|[^A-Za-z0-9_-])${DEPRECATED_KEY}\\s*=`).test(line);
+    if (deprecated) {
+      hits.push({ key: DEPRECATED_KEY, section });
     } else if (section === '' && TOP_LEVEL_HINT_KEYS.has(key[1])) {
       hits.push({ key: key[1], section: '' });
     }
@@ -283,7 +298,8 @@ function checkOne(target, block) {
     process.stdout.write(`${target.harness}: not installed (${target.file})\n`);
   } else {
     const found = locateBlock(existing);
-    if (found.kind === 'present' && found.inner === block) {
+    const rendered = withNewlines(block, fileUsesCrlf(existing));
+    if (found.kind === 'present' && found.inner === rendered) {
       process.stdout.write(`${target.harness}: consistent (${target.file})\n`);
     } else {
       state = 'drift';

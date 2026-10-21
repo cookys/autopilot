@@ -237,6 +237,9 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - **The foreman guard's ceiling follows `context_budget`.** `context_budget.mode: "off"` or `context_budget.t2` = 0 switches it off, and it no longer tells a foreman to stop when auto-compact is configured and enabled.
 - **Three settings the docs used to show do nothing:** `autopilot.costTracker`, `autopilot.protectedBranches` and `autopilot.<hookName>` in Claude Code's `settings.json` are not read by any code. Use `AUTOPILOT_COST_TRACKER=false`, `AUTOPILOT_PROTECTED_BRANCHES`, or the hook's own off switch.
 - **`config_schema_version`:** the first session after an upgrade (and `scripts/dev-setup.sh --check`) checks `~/.autopilot/config.json` for unknown keys, wrong types or values, the `context_budget.t1` / `context_budget.t2` relation, the auto-compact setup, and defaults changed since your last check. It only reminds, never blocks. Set `"config_schema_version": 1` once you have read the notes and that batch of default changes stops showing. Turn the reminder off with `update_check: false` or `AUTOPILOT_UPDATE_CHECK=0`.
+- **New `context_budget.seat`** (`session` or `resident`; default `session`). `session` keeps the T2 handoff wording. `resident` tells a fixed-address seat to update its state file and keep only that path and the unfinished items after compaction. Anything else is ignored, so the seat stays `session`.
+- **New `context_budget.post_compact_warn`** (integer >= 0; default 100000). After compaction, one advisory when the live context still exceeds this many tokens. 0 disables the warning. A value that is not an integer >= 0 is ignored, so with nothing valid set the threshold stays 100000. Advisory only.
+- **New `AUTOPILOT_AUTHOR_KILL_GRACE_SECS`** (positive integer; default 30). Seconds the agy author runner is given after the outer timeout before it is killed. Zero, negatives and non-numbers fall back to 30.
 
 ### 新增
 
@@ -324,6 +327,9 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - **使用 1M context 卻沒設自動壓縮門檻時，T1 提醒會建議你設定**：沒設 `autoCompactWindow` 的話，1M context 的 session 要到接近 1M 才會自動壓縮。現在 context-budget 的 T1 提醒（100k）會多一行，建議在 `~/.claude/settings.json` 設 `"autoCompactWindow": 250000`，或執行 `/autocompact`。實測顯示，在 150k 到 300k 之間重置 context，大約可省下 20% 費用。以下情況不會出現這行：已經用任何方式設定門檻（env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`、使用者或專案設定、`/autocompact` 寫入的單一模型設定）、視窗不是 1M、自動壓縮已關閉。
   - `scripts/dev-setup.sh --check` 會列出目前生效的門檻和它來自哪個檔案；沒有設定時顯示 WARN。
   - 新增的 `scripts/lib/autocompact-window.js` 依照 Claude Code 2.1.296 的規則推算門檻：env 優先，再依 user → project → local → policy 的順序合併設定檔。它讀不到命令列的 `--settings` 與 `--autocompact`，也讀不到伺服器下發的門檻。
+
+- tokmech (dd45ce115): `docs/token-discipline.md` now holds the five advisory token rules. PostCompact records one size after compaction, and the context-budget hook warns once when the live context still exceeds `context_budget.post_compact_warn`. T2 wording follows `context_budget.seat` (`session` keeps the handoff sentence; `resident` tells a fixed-address seat to update its state file). SessionStart prints one extra line that points at the rules file. The rules do not block a tool call.
+- tokinstall (0feb09594): `node scripts/install-token-discipline.js` is opt-in (`install`, `uninstall`, `--check`, `--dry-run`). It writes the rules block into `CODEX_HOME/AGENTS.md` (or `~/.codex/AGENTS.md`) and `~/.gemini/GEMINI.md`. `scripts/dev-setup.sh --check` only reports whether the block is installed. It never installs it.
 
 ### 修正
 
@@ -426,6 +432,10 @@ Every release lists here what changed in the settings you can set (`scripts/chec
   - `corpus_version` 從 discuss-v3 升到 discuss-v4，並重新封存考卷雜湊。
   - 新增釘值測試，包括一個負向對照：照舊版題目說明作答的考生，在 D-a／D-b 全部被判 zero_information。這些新斷言在修正前的版本上會失敗。
 
+- dnone (98d040edc): a pending decision card that has options can now send a note-only answer. The sent line is `→ 都不選｜補充：…` and the send button reads `已答`. Before this, that answer could not be sent.
+- agyto (1e0e3c9f4): the agy author outer wrapper now uses `timeout -k`. `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` is the grace after the time limit (positive integer, default 30). Only an exit 137 after the full time limit counts as a timeout. The bwrap mount points are created before the read-only root mount, so agy no longer fails on a fresh HOME. hangar and openclaw reported the plan-review seat stuck for 78 minutes (fleet message 01M5F7E5EESERJ9J44YGZSDNSG).
+- tfin (b77595d68): three lib.sh-based suites now call `finalize_test`, so test-suite-finalize-gate is green again.
+
 ### 驗證
 
 - hetero code review 由 opus、GLM、MiniMax、Qwen 四席審查，結論是 SHIP-AS-IS，沒有未結的意見。
@@ -446,6 +456,8 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 
 - BL-0082: orphan adoption now re-observes the persisted runner identity and refuses an absent, partial, live or unknowable one (a dead controller no longer implies a dead leaf), and `reconstructOwnedInventory` re-reads rows Git no longer corroborates: a stale `active` on an unregistered worktree is dropped, an unregistered path on disk is unknown residue, and a branch that moved past its recorded tip is re-checked for unique commits. Worktrees created but never registered still need a write-ahead intent row (BL-0082 stays open for that).
 - t14s7: BL-0055 second experiment closed as SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29, M3 26/29 vs 0/29); report archived, five BACKLOG rows added (BL-0253 to BL-0257).
+- deval (d9b0f0402): the dcard and dcard-v2 rows of the skill ON/OFF eval are recorded INSTRUMENT-INVALID (NOT-SHIP). The primary metric reads the decision file only after turn 2, so neither arm could be measured. The text was not shown to be ineffective. dskill B (12 guidance files) is not merged. A v3 waits on owner decision d-27318bdc.
+- subplan (d3878d429): the sub-agent concurrency advisory plan (`docs/plans/2026-10-21-subagent-concurrency-advisory.md`) is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
 
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 

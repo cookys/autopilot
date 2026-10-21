@@ -148,3 +148,15 @@ AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh
 
 Out:explorer suite;broker `unified_diff` 改名;no-confidence decay 取代 TTL(本 plan 不新增 fail-closed TTL;cap 修正僅 implementer 例外);codex-spark 施測;Official-defaults 打包 UX;hard-tier;multi-round review-loop;`resolvedModel` 接線。
 Backlog candidates(G1+G2 裁決產物):AST structural-distance metric + template-memorizer deviant(G1-F8 部分拒);canary transform closure 之外的編碼偵測;F4 in-file lure 的語意範圍機械證明(可行處已由 held-out vectors 承接,其餘 residual);separate-UID 考場 containment(指向既有 L1 BACKLOG row,G2-F1);deterministic virtual-path namespace / 完整 candidate-view 虛擬化(G2-F5/F8);rail 級 runner_invoked receipt(G2-F9)。
+
+## Addendum (2026-10-20) — G2-F9 harness-owned evidence includes a harness structured provider-error field
+
+Owner decision d-8e9de3b3, option A. The administration cap still aborts (no verdict) only on harness-owned `engine_unavailable` evidence. That evidence now also includes a dispatch result whose status is `engine_unavailable` and whose additive `provider_error.source` is `harness_structured`. The field is filled only from structured output the harness reads off the CLI, never from prose the worker printed. A model that prints "429" or "529 overloaded" stays `contract_violation`. The dispatch JSON also carries `error_category`, copied from classify-error text matching, and the ledger stores that string as `dispatch_error_class`. `error_category` is text-derived and diagnostic only; it must never decide harness-owned, which continues to use only `provider_error` with source `harness_structured`. A worker running as the same UID could forge the envelope file, which falls under the existing threat model recorded in docs/BACKLOG.md under the heading "Mission authority store 與 cross-harness enforcement hardening" (BL-0057) and is not defended against now.
+
+| Runner | Structured provider-error field |
+| --- | --- |
+| cc-shim | `api_error_status` on the top-level `claude -p --output-format json` result object (`type` `result`, `is_error` true). Integer set: 429, 503, 529, and 402 (quota). |
+| opencode | `error.data.statusCode` on a top-level JSON event line with `type` `error` and `error.name` `APIError`. Same integer set. |
+| codex | A status field exists under `exec --json` (inside `error` / `turn.failed` message text, not a separate numeric field). Not wired. The codex invocation is unchanged. |
+| grok | Unverified, unchanged. A stub did not yield an error event because grok retried without emitting one. |
+| agy, kimi, cursor, qoderclicn, pi | None. These runners stay text-classified only. |

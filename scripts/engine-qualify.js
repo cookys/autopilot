@@ -296,7 +296,7 @@ const HELP = `Usage:
       also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
       Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
       non-pass case whose dispatch status is not committed: dispatch_error_class
-      (the dispatch JSON category, or null when that field is absent — never the
+      (the dispatch JSON error_category, or null when that field is absent — never the
       free-text error), dispatch_error, agent_log_tail (last 40 lines after the
       canary in literal/base64/hex/reversed form, the endpoint base_url and its
       host, and any http(s) URL are masked; secrets redacted; 8 KiB cap)
@@ -4018,9 +4018,12 @@ function rawDispatchError(dispatchJson, spawnMessage) {
   return spawnMessage || '';
 }
 
+// error_category comes from classify-error TEXT matching. Diagnostic only: it
+// must never be used to decide harness-owned. Harness-owned continues to use
+// only provider_error with source harness_structured.
 function rawDispatchErrorClass(dispatchJson) {
-  if (dispatchJson && typeof dispatchJson.category === 'string' && dispatchJson.category !== '') {
-    return dispatchJson.category;
+  if (dispatchJson && typeof dispatchJson.error_category === 'string' && dispatchJson.error_category !== '') {
+    return dispatchJson.error_category;
   }
   return null;
 }
@@ -4247,11 +4250,19 @@ function runImplCase(context) {
     });
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
-    // Harness-owned evidence = spawn failure or the rail's own precondition
-    // exit (2). A timeout kill is NOT harness-owned even when the killed
+    // Harness-owned evidence = spawn failure, the rail's own precondition
+    // exit (2), or a dispatch JSON engine_unavailable whose provider_error
+    // source is harness_structured (CLI-derived HTTP status, not worker text).
+    // A timeout kill is NOT harness-owned even when the killed
     // child's TERM trap exits 2 (dispatch-hetero's abort_dispatch does) —
     // the candidate stalled; the check must not rest on that coincidence.
-    const harnessOwned = spawnFailed || (run.status === 2 && !timedOut);
+    const structuredProvider = Boolean(dispatchJson
+      && dispatchJson.status === 'engine_unavailable'
+      && dispatchJson.provider_error
+      && typeof dispatchJson.provider_error === 'object'
+      && !Array.isArray(dispatchJson.provider_error)
+      && dispatchJson.provider_error.source === 'harness_structured');
+    const harnessOwned = spawnFailed || (run.status === 2 && !timedOut) || structuredProvider;
     const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
     collection = collectionResult.collection;
     ledgerRow.scored_sha = collection && collection.scored_sha;

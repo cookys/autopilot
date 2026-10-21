@@ -289,6 +289,10 @@ SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
+CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
+PROVIDER_ERROR_RUNNER=""
+PROVIDER_ERROR_STATUS=""
+PROVIDER_ERROR_FIELD=""
 AGY_STDERR=""         # private native stderr, copied to agent_log only on failure
 AGY_PARSED=""         # validated derived {response,usage}; native envelope parsed once
 AGY_USAGE_JSON="null"
@@ -458,6 +462,7 @@ cleanup() {
   [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE"
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
+  [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -879,6 +884,21 @@ emit() { # status commit files ins del worktree error
   if [ "${GITCONFIG_RESTORE_FAILED:-0}" -eq 1 ]; then
     identity_fields="${identity_fields}, \"gitconfig_restore_failed\": true"
   fi
+  local provider_error_fields=""
+  if [ "$1" = "engine_unavailable" ] && [ -n "${PROVIDER_ERROR_RUNNER:-}" ] \
+     && [ -n "${PROVIDER_ERROR_FIELD:-}" ] && [[ "${PROVIDER_ERROR_STATUS:-}" =~ ^[0-9]+$ ]]; then
+    provider_error_fields="$(printf ', "provider_error": {"source":"harness_structured","runner":"%s","http_status":%s,"field":"%s"}' \
+      "$(_flat_json_escape "$PROVIDER_ERROR_RUNNER")" "$PROVIDER_ERROR_STATUS" "$(_flat_json_escape "$PROVIDER_ERROR_FIELD")")"
+  fi
+  # error_category is classify-error TEXT matching (CLASSIFIED_ERROR). Diagnostic
+  # only: it must never decide harness-owned. Harness-owned continues to use only
+  # provider_error with source harness_structured. Empty, unset, and the "unknown"
+  # sentinel (no text match) stay null. Paths that emit before classification
+  # therefore publish null.
+  local error_category_json="null"
+  if [ -n "${CLASSIFIED_ERROR:-}" ] && [ "$CLASSIFIED_ERROR" != "unknown" ]; then
+    error_category_json="\"$(_flat_json_escape "$CLASSIFIED_ERROR")\""
+  fi
   local timeout_fields=""
   local emit_timeout_secs=""
   local timed_out_json="false" timeout_enforced_json="false"
@@ -895,7 +915,7 @@ emit() { # status commit files ins del worktree error
   if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
     zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -906,7 +926,7 @@ emit() { # status commit files ins del worktree error
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$timeout_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json"
 }
 
 check_session_mode_gate() {
@@ -3752,8 +3772,57 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
+  # Harness-owned envelope: claude's JSON stdout never shares the worker log.
+  # The result string (or the raw bytes if it does not parse) is appended to
+  # LOG so classify-error and other log consumers still see the old plain text.
+  CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
   run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
-      --dangerously-skip-permissions ${5:+--effort "$5"} < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG"
+      --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
+      _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE"
+  if [ -f "$CCSHIM_ENVELOPE" ]; then
+    # One JSON object → result text (is_error with an empty result uses the
+    # error message). Anything else, including a second JSON document, is the
+    # raw stdout. A non-zero exit with no result text also keeps the raw bytes.
+    node - "$CCSHIM_ENVELOPE" "$LOG" <<'NODE'
+const fs = require('fs');
+const envPath = process.argv[2];
+const logPath = process.argv[3];
+let raw;
+try { raw = fs.readFileSync(envPath); } catch { process.exit(0); }
+function withNl(s) {
+  return Buffer.from(s.endsWith('\n') ? s : s + '\n');
+}
+function errorText(obj) {
+  const cands = [];
+  if (typeof obj.error === 'string') cands.push(obj.error);
+  if (typeof obj.message === 'string') cands.push(obj.message);
+  if (typeof obj.error_message === 'string') cands.push(obj.error_message);
+  if (Array.isArray(obj.errors)) {
+    for (const e of obj.errors) if (typeof e === 'string') cands.push(e);
+  }
+  for (const c of cands) if (c.trim() !== '') return c;
+  return '';
+}
+let out = raw;
+try {
+  const obj = JSON.parse(raw.toString('utf8'));
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    const result = typeof obj.result === 'string' ? obj.result : null;
+    const resultHasText = result !== null && result.trim() !== '';
+    if (resultHasText) {
+      out = withNl(result);
+    } else if (obj.is_error === true) {
+      const msg = errorText(obj);
+      if (msg) out = withNl(msg);
+      else out = raw;
+    } else if (result !== null) {
+      out = withNl(result);
+    }
+  }
+} catch { out = raw; }
+fs.appendFileSync(logPath, out);
+NODE
+  fi
   rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
@@ -3986,6 +4055,73 @@ NODE
     process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
   ' "$AGY_PARSED")"
 fi
+capture_structured_provider_error
+}
+
+# Structured provider failure, from harness-owned fields only.
+# cc-shim: the private envelope file. opencode: complete top-level JSON event
+# lines already in LOG. Free text never sets PROVIDER_ERROR_*.
+capture_structured_provider_error() {
+  PROVIDER_ERROR_RUNNER=""
+  PROVIDER_ERROR_STATUS=""
+  PROVIDER_ERROR_FIELD=""
+  [ "${AGENT_EXIT:-0}" -ne 0 ] || return 0
+  [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_OPENCODE:-0}" -eq 1 ] || return 0
+  local _parsed=""
+  _parsed="$(node - "${LOG:-}" "${CCSHIM_ENVELOPE:-}" "${IS_CCSHIM:-0}" "${IS_OPENCODE:-0}" <<'NODE'
+const fs = require('fs');
+const ALLOW = new Set([429, 503, 529, 402]);
+const logPath = process.argv[2];
+const envelopePath = process.argv[3];
+const isCc = process.argv[4] === '1';
+const isOc = process.argv[5] === '1';
+let runner = '';
+let status = '';
+let field = '';
+function accept(name, code, fieldName) {
+  if (!Number.isInteger(code) || !ALLOW.has(code)) return false;
+  runner = name;
+  status = String(code);
+  field = fieldName;
+  return true;
+}
+if (isCc && envelopePath) {
+  try {
+    const obj = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)
+        && obj.type === 'result' && obj.is_error === true) {
+      accept('cc-shim', obj.api_error_status, 'api_error_status');
+    }
+  } catch { /* missing or unparseable envelope: no structured evidence */ }
+} else if (isOc && logPath) {
+  let text = '';
+  try { text = fs.readFileSync(logPath, 'utf8'); } catch { text = ''; }
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    let obj;
+    try { obj = JSON.parse(line); } catch { continue; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.type !== 'error') continue;
+    const err = obj.error;
+    if (!err || typeof err !== 'object' || Array.isArray(err) || err.name !== 'APIError') continue;
+    const data = err.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    if (accept('opencode', data.statusCode, 'error.data.statusCode')) break;
+  }
+}
+process.stdout.write(runner + '\n' + status + '\n' + field + '\n');
+NODE
+)" || _parsed=""
+  PROVIDER_ERROR_RUNNER="$(printf '%s\n' "$_parsed" | sed -n '1p')"
+  PROVIDER_ERROR_STATUS="$(printf '%s\n' "$_parsed" | sed -n '2p')"
+  PROVIDER_ERROR_FIELD="$(printf '%s\n' "$_parsed" | sed -n '3p')"
+}
+
+_prefer_structured_classified_error() {
+  case "${PROVIDER_ERROR_STATUS:-}" in
+    429) CLASSIFIED_ERROR="rate_limited" ;;
+    503|529) CLASSIFIED_ERROR="overloaded" ;;
+    402) CLASSIFIED_ERROR="quota_exhausted" ;;
+  esac
 }
 
 compute_artifacts() {
@@ -4484,6 +4620,13 @@ _capability_write_suppress_now() {
 
 passive_capture() {
   local status="${1:-}"
+  # Structured class was derived once before this call. Text classification
+  # still runs for the quota side effect, then the structured class is put back
+  # so a later branch cannot decide from prose.
+  local _structured_class=""
+  case "${PROVIDER_ERROR_STATUS:-}" in
+    429|503|529|402) _structured_class="${CLASSIFIED_ERROR:-}" ;;
+  esac
   CLASSIFIED_ERROR=""
   if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
     # Classify once, outside the recording subshell, so classify_outcome can reuse the result.
@@ -4491,6 +4634,7 @@ passive_capture() {
     if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
       if declare -F _capability_write_suppress_now >/dev/null 2>&1 && _capability_write_suppress_now; then
         write_manifest 2>/dev/null || true
+        if [ -n "$_structured_class" ]; then CLASSIFIED_ERROR="$_structured_class"; else _prefer_structured_classified_error; fi
         return 0
       fi
     fi
@@ -4537,6 +4681,9 @@ passive_capture() {
         echo "$payload" | node "$SELF_DIR/engine-capability-state.js" record "${record_args[@]}" >/dev/null 2>&1
       fi
     ) || true
+  fi
+  if [ -n "$_structured_class" ]; then
+    CLASSIFIED_ERROR="$_structured_class"
   fi
 }
 
@@ -4720,6 +4867,9 @@ classify_outcome() {
   OUTCOME_RESOURCES_CREATED=1
   [ "${WORKTREE_REUSED:-0}" -eq 1 ] && OUTCOME_RESOURCES_CREATED=0
   OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
+  # Once, before any branch reads CLASSIFIED_ERROR. Worker exit is already
+  # gated inside capture_structured_provider_error (non-zero only, never text).
+  _prefer_structured_classified_error
   if ! check_main_checkout_boundary; then
     passive_capture "boundary_rejected"
     OUTCOME_STATUS="boundary_rejected"
@@ -4750,6 +4900,14 @@ classify_outcome() {
       passive_capture "dirty"
       OUTCOME_STATUS="dirty"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+      # Text classification must not upgrade dirty. Only a harness-captured
+      # provider status (PROVIDER_ERROR_STATUS) may. The clean-commit and
+      # no-commit non-zero branches already upgraded from log text before
+      # structured evidence existed; this branch did not.
+      if [ "$AGENT_EXIT" -ne 0 ] && [ -n "${PROVIDER_ERROR_STATUS:-}" ] && _is_engine_unavailable "$CLASSIFIED_ERROR"; then
+        OUTCOME_STATUS="engine_unavailable"
+        OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
+      fi
     elif [ "$AGENT_EXIT" -ne 0 ]; then
       # clean commit but the worker exited non-zero — NOT scored success (KR1):
       # the abnormal exit means the run can't be trusted as a clean implementation.
@@ -4757,6 +4915,7 @@ classify_outcome() {
       passive_capture "failure"
       OUTCOME_STATUS="failure"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+      _prefer_structured_classified_error
       if _is_engine_unavailable "$CLASSIFIED_ERROR"; then
         OUTCOME_STATUS="engine_unavailable"
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
@@ -4863,6 +5022,7 @@ classify_outcome() {
       passive_capture "question_suspected"
       OUTCOME_STATUS="question_suspected"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"; OUTCOME_EXIT=1
+      _prefer_structured_classified_error
       if _is_engine_unavailable "$CLASSIFIED_ERROR"; then
         OUTCOME_STATUS="engine_unavailable"
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
@@ -5019,6 +5179,7 @@ detached_main() {
   [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE" 2>/dev/null || true
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR" 2>/dev/null || true
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED" 2>/dev/null || true
+  [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -5033,7 +5194,8 @@ dispatch_detached_run() {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
-      AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
+      AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
+      PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
@@ -5061,7 +5223,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -1415,9 +1415,19 @@ else
       "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
+  # agy ignores SIGTERM, and its own --print-timeout is the only limit today
+  # unless an outer timeout escalates to KILL. GNU timeout exits 124 on TERM
+  # timeout and 137 when the kill-after grace has to send KILL. Map that 137
+  # back to 124 so this branch reports transport_status timeout. Other runners
+  # are unchanged (still no kill-after).
+  AUTHOR_KILL_GRACE_SECS="${AUTOPILOT_AUTHOR_KILL_GRACE_SECS:-30}"
+  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[0-9]+$ ]] || AUTHOR_KILL_GRACE_SECS=30
   set +e
-  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
+  if [[ "$RUNNER_EXIT" -eq 137 ]]; then
+    RUNNER_EXIT=124
+  fi
   set -e
   rm -rf "$RUN_SH"
 fi

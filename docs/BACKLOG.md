@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0278 -->
+<!-- next-id: BL-0279 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1357,23 +1357,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: landdocs 2026-10-21 empty-range finding
 - **Pointer**: docs/backlog/hetero-collect-empty-range.md
 
-### Pending owner-decision panel is unused by long-running sessions
-- **Id**: BL-0270
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: peer
-- **Reporter**: llm-playground lead (c4140)
-- **Report**: 01M5EQF6YGW98MRG4TBW90YS2W
-- **Reply**: 2026-10-21 01M5EQFP73V0Z6FFQQ3YEFF9ZS
-- **Problem**: 長時間運行的工作階段幾乎不用待決面板。開啟、回答與關閉的機制已經出貨，技能說明還沒有依開關實驗改寫。
-- **Impact**: 技能沒改之前，其他代理仍不知道何時該開待決卡，面板繼續閒置。
-- **Trigger**: skill text for the ceo, dev-flow and level-3-to-6 skills waits on the eval on/off result
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: PEER llm-playground 2026-10-21
-- **Pointer**: docs/backlog/pending-decision-panel-unused-by-long-sessions.md
-- **Context**: owner chose v3 on d-27318bdc; dcardv3 8eb25e85e merged the corrected instrument; the paid campaign is running.
-
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271
 - **Status**: open
@@ -1446,3 +1429,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-21 discoverability audit
 - **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
 - **Context**: Detail in remaining-discoverability-entry-gaps.md. Roundtable stays on BL-0216 and task-card on BL-0243.
+
+### Two text defects in the shipped decision-card guidance are frozen by eval parity
+- **Id**: BL-0278
+- **Status**: open
+- **Since**: 2026-10-22
+- **Origin**: self
+- **Problem**: 剛出貨的決策卡指引發現兩處用詞缺陷：一處把表格切開，一處標題與內文互相矛盾。
+- **Impact**: 這段文字在與新評測一起修訂之前，會一直是錯的或有誤導。
+- **Trigger**: the next revision of level-front-door.md or multi-agent-portability.md, which needs its own eval row
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: dship review 2026-10-22
+- **Pointer**: docs/backlog/decision-card-text-defects-frozen-by-eval.md
+- **Context**: (a) level-front-door.md: card paragraph splits the Sugar table between /l3 and /l4 rows. (b) multi-agent-portability.md: heading says no conflict, body says owner-question-guard returns a Stop block. Any edit needs a new pack, arm and eval.

@@ -26,8 +26,7 @@ export QC_METRIC_STORE="$HOME/projects/llm-playground/qc-metrics/events.jsonl"
 
 ## Call sites (where to emit)
 
-The emitter is a leaf helper; the panel + publish review are orchestrated at **depth 0**,
-so the call is made by the orchestrator after a verdict is rendered. Two sites:
+The emitter is a leaf helper. The only caller is `scripts/ladder-run.sh` (`run` and `audit`), plus manual runs. `scripts/qc-panel.js` does not call it. The two shapes below are the event the depth-0 panel and a publish review would write; they are not current call sites:
 
 ### 1. depth-0 QC panel (`scripts/qc-panel.js` orchestration)
 

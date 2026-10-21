@@ -17,6 +17,7 @@
 //
 // Authority: metrics order, they never admit (plan 2026-10-16-bl0194-qualification-registry-move.md
 // sections 2 and 5). Nothing here writes a scorecard row or a strike.
+// Callers: manual. Fetch is an owner-run operation (no skill, hook or script calls it); engine-qualify and qualification-send-queue use scripts/lib/qualification-metrics.js, not this CLI. An empty cache is normal.
 
 const fs = require('fs');
 const os = require('os');

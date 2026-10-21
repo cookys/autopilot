@@ -515,8 +515,8 @@ bash scripts/dispatch-experience-critic.sh \
 ```
 
 Findings (≤7, stable IDs, BACKLOG-row-ready) feed the round-end report
-(`decision-ledger.js report --critic <critic.json>`); the brain appends accepted
-rows to docs/BACKLOG.md where `/next`'s queue prices them. `human_only` items go
+(`decision-ledger.js report --critic <critic.json>`); admit accepted rows with
+`node scripts/admit-backlog-follow-ups.js` (dedups by fingerprint, rejects blue severity, requires a Trigger) where `/next`'s queue prices them. `human_only` items go
 verbatim to the operator. A "blocking" marker from the critic is stripped and
 surfaced as an anomaly — correctness gates alone block.
 

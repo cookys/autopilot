@@ -31,7 +31,7 @@ Unit (frequent, per build) > E2E (per feature) > Stress (pre-release, rare)
 | Unit | Logic correctness | Every build | Single function/class |
 | E2E | System integration | Per feature / nightly | Full stack |
 | Stress | Capacity limits | Before release | System under load |
-| Regression | No breakage | Every PR | Affected modules |
+| Regression | No breakage | Every PR | Affected modules via `node scripts/affected-suites.js` |
 
 ---
 

@@ -2081,6 +2081,14 @@
       "content_hash": "bc1784794023ef3a8ead9e57ff732c79889ed2692e978122d9525a7448a46e79",
       "disposition": "removed",
       "rationale": "P0 skills/dev-flow/SKILL.md:467 ('| Defer work that affects the final goal | Never defer goal-'). BL-0044 dev-flow contract-card swap (eval: docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/): this prose is relocated verbatim or near-verbatim to skills/dev-flow/references/card-relocated.md (a pointer line stays in SKILL.md); it is moved, not deleted, and card-relocated.md is not a rule-universe source."
+    },
+    {
+      "content_hash": "d11fc0fa3e152c1d346aa5b17d72c2f2cf794d021a33ab4458c0a85c19c1ea17",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "c7e6cb2048c30dd199ba2f8691c49279a7fa7c0777c40c41a57e76d8033c55be"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md dispatch-chains fallback (HEAD line 25, segment dev.dispatch-chains). dcard-v3 pending-decision-card guidance appends the hetero-dispatch intent-table pointer to that same line; the fallback (autopilot skills primary, native Task for parallel, autopilot:reviewer for review, dispatch-config schema) is unchanged. Successor is the rewritten line at skills/dev-flow/SKILL.md:25."
     }
   ]
 }

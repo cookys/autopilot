@@ -22,7 +22,7 @@ If no project config above, use defaults from [references/model-routing.md](refe
 ## Dispatch Chains (for orchestrator routing)
 !`cat .claude/dispatch-config.md 2>/dev/null || true`
 
-If no project config above, autopilot's own fallback skills are primary for methodology; `native` Task dispatch for parallel; `autopilot:reviewer` for code review. See [project-config-template/dispatch-config.md](../../project-config-template/dispatch-config.md) for the schema.
+If no project config above, autopilot's own fallback skills are primary for methodology; `native` Task dispatch for parallel; `autopilot:reviewer` for code review. See [project-config-template/dispatch-config.md](../../project-config-template/dispatch-config.md) for the schema. Which hetero rail: the intent table in [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md).
 
 ---
 
@@ -249,7 +249,7 @@ An unknown still open once its rungs are spent or skipped is the research result
 ### proposal
 
 `node scripts/stage-advance.js --to proposal`, then publish a web page (Artifact tool) with the assumptions (from research, or your own knowledge at U0) and 2–3
-illustrated options, each with its trade-off and a recommendation; the user picks. Record the pick and the
+illustrated options, each with its trade-off and a recommendation; the user picks. An owner choice here uses the decision card in [`skills/ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (`open-decision.js`). Record the pick and the
 assumptions in the plan. No Artifact tool ⇒ write the page as a local `.html` file and list the options in the
 reply. No human available ⇒ take the recommended option and record it (Session Start), then continue to `plan`.
 

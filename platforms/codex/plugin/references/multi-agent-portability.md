@@ -297,7 +297,7 @@ The pragmatic split:
   | UserPromptSubmit | plain stdout, and `additionalContext` | Yes, both, on that prompt | `docs/plans/evidence/2026-09-26-hook-channel-probe/ups/` |
 
   Subagent identity: a subagent's hook payload carries `agent_id` and `agent_type` but no parent id; `transcript_path` is always the ROOT session file; the child's own transcript at `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl` exists by its first tool call, first record is the dispatcher prompt. Evidence: `docs/plans/evidence/2026-09-25-foreman-guard-roles/p0/`. These rows are Claude Code-specific; no claim is made about other harnesses.
-- **OpenCode hook surface**: `.opencode/plugins/autopilot.ts` (in-process TS). Use the context argument's `project` / `directory` / `worktree` for paths; do not read env vars.
+- **OpenCode hook surface**: `.opencode/plugin-package/server.ts` (in-process TS). The path `.opencode/plugins/autopilot.ts` does not exist. Use the context argument's `project` / `directory` / `worktree` for paths; do not read env vars.
 - **Codex thin-shell behavior (verified 2026-07-05, codex-cli 0.142.2, gpt-5.5)**: after `codex plugin marketplace add ./platforms/codex` + `codex plugin add autopilot@autopilot-local`, all five thin-shelled entries (l3/l4/l5/l6/think-tank-dialectic, v2.31.16 payload) surface as `autopilot:<name>` skills loaded from the plugin cache, and a wiring probe on `autopilot:l5` showed codex following the shell's MUST-READ links — artifact evidence: `cat` exec events on `skills/l5/references/hetero-impl-loop.md` + `skills/ceo-agent/references/level-front-door.md` in the transcript (relative links resolve inside the cache copy). Caveat observed: with many plugins enabled codex warns it shortens skill descriptions to fit a "2% skills context budget" — description-based routing may degrade on crowded installs. CC-side natural-behavior evidence (no-hint goals → spontaneous Reads) lives in `hooks/tests/slash-entry-natural-probe.test.sh`.
 - **Codex production boundary (verified 2026-08-05, codex-cli 0.146.0)**: `platforms/codex/plugin` declares generated lifecycle skill projections plus the existing `PostCompact` matcher `manual|auto` (and, since v2.36.11, the advisory `dirty-protected-paths` reminder on `Stop` + `SessionEnd` — warn-only, registration verified by the package test, live-fire on Codex not yet probed). The structured `PreToolUse` denial and its exit-17 fail-open control are retained as D1 probe evidence only; `platforms/codex/hooks/pre-effect.js` is unregistered and non-production. The production package therefore ships no Codex-thread-bound direct-mutation enforcement; D4 remains `NOT_READY/NO_SHIP`. PostCompact retains its existing fail-closed reconciliation contract. The [sanitized receipt](../docs/projects/_archive/2026/08/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json) records the probe evidence and no-ship verdict. `platforms/codex/hook-probe/` remains warning-only/shape-only; its one-shot driver is evidence tooling, not another production authority.
 - **Strict-L5 provider boundary (implemented 2026-08-04)**: the shared CLI/Engine payload compiles one frozen six-claim policy and exact `{runner,model,role,effort,endpoint,family}` roster projection. Only ordinary `AUTOPILOT_LEVEL=l4|l5|l6 engine implement-review` receives the branded, process-local qualification and live-probe closures (l4 since v2.36.8, with the l4 roster profile: implementer + reviewer required, verification-author seat and QC panel optional; l5/l6 require both); they are consumed before workflow dispatch and cannot be replaced by a platform environment variable, work order, disk receipt, or serialized callback. This is an Autopilot Engine trust boundary, not a claim that every host has equivalent hook or model-routing semantics; l3 and unset levels remain explicitly non-strict.
@@ -330,6 +330,7 @@ enhancement is optional, the fallback is always documented.
 The gating is **documentation prose, not a runtime capability probe** — autopilot does not
 ship a "does this agent support /goal?" detector (that would be its own project). A skill
 that mentions `/goal` always states the non-CC fallback inline.
+Autopilot's own mods, the show tool, and hook guard rails are Claude Code specific.
 
 | Primitive | What it is (verified) | Source | autopilot integration | Non-CC fallback |
 |---|---|---|---|---|
@@ -382,10 +383,9 @@ P0b — file-write-mode verdict head (full JSON was jq-valid; run dir `/tmp/p0b-
 </details>
 
 **`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
-Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,
-`session-summary`) are side-effect-only and never return `decision: block`, so they do not
-interfere with `/goal`'s continue/stop decision. The only gate is the `disableAllHooks` /
-`allowManagedHooksOnly` case above, which errors visibly. (Coexistence verified firsthand via
+Stop hook both fire after every turn." `cost-tracker` and `session-summary` are side-effect-only.
+`hooks/owner-question-guard.js` does block: it returns Stop `decision: block`. `disableAllHooks` /
+`allowManagedHooksOnly` still errors visibly. (Coexistence verified firsthand via
 tool schemas + goal docs, 2026-06-02 — see the harness-integration direction memo.)
 
 ---

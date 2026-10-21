@@ -14,7 +14,7 @@ description: >
 
 # Hetero Review — Multi-Family Verification Loops
 
-Thin router for heterogeneous multi-model review. Under ADR-0001, a review verdict is a claim until depth-0 re-derives it from the reviewer's JSON artifact and the exact base..head range it reviewed; a hetero implementer's green is a claim, never a gate.
+Thin router for heterogeneous multi-model review. Under ADR-0001, a review verdict is a claim until depth-0 re-derives it from the reviewer's JSON artifact and the exact base..head range it reviewed; a hetero implementer's green is a claim, never a gate. Which rail: the intent table in [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md).
 
 The three knobs `plan_review`, `hetero_review`, and `consult_dispatch` each take off/on/auto:
 - `off`: stage is skipped, an opt-out receipt is written, and a `capability_warnings` line is emitted.

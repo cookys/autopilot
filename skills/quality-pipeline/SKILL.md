@@ -42,6 +42,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/review-mvp-portfolio.js`](../../scripts/review-mvp-portfolio.js) | Bounded multi-reviewer candidate union → verified MUST-FIX/prerequisite admission + deterministic fixed-budget maximum-score MVP, cut list, and evidence-backed backlog candidates | After a panel returns a complete scored candidate matrix; canonical contract: [`references/reviewer-mvp-portfolio.md`](../../references/reviewer-mvp-portfolio.md) |
 | [`scripts/check-repair-scope.js`](../../scripts/check-repair-scope.js) | Cumulative repair stop-loss — sealed contract (`seal --out` + check `--seal`), full `base_sha..HEAD` churn/path/new-file accounting; TRIP ends automatic repair | Before fixer, after every repair mutation, and before acceptance |
 | [`scripts/check-redispatch-prompt.sh`](../../scripts/check-redispatch-prompt.sh) | Round 2+ leaky-phrase detection (per `references/blind-dispatch.md`) | Before every re-review dispatch |
+| [`scripts/check-dispatch-suppression.sh`](../../scripts/check-dispatch-suppression.sh) | Severity-coaching or "don't flag this" in any dispatch prompt (round 1 included) | Before a methodology-agent dispatch; exit 1 coaching, 0 clean |
 | [`scripts/diff-file-list.sh`](../../scripts/diff-file-list.sh) | Reviewer's "list every file I read" enumeration in Verified Clean | Reviewer prompt assembly |
 | [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
 | [`scripts/resolve-dispatch.sh`](../../scripts/resolve-dispatch.sh) | Per-dispatch model/mode lookup against `model-routing-config.md` | Any subagent dispatch |
@@ -109,6 +110,9 @@ Follow references/test-policy.md
                 systemic handling) BEFORE patching blindly
               → otherwise: fix per test-policy → re-run tests
   → pass? → continue
+  → after impl, before merge: `scripts/check-test-integrity.sh` (warn mode: it warns, it does not block)
+  → high risk (`classify-diff-risk.sh` adversarial_review): `scripts/check-holdout-coverage.sh`
+  → new tests must exercise the change: `scripts/verify-red-green.sh`
 ```
 
 > **Why route to test-strategy** (added v2.25.10): the classifier tells you *whose* failure it

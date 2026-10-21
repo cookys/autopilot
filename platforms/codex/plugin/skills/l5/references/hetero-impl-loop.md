@@ -238,7 +238,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    at intake: set `in_rail_review: single` before the first intake if you want one reviewer per repair round with
    the full panel only at terminal (an already-sealed campaign cannot be migrated in place; see BACKLOG).
    A campaign parked in `REVIEWING` with a bound git candidate is resumable (review-only; the
-   changed-file cap does not apply). `max_changed_files` counts cumulative DISTINCT paths vs base (repairs
+   changed-file cap does not apply). Inspect or resume with `node bin/autopilot.js campaign inspect|status|resume --campaign-id <id>`. An externally produced range is `node bin/autopilot.js engine review-candidate` (`docs/review-candidate.md`). `max_changed_files` counts cumulative DISTINCT paths vs base (repairs
    included), so size it at the output paths plus headroom when `max_repair_generations >= 1`: a repair on
    already-counted paths still resumes at the cap (pre-spend blocks only above it), one that adds a path
    beyond it is refused, and admission warns `campaign_file_cap_no_first_pass_headroom` at cap <= paths. The final panel keeps one artifact per seat under

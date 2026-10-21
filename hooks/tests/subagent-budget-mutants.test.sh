@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 64289264463cc5dcf776c0c5e9687a01362d048a: FAIL every lib.sh suite calls finalize_test (or is on the frozen allowlist): expected 'subagent-budget-mutants.test.sh', got ''
 # Mutant oracle for the subagent-budget concurrency advisory (P2).
 #
 # The hook reads AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT (a row name) only when
@@ -300,6 +301,7 @@ run_one() {
     fi
     echo "reader_throw_fail_open expected PASS under reader_throw, rc=$mrc" >&2
     printf '%s\n' "$mout" >&2
+    fail "reader_throw_fail_open expected PASS under reader_throw, rc=$mrc"
     return 1
   fi
   gout=$(
@@ -310,16 +312,19 @@ run_one() {
   if [ "$mrc" -eq 0 ]; then
     echo "$row unexpected PASS under mutant" >&2
     printf '%s\n' "$mout" >&2
+    fail "$row unexpected PASS under mutant"
     return 1
   fi
   if ! printf '%s' "$mout" | grep -q "ASSERT $row"; then
     echo "$row mutant failed without marker ASSERT $row (rc=$mrc)" >&2
     printf '%s\n' "$mout" >&2
+    fail "$row mutant failed without marker ASSERT $row (rc=$mrc)"
     return 1
   fi
   if [ "$grc" -ne 0 ]; then
     echo "$row green run failed (rc=$grc)" >&2
     printf '%s\n' "$gout" >&2
+    fail "$row green run failed (rc=$grc)"
     return 1
   fi
   echo "$row mutant=FAIL green=PASS"
@@ -338,31 +343,25 @@ gate_without_allow() {
   [ "$__RUN_STDOUT" = "$base" ] && [ "$__RUN_EXIT" = 0 ]
 }
 
-ORACLE_FAIL=0
 if gate_without_allow; then
   echo "mutant_ignored_without_allow PASS"
 else
   echo "mutant_ignored_without_allow FAIL" >&2
-  ORACLE_FAIL=1
+  fail "mutant_ignored_without_allow FAIL"
 fi
 
 echo "SKIPPED resume_mtime_after_ended_counts_running: SubagentStart fired on resume (evidence note 03), so a stamp that still has ended_at is not treated as running from transcript mtime"
 
-run_one parked_ended_not_running scenario_parked_ended_not_running || ORACLE_FAIL=1
-run_one resume_restart_counts_running scenario_resume_restart_counts_running || ORACLE_FAIL=1
-run_one crash_stale_not_running scenario_crash_stale_not_running || ORACLE_FAIL=1
-run_one quota_silent_ages_out scenario_quota_silent_ages_out || ORACLE_FAIL=1
-run_one unparseable_not_counted scenario_unparseable_not_counted || ORACLE_FAIL=1
-run_one compaction_no_double_count scenario_compaction_no_double_count || ORACLE_FAIL=1
-run_one knob_zero_silent scenario_knob_zero_silent || ORACLE_FAIL=1
-run_one activity_off_silent scenario_activity_off_silent || ORACLE_FAIL=1
-run_one older_running_stamp_included scenario_older_running_stamp_included || ORACLE_FAIL=1
-run_one oversized_dir_op_budget scenario_oversized_dir_op_budget || ORACLE_FAIL=1
-run_one reader_throw scenario_reader_throw_fail_open || ORACLE_FAIL=1
+run_one parked_ended_not_running scenario_parked_ended_not_running || true
+run_one resume_restart_counts_running scenario_resume_restart_counts_running || true
+run_one crash_stale_not_running scenario_crash_stale_not_running || true
+run_one quota_silent_ages_out scenario_quota_silent_ages_out || true
+run_one unparseable_not_counted scenario_unparseable_not_counted || true
+run_one compaction_no_double_count scenario_compaction_no_double_count || true
+run_one knob_zero_silent scenario_knob_zero_silent || true
+run_one activity_off_silent scenario_activity_off_silent || true
+run_one older_running_stamp_included scenario_older_running_stamp_included || true
+run_one oversized_dir_op_budget scenario_oversized_dir_op_budget || true
+run_one reader_throw scenario_reader_throw_fail_open || true
 
-if [ "$ORACLE_FAIL" -ne 0 ]; then
-  echo "FAIL [$TEST_NAME] mutant oracle" >&2
-  exit 1
-fi
-echo "PASS [$TEST_NAME] mutant oracle"
-exit 0
+finalize_test

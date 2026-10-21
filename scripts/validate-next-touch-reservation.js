@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// Archive-only: the next-touch mission is closed; no mission ending must run this. Kept as the thin CLI over scripts/next-touch-validation.js, exercised by hooks/tests/next-touch-validation.test.sh.
+
 const core = require('./next-touch-validation');
 
 try {

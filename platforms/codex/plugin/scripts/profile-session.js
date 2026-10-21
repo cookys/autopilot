@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// no runtime caller, owner runs it by hand. Execution profile is shadow/advisory. Caller: hooks/tests/profile-context-isolation.test.sh. The skills ceo-agent, l4, l5, l6 (SKILL.md) and dev-flow references/card-relocated.md describe it as a no-effect isolation probe but no step requires running it.
+
 const fs = require('fs');
 const path = require('path');
 const {

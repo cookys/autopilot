@@ -3,6 +3,12 @@
 // Shared, read-only authority checks for the next-touch reservation and terminal
 // gates.  The two CLIs deliberately remain thin so the source and Codex copies
 // cannot acquire divergent policy.
+// Archive-only: the next-touch mission is closed; no mission ending must run this.
+// This file is the shared library behind the two thin CLIs
+// scripts/validate-next-touch-reservation.js and scripts/validate-next-touch-terminal.js.
+// Apart from those two CLIs and hooks/tests there is no other caller. Its integration
+// path, which also runs the terminal rollover, is reachable only through those two
+// archive-only CLIs.
 
 const fs = require('fs');
 const os = require('os');

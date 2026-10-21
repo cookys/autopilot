@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// no runtime caller, owner runs it by hand. Execution profile is shadow/advisory. Caller: hooks/tests/profile-context-isolation.test.sh.
+
 const path = require('path');
 const {
   EXACT_TOKEN_SOURCE,

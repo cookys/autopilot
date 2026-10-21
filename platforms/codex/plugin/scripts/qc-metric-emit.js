@@ -5,8 +5,7 @@
 //
 // WHY (ROADMAP P2.1): the acceptance-delegation ladder (T0→T1→T2) can only promote a
 // task class when we MEASURE the QC panel's escape rate + endorsement rate. This helper
-// is the write-side seam so the depth-0 QC panel run and the publish hetero-review run
-// CAN record what they saw. It is STRICTLY ADDITIVE — it never gates, blocks, or alters
+// is the write-side seam for that measurement. It is STRICTLY ADDITIVE — it never gates, blocks, or alters
 // any existing review verdict. If no store is configured it is a non-breaking no-op — it
 // exits 0 (writing only a one-line diagnostic notice to stderr, never stdout), so wiring
 // it into a review flow can never break that flow.
@@ -34,6 +33,7 @@
 //   Store resolution order: --store  >  $QC_METRIC_STORE  >  (no-op).
 //
 // EXIT: 0 = appended OR no-op (no store configured); 2 = usage / schema error.
+// Callers: scripts/ladder-run.sh only (run and audit), plus manual runs. scripts/qc-panel.js does not call it.
 
 const fs = require('fs');
 const path = require('path');

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0279 -->
+<!-- next-id: BL-0280 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1388,20 +1388,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/guidance-cut-gate-red-not-in-preflight.md
 - **Context**: The check against base 3.0.0-alpha.3 exits 1. The evidence-discipline digest does not match the pack.
 
-### Scripts that appear uncalled need a keep-or-retire decision
-- **Id**: BL-0275
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: owner
-- **Problem**: 有幾支腳本在盤點裡幾乎沒有呼叫者。有的檔頭說會被品質面板用，實際只有另一支腳本用；有的所屬計畫已經歸檔。
-- **Impact**: 沒人決定留或撤之前，這些腳本會繼續放著，之後的人分不出是備用還是廢棄。
-- **Trigger**: the owner decides, for each script, whether to wire it or retire it
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: 2026-10-21 discoverability audit
-- **Pointer**: docs/backlog/uncalled-scripts-keep-or-retire.md
-- **Context**: A missing caller is not a reason to delete. Each script's purpose, caller and suggestion are in the sidecar.
-
 ### Review deferrals from 2026-10-21
 - **Id**: BL-0276
 - **Status**: open
@@ -1443,3 +1429,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dship review 2026-10-22
 - **Pointer**: docs/backlog/decision-card-text-defects-frozen-by-eval.md
 - **Context**: (a) level-front-door.md: card paragraph splits the Sugar table between /l3 and /l4 rows. (b) multi-agent-portability.md: heading says no conflict, body says owner-question-guard returns a Stop block. Any edit needs a new pack, arm and eval.
+
+### Uncalled-script follow-ups that touch guidance need eval
+- **Id**: BL-0279
+- **Status**: open
+- **Since**: 2026-10-22
+- **Origin**: owner
+- **Problem**: 十支腳本已標明誰在用。還有四件後續這次沒做，兩件要先評測，一件要負責人決定，一件被已封印的圖擋住，並非四件都改指引。
+- **Impact**: 指引仍沒寫何時、由誰去跑，之後的人還是會猜。
+- **Trigger**: the owner accepts an eval for the guidance follow-ups in the sidecar
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: BL-0275 relabel, 2026-10-22
+- **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
+- **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin.

@@ -2,6 +2,7 @@
 /**
  * scripts/check-escalation-coverage.js
  * Verification script for escalation-ledger coverage.
+ * Callers: none at runtime; owner or retro operator runs it by hand (--gate fails the run). Quality-floor project is archived.
  */
 
 const fs = require('fs');

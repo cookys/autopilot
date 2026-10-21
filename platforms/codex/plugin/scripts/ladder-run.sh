@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # ladder-run — the ACCEPTANCE-DELEGATION LADDER harness (ROADMAP P2.2).
+# Callers: external only (owner-run ladder cycles; llm-playground/qc-metrics reads the store). No skill, hook or script in this repo calls it.
 #
 # WHY (ROADMAP §0): cookys is progressively removed from the acceptance loop by moving a
 # task CLASS up a ladder — T0 (cookys per-item) → T1 (agent verifies, cookys samples X%) →

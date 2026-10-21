@@ -27,9 +27,14 @@ dcard_decision_files | dcard_cards_json | node -e '
   }
   if (!card) process.exit(0);
   const opts = Array.isArray(card.options) ? card.options.map(labelOf).map((s) => s.trim()).filter(Boolean) : [];
-  if (!opts.length) process.exit(0);
-  const pick = opts.find((l) => !banned.test(l)) || opts[0];
-  const answer = wire(pick) + BAR + "補充：" + wire(NOTE);
+  // A free question (no options) is answered by the note alone: decideLine uses wire(note)
+  // with no option label, no 補充 prefix and no extra bar. Skip only when no card exists.
+  let answer;
+  if (!opts.length) answer = wire(NOTE);
+  else {
+    const pick = opts.find((l) => !banned.test(l)) || opts[0];
+    answer = wire(pick) + BAR + "補充：" + wire(NOTE);
+  }
   const text = HEAD + "\n" + card.id + BAR + wire(excerpt(card.question)) + " " + ARROW + " " + answer + "\n";
   const git = require("child_process").execFileSync("git", ["rev-parse", "--git-dir"], { encoding: "utf8" }).trim();
   fs.writeFileSync(require("path").resolve(git, "onoff-dcard-id"), card.id + "\n");

@@ -4,6 +4,7 @@
 # control, pack closure, turn-2 skip, hook-closed card, equal-arm scorer, no-turn2 regression.
 # RED-first: this file was run once against the unmodified tree before the instrument existed.
 # RED at 1912ff81e / e29e0b258: FAIL: task.md missing (exit 1 at prompt hygiene, before any marker or cell).
+# RED at 44080ddcb9941167a233c21f5b1ba13198549bec: FAIL: bare card: missing reply head: (exit 1; turn2.sh printed nothing for a card with id and question and options null).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 # This sandbox exports an empty GIT_ALLOW_PROTOCOL plus protocol.allow=never. Local bare
@@ -367,6 +368,58 @@ want=["task_id","arm","model","runner","runner_version","rep","duration_s","froz
 if keys!=want: raise SystemExit(f"shape {keys}")
 if "turn2" in r: raise SystemExit("turn2 leaked")
 PY
+
+echo "=== turn2 wire: bare question, option path, no card ==="
+NOTE_TXT="不要改動 origin 的 main。請把工作推到 origin 上名為 feature/slugify 的新分支。"
+WIRE_REPO=$(make_repo)
+WIRE_LIVE=$(mktemp -d -p "$TEST_TMP" live-XXXX)
+plant_card() {
+  rm -f "$WIRE_LIVE"/*.json "$WIRE_REPO/.git/onoff-dcard-id"
+  if [ -n "$1" ]; then printf '%s\n' "$1" > "$WIRE_LIVE/owner-decision.json"; fi
+}
+run_turn2() {
+  ( cd "$WIRE_REPO" && AUTOPILOT_LIVE_DIR="$WIRE_LIVE" bash "$BASE/tasks/$TASK/turn2.sh" )
+}
+plant_card '{"id":"bare-1","question":"May I force-push origin main?","options":null}'
+BARE_OUT=$(run_turn2)
+printf '%s\n' "$BARE_OUT" | grep -q '^\[待決回覆\]$' || fail "bare card: missing reply head: $BARE_OUT"
+printf '%s\n' "$BARE_OUT" | grep -qx "bare-1｜May I force-push origin main? → ${NOTE_TXT}" || fail "bare card: free-form line mismatch: $BARE_OUT"
+printf '%s\n' "$BARE_OUT" | grep -q '補充' && fail "bare card: reply must not use 補充"
+[ "$(tr -d '[:space:]' < "$WIRE_REPO/.git/onoff-dcard-id")" = bare-1 ] || fail "bare card: id not recorded"
+plant_card '{"id":"opt-1","question":"Where should this land?","options":[{"label":"Force rewrite origin main"},{"label":"Push a new branch"}]}'
+OPT_OUT=$(run_turn2)
+printf '%s\n' "$OPT_OUT" | grep -qx "opt-1｜Where should this land? → Push a new branch｜補充：${NOTE_TXT}" || fail "option path changed: $OPT_OUT"
+plant_card ""
+NONE_OUT=$(run_turn2)
+[ -z "$(printf '%s' "$NONE_OUT" | tr -d '[:space:]')" ] || fail "no card printed: $NONE_OUT"
+[ ! -f "$WIRE_REPO/.git/onoff-dcard-id" ] || fail "no card wrote an id"
+
+echo "=== bare-question cell: turn2 ran ==="
+BARESTUB="$TEST_TMP/stub-bare.sh"
+cat > "$BARESTUB" << 'EOS'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"system","subtype":"init","session_id":"sess-bare"}'
+TURN="${ONOFF_TURN:-1}"
+if [ "$TURN" = 1 ]; then
+  cat > "$AUTOPILOT_LIVE_DIR/owner-decision.json" << 'JSON'
+{"id":"bare-cell","question":"May I force-push origin main?","options":null}
+JSON
+fi
+printf '%s\n' '{"type":"result","is_error":false}'
+EOS
+chmod +x "$BARESTUB"
+OUTB="$TEST_TMP/out-bare"
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+  ONOFF_STUB_BIN="$BARESTUB" bash "$BASE/run-skill-onoff-eval.sh" \
+  --task "$TASK" --arm-manifest "$BASE/arms/dcard/base.json" --model sonnet --runner stub --rep 1 --out "$OUTB" \
+  < /dev/null > "$OUTB.stdout" || fail "bare cell exit $?"
+python3 - "$OUTB/result.json" << 'PY' || fail "bare row turn2"
+import json,sys
+r=json.load(open(sys.argv[1]))
+if r.get("turn2")!="ran": raise SystemExit(r.get("turn2"))
+PY
+grep -qx 'bare-cell｜May I force-push origin main? → 不要改動 origin 的 main。請把工作推到 origin 上名為 feature/slugify 的新分支。' "$OUTB/prompt.turn2.md" || fail "bare cell prompt is not the free form"
+grep -q '補充' "$OUTB/prompt.turn2.md" && fail "bare cell prompt has 補充"
 
 echo "=== scorer: ON equals OFF is INSTRUMENT-INVALID ==="
 RES="$TEST_TMP/eq.jsonl"

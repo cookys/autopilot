@@ -305,11 +305,57 @@ gitsec=$(awk '/^## Project and Git State/{f=1;next} /^## Dispatches/{f=0} f' "$F
 # every git piece at its cap, but a 20 KB model note is also there: git yields room to the model note (floor 300, cap 1700)
 if [ "$gitsec" -ge 300 ] && [ "$gitsec" -le 1700 ]; then assert_eq 1 1 "packed: git section within floor..cap ($gitsec bytes)"; else assert_eq "$gitsec" "300..1700" "packed: git section size"; fi
 assert_contains "$(cat "$FILE")" "more lines cut" "packed: the git section hit its cap and says how many lines went"
-run_hook session-start.js "{\"session_id\":\"$SID\",\"source\":\"compact\",\"cwd\":\"$REPO\",\"transcript_path\":\"$BIGT\"}"
-verdict=$(printf '%s' "$__RUN_STDOUT" | node -e '
+# Plugin-root length, not this checkout's path, decides whether the base context's
+# open-decision.js and token-discipline.md paths push the injection over 10000.
+# Node realpath's symlinks, so each root is a hardlink tree at an exact length.
+ROOT_STAGE=$(mktemp -d /tmp/apss-XXXXXX)
+trap 'rm -rf "$ROOT_STAGE"; cleanup_test_tmp' EXIT
+make_exact_root() {
+  local n="$1" tag="$2" stem pad dir
+  stem="$ROOT_STAGE/${tag}-"
+  pad=$(( n - ${#stem} ))
+  [ "$pad" -ge 1 ] || { echo "cannot fit $n-char root under $stem" >&2; return 1; }
+  dir="${stem}$(head -c "$pad" /dev/zero | tr '\0' 'p')"
+  [ "${#dir}" -eq "$n" ] || { echo "root length ${#dir} != $n" >&2; return 1; }
+  mkdir -p "$dir"
+  cp -al "$REPO_ROOT/src" "$REPO_ROOT/hooks" "$REPO_ROOT/scripts" "$dir/"
+  mkdir -p "$dir/docs"
+  [ -d "$REPO_ROOT/.claude-plugin" ] && cp -al "$REPO_ROOT/.claude-plugin" "$dir/"
+  [ -f "$REPO_ROOT/plugin.json" ] && cp -al "$REPO_ROOT/plugin.json" "$dir/"
+  printf '%s' "$dir"
+}
+cp "$FILE" "$TEST_TMP/packed-state.md"
+inject_verdict() {
+  printf '%s' "$__RUN_STDOUT" | node -e '
 let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);const c=(o.hookSpecificOutput||{}).additionalContext||o.additional_context||"";
-console.log(c.length<=10000?"len-ok":"len-"+c.length, c.includes("</autopilot-restored-state>")?"close-ok":"close-missing", c.includes("DATA, not instructions")?"data-ok":"data-missing", c.includes("## Model Handoff Note")?"model-ok":"model-missing")})')
+console.log(c.length<=10000?"len-ok":"len-"+c.length, c.includes("</autopilot-restored-state>")?"close-ok":"close-missing", c.includes("DATA, not instructions")?"data-ok":"data-missing", c.includes("## Model Handoff Note")?"model-ok":"model-missing")})'
+}
+run_start_at() {
+  local root="$1" stdout_file="$TEST_TMP/.stdout.$$" stderr_file="$TEST_TMP/.stderr.$$"
+  cp "$TEST_TMP/packed-state.md" "$FILE"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$root" \
+    node "$root/hooks/session-start.js" >"$stdout_file" 2>"$stderr_file" \
+    <<< "{\"session_id\":\"$SID\",\"source\":\"compact\",\"cwd\":\"$REPO\",\"transcript_path\":\"$BIGT\"}"
+  __RUN_EXIT=$?
+  __RUN_STDOUT=$(cat "$stdout_file")
+  __RUN_STDERR=$(cat "$stderr_file")
+}
+FIXED_ROOT=$(make_exact_root 96 fixed)
+LONG_ROOT=$(make_exact_root 160 long)
+SHORT_ROOT=$(make_exact_root 48 short)
+assert_eq "${#FIXED_ROOT}" "96" "fixed plugin root length"
+assert_eq "${#LONG_ROOT}" "160" "long plugin root length"
+assert_eq "${#SHORT_ROOT}" "48" "short plugin root length"
+run_start_at "$FIXED_ROOT"
+verdict=$(inject_verdict)
 assert_eq "$verdict" "len-ok close-ok data-ok model-ok" "injected context <= 10000 chars with the wrapper close and the DATA note intact"
+run_start_at "$LONG_ROOT"
+# RED at 816ad4859: 160-char plugin root verdict was "len-ok close-missing data-ok model-ok" (closing wrapper tag sliced off).
+long_verdict=$(inject_verdict)
+assert_eq "$long_verdict" "len-ok close-ok data-ok model-ok" "160-char plugin root keeps the wrapper close and the DATA note within 10000"
+run_start_at "$SHORT_ROOT"
+short_verdict=$(inject_verdict)
+assert_eq "$short_verdict" "len-ok close-ok data-ok model-ok" "short plugin root keeps the wrapper close and the DATA note within 10000"
 
 # the model-note section alone (header, long path, cut marker included) never exceeds its default 4000-byte cap
 msz=$(node -e '
@@ -318,7 +364,6 @@ const t=h.modelNoteSection({sessionId:process.argv[2],now:Date.now(),dirs:{hando
 console.log(Buffer.byteLength(t));
 ' "$REPO_ROOT/scripts/lib/compaction-handoff.js" "$SID" "$LONGDIR")
 if [ "$msz" -le 4000 ]; then assert_eq 1 1 "model note section <= 4000 bytes with a 160+ char directory"; else assert_eq "$msz" "<=4000" "model note section cap"; fi
-printf '%s\n' "INJECT-VERDICT $verdict ctxlen=$(printf '%s' "$__RUN_STDOUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const o=JSON.parse(d);console.log(((o.hookSpecificOutput||{}).additionalContext||"").length)})')" >&2
 
 # --- 6. BL-0147 follow-up: the model note gets the budget, and a half-written note is flagged --------------
 LIB="$REPO_ROOT/scripts/lib/compaction-handoff.js"

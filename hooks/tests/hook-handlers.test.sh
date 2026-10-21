@@ -117,6 +117,37 @@ assert(context.includes('INTENT'));
 assert(context.includes('DISABLED'));
 assert(context.includes('UPDATED'));
 
+const asObject = composeSessionStartContext({
+  compactionRecovery: { head: '\nRE', body: 'COV', tail: 'ERY' },
+  intentHint: '\nINTENT',
+  disableWarning: '\nDISABLED',
+  updateNotice: 'UPDATED',
+  limit: 10000,
+  keep: 9999,
+});
+assert.equal(asObject, context, 'object form under the limit matches the string');
+const huge = composeSessionStartContext({
+  compactionRecovery: {
+    head: '\nHEAD-DATA\n<autopilot-restored-state>\n',
+    body: 'B'.repeat(20000),
+    tail: '\n</autopilot-restored-state>\nTAIL-NOTE',
+  },
+  limit: 10000,
+  keep: 9999,
+});
+assert(huge.length <= 9999, 'object form stays within keep');
+assert(huge.includes('HEAD-DATA'), 'DATA head survives the trim');
+assert(huge.includes('</autopilot-restored-state>'), 'closing tag survives the trim');
+assert(huge.includes('TAIL-NOTE'), 'tail text survives the trim');
+assert(huge.includes('[...cut to fit the injection limit]'), 'cut notice is inside the body room');
+const degenerate = composeSessionStartContext({
+  compactionRecovery: { head: 'H'.repeat(30), body: 'BODY', tail: 'T'.repeat(30) },
+  limit: 40,
+  keep: 20,
+});
+assert(degenerate.length <= 20, 'degenerate head+tail over keep does not throw and stays within keep');
+assert(degenerate.includes('T'), 'degenerate emit keeps tail text');
+
 const withHandoff = composeSessionStartContext({
   intentHint: '\nINTENT',
   handoffInjected: 'HANDOFF',

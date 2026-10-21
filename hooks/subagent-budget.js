@@ -35,7 +35,9 @@
  * Every allowed dispatch gets one additionalContext line: last-hour turns, estimated USD, heaviest lane.
  *
  * MODES: ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
- * "root_turns_per_hour_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
+ * "root_turns_per_hour_max", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
+ * concurrent_advise_max (default 3, env AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX, 0 off) appends one advisory
+ * sentence after an allow. It never denies. AUTOPILOT_AGENT_ACTIVITY=off skips it. A thrown reader fails open.
  * Clock: AUTOPILOT_SUBAGENT_BUDGET_NOW_MS, honoured only with AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1 (tests). FAIL-OPEN: no transcript_path, an unreadable or corrupt transcript, or any
  * internal error => exit 0 with no stdout. This hook is its own process, separate from dispatch-model-guard.
  */
@@ -46,7 +48,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
-const DEFAULTS = { mode: 'remind', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400 };
+const DEFAULTS = { mode: 'remind', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, concurrent_advise_max: 3 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
@@ -64,6 +66,14 @@ function posInt(v) {
   if (typeof v !== 'string' || !/^\d+$/.test(v.trim())) return null;
   const n = Number(v.trim());
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+// 0 is valid and means the concurrency advisory is off. Negative and non-integers are ignored.
+function nonNegInt(v) {
+  if (typeof v === 'number') return Number.isInteger(v) && v >= 0 ? v : null;
+  if (typeof v !== 'string' || !/^\d+$/.test(v.trim())) return null;
+  const n = Number(v.trim());
+  return Number.isInteger(n) && n >= 0 ? n : null;
 }
 
 function normMode(v) {
@@ -89,7 +99,47 @@ function loadConfig() {
   cfg.lane_dispatch_max = pick('lane_dispatch_max', 'AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX');
   cfg.lane_turns_max = pick('lane_turns_max', 'AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX');
   cfg.root_turns_per_hour_max = pick('root_turns_per_hour_max', 'AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX');
+  const adviseEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX);
+  const adviseFile = nonNegInt(file.concurrent_advise_max);
+  cfg.concurrent_advise_max = adviseEnv !== null ? adviseEnv : (adviseFile !== null ? adviseFile : DEFAULTS.concurrent_advise_max);
   return cfg;
+}
+
+// Test-only. Ignored unless AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_MUTANT is exactly 1.
+// Not a user knob. AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT names the oracle row.
+function testMutant() {
+  if (process.env.AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_MUTANT !== '1') return '';
+  const raw = process.env.AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+// One extra sentence, or '' when the advisory is off, under threshold, or the reader fails open.
+function advisorySuffix(payload) {
+  const mutant = testMutant();
+  const { knobOff, liveBase } = require('./live-session-lib.js');
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY') && mutant !== 'activity_off_silent') return '';
+  const max = loadConfig().concurrent_advise_max;
+  if (max === 0 && mutant !== 'knob_zero_silent') return '';
+  const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+  const { scanRunningAdvisory } = require('../scripts/lib/workflow-snapshot.js');
+  const sid = payload && typeof payload.session_id === 'string' ? payload.session_id : '';
+  if (!sid) return '';
+  const dir = path.join(liveBase(), 'agents', sanitizeSessionId(sid));
+  const scan = scanRunningAdvisory(dir, { now: nowMs(), mutant: mutant || undefined });
+  const threshold = max === 0 ? DEFAULTS.concurrent_advise_max : max;
+  if (!scan || !(scan.count >= threshold)) return '';
+  if (scan.partial) return `at least ${scan.count} appear running (scan truncated)`;
+  const shown = max === 0 ? DEFAULTS.concurrent_advise_max : max;
+  return `${scan.count} subagents appear running (advisory threshold ${shown}; token-discipline: keep lightweight subagents at most 3 at a time)`;
+}
+
+function withAdvisory(payload, base) {
+  try {
+    const extra = advisorySuffix(payload);
+    return extra ? `${base} ${extra}` : base;
+  } catch {
+    return base;
+  }
 }
 
 function nowMs() {
@@ -450,18 +500,18 @@ function run(payload) {
   }
 
   const line = contextLine(c);
-  if (hits.length === 0) { emit({ additionalContext: line }); return; }
+  if (hits.length === 0) { emit({ additionalContext: withAdvisory(payload, line) }); return; }
 
   const summary = hits.map((h) => h.text).join('; ');
   if (cfg.mode === 'warn') {
     process.stderr.write(`subagent-budget: ${summary}\n`);
-    emit({ additionalContext: `subagent-budget (warn mode, not blocking): ${summary}. ${line}` });
+    emit({ additionalContext: withAdvisory(payload, `subagent-budget (warn mode, not blocking): ${summary}. ${line}`) });
     return;
   }
   const ack = ackFromBrief(brief);
   if (ack && ack.reason) {
     appendAckRow(payload, lane || 'root', (lane ? c.laneDispatches : c.files) + 1, ack.reason, hits);
-    emit({ additionalContext: `subagent-budget: passed on Budget-Ack (${summary}). ${line}` });
+    emit({ additionalContext: withAdvisory(payload, `subagent-budget: passed on Budget-Ack (${summary}). ${line}`) });
     return;
   }
   const budgetHit = hits.find((h) => !h.noCard);

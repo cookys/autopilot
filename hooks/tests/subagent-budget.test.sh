@@ -402,4 +402,77 @@ p95=$(printf '%s\n' $times | sort -n | awk '{a[NR]=$1} END{i=int(NR*0.95+0.99999
 echo "# KR7 warm latency ms (20 calls): $times  p95=$p95"
 if [ "$p95" -le 300 ]; then assert_eq ok ok "KR7 p95 ${p95} ms <= 300"; else fail "KR7 p95 ${p95} ms > 300"; fi
 
+# ---- P2 concurrency advisory (never denies). RED captured on the unmodified hook. ------------------------------------
+# RED at 36493565d13db8bcdbe25559b74c4683270fc4ac: 210 passed, 5 failed — no "subagents appear running" line at 3 stamps, no "scan truncated" line on a 250-file dir, and AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX / config concurrent_advise_max were not read.
+ADV_EXACT='3 subagents appear running (advisory threshold 3; token-discipline: keep lightweight subagents at most 3 at a time)'
+write_agents() {
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const { sanitizeSessionId } = require(process.argv[1]);
+    const dir = path.join(process.argv[2], "agents", sanitizeSessionId(process.argv[3]));
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const rows = JSON.parse(process.argv[4]);
+    for (const r of rows) {
+      const file = path.join(dir, r.file || (r.agent_id + ".json"));
+      fs.writeFileSync(file, JSON.stringify(r.body) + "\n");
+      if (r.mtimeMs != null) { const d = new Date(Number(r.mtimeMs)); fs.utimesSync(file, d, d); }
+    }
+  ' "$REPO_ROOT/scripts/lib/live-state-dir.js" "$AUTOPILOT_LIVE_DIR" "$1" "$2"
+}
+running_body() { node -e 'const n=+process.argv[1], now=+process.argv[2], extra=process.argv[3]?JSON.parse(process.argv[3]):{}; const iso=new Date(now).toISOString(); const rows=[]; for (let i=0;i<n;i++) rows.push({agent_id:"run-"+i, body:Object.assign({agent_id:"run-"+i, last_tool_at:iso}, extra)}); process.stdout.write(JSON.stringify(rows));' "$1" "$NOW" "${2:-}"; }
+
+mk adv0 '[]'
+fire adv0 'Task: x\ngo'
+ADV_BASE="$__RUN_STDOUT"
+assert_not_contains "$ADV_BASE" 'permissionDecision' "advisory baseline has no permissionDecision"
+assert_not_contains "$ADV_BASE" 'appear running' "advisory baseline has no concurrency line"
+
+mk adv3 '[]'
+write_agents adv3 "$(running_body 3)"
+fire adv3 'Task: x\ngo'
+assert_contains "$__RUN_STDOUT" "$ADV_EXACT" "advisory: 3 running stamps at default threshold"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "advisory: 3 running does not deny"
+assert_eq 0 "$__RUN_EXIT" "advisory: 3 running exits 0"
+
+mk adv2 '[]'
+write_agents adv2 "$(running_body 2)"
+fire adv2 'Task: x\ngo'
+assert_not_contains "$__RUN_STDOUT" 'appear running' "advisory: 2 running stays under the default threshold"
+assert_eq "$ADV_BASE" "$__RUN_STDOUT" "advisory: 2 running matches the empty-directory baseline"
+
+mk advz '[]'
+write_agents advz "$(running_body 3)"
+AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX=0 fire advz 'Task: x\ngo'
+assert_eq "$ADV_BASE" "$__RUN_STDOUT" "advisory: knob 0 is byte-identical to the baseline"
+unset AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX
+
+mk adva '[]'
+write_agents adva "$(running_body 3)"
+AUTOPILOT_AGENT_ACTIVITY=off fire adva 'Task: x\ngo'
+assert_eq "$ADV_BASE" "$__RUN_STDOUT" "advisory: AUTOPILOT_AGENT_ACTIVITY=off matches the baseline with 3 running stamps"
+unset AUTOPILOT_AGENT_ACTIVITY
+
+mk advp '[]'
+write_agents advp "$(running_body 250)"
+fire advp 'Task: x\ngo'
+assert_contains "$__RUN_STDOUT" 'at least ' "advisory partial names a lower bound"
+assert_contains "$__RUN_STDOUT" 'appear running (scan truncated)' "advisory partial uses the truncated wording"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "advisory partial does not deny"
+
+mk adve '[]'
+write_agents adve "$(running_body 1)"
+AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX=1 fire adve 'Task: x\ngo'
+assert_contains "$__RUN_STDOUT" '1 subagents appear running (advisory threshold 1; token-discipline: keep lightweight subagents at most 3 at a time)' "advisory: env override lowers the threshold to 1"
+unset AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX
+printf '%s\n' '{"subagent_budget":{"concurrent_advise_max":1}}' >"$AUTOPILOT_CONFIG_FILE"
+mk advf '[]'
+write_agents advf "$(running_body 1)"
+fire advf 'Task: x\ngo'
+assert_contains "$__RUN_STDOUT" 'advisory threshold 1;' "advisory: config file concurrent_advise_max is read"
+rm -f "$AUTOPILOT_CONFIG_FILE"
+AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX=4 fire adv3 'Task: x\ngo'
+assert_not_contains "$__RUN_STDOUT" 'appear running' "advisory: env override 4 hides 3 running stamps"
+unset AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX
+
 finalize_test

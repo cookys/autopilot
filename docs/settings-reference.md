@@ -123,6 +123,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `subagent_budget.lane_dispatch_max` (config.json) | Dispatches one lane may already have before the next is denied (reviewers excluded). | `4` | `AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX` |
 | `subagent_budget.lane_turns_max` (config.json) | Subagent turns one lane may already have used before the next dispatch is denied. | `300` | `AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX` |
 | `subagent_budget.root_turns_per_hour_max` (config.json) | Subagent turns of the whole session in the last 60 minutes before the next dispatch is denied. | `400` | `AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX` |
+| `subagent_budget.concurrent_advise_max` (config.json) | Running subagents at or above this number add one advisory line on Agent dispatch. 0 disables the line. The hook never denies on this count. | `3` | `AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX` |
 | `dirty_tree_reminder.min_files` (config.json) | Changed files that trigger the reminder. | `3` | `AUTOPILOT_DIRTY_TREE_MIN_FILES` |
 | `dirty_tree_reminder.min_lines` (config.json) | Changed lines that trigger the reminder. | `150` | `AUTOPILOT_DIRTY_TREE_MIN_LINES` |
 | `dirty_tree_reminder.interval_minutes` (config.json) | Minimum minutes between two reminders per repo and session; 0 reminds every turn. | `30` | `AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES` |

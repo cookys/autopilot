@@ -667,6 +667,22 @@
       "type": "number"
     },
     {
+      "name": "subagent_budget.concurrent_advise_max",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 3,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX"
+      ],
+      "summary": "Running subagents at or above this number add one advisory line on Agent dispatch. 0 disables the line. The hook never denies on this count.",
+      "type": "number"
+    },
+    {
       "name": "foreman_guard.advisory_every",
       "kind": "config_key",
       "audience": "user",
@@ -3842,6 +3858,21 @@
       "summary": "Environment override of subagent_budget.root_turns_per_hour_max."
     },
     {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "subagent_budget.concurrent_advise_max"
+      ],
+      "summary": "Environment override of subagent_budget.concurrent_advise_max. 0 disables the advisory."
+    },
+    {
       "name": "AUTOPILOT_SUBAGENT_BUDGET_NOW_MS",
       "kind": "env",
       "audience": "internal",
@@ -3868,6 +3899,36 @@
         "AUTOPILOT_SUBAGENT_BUDGET_NOW_MS"
       ],
       "note": "Set to 1 to let hooks/subagent-budget.js honour AUTOPILOT_SUBAGENT_BUDGET_NOW_MS; any other value (or unset) keeps the real clock."
+    },
+    {
+      "name": "AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_MUTANT"
+      ],
+      "note": "Row name for the subagent-budget concurrency mutant oracle. Ignored unless AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_MUTANT is exactly 1. Not a user knob."
+    },
+    {
+      "name": "AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_MUTANT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT"
+      ],
+      "note": "Set to exactly 1 before hooks/subagent-budget.js will honour AUTOPILOT_TEST_SUBAGENT_BUDGET_MUTANT. Any other value ignores the mutant name."
     },
     {
       "name": "AUTOPILOT_DISCUSS_TIMEOUT",

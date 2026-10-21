@@ -4439,6 +4439,22 @@
       "summary": "Set to \"0\" to stop the update notice (either this or update_check: false switches it off)."
     },
     {
+      "name": "AUTOPILOT_CONFIG_PAIR_CHECK",
+      "kind": "env",
+      "audience": "user",
+      "group": "update",
+      "default": "on",
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "update_check",
+        "AUTOPILOT_UPDATE_CHECK"
+      ],
+      "summary": "Set to \"0\" to stop the ordinary-session reminder when context_budget.t2 plus gap is above autoCompactWindow minus 33000."
+    },
+    {
       "name": "AUTOPILOT_PRICES_FETCH",
       "kind": "env",
       "audience": "user",

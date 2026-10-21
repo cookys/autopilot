@@ -180,7 +180,9 @@ function recommendation(r, window) {
   if (!(Number.isFinite(window) && window >= MAX_WINDOW)) return null;
   return 'Tip: no autoCompactWindow is set, so this 1M-window session compacts only near 1M ' +
     '(unless the server supplies a window). Set "autoCompactWindow": 250000 in ~/.claude/settings.json ' +
-    'or run /autocompact: resetting between 150k and 300k cut cost about 20% in measured sessions.';
+    'or run /autocompact: resetting between 150k and 300k cut cost about 20% in measured sessions. ' +
+    'Keep context_budget.t2 plus context_budget.gap at most autoCompactWindow minus 33000; ' +
+    'autoCompactWindow is in ~/.claude/settings.json and context_budget.t2 and context_budget.gap are in ~/.autopilot/config.json.';
 }
 
 module.exports = { resolve, recommendation, canonicalModel, settingsSources, MIN_WINDOW, MAX_WINDOW };

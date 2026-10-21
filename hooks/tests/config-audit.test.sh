@@ -63,6 +63,10 @@ check_rule unreadable 250000 '{not json'
 check_rule t1_not_below_t2 250000 "{$V1,\"context_budget\":{\"t1\":200000,\"t2\":150000}}"
 check_rule t2_gap_over_window 250000 "{$V1,\"context_budget\":{\"t2\":300000}}"
 check_rule no_autocompact_window "" "{$V1}"
+set_window ""; cfg "{$V1}"
+OUT="$(node "$LIBDIR/config-audit.js" --config "$TEST_TMP/cfg.json")"
+# RED at 56095b46c: no_autocompact_window suggestion named ~/.claude/settings.json only, not ~/.autopilot/config.json
+assert_contains "$OUT" "~/.autopilot/config.json" "no_autocompact_window suggestion names ~/.autopilot/config.json"
 check_rule defaults_changed 250000 '{"update_check":true}'
 assert_eq "$KILLED" "$TOTAL" "negative controls: every removed check is caught ($KILLED of $TOTAL mutants killed)"
 echo "negative controls: $KILLED/$TOTAL mutants killed (red when the check is removed)"

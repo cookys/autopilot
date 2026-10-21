@@ -3263,6 +3263,19 @@
       "summary": "Set to \"off\" to stop the UserPromptSubmit hook that drains queued advisories into the next prompt."
     },
     {
+      "name": "AUTOPILOT_DECIDE_REPLY_CLOSE",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": "on",
+      "readers": [
+        "hooks/advisory-relay.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop a live-panel reply whose first line is [待決回覆] from closing the decision cards it names."
+    },
+    {
       "name": "AUTOPILOT_AGENT_ACTIVITY",
       "kind": "env",
       "audience": "user",

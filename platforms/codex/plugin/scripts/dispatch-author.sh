@@ -382,6 +382,28 @@ process.exit(2);
 ' "$1"
 }
 
+# Positive-integer kill-after grace. `timeout -k 0` does not send KILL, so a
+# non-positive or non-numeric AUTOPILOT_AUTHOR_KILL_GRACE_SECS falls back to 30.
+author_kill_grace() {
+  AUTHOR_KILL_GRACE_SECS="${AUTOPILOT_AUTHOR_KILL_GRACE_SECS:-30}"
+  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[1-9][0-9]*$ ]] || AUTHOR_KILL_GRACE_SECS=30
+}
+
+# timeout exits 124 when the child dies from TERM, and 137 when the kill-after
+# grace has to send KILL. Map 137 back to 124 only after the deadline has
+# elapsed, so an early SIGKILL (OOM or an external kill) is not reported as
+# transport_status timeout. $1 is $SECONDS taken immediately before timeout.
+author_remap_kill_exit() {
+  local start_secs="$1" elapsed limit
+  if [[ "$RUNNER_EXIT" -eq 137 ]]; then
+    elapsed=$((SECONDS - start_secs))
+    if limit="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" \
+      && [[ "$elapsed" -ge "$limit" ]]; then
+      RUNNER_EXIT=124
+    fi
+  fi
+}
+
 strict_result_fields() {
   local containment="$1"
   local fields=""
@@ -1221,14 +1243,18 @@ elif [[ "$RUNNER" = "grok" ]]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"
+  author_kill_grace
   set +e
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
   grok_effort_note "$EFFORT" "dispatch-author" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
-  timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # grok reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
     --reasoning-effort "$GROK_EFFORT" \
-    --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+    --no-alt-screen --output-format plain --disable-web-search </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$GROK_CWD"; GROK_CWD=""
 elif [[ "$RUNNER" = "qoderclicn" ]]; then
@@ -1239,11 +1265,15 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   # captured to RUNNER_ERR_FILE (read only on failure) so qoder's benign non-git-cwd 'fatal: not a git repository' never
   # lands in the captured authored text. Enforced timeout is the hang backstop.
   QODER_CWD="$(mktemp -d -t dispatch-author-qodercwd-XXXXXX)"
+  author_kill_grace
   set +e
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # Prompt is fed with < "$5" inside the exec'd child. Do not redirect this timeout's stdin.
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
     --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
     _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
 elif [[ "$RUNNER" = "cursor" ]]; then
@@ -1268,11 +1298,15 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   # the result either way, preserving "fail-closed, no salvage from stderr".
   CURSOR_CWD="$(mktemp -d -t dispatch-author-cursorcwd-XXXXXX)"
   CURSOR_ERR="$(mktemp -t dispatch-author-cursor-err-XXXXXX)"
+  author_kill_grace
   set +e
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
     --output-format text < "$4"' \
     _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2> "$CURSOR_ERR"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$CURSOR_CWD"; CURSOR_CWD=""
 elif [[ "$RUNNER" = "kimi" ]]; then
@@ -1297,10 +1331,14 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   if KIMI_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" && [[ "$KIMI_TIMEOUT_S" -gt 0 ]]; then
     KIMI_TIMEOUT_ARGS=(--timeout-seconds "$KIMI_TIMEOUT_S")
   fi
+  author_kill_grace
   set +e
-  timeout "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
-    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} > "$RAW_LOG" 2>>"$RAW_LOG"
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # kimi.js reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
@@ -1318,10 +1356,14 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   CCSHIM_CWD="$(mktemp -d -t dispatch-author-ccshimcwd-XXXXXX)"
   set +e
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+  author_kill_grace
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
     bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$AUTHOR_RUN_ID" || true; }
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
@@ -1338,9 +1380,13 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   CNATIVE_CWD="$(mktemp -d)"
   set +e
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
+  author_kill_grace
+  AUTHOR_TIMEOUT_START=$SECONDS
+  # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
+  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
@@ -1419,26 +1465,15 @@ else
       "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
-  # agy ignores SIGTERM, and its own --print-timeout is the only limit today
-  # unless an outer timeout escalates to KILL. GNU timeout exits 124 on TERM
-  # timeout and 137 when the kill-after grace has to send KILL. Map that 137
-  # back to 124 only after the deadline has elapsed, so an early SIGKILL (OOM
-  # or an external kill) is not reported as transport_status timeout. Other
-  # runners are unchanged (still no kill-after). Grace must be a positive
-  # integer: timeout -k 0 does not send KILL.
-  AUTHOR_KILL_GRACE_SECS="${AUTOPILOT_AUTHOR_KILL_GRACE_SECS:-30}"
-  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[1-9][0-9]*$ ]] || AUTHOR_KILL_GRACE_SECS=30
+  # agy ignores SIGTERM. The shared kill-after (author_kill_grace /
+  # author_remap_kill_exit) escalates to KILL and maps 137 back to 124 only
+  # after the deadline has elapsed, so an early SIGKILL is not a timeout.
+  author_kill_grace
   set +e
   AGY_TIMEOUT_START=$SECONDS
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
-  if [[ "$RUNNER_EXIT" -eq 137 ]]; then
-    AGY_TIMEOUT_ELAPSED=$((SECONDS - AGY_TIMEOUT_START))
-    if AGY_TIMEOUT_LIMIT="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" \
-      && [[ "$AGY_TIMEOUT_ELAPSED" -ge "$AGY_TIMEOUT_LIMIT" ]]; then
-      RUNNER_EXIT=124
-    fi
-  fi
+  author_remap_kill_exit "$AGY_TIMEOUT_START"
   set -e
   rm -rf "$RUN_SH"
 fi

@@ -4,6 +4,17 @@ Claude Code dispatching another coding engine (Antigravity `agy` + Gemini, verif
 
 Empirical basis: [`multi-agent-portability.md`](multi-agent-portability.md) § "Verified by Spike (agy 1.0.5 headless dispatch, 2026-06-11)". First production use: the `_bodies` relocation (merged `a83c04a`), implemented by Gemini 3.5 Flash from a six-element Task Prompt.
 
+| Intent | Rail | When |
+|--------|------|------|
+| consult | `scripts/dispatch-consult.sh` | Advice only on a bounded question plus artifacts; never a ship verdict. |
+| discuss | `scripts/dispatch-discuss.js` | Discussion voice when the discuss seat is on; refuses before any transport when off. |
+| explore | `scripts/dispatch-explore.sh` | Hetero engine reads the real repo and answers from what it read. |
+| plan-review | `scripts/dispatch-plan-review.js` | Durable multi-seat review of one frozen plan. |
+| review | `scripts/dispatch-review.sh` | Read-only verdict on a diff passed as text. |
+| batch | `scripts/dispatch-batch.sh` | Git and artifact rails for a width fan-out (plan, verify, merge-back, reap). |
+| foreman | `scripts/dispatch-foreman.sh` | Non-Claude foreman holds the loop; the verdict stays at depth 0. |
+| author | `scripts/dispatch-author.sh` | Raw-prompt authoring (tests, specs); not a review template. |
+
 ## When to reach for it
 
 - **Decorrelated second opinion** — a different model family reviewing or re-deriving reduces same-family blind spots (the same independence logic as [`blind-dispatch.md`](blind-dispatch.md), applied to model choice).

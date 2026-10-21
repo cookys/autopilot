@@ -74,7 +74,7 @@ Ask once, per role, then take one of two paths:
   disclosure, same collision rules, same strike targets — a feed entry is not privileged. The feed's
   own `digest` and `seat_hash` are REPORTED and then re-derived locally: a hash you did not compute is
   a claim (ADR-0001). Optional `~/.autopilot/config.json` `qualification_feed.url` so `--from` can be
-  omitted; there is no refresh timer and no auto-adopt.
+  omitted; there is no refresh timer and no auto-adopt. After the owner replies on the confirm-mode panel, run `node scripts/qualification-feed-trust.js answer --card <id> --decision confirm|reject` again or the reply does not count (`docs/backlog/p6-trust-followups.md`).
 - **Adopt** — `node scripts/adopt-qualification-defaults.js list --role <role>` shows every shipped
   administration with the environment it was measured in; `… adopt --role <role>` copies the rows
   into the local scorecard + capability stores as ordinary rows. Cheap, and honest about being

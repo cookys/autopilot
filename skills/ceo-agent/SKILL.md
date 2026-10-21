@@ -88,6 +88,8 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
+When the owner must decide, open a card with `node scripts/open-decision.js open` because a card needs a question, at least two options, a recommendation and a reason (`--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <why the owner must decide>`), write the printed id in the reply, act on an owner line starting `[待決回覆]`, then `node scripts/open-decision.js close --id <id>` ([`references/review-page.md`](../../references/review-page.md) decisions; [`references/mods.md`](../../references/mods.md)).
+
 CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:think-tank-dialectic, autopilot:quality-pipeline, etc.) and any parallel dispatcher configured in `.claude/dispatch-config.md`.
 
 ### Boundary with survey, think-tank, and think-tank-dialectic
@@ -195,6 +197,8 @@ Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy withou
 [`references/level-front-door.md`](references/level-front-door.md);
 depth-0 control loop and run-summary ledger:
 [`references/depth0-control-loop.md`](references/depth0-control-loop.md).
+Which rail to call: the intent table in [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md).
+When idle and looking for the next item: `node scripts/next-pick.js parse|pick` (usage in [`skills/next/SKILL.md`](../next/SKILL.md)).
 
 ## Startup
 

@@ -22,8 +22,8 @@ ctx_of() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{
 run_hook() { # [extra env]
   env HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$ROOT" ${1:+"$1"} node "$HOOKS_DIR/session-start.js" <<< "$PAYLOAD" 2>/dev/null | ctx_of
 }
-pair_section() { # lines of the pair section only
-  printf '%s\n' "$1" | awk 'BEGIN{p=0} /^\[Autopilot config pair\]/{p=1} p{print} p&&NR>0&&/^\[Autopilot config pair\]/{c=0} p{c++; if(c>=2) exit}'
+pair_section() { # lines of the pair section only (header plus following "- " lines; no cap)
+  printf '%s\n' "$1" | awk '/^\[Autopilot config pair\]/{p=1; print; next} p && /^- /{print; next} p{exit}'
 }
 
 # non-version-update + mismatch
@@ -48,6 +48,11 @@ printf '%s' '{"config_schema_version":1,"context_budget":{"t2":150000,"gap":5000
 OUT="$(run_hook AUTOPILOT_CONFIG_PAIR_CHECK=0)"
 assert_not_contains "$OUT" "t2_gap_over_window" "AUTOPILOT_CONFIG_PAIR_CHECK=0: no finding"
 assert_not_contains "$OUT" "[Autopilot config pair]" "AUTOPILOT_CONFIG_PAIR_CHECK=0: no section"
+
+# update_check opt-out alone, mismatch still configured
+OUT="$(run_hook AUTOPILOT_UPDATE_CHECK=0)"
+assert_not_contains "$OUT" "t2_gap_over_window" "AUTOPILOT_UPDATE_CHECK=0: no finding"
+assert_not_contains "$OUT" "[Autopilot config pair]" "AUTOPILOT_UPDATE_CHECK=0: no section"
 
 # version-update: the finding is printed once (existing block only)
 printf '%s' "3.0.0" > "$HOOK_HOME/.autopilot/last-seen-version"

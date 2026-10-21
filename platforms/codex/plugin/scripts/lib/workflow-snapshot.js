@@ -254,6 +254,130 @@ function srcDispatches(ctx) {
   return ok('dispatches', lines);
 }
 
+// Per-file running predicate shared with the advisory scan. No directory walk.
+// Unparseable or missing last_tool_at still counts as running. ended_at does not.
+function isAgentRunning(stamp, now) {
+  if (!stamp || stamp.ended_at) return false;
+  const t = Date.parse(stamp.last_tool_at);
+  if (Number.isFinite(t) && now - t > AGENT_STALE_MS) return false;
+  return true;
+}
+
+// Test-only broken readers. Not used when opts.mutant is absent.
+function scanRunningAdvisoryMutant(dir, opts) {
+  const mutant = opts.mutant;
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  if (mutant === 'reader_throw') throw new Error('reader_throw');
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return { count: 0, partial: false, ops: 0 }; }
+  const jsonNames = names.filter((n) => n.endsWith('.json'));
+  if (mutant === 'oversized_dir_op_budget') {
+    let count = 0;
+    const seen = new Set();
+    for (const name of jsonNames) {
+      const full = path.join(dir, name);
+      try { fs.statSync(full); } catch { /* mutant still reads */ }
+      let stamp = null;
+      try { stamp = JSON.parse(fs.readFileSync(full, 'utf8')); } catch { count += 1; continue; }
+      if (!stamp || typeof stamp !== 'object' || Array.isArray(stamp)) { count += 1; continue; }
+      if (!isAgentRunning(stamp, now)) continue;
+      const id = stamp.agent_id ? String(stamp.agent_id) : name;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      count += 1;
+    }
+    return { count, partial: false, ops: jsonNames.length };
+  }
+  let files = jsonNames.map((name) => ({ name, full: path.join(dir, name) }));
+  if (mutant === 'older_running_stamp_included') {
+    const rows = [];
+    for (const f of files) {
+      try { rows.push({ ...f, m: fs.statSync(f.full).mtimeMs }); } catch { /* skip */ }
+    }
+    rows.sort((a, b) => b.m - a.m);
+    files = rows.slice(0, ROSTER_READ_CAP);
+  }
+  const seen = new Set();
+  let count = 0;
+  for (const f of files) {
+    let text;
+    try { text = fs.readFileSync(f.full, 'utf8'); } catch {
+      if (mutant === 'unparseable_not_counted') count += 1;
+      continue;
+    }
+    let stamp;
+    try { stamp = JSON.parse(text); } catch {
+      if (mutant === 'unparseable_not_counted') count += 1;
+      continue;
+    }
+    if (!stamp || typeof stamp !== 'object' || Array.isArray(stamp)) {
+      if (mutant === 'unparseable_not_counted') count += 1;
+      continue;
+    }
+    let running;
+    if (mutant === 'parked_ended_not_running') {
+      const copy = { ...stamp };
+      delete copy.ended_at;
+      running = isAgentRunning(copy, now);
+    } else if (mutant === 'resume_restart_counts_running') {
+      // ended_at was cleared on restart; this mutant still treats that agent as ended.
+      running = stamp.ended_at ? isAgentRunning(stamp, now) : false;
+    } else if (mutant === 'crash_stale_not_running' || mutant === 'quota_silent_ages_out') {
+      running = !stamp.ended_at;
+    } else {
+      running = isAgentRunning(stamp, now);
+    }
+    if (!running) continue;
+    const id = stamp.agent_id ? String(stamp.agent_id) : f.name;
+    if (seen.has(id) && mutant !== 'compaction_no_double_count') continue;
+    seen.add(id);
+    count += 1;
+  }
+  return { count, partial: false, ops: files.length };
+}
+
+// Directory-order advisory walk. Counts readdir and readFileSync toward opsBudget.
+// Never stats. Stops with partial=true when the op budget or wall clock is exhausted.
+function scanRunningAdvisory(dir, opts = {}) {
+  // Mutants are a test seam. The hook passes opts.mutant only when its allow-gate is exactly 1.
+  // An absent mutant leaves this function on the production walk below.
+  if (opts && opts.mutant) return scanRunningAdvisoryMutant(dir, opts);
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const opsBudget = Number.isFinite(opts.opsBudget) ? opts.opsBudget : 200;
+  const wallMs = Number.isFinite(opts.wallMs) ? opts.wallMs : 50;
+  const started = Date.now();
+  let ops = 0;
+  const charge = () => {
+    if (ops >= opsBudget || Date.now() - started >= wallMs) return false;
+    ops += 1;
+    return true;
+  };
+  let names;
+  try {
+    if (!charge()) return { count: 0, partial: true, ops };
+    names = fs.readdirSync(dir);
+  } catch {
+    return { count: 0, partial: false, ops: 0 };
+  }
+  const seen = new Set();
+  let count = 0;
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    if (!charge()) return { count, partial: true, ops };
+    let text;
+    try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch { continue; }
+    let stamp;
+    try { stamp = JSON.parse(text); } catch { continue; }
+    if (!stamp || typeof stamp !== 'object' || Array.isArray(stamp)) continue;
+    if (!isAgentRunning(stamp, now)) continue;
+    const id = stamp.agent_id ? String(stamp.agent_id) : name;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    count += 1;
+  }
+  return { count, partial: false, ops };
+}
+
 function srcRoster(ctx) {
   const live = liveBase(ctx.dirs);
   if (!live) return absent('subagents', 'no live-state directory');
@@ -265,9 +389,7 @@ function srcRoster(ctx) {
   const running = [];
   for (const r of rows) {
     const a = readJson(path.join(dir, r.n));
-    if (!a || a.ended_at) continue;
-    const t = Date.parse(a.last_tool_at);
-    if (Number.isFinite(t) && ctx.now - t > AGENT_STALE_MS) continue; // un-ended but silent: not counted as running
+    if (!isAgentRunning(a, ctx.now)) continue;
     running.push(a);
   }
   const lines = [`subagents: ${names.length} recorded, ${running.length} running (newest ${Math.min(names.length, ROSTER_READ_CAP)} read)`];
@@ -355,4 +477,4 @@ function snapshotText(opts = {}) {
   return render(collect(opts), { maxBytes: opts.maxBytes || 3000 });
 }
 
-module.exports = { collect, facts, render, snapshotText, STALE_MS };
+module.exports = { collect, facts, render, snapshotText, STALE_MS, isAgentRunning, scanRunningAdvisory };

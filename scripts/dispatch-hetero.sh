@@ -3783,11 +3783,10 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # One JSON object → result text (is_error with an empty result uses the
     # error message). Anything else, including a second JSON document, is the
     # raw stdout. A non-zero exit with no result text also keeps the raw bytes.
-    node - "$CCSHIM_ENVELOPE" "$LOG" "$AGENT_EXIT" <<'NODE'
+    node - "$CCSHIM_ENVELOPE" "$LOG" <<'NODE'
 const fs = require('fs');
 const envPath = process.argv[2];
 const logPath = process.argv[3];
-const agentExit = Number(process.argv[4] || 0);
 let raw;
 try { raw = fs.readFileSync(envPath); } catch { process.exit(0); }
 function withNl(s) {
@@ -3818,8 +3817,6 @@ try {
       else out = raw;
     } else if (result !== null) {
       out = withNl(result);
-    } else if (agentExit !== 0) {
-      out = raw;
     }
   }
 } catch { out = raw; }
@@ -4903,7 +4900,11 @@ classify_outcome() {
       passive_capture "dirty"
       OUTCOME_STATUS="dirty"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
-      if [ "$AGENT_EXIT" -ne 0 ] && _is_engine_unavailable "$CLASSIFIED_ERROR"; then
+      # Text classification must not upgrade dirty. Only a harness-captured
+      # provider status (PROVIDER_ERROR_STATUS) may. The clean-commit and
+      # no-commit non-zero branches already upgraded from log text before
+      # structured evidence existed; this branch did not.
+      if [ "$AGENT_EXIT" -ne 0 ] && [ -n "${PROVIDER_ERROR_STATUS:-}" ] && _is_engine_unavailable "$CLASSIFIED_ERROR"; then
         OUTCOME_STATUS="engine_unavailable"
         OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
       fi

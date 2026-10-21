@@ -220,6 +220,7 @@ OUT="$(run_cc "$STUB_ERRMSG" feat/pe-log-errmsg)"
 JSON="$(last_json "$OUT")"
 LOGTXT="$(log_text "$JSON")"
 assert_contains "$LOGTXT" "please say which file you want changed" "is_error with empty result appends the error message"
+assert_not_contains "$LOGTXT" '"is_error"' "error-message append is not the raw envelope (no is_error key)"
 assert_not_contains "$LOGTXT" '"api_error_status"' "error-message append is not the raw envelope"
 assert_contains "$JSON" '"status": "question_suspected"' "question-shaped failure text is question_suspected"
 
@@ -318,6 +319,42 @@ OUT="$(run_cc "$STUB_BR_C" feat/pe-br-c)"
 JSON="$(last_json "$OUT")"
 assert_provider "$JSON" cc-shim 529 api_error_status "empty no_op-shaped text with structured 529 is engine_unavailable"
 assert_not_contains "$JSON" '"status": "no_op"' "structured 529 non-zero exit is not no_op"
+
+# --- Dirty tree + new commit. Text must not upgrade dirty. ---
+# The stub commits inside the worktree, then leaves an unstaged file, then
+# exits non-zero. Same shape as the agy dirty fixture in dispatch-hetero.test.sh.
+write_dirty_commit_stub() {
+  local dest="$1" body="$2"
+  cat > "$dest" <<EOF
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: partial"
+echo leftover > unstaged.txt
+$body
+exit 1
+EOF
+  chmod +x "$dest"
+}
+
+# (b) NEGATIVE CONTROL first: success envelope, prose says "rate limit".
+# # RED at dbd7fd359: text class rate_limited upgraded dirty to engine_unavailable.
+STUB_DIRTY_TEXT="$TEST_TMP/claude-dirty-text"
+write_dirty_commit_stub "$STUB_DIRTY_TEXT" \
+  'node -e '"'"'process.stdout.write(JSON.stringify({type:"result",is_error:false,subtype:"success",result:"rate limit"})+"\n")'"'"
+OUT="$(run_cc "$STUB_DIRTY_TEXT" feat/pe-dirty-text)"
+JSON="$(last_json "$OUT")"
+assert_contains "$JSON" '"status": "dirty"' "rate-limit prose with a new commit and a dirty tree stays dirty"
+assert_not_contains "$JSON" '"status": "engine_unavailable"' "rate-limit prose does not upgrade dirty"
+assert_no_provider_key "$JSON" "rate-limit prose with a dirty tree has no provider_error"
+
+# (a) structured 529 envelope, new commit, dirty tree.
+STUB_DIRTY_529="$TEST_TMP/claude-dirty-529"
+write_dirty_commit_stub "$STUB_DIRTY_529" \
+  'node -e '"'"'process.stdout.write(JSON.stringify({type:"result",is_error:true,api_error_status:529,terminal_reason:"api_error",result:"API Error: 529 overloaded"})+"\n")'"'"
+OUT="$(run_cc "$STUB_DIRTY_529" feat/pe-dirty-529)"
+JSON="$(last_json "$OUT")"
+assert_provider "$JSON" cc-shim 529 api_error_status "structured 529 with a new commit and a dirty tree is engine_unavailable"
 
 # --- Fix 3: one stub per allowed status, plus one outside the set ---
 for pair in "429:feat/pe-429" "503:feat/pe-503" "402:feat/pe-402"; do

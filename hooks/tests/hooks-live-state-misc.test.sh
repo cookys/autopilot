@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Shared suite for backlog bundle hooks-live-state-misc. Append-only per row.
+# RED at 95d4a7de9: chrome + complete block and chrome + truncated block FAIL precondition_failed (missing MINIMAX_API_KEY) when endpoints.env is absent under a temp HOME.
 set -u
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -139,6 +140,7 @@ EOF
 
   OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
     --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
   RC=$?
@@ -151,6 +153,7 @@ EOF
 
   OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     R79_TRUNCATE=1 "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
     --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
   RC=$?

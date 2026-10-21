@@ -493,6 +493,79 @@ if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" ]]; then
     fi
   fi
 fi
+# BL-0273: scan only the dispatcher-authored segments (spec, pack, checklist
+# items). The diff and the assembled PROMPT_FILE are not controller text.
+# Absent all three: run nothing, so the prompt stays byte-identical.
+if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" || -n "$CHECKLISTS" ]]; then
+  _SUP_PAYLOAD="$(mktemp -t dispatch-review-suppression-XXXXXX)"
+  _SUP_ERR="$(mktemp -t dispatch-review-suppression-err-XXXXXX)"
+  {
+    if [[ -n "$SPEC_FILE" ]]; then
+      printf '--- spec ---\n'
+      cat "$SPEC_FILE"
+      printf '\n'
+    fi
+    if [[ -n "$PACK_FILE" ]]; then
+      printf '--- pack ---\n'
+      cat "$PACK_FILE"
+      printf '\n'
+    fi
+    if [[ -n "$CHECKLISTS" ]]; then
+      printf '--- checklists ---\n'
+      IFS=',' read -r -a _sup_items <<< "$CHECKLISTS"
+      for _item in "${_sup_items[@]}"; do
+        _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        [ -z "$_item" ] && continue
+        printf '%s\n' "$_item"
+      done
+    fi
+  } > "$_SUP_PAYLOAD"
+  _sup_blocked=0
+  if ! bash "$_REVIEW_SELF_DIR/check-dispatch-suppression.sh" "$_SUP_PAYLOAD" >/dev/null 2>"$_SUP_ERR"; then
+    _sup_blocked=1
+  fi
+  if [[ "$_sup_blocked" -eq 1 ]]; then
+    _sup_phrase="$(sed -n 's/^  - //p' "$_SUP_ERR" | head -n 1)"
+    _sup_which=""
+    _sup_name_one() {
+      local label="$1" file="$2"
+      [[ -n "$file" && -f "$file" ]] || return 0
+      if ! bash "$_REVIEW_SELF_DIR/check-dispatch-suppression.sh" "$file" >/dev/null 2>&1; then
+        if [[ -n "$_sup_which" ]]; then
+          _sup_which="${_sup_which}, ${label}"
+        else
+          _sup_which="$label"
+        fi
+      fi
+    }
+    _sup_name_one spec "$SPEC_FILE"
+    _sup_name_one pack "$PACK_FILE"
+    if [[ -n "$CHECKLISTS" ]]; then
+      _sup_cl_file="$(mktemp -t dispatch-review-suppression-cl-XXXXXX)"
+      IFS=',' read -r -a _sup_items <<< "$CHECKLISTS"
+      for _item in "${_sup_items[@]}"; do
+        _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        [ -z "$_item" ] && continue
+        printf '%s\n' "$_item"
+      done > "$_sup_cl_file"
+      _sup_name_one checklists "$_sup_cl_file"
+      rm -f "$_sup_cl_file"
+    fi
+    [[ -n "$_sup_which" ]] || _sup_which="spec, pack or checklists"
+    _sup_msg="reviewer payload (${_sup_which}) contains suppression or severity-coaching text"
+    if [[ -n "$_sup_phrase" ]]; then
+      _sup_msg="${_sup_msg}; matched phrase: \"${_sup_phrase}\""
+    fi
+    _sup_msg="${_sup_msg}; rewrite it as neutral instruction"
+    rm -f "$_SUP_PAYLOAD" "$_SUP_ERR"
+    _SUP_PAYLOAD=""
+    _SUP_ERR=""
+    die_precondition "$_sup_msg"
+  fi
+  rm -f "$_SUP_PAYLOAD" "$_SUP_ERR"
+  _SUP_PAYLOAD=""
+  _SUP_ERR=""
+fi
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
 # `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;
 # a runner that consumes --effort would be handed the literal word "default".
@@ -900,6 +973,8 @@ cleanup() {
   # Captured FIRST, before rm/rmdir can clobber it.
   _cleanup_rc=$?
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
+  [ -n "${_SUP_PAYLOAD:-}" ] && rm -f "$_SUP_PAYLOAD"
+  [ -n "${_SUP_ERR:-}" ] && rm -f "$_SUP_ERR"
   [ -n "$FRAME_CLOSE_FILE" ] && rm -f "$FRAME_CLOSE_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"

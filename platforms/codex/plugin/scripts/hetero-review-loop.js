@@ -219,6 +219,11 @@ Finalize flags:
   --generation <n>      Generation number (integer >= 1)
   --dispositions <file> Path to dispositions JSON file
   --branch <b>          Target git branch (optional)
+  --controller-notes <file>  Depth-0 authored free text. Appended to hands-brief.md
+                        under "Controller notes:" and scanned with the other
+                        controller-written lines (engine, branch, base, head).
+                        Verbatim finding text, finding ids, and seat names are
+                        not scanned. Must be a readable regular file.
 
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
@@ -1217,6 +1222,28 @@ async function handleFinalize(flags) {
     process.exit(2);
   }
 
+  let controllerNotes = '';
+  if (flags['controller-notes']) {
+    const notesPath = path.resolve(String(flags['controller-notes']));
+    let notesStat = null;
+    try {
+      notesStat = fs.statSync(notesPath);
+    } catch (_e) {
+      notesStat = null;
+    }
+    if (!notesStat || !notesStat.isFile()) {
+      console.error(`ERROR: --controller-notes is not a readable regular file: ${notesPath}`);
+      process.exit(1);
+    }
+    try {
+      fs.accessSync(notesPath, fs.constants.R_OK);
+      controllerNotes = fs.readFileSync(notesPath, 'utf8');
+    } catch (_e) {
+      console.error(`ERROR: --controller-notes is not a readable regular file: ${notesPath}`);
+      process.exit(1);
+    }
+  }
+
   const generation = parseInt(generationRaw, 10);
   if (isNaN(generation) || generation < 1) {
     console.error(`ERROR: Invalid --generation: '${generationRaw}' (must be integer >= 1)`);
@@ -1530,24 +1557,28 @@ async function handleFinalize(flags) {
     }
 
     const briefLines = [engineLine];
-    // Controller-written lines only. Verbatim finding text is omitted so the
-    // suppression linter cannot treat a quoted reviewer as the controller.
-    const controllerLines = [engineLine];
+    // Controller-written lines only. Verbatim finding text, finding ids, and
+    // seat names stay out so the suppression linter cannot treat a quoted
+    // reviewer (or the id/seat label) as the controller.
+    const controllerFields = [{ label: 'the engine line', text: engineLine }];
     if (branch) {
-      briefLines.push(`Branch: ${branch}`);
-      controllerLines.push(`Branch: ${branch}`);
+      const branchLine = `Branch: ${branch}`;
+      briefLines.push(branchLine);
+      controllerFields.push({ label: 'the branch line', text: branchLine });
     }
 
     const baseSha = rangeObj.base || '';
     const headSha = rangeObj.head || '';
-    briefLines.push(`Base: ${baseSha}`);
-    briefLines.push(`Head: ${headSha}`);
+    const baseLine = `Base: ${baseSha}`;
+    const headLine = `Head: ${headSha}`;
+    briefLines.push(baseLine);
+    briefLines.push(headLine);
     briefLines.push('');
-    controllerLines.push(`Base: ${baseSha}`);
-    controllerLines.push(`Head: ${headSha}`);
-    controllerLines.push('');
+    controllerFields.push({ label: 'the base line', text: baseLine });
+    controllerFields.push({ label: 'the head line', text: headLine });
 
-    // One paragraph per verified finding (any severity) written in plain prose
+    // One paragraph per verified finding (any severity) written in plain prose.
+    // The id/seat prefix is brief text only.
     for (const f of findingsList) {
       const disp = dispMap.get(f.id);
       if (disp && disp.disposition === 'verified') {
@@ -1560,23 +1591,37 @@ async function handleFinalize(flags) {
         const findingPrefix = `Finding ${f.id} from seat ${f.seat}:`;
         briefLines.push(`${findingPrefix} ${cleanText}`);
         briefLines.push('');
-        controllerLines.push(findingPrefix);
-        controllerLines.push('');
       }
     }
 
+    if (flags['controller-notes']) {
+      briefLines.push('Controller notes:');
+      briefLines.push(controllerNotes.replace(/\s+$/, ''));
+      briefLines.push('');
+      controllerFields.push({ label: 'controller notes', text: controllerNotes });
+    }
+
     writeFileSyncAtomic(briefPath, briefLines.join('\n').trim() + '\n');
-    const controllerText = controllerLines.join('\n').trim() + '\n';
+    const controllerText = controllerFields.map((field) => field.text).join('\n').trim() + '\n';
+
+    const runPromptCheck = (scriptPath, scriptLabel, args) => {
+      const res = spawnSync(scriptPath, args, {
+        encoding: 'utf8',
+        cwd: repoRoot || process.cwd(),
+        env: { ...process.env },
+      });
+      if (res.error) {
+        console.error(`ERROR: ${scriptLabel} not found at ${scriptPath}`);
+        process.exit(1);
+      }
+      return res;
+    };
 
     // Run scripts/check-redispatch-prompt.sh from __dirname (with env override)
     const checkScript = process.env.AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT
       || path.join(__dirname, 'check-redispatch-prompt.sh');
 
-    const checkRes = spawnSync(checkScript, [briefPath], {
-      encoding: 'utf8',
-      cwd: repoRoot || process.cwd(),
-      env: { ...process.env },
-    });
+    const checkRes = runPromptCheck(checkScript, 'check-redispatch-prompt.sh', [briefPath]);
 
     if (checkRes.status !== 0) {
       console.error(`ERROR: check-redispatch-prompt.sh failed for ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
@@ -1601,9 +1646,28 @@ async function handleFinalize(flags) {
       } catch (_e) {}
     }
 
+    if (suppressionRes && suppressionRes.error) {
+      console.error(`ERROR: check-dispatch-suppression.sh not found at ${suppressionScript}`);
+      process.exit(1);
+    }
+
     if (!suppressionRes || suppressionRes.status !== 0) {
-      const detail = suppressionRes ? (suppressionRes.stderr || suppressionRes.stdout) : 'no result';
-      console.error(`ERROR: check-dispatch-suppression.sh failed for ${briefPath}: ${detail}`);
+      const detail = suppressionRes ? (suppressionRes.stderr || suppressionRes.stdout || '') : 'no result';
+      const phrases = [];
+      for (const line of String(detail).split('\n')) {
+        const matched = /^\s+-\s+(.*\S)\s*$/.exec(line);
+        if (matched) phrases.push(matched[1]);
+      }
+      const blocked = [];
+      for (const field of controllerFields) {
+        const haystack = field.text.toLowerCase();
+        if (phrases.some((phrase) => haystack.includes(phrase.toLowerCase()))) {
+          blocked.push(field.label);
+        }
+      }
+      const fieldLabel = blocked.length > 0 ? blocked.join(', ') : 'controller-written text';
+      const quoted = phrases.length > 0 ? phrases.map((phrase) => `"${phrase}"`).join(', ') : '"(unparsed)"';
+      console.error(`ERROR: check-dispatch-suppression.sh failed for ${briefPath}: ${fieldLabel} blocked by suppression phrase ${quoted}; rewrite it as a neutral instruction or move quoted reviewer text out of controller notes. ${detail}`);
       process.exit(1);
     }
   }

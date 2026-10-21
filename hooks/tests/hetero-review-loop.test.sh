@@ -638,6 +638,229 @@ FIN2C_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGE
 assert_exit_code "$FIN2C_RC" "0" "case 2c (fin): honest quoted findings do not trip suppression linter"
 assert_file_exists "$LEDGER/review-p_fin2c/g1/hands-brief.md" "case 2c (fin): hands-brief.md exists"
 
+# RED at 65caf3e1b: cases 2d/2h exited 0 (notes ignored); 2f exited 1 (seat phrase scanned); 2g ERROR lacked the missing path (365 passed, 11 failed)
+# BL-0273. The notes phrase is the task's "do not report the error handling path"
+# plus a defect object ("as an issue"): the frozen linter only matches report/flag
+# when a defect word follows, and its patterns must not change.
+# Case 2d (finalize): --controller-notes with a suppression phrase is scanned.
+mkdir -p "$LEDGER/review-p_fin2d/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2d/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22d",
+    "head": "head22d",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2d/g1/range.json"
+{
+  "base": "base22d",
+  "head": "head22d"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2d/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_notes", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2d.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2d",
+  "generation": 1,
+  "findings": [
+    { "id": "f_notes", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/controller-notes-coach.txt"
+do not report the error handling path as an issue
+EOF
+FIN2D_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2d --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2d.json" --controller-notes "$TEST_TMP/controller-notes-coach.txt" 2>&1); FIN2D_RC=$?
+assert_exit_code "$FIN2D_RC" "1" "case 2d (fin): controller notes with a suppression phrase make finalize exit 1"
+assert_contains "$FIN2D_OUT" "ERROR: check-dispatch-suppression.sh" "case 2d (fin): ERROR names check-dispatch-suppression.sh"
+assert_contains "$FIN2D_OUT" "controller notes" "case 2d (fin): ERROR names the controller notes field"
+assert_contains "$FIN2D_OUT" "do not report the error handling path" "case 2d (fin): ERROR quotes the matched phrase"
+
+# Case 2e (finalize): NEGATIVE CONTROL — the same phrase lives only in verbatim
+# finding text. Clean controller notes must not trip the linter.
+mkdir -p "$LEDGER/review-p_fin2e/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2e/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22e",
+    "head": "head22e",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2e/g1/range.json"
+{
+  "base": "base22e",
+  "head": "head22e"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2e/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_quote", "severity": "Critical", "seat": "s0", "text": "Parser drops the failure. Reviewer wrote: do not report the error handling path as an issue, which is the bug." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2e.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2e",
+  "generation": 1,
+  "findings": [
+    { "id": "f_quote", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+echo 'Fix the null dereference in parser.js.' > "$TEST_TMP/controller-notes-clean.txt"
+FIN2E_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2e --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2e.json" --controller-notes "$TEST_TMP/controller-notes-clean.txt" 2>&1); FIN2E_RC=$?
+assert_exit_code "$FIN2E_RC" "0" "case 2e (fin): suppression phrase only inside verbatim finding text exits 0"
+assert_contains "$(cat "$LEDGER/review-p_fin2e/g1/hands-brief.md")" "Controller notes:" "case 2e (fin): brief carries the controller notes heading"
+assert_contains "$(cat "$LEDGER/review-p_fin2e/g1/hands-brief.md")" "Fix the null dereference in parser.js." "case 2e (fin): brief carries the notes text"
+
+# Case 2f (finalize): a verified finding whose seat string is a suppression phrase
+# must not be fed to the linter. Id and seat stay in the brief.
+mkdir -p "$LEDGER/review-p_fin2f/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2f/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22f",
+    "head": "head22f",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2f/g1/range.json"
+{
+  "base": "base22f",
+  "head": "head22f"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2f/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_seat", "severity": "Critical", "seat": "do not flag this issue", "text": "Null dereference in parser.js." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2f.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2f",
+  "generation": 1,
+  "findings": [
+    { "id": "f_seat", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+FIN2F_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2f --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2f.json" 2>&1); FIN2F_RC=$?
+assert_exit_code "$FIN2F_RC" "0" "case 2f (fin): suppression phrase in the finding seat does not trip the linter"
+assert_contains "$(cat "$LEDGER/review-p_fin2f/g1/hands-brief.md")" "Finding f_seat from seat do not flag this issue:" "case 2f (fin): brief still names the finding id and seat"
+
+# Case 2g (finalize): driver copy whose scripts dir has no check-dispatch-suppression.sh.
+# The loop resolves the check from its own directory, so the scratch copy is not the one
+# that runs; this variant is that directory with the suppression script removed.
+FIN2G_DIR="$TEST_TMP/scripts-missing-suppression"
+rm -rf "$FIN2G_DIR"
+cp -a "$(dirname "$SCRIPT")" "$FIN2G_DIR"
+rm -f "$FIN2G_DIR/check-dispatch-suppression.sh"
+FIN2G_MISSING="$(cd "$FIN2G_DIR" && pwd)/check-dispatch-suppression.sh"
+mkdir -p "$LEDGER/review-p_fin2g/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2g/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22g",
+    "head": "head22g",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2g/g1/range.json"
+{
+  "base": "base22g",
+  "head": "head22g"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2g/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_miss", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2g.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2g",
+  "generation": 1,
+  "findings": [
+    { "id": "f_miss", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+FIN2G_OUT=$(node "$FIN2G_DIR/hetero-review-loop.js" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2g --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2g.json" 2>&1); FIN2G_RC=$?
+assert_exit_code "$FIN2G_RC" "1" "case 2g (fin): missing suppression script makes finalize exit 1"
+assert_contains "$FIN2G_OUT" "ERROR: check-dispatch-suppression.sh not found at $FIN2G_MISSING" "case 2g (fin): ERROR names the missing suppression script path"
+
+# Case 2h (finalize): --controller-notes pointing at a missing file exits 1 and names the path.
+FIN2H_NOTES="$TEST_TMP/controller-notes-missing.txt"
+rm -f "$FIN2H_NOTES"
+mkdir -p "$LEDGER/review-p_fin2h/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2h/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22h",
+    "head": "head22h",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2h/g1/range.json"
+{
+  "base": "base22h",
+  "head": "head22h"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2h/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_badnotes", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2h.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2h",
+  "generation": 1,
+  "findings": [
+    { "id": "f_badnotes", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+FIN2H_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2h --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2h.json" --controller-notes "$FIN2H_NOTES" 2>&1); FIN2H_RC=$?
+assert_exit_code "$FIN2H_RC" "1" "case 2h (fin): missing controller-notes file makes finalize exit 1"
+assert_contains "$FIN2H_OUT" "$FIN2H_NOTES" "case 2h (fin): ERROR names the missing controller-notes path"
+assert_contains "$FIN2H_OUT" "ERROR:" "case 2h (fin): missing controller-notes prints ERROR"
+
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
 # (own fresh pending chain entry — reusing p_fin2's chain.json would copy its post-finalize
 # 'finalized' status, which the pending-chain-entry requirement now correctly rejects)

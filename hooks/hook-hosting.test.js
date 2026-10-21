@@ -11,6 +11,8 @@
  * (mutation: teardown dropped -> that test red, run-w/int4/mut-no-teardown.txt).
  *
  * Run: node --test hooks/hook-hosting.test.js      (HOSTING_ROOT=<tree> to aim it at another tree)
+ *
+# RED at 95d4a7de9: dead-watcher pid and awaiting-owner-off cases fail (calls.log has no git) because unset AUTOPILOT_RUNS_WATCH_AUTOSTART plus inherited NODE_TEST_CONTEXT disables autostart.
  */
 'use strict';
 
@@ -72,14 +74,13 @@ function teardown() {
 afterEach(teardown);
 after(teardown);   // safety net: a failing self-check still leaves nothing behind
 
-// Autostart is OFF for every case unless it drives autostart itself (mk({ autostart: true }) / upsFixture): a hook run
-// that reaches the full path starts a real detached watcher.
+// Autostart is OFF unless a case drives it (mk({ autostart: true }) / upsFixture): NODE_TEST_CONTEXT is inherited, so the empty string is the gate's explicit enable.
 function mk(extra = {}) {
   const { autostart, ...rest } = extra;
   const live = shm('hh-live-');
   const home = tmp('hh-home-');
   const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, ...rest };
-  if (autostart) delete env.AUTOPILOT_RUNS_WATCH_AUTOSTART; else env.AUTOPILOT_RUNS_WATCH_AUTOSTART = '0';
+  if (autostart) env.AUTOPILOT_RUNS_WATCH_AUTOSTART = ''; else env.AUTOPILOT_RUNS_WATCH_AUTOSTART = '0';
   return { live, home, env };
 }
 function run(script, payload, env) {

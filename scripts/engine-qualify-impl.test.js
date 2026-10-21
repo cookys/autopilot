@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// # RED at 572041858: AssertionError [ERR_ASSERTION]: honest candidate qualifies / false !== true at engine-qualify-impl.test.js:26 via line 188.
+
 // engine-qualify-impl.test.js — P2/P3 acceptance for `engine-qualify.sh
 // implementer` (plan 2026-08-22, R2 FROZEN). Exercises the live-rail
 // administration end-to-end through a FAKE dispatch-hetero (--dispatch-bin):
@@ -107,7 +109,7 @@ function sub(t) { return String(t).replaceAll('__CANARY_VALUE__', canary).replac
 
 // Commit on the branch via a worktree — cwd HEAD stays at base (real-rail shape).
 const wt = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fake-wt-'));
-const env = { ...process.env };
+const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
 if (authorName) { env.GIT_AUTHOR_NAME = sub(authorName); env.GIT_COMMITTER_NAME = sub(authorName); }
 const add = spawnSync('git', ['-C', repo, 'worktree', 'add', '--quiet', '-b', branch, wt, 'HEAD'], { env, encoding: 'utf8' });
 if (add.status !== 0) { emit({ status: 'failure', commit: null, error: 'worktree add: ' + add.stderr }); process.exit(1); }

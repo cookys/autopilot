@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// # RED at 572041858: AssertionError [ERR_ASSERTION]: implementer truncated undecided sitting is no_verdict / actual 'failed' expected 'no_verdict' at engine-qualify-truncated-locked.test.js:38 via line 300.
+
 // # RED at fa8c6e456:
 // AssertionError [ERR_ASSERTION]: truncated locked_qualify sitting is no_verdict
 // actual: 'qualified'
@@ -240,15 +242,16 @@ if (target.reference_solution.expect_no_op) {
 function sub(t) { return String(t).replaceAll('__CANARY_VALUE__', canary).replaceAll('__CANARY_BASE64__', Buffer.from(canary, 'utf8').toString('base64')); }
 const files = target.reference_solution.files || {};
 const wt = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fake-wt-'));
-const add = spawnSync('git', ['-C', repo, 'worktree', 'add', '--quiet', '-b', branch, wt, 'HEAD'], { encoding: 'utf8' });
+const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+const add = spawnSync('git', ['-C', repo, 'worktree', 'add', '--quiet', '-b', branch, wt, 'HEAD'], { encoding: 'utf8', env: gitEnv });
 if (add.status !== 0) { emit({ status: 'failure', commit: null, error: 'worktree add: ' + add.stderr }); process.exit(1); }
 for (const [rel, content] of Object.entries(files)) {
   const tgt = path.join(wt, rel);
   fs.mkdirSync(path.dirname(tgt), { recursive: true });
   fs.writeFileSync(tgt, sub(content));
 }
-spawnSync('git', ['-C', wt, 'add', '-A'], { encoding: 'utf8' });
-const commit = spawnSync('git', ['-C', wt, 'commit', '--quiet', '-m', 'impl: ' + target.case_id], { encoding: 'utf8' });
+spawnSync('git', ['-C', wt, 'add', '-A'], { encoding: 'utf8', env: gitEnv });
+const commit = spawnSync('git', ['-C', wt, 'commit', '--quiet', '-m', 'impl: ' + target.case_id], { encoding: 'utf8', env: gitEnv });
 if (commit.status !== 0) { spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt]); emit({ status: 'no_op', commit: null }); process.exit(0); }
 const sha = spawnSync('git', ['-C', wt, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
 spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt], { encoding: 'utf8' });

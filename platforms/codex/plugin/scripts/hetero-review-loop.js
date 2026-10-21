@@ -1571,6 +1571,19 @@ async function handleFinalize(flags) {
       console.error(`ERROR: check-redispatch-prompt.sh failed for ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
       process.exit(1);
     }
+
+    // Run scripts/check-dispatch-suppression.sh from __dirname (no env override; see blind-dispatch.md)
+    const suppressionScript = path.join(__dirname, 'check-dispatch-suppression.sh');
+    const suppressionRes = spawnSync(suppressionScript, [briefPath], {
+      encoding: 'utf8',
+      cwd: repoRoot || process.cwd(),
+      env: { ...process.env },
+    });
+
+    if (suppressionRes.status !== 0) {
+      console.error(`ERROR: check-dispatch-suppression.sh failed for ${briefPath}: ${suppressionRes.stderr || suppressionRes.stdout}`);
+      process.exit(1);
+    }
   }
 
   // Update target chain entry

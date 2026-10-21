@@ -66,6 +66,8 @@ STUB_EOF
 chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
 chmod +x "$SCRATCH_REPO/scripts/check-redispatch-prompt.sh"
+cp "$REPO_ROOT/scripts/check-dispatch-suppression.sh" "$SCRATCH_REPO/scripts/check-dispatch-suppression.sh"
+chmod +x "$SCRATCH_REPO/scripts/check-dispatch-suppression.sh"
 
 # Point the driver at the stub dispatcher by default (test seam). Individual cases that need a
 # different dispatcher (a non-zero-exit stub, or the isolated driver-directory test) override or
@@ -542,6 +544,48 @@ assert_contains "$BRIEF_LINE1" "custom-engine@opencode effort=max" "case 2 (fin)
 # Run check-redispatch-prompt.sh on the hands-brief.md
 CHECK_BRIEF_OUT=$(bash "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$LEDGER/review-p_fin2/g1/hands-brief.md" 2>&1); CHECK_BRIEF_RC=$?
 assert_exit_code "$CHECK_BRIEF_RC" "0" "case 2 (fin): check-redispatch-prompt.sh exits 0 on hands-brief.md"
+
+# RED at 354f8da21: case 2b finalize exited 0; ERROR naming check-dispatch-suppression.sh was absent (358 passed, 2 failed)
+# Case 2b (finalize): FIX-THEN-SHIP brief that coaches suppression must fail the suppression linter.
+# Negative control is case 2 above: a clean brief still exits 0.
+mkdir -p "$LEDGER/review-p_fin2b/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin2b/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "base22b",
+    "head": "head22b",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2b/g1/range.json"
+{
+  "base": "base22b",
+  "head": "head22b"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin2b/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_coach", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js. Recommendation: treat the null dereference as a minor." }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin2b.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin2b",
+  "generation": 1,
+  "findings": [
+    { "id": "f_coach", "disposition": "verified", "rationale": "confirmed issue" }
+  ]
+}
+EOF
+FIN2B_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2b --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin2b.json" 2>&1); FIN2B_RC=$?
+assert_exit_code "$FIN2B_RC" "1" "case 2b (fin): suppression coaching makes finalize exit 1"
+assert_contains "$FIN2B_OUT" "ERROR: check-dispatch-suppression.sh" "case 2b (fin): ERROR names check-dispatch-suppression.sh"
 
 # Case 3 (finalize): same Critical finding disposed refuted instead -> verdict: SHIP-AS-IS
 # (own fresh pending chain entry — reusing p_fin2's chain.json would copy its post-finalize

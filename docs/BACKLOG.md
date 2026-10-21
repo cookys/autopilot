@@ -1414,7 +1414,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries. Partly fixed, see the sidecar.
+- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries. Mostly fixed by fixa, bl273, runnerk, fixb and fixc; see the sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277

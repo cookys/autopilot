@@ -92,4 +92,17 @@ OK_EXIT=$?
 assert_eq "0" "$OK_EXIT" "normal agy stub exits 0"
 assert_contains "$OK_OUT" '"status": "authored"' "normal agy stub returns authored"
 
+# --- case 3: brand-new HOME with no .gemini directory still authors ---
+# RED at 89f4a823268a80803f843d18bebc1cd069890445: fresh HOME, exit 3, status runner_failed ("runner exited 1"); raw log `bwrap: Can't mkdir parents for <HOME>/.gemini/antigravity-cli/log: Read-only file system`.
+FRESH_HOME="$TEST_TMP/fresh-home-no-gemini"
+mkdir -p "$FRESH_HOME"
+test ! -e "$FRESH_HOME/.gemini"
+FRESH_OUT="$(HOME="$FRESH_HOME" DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
+  "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_AGY_OK" --timeout 3s 2>&1)"
+FRESH_EXIT=$?
+assert_eq "0" "$FRESH_EXIT" "fresh HOME with no .gemini exits 0"
+assert_contains "$FRESH_OUT" '"status": "authored"' "fresh HOME with no .gemini returns authored"
+test -d "$FRESH_HOME/.gemini/antigravity-cli/log"
+test -d "$FRESH_HOME/.gemini/antigravity-cli/crashes"
+
 finalize_test

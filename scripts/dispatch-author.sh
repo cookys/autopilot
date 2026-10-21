@@ -1401,6 +1401,10 @@ else
   # unchanged; only these two leaf paths become writable, and the credential
   # material one level up at ~/.gemini stays read-only and readable.
   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
+  # Mount points must exist before the read-only root bind. These are empty
+  # directories agy itself also creates; credential material in the parent
+  # .gemini directory stays read-only. Fail open: a mkdir error is bwrap's to report.
+  mkdir -p "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" || true
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then

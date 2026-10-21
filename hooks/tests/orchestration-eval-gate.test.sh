@@ -473,4 +473,4 @@ grep -q "Usage:" "$TEST_TMP/s1-bad-feedback.txt" || fail "g: invalid value did n
 echo "g green: invalid feedback exits 2 and gate-off stays on the base probe"
 
 echo "=== Orchestration gate tests passed ==="
-exit 0
+finalize_test

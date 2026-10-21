@@ -49,15 +49,15 @@ Each item is method `official URL`. Source `https://code.claude.com/docs/en/hook
 
 ### UNVERIFIED (keep until a Phase 0 spike settles each item)
 
-A live `claude` run in a temp HOME is the verification method. None of these are read-code facts.
+A live `claude` run in a temp HOME is the verification method. None of these are read-code facts. P0 ran on 2026-10-22 and the notes are authoritative.
 
-- UNVERIFIED: whether SubagentStop fires on a quota error.
-- UNVERIFIED: whether SubagentStop fires on a user interrupt.
-- UNVERIFIED: whether a resumed subagent fires SubagentStop again at the end of the resume.
-- UNVERIFIED: whether a parked subagent (completed, waiting for SendMessage) has already fired SubagentStop when it parked.
-- UNVERIFIED: `run_in_background` as an Agent `tool_input` field.
-- UNVERIFIED: the PreToolUse matcher alias from `Task` to `Agent` (the repo registers `Task|Agent` at `hooks/hooks.json:129`; whether the harness still delivers an Agent call to a `Task`-only matcher is the unverified part).
-- UNVERIFIED: whether `background_tasks` in a Stop or SubagentStop payload lists sibling subagents still running (it is documented as parent-session scoped; whether that scope includes siblings is the unverified part).
+- UNVERIFIED: whether SubagentStop fires on a quota error. ACCEPTED RISK 2026-10-22 ([note 01](evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md)): the stamp ages out through `AGENT_STALE_MS` (30 minutes); no quota parser.
+- UNVERIFIED: whether SubagentStop fires on a user interrupt. ACCEPTED RISK 2026-10-22 ([note 02](evidence/2026-10-21-subagent-concurrency-advisory/02-subagentstop-on-user-interrupt.md)): the stamp looks running until stale, advisory cost one line, no deny.
+- UNVERIFIED: whether a resumed subagent fires SubagentStop again at the end of the resume. SETTLED 2026-10-22 ([note 03](evidence/2026-10-21-subagent-concurrency-advisory/03-subagentstart-stop-on-resume.md)).
+- UNVERIFIED: whether a parked subagent (completed, waiting for SendMessage) has already fired SubagentStop when it parked. SETTLED 2026-10-22 ([note 04](evidence/2026-10-21-subagent-concurrency-advisory/04-parked-subagent-already-stopped.md)).
+- UNVERIFIED: `run_in_background` as an Agent `tool_input` field. SETTLED 2026-10-22 ([note 05](evidence/2026-10-21-subagent-concurrency-advisory/05-run-in-background-tool-input.md)).
+- UNVERIFIED: the PreToolUse matcher alias from `Task` to `Agent` (the repo registers `Task|Agent` at `hooks/hooks.json:129`; whether the harness still delivers an Agent call to a `Task`-only matcher is the unverified part). SETTLED 2026-10-22 ([note 06](evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md)).
+- UNVERIFIED: whether `background_tasks` in a Stop or SubagentStop payload lists sibling subagents still running (it is documented as parent-session scoped; whether that scope includes siblings is the unverified part). SETTLED 2026-10-22 ([note 07](evidence/2026-10-21-subagent-concurrency-advisory/07-background-tasks-siblings.md)).
 
 What changes if a spike goes the other way is in Options, under the recommendation, and again as the Phase 0 acceptance.
 

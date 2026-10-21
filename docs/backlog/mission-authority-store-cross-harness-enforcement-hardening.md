@@ -7,3 +7,8 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
+## 2026-10-21 eunavail follow-up
+
+- **Context**: `provider_error` 且來源為 `harness_structured`（eunavail 引入，develop `1049739fd`）來自 cc-shim 信封暫存檔。同一 UID 的 worker 可以偽造該檔，再殺掉自己的 claude 行程，把 FAIL 變成 `infra_abort`。這與本條目相同的 same-UID 威脅模型缺口，已記在 `docs/plans/2026-08-22-implementer-qualification-suite.md` 的 Addendum。
+- **Source**: eunavail g1 6cfe9f98
+

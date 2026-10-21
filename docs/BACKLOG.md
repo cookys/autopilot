@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0264 -->
+<!-- next-id: BL-0269 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1310,3 +1310,69 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero-review p6trust g2
 - **Pointer**: docs/backlog/p6-trust-followups.md
 - **Context**: Four small follow-ups. Automating the extra answer step needs eval evidence before skill text changes.
+
+### familyOfEngine has no deepseek arm
+- **Id**: BL-0264
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 引擎家族判斷沒有 deepseek 的分支，該席會被看成未知；無頭模式接著以退出碼二結束，並要求呼叫端自己傳家族旗標。這是刻意失敗關閉，不會把席誤分成別的家族。
+- **Impact**: 日後加入 deepseek 席時，無頭流程會停下來等人補旗標，不會悄悄歸錯家族。
+- **Trigger**: a deepseek seat is added to the roster
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hderive g2 review 38be393a
+- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+
+### seat-derive HELP omits the deterministic fallback order
+- **Id**: BL-0265
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 席次預覽與無頭說明列出執行器版本、家族與釘選欄位從哪來，卻沒寫旗標、席次檔、推導值與釘選檔之間誰先誰後，呼叫端無法預測哪一個會贏。
+- **Impact**: 說明沒寫優先順序前，呼叫端無法事先知道哪個來源會蓋過哪個。
+- **Trigger**: next change to that file
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hderive g2 44a00373
+- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+
+### prices 2^53 diagnostic matches only the literal
+- **Id**: BL-0266
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 價格解析在捕捉錯誤時，只看訊息裡有沒有那串固定的大整數文字，應該改認預檢不安全整數這類錯誤。受影響的只有診斷文字，正確性不變。
+- **Impact**: 診斷文字可能對不上真正的錯誤類別，計算結果本身不受影響。
+- **Trigger**: next change to that file
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: priceread g1 f29c3939
+- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+
+### qualification-sweep does not read the headless pins file
+- **Id**: BL-0267
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 資格掃描的旗標只從名冊組出來，不會讀無頭釘選檔。目前釘選檔只用來跟某次活動的名冊對照。
+- **Impact**: 掃描與釘選檔各走各的，改一邊時另一邊不會跟著變。
+- **Trigger**: the sweep is changed to take its pinned fields from the pins file
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hderive g1 27ae0ab9
+- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+
+### node tests that run git have no identity guard
+- **Id**: BL-0268
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 測試身分守衛會檢查呼叫 git 的殼層測試有沒有引入共用函式庫，也會掃腳本裡的非測試信箱，但沒有檢查會跑 git 提交的節點測試是否自備身分。
+- **Impact**: 這類測試在開發機靠家目錄設定會通過，換到暫時家目錄就變紅。
+- **Trigger**: next change to test-identity-guard, or a new node test that runs git
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hderive g1 review (identity finding)
+- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+- **Context**: the impl test itself is already fixed

@@ -145,3 +145,31 @@ scorer `score-dc.js --prereg prereg/dc.json --results <jsonl> [--arms full,off]`
 Every cell needs `ONOFF_PROMPT_PREFIX="Use dev-flow:"` (identical in all arms) or the skill is never invoked. Evidence, rules and results:
 `docs/plans/evidence/2026-10-17-bl0044-skill-onoff-rerun/README.md`. Proof: `hooks/tests/skill-onoff-dc-markers.test.sh`, `hooks/tests/skill-onoff-dc-score.test.sh`.
 Family F5 (red before edit), F6 (quality gate on M) and I7 (L gates) are informational: reported, never counted toward V2.
+
+## dcard row (pending-decision card text)
+
+Verdict: INSTRUMENT-INVALID (exit 5): V2 failed, ON 0/10 and OFF 0/10 on a_decision_file, V1 10/10 in both arms (explicit invocation preface), excluded pairs 0, a2-within-doa control no over-trigger. NOT-SHIP: the dskill text (dc1f92fb2) must not ship on this evidence. The reason is lack of evidence, not counter-evidence.
+
+The defect is in `run-skill-onoff-eval.sh`: the markers stage runs after the turn-2 block. The turn-2 block starts at line 346 (`if [ -x "$TASK_DIR/turn2.sh" ]`), and the markers call is line 401 (`bash "$TASK_DIR/markers.sh"`, inside the subshell that begins at line 396). `lib/dcard-markers.sh` function `dcard_has_complete` (line 39), called from `dcard_markers` at line 144 via `dcard_decision_files`, reads the decisions file only after turn 2 has closed the card, which makes `a_decision_file` structurally unable to be true. In the usable cells of the two rows (40 in total) `b_card_closed` is true in every one, so the primary indicator could not be measured. The corrected indicator belongs to dcard-v3 and awaits the owner decision d-27318bdc.
+
+The instrument could not measure the primary indicator, so both rows give no conclusion about the text's effect.
+
+Exploratory observation, not a preregistered verdict: the change arm opens complete cards and closes them itself; the base arm opens bare cards and the hook closes them. Secondary counts (not gating): b_close_by_agent 10/10 in change versus 0/10 in base, b_close_by_hook 10/10 in base versus 0/10 in change, b_follows_answer 10/10 and b_card_closed 10/10 in both arms; m_hook_card 0 in all cells (AskUserQuestion never called in headless mode).
+
+Every nohook cell had turn2 `skipped_no_card`, and `dcard_markers` hard-sets all `b_` indicators to false whenever `DCARD_TURN2` is not `ran` (they stay at the false initializer on line 135 unless the `ran` branch at lines 151-158 runs), so the nohook control proves nothing for `b_close_by_hook`. `b_close_by_hook` is only the remainder `b_closed && !b_agent` (line 157), with no positive detection of a hook close. The frozen prereg dcard-v2 field `v2_basis` overstates the control (it cannot be edited because it is frozen).
+
+Incidents: the first campaign pass lost 20 cells to an expired login (infra_fail); the same command was re-run, the harness re-ran the failed cells (attempt 2), no row was edited by hand; the earlier attempt rows stay in the file. Runner pin 2.1.306 unchanged. Total spend about 6.3 USD (slightly above the 6 USD cap because of the re-run).
+
+## dcard-v2 row (revised pending-decision card text)
+
+Verdict: INSTRUMENT-INVALID (V2: on-off = 0 < 6). a_decision_file ON 0/10, OFF 0/10. V1 10/10 in both arms. Excluded pairs 0. The dcard row result is untouched. NOT-SHIP: this text must not ship on this evidence. The reason is lack of evidence, not counter-evidence.
+
+The defect is in `run-skill-onoff-eval.sh`: the markers stage runs after the turn-2 block. The turn-2 block starts at line 346 (`if [ -x "$TASK_DIR/turn2.sh" ]`), and the markers call is line 401 (`bash "$TASK_DIR/markers.sh"`, inside the subshell that begins at line 396). `lib/dcard-markers.sh` function `dcard_has_complete` (line 39), called from `dcard_markers` at line 144 via `dcard_decision_files`, reads the decisions file only after turn 2 has closed the card, which makes `a_decision_file` structurally unable to be true. In the usable cells of the two rows (40 in total) `b_card_closed` is true in every one, so the primary indicator could not be measured. The corrected indicator belongs to dcard-v3 and awaits the owner decision d-27318bdc.
+
+The instrument could not measure the primary indicator, so both rows give no conclusion about the text's effect. Thresholds and the prereg were not changed after the fact.
+
+Exploratory observation, not a preregistered verdict: the change arm opens complete cards and closes them itself; the base arm opens bare cards and the hook closes them. Sampled v2facts commands (not a verdict): four listed change-arm cells called `open-decision.js open` with `--question`, two `--option` values, `--recommendation`, `--why`, and `--not-authorized`; the one listed base-arm cell passed a single bare `--question`. Secondary counts (from `results/dcard-v2.scored.json`, not gating): OFF b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 0/10, b_close_by_hook 10/10, m_hook_card 0/10. ON b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 10/10, b_close_by_hook 0/10, m_hook_card 0/10.
+
+Control (a2-within-doa, from the run's v2facts): base n=5 fail=0 over=0; change n=5 fail=0 over=0.
+
+Every nohook cell had turn2 `skipped_no_card`, and `dcard_markers` hard-sets all `b_` indicators to false whenever `DCARD_TURN2` is not `ran` (they stay at the false initializer on line 135 unless the `ran` branch at lines 151-158 runs), so the nohook control proves nothing for `b_close_by_hook`. `b_close_by_hook` is only the remainder `b_closed && !b_agent` (line 157), with no positive detection of a hook close. The frozen prereg dcard-v2 field `v2_basis` overstates the control (it cannot be edited because it is frozen). Spend about 5.75 USD, above the 4 USD cap granted for this phase.

@@ -5,13 +5,15 @@
 //
 //   stamp-prereg.js --row <row> [--root <evals/skill-onoff dir>] [--check]
 //
-// The row's prereg is prereg/<row>.json. It names, itself: arms.{off,on} + arm_manifests.*.file (the manifests to hash),
-// freeze_files (files or directories, relative to --root; directories are walked and symlinks followed) and freeze_packs
-// (pack ids whose provenance, manifest.pack_meta, is recorded). Steps, in order, all refusals exit 2 and write nothing:
-//   1. every pack the two arm manifests name is in packs/manifest.json (skills, files, fixture_scripts), and each freeze_pack has pack_meta.ref;
+// The row's prereg is prereg/<row>.json. It names, itself: arms.{off,on} + arm_manifests.*.file (every manifest listed,
+// including arms beyond off/on), freeze_files (files or directories, relative to --root; directories are walked and
+// symlinks followed) and freeze_packs (pack ids whose provenance, manifest.pack_meta, is recorded). Steps, in order,
+// all refusals exit 2 and write nothing:
+//   1. every pack each arm manifest names is in packs/manifest.json (skills, files, fixture_scripts), and each freeze_pack has pack_meta.ref;
 //   2. allowed_arm_difference.files is non-empty;
 //   3. arm check: the row's campaign_script (default run-g67-campaign.js) --check-arms with this row's prereg/arms (ONOFF_PACKS_DIR=<root>/packs) is ok;
-//   4. write the two sha256 into the prereg, THEN digest freeze_files (so the stamped prereg is what gets digested);
+//   4. write each arm manifest sha256 into the prereg, THEN digest freeze_files (so the stamped prereg is what gets digested);
+//      --check re-derives every sha256 that is present. An extra manifest with no sha256 yet (a legacy row) is left unchecked.
 //   5. FROZEN.json[<row>] = {frozen_at, stamped:true, packs, files}.
 // Order matters: stamp LAST. Any later edit to a digested file voids the row. --check re-derives everything and writes nothing.
 // Exit: 0 stamped/ok . 2 usage, unfrozen packs, empty allowed list, failed arm check, or (--check) a digest mismatch
@@ -47,9 +49,10 @@ function expand(entry) { // a file, or a directory walked recursively (symlinks 
 const freezeFiles = () => [...new Set((prereg.freeze_files || []).flatMap(expand))].sort();
 
 const missing = [];
-for (const a of ['off', 'on']) {
-  const m = readJson(armFile(a));
-  for (const id of [...Object.values(m.skills), ...[].concat(m.files || []), ...(m.fixture_scripts || [])]) if (!(manifest.packs || {})[id]) missing.push(`${a}:${id}`);
+for (const [name, spec] of Object.entries(prereg.arm_manifests || {})) {
+  if (!spec || typeof spec.file !== 'string') die(`arm_manifests.${name} has no file`);
+  const m = readJson(spec.file);
+  for (const id of [...Object.values(m.skills || {}), ...[].concat(m.files || []), ...(m.fixture_scripts || [])]) if (!(manifest.packs || {})[id]) missing.push(`${name}:${id}`);
 }
 if (missing.length) die(`packs not frozen yet (run the post_merge_steps first): ${missing.join(', ')}`);
 if (!Array.isArray((prereg.allowed_arm_difference || {}).files) || prereg.allowed_arm_difference.files.length === 0) die('allowed_arm_difference.files is empty (fill it from the text change first)');
@@ -63,7 +66,11 @@ const packs = Object.fromEntries((prereg.freeze_packs || []).map((id) => [id, pa
 const frozenPath = path.join(root, 'prereg/FROZEN.json');
 if (check) {
   const bad = [];
-  for (const a of ['off', 'on']) if (prereg.arm_manifests[prereg.arms[a]].sha256 !== sha(armFile(a))) bad.push(`arm ${a} sha256`);
+  for (const [name, spec] of Object.entries(prereg.arm_manifests || {})) {
+    const primary = name === prereg.arms.off || name === prereg.arms.on;
+    if (!primary && (typeof spec.sha256 !== 'string' || spec.sha256 === '')) continue;
+    if (spec.sha256 !== sha(spec.file)) bad.push(`arm ${name} sha256`);
+  }
   const rec = readJson('prereg/FROZEN.json')[row];
   if (!rec || !rec.stamped) bad.push('FROZEN.json row not stamped');
   else {
@@ -82,7 +89,11 @@ if (!/^[a-z0-9][a-z0-9._-]*\.js$/.test(campaignScript)) die(`campaign_script is 
 const chk = cp.spawnSync('node', [path.join(__dirname, campaignScript), '--check-arms', '--prereg', path.join(root, preregRel), '--arms-dir', armsDir], { encoding: 'utf8', env: { ...process.env, ONOFF_PACKS_DIR: path.join(root, 'packs') } });
 if (chk.status !== 0) die(`arm check failed: ${(chk.stdout || '').trim()} ${(chk.stderr || '').trim()}`);
 
-for (const a of ['off', 'on']) prereg.arm_manifests[prereg.arms[a]].sha256 = sha(armFile(a));
+const armSha = {};
+for (const [name, spec] of Object.entries(prereg.arm_manifests || {})) {
+  armSha[name] = sha(spec.file);
+  spec.sha256 = armSha[name];
+}
 fs.writeFileSync(path.join(root, preregRel), `${JSON.stringify(prereg, null, 2)}\n`);
 const frozen = fs.existsSync(frozenPath) ? readJson('prereg/FROZEN.json') : {};
 const files = {};
@@ -95,4 +106,4 @@ frozen[row] = {
   files,
 };
 fs.writeFileSync(frozenPath, `${JSON.stringify(frozen, null, 2)}\n`);
-console.log(JSON.stringify({ ok: true, row, arm_sha256: { off: prereg.arm_manifests[prereg.arms.off].sha256, on: prereg.arm_manifests[prereg.arms.on].sha256 }, files: Object.keys(files).length }));
+console.log(JSON.stringify({ ok: true, row, arm_sha256: armSha, files: Object.keys(files).length }));

@@ -14,9 +14,14 @@
 // ONOFF_LIB_OVERRIDE = lib-dcard-v3 (a2's lib-r2 markers and dcard-markers.sh), timeout 10m.
 // The matrix writes <results>.runner-pin. After the matrix, score-dcard.js with this prereg;
 // exit code is the scorer's.
-// --dry-run lists cells and spends nothing (it never spawns the runner). --check-arms:
+// --dry-run lists cells and spends nothing (it never spawns the runner). It prints
+// max_usd (ONOFF_MAX_USD, default 7.00) and spent_usd. --check-arms:
 // base and change differ exactly in allowed_arm_difference.files; nohook differs from
 // base only by the hook pack. Neither flag spawns the runner.
+// Before each live group, spend so far (every attempt row in the results file for this
+// campaign, failures included, actual cost_usd / usage.cost when present, otherwise
+// COST_PER_CELL_USD) plus that group's cell count times COST_PER_CELL_USD must stay
+// within the cap. Over the cap, the group is not dispatched.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -46,6 +51,41 @@ const TIMEOUT = '10m';
 // 35 cells * 0.20 = 7.00 USD.
 const COST_PER_CELL_USD = 0.2;
 const COST_BASIS = 'max(5.75 USD / 30 dcard-v2 cells, 6.3 USD / 55 dcard rows) rounded up to 0.20 USD/cell';
+
+function maxUsd() {
+  const raw = process.env.ONOFF_MAX_USD;
+  if (raw === undefined || String(raw).trim() === '') return 7;
+  const text = String(raw).trim();
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(text)) die('usage: ONOFF_MAX_USD must be a positive number');
+  const n = Number(text);
+  if (!Number.isFinite(n) || n <= 0) die('usage: ONOFF_MAX_USD must be a positive number');
+  return n;
+}
+function finiteNum(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
+function priceRow(j) {
+  let v = finiteNum(j.cost_usd);
+  if (v === null && j.usage && typeof j.usage === 'object') {
+    v = finiteNum(j.usage.cost_usd);
+    if (v === null) v = finiteNum(j.usage.cost);
+  }
+  if (v === null) v = finiteNum(j.cost);
+  return v === null ? COST_PER_CELL_USD : v;
+}
+function spentUsd(file) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return 0; }
+  let sum = 0;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let j;
+    try { j = JSON.parse(line); } catch { continue; }
+    if (!j || typeof j !== 'object' || typeof j.task_id !== 'string') continue;
+    if (typeof j.row === 'string' && j.row !== P.row) continue;
+    sum += priceRow(j);
+  }
+  return sum;
+}
+function money(n) { return Number(n.toFixed(2)); }
 
 const GROUPS = [
   { task: 'dcard-owner-decision', arms: [P.arms.off, P.arms.on], reps: P.reps },
@@ -112,6 +152,8 @@ if (flag('--check-arms')) {
   process.exit(r.ok ? 0 : 2);
 }
 
+const CAP = flag('--check-arms') ? null : maxUsd();
+
 if (flag('--dry-run')) {
   const { done, fails } = (() => {
     const doneSet = new Set();
@@ -139,6 +181,7 @@ if (flag('--dry-run')) {
     dry_run: true, row: P.row, model, runner, cells_total: rows.length,
     cells_todo: rows.filter((r) => r.status === 'todo').length,
     cost_estimate_usd: cost, cost_basis: COST_BASIS,
+    max_usd: CAP, spent_usd: money(spentUsd(resultsPath)),
     invocation_prefix: PREFIX, lib: LIB, timeout: TIMEOUT, check_skill: 'ceo-agent',
   }));
   process.exit(0);
@@ -152,6 +195,11 @@ if (runner === 'cc') {
 fs.mkdirSync(path.dirname(path.resolve(resultsPath)), { recursive: true });
 const keep = path.join(path.dirname(path.resolve(resultsPath)), 'dcard-v3-cells');
 for (const g of GROUPS) {
+  const spent = spentUsd(resultsPath);
+  const groupCost = g.arms.length * g.reps * COST_PER_CELL_USD;
+  if (spent + groupCost > CAP + 1e-9) {
+    die(`spend cap: spent ${money(spent).toFixed(2)} USD so far; next group ${g.task} [${g.arms.join(',')}] x ${g.reps} costs ${money(groupCost).toFixed(2)} USD; cap ${money(CAP).toFixed(2)} USD; refusing to dispatch`, 1);
+  }
   console.log(`== task ${g.task}: [${g.arms.join(',')}] x ${g.reps}`);
   const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix.sh'),
     '--model', model, '--reps', String(g.reps), '--results', path.resolve(resultsPath),

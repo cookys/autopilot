@@ -1034,6 +1034,13 @@
         "files": 83,
         "digest_sha256": "e9980d9dc374ca812d3625cd2414447d3a127a220e47815ded040c08f09f96c4"
       },
+      "dcard-hooks-empty": {
+        "kind": "dir",
+        "source": "/tmp/onoff-dcard-empty-vzrfUy",
+        "ref": "1912ff81e",
+        "files": 1,
+        "digest_sha256": "557c0787d0f7e77b7506191722d718da6d55e2d3cf1d5f598573a5c8e3363033"
+      },
       "fixture-scripts-dcard2": {
         "kind": "scripts",
         "source": "scripts/open-decision.js",
@@ -1051,8 +1058,8 @@
       "lib-dcard-v3/p1w-markers.sh": "b05608f01343d11a0629ae4de2cc618bcc1873e3724d058f46723b5dd8394bdb",
       "lib/dcard-markers.sh": "3bbf2f55187f33b0bfdfbb30a85ab899c10559916d7cf7aecbccbb5c5796ab1c",
       "lib/dcard-v3-markers.sh": "78173abee761d4c29b72c4e3b6089d66fcc60f09bcd3a73d74d424bba499c08f",
-      "prereg/dcard-v3.json": "c276296911d3663c728abd0ed9169c7fdea74bfc7d7a90032f1fae85ca8672f0",
-      "run-dcard-v3-campaign.js": "ad1da7a4f58777a6cc9579f9d593d825b1a19bca26335cc468f245f50734a46e",
+      "prereg/dcard-v3.json": "ee02d4be74591049f724454d46d46b359d9fdd18c66cb7bc1a010a0f80f80072",
+      "run-dcard-v3-campaign.js": "fd84a1dff09ef69e93dc296090650f9a30b2b636d95685bd776bb26679b335a2",
       "run-skill-onoff-eval.sh": "eb29cea61a05fdf9d6a41a04fbb0268840137bfe504324851b393a382ebcca1f",
       "score-dcard.js": "636b3de22282343181ce7126229ec6874286896dbfea7695df83825e6f96387a",
       "tasks/a2-within-doa/init-repo.sh": "cb9cbc79d511abd9c03c3f631c791bed99b298ae24956f5c86b5f0db082a7ca4",

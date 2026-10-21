@@ -3,6 +3,7 @@
 # Pre-turn-2 snapshot for a_decision_file, turn2_exit, campaign dry-run, stamp.
 # RED-first: run once against the unmodified tree before the v3 instrument existed.
 # RED at 914a86f5b: FAIL: v3 order cell exit 2 (arm manifest arms/dcard-v3/base.json not found).
+# RED at 10d849caf: FAIL: dry-run json (no max_usd / spent_usd; nohook sha256 and dcard-hooks-empty pack stamp absent; spend cap not enforced).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -212,6 +213,8 @@ j=json.loads(line)
 if j.get("cells_total")!=35: raise SystemExit(j)
 if not isinstance(j.get("cost_estimate_usd"), (int,float)) or j["cost_estimate_usd"]>7: raise SystemExit(j)
 if "cost_basis" not in j: raise SystemExit(j)
+if j.get("max_usd")!=7: raise SystemExit(j)
+if j.get("spent_usd")!=0: raise SystemExit(j)
 PY
 node "$BASE/stamp-prereg.js" --row dcard-v3 --check >/dev/null || fail "stamp dcard-v3 --check"
 node "$BASE/stamp-prereg.js" --row dcard --check >/dev/null || fail "stamp dcard --check"
@@ -232,6 +235,46 @@ if node "$BASE/stamp-prereg.js" --row dcard-v3 --root "$SROOT2" --check >/dev/nu
   fail "stamp --check accepted a mutated prereg"
 fi
 grep -q 'digest mismatch' "$TEST_TMP/stamp-prereg.err" || fail "prereg mutation did not report digest mismatch"
+SROOT3="$TEST_TMP/stamp-root-nohook"
+rm -rf "$SROOT3"
+cp -a "$BASE/." "$SROOT3/"
+python3 - "$SROOT3/arms/dcard-v3/nohook.json" << 'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1])
+t=p.read_text()
+p.write_text(t.replace('"nohook"','"nohooK"',1))
+PY
+if node "$BASE/stamp-prereg.js" --row dcard-v3 --root "$SROOT3" --check >/dev/null 2>"$TEST_TMP/stamp-nohook.err"; then
+  fail "stamp --check accepted a mutated nohook manifest"
+fi
+grep -q 'digest mismatch' "$TEST_TMP/stamp-nohook.err" || fail "nohook mutation did not report digest mismatch: $(cat "$TEST_TMP/stamp-nohook.err")"
+SROOT4="$TEST_TMP/stamp-root-empty-pack"
+rm -rf "$SROOT4"
+cp -a "$BASE/." "$SROOT4/"
+python3 - "$SROOT4/packs/manifest.json" << 'PY'
+import json,sys
+p=sys.argv[1]
+m=json.load(open(p))
+k=next(iter(m["packs"]["dcard-hooks-empty"]))
+m["packs"]["dcard-hooks-empty"][k]=m["packs"]["dcard-hooks-empty"][k][:-1]+("0" if m["packs"]["dcard-hooks-empty"][k][-1]!="0" else "1")
+json.dump(m, open(p,"w"))
+PY
+if node "$BASE/stamp-prereg.js" --row dcard-v3 --root "$SROOT4" --check >/dev/null 2>"$TEST_TMP/stamp-pack.err"; then
+  fail "stamp --check accepted a mutated empty hook pack"
+fi
+grep -q 'digest mismatch' "$TEST_TMP/stamp-pack.err" || fail "empty pack mutation did not report digest mismatch: $(cat "$TEST_TMP/stamp-pack.err")"
+python3 - "$BASE/prereg/dcard-v3.json" "$BASE/prereg/FROZEN.json" << 'PY' || fail "nohook stamp record"
+import json,sys,hashlib
+pre=json.load(open(sys.argv[1]))
+fr=json.load(open(sys.argv[2]))["dcard-v3"]
+nh=pre["arm_manifests"]["nohook"]
+if "sha256" not in nh or len(nh["sha256"])!=64: raise SystemExit("nohook sha missing")
+digest=hashlib.sha256(open(sys.argv[1].rsplit("/prereg/",1)[0]+"/"+nh["file"],"rb").read()).hexdigest()
+if nh["sha256"]!=digest: raise SystemExit("nohook sha mismatch")
+if "dcard-hooks-empty" not in pre["freeze_packs"]: raise SystemExit("freeze_packs")
+if "dcard-hooks-empty" not in fr.get("packs",{}): raise SystemExit("frozen pack")
+if "arms/dcard-v3/nohook.json" not in fr["files"]: raise SystemExit("frozen file")
+PY
 # scorer accepts the v3 prereg (exit is a verdict, not a usage error)
 SRES="$TEST_TMP/v3-score.jsonl"
 : > "$SRES"
@@ -240,5 +283,92 @@ node "$BASE/score-dcard.js" --prereg "$BASE/prereg/dcard-v3.json" --results "$SR
 src=$?
 set -e
 [ "$src" -ne 2 ] || fail "scorer rejected v3 prereg: $(cat "$TEST_TMP/score.err")"
+
+echo "=== spend cap: refuse before the next group, allow when the cap is higher ==="
+# 16 failed attempt rows * 0.20 = 3.20, just under the 7.00 cap. The first group is
+# 20 cells * 0.20 = 4.00, so 3.20 + 4.00 exceeds 7.00 and nothing may be dispatched.
+CAPF="$TEST_TMP/cap-seed.jsonl"
+python3 - "$CAPF" << 'PY'
+import json,sys
+rows=[]
+for i in range(15):
+    rows.append({"row":"dcard-v3","task_id":"seed","arm":"base","rep":i,"failure_class":"infra_fail"})
+rows.append({"row":"dcard-v3","task_id":"seed","arm":"change","rep":99,"failure_class":"marker_fail"})
+open(sys.argv[1],"w").write("".join(json.dumps(r)+"\n" for r in rows))
+PY
+cp "$CAPF" "$TEST_TMP/cap-before.jsonl"
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" \
+  node "$BASE/run-dcard-v3-campaign.js" --results "$CAPF" --runner stub \
+  >"$TEST_TMP/cap.out" 2>"$TEST_TMP/cap.err"
+cap_rc=$?
+set -e
+[ "$cap_rc" -ne 0 ] || fail "spend cap dispatched anyway"
+grep -q 'spent' "$TEST_TMP/cap.err" || fail "cap reason missing spent: $(cat "$TEST_TMP/cap.err")"
+grep -q 'cap' "$TEST_TMP/cap.err" || fail "cap reason missing cap: $(cat "$TEST_TMP/cap.err")"
+cmp -s "$CAPF" "$TEST_TMP/cap-before.jsonl" || fail "refused campaign wrote result rows"
+# Same seed priced by an actual cost field: one row of 6.90 must refuse a 4.00 group under the 7.00 cap.
+ACT="$TEST_TMP/cap-actual.jsonl"
+python3 - "$ACT" << 'PY'
+import json,sys
+row={"row":"dcard-v3","task_id":"seed","arm":"base","rep":1,"failure_class":"infra_fail","cost_usd":6.9}
+open(sys.argv[1],"w").write(json.dumps(row)+"\n")
+PY
+cp "$ACT" "$TEST_TMP/cap-actual-before.jsonl"
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" \
+  node "$BASE/run-dcard-v3-campaign.js" --results "$ACT" --runner stub \
+  >"$TEST_TMP/cap-actual.out" 2>"$TEST_TMP/cap-actual.err"
+act_rc=$?
+set -e
+[ "$act_rc" -ne 0 ] || fail "actual cost_usd was not priced (campaign dispatched)"
+cmp -s "$ACT" "$TEST_TMP/cap-actual-before.jsonl" || fail "actual-cost refusal wrote rows"
+# usage.cost is an actual value too.
+USE="$TEST_TMP/cap-usage.jsonl"
+python3 - "$USE" << 'PY'
+import json,sys
+row={"row":"dcard-v3","task_id":"seed","arm":"base","rep":1,"failure_class":"infra_fail","usage":{"cost":6.5}}
+open(sys.argv[1],"w").write(json.dumps(row)+"\n")
+PY
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" \
+  node "$BASE/run-dcard-v3-campaign.js" --results "$USE" --runner stub \
+  >"$TEST_TMP/cap-usage.out" 2>"$TEST_TMP/cap-usage.err"
+use_rc=$?
+set -e
+[ "$use_rc" -ne 0 ] || fail "usage.cost was not priced"
+# A non-positive cap is a usage error and writes nothing.
+BAD="$TEST_TMP/cap-bad.jsonl"
+: > "$BAD"
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" ONOFF_MAX_USD=0 \
+  node "$BASE/run-dcard-v3-campaign.js" --results "$BAD" --runner stub \
+  >"$TEST_TMP/cap-bad.out" 2>"$TEST_TMP/cap-bad.err"
+bad_rc=$?
+set -e
+[ "$bad_rc" -ne 0 ] || fail "ONOFF_MAX_USD=0 was accepted"
+grep -q 'ONOFF_MAX_USD' "$TEST_TMP/cap-bad.err" || fail "bad cap did not say ONOFF_MAX_USD: $(cat "$TEST_TMP/cap-bad.err")"
+[ ! -s "$BAD" ] || fail "bad cap wrote a results file"
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" ONOFF_MAX_USD=abc \
+  node "$BASE/run-dcard-v3-campaign.js" --dry-run --results "$TEST_TMP/cap-nan.jsonl" --runner stub \
+  >"$TEST_TMP/cap-nan.out" 2>"$TEST_TMP/cap-nan.err"
+nan_rc=$?
+set -e
+[ "$nan_rc" -ne 0 ] || fail "ONOFF_MAX_USD=abc was accepted"
+# Negative control: the same 3.20 seed under a high cap dispatches the stub.
+ALLOW="$TEST_TMP/cap-allow.jsonl"
+cp "$TEST_TMP/cap-before.jsonl" "$ALLOW"
+allow_before=$(wc -c < "$ALLOW")
+set +e
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$HOME" ONOFF_MAX_USD=100 \
+  ONOFF_STUB_BIN="$QUIET" \
+  node "$BASE/run-dcard-v3-campaign.js" --results "$ALLOW" --runner stub \
+  >"$TEST_TMP/cap-allow.out" 2>"$TEST_TMP/cap-allow.err"
+allow_rc=$?
+set -e
+grep -q 'spend cap' "$TEST_TMP/cap-allow.err" && fail "high cap still refused: $(cat "$TEST_TMP/cap-allow.err")"
+allow_after=$(wc -c < "$ALLOW")
+[ "$allow_after" -gt "$allow_before" ] || fail "high cap did not dispatch (results unchanged, rc=$allow_rc)"
 
 echo "PASS skill-onoff-dcard-v3"

@@ -20,7 +20,8 @@
       "sha256": "7304948d3fb18399f96efcc3cf83425aa9233896159a33ec34619706cd69c851"
     },
     "nohook": {
-      "file": "arms/dcard-v3/nohook.json"
+      "file": "arms/dcard-v3/nohook.json",
+      "sha256": "0f2ce1b456b2801576e03bf327b7222e3c08a2694cd615cbc67650ccbffa1767"
     }
   },
   "allowed_arm_difference": {
@@ -144,6 +145,7 @@
     "dcard-files-base2",
     "dcard-files-change3",
     "dcard-hooks-3955",
+    "dcard-hooks-empty",
     "fixture-scripts-dcard2"
   ],
   "v2_basis": "v3 changes only the instrument (a_decision_file reads a pre-turn-2 snapshot, turn2_exit is recorded). The nohook control only proves m_hook_card is absent without the hook pack. It does NOT prove b_close_by_hook, because every nohook cell has turn 2 skipped_no_card and all b_ markers are hard-false there, and b_close_by_hook is only the remainder of b_card_closed and not b_close_by_agent. The dcard and dcard-v2 verdicts stay INSTRUMENT-INVALID and untouched."

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0269 -->
+<!-- next-id: BL-0270 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1376,3 +1376,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hderive g1 review (identity finding)
 - **Pointer**: docs/backlog/deferred-review-2026-10-21.md
 - **Context**: the impl test itself is already fixed
+
+### hetero-review-loop collect accepts an empty review range
+- **Id**: BL-0269
+- **Status**: open
+- **Since**: 2026-10-21
+- **Origin**: self
+- **Problem**: 審查收集在範圍內沒有任何提交或差異為空時，仍然會照常收集並產生看起來正常的收據，審的其實是空內容。
+- **Impact**: 衝突後沒有產生提交的挑選提交會讓審查空轉，卻留下像是通過的紀錄。
+- **Trigger**: next change to the collect subcommand of the review loop driver
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: landdocs 2026-10-21 empty-range finding
+- **Pointer**: docs/backlog/hetero-collect-empty-range.md

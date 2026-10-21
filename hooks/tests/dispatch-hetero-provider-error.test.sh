@@ -186,4 +186,164 @@ JSON="$(last_json "$OUT")"
 assert_error_category "$JSON" null "unclassifiable failure has null error_category"
 assert_no_provider_key "$JSON" "unclassifiable failure has no provider_error"
 
+# --- Fix 1: cc-shim LOG stays diagnosable after the envelope split ---
+log_text() {
+  node -e 'const o=JSON.parse(process.argv[1]); process.stdout.write(require("fs").readFileSync(o.agent_log,"utf8"));' "$1"
+}
+
+# is_error is not true: result text is in the log; exit 0 + no edits → no_op.
+STUB_OK="$TEST_TMP/claude-log-ok"
+cat > "$STUB_OK" <<'EOF'
+#!/usr/bin/env bash
+echo "STDERR_KEPT_MARKER" >&2
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:false,subtype:"success",result:"nothing to do here"})+"\n")'
+exit 0
+EOF
+chmod +x "$STUB_OK"
+OUT="$(run_cc "$STUB_OK" feat/pe-log-ok)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" "nothing to do here" "success envelope appends result text"
+assert_not_contains "$LOGTXT" '"is_error"' "success envelope does not append the raw JSON"
+assert_contains "$LOGTXT" "STDERR_KEPT_MARKER" "cc-shim stderr still reaches the agent log"
+assert_contains "$JSON" '"status": "no_op"' "exit 0 with no edits is no_op"
+
+# is_error true, empty result: the error message text is what the log gets.
+STUB_ERRMSG="$TEST_TMP/claude-log-errmsg"
+cat > "$STUB_ERRMSG" <<'EOF'
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,result:"",error:"please say which file you want changed"})+"\n")'
+exit 1
+EOF
+chmod +x "$STUB_ERRMSG"
+OUT="$(run_cc "$STUB_ERRMSG" feat/pe-log-errmsg)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" "please say which file you want changed" "is_error with empty result appends the error message"
+assert_not_contains "$LOGTXT" '"api_error_status"' "error-message append is not the raw envelope"
+assert_contains "$JSON" '"status": "question_suspected"' "question-shaped failure text is question_suspected"
+
+# is_error true with result text (the question the old plain mode would have logged).
+STUB_Q="$TEST_TMP/claude-log-question"
+cat > "$STUB_Q" <<'EOF'
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,result:"I need to ask a clarifying question before editing"})+"\n")'
+exit 1
+EOF
+chmod +x "$STUB_Q"
+OUT="$(run_cc "$STUB_Q" feat/pe-log-q)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" "I need to ask a clarifying question before editing" "is_error result text is in the log"
+assert_contains "$JSON" '"status": "question_suspected"' "question result text keeps question_suspected"
+
+# Not one JSON object (two documents): raw stdout, unchanged.
+STUB_MULTI="$TEST_TMP/claude-log-multi"
+cat > "$STUB_MULTI" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"result","is_error":false,"result":"first document"}'
+printf '%s\n' '{"type":"result","is_error":false,"result":"I need to ask a clarifying question before editing"}'
+exit 1
+EOF
+chmod +x "$STUB_MULTI"
+OUT="$(run_cc "$STUB_MULTI" feat/pe-log-multi)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" '"result":"first document"' "multi-document stdout is appended raw"
+assert_contains "$LOGTXT" "I need to ask a clarifying question before editing" "raw multi-document keeps the question text"
+assert_contains "$JSON" '"status": "question_suspected"' "multi-document question text is question_suspected"
+
+# Non-zero exit, envelope has no result text: raw bytes (not a dropped log).
+STUB_RAW="$TEST_TMP/claude-log-rawnz"
+cat > "$STUB_RAW" <<'EOF'
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:false})+"\n")'
+exit 1
+EOF
+chmod +x "$STUB_RAW"
+OUT="$(run_cc "$STUB_RAW" feat/pe-log-rawnz)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" '"type":"result"' "non-zero exit without result text keeps raw stdout"
+assert_contains "$JSON" '"status": "question_suspected"' "raw non-error envelope with exit 1 is question_suspected"
+
+# Unstructured text, not an envelope. Text classifier, no provider_error.
+STUB_U529="$TEST_TMP/claude-log-u529"
+cat > "$STUB_U529" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '529 overloaded'
+exit 1
+EOF
+chmod +x "$STUB_U529"
+OUT="$(run_cc "$STUB_U529" feat/pe-log-u529)"
+JSON="$(last_json "$OUT")"
+LOGTXT="$(log_text "$JSON")"
+assert_contains "$LOGTXT" "529 overloaded" "unparsed stdout is stored unchanged"
+assert_contains "$JSON" '"status": "engine_unavailable"' "plain 529 overloaded is engine_unavailable"
+assert_error_category "$JSON" overloaded "plain 529 overloaded sets error_category"
+assert_no_provider_key "$JSON" "unstructured 529 overloaded has no provider_error"
+
+# --- Fix 2: structured 529 wins on every no-commit non-zero shape ---
+# Already green on the pre-fix branch: the equality branch (no new commit,
+# AGENT_EXIT != 0) called _prefer_structured_classified_error before
+# _is_engine_unavailable. (a) generic stop, (b) question-shaped result, and
+# (c) boilerplate/empty result all land on that one path, so structured 529
+# already became engine_unavailable. The dirty-tree non-zero path did not.
+write_529() {
+  local dest="$1" result="$2"
+  cat > "$dest" <<EOF
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,api_error_status:529,terminal_reason:"api_error",result:${result}})+"\\n")'
+exit 1
+EOF
+  chmod +x "$dest"
+}
+
+STUB_BR_A="$TEST_TMP/claude-br-a"
+write_529 "$STUB_BR_A" '"worker stopped without editing"'
+OUT="$(run_cc "$STUB_BR_A" feat/pe-br-a)"
+JSON="$(last_json "$OUT")"
+assert_provider "$JSON" cc-shim 529 api_error_status "exit 1 with no commit and structured 529 is engine_unavailable"
+
+STUB_BR_B="$TEST_TMP/claude-br-b"
+write_529 "$STUB_BR_B" '"I need to ask a clarifying question before editing"'
+OUT="$(run_cc "$STUB_BR_B" feat/pe-br-b)"
+JSON="$(last_json "$OUT")"
+assert_provider "$JSON" cc-shim 529 api_error_status "question-shaped text with structured 529 is engine_unavailable"
+assert_not_contains "$JSON" '"status": "question_suspected"' "structured 529 is not left as question_suspected"
+
+STUB_BR_C="$TEST_TMP/claude-br-c"
+write_529 "$STUB_BR_C" '""'
+OUT="$(run_cc "$STUB_BR_C" feat/pe-br-c)"
+JSON="$(last_json "$OUT")"
+assert_provider "$JSON" cc-shim 529 api_error_status "empty no_op-shaped text with structured 529 is engine_unavailable"
+assert_not_contains "$JSON" '"status": "no_op"' "structured 529 non-zero exit is not no_op"
+
+# --- Fix 3: one stub per allowed status, plus one outside the set ---
+for pair in "429:feat/pe-429" "503:feat/pe-503" "402:feat/pe-402"; do
+  code="${pair%%:*}"
+  branch="${pair##*:}"
+  stub="$TEST_TMP/claude-$code"
+  cat > "$stub" <<EOF
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,api_error_status:${code},terminal_reason:"api_error",result:"status ${code}"})+"\\n")'
+exit 1
+EOF
+  chmod +x "$stub"
+  OUT="$(run_cc "$stub" "$branch")"
+  JSON="$(last_json "$OUT")"
+  assert_provider "$JSON" cc-shim "$code" api_error_status "cc-shim structured ${code} is harness_structured engine_unavailable"
+done
+
+STUB_500="$TEST_TMP/claude-500"
+cat > "$STUB_500" <<'EOF'
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,api_error_status:500,terminal_reason:"api_error",result:"internal error"})+"\n")'
+exit 1
+EOF
+chmod +x "$STUB_500"
+OUT="$(run_cc "$STUB_500" feat/pe-500)"
+JSON="$(last_json "$OUT")"
+assert_no_provider_key "$JSON" "structured status 500 is outside the set and has no provider_error"
+
 finalize_test

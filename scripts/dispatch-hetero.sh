@@ -3780,18 +3780,49 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
       _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE"
   if [ -f "$CCSHIM_ENVELOPE" ]; then
-    node - "$CCSHIM_ENVELOPE" "$LOG" <<'NODE'
+    # One JSON object → result text (is_error with an empty result uses the
+    # error message). Anything else, including a second JSON document, is the
+    # raw stdout. A non-zero exit with no result text also keeps the raw bytes.
+    node - "$CCSHIM_ENVELOPE" "$LOG" "$AGENT_EXIT" <<'NODE'
 const fs = require('fs');
 const envPath = process.argv[2];
 const logPath = process.argv[3];
+const agentExit = Number(process.argv[4] || 0);
 let raw;
 try { raw = fs.readFileSync(envPath); } catch { process.exit(0); }
-let text = null;
+function withNl(s) {
+  return Buffer.from(s.endsWith('\n') ? s : s + '\n');
+}
+function errorText(obj) {
+  const cands = [];
+  if (typeof obj.error === 'string') cands.push(obj.error);
+  if (typeof obj.message === 'string') cands.push(obj.message);
+  if (typeof obj.error_message === 'string') cands.push(obj.error_message);
+  if (Array.isArray(obj.errors)) {
+    for (const e of obj.errors) if (typeof e === 'string') cands.push(e);
+  }
+  for (const c of cands) if (c.trim() !== '') return c;
+  return '';
+}
+let out = raw;
 try {
   const obj = JSON.parse(raw.toString('utf8'));
-  if (obj && typeof obj === 'object' && !Array.isArray(obj) && typeof obj.result === 'string') text = obj.result;
-} catch { text = null; }
-const out = text === null ? raw : Buffer.from(text.endsWith('\n') ? text : text + '\n');
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    const result = typeof obj.result === 'string' ? obj.result : null;
+    const resultHasText = result !== null && result.trim() !== '';
+    if (resultHasText) {
+      out = withNl(result);
+    } else if (obj.is_error === true) {
+      const msg = errorText(obj);
+      if (msg) out = withNl(msg);
+      else out = raw;
+    } else if (result !== null) {
+      out = withNl(result);
+    } else if (agentExit !== 0) {
+      out = raw;
+    }
+  }
+} catch { out = raw; }
 fs.appendFileSync(logPath, out);
 NODE
   fi
@@ -4592,6 +4623,13 @@ _capability_write_suppress_now() {
 
 passive_capture() {
   local status="${1:-}"
+  # Structured class was derived once before this call. Text classification
+  # still runs for the quota side effect, then the structured class is put back
+  # so a later branch cannot decide from prose.
+  local _structured_class=""
+  case "${PROVIDER_ERROR_STATUS:-}" in
+    429|503|529|402) _structured_class="${CLASSIFIED_ERROR:-}" ;;
+  esac
   CLASSIFIED_ERROR=""
   if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
     # Classify once, outside the recording subshell, so classify_outcome can reuse the result.
@@ -4599,6 +4637,7 @@ passive_capture() {
     if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
       if declare -F _capability_write_suppress_now >/dev/null 2>&1 && _capability_write_suppress_now; then
         write_manifest 2>/dev/null || true
+        if [ -n "$_structured_class" ]; then CLASSIFIED_ERROR="$_structured_class"; else _prefer_structured_classified_error; fi
         return 0
       fi
     fi
@@ -4645,6 +4684,9 @@ passive_capture() {
         echo "$payload" | node "$SELF_DIR/engine-capability-state.js" record "${record_args[@]}" >/dev/null 2>&1
       fi
     ) || true
+  fi
+  if [ -n "$_structured_class" ]; then
+    CLASSIFIED_ERROR="$_structured_class"
   fi
 }
 
@@ -4828,6 +4870,9 @@ classify_outcome() {
   OUTCOME_RESOURCES_CREATED=1
   [ "${WORKTREE_REUSED:-0}" -eq 1 ] && OUTCOME_RESOURCES_CREATED=0
   OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
+  # Once, before any branch reads CLASSIFIED_ERROR. Worker exit is already
+  # gated inside capture_structured_provider_error (non-zero only, never text).
+  _prefer_structured_classified_error
   if ! check_main_checkout_boundary; then
     passive_capture "boundary_rejected"
     OUTCOME_STATUS="boundary_rejected"
@@ -4858,6 +4903,10 @@ classify_outcome() {
       passive_capture "dirty"
       OUTCOME_STATUS="dirty"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+      if [ "$AGENT_EXIT" -ne 0 ] && _is_engine_unavailable "$CLASSIFIED_ERROR"; then
+        OUTCOME_STATUS="engine_unavailable"
+        OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
+      fi
     elif [ "$AGENT_EXIT" -ne 0 ]; then
       # clean commit but the worker exited non-zero — NOT scored success (KR1):
       # the abnormal exit means the run can't be trusted as a clean implementation.

@@ -12,7 +12,7 @@
  *
  * Run: node --test hooks/hook-hosting.test.js      (HOSTING_ROOT=<tree> to aim it at another tree)
  *
-# RED at 95d4a7de9: dead-watcher pid and awaiting-owner-off cases fail (calls.log has no git) because unset AUTOPILOT_RUNS_WATCH_AUTOSTART plus inherited NODE_TEST_CONTEXT disables autostart.
+ * RED at 95d4a7de9: dead-watcher pid and awaiting-owner-off cases fail (calls.log has no git) because unset AUTOPILOT_RUNS_WATCH_AUTOSTART plus inherited NODE_TEST_CONTEXT disables autostart.
  */
 'use strict';
 

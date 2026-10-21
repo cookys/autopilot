@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 895b778d3: string value and trailing comment produce no hint (unexpected 'compact_token_budget'); 97 passed, 1 failed. Inline table still hinted.
 # RED at 69fe38bdd7af775498227abdf24f4ed6850b8ef3: script absent (MODULE_NOT_FOUND); 19 passed, 22 failed — install exits 1, no AGENTS.md/GEMINI.md, no markers, second install not byte-identical, block not inserted, --check not 0 when "consistent", top-level default_subagent_model not flagged, dry-run exit 1.
 # RED at 9d2e05ebe5c2314f224c4e05bd6d0725fa718f2d: 50 passed, 12 failed — installed files still contain context_budget and Known per-harness facts; a doc with no install-block markers and an unpaired marker both install (exit 0) and write files; compact_token_budget inside a section is not flagged.
 # Opt-in installer for the token-discipline block (Codex AGENTS.md, agy GEMINI.md).
@@ -391,6 +392,26 @@ HINTS="$(printf '%s\n' "$OUT" | grep -c 'compact_token_budget' || true)"
 assert_eq "$HINTS" "2" "dotted key and inline table each hint compact_token_budget"
 assert_not_contains "$OUT" "default_subagent_model" "dotted or inline default_subagent_model stays unflagged"
 assert_contains "$OUT" "default_subagent_reasoning_effort" "top-level sibling key is still hinted"
+
+# A quoted value or a trailing comment that merely mentions the key is not a setting.
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install >/dev/null
+cat > "$CODEX_D/config.toml" <<'EOF'
+note = "compact_token_budget = 3"
+x = 1 # compact_token_budget = 2
+EOF
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
+assert_eq "$EC" "0" "string and comment mentions do not change --check exit"
+assert_not_contains "$OUT" "compact_token_budget" "string value and trailing comment produce no hint"
+# The inline table is still a real setting.
+cat > "$CODEX_D/config.toml" <<'EOF'
+x = { compact_token_budget = 1 }
+EOF
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
+assert_eq "$EC" "0" "inline table still does not change --check exit"
+assert_contains "$OUT" "compact_token_budget" "inline table still produces the hint"
 
 echo "Summary: $PASS passed, $FAIL failed"
 if [[ "$FAIL" -ne 0 ]]; then exit 1; fi

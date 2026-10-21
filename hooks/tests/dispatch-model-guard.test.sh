@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 895b778d3: no model with first line "Engine: sonnet" still lists engine (missingBriefHeaders exited 2). 92 passed, 1 failed.
 # RED at 48aa19a3fdc8eb21ab3a1036dbc7a32a6a61e0ef: 87 passed, 4 failed — both-missing deny had no "Lane:", no three-line template, and did not name subagent-budget.
 # Test for dispatch-model-guard.js hook
 . "$(dirname "$0")/lib.sh"
@@ -267,6 +268,17 @@ PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: ha
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "hdrhint-complete-exit"
 assert_eq "" "$__RUN_STDOUT" "hdrhint-complete stays allowed"
+
+# No model argument: a first line that starts with Engine: is not a missing engine.
+NOMODEL="$(node -e '
+  const { missingBriefHeaders } = require(process.argv[1]);
+  const missing = missingBriefHeaders("Engine: sonnet\nRole: worker\nLane: alpha\n", "");
+  if (missing.indexOf("engine") !== -1) process.exit(2);
+  process.stdout.write(missing.join(","));
+' "$REPO_ROOT/hooks/lib/brief-header-template.js" 2>"$TEST_TMP/nomodel.err")"
+NOMODEL_EC=$?
+assert_eq "$NOMODEL_EC" "0" "no model with Engine: sonnet does not list engine (exit ${NOMODEL_EC})"
+assert_not_contains ",${NOMODEL}," ",engine," "no model with Engine: sonnet returns a list without engine"
 
 # Negative: Role alone is not a deny.
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'

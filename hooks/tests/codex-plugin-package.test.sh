@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# RED at 895b778d3: extra hooks/lib file made --check exit 1 with no "drift:" line; removing a missing brief-head.js left --check exit 0 (sandbox lib file is payload.txt). 133 passed, 3 failed.
 # RED at f52f04b9256a4403b90dc4aba306c0871d335cc3: FAIL requiring mirrored session-start.js succeeds (expected 0, got 1); Cannot find module '../../../hooks/lib/brief-header-template.js'
+# RED at 0dd55318e: scratch copy of sync-codex-plugin-skills.sh with LC_ALL=C removed from both comm calls, GNU comm shim, LC_ALL=en_US.utf8: FAIL UTF-8 --check has no extra drift line for brief-header-template.js: unexpected 'brief-header-template.js' in output; FAIL UTF-8 --check does not warn that comm input is unsorted: unexpected 'not in sorted order' in output. 139 passed, 2 failed.
 . "$(dirname "$0")/lib.sh"
 
 PLUGIN_DIR="$REPO_ROOT/platforms/codex/plugin"
@@ -556,6 +558,69 @@ assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra baselin
 assert_contains "$OUT" "profiles/baselines/stale.json" \
   "sync-codex-plugin-skills --check names the extra baseline"
 rm "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
+
+printf 'extra lib\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/extra-not-in-source.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra hooks/lib file"
+assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for an extra hooks/lib file"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/extra-not-in-source.js"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects a missing hooks/lib file"
+assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for a missing hooks/lib file"
+cp "$SYNC_SANDBOX/hooks/lib/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
+
+# brief-head.js vs brief-header-template.js: LC_ALL=C sort order is not the
+# en_US.UTF-8 collation order. Both files live in the sandbox source and mirror
+# so the only drift is the removed mirror copy of brief-head.js.
+for lib_base in brief-head.js brief-header-template.js; do
+  printf "'use strict';\n// %s\n" "$lib_base" > "$SYNC_SANDBOX/hooks/lib/$lib_base"
+  cp "$SYNC_SANDBOX/hooks/lib/$lib_base" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/$lib_base"
+done
+test -f "$SYNC_SANDBOX/hooks/lib/brief-head.js" || fail "sandbox source hooks/lib has brief-head.js"
+test -f "$SYNC_SANDBOX/hooks/lib/brief-header-template.js" || fail "sandbox source hooks/lib has brief-header-template.js"
+test -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js" || fail "sandbox mirror hooks/lib has brief-head.js"
+test -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-header-template.js" || fail "sandbox mirror hooks/lib has brief-header-template.js"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
+# First locale -a line matching ^en_US.utf-?8$ (case-insensitive). Never fall
+# back to C/C.utf8: those collate like byte order and hide a missing LC_ALL=C.
+COMM_LOCALE="$(locale -a | grep -Ei '^en_US\.utf-?8$' | head -n 1)"
+GNU_COMM=""
+if [ -n "$COMM_LOCALE" ]; then
+  _comm_ifs="${IFS-}"
+  IFS=:
+  for _comm_dir in $PATH; do
+    [ -n "$_comm_dir" ] || continue
+    if [ -x "$_comm_dir/comm" ] && "$_comm_dir/comm" --version 2>&1 | grep -q "GNU coreutils"; then
+      GNU_COMM="$_comm_dir/comm"
+      break
+    fi
+  done
+  IFS="$_comm_ifs"
+  if [ -z "$GNU_COMM" ] && [ -x /usr/bin/gnucomm ]; then
+    GNU_COMM="/usr/bin/gnucomm"
+  fi
+fi
+if [ -z "$COMM_LOCALE" ]; then
+  echo "SKIP brief-head locale check: locale -a has no line matching ^en_US.utf-?8$"
+elif [ -z "$GNU_COMM" ]; then
+  echo "SKIP brief-head locale check: no GNU coreutils comm in PATH and /usr/bin/gnucomm is not executable"
+else
+  COMM_SHIM_DIR="$(mktemp -d "$TEST_TMP/comm-shim-XXXXXX")"
+  cat > "$COMM_SHIM_DIR/comm" << EOF
+#!/bin/sh
+exec $(printf '%q' "$GNU_COMM") "\$@"
+EOF
+  chmod +x "$COMM_SHIM_DIR/comm"
+  SHIM_VER="$(PATH="$COMM_SHIM_DIR:$PATH" comm --version 2>&1)"
+  assert_contains "$SHIM_VER" "GNU" "locale comm shim --version contains GNU"
+  OUT="$(PATH="$COMM_SHIM_DIR:$PATH" LANG="$COMM_LOCALE" LC_ALL="$COMM_LOCALE" bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+  assert_eq "$EXIT" "1" "UTF-8 --check rejects brief-head.js missing from the mirror"
+  assert_contains "$OUT" "brief-head.js" "UTF-8 --check names missing brief-head.js"
+  assert_not_contains "$OUT" "brief-header-template.js" "UTF-8 --check has no extra drift line for brief-header-template.js"
+  assert_not_contains "$OUT" "not in sorted order" "UTF-8 --check does not warn that comm input is unsorted"
+fi
+cp "$SYNC_SANDBOX/hooks/lib/brief-head.js" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
 
 printf 'stale hook\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?

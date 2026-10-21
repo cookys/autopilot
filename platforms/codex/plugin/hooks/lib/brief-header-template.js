@@ -25,11 +25,16 @@ function missingBriefHeaders(prompt, model) {
     }
   }
   let engineOk = false;
-  if (firstLine !== null && modelNorm) {
-    const m = firstLine.match(/^Engine:\s*(\S+)/);
-    if (m) {
-      const token = m[1].toLowerCase();
-      if (token === modelNorm || token.startsWith(modelNorm + '@')) engineOk = true;
+  if (firstLine !== null && /^Engine:/.test(firstLine)) {
+    if (!modelNorm) {
+      // No model to compare. A leading Engine: line is enough.
+      engineOk = true;
+    } else {
+      const m = firstLine.match(/^Engine:\s*(\S+)/);
+      if (m) {
+        const token = m[1].toLowerCase();
+        if (token === modelNorm || token.startsWith(modelNorm + '@')) engineOk = true;
+      }
     }
   }
   const head = headLines(raw, 5);

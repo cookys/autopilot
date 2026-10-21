@@ -265,6 +265,31 @@ function uninstallOne(target, dryRun) {
   process.stdout.write(`wrote ${target.file}\n`);
 }
 
+// Drop quoted spans (so a "#" inside a string is not a comment) and a trailing # comment.
+// Used only for the inline-table key scan. Bare and dotted keys stay on the raw line.
+function lineWithoutQuotesOrTrailingComment(line) {
+  let out = '';
+  let quote = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quote) {
+      if (quote === '"' && c === '\\') {
+        i += 1;
+        continue;
+      }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      continue;
+    }
+    if (c === '#') break;
+    out += c;
+  }
+  return out;
+}
+
 function hintFindings(toml) {
   let section = '';
   const hits = [];
@@ -278,9 +303,10 @@ function hintFindings(toml) {
     }
     const key = line.match(/^([A-Za-z0-9_.-]+)\s*=/);
     if (!key) continue;
+    const inlineLine = lineWithoutQuotesOrTrailingComment(line);
     const deprecated = key[1] === DEPRECATED_KEY
       || key[1].endsWith(`.${DEPRECATED_KEY}`)
-      || new RegExp(`(?:^|[^A-Za-z0-9_-])${DEPRECATED_KEY}\\s*=`).test(line);
+      || new RegExp(`(?:^|[^A-Za-z0-9_-])${DEPRECATED_KEY}\\s*=`).test(inlineLine);
     if (deprecated) {
       hits.push({ key: DEPRECATED_KEY, section });
     } else if (section === '' && TOP_LEVEL_HINT_KEYS.has(key[1])) {

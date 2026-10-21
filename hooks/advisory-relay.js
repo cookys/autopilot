@@ -54,19 +54,23 @@ function closeDecideReply(payload) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
-  try {
-    for (const id of ids) {
-      for (const file of files) {
-        const r = closeDecisionById(file, id);
-        // closeDecisionById swallows write failures as status error. Surface them
-        // on the same fail-open path as a throw from the close loop.
-        if (r && r.status === 'error') throw new Error(r.message || 'close failed');
-        if (r && r.status !== 'absent') break;
+  for (const id of ids) {
+    for (const file of files) {
+      let r;
+      try {
+        r = closeDecisionById(file, id);
+      } catch (e) {
+        const message = e && e.message ? e.message : e;
+        process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${message}\n`);
+        break;
       }
+      // One id's error gives up on that id only. Later ids still close.
+      if (r && r.status === 'error') {
+        process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${r.message || 'close failed'}\n`);
+        break;
+      }
+      if (r && r.status !== 'absent') break;
     }
-  } catch (e) {
-    process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
-    return;
   }
 }
 

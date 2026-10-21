@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # RED at ae262ac9: suite missing; group-S hooks do not enqueue; advisory-relay.js absent
-# RED at 895b778d3: unwritable scope close: stderr fail-open: 'fail-open' not found in output (hook exit 0, 103 passed, 1 failed).
+# RED at 344f91602: unwritable scope close: stderr names id A: 'd-1ed25cdf' not found in output; writable scope card B closed: unexpected 'd-4128b4d2' in output (hook exit 0, 104 passed, 2 failed).
 # advisory-relay + group-S Stop queue (ha-p2). Isolated HOME / TMPDIR / XDG_RUNTIME_DIR / AUTOPILOT_LIVE_DIR.
 . "$(dirname "$0")/lib.sh"
 
@@ -550,24 +550,51 @@ else
   fail "show and close --id use projectScopeFiles"
 fi
 
-# Unwritable scope directory: closeDecisionById cannot write the lock. The hook must still exit 0 and say fail-open.
-UNW_REPO="$TEST_TMP/dec-unwritable"
-mkdir -p "$UNW_REPO"
-git -C "$UNW_REPO" init -q
-UNW_FILE="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+# One [待決回覆] names two ids, A first. The two scope files share
+# .../autopilot/decisions, so chmod a-w on that directory would also stop B from
+# closing. A's scope directory here is a private directory (chmod a-w, restored
+# afterwards) that holds A's scope file; the decisions entry is a symlink to it.
+# closeDecisionById locks beside the symlink, so the private directory alone does
+# not fail the lock. A live lock on A's scope file makes that close return status
+# error. B's root scope file sorts first and stays writable, so isolating A's
+# error still closes B. An early abort leaves B open.
+PAIR_REPO="$TEST_TMP/dec-unwritable"
+mkdir -p "$PAIR_REPO"
+git -C "$PAIR_REPO" init -q
+PAIR_META="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
   const { openDecision } = require(process.argv[1]);
-  const r = openDecision({ cwd: process.argv[2], question: "unwritable?" });
-  if (r.status !== "ok") { process.stderr.write((r.message || "open failed") + "\n"); process.exit(2); }
-  process.stdout.write(r.file + "\n" + r.id + "\n");
-' "$REPO_ROOT/scripts/open-decision.js" "$UNW_REPO")"
-UNW_PATH="$(printf '%s\n' "$UNW_FILE" | sed -n '1p')"
-UNW_ID="$(printf '%s\n' "$UNW_FILE" | sed -n '2p')"
-UNW_DIR="$(dirname "$UNW_PATH")"
-chmod a-w "$UNW_DIR"
-UNW_PROMPT="$(printf '[待決回覆]\n%s｜unwritable → x\n' "$UNW_ID")"
-run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-unwritable",cwd:process.argv[1],prompt:process.argv[2]}))' "$UNW_REPO" "$UNW_PROMPT")"
-chmod u+w "$UNW_DIR"
+  const cwd = process.argv[2];
+  const a = openDecision({ cwd, question: "unwritable?" });
+  const b = openDecision({ cwd, root: "writable", question: "still close?" });
+  if (a.status !== "ok" || b.status !== "ok") {
+    process.stderr.write((a.message || b.message || "open failed") + "\n");
+    process.exit(2);
+  }
+  process.stdout.write([a.id, a.file, b.id, b.file].join("\n"));
+' "$REPO_ROOT/scripts/open-decision.js" "$PAIR_REPO")"
+PAIR_A="$(printf '%s\n' "$PAIR_META" | sed -n '1p')"
+PAIR_A_FILE="$(printf '%s\n' "$PAIR_META" | sed -n '2p')"
+PAIR_B="$(printf '%s\n' "$PAIR_META" | sed -n '3p')"
+PAIR_B_FILE="$(printf '%s\n' "$PAIR_META" | sed -n '4p')"
+test "$PAIR_A_FILE" != "$PAIR_B_FILE" || fail "card A and card B are different scope files"
+PAIR_A_DIR="$TEST_TMP/dec-unwritable-a-scope"
+mkdir -p "$PAIR_A_DIR"
+mv "$PAIR_A_FILE" "$PAIR_A_DIR/$(basename "$PAIR_A_FILE")"
+ln -s "$PAIR_A_DIR/$(basename "$PAIR_A_FILE")" "$PAIR_A_FILE"
+chmod a-w "$PAIR_A_DIR"
+printf '%s\n' "$$" > "${PAIR_A_FILE}.lock"
+PAIR_SHOW() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$PAIR_REPO" --json
+}
+PAIR_PROMPT="$(printf '[待決回覆]\n%s｜unwritable → x\n%s｜writable → y\n' "$PAIR_A" "$PAIR_B")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-unwritable",cwd:process.argv[1],prompt:process.argv[2]}))' "$PAIR_REPO" "$PAIR_PROMPT")"
+chmod u+w "$PAIR_A_DIR"
+rm -f "${PAIR_A_FILE}.lock"
 assert_eq 0 "$__RUN_EXIT" "unwritable scope close: exit 0"
 assert_contains "$__RUN_STDERR" "fail-open" "unwritable scope close: stderr fail-open"
+assert_contains "$__RUN_STDERR" "$PAIR_A" "unwritable scope close: stderr names id A"
+PAIR_AFTER="$(PAIR_SHOW || true)"
+assert_not_contains "$PAIR_AFTER" "$PAIR_B" "writable scope card B closed"
 
 finalize_test

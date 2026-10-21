@@ -23,8 +23,14 @@
 //     live      — `.autopilot-worktree.lock` is held (a rail is running in it): never touched
 //     dirty     — any `git status --porcelain` line (staged, unstaged, untracked)
 //     integrated— the worktree's HEAD is an ancestor of --integration-ref (default: the main
-//                 checkout's HEAD)
-//   branch:   checked-out | integrated | unintegrated  (+ ahead count, last commit date)
+//                 checkout's HEAD), or every non-merge commit in integration..HEAD has the
+//                 same stable patch-id as a distinct commit on that ref. git cherry is only a
+//                 set check (all '-' is not enough); each target sha is used once. A partial
+//                 match, a merge in the range, or an empty non-ancestor range is not integrated.
+//                 Rows with integrated true carry integrated_by "ancestor"|"patch_id"; patch_id
+//                 rows also carry patch_id_matches [{branch, target}] one per branch commit.
+//   branch:   checked-out | integrated | unintegrated  (+ ahead count, last commit date;
+//             integrated uses the same ancestor-or-patch-id rule, with integrated_by)
 //
 // PRESERVE: for a dirty worktree, write <out>/<name>/{staged.patch,unstaged.patch,
 // untracked.tar,manifest.json}. A patch is VERIFIED by `git apply --check` against the
@@ -107,7 +113,7 @@
 //         process cwd inside (or /proc unknowable) or an unexpired lease; stale ledger row; campaign signal unreliable
 //         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
 //         campaign/Mission (unresolved_campaign);
-//   integrated (same rule as the sweep) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
+//   integrated (same rule as the sweep: ancestor, else full stable patch-id equivalence) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
 //   unintegrated -> abandoned work (finish-flow close-out ends the round; handoff does not run close-out):
 //         pin anchors, then DELETE directly with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap);
 //         NO refs/archive ref is written. Recovery: for each unintegrated delete one stderr line
@@ -124,7 +130,7 @@
 // to remove (named) · 2 usage / cannot run. A scan finding is not an error.
 //
 // TRUST: nothing here reads a rail's self-report. Lock state comes from flock, dirtiness from
-// git status, integration from merge-base, preservation from git apply --check.
+// git status, integration from merge-base or stable patch-id equivalence, preservation from git apply --check.
 
 const fs = require('fs');
 const os = require('os');
@@ -245,6 +251,99 @@ function isAncestor(repo, a, b) {
   return null;
 }
 
+// Stable patch-id → commit shas for one rev range. null when git could not run.
+const patchIdCache = new Map();
+function patchIdMap(repo, range) {
+  const key = `${repo}\0${range}`;
+  if (patchIdCache.has(key)) return patchIdCache.get(key);
+  const log = spawnSync('git', ['-C', repo, 'log', '--no-merges', '-p', '--pretty=format:%H', range], {
+    encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' },
+  });
+  if (log.status !== 0) return null;
+  const map = new Map();
+  if (log.stdout && log.stdout.trim()) {
+    const pid = spawnSync('git', ['patch-id', '--stable'], { input: log.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (pid.status !== 0) return null;
+    for (const line of (pid.stdout || '').split('\n')) {
+      if (!line) continue;
+      const [id, sha] = line.split(/\s+/);
+      if (!id || !sha) continue;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(sha);
+    }
+  }
+  patchIdCache.set(key, map);
+  return map;
+}
+
+function stablePatchId(repo, sha) {
+  const show = spawnSync('git', ['-C', repo, 'show', '--pretty=format:%H', '--patch', sha], {
+    encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' },
+  });
+  if (show.status !== 0 || !show.stdout) return null;
+  const pid = spawnSync('git', ['patch-id', '--stable'], { input: show.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (pid.status !== 0 || !pid.stdout) return null;
+  return pid.stdout.split(/\s+/)[0] || null;
+}
+
+// One judge for worktrees, branches and close-session.
+// { integrated:true, basis:'ancestor' }
+// { integrated:true, basis:'patch_id', matches:[{branch, target}] }
+// { integrated:false } when the ref is known not to qualify
+// null when git could not run (same unverifiable outcome as a failed merge-base)
+function isIntegrated(repo, ref, integrationSha) {
+  const anc = isAncestor(repo, ref, integrationSha);
+  if (anc === null) return null;
+  if (anc === true) return { integrated: true, basis: 'ancestor' };
+  const merges = git(repo, ['rev-list', '--merges', `${integrationSha}..${ref}`]);
+  if (!merges.ok) return null;
+  if (merges.out.trim()) return { integrated: false };
+  // git cherry is only a set check and is not sufficient on its own: a later branch
+  // commit can share a patch-id with an earlier one, and cherry still prints '-' for both.
+  // Binary content differences are blocked by git cherry (a text patch-id only sees
+  // "Binary files differ"), so nobody should remove the cherry check later.
+  const cherry = git(repo, ['cherry', integrationSha, ref]);
+  if (!cherry.ok) return null;
+  const lines = cherry.out ? cherry.out.split('\n').filter(Boolean) : [];
+  // Empty range that is not an ancestor: nothing to equate, so not integrated.
+  if (lines.length === 0) return { integrated: false };
+  const branchShas = [];
+  for (const line of lines) {
+    const m = /^([+-]) ([0-9a-f]{7,64})\b/.exec(line);
+    if (!m) return null;
+    if (m[1] !== '-') return { integrated: false };
+    branchShas.push(m[2]);
+  }
+  const mb = git(repo, ['merge-base', integrationSha, ref]);
+  // Exit 1 is "no common ancestor" and is a known miss. Any other failure is unverifiable.
+  if (mb.status !== 0) return mb.status === 1 ? { integrated: false } : null;
+  if (!mb.out.trim()) return { integrated: false };
+  const upstream = patchIdMap(repo, `${mb.out.trim()}..${integrationSha}`);
+  if (upstream === null) return null;
+  // Per-call copies. The cache is shared across refs and must not be mutated.
+  const remaining = new Map();
+  for (const [id, shas] of upstream) remaining.set(id, shas.slice());
+  const matches = [];
+  for (const sha of branchShas) {
+    const full = git(repo, ['rev-parse', '--verify', `${sha}^{commit}`]);
+    if (!full.ok) return null;
+    const id = stablePatchId(repo, full.out.trim());
+    const pool = id ? remaining.get(id) : null;
+    if (!pool || pool.length === 0) return { integrated: false };
+    matches.push({ branch: full.out.trim(), target: pool.shift() });
+  }
+  return { integrated: true, basis: 'patch_id', matches };
+}
+
+function assignIntegrated(row, verdict) {
+  if (verdict === null) { row.integrated = null; return; }
+  row.integrated = verdict.integrated === true;
+  if (row.integrated) {
+    row.integrated_by = verdict.basis;
+    if (verdict.basis === 'patch_id') row.patch_id_matches = verdict.matches;
+  }
+}
+
 // A worktree someone is using right now looks exactly like a merged one while it is new: clean, no commits, HEAD an ancestor of the integration ref
 // (2026-10-16: a fresh lane worktree was deleted under its own session by the panel's 全部清掉). A sub-agent's Bash is a short-lived process, so the cwd check cannot see it.
 // So recent on-disk movement keeps a clean worktree out of every removal path: the directory, its git admin dir (HEAD, index, logs/HEAD) or the creation of its branch
@@ -305,9 +404,10 @@ function classifyWorktrees(repo, mainPath, integrationSha) {
       const last = recentActivityMs(repo, p, wt.branch);
       if (last !== null && now - last < rh * 3600 * 1000) { row.class = 'live'; row.reason += `${row.reason ? '; ' : ''}recent activity (under ${rh}h): in use, not a leftover`; rows.push(row); continue; }
     }
-    row.integrated = wt.head ? isAncestor(repo, wt.head, integrationSha) : null;
+    if (!wt.head) row.integrated = null;
+    else assignIntegrated(row, isIntegrated(repo, wt.head, integrationSha));
     if (row.integrated === null) { row.class = 'unverifiable'; row.reason += 'merge-base could not run'; }
-    else if (row.integrated) { row.class = 'clean-integrated'; row.reason += 'HEAD is an ancestor of the integration ref'; }
+    else if (row.integrated) { row.class = 'clean-integrated'; row.reason += row.integrated_by === 'patch_id' ? 'every commit matches the integration ref by patch-id' : 'HEAD is an ancestor of the integration ref'; }
     else { row.class = 'clean-unintegrated'; row.reason += 'clean, but HEAD is not integrated'; }
     rows.push(row);
   }
@@ -325,7 +425,7 @@ function classifyBranches(repo, worktrees, integrationSha, integrationBranch) {
     if (!name) continue;
     const row = { branch: name, tip, last_commit_unix: Number(date) || null, class: null, ahead: null, checked_out_in: checkedOut.get(name) || null, integrated: null };
     if (name === mainBranch) { row.class = 'integration-ref'; rows.push(row); continue; }
-    row.integrated = isAncestor(repo, tip, integrationSha);
+    assignIntegrated(row, isIntegrated(repo, tip, integrationSha));
     const ahead = git(repo, ['rev-list', '--count', `${integrationSha}..${tip}`]);
     row.ahead = ahead.ok ? Number(ahead.out) : null;
     if (row.checked_out_in) row.class = 'checked-out';

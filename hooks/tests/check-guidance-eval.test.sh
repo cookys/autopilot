@@ -39,6 +39,7 @@ printf 'skill v1\n' > "$R/skills/dev-flow/SKILL.md"
 printf 'plan v1\n' > "$R/references/plan-template.md"
 printf 'x2\n' > "$R/scripts/helper.js"   # outside the guidance manifest: must be ignored
 git -C "$R" add -A; git -C "$R" commit -qm change
+CHANGE_REF=$(git -C "$R" rev-parse HEAD)
 
 sha() { sha256sum "$1" | cut -d' ' -f1; }
 PK="$TEST_TMP/packs"
@@ -311,5 +312,56 @@ node -e '
   if (o.score !== null) process.exit(4);
   if (o.differing.some((x) => x.path !== "skills/handoff/SKILL.md")) process.exit(5);
 ' "$G_OUT" "$C_HAND" || fail "correct out_of_arm must be listed ok with score null: $G_OUT"
+
+# Array arm.files (pack id list) vs the historical string field.
+# RED at b14e24663fef34f1dccf507eabf6760eb6959f24: FAIL: array-files arm whose shipped files equal their pack files must pass (rc=2):  check-guidance-eval: arm manifest: files must be a non-empty string
+echo "=== array-files arm, shipped files equal their pack files -> 0 ==="
+ARRPK="$TEST_TMP/packs-array"
+mkdir -p "$ARRPK/dev-flow-sg-change" "$ARRPK/pack-a/references" "$ARRPK/pack-b/references"
+cp "$R/skills/dev-flow/SKILL.md" "$ARRPK/dev-flow-sg-change/SKILL.md"
+cp "$R/references/plan-template.md" "$ARRPK/pack-a/references/plan-template.md"
+printf 'only in pack-b\n' > "$ARRPK/pack-b/references/other.md"
+node -e '
+  const [pk, a, b, c] = process.argv.slice(1);
+  require("fs").writeFileSync(pk + "/manifest.json", JSON.stringify({ schema_version: 1, packs: {
+    "dev-flow-sg-change": { "dev-flow-sg-change/SKILL.md": a },
+    "pack-a": { "pack-a/references/plan-template.md": b },
+    "pack-b": { "pack-b/references/other.md": c } } }));
+' "$ARRPK" "$(sha "$R/skills/dev-flow/SKILL.md")" "$(sha "$R/references/plan-template.md")" "$(sha "$ARRPK/pack-b/references/other.md")"
+ARMARR="$TEST_TMP/arm-array.json"
+echo '{"schema_version":1,"arm":"change","skills":{"dev-flow":"dev-flow-sg-change"},"files":["pack-a","pack-b"]}' > "$ARMARR"
+mk_results "$TEST_TMP/ship-array.jsonl" 12 "$ARMARR"
+gate --arm "$ARMARR" --base "$BASE_REF" --head "$CHANGE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$ARRPK" --results "$TEST_TMP/ship-array.jsonl"
+[ "$G_RC" -eq 0 ] && [ "$(ok_field)" = true ] || fail "array-files arm whose shipped files equal their pack files must pass (rc=$G_RC): $G_OUT $(cat "$TEST_TMP/gate.err")"
+
+echo "=== array-files arm, one shipped file changed by one character -> 1 ==="
+R2="$TEST_TMP/repo-char"
+cp -a "$R" "$R2"
+git -C "$R2" reset -q --hard "$CHANGE_REF"
+printf 'plan v1x\n' > "$R2/references/plan-template.md"
+git -C "$R2" add -A && git -C "$R2" commit -qm 'one character'
+gate --arm "$ARMARR" --base "$BASE_REF" --repo "$R2" --prereg "$PRE" --packs-dir "$ARRPK" --results "$TEST_TMP/ship-array.jsonl"
+[ "$G_RC" -eq 1 ] || fail "array-files arm with a one-character shipped change must fail (rc=$G_RC): $G_OUT $(cat "$TEST_TMP/gate.err")"
+
+echo "=== array-files arm, one non-skills path in two packs -> 1 ==="
+BOTHP="$TEST_TMP/packs-both"
+mkdir -p "$BOTHP/dev-flow-sg-change" "$BOTHP/pack-a/references" "$BOTHP/pack-b/references"
+cp "$R/skills/dev-flow/SKILL.md" "$BOTHP/dev-flow-sg-change/SKILL.md"
+cp "$R/references/plan-template.md" "$BOTHP/pack-a/references/plan-template.md"
+cp "$R/references/plan-template.md" "$BOTHP/pack-b/references/plan-template.md"
+PLAN_SHA="$(sha "$R/references/plan-template.md")"
+node -e '
+  const [pk, a, b] = process.argv.slice(1);
+  require("fs").writeFileSync(pk + "/manifest.json", JSON.stringify({ schema_version: 1, packs: {
+    "dev-flow-sg-change": { "dev-flow-sg-change/SKILL.md": a },
+    "pack-a": { "pack-a/references/plan-template.md": b },
+    "pack-b": { "pack-b/references/plan-template.md": b } } }));
+' "$BOTHP" "$(sha "$R/skills/dev-flow/SKILL.md")" "$PLAN_SHA"
+gate --arm "$ARMARR" --base "$BASE_REF" --head "$CHANGE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$BOTHP" --results "$TEST_TMP/ship-array.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'more than one arm pack' <<<"$G_OUT" || fail "path in two arm packs must fail (rc=$G_RC): $G_OUT $(cat "$TEST_TMP/gate.err")"
+
+echo "=== string-files arm still matches its pack -> 0 ==="
+gate --base "$BASE_REF" --head "$CHANGE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 0 ] && [ "$(ok_field)" = true ] || fail "string-files arm must still pass (rc=$G_RC): $G_OUT $(cat "$TEST_TMP/gate.err")"
 
 echo "PASS: check-guidance-eval fixtures"

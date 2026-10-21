@@ -30,12 +30,19 @@
  * (`score: null`).
  *
  * Pack mapping comes from the arm manifest (--arm; the evaluated arm's pack ids carry a version suffix
- * on later runs, v2..v5): skills/<s>/<rest> -> pack arm.skills[<s>], file <rest>; every other manifest
- * path -> pack arm.files, file = the repo path itself. Only the `change` arm is evaluated.
+ * on later runs, v2..v5). arm.files is a non-empty string or a non-empty array of non-empty pack ids.
+ * skills/<s>/<rest> -> pack arm.skills[<s>], file <rest>. Every other manifest path maps to pack
+ * arm.files when that field is a string (file = the repo path itself). When arm.files is an array,
+ * the path maps to the single pack in that list whose manifest holds "<pack id>/<path>". Exactly one
+ * pack must hold it. Zero packs: the same failure as a path with no pack entry. Two or more: the gate
+ * fails because the path is in more than one arm pack (it never picks the first). Only the `change`
+ * arm is evaluated.
  *
  * Usage:
  *   check-guidance-eval.js --base <ref> [--head <ref, default HEAD>] [--repo <dir, default cwd>]
  *       [--prereg <json>] [--packs-dir <dir>] [--arm <json>] [--results <jsonl>] [--scorer <script>]
+ *   --arm's files field is a non-empty string or a non-empty array of non-empty pack ids. A non-skill
+ *   manifest path must be held by exactly one of those packs.
  *   Defaults: prereg/packs/scorer/arm (arms/stage-graph/change.json) from evals/skill-onoff next to this script; --results required
  *   whenever a manifest file differs.
  * stdout: ONE JSON object {ok, base, head, arm, differing[], failures[], score, out_of_arm[]}.
@@ -76,7 +83,9 @@ try { man = JSON.parse(fs.readFileSync(path.join(packsDir, 'manifest.json'), 'ut
 try { arm = JSON.parse(fs.readFileSync(armPath, 'utf8')); } catch (e) { die(`unreadable arm manifest: ${e.message}`); }
 if (!arm || arm.arm !== 'change') die(`arm manifest ${armPath} is not the change arm (arm=${arm && arm.arm})`);
 if (!arm.skills || typeof arm.skills !== 'object' || Array.isArray(arm.skills)) die('arm manifest: skills must be an object');
-if (typeof arm.files !== 'string' || !arm.files) die('arm manifest: files must be a non-empty string');
+if (!packIdList(arm.files).length || (Array.isArray(arm.files) && packIdList(arm.files).length !== arm.files.length) || (typeof arm.files !== 'string' && !Array.isArray(arm.files))) {
+  die('arm manifest: files must be a non-empty string or a non-empty array of non-empty strings');
+}
 
 const IS_MANIFEST = [
   /^skills\/[^/]+\/SKILL\.md$/,
@@ -90,7 +99,13 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 function packFor(p) {
   const m = p.match(/^skills\/([^/]+)\/(.+)$/);
   if (m) return { id: Object.hasOwn(arm.skills, m[1]) ? arm.skills[m[1]] : undefined, skill: m[1], rel: m[2] };
-  return { id: arm.files, rel: p };
+  if (typeof arm.files === 'string') return { id: arm.files, rel: p };
+  const ids = packIdList(arm.files);
+  const holders = ids.filter((id) => packContains(id, p));
+  if (holders.length > 1) return { rel: p, ambiguous: holders };
+  if (holders.length === 1) return { id: holders[0], rel: p };
+  // No pack holds the path: same later failure as a string files field with no pack entry.
+  return { id: ids[0], rel: p };
 }
 
 const diff = git(['diff', '--name-status', '--no-renames', '-z', base, head]).toString('utf8').split('\0').filter(Boolean);
@@ -230,7 +245,7 @@ if (rawOut !== undefined && !Array.isArray(rawOut)) {
 }
 
 for (const d of differing) {
-  const { id, rel, skill } = packFor(d.path);
+  const { id, rel, skill, ambiguous } = packFor(d.path);
   d.pack = id;
   d.pack_file = rel;
   const key = `${id}/${rel}`;
@@ -249,6 +264,7 @@ for (const d of differing) {
     fail('not in the prereg guidance file set (an unevaluated guidance change: new pack + new arm required)');
     continue;
   }
+  if (ambiguous) { fail('path is in more than one arm pack'); continue; }
   if (!id) { fail(`skill ${skill} has no change pack in the arm manifest`); continue; }
   if (!man.packs || !man.packs[id]) { fail(`change pack ${id} is not frozen in packs/manifest.json`); continue; }
   if (d.status === 'D') {

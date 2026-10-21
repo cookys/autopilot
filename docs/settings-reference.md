@@ -76,6 +76,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `advisory_bridge.mode` (config.json) | Where hook advisories go: "sink" shows them as a band toast (default); "inject" puts them in the model context as before. | sink | `AUTOPILOT_ADVISORY_BRIDGE`: inject or sink for all four advisory hooks at once. |
 | `advisory_bridge.<hook>` (config.json) | Per-hook override of advisory_bridge.mode; `<hook>` is cost_tracker, version_drift, context_budget or suggest_compact. | unset | `AUTOPILOT_ADVISORY_BRIDGE_<HOOK>`: inject or sink for one hook; `<HOOK>` is COST_TRACKER, VERSION_DRIFT, CONTEXT_BUDGET or SUGGEST_COMPACT. Beats the global variable. |
 | `AUTOPILOT_ADVISORY_RELAY` | Set to "off" to stop the UserPromptSubmit hook that drains queued advisories into the next prompt. | on |  |
+| `AUTOPILOT_DECIDE_REPLY_CLOSE` | Set to "off" to stop a live-panel reply whose first line is [待決回覆] from closing the decision cards it names. | on |  |
 | `AUTOPILOT_LIVE_DIR` | Overrides the directory for the live status files; an explicit value is an isolation request and is never replaced by a fallback. | auto (tmpfs) |  |
 | `autoCompactEnabled` (Claude Code) | Claude Code setting (settings.json, else ~/.claude.json): false turns auto-compact off. | unset |  |
 | `autoCompactWindow` (Claude Code) | Claude Code setting (user/project/local/policy settings.json; also modelSettings.`<model>`.autoCompactWindow): token window after which Claude Code compacts, at window minus a 33k buffer. Set via /autocompact or in settings.json. | unset |  |

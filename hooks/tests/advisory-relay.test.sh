@@ -413,4 +413,64 @@ TSC_EXPECT="${TSC_EXPECT%$'\n'}"
 assert_eq "$TSC_QTEXT" "$TSC_EXPECT" "batch-format tsc queue text byte-identical to stderr"
 unset CLAUDE_CODE_SESSION_ID AUTOPILOT_HOOK_BATCH_FORMAT AUTOPILOT_HOOK_CHECK_CONSOLE
 
+# RED at 792347b09: UserPromptSubmit whose first line is [待決回覆] left both seeded cards open (show still printed d- ids; nothing in advisory-relay.js calls closeDecisionById).
+# Panel reply closes the named cards. Store is the temp repo's git common dir.
+DEC_REPO="$TEST_TMP/dec-repo"
+mkdir -p "$DEC_REPO"
+git -C "$DEC_REPO" init -q
+dec_ids() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node -e '
+      const { openDecision } = require(process.argv[1]);
+      const cwd = process.argv[2];
+      const a = openDecision({ cwd, question: "第一題？" });
+      const b = openDecision({ cwd, question: "第二題？" });
+      if (a.status !== "ok" || b.status !== "ok") { process.stderr.write((a.message || b.message || "open failed") + "\n"); process.exit(2); }
+      process.stdout.write(a.id + "\n" + b.id + "\n");
+    ' "$REPO_ROOT/scripts/open-decision.js" "$DEC_REPO"
+}
+DEC_IDS="$(dec_ids)"
+DEC_A="$(printf '%s\n' "$DEC_IDS" | sed -n '1p')"
+DEC_B="$(printf '%s\n' "$DEC_IDS" | sed -n '2p')"
+dec_show() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$DEC_REPO" --json
+}
+SHOW0="$(dec_show)"
+assert_contains "$SHOW0" "$DEC_A" "seeded card A"
+assert_contains "$SHOW0" "$DEC_B" "seeded card B"
+DEC_SID="adv-decide-close"
+DEC_Q="$(queue_path "$DEC_SID")"
+mkdir -p "$(dirname "$DEC_Q")"
+NOW_DEC="$(node -e 'process.stdout.write(new Date().toISOString())')"
+printf '%s\n' "{\"ts\":\"$NOW_DEC\",\"source\":\"cost-tracker\",\"text\":\"decide-relay-still-here\"}" > "$DEC_Q"
+DEC_PROMPT="$(printf '[待決回覆]\n%s｜第一題 → 甲\n%s｜第二題 → 乙\n' "$DEC_A" "$DEC_B")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:process.argv[1],cwd:process.argv[2],prompt:process.argv[3]}))' "$DEC_SID" "$DEC_REPO" "$DEC_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "decide reply close: exit 0"
+assert_contains "$__RUN_STDOUT" "decide-relay-still-here" "decide reply close: advisory stdout unchanged"
+SHOW1="$(dec_show || true)"
+assert_not_contains "$SHOW1" "$DEC_A" "card A closed"
+assert_not_contains "$SHOW1" "$DEC_B" "card B closed"
+# negative: head not on the first line
+DEC_IDS2="$(dec_ids)"
+DEC_C="$(printf '%s\n' "$DEC_IDS2" | sed -n '1p')"
+DEC_D="$(printf '%s\n' "$DEC_IDS2" | sed -n '2p')"
+LATER="$(printf 'hello\n[待決回覆]\n%s｜第一題 → 甲\n%s｜第二題 → 乙\n' "$DEC_C" "$DEC_D")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-decide-later",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$LATER")"
+assert_eq 0 "$__RUN_EXIT" "later head: exit 0"
+SHOW2="$(dec_show)"
+assert_contains "$SHOW2" "$DEC_C" "later head closes nothing (C)"
+assert_contains "$SHOW2" "$DEC_D" "later head closes nothing (D)"
+LEAD="$(printf 'note [待決回覆]\n%s｜第一題 → 甲\n' "$DEC_C")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-decide-lead",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$LEAD")"
+assert_eq 0 "$__RUN_EXIT" "leading text: exit 0"
+SHOW3="$(dec_show)"
+assert_contains "$SHOW3" "$DEC_C" "leading text closes nothing"
+MISS="$(printf '[待決回覆]\nd-00000000｜沒有這張 → 略\n')"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-decide-miss",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$MISS")"
+assert_eq 0 "$__RUN_EXIT" "unknown id: exit 0"
+assert_eq "" "$__RUN_STDOUT" "unknown id: no stdout"
+SHOW4="$(dec_show)"
+assert_contains "$SHOW4" "$DEC_C" "unknown id leaves real cards"
+
 finalize_test

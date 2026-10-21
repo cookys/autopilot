@@ -192,6 +192,7 @@ printf '%b' "$violations" >&2
 printf '\nProtected: %s\nEvidence required: %s (mode=%s)\n' "$PATHS_CSV" "$EVIDENCE" "$MODE" >&2
 printf 'Fix: run the qc gate (quality-pipeline / reviewer), then add a trailer to the landing commit:\n' >&2
 printf '     QC-Verdict: PASS (reviewer <id>, %s)\n' "$(date +%Y-%m-%d 2>/dev/null || echo YYYY-MM-DD)" >&2
+printf 'The QC-Verdict trailer must be in the same final paragraph of the commit message as Co-Authored-By (same paragraph, no blank line between them), otherwise git cannot read it as a trailer.\n' >&2
 printf 'Deliberate bypass (logged by git): git push --no-verify\n\n' >&2
 
 if [ "$MODE" = "warn" ]; then

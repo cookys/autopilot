@@ -19,8 +19,46 @@ const BASE_AUTOPILOT_CONTEXT = `You have **Autopilot** lifecycle skills. Before 
 
 If uncertain, invoke the skill — it will guide you. Autopilot sets the rules and runs them standalone.`;
 
-function buildBaseContext() {
-  return BASE_AUTOPILOT_CONTEXT;
+const path = require('path');
+const OPEN_DECISION_JS = path.join(__dirname, '..', '..', '..', 'scripts', 'open-decision.js');
+const DECISION_SCHEMA = 'autopilot.decision/2';
+
+// Open cards the way scripts/open-decision.js show does. Read failure => no line.
+function openDecisionCardLine(cwd) {
+  try {
+    const fs = require('fs');
+    const { scopeFromCwd } = require('../../status/project-key');
+    const { commonDirOf, listScopeFiles, readScopeFile } = require('../../status/scope-key');
+    const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
+    const commonDir = commonDirOf(scope.repo_identity);
+    if (!scope.project_key || !commonDir) return '';
+    const dir = path.join(commonDir, 'autopilot', 'decisions');
+    const entries = [];
+    for (const file of listScopeFiles(dir, scope.project_key)) {
+      if (!readScopeFile(file, { schema: DECISION_SCHEMA, projectKey: scope.project_key, identity: scope.repo_identity })) continue;
+      let decisions = [];
+      try {
+        const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+        decisions = v && v.schema === DECISION_SCHEMA && Array.isArray(v.decisions) ? v.decisions : [];
+      } catch { decisions = []; }
+      for (const e of decisions) {
+        if (e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question) entries.push(e);
+      }
+    }
+    entries.sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0) || String(a.id).localeCompare(String(b.id)));
+    if (entries.length === 0) return '';
+    return `\nOpen decision cards (${entries.length}): ${entries.map((e) => e.id).join(', ')}`;
+  } catch {
+    return '';
+  }
+}
+
+function buildBaseContext(cwd = process.cwd()) {
+  return `${BASE_AUTOPILOT_CONTEXT}
+
+Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_JS} open --question ... and write the card id (d- + 8 hex) in the reply.
+When the owner answers in the live panel, a message starting with [待決回覆] arrives: act on the answers; the cards close automatically.
+To show the owner a file or a diff, use the show tool; do not paste the content.${openDecisionCardLine(cwd)}`;
 }
 
 function composeSessionStartContext({
@@ -33,8 +71,9 @@ function composeSessionStartContext({
   injectHandoffSection,
   limit = 10000,
   keep = 9999,
+  cwd,
 }) {
-  let context = buildBaseContext();
+  let context = buildBaseContext(cwd);
 
   if (compactionRecovery) {
     context += compactionRecovery;

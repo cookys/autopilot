@@ -207,7 +207,7 @@ echo "=== packs present ==="
 # Ids come from arms/dcard*/*.json (skills, files, fixture_scripts). ONOFF_PACKS_DIR
 # overrides the pack root so a temp copy can be broken without touching real packs.
 PACKS_DIR="${ONOFF_PACKS_DIR:-$BASE/packs}"
-mapfile -t PACK_IDS < <(node -e '
+pack_ids_out=$(node -e '
   const fs=require("fs"), path=require("path");
   const arms=path.join(process.argv[1],"arms");
   const ids=new Set();
@@ -226,6 +226,7 @@ mapfile -t PACK_IDS < <(node -e '
   if(!ids.size){ console.error("no pack ids"); process.exit(1); }
   for(const id of [...ids].sort()) console.log(id);
 ' "$BASE") || fail "derive pack ids"
+mapfile -t PACK_IDS <<< "$pack_ids_out"
 [ "${#PACK_IDS[@]}" -gt 0 ] || fail "no pack ids"
 for id in "${PACK_IDS[@]}"; do
   [ -d "$PACKS_DIR/$id" ] || fail "pack dir missing $id"

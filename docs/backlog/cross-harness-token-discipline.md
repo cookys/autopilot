@@ -53,3 +53,23 @@ Local spike on this host (foreman). Versions: codex-cli 0.163.0 (`codex --versio
 - Codex global instructions go in `~/.codex/AGENTS.md` (confirmed loaded before the repo AGENTS.md).
 - agy global instructions go in `~/.gemini/GEMINI.md` and/or `~/.gemini/AGENTS.md` (both confirmed loaded).
 - Codex subagent and compaction settings go in `config.toml`: `model_auto_compact_token_limit` and `compact_prompt` at top level; `default_subagent_model`, `default_subagent_reasoning_effort`, and `max_concurrent_threads_per_session` under `[agents]`. Do not set `compact_token_budget`.
+
+## 2026-10-21 shipped
+
+Merges: tokspike 36cd0a5f0 wrote the measured Codex and agy facts into the capability notes and this sidecar. tokmech dd45ce115 added the rules file and the two hook mechanisms. tokinstall 0feb09594 added the opt-in installer.
+
+The five rules are the install block in `docs/token-discipline.md`. tokmech (`git show dd45ce115`) lands them as follows.
+
+1. Hand off by each machine's own context-budget setting. The rule text is in that file. `context_budget.seat` (`session` by default, or `resident`) chooses the T2 wording. `session` keeps the handoff sentence, and that sentence stays byte-identical. `resident` tells a fixed-address seat to update its state file and to keep only that path and the unfinished items. Anything else is ignored and the seat stays `session`.
+2. Read a file enough in one read. The rule is advisory text in that file. No hook blocks a second read.
+3. Do not sleep-then-check poll. The rule is advisory text in that file. No hook blocks a poll.
+4. Subagents doing light work use a cheap model at low effort, and at most 3 at once. The rule text shipped. The concurrency advisory did not. `docs/plans/2026-10-21-subagent-concurrency-advisory.md` is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
+5. Accumulate peer messages, then reply once. The rule is advisory text in that file. No hook batches replies.
+
+SessionStart prints one extra line that points at `docs/token-discipline.md`. The line is advisory only.
+
+Two settings, both advisory. `context_budget.post_compact_warn` defaults to 100000. PostCompact records one size after compaction, and the context-budget hook warns once when the live context still exceeds that many tokens. 0 turns the warning off. A value that is not an integer of 0 or more is ignored, so the threshold stays 100000. `context_budget.seat` is the seat switch above.
+
+Install is opt-in. `node scripts/install-token-discipline.js` accepts `install`, `uninstall`, `--check` and `--dry-run`. It writes the rules block into the Codex file at `CODEX_HOME/AGENTS.md` (or `~/.codex/AGENTS.md` when `CODEX_HOME` is unset) and the agy file at `~/.gemini/GEMINI.md`. `scripts/dev-setup.sh --check` only reports. It never installs.
+
+Not done: item 4, the sub-agent concurrency advisory, still waits on d-02c60498.

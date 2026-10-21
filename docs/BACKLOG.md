@@ -1372,7 +1372,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER llm-playground 2026-10-21
 - **Pointer**: docs/backlog/pending-decision-panel-unused-by-long-sessions.md
-- **Context**: Mechanism merge 6e428fd6c. AGENTS.md merge 9aa45ce1b. Skill text remains.
+- **Context**: Mechanism 6e428fd6c and AGENTS.md 9aa45ce1b shipped. deval d9b0f0402 records dcard and dcard-v2 as INSTRUMENT-INVALID because the metric reads the decision file only after turn 2. dskill B is not merged. v3 waits on d-27318bdc.
 
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271
@@ -1384,12 +1384,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6；2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX
 - **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
 - **Impact**: 主執行緒會累積到十億級用量。壓縮後仍比新執行緒肥，成本與延遲都下不來。
-- **Trigger**: the owner decides whether to adopt the five rules and to spike the named settings
+- **Trigger**: the owner decides d-02c60498
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
 - **Pointer**: docs/backlog/cross-harness-token-discipline.md
-- **Context**: Resident seats cannot change thread. Codex setting names are unverified. Item 4 plan: docs/plans/2026-10-21-subagent-concurrency-advisory.md.
+- **Context**: Shipped tokspike 36cd0a5f0, tokmech dd45ce115 and tokinstall 0feb09594. Item 4 has a frozen plan waiting on d-02c60498.
 
 ### Guidance cut gate is red on develop and not in preflight
 - **Id**: BL-0272

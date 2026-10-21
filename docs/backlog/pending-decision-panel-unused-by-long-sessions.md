@@ -11,3 +11,5 @@ Shipped mechanism, merge 6e428fd6c (dmech):
 Shipped entry for non-Claude agents, merge 9aa45ce1b (dskill A): AGENTS.md carries how to open, list and close owner decision cards and what a [待決回覆] answer means.
 
 Remaining: skill text (ceo-agent, dev-flow, l3 through l6) waits on the eval ON/OFF result. Trigger-Type event.
+
+deval d9b0f0402 records the dcard and dcard-v2 rows of the skill ON/OFF eval as INSTRUMENT-INVALID (NOT-SHIP). The primary metric reads the decision file only after turn 2, so neither arm could be measured. That is a metric timing defect. The text was not shown to be ineffective. dskill B (12 guidance files) is not merged. A v3 waits on owner decision d-27318bdc.

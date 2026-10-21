@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "arm": "change",
+  "skills": {
+    "ceo-agent": "ceo-agent-dcard-change3",
+    "dev-flow": "dev-flow-dcard-change3",
+    "engine-onboarding": "engine-onboarding-dcard-change3",
+    "harness-maintenance": "harness-maintenance-dcard-change3",
+    "hetero-review": "hetero-review-dcard-change3",
+    "l5": "l5-dcard-change3",
+    "quality-pipeline": "quality-pipeline-dcard-change3",
+    "test-strategy": "test-strategy-dcard-change3"
+  },
+  "files": [
+    "dcard-files-change3",
+    "dcard-hooks-3955"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-dcard2"
+  ]
+}

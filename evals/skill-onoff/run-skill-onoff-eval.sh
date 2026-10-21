@@ -48,6 +48,11 @@
 # same row as before). turn2.sh runs in the cell repo and prints the follow-up prompt, or nothing
 # (row.turn2 = skipped_no_card, b_ markers false). Otherwise the same claude -p flags resume the
 # session id from the first system/init event. Stub: ONOFF_TURN=1 then ONOFF_TURN=2 <prompt-file>.
+# Before that block, tasks with an executable turn2.sh copy decision files to
+# $OUT/decisions-pre-turn2/{live,git} and export DCARD_DECISIONS_PRE_TURN2. When turn 2 does not
+# run or is skipped (for example the nohook arm: turn 2 prints no body, state skipped_no_card),
+# the snapshot is still taken, and equals the final state. The row then also carries turn2_exit
+# (integer, 0 when turn2.sh ran clean). ONOFF_TASKS_DIR overrides the tasks root (tests only).
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
 
@@ -116,7 +121,8 @@ case "$RUNNER" in cc|stub) ;; *) echo "ERROR: runner must be cc|stub" >&2; exit 
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BASE_DIR="$REPO_ROOT/evals/skill-onoff"
-TASK_DIR="$BASE_DIR/tasks/$TASK_ID"
+TASKS_ROOT="${ONOFF_TASKS_DIR:-$BASE_DIR/tasks}"
+TASK_DIR="$TASKS_ROOT/$TASK_ID"
 PACKS_DIR="${ONOFF_PACKS_DIR:-$BASE_DIR/packs}"
 [ -d "$TASK_DIR" ] || { echo "ERROR: task dir not found: $TASK_DIR" >&2; exit 2; }
 [ -f "$TASK_DIR/task.md" ] || { echo "ERROR: task.md missing: $TASK_DIR" >&2; exit 2; }
@@ -343,6 +349,36 @@ else
 fi
 
 # Second turn is opt-in: an executable turn2.sh. Tasks without one keep the single transcript.
+# Snapshot first, including when turn 2 does not run or is skipped (for example the nohook arm:
+# turn 2 prints no body, state skipped_no_card). The snapshot is still taken, and equals the final state.
+DCARD_DECISIONS_PRE_TURN2=""
+TURN2_SH_EXIT=""
+if [ -x "$TASK_DIR/turn2.sh" ]; then
+  DCARD_DECISIONS_PRE_TURN2="$OUT_DIR/decisions-pre-turn2"
+  rm -rf "$DCARD_DECISIONS_PRE_TURN2"
+  mkdir -p "$DCARD_DECISIONS_PRE_TURN2/live" "$DCARD_DECISIONS_PRE_TURN2/git"
+  _snap_glob="${ONOFF_DECISION_GLOB:-*decision*.json}"
+  if [ -n "${AUTOPILOT_LIVE_DIR:-}" ] && [ -d "$AUTOPILOT_LIVE_DIR" ]; then
+    while IFS= read -r _snap_f; do
+      [ -n "$_snap_f" ] || continue
+      _snap_rel="${_snap_f#"$AUTOPILOT_LIVE_DIR"/}"
+      mkdir -p "$DCARD_DECISIONS_PRE_TURN2/live/$(dirname "$_snap_rel")"
+      cp -a "$_snap_f" "$DCARD_DECISIONS_PRE_TURN2/live/$_snap_rel"
+    done < <(find "$AUTOPILOT_LIVE_DIR" -type f -name "$_snap_glob" 2>/dev/null || true)
+  fi
+  _snap_common=$(git -C "$TEMP_REPO" rev-parse --git-common-dir 2>/dev/null || true)
+  if [ -n "$_snap_common" ]; then
+    case "$_snap_common" in
+      /*) ;;
+      *) _snap_common="$TEMP_REPO/$_snap_common" ;;
+    esac
+    _snap_common=$(cd "$_snap_common" 2>/dev/null && pwd) || _snap_common=""
+  fi
+  if [ -n "$_snap_common" ] && [ -d "$_snap_common/autopilot/decisions" ]; then
+    find "$_snap_common/autopilot/decisions" -maxdepth 1 -type f -name '*.json' -exec cp -a {} "$DCARD_DECISIONS_PRE_TURN2/git/" \;
+  fi
+  unset _snap_glob _snap_f _snap_rel _snap_common
+fi
 if [ -z "$PREFLIGHT_FAIL" ] && [ -x "$TASK_DIR/turn2.sh" ]; then
   TURN1_FILE="$OUT_DIR/transcript.turn1.jsonl"
   TURN2_FILE="$OUT_DIR/transcript.turn2.jsonl"
@@ -396,13 +432,15 @@ set +e
 (
   cd "$TEMP_REPO"
   TRANSCRIPT="$TRANSCRIPT" TRANSCRIPT_TURN1="${TRANSCRIPT_TURN1:-}" TRANSCRIPT_TURN2="${TRANSCRIPT_TURN2:-}" \
-  DCARD_TURN2="${DCARD_TURN2:-}" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
+  DCARD_TURN2="${DCARD_TURN2:-}" DCARD_DECISIONS_PRE_TURN2="${DCARD_DECISIONS_PRE_TURN2:-}" \
+  FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
   QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
     bash "$TASK_DIR/markers.sh"
   # optional second marker file (P1W rows add markers to a task without touching its markers.sh)
   if [ -f "$TASK_DIR/markers-extra.sh" ]; then
     TRANSCRIPT="$TRANSCRIPT" TRANSCRIPT_TURN1="${TRANSCRIPT_TURN1:-}" TRANSCRIPT_TURN2="${TRANSCRIPT_TURN2:-}" \
-    DCARD_TURN2="${DCARD_TURN2:-}" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
+    DCARD_TURN2="${DCARD_TURN2:-}" DCARD_DECISIONS_PRE_TURN2="${DCARD_DECISIONS_PRE_TURN2:-}" \
+    FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
     QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
       bash "$TASK_DIR/markers-extra.sh"
   fi
@@ -494,9 +532,10 @@ if [ -n "$ARM_MANIFEST" ]; then
   ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$ARM_SHA")
 fi
 [ "$STOPPED_BY_TIMEOUT" -eq 0 ] || ARM_SHA_FIELD="$ARM_SHA_FIELD,\"stopped_by_timeout\":true"
-# turn2 is emitted only for tasks that ship an executable turn2.sh (other rows stay byte-identical).
+# turn2 and turn2_exit are emitted only for tasks that ship an executable turn2.sh
+# (other rows stay byte-identical). turn2_exit is the turn2.sh status, 0 when it ran clean.
 if [ -n "$TURN2_STATE" ]; then
-  ARM_SHA_FIELD="$ARM_SHA_FIELD,\"turn2\":\"$TURN2_STATE\""
+  ARM_SHA_FIELD="$ARM_SHA_FIELD,\"turn2\":\"$TURN2_STATE\",\"turn2_exit\":${TURN2_SH_EXIT:-0}"
 fi
 RESULT_JSON="$OUT_DIR/result.json"
 printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s%s}\n' \

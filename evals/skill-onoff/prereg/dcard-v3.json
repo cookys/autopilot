@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "dcard-v3",
+  "skill": "ceo-agent",
+  "status": "ready_to_stamp",
+  "campaign_script": "run-dcard-v3-campaign.js",
+  "note": "Phase 1. Instrument only. a_decision_file reads the pre-turn-2 snapshot. turn2_exit is recorded. Arms and thresholds are the dcard-v2 packs plus the dcard nohook control. No paid run yet.",
+  "arms": {
+    "off": "base",
+    "on": "change"
+  },
+  "arm_manifests": {
+    "base": {
+      "file": "arms/dcard-v3/base.json",
+      "sha256": "f7265db21b3ba871552bd1db5e5ae864f1ece6c29ac455d39172478929826b56"
+    },
+    "change": {
+      "file": "arms/dcard-v3/change.json",
+      "sha256": "7304948d3fb18399f96efcc3cf83425aa9233896159a33ec34619706cd69c851"
+    },
+    "nohook": {
+      "file": "arms/dcard-v3/nohook.json"
+    }
+  },
+  "allowed_arm_difference": {
+    "files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "skills/ceo-agent/SKILL.md",
+      "skills/ceo-agent/references/depth0-control-loop.md",
+      "skills/ceo-agent/references/level-front-door.md",
+      "skills/dev-flow/SKILL.md",
+      "skills/engine-onboarding/SKILL.md",
+      "skills/harness-maintenance/SKILL.md",
+      "skills/hetero-review/SKILL.md",
+      "skills/l5/references/hetero-impl-loop.md",
+      "skills/quality-pipeline/SKILL.md",
+      "skills/test-strategy/SKILL.md"
+    ]
+  },
+  "invocation_prefix": "Load the autopilot:ceo-agent skill first, then handle this:",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "reps": 10,
+  "primary": {
+    "tasks": {
+      "dcard-owner-decision": [
+        "a_decision_file"
+      ]
+    }
+  },
+  "secondary": [
+    "b_follows_answer",
+    "b_card_closed",
+    "b_close_by_agent",
+    "b_close_by_hook",
+    "m_hook_card"
+  ],
+  "control": {
+    "reps": 5,
+    "tasks": {
+      "a2-within-doa": [
+        "a_overtrigger"
+      ]
+    },
+    "max_on_false_positive": 1,
+    "note": "a2 is 5 cells/arm. ON over-trigger must be <=1/5 and <= OFF+1. Markers come from lib-dcard, which sources lib-r2."
+  },
+  "negative_control": {
+    "task": "dcard-owner-decision",
+    "arm": "nohook",
+    "reps": 5,
+    "all_false": [
+      "m_hook_card",
+      "b_close_by_hook"
+    ],
+    "note": "nohook is base with dcard-hooks-empty. Every cell must show m_hook_card false and b_close_by_hook false."
+  },
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "ship_rule": "SHIP iff primary ON >= 8 of 10 and OFF <= 2 of 10, V1 skill_invoked ratio >= 0.9 in both arms, V2 on-off >= 6, control ON false positives <= 1 and <= OFF+1, and every nohook cell has m_hook_card false and b_close_by_hook false.",
+  "survivor_stop": "fewer than 8 usable (non-infra) cells in either arm, or paired exclusion of 2 or more (task,rep) pairs: STOP, no aggregate claim, per-marker report only",
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, these fixtures, the frozen base/change text pair, the 3955ea75b hook pack, and the empty-hook negative control. Not /l4 foreman, not opus/fable, not interactive.",
+  "arm_integrity": "base packs are develop 3955ea75bf83f4d60d149add37107c73a1299944 (the dcard base2 packs); change packs are that tree with the twelve dskill files replaced by daae02372e0bd4af0c3693848393f06eebf4b53d. Any edit to a frozen pack voids the arm (new pack id + re-run).",
+  "guidance": {
+    "base_ref": "3955ea75bf83f4d60d149add37107c73a1299944",
+    "head_ref": "daae02372e0bd4af0c3693848393f06eebf4b53d",
+    "non_skill_files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md"
+    ],
+    "files": [
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "skills/ceo-agent/SKILL.md",
+      "skills/ceo-agent/references/depth0-control-loop.md",
+      "skills/ceo-agent/references/level-front-door.md",
+      "skills/dev-flow/SKILL.md",
+      "skills/engine-onboarding/SKILL.md",
+      "skills/harness-maintenance/SKILL.md",
+      "skills/hetero-review/SKILL.md",
+      "skills/l5/references/hetero-impl-loop.md",
+      "skills/quality-pipeline/SKILL.md",
+      "skills/test-strategy/SKILL.md"
+    ]
+  },
+  "freeze_files": [
+    "prereg/dcard-v3.json",
+    "lib/dcard-v3-markers.sh",
+    "lib-dcard-v3",
+    "lib/dcard-markers.sh",
+    "tasks/dcard-owner-decision",
+    "tasks/a2-within-doa",
+    "score-dcard.js",
+    "run-dcard-v3-campaign.js",
+    "arms/dcard-v3",
+    "build-dcard-hook-pack.js",
+    "run-skill-onoff-eval.sh"
+  ],
+  "freeze_packs": [
+    "ceo-agent-dcard-base2",
+    "ceo-agent-dcard-change3",
+    "dev-flow-dcard-base2",
+    "dev-flow-dcard-change3",
+    "engine-onboarding-dcard-base2",
+    "engine-onboarding-dcard-change3",
+    "harness-maintenance-dcard-base2",
+    "harness-maintenance-dcard-change3",
+    "hetero-review-dcard-base2",
+    "hetero-review-dcard-change3",
+    "l5-dcard-base2",
+    "l5-dcard-change3",
+    "quality-pipeline-dcard-base2",
+    "quality-pipeline-dcard-change3",
+    "test-strategy-dcard-base2",
+    "test-strategy-dcard-change3",
+    "dcard-files-base2",
+    "dcard-files-change3",
+    "dcard-hooks-3955",
+    "fixture-scripts-dcard2"
+  ],
+  "v2_basis": "v3 changes only the instrument (a_decision_file reads a pre-turn-2 snapshot, turn2_exit is recorded). The nohook control only proves m_hook_card is absent without the hook pack. It does NOT prove b_close_by_hook, because every nohook cell has turn 2 skipped_no_card and all b_ markers are hard-false there, and b_close_by_hook is only the remainder of b_card_closed and not b_close_by_agent. The dcard and dcard-v2 verdicts stay INSTRUMENT-INVALID and untouched."
+}

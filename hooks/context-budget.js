@@ -45,6 +45,11 @@
  * AUTOPILOT_CONTEXT_BUDGET_MODE=off (case-insensitive; any other value is warned about and ignored).
  * Config problems (unknown mode, t1 >= t2, a user-set t2 past the compaction point of a <200K window) are
  * written once per session to stderr; they never change a threshold and never make the hook fail.
+ * Post-compact (BL-0271): state-checkpoint arms one check per PostCompact in this state file. The next
+ * time a fresh statusline live total is readable, that total is recorded. Above
+ * context_budget.post_compact_warn (default 100000; 0 disables; env
+ * AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN) one T1-channel advisory fires. The check never changes
+ * compaction. A missing live total leaves the check armed and exits 0.
  * Fail-open: any error ⇒ exit 0. Separate state/script from
  * orchestrator-edit-gate (single-crash isolation, panel finding).
  *
@@ -63,7 +68,7 @@
 'use strict';
 
 const fs = require('fs');
-const { readContextBudget, applyPerModel } = require('../scripts/lib/config-path.js');
+const { readContextBudget, applyPerModel, configPath } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
@@ -93,10 +98,48 @@ function getSessionId(payload) {
   return sanitizeSessionId(raw);
 }
 
+// session (default) or resident. Unknown values are ignored, same as an unknown mode.
+// Env AUTOPILOT_CONTEXT_BUDGET_SEAT beats the config. FLEET_LIFETIME is not consulted.
+function normSeat(raw, where, warnings) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const seat = String(raw).trim().toLowerCase();
+  if (seat === 'session' || seat === 'resident') return seat;
+  warnings.push(`context_budget seat "${raw}" (${where}) is not session|resident, so it is ignored and the seat stays session`);
+  return null;
+}
+
+const POST_COMPACT_WARN_DEFAULT = 100_000;
+
+// Positive integer, or 0 (disabled). Anything else is ignored so the caller keeps the default.
+function normPostCompactWarn(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'string' && raw.trim() === '') return null;
+  const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n;
+}
+
 function loadConfig() {
   // One parse of context_budget (config + env), shared with the SessionStart budget warning:
-  // scripts/lib/config-path.js readContextBudget.
-  return readContextBudget();
+  // scripts/lib/config-path.js readContextBudget. seat and post_compact_warn are read here (BL-0271).
+  const cfg = readContextBudget();
+  cfg.seat = 'session';
+  cfg.postCompactWarn = POST_COMPACT_WARN_DEFAULT;
+  try {
+    const user = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    const cb = user && user.context_budget;
+    if (cb && typeof cb === 'object') {
+      const fromConfig = normSeat(cb.seat, 'config', cfg.warnings);
+      if (fromConfig) cfg.seat = fromConfig;
+      const warn = normPostCompactWarn(cb.post_compact_warn);
+      if (warn !== null) cfg.postCompactWarn = warn;
+    }
+  } catch { /* absent or corrupt config keeps session and the default post-compact threshold */ }
+  const fromEnv = normSeat(process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT, 'env AUTOPILOT_CONTEXT_BUDGET_SEAT', cfg.warnings);
+  if (fromEnv) cfg.seat = fromEnv;
+  const warnEnv = normPostCompactWarn(process.env.AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN);
+  if (warnEnv !== null) cfg.postCompactWarn = warnEnv;
+  return cfg;
 }
 
 const WRITER_ID = 'context-budget';
@@ -227,6 +270,22 @@ function emitT1(sid, message) {
   if (!sink.writeAdvisory({ sid, kind: 'context-budget-t1', severity: 'info', text: message })) emitInjected(message);
 }
 
+// One measurement per PostCompact generation. liveTokens is the statusline total, or null when
+// that file cannot be read. Null leaves the generation armed. The advisory uses the T1 channel.
+function advisePostCompact(st, sid, liveTokens, cfg) {
+  const gen = Number.isFinite(st.postCompactGen) ? st.postCompactGen : 0;
+  const seen = Number.isFinite(st.postCompactSeen) ? st.postCompactSeen : 0;
+  if (!(gen > seen)) return;
+  if (!Number.isFinite(liveTokens)) return;
+  st.postCompactSeen = gen;
+  st.postCompactTokens = liveTokens;
+  const limit = cfg.postCompactWarn;
+  if (!(limit > 0) || !(liveTokens > limit)) return;
+  const message = `${liveTokens} tokens remain after compaction. A fresh conversation would start around 43K (the reporter's unverified figure). Update the state file or hand off.`;
+  process.stderr.write(`${message}\n`);
+  emitT1(sid, message);
+}
+
 (function main() {
   let exitCode = 0;
   try {
@@ -280,8 +339,10 @@ function emitT1(sid, message) {
       ? liveMain.context_window.total_input_tokens : null;
     const liveUsable = liveWindow !== null && liveTotal !== null;
     st.lastLive.used = liveUsable; // false also when present but the window/total was rejected (review 🟡)
+    let measuredLive = null;
 
     if (liveUsable) {
+      measuredLive = liveTotal;
       // v2.36.1 (P2): the live file gives the EXACT window — skip inferWindowTokens.
       // contextTokens defaults to the live total (free — the live file is already
       // parsed); only on the periodic parse cadence do we also read the transcript,
@@ -398,6 +459,7 @@ function emitT1(sid, message) {
         }
       }
     }
+    try { advisePostCompact(st, sid, measuredLive, cfg); } catch { /* the size check never breaks the hook */ }
     if (cfg.liveWrite) {
       try { maybeWriteLive(live.base, sid, tpath, st, liveRaw); } catch { /* the writer never breaks the hook */ }
     }

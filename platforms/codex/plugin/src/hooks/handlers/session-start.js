@@ -21,6 +21,7 @@ If uncertain, invoke the skill — it will guide you. Autopilot sets the rules a
 
 const path = require('path');
 const OPEN_DECISION_JS = path.join(__dirname, '..', '..', '..', 'scripts', 'open-decision.js');
+const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', 'docs', 'token-discipline.md');
 const DECISION_SCHEMA = 'autopilot.decision/2';
 
 // Open cards the way scripts/open-decision.js show does. Read failure => no line.
@@ -58,7 +59,8 @@ function buildBaseContext(cwd = process.cwd()) {
 
 Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_JS} open --question ... and write the card id (d- + 8 hex) in the reply.
 When the owner answers in the live panel, a message starting with [待決回覆] arrives: act on the answers; the cards close automatically.
-To show the owner a file or a diff, use the show tool; do not paste the content.${openDecisionCardLine(cwd)}`;
+To show the owner a file or a diff, use the show tool; do not paste the content.
+Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.${openDecisionCardLine(cwd)}`;
 }
 
 function composeSessionStartContext({

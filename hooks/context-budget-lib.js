@@ -245,15 +245,20 @@ function budgetDecision(state, cfg) {
     // 200K and 1M are indistinguishable, so a directive STOP would be a guess. Degrade to an
     // advisory — tier 't2' keeps the T2 throttle/counter, `advisory` tells the hook to deliver
     // it like T1 (exit 0, additionalContext).
+    const resident = cfg.seat === 'resident';
+    const residentClose = 'Update the state file and confirm that after compaction only the state file path and unfinished items remain.';
     if (cfg.windowUnknown === true) {
       return {
         tier: 't2',
         advisory: true,
-        message:
-          `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
-          '(no statusline live file, so 200K and 1M cannot be told apart). ' +
-          'If this is a 200K window, plan a handoff at the next phase boundary; ' +
-          'on a 1M window this is early and no action is needed.',
+        message: resident
+          ? `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
+            '(no statusline live file, so 200K and 1M cannot be told apart). ' +
+            residentClose
+          : `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
+            '(no statusline live file, so 200K and 1M cannot be told apart). ' +
+            'If this is a 200K window, plan a handoff at the next phase boundary; ' +
+            'on a 1M window this is early and no action is needed.',
       };
     }
     // An auto-compact window is set (finite > 0) and compaction is on (the hook passes a number only
@@ -263,23 +268,29 @@ function budgetDecision(state, cfg) {
     if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0) {
       return {
         tier: 't2',
-        message:
-          `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-          `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
-          'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
-          'write a handoff doc (autopilot:handoff) at the next phase boundary so the compaction rehydrates cleanly.',
+        message: resident
+          ? `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+            `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
+            'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
+            residentClose
+          : `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+            `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
+            'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
+            'write a handoff doc (autopilot:handoff) at the next phase boundary so the compaction rehydrates cleanly.',
       };
     }
     return {
       tier: 't2',
-      message:
-        `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-        'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
-        'then tell the user to /clear or restart the session — context cost compounds ' +
-        'quadratically with session length. [USER: after the handoff lands, /clear or ' +
-        'start a fresh session to reset the context.] ' +
-        'To avoid being asked to stop: set `autoCompactWindow` in ~/.claude/settings.json (or run /autocompact) ' +
-        'so Claude Code compacts the session itself; T2 then stays a handoff reminder only.',
+      message: resident
+        ? `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+          residentClose
+        : `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+          'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
+          'then tell the user to /clear or restart the session — context cost compounds ' +
+          'quadratically with session length. [USER: after the handoff lands, /clear or ' +
+          'start a fresh session to reset the context.] ' +
+          'To avoid being asked to stop: set `autoCompactWindow` in ~/.claude/settings.json (or run /autocompact) ' +
+          'so Claude Code compacts the session itself; T2 then stays a handoff reminder only.',
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {

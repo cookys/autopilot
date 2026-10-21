@@ -249,6 +249,44 @@
       "invalid_effect": "keys other than t1 and t2, and values that are not positive integers, are ignored with a one-line warning"
     },
     {
+      "name": "context_budget.post_compact_warn",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": 100000,
+      "readers": [
+        "hooks/context-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN"
+      ],
+      "summary": "After compaction, one advisory when the live context still exceeds this many tokens. 0 disables. A value that is not an integer >= 0 is ignored, so with nothing valid set the threshold stays 100000. Advisory only.",
+      "type": "number",
+      "invalid_effect": "a value that is not an integer >= 0 is ignored, so with nothing valid set the threshold stays 100000"
+    },
+    {
+      "name": "context_budget.seat",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "context",
+      "default": "session",
+      "readers": [
+        "hooks/context-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CONTEXT_BUDGET_SEAT"
+      ],
+      "summary": "session (default) keeps the T2 handoff wording. resident tells a fixed-address seat to update its state file and keep only that path and the unfinished items after compaction. Anything else is ignored.",
+      "type": "enum",
+      "allowed": [
+        "session",
+        "resident"
+      ],
+      "invalid_effect": "anything but session or resident is ignored, so the seat stays session"
+    },
+    {
       "name": "context_budget.step",
       "kind": "config_key",
       "audience": "user",
@@ -3454,6 +3492,36 @@
         "context_budget.mode"
       ],
       "summary": "Set to \"off\" to silence context-budget. Any other value is ignored (the config accepts \"off\" and \"warn\")."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.post_compact_warn"
+      ],
+      "summary": "Environment override of context_budget.post_compact_warn (integer >= 0; 0 disables; beats the config). Any other value is ignored, so with nothing valid set the threshold stays 100000."
+    },
+    {
+      "name": "AUTOPILOT_CONTEXT_BUDGET_SEAT",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": null,
+      "readers": [
+        "hooks/context-budget.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "context_budget.seat"
+      ],
+      "summary": "Environment override of context_budget.seat (session or resident; beats the config). Any other value is ignored."
     },
     {
       "name": "AUTOPILOT_CONTEXT_BUDGET_STEP",

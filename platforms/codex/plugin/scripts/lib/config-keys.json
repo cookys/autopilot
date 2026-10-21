@@ -3357,6 +3357,19 @@
       "summary": "Set to \"off\" to stop recording AskUserQuestion prompts as decisions."
     },
     {
+      "name": "AUTOPILOT_AUTHOR_KILL_GRACE_SECS",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": 30,
+      "readers": [
+        "scripts/dispatch-author.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30."
+    },
+    {
       "name": "AUTOPILOT_AUTHOR_MAX_TOKENS",
       "kind": "env",
       "audience": "user",

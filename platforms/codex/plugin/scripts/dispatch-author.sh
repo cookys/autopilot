@@ -1401,6 +1401,10 @@ else
   # unchanged; only these two leaf paths become writable, and the credential
   # material one level up at ~/.gemini stays read-only and readable.
   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
+  # Mount points must exist before the read-only root bind. These are empty
+  # directories agy itself also creates; credential material in the parent
+  # .gemini directory stays read-only. Fail open: a mkdir error is bwrap's to report.
+  mkdir -p "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" || true
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
@@ -1415,9 +1419,26 @@ else
       "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
+  # agy ignores SIGTERM, and its own --print-timeout is the only limit today
+  # unless an outer timeout escalates to KILL. GNU timeout exits 124 on TERM
+  # timeout and 137 when the kill-after grace has to send KILL. Map that 137
+  # back to 124 only after the deadline has elapsed, so an early SIGKILL (OOM
+  # or an external kill) is not reported as transport_status timeout. Other
+  # runners are unchanged (still no kill-after). Grace must be a positive
+  # integer: timeout -k 0 does not send KILL.
+  AUTHOR_KILL_GRACE_SECS="${AUTOPILOT_AUTHOR_KILL_GRACE_SECS:-30}"
+  [[ "$AUTHOR_KILL_GRACE_SECS" =~ ^[1-9][0-9]*$ ]] || AUTHOR_KILL_GRACE_SECS=30
   set +e
-  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
+  AGY_TIMEOUT_START=$SECONDS
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
+  if [[ "$RUNNER_EXIT" -eq 137 ]]; then
+    AGY_TIMEOUT_ELAPSED=$((SECONDS - AGY_TIMEOUT_START))
+    if AGY_TIMEOUT_LIMIT="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" \
+      && [[ "$AGY_TIMEOUT_ELAPSED" -ge "$AGY_TIMEOUT_LIMIT" ]]; then
+      RUNNER_EXIT=124
+    fi
+  fi
   set -e
   rm -rf "$RUN_SH"
 fi

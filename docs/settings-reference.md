@@ -181,6 +181,7 @@ On every other SessionStart, only a `t2 + gap` above `autoCompactWindow - 33000`
 | `AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE` | Set to "1" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
+| `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |
 | `AUTOPILOT_AUTHOR_MAX_TOKENS` | Response cap of an authoring dispatch. | `30000` |  |
 | `AUTOPILOT_CONTEXT_WINDOW_GATE` | off, warn or block: what a dispatch does when its prompt would not fit the engine context window. | block |  |
 | `qualification_feed.url` (config.json) | Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself. | unset |  |

@@ -1405,20 +1405,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/guidance-cut-gate-red-not-in-preflight.md
 - **Context**: The check against base 3.0.0-alpha.3 exits 1. The evidence-discipline digest does not match the pack.
 
-### Dispatch-suppression scans only the hands-brief fixed fields
-- **Id**: BL-0273
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 派工壓制檢查只掃簡報裡由控制者填的固定欄位。審查發現被逐字引用時會被誤擋，而簡報沒有控制者的自由文字欄。
-- **Impact**: 真正該檢查的重派說明與審查提示目前都沒掃到，壓制規則等於沒接上。
-- **Trigger**: scan the depth-0 redispatch prompt file and the reviewer prompt, which can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: dwire merge 215d9084c, 2026-10-21
-- **Pointer**: docs/backlog/dispatch-suppression-fixed-fields-only.md
-- **Context**: Merge 215d9084c. Four honest findings were all blocked. The brief has no controller free text.
-
 ### Two hook suites are already red on the depth-0 postmerge tree
 - **Id**: BL-0274
 - **Status**: open
@@ -1459,7 +1445,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries.
+- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries. Partly fixed, see the sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277

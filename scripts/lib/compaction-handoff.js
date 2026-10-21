@@ -11,7 +11,8 @@
  *      ledger -> model handoff note -> (caller's machine state) -> transcript tail. Every section
  *      that cannot be read says "unavailable: <reason>" instead of failing the hook. The size is
  *      bounded: each section has its own cap and the tail gets what is left.
- *   2. budgetWarning() — SessionStart (any source): t2 + gap must fit under window - 33000, else Claude
+ *   2. budgetWarning() — SessionStart (any source): t2 + gap must fit under window - AUTOCOMPACT_BUFFER
+ *      (scripts/lib/autocompact-window.js), else Claude
  *      Code compacts before T2 can remind (with auto-compact set, T2 is only a handoff reminder). One line, nothing is changed.
  *   3. recordCompactionPoint() — SessionStart(compact): append the last compact_boundary's
  *      preTokens plus the resolved window and CC version to a calibration jsonl, so the real
@@ -28,7 +29,8 @@ const { spawnSync } = require('child_process');
 
 // Claude Code reserves a fixed buffer under the auto-compact window: /context prints
 // "Autocompact buffer: 33k" (measured on CC 2.1.30x). Compaction fires at window - this.
-const AUTOCOMPACT_BUFFER_TOKENS = 33_000;
+// The value is AUTOCOMPACT_BUFFER from scripts/lib/autocompact-window.js (no second copy).
+const { AUTOCOMPACT_BUFFER: AUTOCOMPACT_BUFFER_TOKENS } = require('./autocompact-window.js');
 // Defaults live in config-path.js readContextBudget (t2 150k absolute, gap 50k between T2 - the "prepare, write the
 // handoff, keep working" point - and the compaction point); these mirror them for callers that import the numbers.
 const DEFAULT_GAP_TOKENS = 50_000;

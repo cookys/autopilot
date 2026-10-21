@@ -14,9 +14,10 @@
  *   node scripts/install-token-discipline.js uninstall [--harness codex|agy|all] [--dry-run]
  *   node scripts/install-token-discipline.js --check [--harness codex|agy|all]
  *
- * --check exits 0 when every selected block matches that marked section, and 1
- * on drift or when a block is not installed. A config.toml hint does not change
- * that exit code. --dry-run prints what would be written and writes nothing.
+ * --check exits 0 when every selected block matches that marked section, 1 on
+ * drift, and 3 when nothing has drifted but at least one target is not installed
+ * (drift wins over 3). A config.toml hint does not change that exit code.
+ * --dry-run prints what would be written and writes nothing.
  * compact_token_budget is hinted wherever it appears. The other three ignored
  * keys are hinted only at the top level.
  *
@@ -276,16 +277,16 @@ function hintFindings(toml) {
 
 function checkOne(target, block) {
   const existing = readText(target.file);
-  let ok = true;
+  let state = 'ok';
   if (existing === null) {
-    ok = false;
+    state = 'missing';
     process.stdout.write(`${target.harness}: not installed (${target.file})\n`);
   } else {
     const found = locateBlock(existing);
     if (found.kind === 'present' && found.inner === block) {
       process.stdout.write(`${target.harness}: consistent (${target.file})\n`);
     } else {
-      ok = false;
+      state = 'drift';
       process.stdout.write(`${target.harness}: drift (${target.file})\n`);
     }
   }
@@ -308,7 +309,7 @@ function checkOne(target, block) {
       }
     }
   }
-  return ok;
+  return state;
 }
 
 function main() {
@@ -316,11 +317,16 @@ function main() {
   const block = readSource();
   const targets = targetsFor(args.harness);
   if (args.command === 'check') {
-    let ok = true;
+    let drift = false;
+    let missing = false;
     for (const target of targets) {
-      if (!checkOne(target, block)) ok = false;
+      const state = checkOne(target, block);
+      if (state === 'drift') drift = true;
+      else if (state === 'missing') missing = true;
     }
-    process.exit(ok ? 0 : 1);
+    if (drift) process.exit(1);
+    if (missing) process.exit(3);
+    process.exit(0);
   }
   for (const target of targets) {
     if (args.command === 'install') installOne(target, block, args.dryRun);

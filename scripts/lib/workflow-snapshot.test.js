@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { collect, render, snapshotText } = require('./workflow-snapshot.js');
+const { collect, render, snapshotText, isAgentRunning, scanRunningAdvisory } = require('./workflow-snapshot.js');
 
 const SID = 'snap-session-1';
 const KEY = '0123456789abcdef';
@@ -248,4 +248,190 @@ test('the decision ledger without a task card falls back to the newest project l
     const t = text(run(f));
     assert.match(t, /decision ledger \(newest docs\/projects\/\*\/ledger by mtime, under 24h, may be another session's in this checkout\)/);
   } finally { f.cleanup(); }
+});
+
+// # RED at 6648ef275: 4 failed before the extract — isAgentRunning is not a function (ASSERT parity); scanRunningAdvisory is not a function (ASSERT older_running_stamp_included, ASSERT oversized_dir_op_budget, ASSERT malformed_not_counted / duplicate_agent_id / unreadable_directory). 12 existing tests passed.
+// P1 subagent concurrency advisory. Temp dirs only (os.tmpdir), never ~/.autopilot.
+// Oracle is the pre-extraction srcRoster inline rule (workflow-snapshot.js before isAgentRunning):
+//   if (!a || a.ended_at) not running;
+//   t = Date.parse(a.last_tool_at);
+//   if (Number.isFinite(t) && now - t > 30min) not running;
+//   otherwise running (missing or unparseable last_tool_at still running).
+const AGENT_STALE_ORACLE_MS = 30 * 60 * 1000;
+function oracleIsAgentRunning(a, now) {
+  if (!a || a.ended_at) return false;
+  const t = Date.parse(a.last_tool_at);
+  if (Number.isFinite(t) && now - t > AGENT_STALE_ORACLE_MS) return false;
+  return true;
+}
+
+test('parity: isAgentRunning matches the original inline rule and srcRoster text is unchanged', () => {
+  const now = NOW;
+  const table = [
+    ['ended', { ended_at: iso(now - 500), last_tool_at: iso(now - 1000) }],
+    ['fresh', { last_tool_at: iso(now - 30e3) }],
+    ['stale', { last_tool_at: iso(now - AGENT_STALE_ORACLE_MS - 1) }],
+    ['unparseable last_tool_at', { last_tool_at: 'not-a-date' }],
+    ['missing last_tool_at', { agent_id: 'notime' }],
+  ];
+  for (const [name, stamp] of table) {
+    assert.strictEqual(
+      isAgentRunning(stamp, now),
+      oracleIsAgentRunning(stamp, now),
+      `ASSERT parity ${name}`,
+    );
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wfs-parity-'));
+  try {
+    const live = path.join(root, 'live');
+    const dir = path.join(live, 'agents', 'sess1');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamps = [
+      ['ended.json', { agent_id: 'ended', agent_type: 'reviewer', last_tool_at: iso(now - 1000), last_tool_name: 'Read', ended_at: iso(now - 500) }, 5],
+      ['fresh.json', { agent_id: 'fresh', agent_type: 'autopilot:reviewer', last_tool_at: iso(now - 30e3), last_tool_name: 'Bash' }, 1],
+      ['stale.json', { agent_id: 'stale', agent_type: 'x', last_tool_at: iso(now - 31 * 60e3), last_tool_name: 'Edit' }, 4],
+      ['badtime.json', { agent_id: 'badtime', agent_type: 'worker', last_tool_at: 'nope', last_tool_name: 'Grep' }, 2],
+      ['notime.json', { agent_id: 'notime', agent_type: 'worker' }, 3],
+    ];
+    for (const [n, obj, ord] of stamps) {
+      const file = path.join(dir, n);
+      fs.writeFileSync(file, JSON.stringify(obj));
+      const t = new Date(now - ord * 1000);
+      fs.utimesSync(file, t, t);
+    }
+    const s = collect({ sessionId: 'sess1', cwd: root, now, dirs: { live }, git: () => '' });
+    const expected = [
+      'subagents: 5 recorded, 3 running (newest 5 read)',
+      '  - autopilot:reviewer fresh last tool Bash 30s ago',
+      '  - worker badtime last tool Grep',
+      '  - worker notime last tool none yet',
+    ].join('\n');
+    assert.strictEqual((s.bySource.subagents || []).join('\n'), expected, 'ASSERT parity srcRoster');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('older_running_stamp_included: advisory counts a running stamp older than 40 newer ended stamps', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wfs-older-'));
+  try {
+    const dir = path.join(root, 'agents');
+    fs.mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 40; i++) {
+      const file = path.join(dir, `ended-${String(i).padStart(2, '0')}.json`);
+      fs.writeFileSync(file, JSON.stringify({
+        agent_id: `ended-${i}`, ended_at: iso(NOW), last_tool_at: iso(NOW),
+      }));
+      const t = new Date(NOW - i * 1000);
+      fs.utimesSync(file, t, t);
+    }
+    const old = path.join(dir, 'running-old.json');
+    fs.writeFileSync(old, JSON.stringify({
+      agent_id: 'still-running', agent_type: 'worker', last_tool_at: iso(NOW - 1000),
+    }));
+    const oldT = new Date(NOW - 86_400_000);
+    fs.utimesSync(old, oldT, oldT);
+    const res = scanRunningAdvisory(dir, { now: NOW });
+    assert.strictEqual(res.count, 1, 'ASSERT older_running_stamp_included');
+    assert.strictEqual(res.partial, false, 'ASSERT older_running_stamp_included');
+    assert.strictEqual(typeof res.ops, 'number', 'ASSERT older_running_stamp_included');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('oversized_dir_op_budget: advisory walk stays inside 200 ops and never stats', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wfs-oversize-'));
+  const origReadDir = fs.readdirSync;
+  const origStat = fs.statSync;
+  const origRead = fs.readFileSync;
+  let calls = 0;
+  let statCalls = 0;
+  let wrapped = false;
+  try {
+    const dir = path.join(root, 'agents');
+    fs.mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 4999; i++) {
+      fs.writeFileSync(path.join(dir, `e${String(i).padStart(4, '0')}.json`), JSON.stringify({
+        agent_id: `e${i}`, ended_at: iso(NOW), last_tool_at: iso(NOW),
+      }));
+    }
+    // Name sorts late; readdir order is filesystem order, so this stamp may sit outside the inspected subset.
+    fs.writeFileSync(path.join(dir, 'zzz-running.json'), JSON.stringify({
+      agent_id: 'only-running', last_tool_at: iso(NOW - 1000),
+    }));
+    fs.readdirSync = function wrappedReaddir(...args) {
+      if (wrapped) calls += 1;
+      return origReadDir.apply(this, args);
+    };
+    fs.statSync = function wrappedStat(...args) {
+      if (wrapped) { calls += 1; statCalls += 1; }
+      return origStat.apply(this, args);
+    };
+    fs.readFileSync = function wrappedRead(...args) {
+      if (wrapped) calls += 1;
+      return origRead.apply(this, args);
+    };
+    wrapped = true;
+    const res = scanRunningAdvisory(dir, { now: NOW, opsBudget: 200, wallMs: 30000 });
+    wrapped = false;
+    assert.ok(calls <= 200, `ASSERT oversized_dir_op_budget calls=${calls}`);
+    assert.strictEqual(statCalls, 0, 'ASSERT oversized_dir_op_budget statSync');
+    assert.strictEqual(res.partial, true, 'ASSERT oversized_dir_op_budget');
+    assert.ok(res.count >= 0, `ASSERT oversized_dir_op_budget count=${res.count}`);
+  } finally {
+    wrapped = false;
+    fs.readdirSync = origReadDir;
+    fs.statSync = origStat;
+    fs.readFileSync = origRead;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('malformed stamps are not counted; duplicate agent_id counts once; unreadable directory does not throw', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wfs-bad-'));
+  try {
+    const dir = path.join(root, 'agents');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bad.json'), '{');
+    fs.writeFileSync(path.join(dir, 'arr.json'), '[]');
+    fs.writeFileSync(path.join(dir, 'running.json'), JSON.stringify({
+      agent_id: 'live', last_tool_at: iso(NOW - 1000),
+    }));
+    const locked = path.join(dir, 'locked.json');
+    fs.writeFileSync(locked, JSON.stringify({ agent_id: 'locked', last_tool_at: iso(NOW) }));
+    fs.chmodSync(locked, 0);
+    const malformed = scanRunningAdvisory(dir, { now: NOW });
+    assert.strictEqual(malformed.count, 1, 'ASSERT malformed_not_counted');
+    assert.strictEqual(malformed.partial, false, 'ASSERT malformed_not_counted');
+
+    const dup = path.join(root, 'dup');
+    fs.mkdirSync(dup);
+    fs.writeFileSync(path.join(dup, 'a.json'), JSON.stringify({ agent_id: 'same', last_tool_at: iso(NOW) }));
+    fs.writeFileSync(path.join(dup, 'b.json'), JSON.stringify({ agent_id: 'same', last_tool_at: iso(NOW) }));
+    fs.writeFileSync(path.join(dup, 'c.json'), JSON.stringify({ agent_id: 'other', last_tool_at: iso(NOW) }));
+    const dups = scanRunningAdvisory(dup, { now: NOW });
+    assert.strictEqual(dups.count, 2, 'ASSERT duplicate_agent_id');
+
+    const missing = path.join(root, 'no-such-dir');
+    let threw = false;
+    let unread;
+    try { unread = scanRunningAdvisory(missing, { now: NOW }); } catch { threw = true; }
+    assert.strictEqual(threw, false, 'ASSERT unreadable_directory');
+    assert.strictEqual(unread.count, 0, 'ASSERT unreadable_directory');
+    assert.strictEqual(unread.partial, false, 'ASSERT unreadable_directory');
+
+    const blocked = path.join(root, 'blocked');
+    fs.mkdirSync(blocked);
+    fs.chmodSync(blocked, 0);
+    let threwDir = false;
+    let blockedRes;
+    try { blockedRes = scanRunningAdvisory(blocked, { now: NOW }); } catch { threwDir = true; }
+    fs.chmodSync(blocked, 0o755);
+    assert.strictEqual(threwDir, false, 'ASSERT unreadable_directory');
+    assert.strictEqual(blockedRes.count, 0, 'ASSERT unreadable_directory');
+    assert.strictEqual(blockedRes.partial, false, 'ASSERT unreadable_directory');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

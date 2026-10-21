@@ -1530,8 +1530,12 @@ async function handleFinalize(flags) {
     }
 
     const briefLines = [engineLine];
+    // Controller-written lines only. Verbatim finding text is omitted so the
+    // suppression linter cannot treat a quoted reviewer as the controller.
+    const controllerLines = [engineLine];
     if (branch) {
       briefLines.push(`Branch: ${branch}`);
+      controllerLines.push(`Branch: ${branch}`);
     }
 
     const baseSha = rangeObj.base || '';
@@ -1539,6 +1543,9 @@ async function handleFinalize(flags) {
     briefLines.push(`Base: ${baseSha}`);
     briefLines.push(`Head: ${headSha}`);
     briefLines.push('');
+    controllerLines.push(`Base: ${baseSha}`);
+    controllerLines.push(`Head: ${headSha}`);
+    controllerLines.push('');
 
     // One paragraph per verified finding (any severity) written in plain prose
     for (const f of findingsList) {
@@ -1550,12 +1557,16 @@ async function handleFinalize(flags) {
           .replace(/\baround\s+line\s+\d+\b/gi, 'at the specified line')
           .replace(/[\r\n]+/g, ' ')
           .trim();
-        briefLines.push(`Finding ${f.id} from seat ${f.seat}: ${cleanText}`);
+        const findingPrefix = `Finding ${f.id} from seat ${f.seat}:`;
+        briefLines.push(`${findingPrefix} ${cleanText}`);
         briefLines.push('');
+        controllerLines.push(findingPrefix);
+        controllerLines.push('');
       }
     }
 
     writeFileSyncAtomic(briefPath, briefLines.join('\n').trim() + '\n');
+    const controllerText = controllerLines.join('\n').trim() + '\n';
 
     // Run scripts/check-redispatch-prompt.sh from __dirname (with env override)
     const checkScript = process.env.AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT
@@ -1569,6 +1580,30 @@ async function handleFinalize(flags) {
 
     if (checkRes.status !== 0) {
       console.error(`ERROR: check-redispatch-prompt.sh failed for ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
+      process.exit(1);
+    }
+
+    // Run scripts/check-dispatch-suppression.sh from __dirname (no env override; see blind-dispatch.md).
+    // Input is controller-written lines only, not the verbatim finding text.
+    const suppressionScript = path.join(__dirname, 'check-dispatch-suppression.sh');
+    const controllerPath = path.join(gDir, `.hands-brief-controller-${process.pid}.txt`);
+    let suppressionRes;
+    try {
+      writeFileSyncAtomic(controllerPath, controllerText);
+      suppressionRes = spawnSync(suppressionScript, [controllerPath], {
+        encoding: 'utf8',
+        cwd: repoRoot || process.cwd(),
+        env: { ...process.env },
+      });
+    } finally {
+      try {
+        if (fs.existsSync(controllerPath)) fs.unlinkSync(controllerPath);
+      } catch (_e) {}
+    }
+
+    if (!suppressionRes || suppressionRes.status !== 0) {
+      const detail = suppressionRes ? (suppressionRes.stderr || suppressionRes.stdout) : 'no result';
+      console.error(`ERROR: check-dispatch-suppression.sh failed for ${briefPath}: ${detail}`);
       process.exit(1);
     }
   }

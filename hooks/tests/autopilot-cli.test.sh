@@ -139,6 +139,9 @@ assert_contains "$OUT" "--campaign-contract" "autopilot help documents the manda
 assert_contains "$OUT" "--legacy-unmanaged" "autopilot help documents the temporary compatibility rail"
 assert_contains "$OUT" "host-owned exact-roster provider-readiness trust root" \
   "autopilot help documents strict L5 provider readiness"
+# RED at 354f8da21: help lacked the literal endpoints list init|list|which|set|doctor|test (128 passed, 1 failed)
+echo "$OUT" | grep -F 'init|list|which|set|doctor|test' >/dev/null \
+  || fail "autopilot help endpoints subcommand list includes test"
 
 printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"
 BASE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"

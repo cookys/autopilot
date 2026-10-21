@@ -33,7 +33,7 @@ function printHelp() {
   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
   node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--campaign-continuation end|return|repair] [--cwd <repo>] [--resume]
   node bin/autopilot.js harness report [harness report args...]
-  node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
+  node bin/autopilot.js endpoints <init|list|which|set|doctor|test> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
   node bin/autopilot.js status task --root-run-id <id> [--json]
   node bin/autopilot.js campaign <inspect|status|resume|terminalize> --campaign-id <id> [--ledger <file>]
@@ -82,7 +82,7 @@ Commands:
                     contract + task file for the caller to seal and run: repair_handoff in the
                     result). The contract may preset the choice.
   harness report    Emit read-only harness capability state and stale flags.
-  endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
+  endpoints         Manage endpoint credentials (list/which/set/doctor/init/test; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
   merge             Execute only an explicitly sealed merge request and emit a receipt.

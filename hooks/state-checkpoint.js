@@ -174,6 +174,28 @@ function postCompactCheck(input) {
   }
 }
 
+// Arm one post-compact size measurement in the context-budget state file. Measurement itself
+// happens on the next context-budget read. This does not change what the checkpoint writes.
+function armPostCompactSizeCheck(sessionId) {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return;
+  const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+  const sid = sanitizeSessionId(sessionId);
+  const live = resolveLiveDir();
+  const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
+  fs.mkdirSync(stDir, { recursive: true });
+  const file = path.join(stDir, `${sid}.json`);
+  let st = { calls: 0, lastT1Context: 0, lastT2Context: 0, lastContext: 0, observedMax: 0 };
+  try {
+    const cur = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (cur && typeof cur === 'object' && !Array.isArray(cur)) st = cur;
+  } catch { /* absent or corrupt: a fresh state still carries the arm */ }
+  if (!Number.isFinite(st.calls)) st.calls = 0;
+  st.postCompactGen = (Number.isFinite(st.postCompactGen) ? st.postCompactGen : 0) + 1;
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(st));
+  fs.renameSync(tmp, file);
+}
+
 // === Main ===
 
 (function main() {
@@ -207,6 +229,7 @@ function postCompactCheck(input) {
     const input = stdin.trim() ? JSON.parse(stdin) : {};
     if (input.hook_event_name === 'PostCompact') {
       try { postCompactCheck(input); } catch (err) { process.stderr.write(`[state-checkpoint] postcompact check failed: ${err.message}\n`); }
+      try { armPostCompactSizeCheck(input.session_id); } catch (err) { process.stderr.write(`[state-checkpoint] postcompact size arm failed: ${err.message}\n`); }
       return process.exit(0);
     }
     sessionId = input.session_id || '<unknown>';

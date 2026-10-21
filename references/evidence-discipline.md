@@ -1145,6 +1145,8 @@ baseline from history every clone has (e.g. the parent of the commit that introd
 never a SHA from a scratch clone, and (c) be shown to fail on an injected drift before it is trusted
 (§48: a check that cannot fail proves nothing).
 
+Same family, 2026-10-20 (634b4736a): the parity test in `scripts/qualification-metrics.test.js` that compares the vendored qualification schemas with llm-playground defaulted to a nonexistent host path, so it always skipped and never compared anything; it also read a working tree, which false-reds when that checkout's master lags. Rule: a skip must name what it skipped, an implicit-default skip must be shown to be impossible to hit on the host that gates the merge or turned into a failure, and the comparison must read committed bytes (`git show <ref>:<path>`) not a work tree. Fix: 634b4736a, with negative controls built on temp git repos (different bytes fail, identical bytes pass).
+
 ## 51. A lib.sh suite that never calls finalize_test is green by construction
 
 2026-10-03, v2.36.111. A new suite (`campaign-resume-reviewing-phase`) shipped through its hand's
@@ -1328,3 +1330,15 @@ Preventing artifact: `require_under_test_tmp` in `hooks/tests/lib.sh` (merge 0be
 The same day a merge (517fbe910) inserted a new function into a protected region, and
 `check-supersession-anchors` went red on develop, because the pre-merge checklist did not include
 `check-canonical-invariants.sh`. Rule: run it before every lane merge. Fix: 3f6719d1c.
+
+## 63. A watchdog that treats a missing token as a cancel is disarmed by any deletion
+
+2026-10-20, merges eb477761e (rlrun) and 8b314e241 (wdcancel). The wall-timeout watchdog of `scripts/dispatch-hetero.sh` kept a token file and exited when the token was gone, treating that as cancelled. The token's mktemp name matched the tmp-residue registry's test-lockgated hetero pattern, so any suite's residue reap on the same host deleted a live dispatch's token and the timeout never fired while the manifest still said timeout_enforced=true (observed: timeout 1500s, wall 3634s).
+
+Rule: a cancel must be an explicit positive signal (a `.cancel` marker written before the token is removed), never inferred from something being absent. Absence without the marker while the worker lives means enforce the timeout. A negative control must delete the live token and require the timeout to still fire.
+
+Preventing artifacts: rlrun renamed the token to `dispatch-wdog-tok-XXXXXX` and added `assert_reap_does_not_disarm_wall_timeout` (red on the old prefix); wdcancel added the marker, the token-vanished-without-cancel enforcement, and the KILL-grace wait, tested in `hooks/tests/dispatch-hetero-wall-timeout.test.sh`.
+
+**Same-day: an empty review range.** After a cherry-pick conflict that produced no commit, a hetero review was still collected over base..head and reviewed an empty diff, and the result looked like a normal receipt. Rule: before sending a range to review, confirm the range contains commits and the work tree is clean. `scripts/hetero-review-loop.js` collect does not reject an empty range today (it hashes and records whatever diff it gets, including a zero-byte one); that gap is filed as BL-0269.
+
+**Same-day: a whole-tree scan registered late (metscan2).** hderive added `hooks/tests/engine-qualify-seat-derive.test.sh`, and the whole-tree scan in `scripts/qualification-metrics.test.js` went red on develop d426dff4a. Measured by the foreman: `node scripts/affected-suites.js --base 634b4736a --head d426dff4a --json` selects `scripts/qualification-metrics.test.js`, so the selector was not the gap; the suite was simply not run before merging. Rule: run every suite the selector names before the merge. Fix: metscan2 (d01f9971a).

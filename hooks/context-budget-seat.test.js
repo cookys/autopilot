@@ -63,8 +63,14 @@ function runHook(configText, extraEnv) {
       input: JSON.stringify({ transcript_path: transcript, session_id: 'seat-test-sid' }),
       encoding: 'utf8',
       env: (() => {
-        const env = {
-          ...process.env,
+        const env = { ...process.env };
+        for (const key of Object.keys(env)) {
+          if (key.startsWith('AUTOPILOT_CONTEXT_BUDGET_')) delete env[key];
+        }
+        delete env.AUTOPILOT_SESSION_ID;
+        delete env.CLAUDE_CODE_SESSION_ID;
+        return {
+          ...env,
           HOME: home,
           AUTOPILOT_CONFIG_FILE: configFile,
           AUTOPILOT_LIVE_DIR: live,
@@ -74,9 +80,6 @@ function runHook(configText, extraEnv) {
           AUTOPILOT_CONTEXT_BUDGET_STEP: '0',
           ...extraEnv,
         };
-        delete env.AUTOPILOT_SESSION_ID;
-        delete env.CLAUDE_CODE_SESSION_ID;
-        return env;
       })(),
     });
     return { status: r.status, stderr: r.stderr || '' };
@@ -101,4 +104,19 @@ test('config seat=resident reaches the hook T2 text', () => {
   assert.strictEqual(sessionLine, unsetLine);
   assert.strictEqual(unknownLine, unsetLine);
   assert.match(unsetLine, /handoff/i);
+});
+
+test('outer AUTOPILOT_CONTEXT_BUDGET_SEAT=resident does not leak into the session-default case', () => {
+  const prev = process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT;
+  process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT = 'resident';
+  try {
+    const unset = runHook('{}\n', {});
+    assert.strictEqual(unset.status, 2);
+    const line = unset.stderr.split('\n').find((l) => l.startsWith('Context budget T2'));
+    assert.match(line, /handoff/i);
+    assert.doesNotMatch(line, /state file path and unfinished items/);
+  } finally {
+    if (prev === undefined) delete process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT;
+    else process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT = prev;
+  }
 });

@@ -473,4 +473,80 @@ assert_eq "" "$__RUN_STDOUT" "unknown id: no stdout"
 SHOW4="$(dec_show)"
 assert_contains "$SHOW4" "$DEC_C" "unknown id leaves real cards"
 
+# RED at a84d9453d129bb5a4cbc447c2a99b7302c84ad69: FAIL hook does not keep its own scope walk; FAIL hook calls projectScopeFiles; FAIL open-decision defines projectScopeFiles; FAIL show and close --id use projectScopeFiles. Closing both scope files and leaving the other project's card byte-identical already passed on that base.
+# One reply names cards in two scope files of this project. A same id in another project stays byte-identical.
+SCOPE_REPO="$TEST_TMP/dec-scope-a"
+OTHER_REPO="$TEST_TMP/dec-scope-b"
+mkdir -p "$SCOPE_REPO" "$OTHER_REPO"
+git -C "$SCOPE_REPO" init -q
+git -C "$OTHER_REPO" init -q
+SCOPE_META="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const fs = require("fs");
+  const { openDecision } = require(process.argv[1]);
+  const repo = process.argv[2];
+  const other = process.argv[3];
+  const a = openDecision({ cwd: repo, question: "card A?" });
+  const b = openDecision({ cwd: repo, root: "rootb", question: "card B?" });
+  const c = openDecision({ cwd: other, question: "card C?" });
+  if (a.status !== "ok" || b.status !== "ok" || c.status !== "ok") {
+    process.stderr.write("seed failed\n");
+    process.exit(2);
+  }
+  const raw = JSON.parse(fs.readFileSync(c.file, "utf8"));
+  raw.decisions[0].id = a.id;
+  fs.writeFileSync(c.file, JSON.stringify(raw, null, 2) + "\n");
+  process.stdout.write([a.id, b.id, a.file, b.file, c.file].join("\n"));
+' "$REPO_ROOT/scripts/open-decision.js" "$SCOPE_REPO" "$OTHER_REPO")"
+SCOPE_A="$(printf '%s\n' "$SCOPE_META" | sed -n '1p')"
+SCOPE_B="$(printf '%s\n' "$SCOPE_META" | sed -n '2p')"
+SCOPE_FILE_A="$(printf '%s\n' "$SCOPE_META" | sed -n '3p')"
+SCOPE_FILE_B="$(printf '%s\n' "$SCOPE_META" | sed -n '4p')"
+SCOPE_FILE_C="$(printf '%s\n' "$SCOPE_META" | sed -n '5p')"
+cp "$SCOPE_FILE_C" "$TEST_TMP/card-c.before"
+test "$SCOPE_FILE_A" != "$SCOPE_FILE_B" || fail "card A and card B are different scope files"
+SCOPE_SHOW() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$SCOPE_REPO" --json
+}
+SCOPE_BEFORE="$(SCOPE_SHOW)"
+assert_contains "$SCOPE_BEFORE" "$SCOPE_A" "scope walk seed A"
+assert_contains "$SCOPE_BEFORE" "$SCOPE_B" "scope walk seed B"
+SCOPE_PROMPT="$(printf '[待決回覆]\n%s｜A → yes\n%s｜B → yes\n' "$SCOPE_A" "$SCOPE_B")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-scope-walk",cwd:process.argv[1],prompt:process.argv[2]}))' "$SCOPE_REPO" "$SCOPE_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "scope walk reply: exit 0"
+SCOPE_AFTER="$(SCOPE_SHOW || true)"
+assert_not_contains "$SCOPE_AFTER" "$SCOPE_A" "scope walk closes unbound card A"
+assert_not_contains "$SCOPE_AFTER" "$SCOPE_B" "scope walk closes root card B"
+if cmp -s "$TEST_TMP/card-c.before" "$SCOPE_FILE_C"; then
+  assert_eq 1 1 "other project card C byte-identical"
+else
+  fail "other project card C byte-identical"
+fi
+if grep -q 'function decideScopeFiles' "$REPO_ROOT/hooks/advisory-relay.js"; then
+  fail "hook does not keep its own scope walk"
+else
+  assert_eq 1 1 "hook does not keep its own scope walk"
+fi
+if grep -q 'projectScopeFiles' "$REPO_ROOT/hooks/advisory-relay.js"; then
+  assert_eq 1 1 "hook calls projectScopeFiles"
+else
+  fail "hook calls projectScopeFiles"
+fi
+if grep -q 'function projectScopeFiles' "$REPO_ROOT/scripts/open-decision.js"; then
+  assert_eq 1 1 "open-decision defines projectScopeFiles"
+else
+  fail "open-decision defines projectScopeFiles"
+fi
+if node -e '
+  const fs = require("fs");
+  const src = fs.readFileSync(process.argv[1], "utf8");
+  const show = src.split("if (cmd === '\''show'\'')")[1].split("if (cmd === '\''close'\'')")[0];
+  const close = src.split("if (cmd === '\''close'\'')")[1].split("// open")[0];
+  if (!show.includes("projectScopeFiles") || !close.includes("projectScopeFiles")) process.exit(1);
+' "$REPO_ROOT/scripts/open-decision.js"; then
+  assert_eq 1 1 "show and close --id use projectScopeFiles"
+else
+  fail "show and close --id use projectScopeFiles"
+fi
+
 finalize_test

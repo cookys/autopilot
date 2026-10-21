@@ -116,6 +116,14 @@ function projectScopes(sf) {
   return out;
 }
 
+// Paths of this project's scope files that hold at least one card readFile accepts. `show`, `close --id`, and
+// hooks/advisory-relay.js share this walk. `root` does not select the list: every unbound and root file is included.
+function projectScopeFiles(cwd) {
+  const sf = scopeFile(cwd, null);
+  if (!sf) return [];
+  return projectScopes(sf).map((s) => s.file);
+}
+
 function writeEntries(sf, root, entries) {
   if (entries.length === 0) { fs.unlinkSync(sf.file); return; }
   const body = { schema: SCHEMA, root_run_id: root || null, repo_identity: sf.scope.repo_identity, project_key: sf.scope.project_key, decisions: entries };
@@ -161,7 +169,7 @@ function main(argv) {
   if (!sf) return usage('not inside a git repository');
 
   if (cmd === 'show') {
-    const entries = projectScopes(sf).flatMap((s) => s.entries)
+    const entries = projectScopeFiles(args.cwd).flatMap((f) => readFile(f))
       .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
     if (entries.length === 0) { if (!args.json) process.stdout.write('no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries));
@@ -170,7 +178,7 @@ function main(argv) {
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
     let r = { status: 'absent' };
-    for (const { file: f } of projectScopes(sf)) {
+    for (const f of projectScopeFiles(args.cwd)) {
       r = closeDecisionById(f, args.id);
       if (r.status !== 'absent') break;
     }
@@ -245,4 +253,4 @@ function closeDecisionById(file, id, isOurs) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, openDecision, closeDecisionById, SAFE_ROOT, SCHEMA };
+module.exports = { main, openDecision, closeDecisionById, projectScopeFiles, SAFE_ROOT, SCHEMA };

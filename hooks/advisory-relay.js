@@ -22,30 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DECIDE_REPLY_HEAD = '[待決回覆]';
-const DECIDE_SCHEMA = 'autopilot.decision/2';
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
-
-// Same scope walk as scripts/open-decision.js projectScopes (those helpers are not exported).
-function decideScopeFiles(cwd) {
-  const { scopeFromCwd } = require('../src/status/project-key');
-  const { commonDirOf, listScopeFiles, readScopeFile } = require('../src/status/scope-key');
-  const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
-  const commonDir = commonDirOf(scope.repo_identity);
-  if (!scope.project_key || !commonDir) return [];
-  const dir = path.join(commonDir, 'autopilot', 'decisions');
-  const out = [];
-  for (const file of listScopeFiles(dir, scope.project_key)) {
-    if (!readScopeFile(file, { schema: DECIDE_SCHEMA, projectKey: scope.project_key, identity: scope.repo_identity })) continue;
-    let decisions = [];
-    try {
-      const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-      decisions = v && v.schema === DECIDE_SCHEMA && Array.isArray(v.decisions) ? v.decisions : [];
-    } catch { decisions = []; }
-    const live = decisions.some((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question);
-    if (live) out.push(file);
-  }
-  return out;
-}
 
 function closeDecideReply(payload) {
   if (process.env.AUTOPILOT_DECIDE_REPLY_CLOSE === 'off') return;
@@ -62,8 +39,21 @@ function closeDecideReply(payload) {
     ids.push(m[0]);
   }
   if (ids.length === 0) return;
-  const { closeDecisionById } = require('../scripts/open-decision.js');
-  const files = decideScopeFiles(payload.cwd);
+  let closeDecisionById;
+  let projectScopeFiles;
+  try {
+    ({ closeDecisionById, projectScopeFiles } = require('../scripts/open-decision.js'));
+  } catch (e) {
+    process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
+    return;
+  }
+  let files;
+  try {
+    files = projectScopeFiles(payload.cwd);
+  } catch (e) {
+    process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
+    return;
+  }
   for (const id of ids) {
     for (const file of files) {
       const r = closeDecisionById(file, id);

@@ -275,6 +275,123 @@ assert_eq "$EC" "0" "top-level deprecated key does not change --check exit"
 assert_contains "$OUT" "compact_token_budget" "top-level compact_token_budget is flagged"
 assert_not_contains "$OUT" "default_subagent_model" "key under [agents] stays unflagged beside top-level deprecated key"
 
+# RED at a84d9453d129bb5a4cbc447c2a99b7302c84ad69: 78 passed, 16 failed — two begin markers: --check exits 0 (expected 1), no drift; install got 0; uninstall got 0 and rewrote the file. two end markers: --check exits 0, no drift; install got 0. whitespace remainder dry-run said would delete (not would write) and uninstall deleted the file. CRLF install left a bare LF (prefix/uninstall round-trip and --check of that mixed file already passed); a CRLF-encoded copy of the installed block made --check exit 1 and omit "codex: consistent". dotted key and inline table hinted compact_token_budget 0 times (expected 2).
+# two complete marked blocks are drift: install, uninstall, and --check refuse
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install --harness codex >/dev/null
+ONE="$(cat "$CODEX_D/AGENTS.md")"
+printf '%s\nkeep\n%s\n' "$ONE" "$ONE" > "$CODEX_D/AGENTS.md"
+cp "$CODEX_D/AGENTS.md" "$BASE/two-blocks"
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "1" "two begin markers: --check exits 1"
+assert_contains "$OUT" "drift" "two begin markers: --check reports drift"
+OUT="$(run_it "$HOME_D" "$CODEX_D" install --harness codex 2>&1)"; EC=$?
+if [[ "$EC" -ne 0 ]]; then ok "two begin markers: install refuses"; else fail "two begin markers: install refuses (got 0)"; fi
+cmp -s "$BASE/two-blocks" "$CODEX_D/AGENTS.md" && ok "two begin markers: install writes nothing" || fail "two begin markers: install writes nothing"
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall --harness codex 2>&1)"; EC=$?
+if [[ "$EC" -ne 0 ]]; then ok "two begin markers: uninstall refuses"; else fail "two begin markers: uninstall refuses (got 0)"; fi
+cmp -s "$BASE/two-blocks" "$CODEX_D/AGENTS.md" && ok "two begin markers: uninstall writes nothing" || fail "two begin markers: uninstall writes nothing"
+# two END markers, one BEGIN
+python3 - "$BASE/two-blocks" "$CODEX_D/AGENTS.md" "$END" <<'PY'
+import pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text()
+end = sys.argv[3]
+pathlib.Path(sys.argv[2]).write_text(text.replace(end, end + "\n" + end, 1))
+PY
+cp "$CODEX_D/AGENTS.md" "$BASE/two-ends"
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "1" "two end markers: --check exits 1"
+assert_contains "$OUT" "drift" "two end markers: --check reports drift"
+OUT="$(run_it "$HOME_D" "$CODEX_D" install --harness codex 2>&1)"; EC=$?
+if [[ "$EC" -ne 0 ]]; then ok "two end markers: install refuses"; else fail "two end markers: install refuses (got 0)"; fi
+cmp -s "$BASE/two-ends" "$CODEX_D/AGENTS.md" && ok "two end markers: install writes nothing" || fail "two end markers: install writes nothing"
+
+# whitespace-only remainder is written back; only the empty string deletes the file
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+printf ' \n' > "$CODEX_D/AGENTS.md"
+run_it "$HOME_D" "$CODEX_D" install --harness codex >/dev/null
+cp "$CODEX_D/AGENTS.md" "$BASE/ws-installed"
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall --harness codex --dry-run 2>&1)"; EC=$?
+assert_eq "$EC" "0" "whitespace remainder dry-run exits 0"
+assert_contains "$OUT" "would write" "whitespace remainder dry-run would write"
+assert_not_contains "$OUT" "would delete" "whitespace remainder dry-run does not delete"
+cmp -s "$BASE/ws-installed" "$CODEX_D/AGENTS.md" && ok "whitespace remainder dry-run writes nothing" || fail "whitespace remainder dry-run writes nothing"
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "0" "whitespace remainder uninstall exits 0"
+assert_file_exists "$CODEX_D/AGENTS.md" "whitespace remainder keeps the file"
+printf ' \n' > "$BASE/ws-expect"
+cmp -s "$BASE/ws-expect" "$CODEX_D/AGENTS.md" && ok "whitespace remainder is the bytes outside the block" || fail "whitespace remainder is the bytes outside the block"
+# exactly empty remainder still deletes
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install >/dev/null
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall --dry-run 2>&1)"; EC=$?
+assert_contains "$OUT" "would delete" "empty remainder dry-run would delete"
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall 2>&1)"; EC=$?
+assert_eq "$EC" "0" "empty remainder uninstall exits 0"
+assert_file_absent "$CODEX_D/AGENTS.md" "empty remainder deletes the file"
+
+# CRLF file: install then uninstall preserves outside bytes; --check is consistent
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+printf 'before\r\n\r\nafter\r\n' > "$CODEX_D/AGENTS.md"
+cp "$CODEX_D/AGENTS.md" "$BASE/crlf-orig"
+OUT="$(run_it "$HOME_D" "$CODEX_D" install --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "0" "CRLF install exits 0"
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "0" "CRLF installed file --check exits 0"
+assert_contains "$OUT" "codex: consistent" "CRLF installed file reports consistent"
+python3 - "$CODEX_D/AGENTS.md" <<'PY'
+import pathlib, sys
+got = pathlib.Path(sys.argv[1]).read_bytes()
+begin = b"<!-- autopilot:token-discipline begin v1 -->"
+bare = got.replace(b"\r\n", b"")
+if begin not in got or b"\n" in bare or not got.startswith(b"before\r\n\r\nafter\r\n"):
+    raise SystemExit(1)
+PY
+if [[ "$?" -eq 0 ]]; then ok "CRLF install keeps prefix and writes CRLF"; else fail "CRLF install keeps prefix and writes CRLF"; fi
+OUT="$(run_it "$HOME_D" "$CODEX_D" uninstall --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "0" "CRLF uninstall exits 0"
+cmp -s "$BASE/crlf-orig" "$CODEX_D/AGENTS.md" && ok "CRLF uninstall restores outside bytes" || fail "CRLF uninstall restores outside bytes"
+# A file whose marked block is the installed body with CRLF line endings.
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install --harness codex >/dev/null
+python3 - "$CODEX_D/AGENTS.md" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+PY
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check --harness codex 2>&1)"; EC=$?
+assert_eq "$EC" "0" "CRLF-encoded installed block --check exits 0"
+assert_contains "$OUT" "codex: consistent" "CRLF-encoded installed block reports consistent"
+
+# dotted key and inline table hint compact_token_budget; the other keys stay top-level-only
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install >/dev/null
+cat > "$CODEX_D/config.toml" <<'EOF'
+profiles.x.compact_token_budget = 1
+x = { compact_token_budget = 1 }
+profiles.x.default_subagent_model = "z"
+y = { default_subagent_model = "z" }
+default_subagent_reasoning_effort = "low"
+EOF
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
+assert_eq "$EC" "0" "dotted and inline deprecated key does not change --check exit"
+HINTS="$(printf '%s\n' "$OUT" | grep -c 'compact_token_budget' || true)"
+assert_eq "$HINTS" "2" "dotted key and inline table each hint compact_token_budget"
+assert_not_contains "$OUT" "default_subagent_model" "dotted or inline default_subagent_model stays unflagged"
+assert_contains "$OUT" "default_subagent_reasoning_effort" "top-level sibling key is still hinted"
+
 echo "Summary: $PASS passed, $FAIL failed"
 if [[ "$FAIL" -ne 0 ]]; then exit 1; fi
 exit 0

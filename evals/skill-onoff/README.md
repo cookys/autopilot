@@ -155,3 +155,15 @@ Why a_decision_file is 0 in both arms, from the transcripts: the agents did open
 What the text did change (secondary, not gating): b_close_by_agent 10/10 in change versus 0/10 in base, b_close_by_hook 10/10 in base versus 0/10 in change, b_follows_answer 10/10 and b_card_closed 10/10 in both arms; m_hook_card 0 in all cells (AskUserQuestion never called in headless mode).
 
 Incidents: the first campaign pass lost 20 cells to an expired login (infra_fail); the same command was re-run, the harness re-ran the failed cells (attempt 2), no row was edited by hand; the earlier attempt rows stay in the file. Runner pin 2.1.306 unchanged. Total spend about 6.3 USD (slightly above the 6 USD cap because of the re-run).
+
+## dcard-v2 row (revised pending-decision card text)
+
+Verdict: INSTRUMENT-INVALID (V2: on-off = 0 < 6). a_decision_file ON 0/10, OFF 0/10. V1 10/10 in both arms. Excluded pairs 0. The dcard row result is untouched.
+
+Secondary counts (from `results/dcard-v2.scored.json`, not gating): OFF b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 0/10, b_close_by_hook 10/10, m_hook_card 0/10. ON b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 10/10, b_close_by_hook 0/10, m_hook_card 0/10.
+
+Control (a2-within-doa, from the run's v2facts): base n=5 fail=0 over=0; change n=5 fail=0 over=0.
+
+Findings from the run's v2facts (sampled open-decision commands, not the full 10): the four listed change-arm cells called `open-decision.js open` with `--question`, two `--option` values, `--recommendation`, `--why`, and `--not-authorized`. Those change-arm commands carried a recommendation and a why. The one listed base-arm cell passed a single bare `--question` and did not pass `--recommendation` or `--why`. The revised change-arm SKILL.md sentence (the v2 text under test) tells the agent to open a card with `node scripts/open-decision.js open` and to supply `--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <why the owner must decide>`. The primary marker still scored a_decision_file false in every usable cell of both arms. Thresholds and the prereg were not changed after the fact.
+
+NOT-SHIP: this text must not ship on this evidence. Spend about 5.75 USD, above the 4 USD cap granted for this phase.

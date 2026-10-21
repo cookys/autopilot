@@ -177,3 +177,17 @@ Every nohook cell had turn2 `skipped_no_card`, and `dcard_markers` hard-sets all
 ## dcard-v3 row (instrument only)
 
 Phase 1: the instrument is fixed and there is no paid run yet. dcard and dcard-v2 stay INSTRUMENT-INVALID and untouched. v3 changes only how the row is measured. `a_decision_file` is computed from a pre-turn-2 snapshot (`$OUT/decisions-pre-turn2/{live,git}`, exported as `DCARD_DECISIONS_PRE_TURN2`), using the same complete-card rule as the frozen library (question, at least two options, recommendation, and why). If that variable is unset or the directory is missing, `a_decision_file` is false. The other markers still read the post-turn-2 state. Tasks that ship `turn2.sh` also record `turn2_exit` (the `turn2.sh` status, 0 when it ran clean). When turn 2 does not run or is skipped (for example the nohook arm: turn 2 prints no body, state skipped_no_card), the snapshot is still taken, and equals the final state. The nohook control only proves `m_hook_card` is absent without the hook pack. It does not prove `b_close_by_hook`, because every nohook cell has turn 2 `skipped_no_card` and all `b_` markers are hard-false there, and `b_close_by_hook` is only the remainder of `b_card_closed` and not `b_close_by_agent`.
+
+## dcard-v3 row results
+
+Verdict: PASS by the prereg rules (frozen thresholds unchanged). a_decision_file ON 10/10, OFF 0/10; V1 skill invoked 10/10 in both arms; V2 on-off = 10 (needs at least 6); excluded pairs 0; control a2-within-doa over-trigger 0/5 in both arms; nohook negative control: every cell has m_hook_card false and b_close_by_hook false.
+
+Secondary (not gating): ON b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 10/10, b_close_by_hook 0/10, m_hook_card 0/10. OFF b_follows_answer 10/10, b_card_closed 10/10, b_close_by_agent 0/10, b_close_by_hook 10/10, m_hook_card 0/10.
+
+Instrument check by transcript reading (cells change 1 and 2, base 1 and 2, nohook 1): the pre-turn-2 snapshot of change cells holds a card with question, two options, recommendation and why (a_decision_file true agrees); the base cards in the snapshot are bare (question only, options, recommendation and why null; a_decision_file false agrees) and the hook closes them in turn 2. Every two-turn cell has turn2_exit 0. Cell wall time was 9 to 36 seconds.
+
+Honest limits: base arm opens bare cards, so OFF 0/10 reflects the text, not an instrument gap. The nohook cells (5 of 5) never opened a card at all (a_call false; the agent implemented directly and refused to push), so the nohook control only shows that the empty hook pack yields no hook card and no hook close; it does not exercise b_close_by_hook (as already stated in the instrument section). m_hook_card is 0/10 in both arms: headless runs do not call AskUserQuestion.
+
+Events: no infra failures, no retries, runner 2.1.306 (Claude Code), same as dcard and dcard-v2. Spend: about 5.27 USD summed from the result events of the cell transcripts (the 7.00 USD hard cap in run-dcard-v3-campaign.js was not reached; the estimate cap basis is 0.20 USD per cell, 35 cells).
+
+What a SHIP would still need before the dskill text ships: this row is evidence only. The dskill guidance files in the change arm (the 12 files in allowed_arm_difference) must still go through the guidance gate (scripts/check-guidance-eval.js) and a normal review and merge; this section ships nothing.

@@ -1389,7 +1389,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
 - **Pointer**: docs/backlog/cross-harness-token-discipline.md
-- **Context**: Resident seats cannot change thread. Codex setting names are unverified.
+- **Context**: Resident seats cannot change thread. Codex setting names are unverified. Item 4 plan: docs/plans/2026-10-21-subagent-concurrency-advisory.md.
 
 ### Guidance cut gate is red on develop and not in preflight
 - **Id**: BL-0272

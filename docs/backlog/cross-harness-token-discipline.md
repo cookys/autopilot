@@ -25,3 +25,31 @@ Whether agy reads AGENTS.md or GEMINI.md at runtime is unmeasured.
 agy (c4140 argon, gemini-4-argon, a single conversation) made 5532 calls, with an average context of 157K, about 25K after compaction, and compaction at about 290K for 89 compactions in total; the fields were inferred from the conversations database protobuf and there is no official schema. The agy subagent configuration follows the official documentation at antigravity.google/docs/subagents: global ~/.gemini/config/agents/NAME.md and workspace .agents/agents/NAME.md, YAML frontmatter fields name and description (both required), model (inherit, flash or pro), tools, subagent, mainAgent, commandExecutionPolicy, mcpServers, skills; there is no per-subagent effort and no concurrency cap (nesting depth cap is 10); a misspelled tool name makes the subagent hang; whether flash maps to gemini-3.8-flash is untested. Source: fleet message 01M5EY27E8E1PJVDB7B05FEENX, reply 2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX.
 
 Trigger-Type owner. Effort M. Confirm with the owner before adopting the rules.
+
+## 2026-10-21 local measurement
+
+Local spike on this host (foreman). Versions: codex-cli 0.163.0 (`codex --version`), agy 1.4.4 (`agy --version`). Runtime effect of Codex config keys was not observed (no model-driven measurement). Official Codex config reference: https://learn.chatgpt.com/docs/config-file/config-reference (`developers.openai.com/codex/config-reference` redirects there). Oracle for Codex keys is `codex doctor` (Configuration section names ignored keys; bogus top-level `totally_bogus_key_zz` is "is ignored"; unknown keys in `[agents]` and `[features.multi_agent_v2]` fail to load with "invalid data").
+
+| item | command | version | conclusion | summary |
+| --- | --- | --- | --- | --- |
+| Codex global AGENTS.md in CODEX_HOME | `CODEX_HOME=<temp with auth.json and AGENTS.md codeword>`, cwd AGENTS.md has a second codeword, `codex exec --skip-git-repo-check -s read-only` plus a one-line question | codex-cli 0.163.0 | confirmed | Model returned both codewords; global AGENTS.md text appeared first, then the repo AGENTS.md. CODEX_HOME is the config directory. |
+| `model_auto_compact_token_limit` top-level | `codex doctor` | codex-cli 0.163.0 | confirmed | Accepted with no warning. Official doc lists it top-level. Effect not observed. |
+| `compact_prompt` top-level | `codex doctor` | codex-cli 0.163.0 | confirmed | Accepted. Official doc lists it top-level. Effect not observed. |
+| `model_post_turn_compact_threshold_percent` top-level | `codex doctor` | codex-cli 0.163.0 | unverifiable | Parser accepts it with no warning. Not found in the first 100000 characters of the official config reference. Effect not observed. |
+| `compact_token_budget` top-level | `codex doctor` | codex-cli 0.163.0 | confirmed | Recognised but deprecated: redacted startup warning counted under "startup warning deprecated 1". Not in the official doc text read. Do not recommend it. Effect not observed. |
+| `default_subagent_model`, `default_subagent_reasoning_effort`, `max_concurrent_threads_per_session` at top level | `codex doctor` | codex-cli 0.163.0 | refuted | Each reported "is ignored". |
+| Same three keys inside `[agents]` | `codex doctor` | codex-cli 0.163.0 | confirmed | Accepted without warning. Official doc lists `agents.default_subagent_model`, `agents.default_subagent_reasoning_effort`, `agents.max_concurrent_threads_per_session`. Effect not observed. |
+| `agents.max_threads` vs `max_concurrent_threads_per_session` | `codex doctor` | codex-cli 0.163.0 | confirmed | `agents.max_threads` is the legacy alias. Setting both yields "Ignoring malformed agent role definition: duplicate field max_concurrent_threads_per_session". |
+| Keys inside `[features.multi_agent_v2]` | `codex doctor` | codex-cli 0.163.0 | confirmed | Only `enabled` and `max_concurrent_threads_per_session` accepted. `default_subagent_model`, `default_subagent_reasoning_effort`, and `max_depth` there fail to load. |
+| agy global instruction files | `HOME=<temp dir with copied OAuth token>`, `agy -p` plus a one-line question | agy 1.4.4 | confirmed | Loads global `~/.gemini/GEMINI.md`, global `~/.gemini/AGENTS.md`, and the workspace AGENTS.md. All three codewords returned. Load order was not observed. |
+| agy subagent file and aliases | `~/.gemini/config/agents/NAME.md`; `agy agents`; `agy --agent NAME`; `invoke_subagent` | agy 1.4.4 | confirmed | Frontmatter `name`, `description`, `model` is listed and runnable, and the main model can call it via `invoke_subagent`. `model` accepts only `flash`, `pro`, `inherit` (case-insensitive) or an absent field. `gemini-3.8-flash-low`, `gemini-3.8-flash`, `sonnet`, and `zzz-nonexistent-9` were silently not listed. |
+| Whether `flash` resolves to `gemini-3.8-flash` | agy log and transcript of `invoke_subagent` | agy 1.4.4 | unverifiable | Log shows no subagent model. The recorded call carried Model "inherit". `agy models` lists `gemini-4-argon-{low,medium,high}`, `gemini-3.8-flash-{low,medium,high}`, `claude-opus-5-5-*`, `claude-sonnet-5-5-*`, `gpt-oss-120b-medium`. `--agent NAME` left the main label at Gemini 4 Argon (Medium). `--model gemini-3.8-flash-low` changed it to Gemini 3.8 Flash (Low). |
+| `commandExecutionPolicy` sandbox vs GPU | peer measurement, c4140 argon; not run locally | peer (agy) | unverifiable | Peer measured, not reproduced locally. Not recorded as a capability. |
+| Compaction thresholds hard-coded for `gemini-4-argon` | not tested | peer claim | unverifiable | Unverified peer claim. |
+| `settings.json` `contextWindow` only 256K/512K/900K | not tested | peer claim | unverifiable | Unverified peer claim. |
+
+### Recommended global files for tokinstall
+
+- Codex global instructions go in `~/.codex/AGENTS.md` (confirmed loaded before the repo AGENTS.md).
+- agy global instructions go in `~/.gemini/GEMINI.md` and/or `~/.gemini/AGENTS.md` (both confirmed loaded).
+- Codex subagent and compaction settings go in `config.toml`: `model_auto_compact_token_limit` and `compact_prompt` at top level; `default_subagent_model`, `default_subagent_reasoning_effort`, and `max_concurrent_threads_per_session` under `[agents]`. Do not set `compact_token_budget`.

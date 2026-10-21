@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # RED at 69fe38bdd7af775498227abdf24f4ed6850b8ef3: script absent (MODULE_NOT_FOUND); 19 passed, 22 failed — install exits 1, no AGENTS.md/GEMINI.md, no markers, second install not byte-identical, block not inserted, --check not 0 when "consistent", top-level default_subagent_model not flagged, dry-run exit 1.
+# RED at 9d2e05ebe5c2314f224c4e05bd6d0725fa718f2d: 50 passed, 12 failed — installed files still contain context_budget and Known per-harness facts; a doc with no install-block markers and an unpaired marker both install (exit 0) and write files; compact_token_budget inside a section is not flagged.
 # Opt-in installer for the token-discipline block (Codex AGENTS.md, agy GEMINI.md).
 # Does not source hooks/tests/lib.sh: no git operations.
 set -uo pipefail
@@ -125,7 +126,7 @@ python3 - "$CODEX_D/AGENTS.md" <<'PY'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
 t = p.read_text()
-p.write_text(t.replace("Token discipline", "Token discipline HAND-EDITED", 1))
+p.write_text(t.replace("Five rules", "Five rules HAND-EDITED", 1))
 PY
 OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
 assert_eq "$EC" "1" "--check exits 1 after the block was hand-edited"
@@ -174,6 +175,105 @@ cp "$SCRIPT" "$COPY/scripts/install-token-discipline.js"
 OUT="$(HOME="$HOME_D" CODEX_HOME="$CODEX_D" node "$COPY/scripts/install-token-discipline.js" install 2>&1)"; EC=$?
 if [[ "$EC" -ne 0 ]]; then ok "missing docs source exits non-zero"; else fail "missing docs source exits non-zero (got 0)"; fi
 assert_file_absent "$CODEX_D/AGENTS.md" "missing source writes nothing"
+
+# narrowed block: seat key and the facts section stay out of the installed text
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+OUT="$(run_it "$HOME_D" "$CODEX_D" install 2>&1)"; EC=$?
+assert_eq "$EC" "0" "install for narrowed-block checks exits 0"
+for f in "$CODEX_D/AGENTS.md" "$HOME_D/.gemini/GEMINI.md"; do
+  body="$(cat "$f")"
+  assert_not_contains "$body" "context_budget" "installed $(basename "$f") omits context_budget"
+  assert_not_contains "$body" "Known per-harness facts" "installed $(basename "$f") omits per-harness facts"
+  assert_contains "$body" "Five rules" "installed $(basename "$f") keeps the Five rules"
+done
+
+# doc without install-block markers: real script refuses; a mutant that ignores markers writes
+marker_tree() {
+  local dest="$1" doc="$2" script_src="$3"
+  mkdir -p "$dest/scripts" "$dest/docs"
+  cp "$script_src" "$dest/scripts/install-token-discipline.js"
+  printf '%s\n' "$doc" > "$dest/docs/token-discipline.md"
+}
+
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+NOMARK="$(mktemp -d)"
+marker_tree "$NOMARK" $'# Token discipline\n\n## Five rules\n\n1. Hand off.\n' "$SCRIPT"
+OUT="$(HOME="$HOME_D" CODEX_HOME="$CODEX_D" node "$NOMARK/scripts/install-token-discipline.js" install 2>&1)"; EC=$?
+if [[ "$EC" -ne 0 ]]; then ok "doc without install-block markers exits non-zero"; else fail "doc without install-block markers exits non-zero (got 0)"; fi
+assert_file_absent "$CODEX_D/AGENTS.md" "doc without markers writes no file"
+assert_file_absent "$HOME_D/.gemini/GEMINI.md" "doc without markers writes no agy file"
+
+MUT="$(mktemp -d)"
+python3 - "$SCRIPT" "$MUT/mutant.js" <<'PY'
+import pathlib, sys
+src = pathlib.Path(sys.argv[1]).read_text()
+start = src.find("function readSource() {")
+end = src.find("\nfunction targetsFor(")
+if start < 0 or end < 0:
+    raise SystemExit("readSource span not found")
+# Negative control: this mutant ignores install-block markers and installs the whole file.
+mutant = (
+    "function readSource() {\n"
+    "  let body;\n"
+    "  try { body = fs.readFileSync(SOURCE, 'utf8'); }\n"
+    "  catch (error) { fail('cannot read ' + SOURCE); }\n"
+    "  if (!body.endsWith('\\n')) body += '\\n';\n"
+    "  return BEGIN + '\\n' + body + END + '\\n';\n"
+    "}\n"
+)
+pathlib.Path(sys.argv[2]).write_text(src[:start] + mutant + src[end + 1:])
+PY
+marker_tree "$MUT" $'# Token discipline\n\n## Five rules\n\n1. Hand off.\n' "$MUT/mutant.js"
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+OUT="$(HOME="$HOME_D" CODEX_HOME="$CODEX_D" node "$MUT/scripts/install-token-discipline.js" install 2>&1)"; EC=$?
+assert_eq "$EC" "0" "negative control: mutant that ignores markers exits 0"
+assert_file_exists "$CODEX_D/AGENTS.md" "negative control: mutant that ignores markers writes a file"
+
+# unpaired marker
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+UNPAIRED="$(mktemp -d)"
+marker_tree "$UNPAIRED" $'<!-- install-block begin -->\n## Five rules\n\n1. Hand off.\n' "$SCRIPT"
+OUT="$(HOME="$HOME_D" CODEX_HOME="$CODEX_D" node "$UNPAIRED/scripts/install-token-discipline.js" install 2>&1)"; EC=$?
+if [[ "$EC" -ne 0 ]]; then ok "unpaired install-block marker exits non-zero"; else fail "unpaired install-block marker exits non-zero (got 0)"; fi
+assert_file_absent "$CODEX_D/AGENTS.md" "unpaired marker writes no file"
+shopt -s nullglob
+baks=("$CODEX_D"/AGENTS.md.bak-* "$HOME_D"/.gemini/GEMINI.md.bak-*)
+shopt -u nullglob
+assert_eq "${#baks[@]}" "0" "unpaired marker writes no backup"
+
+# compact_token_budget is flagged in a section and at the top level
+BASE="$(new_home)"
+HOME_D="$BASE/home"
+CODEX_D="$BASE/codex"
+run_it "$HOME_D" "$CODEX_D" install >/dev/null
+cat > "$CODEX_D/config.toml" <<'EOF'
+[agents]
+compact_token_budget = 1000
+default_subagent_model = "cheap"
+EOF
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
+assert_eq "$EC" "0" "deprecated key inside a section does not change --check exit"
+assert_contains "$OUT" "compact_token_budget" "compact_token_budget inside a section is flagged"
+assert_not_contains "$OUT" "default_subagent_model" "default_subagent_model under [agents] stays unflagged beside the deprecated key"
+
+cat > "$CODEX_D/config.toml" <<'EOF'
+compact_token_budget = 1000
+
+[agents]
+default_subagent_model = "cheap"
+EOF
+OUT="$(run_it "$HOME_D" "$CODEX_D" --check 2>&1)"; EC=$?
+assert_eq "$EC" "0" "top-level deprecated key does not change --check exit"
+assert_contains "$OUT" "compact_token_budget" "top-level compact_token_budget is flagged"
+assert_not_contains "$OUT" "default_subagent_model" "key under [agents] stays unflagged beside top-level deprecated key"
 
 echo "Summary: $PASS passed, $FAIL failed"
 if [[ "$FAIL" -ne 0 ]]; then exit 1; fi

@@ -4,18 +4,21 @@
  * Opt-in installer for the token-discipline marked block.
  *
  * Writes one HTML-comment-delimited block into Codex AGENTS.md (CODEX_HOME, or
- * ~/.codex when unset) and agy GEMINI.md (~/.gemini). The block body is read
- * at run time from docs/token-discipline.md. Nothing in a default install flow
- * calls this with `install`. This script writes no Codex config.toml values.
+ * ~/.codex when unset) and agy GEMINI.md (~/.gemini). The block body is the
+ * text between the install-block markers in docs/token-discipline.md, read at
+ * run time. Nothing in a default install flow calls this with `install`.
+ * This script writes no Codex config.toml values.
  *
  * Usage:
  *   node scripts/install-token-discipline.js install [--harness codex|agy|all] [--dry-run]
  *   node scripts/install-token-discipline.js uninstall [--harness codex|agy|all] [--dry-run]
  *   node scripts/install-token-discipline.js --check [--harness codex|agy|all]
  *
- * --check exits 0 when every selected block matches the source, and 1 on drift
- * or when a block is not installed. A config.toml hint does not change that
- * exit code. --dry-run prints what would be written and writes nothing.
+ * --check exits 0 when every selected block matches that marked section, and 1
+ * on drift or when a block is not installed. A config.toml hint does not change
+ * that exit code. --dry-run prints what would be written and writes nothing.
+ * compact_token_budget is hinted wherever it appears. The other three ignored
+ * keys are hinted only at the top level.
  *
  * Contract: this header.
  */
@@ -26,14 +29,16 @@ const path = require('path');
 
 const BEGIN = '<!-- autopilot:token-discipline begin v1 -->';
 const END = '<!-- autopilot:token-discipline end -->';
+const INSTALL_BEGIN = '<!-- install-block begin -->';
+const INSTALL_END = '<!-- install-block end -->';
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SOURCE = path.join(REPO_ROOT, 'docs', 'token-discipline.md');
-const HINT_KEYS = new Set([
+const TOP_LEVEL_HINT_KEYS = new Set([
   'default_subagent_model',
   'default_subagent_reasoning_effort',
   'max_concurrent_threads_per_session',
-  'compact_token_budget',
 ]);
+const DEPRECATED_KEY = 'compact_token_budget';
 
 function usage() {
   process.stdout.write(
@@ -85,14 +90,47 @@ function parseArgs(argv) {
   return { command, harness, dryRun };
 }
 
+function countOf(text, needle) {
+  let count = 0;
+  let from = 0;
+  while (from <= text.length) {
+    const at = text.indexOf(needle, from);
+    if (at === -1) return count;
+    count += 1;
+    from = at + needle.length;
+  }
+  return count;
+}
+
 function readSource() {
-  let body;
+  let text;
   try {
-    body = fs.readFileSync(SOURCE, 'utf8');
+    text = fs.readFileSync(SOURCE, 'utf8');
   } catch (error) {
     fail(`cannot read token-discipline source ${SOURCE}: ${error.message}`);
   }
-  if (!body.endsWith('\n')) body += '\n';
+  const beginCount = countOf(text, INSTALL_BEGIN);
+  const endCount = countOf(text, INSTALL_END);
+  if (beginCount !== 1 || endCount !== 1) {
+    fail(
+      `token-discipline source ${SOURCE} must contain exactly one ` +
+      '"<!-- install-block begin -->" line and one "<!-- install-block end -->" line ' +
+      `(found begin ${beginCount}, end ${endCount})`
+    );
+  }
+  const beginAt = text.indexOf(INSTALL_BEGIN);
+  const endAt = text.indexOf(INSTALL_END);
+  if (endAt < beginAt) {
+    fail(`install-block markers in ${SOURCE} are out of order`);
+  }
+  let start = beginAt + INSTALL_BEGIN.length;
+  if (text[start] === '\r') start += 1;
+  if (text[start] === '\n') start += 1;
+  let body = text.slice(start, endAt);
+  if (body.endsWith('\r\n')) body = body.slice(0, -2);
+  else if (body.endsWith('\n')) body = body.slice(0, -1);
+  if (body.endsWith('\r')) body = body.slice(0, -1);
+  body += '\n';
   return `${BEGIN}\n${body}${END}\n`;
 }
 
@@ -214,7 +252,7 @@ function uninstallOne(target, dryRun) {
   process.stdout.write(`wrote ${target.file}\n`);
 }
 
-function topLevelHintKeys(toml) {
+function hintFindings(toml) {
   let section = '';
   const hits = [];
   for (const raw of toml.split('\n')) {
@@ -225,9 +263,13 @@ function topLevelHintKeys(toml) {
       section = header[1].trim();
       continue;
     }
-    if (section !== '') continue;
     const key = line.match(/^([A-Za-z0-9_.-]+)\s*=/);
-    if (key && HINT_KEYS.has(key[1])) hits.push(key[1]);
+    if (!key) continue;
+    if (key[1] === DEPRECATED_KEY) {
+      hits.push({ key: key[1], section });
+    } else if (section === '' && TOP_LEVEL_HINT_KEYS.has(key[1])) {
+      hits.push({ key: key[1], section: '' });
+    }
   }
   return hits;
 }
@@ -250,12 +292,19 @@ function checkOne(target, block) {
   if (target.codexHome) {
     const configPath = path.join(target.codexHome, 'config.toml');
     if (fs.existsSync(configPath)) {
-      const hits = topLevelHintKeys(fs.readFileSync(configPath, 'utf8'));
-      for (const key of hits) {
-        process.stdout.write(
-          `hint: ${key} at the top level of ${configPath} is ignored there; ` +
-          'the correct location is the [agents] section\n'
-        );
+      const hits = hintFindings(fs.readFileSync(configPath, 'utf8'));
+      for (const hit of hits) {
+        if (hit.key === DEPRECATED_KEY) {
+          const where = hit.section === '' ? 'the top level' : `[${hit.section}]`;
+          process.stdout.write(
+            `hint: ${hit.key} in ${where} of ${configPath} is deprecated; do not set it\n`
+          );
+        } else {
+          process.stdout.write(
+            `hint: ${hit.key} at the top level of ${configPath} is ignored there; ` +
+            'the correct location is the [agents] section\n'
+          );
+        }
       }
     }
   }

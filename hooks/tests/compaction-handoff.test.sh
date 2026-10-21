@@ -308,8 +308,20 @@ assert_contains "$(cat "$FILE")" "more lines cut" "packed: the git section hit i
 # Plugin-root length, not this checkout's path, decides whether the base context's
 # open-decision.js and token-discipline.md paths push the injection over 10000.
 # Node realpath's symlinks, so each root is a hardlink tree at an exact length.
+# TEST_TMP from mktemp -t is ~45 chars (autopilot-test-compaction-handoff-XXXXXX).
+# A 48-char root needs stem "$ROOT_STAGE/short-" plus one pad char, so the stage
+# itself must be <= 40 chars. That does not fit under TEST_TMP. 96 and 160 would.
+# Stage stays on /tmp (same filesystem as a typical repo for cp -al). The EXIT
+# trap is inherited by command substitutions; only the outermost BASHPID removes
+# the stage, matching hooks/tests/lib.sh.
+__ROOT_STAGE_TOP_BASHPID=$BASHPID
 ROOT_STAGE=$(mktemp -d /tmp/apss-XXXXXX)
-trap 'rm -rf "$ROOT_STAGE"; cleanup_test_tmp' EXIT
+cleanup_root_stage() {
+  [ "$BASHPID" = "$__ROOT_STAGE_TOP_BASHPID" ] || return 0
+  rm -rf "$ROOT_STAGE"
+  cleanup_test_tmp
+}
+trap cleanup_root_stage EXIT
 make_exact_root() {
   local n="$1" tag="$2" stem pad dir
   stem="$ROOT_STAGE/${tag}-"
@@ -318,10 +330,15 @@ make_exact_root() {
   dir="${stem}$(head -c "$pad" /dev/zero | tr '\0' 'p')"
   [ "${#dir}" -eq "$n" ] || { echo "root length ${#dir} != $n" >&2; return 1; }
   mkdir -p "$dir"
-  cp -al "$REPO_ROOT/src" "$REPO_ROOT/hooks" "$REPO_ROOT/scripts" "$dir/"
+  cp -al "$REPO_ROOT/src" "$REPO_ROOT/hooks" "$REPO_ROOT/scripts" "$dir/" \
+    || cp -a "$REPO_ROOT/src" "$REPO_ROOT/hooks" "$REPO_ROOT/scripts" "$dir/"
   mkdir -p "$dir/docs"
-  [ -d "$REPO_ROOT/.claude-plugin" ] && cp -al "$REPO_ROOT/.claude-plugin" "$dir/"
-  [ -f "$REPO_ROOT/plugin.json" ] && cp -al "$REPO_ROOT/plugin.json" "$dir/"
+  if [ -d "$REPO_ROOT/.claude-plugin" ]; then
+    cp -al "$REPO_ROOT/.claude-plugin" "$dir/" || cp -a "$REPO_ROOT/.claude-plugin" "$dir/"
+  fi
+  if [ -f "$REPO_ROOT/plugin.json" ]; then
+    cp -al "$REPO_ROOT/plugin.json" "$dir/" || cp -a "$REPO_ROOT/plugin.json" "$dir/"
+  fi
   printf '%s' "$dir"
 }
 cp "$FILE" "$TEST_TMP/packed-state.md"

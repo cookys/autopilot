@@ -88,6 +88,38 @@ function fitBodyToRoom(body, room) {
   return marker.slice(0, room);
 }
 
+// head+tail fit in keep, but base + later blocks + head + tail do not, so the
+// body room is negative. An empty body plus slice(0, keep) would cut the tail.
+// Keep the full head (it carries the DATA sentence) and the full tail (closing
+// wrapper tag), then the cut notice, then as much of the front of the base as
+// still fits. The tail sits at the end; a length guard drops the front. Never throws.
+function negativeRoomFallback(base, head, tail, keep) {
+  const core = head + tail;
+  let spare = keep - core.length;
+  let notice = '';
+  if (spare > 0) {
+    notice = RECOVERY_CUT_LINE.slice(0, Math.min(RECOVERY_CUT_LINE.length, spare));
+    spare -= notice.length;
+  }
+  const front = spare > 0 ? String(base).slice(0, spare) : '';
+  let out = front + head + notice + tail;
+  if (out.length > keep) out = out.slice(out.length - keep);
+  return out;
+}
+
+// Last-resort length guard. Drop from the front so a tail that fits in keep
+// is never the part that gets cut.
+function guardKeepTail(context, tail, keep) {
+  if (tail.length >= keep) return tail.slice(tail.length - keep);
+  if (context.length <= keep && context.endsWith(tail)) return context;
+  const roomForFront = keep - tail.length;
+  const front = context.endsWith(tail)
+    ? context.slice(0, context.length - tail.length).slice(-roomForFront)
+    : context.slice(0, roomForFront);
+  const out = front + tail;
+  return out.length > keep ? out.slice(out.length - keep) : out;
+}
+
 // Object form reserves head and tail. A plain string stays on the original path.
 function composeWithRecoveryObject({
   compactionRecovery,
@@ -147,6 +179,7 @@ function composeWithRecoveryObject({
     const later = full.slice((base + fullRecovery).length);
     const othersLen = base.length + later.length;
     const room = keep - othersLen - head.length - tail.length;
+    if (room < 0) return negativeRoomFallback(base, head, tail, keep);
     let fitted = fitBodyToRoom(body, room);
     context = base + head + fitted + tail + later;
     if (context.length >= limit) {
@@ -166,6 +199,7 @@ function composeWithRecoveryObject({
       othersLen = base.length + later.length;
     }
     const room = keep - othersLen - head.length - tail.length;
+    if (room < 0) return negativeRoomFallback(base, head, tail, keep);
     let fitted = fitBodyToRoom(body, room);
     context = applySections(head + fitted + tail);
     if (context.length >= limit) {
@@ -180,7 +214,7 @@ function composeWithRecoveryObject({
       }
     }
   }
-  if (context.length >= limit) context = context.slice(0, keep);
+  if (context.length >= limit) context = guardKeepTail(context, tail, keep);
   return context;
 }
 

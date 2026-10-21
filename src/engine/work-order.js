@@ -1188,7 +1188,7 @@ function observeRegisteredControllerWorktree(wo, options = {}) {
       reason: dirty
         ? 'dirty controller worktree remains owned and blocks automatic attach'
         : (unique
-          ? 'controller worktree has unique committed mutation and requires adoption'
+          ? 'controller worktree has a unique committed mutation; adopt the range by running autopilot engine review-candidate (node bin/autopilot.js engine review-candidate) with a sealed adoption contract, see docs/review-candidate.md'
           : null),
       observation,
       digest: sha256Json(observation),

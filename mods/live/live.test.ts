@@ -5221,7 +5221,7 @@ for (const surface of SURFACES) {
     expect(rows[1]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
     expect(rows).toContain('  選項      [ ] ★ OK  [ ] 完整顯示')
     expect(rows).toContain('  選項      [ ] 要  [ ] 不要')
-    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 0/3） ]  答案會貼進這個對話送出')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/3） ]  答案會貼進這個對話送出')
     const buttons = await keysOf($, 'Button')
     for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1', 'pick:d-c24ecfd9:0', 'pick:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
     expect(buttons, 'nothing is chosen: the send row is plain text').not.toContain('submit')
@@ -5236,7 +5236,7 @@ for (const surface of SURFACES) {
     await act($, 'pick:d-4290499d:1')
     let rows = await decideRows($)
     expect(rows).toContain('  選項      [ ] ★ OK  [x] 完整顯示')
-    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 1/3） ]  答案會貼進這個對話送出')
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已答 1/3） ]  答案會貼進這個對話送出')
     expect(await keysOf($, 'Button')).toContain('submit')
     await act($, 'pick:d-4290499d:0') // another option of the same question replaces the pick
     expect(await decideRows($)).toContain('  選項      [x] ★ OK  [ ] 完整顯示')
@@ -5322,6 +5322,17 @@ for (const surface of SURFACES) {
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
   })
 
+  test('DECIDE mounted: a note with no option picked submits that question as 都不選 (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    await pane.input({ key: 'note:d-4290499d', text: '自己寫', kind: 'change' })
+    await pane.press({ key: 'submit' })
+    await pane.unmount()
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己寫')
+  })
+
   test('DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (' + surface + ')', async ($, on) => {
     decideWorld(on, [DQ1, { ...DQ2, origin: 'ask_user_question' }]) // the origin travels model.json -> job model -> pane, nothing is put into a view by hand
     await start($, surface)
@@ -5330,7 +5341,7 @@ for (const surface of SURFACES) {
     expect(at).toBeGreaterThan(0)
     expect(rows[at + 1]).toBe('  選項      [ ] 要  [ ] 不要') // still shown, as plain text
     expect(rows[at + 2]).toBe('  請在對話框回答。')
-    expect(rows[rows.length - 1]).toBe('  [ 送出（已選 0/1） ]  答案會貼進這個對話送出') // only the first question counts
+    expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/1） ]  答案會貼進這個對話送出') // only the first question counts
     const buttons = await keysOf($, 'Button')
     expect(buttons.filter(k => k.startsWith('pick:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
     expect(buttons.filter(k => k.startsWith('pick:d-4290499d')).length).toBe(2)

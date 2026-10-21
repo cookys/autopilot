@@ -1564,13 +1564,16 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 
 // ---- the 待決 tab: what the owner picked and typed, and what was already sent. The pane keeps it in $.state (`autopilot.decide`, types/index.d.ts), keyed by the
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
-// answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`. These strings are a wire format the model reads back, so they are not
+// answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`, or `→ 都不選｜補充：<note>` when the owner picked none of the options. These strings are a wire format the model reads back, so they are not
 // in the locale tables and do not change with the language. ----
 export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
 export type DecideView = DecideState & { inputs: boolean }
 export const DECIDE_REPLY_HEAD = '[待決回覆]'
 const DECIDE_ARROW = '\u2192' // written as an escape: it is wire text the model parses, never a glyph the pane draws (ui-lint L2 keeps drawn glyphs in GLYPHS)
+// wire text the model on the receiving end reads as "owner picked none of the options and wrote their own answer in the note"
+export const DECIDE_NONE = '都不選'
+const DECIDE_NOTE_MARK = '｜補充：'
 const DECIDE_EXCERPT = 30
 const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 const excerptOf = (q: string): string => { const cs = [...flat(q)]; return cs.length <= DECIDE_EXCERPT ? cs.join('') : cs.slice(0, DECIDE_EXCERPT).join('') + '…' }
@@ -1596,12 +1599,13 @@ export function recommendedIndex(d: LiveDecision): number | null {
   const part = labels.findIndex(l => l !== '' && (r.startsWith(l) || l.startsWith(r)))
   return part >= 0 ? part : null
 }
-// the answer line of one question, or null when nothing is chosen (an option question needs a pick, a free one needs text)
+// the answer line of one question, or null when nothing is answered (an option question needs a pick or a non-empty note, a free one needs text)
 export function decideLine(d: LiveDecision, st: DecideState): string | null {
   if (d.id === null || decideDialog(d)) return null
   const note = decideNote(d, st)
   const pick = decidePick(d, st)
-  const answer = d.options.length === 0 ? wire(note) : pick === null ? '' : wire(d.options[pick].label) + (note === '' ? '' : '｜補充：' + wire(note))
+  const notePart = note === '' ? '' : DECIDE_NOTE_MARK + wire(note)
+  const answer = d.options.length === 0 ? wire(note) : pick === null ? (note === '' ? '' : DECIDE_NONE + notePart) : wire(d.options[pick].label) + notePart
   return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer
 }
 // the reply to send now: every open question that has an answer, in list order; null when there is none

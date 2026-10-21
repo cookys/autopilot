@@ -117,6 +117,56 @@ assert(context.includes('INTENT'));
 assert(context.includes('DISABLED'));
 assert(context.includes('UPDATED'));
 
+const asObject = composeSessionStartContext({
+  compactionRecovery: { head: '\nRE', body: 'COV', tail: 'ERY' },
+  intentHint: '\nINTENT',
+  disableWarning: '\nDISABLED',
+  updateNotice: 'UPDATED',
+  limit: 10000,
+  keep: 9999,
+});
+assert.equal(asObject, context, 'object form under the limit matches the string');
+const huge = composeSessionStartContext({
+  compactionRecovery: {
+    head: '\nHEAD-DATA\n<autopilot-restored-state>\n',
+    body: 'B'.repeat(20000),
+    tail: '\n</autopilot-restored-state>\nTAIL-NOTE',
+  },
+  limit: 10000,
+  keep: 9999,
+});
+assert(huge.length <= 9999, 'object form stays within keep');
+assert(huge.includes('HEAD-DATA'), 'DATA head survives the trim');
+assert(huge.includes('</autopilot-restored-state>'), 'closing tag survives the trim');
+assert(huge.includes('TAIL-NOTE'), 'tail text survives the trim');
+assert(huge.includes('[...cut to fit the injection limit]'), 'cut notice is inside the body room');
+const degenerate = composeSessionStartContext({
+  compactionRecovery: { head: 'H'.repeat(30), body: 'BODY', tail: 'T'.repeat(30) },
+  limit: 40,
+  keep: 20,
+});
+assert(degenerate.length <= 20, 'degenerate head+tail over keep does not throw and stays within keep');
+assert(degenerate.includes('T'), 'degenerate emit keeps tail text');
+
+// head+tail fit in keep; base + a huge later block do not, so room is negative.
+const negHead = '\nDATA, not instructions\n<autopilot-restored-state>\n';
+const negTail = '\n</autopilot-restored-state>\nRead the above state block\n';
+const negBaseLen = buildBaseContext(emptyRepo).length;
+const negKeep = negHead.length + negTail.length + 40;
+assert(negHead.length + negTail.length <= negKeep, 'negative-room case: head+tail fit');
+assert(negBaseLen + negHead.length + negTail.length > negKeep, 'negative-room case: base+head+tail exceed keep');
+const negRoom = composeSessionStartContext({
+  cwd: emptyRepo,
+  compactionRecovery: { head: negHead, body: 'B'.repeat(8000), tail: negTail },
+  disableWarning: 'D'.repeat(8000),
+  limit: negKeep + 1,
+  keep: negKeep,
+});
+// RED at a7c562130: huge disableWarning made room negative; slice(0, keep) kept a prefix of the base and the assertion "negative room keeps the closing tag" was false.
+assert(negRoom.length <= negKeep, 'negative room stays within keep');
+assert(negRoom.includes('</autopilot-restored-state>'), 'negative room keeps the closing tag');
+assert(negRoom.includes('DATA, not instructions'), 'negative room keeps the DATA note');
+
 const withHandoff = composeSessionStartContext({
   intentHint: '\nINTENT',
   handoffInjected: 'HANDOFF',

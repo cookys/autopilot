@@ -910,6 +910,28 @@ setup_grok() {
   echo "see docs/installation.md § Grok Build and src/harness/capabilities/grok.json."
 }
 
+# Report-only. Never install. A non-zero --check is a WARN, not a failure.
+report_token_discipline() {
+  if ! have_cmd node; then
+    status WARN "tokens" "node not found; token-discipline blocks not checked"
+    return 0
+  fi
+  local out td_status=0 line level
+  out="$(node "$REPO_DIR/scripts/install-token-discipline.js" --check 2>&1)" || td_status=$?
+  level="OK"
+  if [[ "$td_status" -ne 0 ]]; then
+    level="WARN"
+  fi
+  if [[ -z "$out" ]]; then
+    status "$level" "tokens" "token-discipline --check exit $td_status"
+    return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    status "$level" "tokens" "$line"
+  done <<< "$out"
+}
+
 run_check_for() {
   case "$1" in
     claude) check_claude ;;
@@ -1041,6 +1063,7 @@ main() {
       run_check_for "$HARNESS"
     fi
     check_config_file
+    report_token_discipline
 
     echo ""
     echo "Summary: $FAILURES failure(s), $WARNINGS warning(s)"

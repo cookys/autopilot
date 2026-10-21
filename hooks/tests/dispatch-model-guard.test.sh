@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 48aa19a3fdc8eb21ab3a1036dbc7a32a6a61e0ef: 87 passed, 4 failed — both-missing deny had no "Lane:", no three-line template, and did not name subagent-budget.
 # Test for dispatch-model-guard.js hook
 . "$(dirname "$0")/lib.sh"
 
@@ -248,5 +249,29 @@ assert_contains "$__RUN_STDOUT" '"additionalContext"' "case21-stdout-advisory"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case21-warn never permissionDecision"
 assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case21-stderr-carries-warn-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# hdrhint: a brief missing Engine and Lane names both, the three-line template, and subagent-budget.
+HDR_TMPL='Engine: <model>\nRole: <role>\nLane: <slug>'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Do the work with no header lines."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "hdrhint-both-missing-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "hdrhint-both-missing-deny"
+assert_contains "$__RUN_STDOUT" "Engine:" "hdrhint-both-missing lists Engine"
+assert_contains "$__RUN_STDOUT" "Lane:" "hdrhint-both-missing lists Lane"
+assert_contains "$__RUN_STDOUT" "$HDR_TMPL" "hdrhint-both-missing has the three-line template"
+assert_contains "$__RUN_STDOUT" "subagent-budget" "hdrhint-both-missing names subagent-budget"
+assert_contains "$__RUN_STDOUT" "subagent-budget requires Lane: for autopilot dispatches" "hdrhint-both-missing does not guess the lane gate"
+
+# Negative: all three lines stay allowed (same as a matching header on base).
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "hdrhint-complete-exit"
+assert_eq "" "$__RUN_STDOUT" "hdrhint-complete stays allowed"
+
+# Negative: Role alone is not a deny.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "hdrhint-role-only-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "hdrhint-role-only is not denied"
 
 finalize_test

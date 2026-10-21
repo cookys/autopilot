@@ -18,8 +18,10 @@ first_node_arg() {
 
 # --- quote: space in the plugin path ---
 SPACE="$TEST_TMP/plugin dir"
-mkdir -p "$SPACE/hooks" "$SPACE/scripts/lib" "$SPACE/src/hooks/handlers"
+mkdir -p "$SPACE/hooks/lib" "$SPACE/scripts/lib" "$SPACE/src/hooks/handlers"
 cp "$GUARD_SRC" "$SPACE/hooks/owner-question-guard.js"
+cp "$REPO_ROOT/hooks/lib/brief-head.js" "$SPACE/hooks/lib/brief-head.js"
+cp "$REPO_ROOT/hooks/lib/brief-header-template.js" "$SPACE/hooks/lib/brief-header-template.js"
 cp "$REPO_ROOT/scripts/lib/config-path.js" "$SPACE/scripts/lib/config-path.js"
 cp "$START_SRC" "$SPACE/src/hooks/handlers/session-start.js"
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Should I continue?"}]}}' > "$TEST_TMP/transcript.jsonl"

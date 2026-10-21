@@ -32,6 +32,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { headerDenialSuffix } = require('./lib/brief-header-template.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
@@ -295,7 +296,8 @@ try {
     // and it re-dispatches on its own. `on_missing_model: ask` keeps the old dialog.
     const reason = 'dispatch-model-guard: no model specified — the subagent would inherit the session model '
       + '(possibly a guarded engine); re-dispatch NOW with an explicit model: (scripts/resolve-dispatch.sh '
-      + '--role <role>) and an "Engine: <model>" first prompt line';
+      + '--role <role>) and an "Engine: <model>" first prompt line'
+      + headerDenialSuffix(typeof toolInput.prompt === 'string' ? toolInput.prompt : '', '', { engineBy: 'self', laneBy: 'other' });
     // on_missing_model: ask is the explicit opt-in to the dialog, so it asks even under
     // the default remind mode (warn stays advisory).
     if (config.on_missing_model === 'ask') handleGuard(reason, config.mode === 'remind' ? 'ask' : config.mode);
@@ -329,7 +331,8 @@ try {
     if (!headerMatch) {
       const got = firstLine !== null ? firstLine : '(none)';
       handleDeny(
-        `dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: ${modelRaw} (got: ${got})`,
+        `dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: ${modelRaw} (got: ${got})`
+        + headerDenialSuffix(promptRaw, modelRaw, { engineBy: 'self', laneBy: 'other' }),
         config.mode
       );
     }

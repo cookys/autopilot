@@ -58,6 +58,7 @@
         "evals/capability-evidence-corpus.json",
         "evals/reviewer-eval-generator.js",
         "hooks/_shared/",
+        "hooks/lib/",
         "hooks/hooks.json",
         "references/",
         "scripts/",

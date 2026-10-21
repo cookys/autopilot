@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
+# RED at f52f04b9256a4403b90dc4aba306c0871d335cc3: FAIL requiring mirrored session-start.js succeeds (expected 0, got 1); Cannot find module '../../../hooks/lib/brief-header-template.js'
 . "$(dirname "$0")/lib.sh"
 
 PLUGIN_DIR="$REPO_ROOT/platforms/codex/plugin"
 MARKETPLACE_ROOT="$REPO_ROOT/platforms/codex"
 MARKETPLACE="$MARKETPLACE_ROOT/.agents/plugins/marketplace.json"
+
+MIRROR_SESSION_START="$(cd "$REPO_ROOT" && node -e "require('./platforms/codex/plugin/src/hooks/handlers/session-start.js'); process.stdout.write('mirrored_session_start_ok')" 2>&1)"
+MIRROR_SESSION_START_EXIT=$?
+assert_eq "$MIRROR_SESSION_START_EXIT" "0" "requiring mirrored session-start.js succeeds"
+assert_eq "$MIRROR_SESSION_START" "mirrored_session_start_ok" "mirrored session-start.js loads brief-header-template"
 
 assert_file_exists "$PLUGIN_DIR/.codex-plugin/plugin.json" "Codex plugin manifest exists"
 assert_file_exists "$MARKETPLACE" "Codex local marketplace exists"
@@ -167,6 +173,7 @@ for (const rel of [
   'evals/clean',
   'evals/known-bad',
   'hooks/_shared',
+  'hooks/lib',
   'references',
   'scripts',
   'project-config-template',
@@ -228,7 +235,7 @@ if (!fs.existsSync(hookBaseline)) {
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
 if (JSON.stringify(hookEntries) !== JSON.stringify([
-  '_shared', 'dirty-protected-paths.js', 'hooks.json', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
+  '_shared', 'dirty-protected-paths.js', 'hooks.json', 'lib', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
 ])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
@@ -353,7 +360,7 @@ mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin/.codex-pl
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
 printf '%s\n' '{"description":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped","hooks":"./hooks/hooks.json","interface":{"longDescription":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped"}}' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
-for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
+for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared hooks/lib references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
   printf 'payload %s\n' "$rel" > "$SYNC_SANDBOX/$rel/payload.txt"
   cp "$SYNC_SANDBOX/$rel/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/$rel/payload.txt"

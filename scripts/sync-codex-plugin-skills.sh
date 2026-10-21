@@ -51,6 +51,7 @@ DIRS=(
   "evals/clean"
   "evals/known-bad"
   "hooks/_shared"
+  "hooks/lib"
   "references"
   "scripts"
   "project-config-template"
@@ -563,7 +564,10 @@ clean_hooks_root() (
   shopt -s nullglob dotglob
   local entry
   for entry in "$hooks_root"/*; do
-    if [ "$(basename "$entry")" != "_shared" ]; then
+    # hooks/lib is a mirrored DIRS entry (brief-head.js, brief-header-template.js).
+    # session-start.js requires it from the plugin tree; deleting it here
+    # leaves the mirrored handler unable to load.
+    if [ "$(basename "$entry")" != "_shared" ] && [ "$(basename "$entry")" != "lib" ]; then
       rm -rf "$entry"
     fi
   done
@@ -618,7 +622,7 @@ if [ "$MODE" = "check" ]; then
     "$LIFECYCLE_ADAPTER_DEST" || STATUS=1
   check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
   check_exact_directory_entries "hooks" "_shared" "dirty-protected-paths.js" "hooks.json" \
-    "orchestrator-edit-gate-lib.js" "post-compact.js" "pre-effect.js" || STATUS=1
+    "lib" "orchestrator-edit-gate-lib.js" "post-compact.js" "pre-effect.js" || STATUS=1
   check_plugin_manifest || STATUS=1
   check_doc_extras || STATUS=1
 

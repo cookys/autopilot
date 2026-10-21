@@ -67,3 +67,4 @@ assert.strictEqual(clean.reason_code, null);
 
 console.log('ok');
 NODE
+finalize_test

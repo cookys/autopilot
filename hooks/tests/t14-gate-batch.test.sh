@@ -851,3 +851,4 @@ printf '%s\n' "$SUCC_ALL" | grep -q "both: persisted=0 fixed=0 introduced=0" || 
 echo "i green: snapshot section counts gaps persisted, fixed and introduced; verdict line unchanged"
 
 echo "OK t14 gate batch"
+finalize_test

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- concfix (3224af2b0): subagent-budget-mutants.test.sh now records row failures through lib.sh fail and ends with finalize_test, so test-suite-finalize-gate is green again.
+
+- reds4: five suites that were already red on develop are now recorded as BL-0280, BL-0281 and BL-0282 with their causes (docs only, no code changed).
+
 - Subagent concurrency advisory: when an Agent dispatch is allowed and the number of running subagent stamps is at or above the threshold, `subagent-budget` appends one extra `additionalContext` sentence. The line is advisory only and never denies. It is skipped when `AUTOPILOT_AGENT_ACTIVITY` is off. When the stat-free scan hits its 200-operation or 50 ms budget, the sentence says the scan was truncated (`at least N appear running (scan truncated)`).
 
 - bl275: ten scripts were relabelled in their headers and in the scripts inventory (nine named plus next-touch-validation.js; external, manual, archive-only, or no runtime caller). None was retired and no executable line changed. BL-0275 is closed; the remaining follow-ups are BL-0279.

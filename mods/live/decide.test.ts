@@ -52,7 +52,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   expect(pressIds([ls[row]])).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1'])
   expect(t[advice]).toBe('  建議      OK') // no reason given: the recommended option alone
   expect(t[note]).toBe('  補充')
-  expect(ls[note].field?.placeholder).toBe('選填，可留空')
+  expect(ls[note].field?.placeholder).toBe('選填；都不要就直接寫你的答案')
   expect(ls[note].segs?.[1].text).toBe('補充      ') // the key slot is 10 cells: the field starts at column 12
   // every value row hangs at column 12
   for (const l of ls.filter(x => x.kind === 'kv')) expect(l.hang).toBe(12)
@@ -69,7 +69,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   expect(ls[1].kind).toBe('item')
   // the send row is last and is inert while nothing is chosen; it says where the answers go
   const last = ls[ls.length - 1]
-  expect(last.text.trim()).toBe('[ 送出（已選 0/3） ]  答案會貼進這個對話送出')
+  expect(last.text.trim()).toBe('[ 送出（已答 0/3） ]  答案會貼進這個對話送出')
   expect(pressIds([last])).toEqual([])
   expect(last.segs?.find(s => s.text.includes('答案會貼進'))?.dim).toBe(true)
   // a card is not a screenful: three cards of this kind fit well under a page
@@ -118,11 +118,11 @@ test('DECIDE choose: the picked option is `[x]` in bold default text (no backgro
   expect(desc.text, 'the picked option shows its description, dim, at column 12').toBe('            全列出來')
   expect(desc.segs?.every(s => s.dim === true || s.text.trim() === '')).toBe(true)
   const last = ls[ls.length - 1]
-  expect(last.text.trim()).toBe('[ 送出（已選 1/3） ]  答案會貼進這個對話送出')
+  expect(last.text.trim()).toBe('[ 送出（已答 1/3） ]  答案會貼進這個對話送出')
   expect(pressIds([last])).toEqual(['submit'])
   // a pick that is no longer one of the options (the list changed under it) counts as no pick
   const stale = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 7 } })))
-  expect(stale[stale.length - 1].text.trim()).toBe('[ 送出（已選 0/3） ]  答案會貼進這個對話送出')
+  expect(stale[stale.length - 1].text.trim()).toBe('[ 送出（已答 0/3） ]  答案會貼進這個對話送出')
 })
 
 test('DECIDE sent: a question already sent says so, draws its options without Buttons and without a field, and the send row stops offering it', () => {
@@ -169,7 +169,7 @@ test('DECIDE none: no question is the section header and one empty line, and no 
 })
 
 test('DECIDE every invariant: I1-I8 and I10 hold on the tab in both locales, with and without text fields, picked and sent, at 40-160 columns', () => {
-  const states: DecideView[] = [view(), view({ inputs: false }), view({ picks: { 'd-4290499d': 0, 'd-c24ecfd9': 1 }, notes: { 'd-0000free': '叫 main' } }), view({ sent: { 'd-4290499d': 1 } })]
+  const states: DecideView[] = [view(), view({ inputs: false }), view({ picks: { 'd-4290499d': 0, 'd-c24ecfd9': 1 }, notes: { 'd-0000free': '叫 main' } }), view({ notes: { 'd-4290499d': '自己的答案' } }), view({ sent: { 'd-4290499d': 1 } })]
   const found = new Set<string>()
   for (const [, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const v of states) for (const pending of [THREE, []]) {
     const ls = decideTabLines(snapOf(pending), ctxOf(t, cols, v))
@@ -247,7 +247,7 @@ test('DECIDE send note: the button says where the answers go, in both locales; o
   }
   // control: the send note is not part of the press target: the Button text is only `[ ... ]`
   const row = decideTabLines(snapOf(THREE), ctxOf(makeT('zh-TW'), 76, view({ picks: { 'd-4290499d': 0 } }))).slice(-1)[0]
-  expect(row.segs?.filter(s => s.press !== undefined).map(s => s.text)).toEqual(['[ 送出（已選 1/3） ]'])
+  expect(row.segs?.filter(s => s.press !== undefined).map(s => s.text)).toEqual(['[ 送出（已答 1/3） ]'])
 })
 
 test('DECIDE wrap: a closing mark never starts a continuation line (negative control: the checker flags a planted one)', () => {
@@ -295,13 +295,46 @@ test('DECIDE reply: the head line, then `<id>｜<first 30 characters> → <answe
   // the question is cut at 30 characters with an ellipsis
   const long = dec('d-long', '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十多出來的字', { options: [OPT('甲'), OPT('乙')] })
   expect(decideLine(long, { ...NO_DECIDE, picks: { 'd-long': 1 } })).toBe('d-long｜一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十… → 乙')
-  // nothing chosen, an option question with only a note, a sent question and a question with no id all send nothing
+  // nothing chosen sends nothing; a sent question and a question with no id send nothing. A note with no pick is an answer.
   expect(decideReply(THREE, NO_DECIDE)).toBeNull()
-  expect(decideReply([THREE[0]], { ...NO_DECIDE, notes: { 'd-4290499d': '只有補充' } })).toBeNull()
+  expect(decideReply([THREE[0]], { ...NO_DECIDE, notes: { 'd-4290499d': '只有補充' } })?.text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：只有補充')
   expect(decideReply([THREE[0]], { picks: { 'd-4290499d': 0 }, notes: {}, sent: { 'd-4290499d': 9 } })).toBeNull()
   expect(decideReply([dec(null, '沒有 id', { options: [OPT('甲'), OPT('乙')] })], { ...NO_DECIDE, picks: { null: 0 } })).toBeNull()
   // one answered question among three: only that one is in the text
   expect(decideReply(THREE, { ...NO_DECIDE, picks: { 'd-c24ecfd9': 0 } })?.text).toBe('[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 要')
+})
+
+// # RED at 7ebd408a3:
+// decideLine returned null for an option card with no pick and note 自己的答案; note_ph was still 選填，可留空; mounted send had no submit Button
+test('DECIDE reply: an option card with no pick and a non-empty note is answered as 都不選｜補充：<note>, and the send row counts it', () => {
+  const d = THREE[0]
+  const st = { ...NO_DECIDE, notes: { 'd-4290499d': '  自己的答案 ' } }
+  expect(decideLine(d, st)).toBe('d-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己的答案')
+  expect(decideReply([d], st)?.text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己的答案')
+  for (const [loc, t] of LOCALES) {
+    const ls = decideTabLines(snapOf([d]), ctxOf(t, 76, view({ notes: { 'd-4290499d': '自己的答案' } })))
+    const last = ls[ls.length - 1]
+    const label = t('decide.submit', { n: 1, total: 1 })
+    expect(label, loc).toBe(loc === 'zh-TW' ? '送出（已答 1/1）' : 'Send (1/1 answered)')
+    expect(last.text, loc).toContain(label)
+    expect(pressIds([last]), loc).toEqual(['submit'])
+  }
+  const blank = { ...NO_DECIDE, notes: { 'd-4290499d': ' \n\t ' } }
+  expect(decideLine(d, blank)).toBeNull()
+  const none = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 76, view({ notes: { 'd-4290499d': '   ' } })))
+  expect(none[none.length - 1].text).toContain(makeT('zh-TW')('decide.submit', { n: 0, total: 1 }))
+  expect(pressIds([none[none.length - 1]])).toEqual([])
+  expect(decideLine(THREE[1], { ...NO_DECIDE, picks: { 'd-c24ecfd9': 1 }, notes: { 'd-c24ecfd9': '  要，\n但只寫一句 ' } })).toBe('d-c24ecfd9｜U6 要不要把建議也寫進回覆 → 不要｜補充：要， 但只寫一句')
+  expect(decideLine(THREE[2], { ...NO_DECIDE, notes: { 'd-0000free': '叫 main' } })).toBe('d-0000free｜這個分支要叫什麼名字？ → 叫 main')
+})
+
+test('DECIDE copy: the note placeholder and the submit label say a written answer counts, in both locales', () => {
+  expect(makeT('zh-TW')('decide.note_ph')).toBe('選填；都不要就直接寫你的答案')
+  expect(makeT('en')('decide.note_ph')).toBe('optional; or write your own answer instead of picking')
+  expect(makeT('zh-TW')('decide.submit', { n: 1, total: 2 })).toBe('送出（已答 1/2）')
+  expect(makeT('en')('decide.submit', { n: 1, total: 2 })).toBe('Send (1/2 answered)')
+  expect(makeT('zh-TW')('decide.reply_ph')).toBe('請輸入你的回答')
+  expect(makeT('en')('decide.reply_ph')).toBe('type your answer')
 })
 
 // ---- review round 1 ----
@@ -351,7 +384,7 @@ test('DECIDE send row: the total counts only the questions still open from the p
   const zh = makeT('zh-TW')
   const list = [THREE[0], THREE[1], THREE[2], dec(null, '沒有 id', { options: [OPT('甲'), OPT('乙')] }), dec('d-dlg', '對話框題', { options: [OPT('甲'), OPT('乙')], origin: 'ask_user_question' })]
   const ls = decideTabLines(snapOf(list), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 0 }, sent: { 'd-0000free': 3 } })))
-  expect(ls[ls.length - 1].text.trim()).toBe('[ 送出（已選 1/2） ]  答案會貼進這個對話送出')
+  expect(ls[ls.length - 1].text.trim()).toBe('[ 送出（已答 1/2） ]  答案會貼進這個對話送出')
 })
 
 test('DECIDE dialog: a question the asking session\'s dialog answers has no option Buttons, no field, says so, and is not counted or sent', () => {

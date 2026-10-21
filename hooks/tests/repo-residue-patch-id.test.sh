@@ -3,6 +3,7 @@
 # only when every non-merge commit in integration..ref has a stable patch-id
 # match (git cherry all '-'). Partial adoption stays unintegrated.
 # RED at 500aa187f9b47fa9e11468b81d65c50961fe6bf1: positive cases failed on the ancestor-only judge (hands/both class unintegrated, integrated_by <undef>, apply left the branch; worktree class clean-unintegrated). Ancestor deletion still passed; integrated_by ancestor was <undef>. Negatives (altered hunk, one-of-two) stayed unintegrated and were not deleted. 11 passed, 10 failed, exit 1.
+# RED at bc34e359f: add/delete/re-add (A adds x, B deletes x, C adds x again; develop cherry-picked only A and B) was judged integrated by patch_id and apply deleted the branch. abc: class expected unintegrated got integrated; integrated expected false got true; integrated_by expected <undef> got patch_id; branch was deleted. develop did not contain x. 22 passed, 4 failed, exit 1.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
@@ -129,5 +130,39 @@ SCAN="$(node "$SCRIPT" scan --repo "$SBX" --integration-ref develop)"
 assert_eq "$(jx "$SCAN" 'j.worktrees.find(w=>w.path.endsWith("/wt-picked")).class')" "clean-integrated" "worktree: clean-integrated"
 assert_eq "$(jx "$SCAN" 'j.worktrees.find(w=>w.path.endsWith("/wt-picked")).integrated_by')" "patch_id" "worktree: integrated_by patch_id"
 assert_eq "$(jx "$SCAN" 'j.worktrees.find(w=>w.path.endsWith("/wt-picked")).patch_id_matches.length')" "2" "worktree: two patch-id matches"
+
+# <repo> <message> <path> — delete a tracked file, dated 5 days ago; prints new HEAD.
+old_rm_file() {
+  local sbx="$1" msg="$2" rel="$3"
+  local now d
+  now="$(date +%s)"
+  d="$(date -d "@$((now - 5 * 86400))" -R)"
+  git -C "$sbx" rm -q -- "$rel"
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git -C "$sbx" -c user.email=t@t -c user.name=t commit -q -m "$msg"
+  git -C "$sbx" rev-parse HEAD
+}
+
+# --- 6. add / delete / re-add: same patch-id must not be spent twice ---
+# A adds x, B deletes x, C adds x again. develop gets an unrelated commit, then only A and B
+# are cherry-picked. git cherry is a set check, so all three lines are '-', and C's patch-id
+# equals the pick of A. The branch tip still contains x; develop does not. Not integrated.
+SBX="$(new_repo abc)"
+old_commit_file "$SBX" base a.txt base >/dev/null
+git -C "$SBX" checkout -q --detach
+A="$(old_commit_file "$SBX" A x.txt X)"
+B="$(old_rm_file "$SBX" B x.txt)"
+C="$(old_commit_file "$SBX" C x.txt X)"
+git -C "$SBX" checkout -q develop
+old_commit_file "$SBX" side z.txt side >/dev/null
+git -C "$SBX" -c user.email=t@t -c user.name=t cherry-pick "$A" "$B" >/dev/null
+no_reflog_branch "$SBX" hands/abc "$C"
+SCAN="$(node "$SCRIPT" scan --repo "$SBX" --integration-ref develop)"
+ROW="$(branch_row hands/abc "$SCAN")"
+assert_eq "$(jx "$ROW" 'j.class')" "unintegrated" "abc: class unintegrated"
+assert_eq "$(jx "$ROW" 'j.integrated')" "false" "abc: integrated false"
+assert_eq "$(jx "$ROW" 'j.integrated_by')" "<undef>" "abc: no integrated_by"
+node "$SCRIPT" reap --repo "$SBX" --auto --yes --integration-ref develop >/dev/null
+git -C "$SBX" rev-parse --verify -q refs/heads/hands/abc >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "abc: must not be deleted"
+git -C "$SBX" cat-file -e develop:x.txt >/dev/null 2>&1 && fail "abc: develop must not contain x" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 
 finalize_test

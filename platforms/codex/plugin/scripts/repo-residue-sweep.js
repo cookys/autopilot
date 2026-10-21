@@ -24,7 +24,8 @@
 //     dirty     — any `git status --porcelain` line (staged, unstaged, untracked)
 //     integrated— the worktree's HEAD is an ancestor of --integration-ref (default: the main
 //                 checkout's HEAD), or every non-merge commit in integration..HEAD has the
-//                 same stable patch-id as a commit on that ref (git cherry all '-'). A partial
+//                 same stable patch-id as a distinct commit on that ref. git cherry is only a
+//                 set check (all '-' is not enough); each target sha is used once. A partial
 //                 match, a merge in the range, or an empty non-ancestor range is not integrated.
 //                 Rows with integrated true carry integrated_by "ancestor"|"patch_id"; patch_id
 //                 rows also carry patch_id_matches [{branch, target}] one per branch commit.
@@ -297,6 +298,10 @@ function isIntegrated(repo, ref, integrationSha) {
   const merges = git(repo, ['rev-list', '--merges', `${integrationSha}..${ref}`]);
   if (!merges.ok) return null;
   if (merges.out.trim()) return { integrated: false };
+  // git cherry is only a set check and is not sufficient on its own: a later branch
+  // commit can share a patch-id with an earlier one, and cherry still prints '-' for both.
+  // Binary content differences are blocked by git cherry (a text patch-id only sees
+  // "Binary files differ"), so nobody should remove the cherry check later.
   const cherry = git(repo, ['cherry', integrationSha, ref]);
   if (!cherry.ok) return null;
   const lines = cherry.out ? cherry.out.split('\n').filter(Boolean) : [];
@@ -310,17 +315,22 @@ function isIntegrated(repo, ref, integrationSha) {
     branchShas.push(m[2]);
   }
   const mb = git(repo, ['merge-base', integrationSha, ref]);
-  if (!mb.ok || !mb.out.trim()) return { integrated: false };
+  // Exit 1 is "no common ancestor" and is a known miss. Any other failure is unverifiable.
+  if (mb.status !== 0) return mb.status === 1 ? { integrated: false } : null;
+  if (!mb.out.trim()) return { integrated: false };
   const upstream = patchIdMap(repo, `${mb.out.trim()}..${integrationSha}`);
   if (upstream === null) return null;
+  // Per-call copies. The cache is shared across refs and must not be mutated.
+  const remaining = new Map();
+  for (const [id, shas] of upstream) remaining.set(id, shas.slice());
   const matches = [];
   for (const sha of branchShas) {
     const full = git(repo, ['rev-parse', '--verify', `${sha}^{commit}`]);
     if (!full.ok) return null;
     const id = stablePatchId(repo, full.out.trim());
-    const targets = id ? upstream.get(id) : null;
-    if (!targets || targets.length === 0) return { integrated: false };
-    matches.push({ branch: full.out.trim(), target: targets[0] });
+    const pool = id ? remaining.get(id) : null;
+    if (!pool || pool.length === 0) return { integrated: false };
+    matches.push({ branch: full.out.trim(), target: pool.shift() });
   }
   return { integrated: true, basis: 'patch_id', matches };
 }

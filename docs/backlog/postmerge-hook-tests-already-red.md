@@ -19,4 +19,6 @@ test-suite-finalize-gate is green again. tfin b77595d68 made three lib.sh suites
 
 `dispatch-author.test.sh` (19) and `dispatch-author-strict-roster.test.sh` (10) were already red on develop. agyto 1e0e3c9f4 fixed them. The cause was the bwrap mount point on a fresh HOME: the mount points are now created before the read-only root mount.
 
+compaction-handoff.test.sh was also red on develop and is fixed by chfix 1d6ca496b. The root cause was tail truncation of the SessionStart injection that depended on the root path length. A post-compaction injection longer than 10000 characters used to be cut from the tail, so a long repo path cut off the closing tag and the DATA note. It is now split into head, body and tail, and only the body is trimmed.
+
 The two suites this entry names, hooks-hosting and hooks-live-state-misc, are still unfixed.

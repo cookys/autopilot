@@ -55,21 +55,31 @@ function closeDecideReply(payload) {
     return;
   }
   for (const id of ids) {
+    // closeDecisionById locks before it looks up the id, so a locked scope file
+    // returns status error even when this card is not in it. Remember that and
+    // keep walking; a later scope file may still hold the card. One line is
+    // written only when every file was absent-or-error and an error was seen.
+    let remembered = '';
+    let closed = false;
     for (const file of files) {
       let r;
       try {
         r = closeDecisionById(file, id);
       } catch (e) {
-        const message = e && e.message ? e.message : e;
-        process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${message}\n`);
-        break;
+        remembered = e && e.message ? e.message : String(e);
+        continue;
       }
-      // One id's error gives up on that id only. Later ids still close.
       if (r && r.status === 'error') {
-        process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${r.message || 'close failed'}\n`);
+        remembered = r.message || 'close failed';
+        continue;
+      }
+      if (r && r.status !== 'absent') {
+        closed = true;
         break;
       }
-      if (r && r.status !== 'absent') break;
+    }
+    if (!closed && remembered) {
+      process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${remembered}\n`);
     }
   }
 }

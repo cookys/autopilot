@@ -569,6 +569,30 @@ assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects a missing hooks/
 assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for a missing hooks/lib file"
 cp "$SYNC_SANDBOX/hooks/lib/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
 
+# brief-head.js vs brief-header-template.js: LC_ALL=C sort order is not the
+# en_US.UTF-8 collation order. Both files live in the sandbox source and mirror
+# so the only drift is the removed mirror copy of brief-head.js.
+for lib_base in brief-head.js brief-header-template.js; do
+  printf "'use strict';\n// %s\n" "$lib_base" > "$SYNC_SANDBOX/hooks/lib/$lib_base"
+  cp "$SYNC_SANDBOX/hooks/lib/$lib_base" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/$lib_base"
+done
+test -f "$SYNC_SANDBOX/hooks/lib/brief-head.js" || fail "sandbox source hooks/lib has brief-head.js"
+test -f "$SYNC_SANDBOX/hooks/lib/brief-header-template.js" || fail "sandbox source hooks/lib has brief-header-template.js"
+test -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js" || fail "sandbox mirror hooks/lib has brief-head.js"
+test -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-header-template.js" || fail "sandbox mirror hooks/lib has brief-header-template.js"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
+COMM_LOCALE="en_US.UTF-8"
+if ! locale -a | grep -qx "$COMM_LOCALE"; then
+  COMM_LOCALE="$(locale -a | grep -Ei 'utf-?8' | grep -Evi '^(C|POSIX)(\.|$)' | head -n 1)"
+fi
+[ -n "$COMM_LOCALE" ] || fail "a non-C UTF-8 locale is installed"
+OUT="$(LANG="$COMM_LOCALE" LC_ALL="$COMM_LOCALE" bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "UTF-8 --check rejects brief-head.js missing from the mirror"
+assert_contains "$OUT" "brief-head.js" "UTF-8 --check names missing brief-head.js"
+assert_not_contains "$OUT" "brief-header-template.js" "UTF-8 --check has no extra drift line for brief-header-template.js"
+assert_not_contains "$OUT" "not in sorted order" "UTF-8 --check does not warn that comm input is unsorted"
+cp "$SYNC_SANDBOX/hooks/lib/brief-head.js" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
+
 printf 'stale hook\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra Codex hook payload"

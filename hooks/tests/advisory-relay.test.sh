@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # RED at ae262ac9: suite missing; group-S hooks do not enqueue; advisory-relay.js absent
 # RED at 344f91602: unwritable scope close: stderr names id A: 'd-1ed25cdf' not found in output; writable scope card B closed: unexpected 'd-4128b4d2' in output (hook exit 0, 104 passed, 2 failed).
+# RED at 643120569: locked earlier scope: stderr has no fail-open line naming A: unexpected 'd-557c6aa8' in output; card A closed in the later writable scope: unexpected 'd-557c6aa8' in output (107 passed, 2 failed).
 # advisory-relay + group-S Stop queue (ha-p2). Isolated HOME / TMPDIR / XDG_RUNTIME_DIR / AUTOPILOT_LIVE_DIR.
 . "$(dirname "$0")/lib.sh"
 
@@ -581,6 +582,18 @@ PAIR_A_DIR="$TEST_TMP/dec-unwritable-a-scope"
 mkdir -p "$PAIR_A_DIR"
 mv "$PAIR_A_FILE" "$PAIR_A_DIR/$(basename "$PAIR_A_FILE")"
 ln -s "$PAIR_A_DIR/$(basename "$PAIR_A_FILE")" "$PAIR_A_FILE"
+# EXIT is chained onto lib.sh's cleanup_test_tmp so a failed assert cannot leave
+# the scope directory mode a-w or its lock file behind. BASHPID matches the
+# top-level guard inside cleanup_test_tmp: a command-substitution subshell
+# inherits EXIT and must not restore (or delete) while this script is still running.
+restore_scope_locks() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
+  if [ -n "${PAIR_A_DIR:-}" ]; then chmod u+w "$PAIR_A_DIR" 2>/dev/null || true; fi
+  if [ -n "${PAIR_A_FILE:-}" ]; then rm -f "${PAIR_A_FILE}.lock"; fi
+  if [ -n "${ORDER_LOCK_DIR:-}" ]; then chmod u+w "$ORDER_LOCK_DIR" 2>/dev/null || true; fi
+  if [ -n "${ORDER_LOCK_FILE:-}" ]; then rm -f "${ORDER_LOCK_FILE}.lock"; fi
+}
+trap 'restore_scope_locks; cleanup_test_tmp' EXIT
 chmod a-w "$PAIR_A_DIR"
 printf '%s\n' "$$" > "${PAIR_A_FILE}.lock"
 PAIR_SHOW() {
@@ -596,5 +609,48 @@ assert_contains "$__RUN_STDERR" "fail-open" "unwritable scope close: stderr fail
 assert_contains "$__RUN_STDERR" "$PAIR_A" "unwritable scope close: stderr names id A"
 PAIR_AFTER="$(PAIR_SHOW || true)"
 assert_not_contains "$PAIR_AFTER" "$PAIR_B" "writable scope card B closed"
+
+# projectScopeFiles follows listScopeFiles, which returns names.sort().
+# `<project>--<root>.json` sorts before `<project>.json` because '-' < '.'.
+# Root "aaa" is therefore the first file the close loop visits; the unbound
+# file (openDecision with no root) is later. The first file is locked and holds
+# only a decoy card, not A. A lives only in the later writable file.
+ORDER_REPO="$TEST_TMP/dec-order"
+mkdir -p "$ORDER_REPO"
+git -C "$ORDER_REPO" init -q
+ORDER_META="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const { openDecision } = require(process.argv[1]);
+  const cwd = process.argv[2];
+  const decoy = openDecision({ cwd, root: "aaa", question: "locked first, not A" });
+  const a = openDecision({ cwd, question: "close me past the lock" });
+  if (decoy.status !== "ok" || a.status !== "ok") {
+    process.stderr.write((decoy.message || a.message || "open failed") + "\n");
+    process.exit(2);
+  }
+  process.stdout.write([decoy.file, a.id, a.file].join("\n"));
+' "$REPO_ROOT/scripts/open-decision.js" "$ORDER_REPO")"
+ORDER_DECOY_FILE="$(printf '%s\n' "$ORDER_META" | sed -n '1p')"
+ORDER_A="$(printf '%s\n' "$ORDER_META" | sed -n '2p')"
+ORDER_A_FILE="$(printf '%s\n' "$ORDER_META" | sed -n '3p')"
+test "$ORDER_DECOY_FILE" != "$ORDER_A_FILE" || fail "locked scope and card A are different scope files"
+ORDER_LOCK_DIR="$TEST_TMP/dec-order-locked-scope"
+ORDER_LOCK_FILE="$ORDER_DECOY_FILE"
+mkdir -p "$ORDER_LOCK_DIR"
+mv "$ORDER_DECOY_FILE" "$ORDER_LOCK_DIR/$(basename "$ORDER_DECOY_FILE")"
+ln -s "$ORDER_LOCK_DIR/$(basename "$ORDER_DECOY_FILE")" "$ORDER_DECOY_FILE"
+chmod a-w "$ORDER_LOCK_DIR"
+printf '%s\n' "$$" > "${ORDER_LOCK_FILE}.lock"
+ORDER_SHOW() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$ORDER_REPO" --json
+}
+ORDER_PROMPT="$(printf '[待決回覆]\n%s｜past the lock → x\n' "$ORDER_A")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-order",cwd:process.argv[1],prompt:process.argv[2]}))' "$ORDER_REPO" "$ORDER_PROMPT")"
+chmod u+w "$ORDER_LOCK_DIR"
+rm -f "${ORDER_LOCK_FILE}.lock"
+assert_eq 0 "$__RUN_EXIT" "locked earlier scope: exit 0"
+assert_not_contains "$__RUN_STDERR" "$ORDER_A" "locked earlier scope: stderr has no fail-open line naming A"
+ORDER_AFTER="$(ORDER_SHOW || true)"
+assert_not_contains "$ORDER_AFTER" "$ORDER_A" "card A closed in the later writable scope"
 
 finalize_test

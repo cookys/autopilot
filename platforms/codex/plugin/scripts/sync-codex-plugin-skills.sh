@@ -598,14 +598,14 @@ check_mirrored_file_list() {
     [ -n "$path" ] || continue
     echo "drift: missing file platforms/codex/plugin/$rel/$path"
     status=1
-  done < <(comm -23 \
+  done < <(LC_ALL=C comm -23 \
     <(cd "$src" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort) \
     <(cd "$dst" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort))
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     echo "drift: extra file platforms/codex/plugin/$rel/$path"
     status=1
-  done < <(comm -13 \
+  done < <(LC_ALL=C comm -13 \
     <(cd "$src" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort) \
     <(cd "$dst" && find . -type f -print | sed 's|^\./||' | LC_ALL=C sort))
   return "$status"

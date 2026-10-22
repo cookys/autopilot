@@ -11,9 +11,11 @@ Termination evidence: [`../projects/_archive/2026/06/2026-06-12-task-tree-engine
 
 Current state: no in-progress project has a tree/ directory; archived projects hold 20 tree/events.jsonl files, the newest entry dated 2026-08-30.
 
+The owner recalls the original need as "structuring the whole project flow", but the original design spec states the goal as keeping the manager's context from growing with the amount of work; the structured task tree on disk (the spec calls it the universal substrate) is the means. Facts from the spec (docs/plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md): North star is the quoted sentence; the task tree is structured data on disk owned by deterministic scripts; the manager talks to the tree only through its CLI.
+
 ## Decision
 
-Scripts, tests and archived records stay in place, not deleted. Both mechanisms are dormant and no workflow triggers them. A tree is no longer initialised by default. The re-entry condition is the abort scope text verbatim: "amendment-6-overdue-review: 2/50 samples in 72 days, agreement 0/2, sample-accrual rate proves the shadow instrument cannot reach graduation on this repo's workflow; abort shadow, adapter stays inactive; re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)".
+Scripts, tests and archived records stay in place, not deleted. Both mechanisms are dormant and no workflow triggers them. A tree is no longer initialised by default. The re-entry condition quotes only this sentence of the abort scope: "re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)".
 
 ## Consequences
 
@@ -29,44 +31,7 @@ NOT superseded: (1) the manager_raw_read audit: today only the depth-0 do-not-ed
 
 Skill and reference text that still contradicts the abort is not edited here. It waits for a guidance eval, tracked as BL-0283 in [`../BACKLOG.md`](../BACKLOG.md). Known sites: [`../../skills/ceo-agent/SKILL.md`](../../skills/ceo-agent/SKILL.md) line 309 (c2, L/XL default runs `tree.js init`); [`../../skills/quality-pipeline/SKILL.md`](../../skills/quality-pipeline/SKILL.md) (qc-panel described as a mandatory shadow reviewer; line 66 "the dispatcher MUST run `scripts/qc-panel.js`"); [`../../references/blind-dispatch.md`](../../references/blind-dispatch.md) line 297 (qc-panel listed as the blind-review exception); [`../../references/tree-contracts.md`](../../references/tree-contracts.md) carries no dormant marking.
 
-`git grep -n 'tree.js'` and `git grep -n 'qc-panel'` limited to `skills/`, `references/` and `agents/` (read-only, 2026-10-22). `agents/` had no hits. Other sentences of the same kind (file:line plus a few words):
-
-- `skills/ceo-agent/SKILL.md:407` `scripts/tree.js board-status`
-- `skills/ceo-agent/SKILL.md:410` decisions flow from `scripts/tree.js next-decision`
-- `skills/ceo-agent/SKILL.md:416` `next-decision` is the manager's ONLY default input
-- `skills/ceo-agent/SKILL.md:422` read MUST go through `scripts/tree.js fetch`
-- `skills/ceo-agent/SKILL.md:439` Tree CLI `init`, `emit`, `next-decision`
-- `skills/ceo-agent/SKILL.md:472` Route decisions through `tree.js next-decision`
-- `skills/ceo-agent/SKILL.md:473` artifact reads go through `fetch --raw`
-- `skills/ceo-agent/SKILL.md:476` `tree.js` rejects `_archive/<proj>`
-- `skills/ceo-agent/references/tree-adapter.md:34` `scripts/tree.js board-status`
-- `skills/ceo-agent/references/tree-adapter.md:49` Do NOT route decisions through `tree.js next-decision` (pre-signoff)
-- `skills/ceo-agent/references/tree-adapter.md:51` Post-signoff: decisions flow from `tree.js next-decision`
-- `skills/ceo-agent/references/tree-adapter.md:63` `scripts/tree.js next-decision`
-- `skills/ceo-agent/references/tree-adapter.md:95` `scripts/tree.js fetch`
-- `skills/ceo-agent/references/tree-adapter.md:105` Emit events via `scripts/tree.js emit`
-- `skills/ceo-agent/references/tree-adapter.md:233` `scripts/tree.js init`
-- `skills/ceo-agent/references/tree-adapter.md:237` `` `tree.js init` as part of project setup ``
-- `skills/ceo-agent/references/tree-adapter.md:251` a qc-panel run writes a per-run verdict
-- `skills/distill/SKILL.md:100` direct `tree.js escalations` sweep
-- `skills/retro/SKILL.md:31` run `node scripts/tree.js escalations`
-- `skills/quality-pipeline/SKILL.md:58` Cross-family interrogation panel (shadow mode)
-- `skills/quality-pipeline/SKILL.md:70` Run `scripts/qc-panel.js`
-- `skills/quality-pipeline/references/code-review.md:349` `scripts/qc-panel.js` in parallel with authoritative reviewer
-- `skills/quality-pipeline/references/code-review.md:351` every panel run MUST write a verdict artifact
-- `skills/quality-pipeline/references/code-review.md:373` `qc-panel.js` 4th shape = refute pass
-- `references/hetero-dispatch.md:134` `scripts/qc-panel.js` carries the same check
-- `references/hetero-dispatch.md:711` do NOT count pi toward reviewer/qc-panel family coverage
-- `references/hetero-dispatch.md:897` `scripts/qc-panel.js` dispatches its Gemini judge
-- `references/multi-agent-portability.md:341` Tree engine (`scripts/tree.js`) stays the cross-session source of truth
-- `references/multi-agent-portability.md:343` Task-tree engine is platform-universal (`scripts/tree.js`)
-- `references/multi-agent-portability.md:353` Operational caveats for P4's `qc-panel.js`
-- `references/four-layer-design.md:17` qc-panel fan-out
-- `references/blind-dispatch.md:553` depth-0 qc-panel re-review after fixes
-- `references/tree-contracts.md:4` consumers (tree.js, check-node-report.js, QC panel)
-- `references/tree-contracts.md:52` Emitted exactly once by `tree.js init`
-- `references/tree-contracts.md:181` Emitted automatically by `tree.js fetch`
-- `references/knowledge-routing.md:48` names `scripts/tree.js` as an in-repo path example
+The full list of sentences (file:line, original text, suggested change) is in [`../backlog/dormant-tree-qc-panel-skill-text.md`](../backlog/dormant-tree-qc-panel-skill-text.md), tracked by BL-0283.
 
 ## Evidence
 

@@ -663,4 +663,42 @@ assert_contains "$RESERVE_OUT" "zero_ok=true" "reserve 0 is admitted"
 assert_contains "$RESERVE_OUT" "nine_ok=true" "reserve 900 is admitted"
 assert_contains "$RESERVE_OUT" "over_refused=true" "reserve 1801 is refused"
 
+# BL-0223 (RED at 801ab74e2: 7 of 7 new asserts failed, redVerificationDetail undefined): a RED campaign_verification must keep the failing command and its output.
+# RED at 801ab74e2: redVerificationDetail was not exported (TypeError) and the engine ledger
+# entry carried no verify_argv / verify_exit_status.
+RED_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const cv = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+const verifyCmd = 'echo boom >&2; exit 3';
+const argv = cv.verificationArgv(verifyCmd);
+const tree = 'a'.repeat(40);
+const request = cv.createVerificationRequest({ treeSha: tree, verifyCmd, env: { PATH: '/usr/bin:/bin' } });
+const fence = { schema_version: 1, artifact_type: 'implementation_campaign_writer_fence',
+  campaign_id: 'c1', status: 'closed', candidate_tree_sha: tree, candidate_commit: 'b'.repeat(40) };
+fence.receipt_digest = cv.canonicalDigest({ ...fence });
+const co = { schema_version: 1, artifact_type: 'implementation_campaign_checkout_attestation',
+  candidate_commit: 'b'.repeat(40), candidate_tree_sha: tree, mode: 'detached',
+  worktree_path_digest: 'c'.repeat(64) };
+co.receipt_digest = cv.canonicalDigest({ ...co });
+const mk = (status, stdout, stderr) => cv.createVerificationReceipt({
+  campaignId: 'c1', request, exitStatus: status,
+  startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:00:01Z',
+  writerFence: fence, checkoutAttestation: co, executedArgv: argv, stdout, stderr });
+const red = mk(3, 'OUT_MARK', 'boom');
+const d = cv.redVerificationDetail({ receipt: red, executedArgv: argv });
+console.log(`argv_kept=${JSON.stringify(d.verify_argv) === JSON.stringify(argv)}`);
+console.log(`exit_kept=${d.verify_exit_status === 3}`);
+console.log(`green_empty=${Object.keys(cv.redVerificationDetail({ receipt: mk(0, '', ''), executedArgv: argv })).length === 0}`);
+console.log(`digest_unchanged=${!('verify_argv' in red) && !('verify_exit_status' in red)}`);
+const eng = fs.readFileSync(path.join(root, 'src', 'engine', 'autopilot-engine.js'), 'utf8');
+console.log(`engine_wired=${/\.\.\.redVerificationDetail\(/.test(eng)}`);
+NODE
+)"
+for k in argv_kept exit_kept green_empty digest_unchanged engine_wired; do
+  assert_contains "$RED_OUT" "$k=true" "BL-0223 red verification detail: $k"
+done
+
 finalize_test

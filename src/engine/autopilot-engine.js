@@ -149,6 +149,7 @@ const {
   createDetachedCheckoutAttestation,
   createLedgerReconciliationReceipt,
   createVerificationReceipt,
+  redVerificationDetail,
   createVerificationRequest,
   createAdoptedWriterFence,
   createWriterFence,
@@ -9328,6 +9329,10 @@ class AutopilotEngine {
             cleanup_warning: cleanupReason,
             verify_stdout_tail: boundedVerifyOutputTail(verifyResult.stdout),
             verify_stderr_tail: boundedVerifyOutputTail(verifyResult.stderr),
+            ...redVerificationDetail({
+              receipt,
+              executedArgv: verifyResult.executed_argv,
+            }),
           },
         ));
         if (receipt.verdict === 'GREEN') {

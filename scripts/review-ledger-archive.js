@@ -27,8 +27,10 @@
 //       calendar months. Dry-run is the default: print each path, delete
 //       nothing. --execute deletes, under the repo bucket lock. A target whose
 //       realpath is not strictly inside the archive dir, or a target that is
-//       itself a symlink, is refused: one line on stderr, exit 1, nothing
-//       deleted. Manual. Not called from a hook.
+//       itself a symlink, is refused: one line on stderr, exit 1. Targets
+//       already deleted before that refusal are listed on stdout as
+//       "deleted <path>". A refusal before any delete prints nothing on
+//       stdout. Manual. Not called from a hook.
 //
 // Directory: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR, else review_ledger_archive.dir
 // from the operator config. Empty or unset means off. include_diff:
@@ -169,9 +171,9 @@ function main(argv) {
       execute: args.execute === true,
       targets: args.targets || [],
     });
+    for (const line of result.lines) console.log(line);
     for (const line of result.refusals) console.error(line);
     if (result.refusals.length) return 1;
-    for (const line of result.lines) console.log(line);
     return 0;
   }
   if (args.cmd === 'rotate') {

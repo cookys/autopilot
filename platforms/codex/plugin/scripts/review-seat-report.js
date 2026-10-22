@@ -177,8 +177,10 @@ function noteCorrupt(scope, phaseName) {
   scope.corrupt_phases.push(phaseName);
 }
 
-function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe) {
-  const ledgerKey = path.resolve(ledgerDir);
+function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe, ledgerKeyOverride) {
+  // Same bucket + ledger-id shares one key, so a tar extract and its sibling
+  // directory do not each add a generation.
+  const ledgerKey = ledgerKeyOverride || path.resolve(ledgerDir);
   const phaseDir = path.join(ledgerDir, phaseName);
   const chain = readJson(path.join(phaseDir, 'chain.json'));
   if (!chain.ok || !Array.isArray(chain.value)) {
@@ -388,20 +390,32 @@ function isRealpathInside(rootReal, candidateReal) {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
+function layoutLedgerIdentity(relParts, ctx) {
+  if (!relParts || relParts.length < 2) return { bucket: null, ledgerId: null };
+  const month = relParts[relParts.length - 2];
+  if (!MONTH_TAR_NAME.test(`${month}.tar.gz`)) return { bucket: null, ledgerId: null };
+  if (ctx && ctx.fromTar) {
+    if (!ctx.bucket) return { bucket: null, ledgerId: null };
+    return { bucket: ctx.bucket, ledgerId: relParts[relParts.length - 1] };
+  }
+  if (relParts.length < 3) return { bucket: null, ledgerId: null };
+  return { bucket: relParts[relParts.length - 3], ledgerId: relParts[relParts.length - 1] };
+}
+
 function discoverArchive(root, tempDirs = []) {
   const ledgers = [];
   const tarMonths = [];
   let tarMonthsRead = 0;
   const seen = new Set();
 
-  function walkRoot(start, readMonthTars) {
+  function walkRoot(start, readMonthTars, ctx) {
     let rootReal;
     try {
       rootReal = fs.realpathSync(start);
     } catch {
       return;
     }
-    function enter(dir, depth) {
+    function enter(dir, depth, relParts) {
       let real;
       try {
         real = fs.realpathSync(dir);
@@ -419,7 +433,8 @@ function discoverArchive(root, tempDirs = []) {
       }
       if (!st.isDirectory()) return;
       if (directoryHasLedgerChain(real)) {
-        ledgers.push(real);
+        const identity = layoutLedgerIdentity(relParts, ctx);
+        ledgers.push({ dir: real, bucket: identity.bucket, ledgerId: identity.ledgerId, fromTar: Boolean(ctx && ctx.fromTar) });
         return;
       }
       if (depth >= WALK_DEPTH_LIMIT) return;
@@ -476,7 +491,7 @@ function discoverArchive(root, tempDirs = []) {
             } else {
               keepExtract = true;
               tarMonthsRead += 1;
-              walkRoot(extracted, false);
+              walkRoot(extracted, false, { fromTar: true, bucket: path.basename(real) });
             }
           } finally {
             if (!keepExtract && extracted) {
@@ -492,13 +507,13 @@ function discoverArchive(root, tempDirs = []) {
         } catch {
           continue;
         }
-        if (childStat.isSymbolicLink() || childStat.isDirectory()) enter(child, depth + 1);
+        if (childStat.isSymbolicLink() || childStat.isDirectory()) enter(child, depth + 1, relParts.concat(name));
       }
     }
-    enter(start, 0);
+    enter(start, 0, []);
   }
 
-  walkRoot(root, true);
+  walkRoot(root, true, { fromTar: false, bucket: null });
   return { ledgers, tarMonths, tarMonthsRead, tempDirs };
 }
 
@@ -580,11 +595,22 @@ function buildReport(ledgerDirs, options = {}) {
     seen: new Set(),
     recordUncountedGenerationKeys: Boolean(options.recordUncountedGenerationKeys),
   };
-  for (const dir of ledgerDirs) {
+  const identities = Array.isArray(options.ledgerIdentities) ? options.ledgerIdentities : null;
+  const seenLedgerIds = new Set();
+  for (let i = 0; i < ledgerDirs.length; i++) {
+    const dir = ledgerDirs[i];
     const phases = listPhases(dir, scope);
     if (phases == null) continue;
-    scope.ledgers_read += 1;
-    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope, genDedupe);
+    const ident = identities ? identities[i] : null;
+    if (ident) {
+      if (!seenLedgerIds.has(ident)) {
+        seenLedgerIds.add(ident);
+        scope.ledgers_read += 1;
+      }
+    } else {
+      scope.ledgers_read += 1;
+    }
+    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope, genDedupe, ident || null);
   }
 
   const verifiedSeats = new Map();
@@ -764,7 +790,14 @@ function main(argv) {
       const found = discoverArchive(root, tempDirs);
       tarMonths.push(...found.tarMonths);
       tarMonthsRead += found.tarMonthsRead;
-      for (const dir of found.ledgers) candidates.push({ dir, fromArchive: true });
+      for (const entry of found.ledgers) {
+        candidates.push({
+          dir: entry.dir,
+          fromArchive: true,
+          bucket: entry.bucket || null,
+          ledgerId: entry.ledgerId || null,
+        });
+      }
     }
     // Without --archive the candidate list is exactly the --ledger list. Skipping
     // dedupe keeps the previous totals, including two directories with the same bytes.
@@ -780,6 +813,9 @@ function main(argv) {
       tarMonths,
       tarMonthsRead,
       dedupeGenerations: Boolean(selected.dedupeGenerations),
+      ledgerIdentities: selected.kept.map((entry) => (
+        entry.bucket && entry.ledgerId ? `${entry.bucket}\0${entry.ledgerId}` : null
+      )),
     });
     writeStdout(json ? formatJson(report) : formatText(report));
     process.exitCode = 0;

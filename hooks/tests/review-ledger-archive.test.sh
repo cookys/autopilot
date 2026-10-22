@@ -2021,7 +2021,7 @@ unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET
 # (bh) negative control: drop the realpath prefix check. Sibling, root, and
 # symlink refusals go red (exit 0, and the sibling is removed). Restoring the
 # check is the production file; be/bf/bg above stay green.
-# RED with pruneTargetAllowed reduced to "return true" (prefix check gone):
+# RED with pruneTargetAllowedChecked reduced to "return true" (prefix check gone):
 #   case bh: red-on-broken (sibling rc=0 root rc=0 symlink rc=0)
 # The three refusal cases exit 0 instead of 1. rm of a symlink unlinks the
 # link; the outside directory is still on disk.
@@ -2034,10 +2034,10 @@ python3 - "$MUT_BH/scripts/lib/review-ledger-tar.js" <<'PY'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1])
 t = p.read_text()
-old = "function pruneTargetAllowed(archiveDir, targetPath) {\n  return pruneTargetAllowedChecked(archiveDir, targetPath);\n}"
-new = "function pruneTargetAllowed(archiveDir, targetPath) {\n  return true;\n}"
+old = "function pruneTargetAllowedChecked(archiveDir, targetPath) {\n  let st;"
+new = "function pruneTargetAllowedChecked(archiveDir, targetPath) {\n  return true;\n  let st;"
 if old not in t:
-    sys.stderr.write("case bh: pruneTargetAllowed wrapper missing\n")
+    sys.stderr.write("case bh: pruneTargetAllowedChecked missing\n")
     sys.exit(2)
 p.write_text(t.replace(old, new, 1))
 PY
@@ -2237,15 +2237,21 @@ else
   node "$MUT_BM/scripts/review-ledger-archive.js" rotate >"$TEST_TMP/bm-neg.out" 2>"$TEST_TMP/bm-neg.err"
   BM2_ROT_RC=$?
   wait "$BM2_PID" || true
-  BM2_HIT=0
-  if [ -f "$BM2_BUCKET/2026-07.tar.gz" ] && tar -tzf "$BM2_BUCKET/2026-07.tar.gz" | grep -F 'review-beta/g1/findings.json' >/dev/null; then
-    BM2_HIT=1
+  BM2_TAR=0
+  BM2_LACKS=0
+  if [ -f "$BM2_BUCKET/2026-07.tar.gz" ]; then
+    BM2_TAR=1
+    if ! tar -tzf "$BM2_BUCKET/2026-07.tar.gz" | grep -F 'review-beta/g1/findings.json' >/dev/null; then
+      BM2_LACKS=1
+    fi
   fi
-  if [ "$BM2_ROT_RC" = 0 ] && [ "$BM2_HIT" = 1 ]; then
-    fail "case bm: rotate without per-ledger locks still archived review-beta (negative control is blind)"
-  else
-    echo "case bm: red-on-broken (tar missing review-beta, rotate rc=$BM2_ROT_RC)"
+  # Lock-removal is red only when rotate exited 0, the tar exists, and the
+  # listing lacks review-beta. A crash or a missing tar is an invalid control.
+  if [ "$BM2_ROT_RC" = 0 ] && [ "$BM2_TAR" = 1 ] && [ "$BM2_LACKS" = 1 ]; then
+    echo "case bm: red-on-broken (rotate rc=0, tar exists, listing lacks review-beta)"
     __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "case bm: negative control invalid (rotate rc=$BM2_ROT_RC tar_exists=$BM2_TAR lacks_review_beta=$BM2_LACKS)"
   fi
 fi
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
@@ -2267,13 +2273,27 @@ mkdir -p "$BN_LEDGER.lock"
 printf '%s\n' 'lock-body' > "$BN_LEDGER.lock/owner"
 # Stale so rotate can take the lock instead of waiting out a live holder.
 touch -d '40 seconds ago' "$BN_LEDGER.lock" "$BN_LEDGER.lock/owner"
-printf '%s\n' 'stale' > "$BN_BUCKET/2026-07.tar.gz.tmp-123"
+printf '%s\n' 'lock-file' > "$BN_LEDGER/x.lock"
+printf '%s\n' 'stale' > "$BN_BUCKET/2026-07.tar.gz.tmp-old"
+printf '%s\n' 'fresh' > "$BN_BUCKET/2026-07.tar.gz.tmp-fresh"
 printf '%s\n' 'other' > "$BN_BUCKET/2026-08.tar.gz.tmp-123"
+# Ages are relative to the injected noon clock (AUTOPILOT_TEST_NOW=2026-10-22),
+# which resolveNow turns into 12:00 local. 20 minutes back is removed; 1 minute back stays.
+node -e '
+  const fs = require("fs");
+  const now = new Date(2026, 9, 22, 12, 0, 0);
+  const old = new Date(now.getTime() - 20 * 60 * 1000);
+  const fresh = new Date(now.getTime() - 60 * 1000);
+  fs.utimesSync(process.argv[1], old, old);
+  fs.utimesSync(process.argv[2], fresh, fresh);
+' "$BN_BUCKET/2026-07.tar.gz.tmp-old" "$BN_BUCKET/2026-07.tar.gz.tmp-fresh"
 node "$CLI" rotate >"$TEST_TMP/bn.out" 2>"$TEST_TMP/bn.err"
 assert_exit_code "$?" "0" "case bn: rotate exits 0"
 assert_contains "$(cat "$TEST_TMP/bn.out")" "rotated " "case bn: month rotated"
-test ! -e "$BN_BUCKET/2026-07.tar.gz.tmp-123"
-assert_exit_code "$?" "0" "case bn: stale tmp tar of that month is gone"
+test ! -e "$BN_BUCKET/2026-07.tar.gz.tmp-old"
+assert_exit_code "$?" "0" "case bn: tmp tar older than 10 minutes is gone"
+test -f "$BN_BUCKET/2026-07.tar.gz.tmp-fresh"
+assert_exit_code "$?" "0" "case bn: tmp tar newer than 10 minutes survives"
 test -f "$BN_BUCKET/2026-08.tar.gz.tmp-123"
 assert_exit_code "$?" "0" "case bn: another month tmp tar is left"
 test -f "$BN_BUCKET/2026-07.tar.gz"
@@ -2302,18 +2322,173 @@ node -e '
   if (lib.pruneTargetAllowedChecked(arch, arch + "/bucket") !== true) process.exit(5);
 ' "$TAR_LIB" "$BO_ARCH" "$BO_SIB" "$BO_ARCH/link-out"
 assert_exit_code "$?" "0" "case bo: in-place check refuses symlink and sibling"
-python3 - "$TAR_LIB" <<'PY'
+# Real prune: the month passes the up-front check, then the test swaps it for a
+# symlink before the in-place check. The outside file must survive and the
+# swap must be refused.
+# RED at 72c427129: removeChecked called pruneTargetAllowed, not
+# pruneTargetAllowedChecked, and there was no pause seam. A swap could not
+# land between validation and rmSync, and a midway refusal returned no
+# "deleted <path>" lines.
+BO_EXEC="$TEST_TMP/archive-bo-exec"
+BO_OUTSIDE="$TEST_TMP/outside-bo"
+mkdir -p "$BO_EXEC/bucket/2026-01" "$BO_OUTSIDE"
+printf '%s\n' 'month' > "$BO_EXEC/bucket/2026-01/note"
+printf '%s\n' 'victim' > "$BO_OUTSIDE/victim"
+BO_READY="$TEST_TMP/bo-ready"
+BO_RELEASE="$TEST_TMP/bo-release"
+rm -f "$BO_READY" "$BO_RELEASE"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$BO_EXEC"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE=1
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE="$BO_READY"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE="$BO_RELEASE"
+node "$CLI" prune --older-than 2m --execute >"$TEST_TMP/bo-real.out" 2>"$TEST_TMP/bo-real.err" &
+BO_PID=$!
+BO_SAW=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 40 50 60 70 80; do
+  if [ -f "$BO_READY" ]; then BO_SAW=1; break; fi
+  sleep 0.05
+done
+if [ "$BO_SAW" != 1 ]; then
+  printf '%s\n' go > "$BO_RELEASE"
+  wait "$BO_PID" || true
+  fail "case bo: prune did not pause before delete"
+else
+  rm -rf "$BO_EXEC/bucket/2026-01"
+  ln -s "$BO_OUTSIDE" "$BO_EXEC/bucket/2026-01"
+  printf '%s\n' go > "$BO_RELEASE"
+  wait "$BO_PID"
+  BO_REAL_RC=$?
+  assert_exit_code "$BO_REAL_RC" "1" "case bo: swapped symlink is refused"
+  grep -F 'refused' "$TEST_TMP/bo-real.err" >/dev/null
+  assert_exit_code "$?" "0" "case bo: refusal is on stderr"
+  test -L "$BO_EXEC/bucket/2026-01"
+  assert_exit_code "$?" "0" "case bo: symlink was not deleted"
+  test -f "$BO_OUTSIDE/victim"
+  assert_exit_code "$?" "0" "case bo: symlink target outside the archive survives"
+fi
+
+# Mutant: the in-place check is deleted from removeChecked. Red only when the
+# process exits 0, the archive path is gone, and the outside victim survives.
+# A crash fails this control instead of counting as red.
+MUT_BO="$TEST_TMP/mut-bo"
+mkdir -p "$MUT_BO/scripts/lib"
+cp "$CLI" "$MUT_BO/scripts/review-ledger-archive.js"
+cp "$LIB" "$MUT_BO/scripts/lib/review-ledger-copy.js"
+cp "$TAR_LIB" "$MUT_BO/scripts/lib/review-ledger-tar.js"
+python3 - "$MUT_BO/scripts/lib/review-ledger-tar.js" <<'PY'
 import pathlib, sys
-t = pathlib.Path(sys.argv[1]).read_text()
-start = t.find("function pruneArchive")
-body = t[start:]
-call = body.find("pruneTargetAllowed(")
-rm = body.find("fs.rmSync")
-if call < 0 or rm < 0 or call > rm:
-    sys.stderr.write("case bo: pruneTargetAllowed is not called before rmSync\n")
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = """      // in-place-prune-check
+      if (!pruneTargetAllowedChecked(o.dir, t)) {
+        refusal = `review-ledger-archive: refused ${t} (${pruneTargetRefusal(o.dir, t) || 'not under archive'})`;
+        return;
+      }
+"""
+if old not in t:
+    sys.stderr.write("case bo: in-place check block missing\n")
     sys.exit(2)
+p.write_text(t.replace(old, "", 1))
 PY
-assert_exit_code "$?" "0" "case bo: execute path checks the target before rmSync"
+assert_exit_code "$?" "0" "case bo: in-place-check mutant applied"
+BO_MUT_ARCH="$TEST_TMP/archive-bo-mut"
+BO_MUT_OUT="$TEST_TMP/outside-bo-mut"
+mkdir -p "$BO_MUT_ARCH/bucket/2026-01" "$BO_MUT_OUT"
+printf '%s\n' 'month' > "$BO_MUT_ARCH/bucket/2026-01/note"
+printf '%s\n' 'victim' > "$BO_MUT_OUT/victim"
+rm -f "$BO_READY" "$BO_RELEASE"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$BO_MUT_ARCH"
+node "$MUT_BO/scripts/review-ledger-archive.js" prune --older-than 2m --execute >"$TEST_TMP/bo-mut.out" 2>"$TEST_TMP/bo-mut.err" &
+BO_MUT_PID=$!
+BO_MUT_SAW=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 40 50 60 70 80; do
+  if [ -f "$BO_READY" ]; then BO_MUT_SAW=1; break; fi
+  sleep 0.05
+done
+if [ "$BO_MUT_SAW" != 1 ]; then
+  printf '%s\n' go > "$BO_RELEASE"
+  wait "$BO_MUT_PID" || true
+  fail "case bo: mutant prune did not pause before delete"
+else
+  rm -rf "$BO_MUT_ARCH/bucket/2026-01"
+  ln -s "$BO_MUT_OUT" "$BO_MUT_ARCH/bucket/2026-01"
+  printf '%s\n' go > "$BO_RELEASE"
+  wait "$BO_MUT_PID"
+  BO_MUT_RC=$?
+  BO_MUT_GONE=0
+  BO_MUT_VICTIM=0
+  if [ ! -e "$BO_MUT_ARCH/bucket/2026-01" ] && [ ! -L "$BO_MUT_ARCH/bucket/2026-01" ]; then
+    BO_MUT_GONE=1
+  fi
+  if [ -f "$BO_MUT_OUT/victim" ]; then BO_MUT_VICTIM=1; fi
+  if [ "$BO_MUT_RC" = 0 ] && [ "$BO_MUT_GONE" = 1 ] && [ "$BO_MUT_VICTIM" = 1 ]; then
+    echo "case bo: red-on-broken (rc=0, archive path deleted, outside victim survives)"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "case bo: negative control invalid (rc=$BO_MUT_RC path_gone=$BO_MUT_GONE victim_survives=$BO_MUT_VICTIM)"
+  fi
+fi
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE
+
+# (bp) a refusal after one delete lists that delete on stdout and the refusal
+# on stderr.
+BP_ARCH="$TEST_TMP/archive-bp"
+BP_OUTSIDE="$TEST_TMP/outside-bp"
+mkdir -p "$BP_ARCH/bucket/2026-01" "$BP_ARCH/bucket/2026-02" "$BP_OUTSIDE"
+printf '%s\n' 'one' > "$BP_ARCH/bucket/2026-01/note"
+printf '%s\n' 'two' > "$BP_ARCH/bucket/2026-02/note"
+printf '%s\n' 'victim' > "$BP_OUTSIDE/victim"
+BP_READY="$TEST_TMP/bp-ready"
+BP_RELEASE="$TEST_TMP/bp-release"
+rm -f "$BP_READY" "$BP_RELEASE"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$BP_ARCH"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE=1
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE="$BP_READY"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE="$BP_RELEASE"
+node "$CLI" prune --older-than 2m --execute >"$TEST_TMP/bp.out" 2>"$TEST_TMP/bp.err" &
+BP_PID=$!
+bp_wait_ready() {
+  BP_SAW=0
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 40 50 60 70 80; do
+    BP_READY_BODY=$(cat "$BP_READY" 2>/dev/null || true)
+    if [ -n "$BP_READY_BODY" ] && [ "$BP_READY_BODY" = "$1" ]; then BP_SAW=1; return 0; fi
+    sleep 0.05
+  done
+  return 1
+}
+if ! bp_wait_ready "$BP_ARCH/bucket/2026-01"; then
+  printf '%s\n' go > "$BP_RELEASE"
+  wait "$BP_PID" || true
+  fail "case bp: first target did not pause"
+else
+  printf '%s\n' go > "$BP_RELEASE"
+  if ! bp_wait_ready "$BP_ARCH/bucket/2026-02"; then
+    wait "$BP_PID" || true
+    fail "case bp: second target did not pause"
+  else
+    rm -rf "$BP_ARCH/bucket/2026-02"
+    ln -s "$BP_OUTSIDE" "$BP_ARCH/bucket/2026-02"
+    printf '%s\n' go > "$BP_RELEASE"
+    wait "$BP_PID"
+    BP_RC=$?
+    assert_exit_code "$BP_RC" "1" "case bp: midway refusal exits 1"
+    grep -F -x "deleted $BP_ARCH/bucket/2026-01" "$TEST_TMP/bp.out" >/dev/null
+    assert_exit_code "$?" "0" "case bp: stdout lists the target already deleted"
+    grep -F 'refused' "$TEST_TMP/bp.err" >/dev/null
+    assert_exit_code "$?" "0" "case bp: refusal line is on stderr"
+    test ! -e "$BP_ARCH/bucket/2026-01"
+    assert_exit_code "$?" "0" "case bp: first month was deleted"
+    test -f "$BP_OUTSIDE/victim"
+    assert_exit_code "$?" "0" "case bp: outside target survives"
+    test -L "$BP_ARCH/bucket/2026-02"
+    assert_exit_code "$?" "0" "case bp: second target was not deleted"
+  fi
+fi
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE
 
 unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
 unset AUTOPILOT_TEST_NOW

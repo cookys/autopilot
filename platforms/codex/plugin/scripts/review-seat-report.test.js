@@ -1420,3 +1420,37 @@ test('33 a nested tar is not expanded and a non-month name is skipped', () => {
   assert.match(text, /2026-7\.tar\.gz: not a month tar/);
   assertTmpEmpty(childTmp);
 });
+
+// # RED at 72c427129: node --test --test-name-pattern '34 same ledger' scripts/review-seat-report.test.js
+// → fail 1, pass 0. ledgers_read 2 !== 1 (the assertion stops before generations).
+
+test('34 same ledger-id in a tar and its sibling directory counts once', () => {
+  const home = tmp();
+  const source = tmp();
+  writePhase(source, 'review-alpha', { text: '[g1] shared', findingId: 'g1', generation: 1 });
+  const root = tmp();
+  const imported = importLayoutA(source, root, home);
+  rotateWithClock(root, home);
+  const { bucketDir, month } = findMonthDir(root);
+  assert.ok(fs.existsSync(path.join(bucketDir, `${month}.tar.gz`)));
+  const phase = path.join(imported, 'review-alpha');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized'), chainEntry(2, 'finalized')]);
+  writeJson(path.join(phase, 'g2', 'findings.json'), {
+    findings: [finding('g2', 'Major', 's0', '[g2] later')],
+  });
+  writeJson(path.join(phase, 'g2', 'dispositions.json'), { findings: [disp('g2', 'verified')] });
+  writeJson(path.join(phase, 'g2', 'seat-s0.json'), seat('gpt-5'));
+  const dirOnly = load().buildReport([imported], { dedupeGenerations: true });
+  assert.strictEqual(dirOnly.totals.findings, 2);
+  assert.strictEqual(dirOnly.totals.generations, 2);
+  const childTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tmp-'));
+  const cli = runCli(['--archive', root, '--json'], home, { TMPDIR: childTmp });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const report = JSON.parse(cli.stdout);
+  assert.strictEqual(report.scope.ledgers_read, 1);
+  assert.strictEqual(report.scope.finalized_generations, 2);
+  assert.strictEqual(report.totals.generations, 2);
+  assert.strictEqual(report.totals.findings, dirOnly.totals.findings);
+  assert.strictEqual(report.scope.duplicate_generations_skipped, 1);
+  assertTmpEmpty(childTmp);
+});

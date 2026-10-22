@@ -89,6 +89,8 @@ function countRegularFiles(root) {
       try { names = fs.readdirSync(cur); } catch (_e) { continue; }
       for (const name of names) stack.push(path.join(cur, name));
     } else if (st.isFile()) {
+      // tar --exclude=*.lock drops lock files as well as lock directories.
+      if (path.basename(cur).endsWith('.lock')) continue;
       n += 1;
     }
   }
@@ -187,7 +189,11 @@ function withLedgerLocks(lockDirs, fn) {
   return step(0);
 }
 
-function clearStaleTmpTars(bucketDir, month) {
+const TMP_TAR_MAX_AGE_MS = 10 * 60 * 1000;
+
+function clearStaleTmpTars(bucketDir, month, now) {
+  const when = now instanceof Date && !Number.isNaN(now.getTime()) ? now.getTime() : Date.now();
+  const cutoff = when - TMP_TAR_MAX_AGE_MS;
   let names = [];
   try { names = fs.readdirSync(bucketDir); } catch (_e) { return; }
   const prefix = `${month}.tar.gz.tmp-`;
@@ -197,8 +203,27 @@ function clearStaleTmpTars(bucketDir, month) {
     let st;
     try { st = fs.lstatSync(p); } catch (_e) { continue; }
     if (st.isSymbolicLink() || !st.isFile()) continue;
+    // A tmp file newer than the cutoff belongs to a concurrent rotate.
+    if (!(st.mtimeMs < cutoff)) continue;
     try { fs.unlinkSync(p); } catch (_e) { /* absent */ }
   }
+}
+
+// Test-only. The gate is exactly "1". The rotate/prune caller waits until the
+// release file appears, then removes it so the next target pauses again.
+function pausePruneForTest(targetPath) {
+  if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_PAUSE !== '1') return;
+  const ready = process.env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_READY_FILE;
+  const release = process.env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_PRUNE_RELEASE_FILE;
+  if (!ready || !release) return;
+  try { fs.writeFileSync(ready, String(targetPath || '')); } catch (_e) { return; }
+  const deadline = Date.now() + 20000;
+  while (!fs.existsSync(release)) {
+    if (Date.now() > deadline) return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  try { fs.unlinkSync(release); } catch (_e) { /* absent */ }
+  try { fs.unlinkSync(ready); } catch (_e) { /* absent */ }
 }
 
 function bucketDirForPrune(archiveDir, targetPath) {
@@ -250,15 +275,21 @@ function pruneArchive(opts) {
   // or left the archive after the up-front pass is a refusal: stop, delete
   // nothing further. Month directories also hold every per-ledger lock for
   // that month until the delete finishes. Tar files take no extra lock.
+  const deleted = [];
   const removeChecked = (t) => {
+    // After the up-front pass, before this target is classified again. A test
+    // can swap the path for a symlink during the pause.
+    pausePruneForTest(t);
     const locks = monthNameOk(path.basename(t)) && isRealDir(t) ? ledgerLockPaths(t) : [];
     let refusal = null;
     withLedgerLocks(locks, () => {
-      if (!pruneTargetAllowed(o.dir, t)) {
+      // in-place-prune-check
+      if (!pruneTargetAllowedChecked(o.dir, t)) {
         refusal = `review-ledger-archive: refused ${t} (${pruneTargetRefusal(o.dir, t) || 'not under archive'})`;
         return;
       }
       fs.rmSync(t, { recursive: true });
+      deleted.push(t);
     });
     return refusal;
   };
@@ -278,7 +309,7 @@ function pruneArchive(opts) {
       if (refusal) break;
     }
   }
-  if (refusal) return { refusals: [refusal], lines: [] };
+  if (refusal) return { refusals: [refusal], lines: deleted.map((t) => `deleted ${t}`) };
   return { refusals: [], lines: accepted };
 }
 
@@ -311,7 +342,7 @@ function rotateArchive(opts) {
         }
         const monthDir = path.join(bucketDir, month);
         withLedgerLocks(ledgerLockPaths(monthDir), () => {
-          clearStaleTmpTars(bucketDir, month);
+          clearStaleTmpTars(bucketDir, month, now);
           const finalName = path.join(bucketDir, `${month}.tar.gz`);
           const tmp = path.join(bucketDir, `${month}.tar.gz.tmp-${process.pid}`);
           try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }

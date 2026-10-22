@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Off unless the directory is set. Finalize is not wired in this change.
+- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written. The archive writes only when a dir is configured.
 
 - seatcard: read-only `review-seat-report.js` aggregates per-family review seat statistics from hetero-review ledgers supplied by the caller.
 

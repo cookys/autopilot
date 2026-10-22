@@ -16,6 +16,10 @@
 # is not attempted.
 # RED at 8694f710fe00e5df9f515e19f8e1872a91d345f0: enforceModes chmods the whole archive root; "~/x" is not
 # expanded; a live lock is not refreshed so a copy longer than staleMs is stolen.
+# RED at 3caa2b554ec7b688c73c3f6d65ef888f67b02186: wording still says finalize is not wired; a chain.json
+# with no generation 1 aborts the import; a read-only archive root is not
+# rejected before copy; --phase ../x is an unknown argument; a symlinked
+# review-* directory is followed.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -1182,6 +1186,263 @@ fi
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# Round 8 phrase. The same four files must carry it, and must not carry the
+# stale clauses this round removed.
+R8_PHRASE='writes only when a dir is configured'
+R8_STALE_RE='not wired in this change|finalize hook is a later change|later, the finalize'
+R8_WORD_FILES=(
+  "$REPO_ROOT/CHANGELOG.md"
+  "$REPO_ROOT/docs/scripts-inventory.md"
+  "$REPO_ROOT/scripts/lib/review-ledger-copy.js"
+  "$REPO_ROOT/docs/settings-reference.md"
+)
+
+# (af) wording. Negative control: the same grep on the pre-change blob fails.
+for f in "${R8_WORD_FILES[@]}"; do
+  if grep -E "$R8_STALE_RE" "$f" >/dev/null; then
+    fail "case af: stale wording still in $f"
+  fi
+  grep -F "$R8_PHRASE" "$f" >/dev/null
+  assert_exit_code "$?" "0" "case af: $f has the configured-dir phrase"
+done
+if ! git grep -q -F "$R8_PHRASE" HEAD -- CHANGELOG.md docs/scripts-inventory.md scripts/lib/review-ledger-copy.js docs/settings-reference.md; then
+  R8_PRE=HEAD
+else
+  R8_PRE='HEAD^'
+fi
+R8_PRE_HITS=0
+for rel in CHANGELOG.md docs/scripts-inventory.md scripts/lib/review-ledger-copy.js docs/settings-reference.md; do
+  blob=$(git show "$R8_PRE:$rel")
+  if printf '%s\n' "$blob" | grep -E "$R8_STALE_RE" >/dev/null; then
+    R8_PRE_HITS=$((R8_PRE_HITS + 1))
+  fi
+  if printf '%s\n' "$blob" | grep -F "$R8_PHRASE" >/dev/null; then
+    R8_PRE_HITS=$((R8_PRE_HITS + 1))
+  fi
+done
+if [ "$R8_PRE_HITS" = 0 ]; then
+  fail "case af: pre-change blob $R8_PRE already matches the new wording (negative control is blind)"
+else
+  echo "case af: red-on-broken (pre-change $R8_PRE wording hits $R8_PRE_HITS)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+# (ag) chain.json without generation 1 is skipped. Other phases are archived.
+LEDGER_AG="$TEST_TMP/ledger-ag"
+make_real_ledger "$LEDGER_AG" good "2026-01-02T00:00:00Z" '{"base":"ag","head":"good"}'
+mkdir -p "$LEDGER_AG/review-nogen1/g1"
+printf '%s\n' '[{"generation":2,"base":"aaa","head":"bbb","status":"pending"}]' > "$LEDGER_AG/review-nogen1/chain.json"
+printf '%s\n' '{"base":"ag","head":"nogen"}' > "$LEDGER_AG/review-nogen1/g1/range.json"
+printf '%s\n' '{"findings":[]}' > "$LEDGER_AG/review-nogen1/g1/findings.json"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ag"
+node "$CLI" import --ledger "$LEDGER_AG" --repo "$REPO" >"$TEST_TMP/ag.out" 2>"$TEST_TMP/ag.err"
+assert_exit_code "$?" "0" "case ag: import exits 0"
+DEST_AG=$(cat "$TEST_TMP/ag.out")
+assert_file_exists "$DEST_AG/review-good/chain.json" "case ag: good phase archived"
+assert_file_absent "$DEST_AG/review-nogen1" "case ag: phase without generation 1 not copied"
+grep -F 'review-ledger-archive: skipped review-nogen1' "$TEST_TMP/ag.err" >/dev/null
+assert_exit_code "$?" "0" "case ag: stderr names the phase with no generation 1"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (ah) negative control: phaseCopyable that ignores generation 1 throws as before.
+MUT_AH="$TEST_TMP/mut-ah/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AH")"
+cp "$LIB" "$MUT_AH"
+python3 - "$MUT_AH" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "if (!Array.isArray(chain) || !chain.some((e) => e && e.generation === 1)) return false;\n"
+if old not in t:
+    sys.stderr.write("case ah: generation 1 guard missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, "", 1))
+PY
+assert_exit_code "$?" "0" "case ah: generation guard removed on a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ah"
+node -e '
+  const fs = require("fs");
+  const lib = require(process.argv[1]);
+  try {
+    const r = lib.copyLedger({
+      ledgerDir: process.argv[2],
+      repoDir: process.argv[3],
+      importedFrom: fs.realpathSync(process.argv[2]),
+    });
+    if (r && r.skipped) {
+      for (const name of r.skipped) console.error("review-ledger-archive: skipped " + name);
+    }
+    if (r && r.dest) console.log(r.dest);
+    process.exit(0);
+  } catch (err) {
+    console.error(err && err.message ? err.message : err);
+    process.exit(1);
+  }
+' "$MUT_AH" "$LEDGER_AG" "$REPO" >"$TEST_TMP/ah.out" 2>"$TEST_TMP/ah.err"
+AH_RC=$?
+if [ "$AH_RC" = 0 ] && grep -F 'review-ledger-archive: skipped review-nogen1' "$TEST_TMP/ah.err" >/dev/null && [ -f "$(cat "$TEST_TMP/ah.out")/review-good/chain.json" ]; then
+  fail "case ah: lib that ignores a missing generation 1 still skipped the phase (negative control is blind)"
+else
+  echo "case ah: red-on-broken (exit $AH_RC)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (ai) read-only archive root: one message, non-zero, mode stays 0555.
+# Status on the same root exits 0. Skip as root (0555 is not a barrier).
+if [ "$(id -u)" = 0 ]; then
+  echo "case ai skipped: running as root, chmod 0555 is not a write barrier"
+else
+  LEDGER_AI="$TEST_TMP/ledger-ai"
+  make_real_ledger "$LEDGER_AI" good "2026-01-03T00:00:00Z" '{"base":"ai","head":"good"}'
+  export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ai"
+  mkdir -p "$TEST_TMP/archive-ai"
+  chmod 0555 "$TEST_TMP/archive-ai"
+  AI_RC=0
+  node "$CLI" import --ledger "$LEDGER_AI" --repo "$REPO" >"$TEST_TMP/ai.out" 2>"$TEST_TMP/ai.err" || AI_RC=$?
+  AI_MODE=$(stat -c '%a' "$TEST_TMP/archive-ai")
+  assert_eq "$AI_MODE" "555" "case ai: archive root stays 0555"
+  if [ "$AI_RC" = 0 ]; then
+    fail "case ai: import of a read-only root exited 0"
+  fi
+  grep -F 'review-ledger-archive: archive root is not writable' "$TEST_TMP/ai.err" >/dev/null
+  assert_exit_code "$?" "0" "case ai: one not-writable message"
+  AI_LINES=$(grep -c . "$TEST_TMP/ai.err" || true)
+  assert_eq "$AI_LINES" "1" "case ai: stderr is one line"
+  node "$CLI" status >"$TEST_TMP/ai-status.out" 2>"$TEST_TMP/ai-status.err"
+  assert_exit_code "$?" "0" "case ai: status on a read-only root exits 0"
+  AI_MODE2=$(stat -c '%a' "$TEST_TMP/archive-ai")
+  assert_eq "$AI_MODE2" "555" "case ai: status leaves the root 0555"
+  chmod 0755 "$TEST_TMP/archive-ai" || true
+
+  # (aj) negative control: CLI without the W_OK check does not print that message.
+  MUT_AJ_DIR="$TEST_TMP/mut-aj"
+  mkdir -p "$MUT_AJ_DIR/lib"
+  cp "$CLI" "$MUT_AJ_DIR/review-ledger-archive.js"
+  cp "$LIB" "$MUT_AJ_DIR/lib/review-ledger-copy.js"
+  python3 - "$MUT_AJ_DIR/review-ledger-archive.js" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = """    if (cfg.dir && !archiveRootWritable(cfg.dir)) {
+      console.error('review-ledger-archive: archive root is not writable');
+      return 1;
+    }
+"""
+if old not in t:
+    sys.stderr.write("case aj: W_OK check missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, "", 1))
+PY
+  assert_exit_code "$?" "0" "case aj: W_OK check removed on a temp CLI"
+  chmod 0555 "$TEST_TMP/archive-ai"
+  AJ_RC=0
+  node "$MUT_AJ_DIR/review-ledger-archive.js" import --ledger "$LEDGER_AI" --repo "$REPO" >"$TEST_TMP/aj.out" 2>"$TEST_TMP/aj.err" || AJ_RC=$?
+  AJ_MODE=$(stat -c '%a' "$TEST_TMP/archive-ai")
+  if grep -F 'review-ledger-archive: archive root is not writable' "$TEST_TMP/aj.err" >/dev/null && [ "$AJ_MODE" = "555" ] && [ "$AJ_RC" != 0 ]; then
+    fail "case aj: CLI without W_OK still reported the not-writable line (negative control is blind)"
+  else
+    echo "case aj: red-on-broken (exit $AJ_RC mode $AJ_MODE)"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+  chmod 0755 "$TEST_TMP/archive-ai" || true
+  unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+fi
+
+# (ak) unsafe --phase is rejected before any read or write.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ak"
+AK_GHOST="$TEST_TMP/archive-ak-ghost"
+rm -rf "$AK_GHOST"
+for ak_phase in '../x' 'a/b' ''; do
+  rm -rf "$TEST_TMP/archive-ak"
+  AK_RC=0
+  node "$CLI" import --ledger "$TEST_TMP/no-such-ledger-ak" --repo "$REPO" --phase "$ak_phase" >"$TEST_TMP/ak.out" 2>"$TEST_TMP/ak.err" || AK_RC=$?
+  if [ "$AK_RC" = 0 ]; then
+    fail "case ak: --phase $(printf '%q' "$ak_phase") exited 0"
+  fi
+  grep -F 'review-ledger-archive: unsafe phase name' "$TEST_TMP/ak.err" >/dev/null
+  assert_exit_code "$?" "0" "case ak: unsafe phase message for $(printf '%q' "$ak_phase")"
+  AK_LINES=$(grep -c . "$TEST_TMP/ak.err" || true)
+  assert_eq "$AK_LINES" "1" "case ak: stderr is one line"
+  if [ -e "$TEST_TMP/archive-ak" ] || [ -e "$AK_GHOST" ]; then
+    fail "case ak: unsafe --phase wrote an archive directory"
+  fi
+done
+# A missing ledger is not touched: the error is the phase, not "ledger not found".
+grep -F 'ledger not found' "$TEST_TMP/ak.err" >/dev/null && fail "case ak: ledger was read before the phase check"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (al) a review-* symlink to a directory outside the ledger is not followed.
+LEDGER_AL="$TEST_TMP/ledger-al"
+OUTSIDE_AL="$TEST_TMP/outside-al"
+make_real_ledger "$LEDGER_AL" good "2026-01-04T00:00:00Z" '{"base":"al","head":"good"}'
+mkdir -p "$OUTSIDE_AL/g1"
+printf '%s\n' '[{"generation":1,"base":"aaa","head":"bbb","status":"pending"}]' > "$OUTSIDE_AL/chain.json"
+printf '%s\n' 'SENTINEL_OUTSIDE' > "$OUTSIDE_AL/g1/range.json"
+ln -s "$OUTSIDE_AL" "$LEDGER_AL/review-evil"
+OUTSIDE_BEFORE=$(find "$OUTSIDE_AL" -printf '%p\n' | sort)
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-al"
+node "$CLI" import --ledger "$LEDGER_AL" --repo "$REPO" >"$TEST_TMP/al.out" 2>"$TEST_TMP/al.err"
+assert_exit_code "$?" "0" "case al: import exits 0"
+DEST_AL=$(cat "$TEST_TMP/al.out")
+assert_file_exists "$DEST_AL/review-good/chain.json" "case al: good phase archived"
+assert_file_absent "$DEST_AL/review-evil" "case al: symlinked phase not copied"
+grep -F 'review-ledger-archive: skipped review-evil' "$TEST_TMP/al.err" >/dev/null
+assert_exit_code "$?" "0" "case al: stderr names the symlinked phase"
+if grep -R -F 'SENTINEL_OUTSIDE' "$TEST_TMP/archive-al" >/dev/null; then
+  fail "case al: sentinel from outside the ledger was copied into the archive"
+fi
+OUTSIDE_AFTER=$(find "$OUTSIDE_AL" -printf '%p\n' | sort)
+assert_eq "$OUTSIDE_AFTER" "$OUTSIDE_BEFORE" "case al: nothing appeared outside the archive root"
+# No archive path is a symlink that leaves the root.
+if find "$TEST_TMP/archive-al" -type l | grep -q .; then
+  fail "case al: archive contains a symlink"
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (am) negative control: stat instead of lstat follows the symlinked phase.
+MUT_AM="$TEST_TMP/mut-am/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AM")"
+cp "$LIB" "$MUT_AM"
+python3 - "$MUT_AM" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+if "fs.lstatSync" not in t:
+    sys.stderr.write("case am: lstatSync missing\n")
+    sys.exit(2)
+p.write_text(t.replace("fs.lstatSync", "fs.statSync"))
+PY
+assert_exit_code "$?" "0" "case am: lstat replaced with stat on a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-am"
+node -e '
+  const fs = require("fs");
+  const lib = require(process.argv[1]);
+  const r = lib.copyLedger({
+    ledgerDir: process.argv[2],
+    repoDir: process.argv[3],
+    importedFrom: fs.realpathSync(process.argv[2]),
+  });
+  if (r && r.skipped) {
+    for (const name of r.skipped) console.error("review-ledger-archive: skipped " + name);
+  }
+  if (r && r.dest) console.log(r.dest);
+' "$MUT_AM" "$LEDGER_AL" "$REPO" >"$TEST_TMP/am.out" 2>"$TEST_TMP/am.err"
+AM_RC=$?
+AM_HIT=0
+if grep -R -F 'SENTINEL_OUTSIDE' "$TEST_TMP/archive-am" >/dev/null 2>&1; then AM_HIT=1; fi
+if [ "$AM_RC" = 0 ] && [ "$AM_HIT" = 0 ] && grep -F 'review-ledger-archive: skipped review-evil' "$TEST_TMP/am.err" >/dev/null; then
+  fail "case am: stat-based lib still skipped the symlink (negative control is blind)"
+else
+  echo "case am: red-on-broken (exit $AM_RC sentinel $AM_HIT)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
 finalize_test

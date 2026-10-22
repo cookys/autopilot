@@ -1036,7 +1036,7 @@
       "readers": ["scripts/lib/review-ledger-copy.js"],
       "doc": "docs/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR"],
-      "summary": "Directory for the opt-in review-ledger archive. Unset or empty means off: nothing is read or written. The environment variable wins.",
+      "summary": "Directory for the opt-in review-ledger archive. Unset or empty means off: it writes nothing. The config file is still read to learn whether the key is set. The archive writes only when a dir is configured. The environment variable wins.",
       "type": "string",
       "invalid_effect": "a non-string is an error at copy time; empty string means off"
     },

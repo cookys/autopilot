@@ -2,10 +2,13 @@
 
 // review-ledger-copy.js — opt-in copy of a hetero-review ledger into layout A.
 // Node built-ins only. Throws Error on failure. Never calls process.exit.
-// The caller (CLI or, later, the finalize hook) catches every error.
+// Finalize is wired in. It writes to the archive only when a dir is configured
+// (env or config key); unset means nothing is written. The caller (CLI or the
+// finalize hook) catches every error. The archive writes only when a dir is configured.
 //
 // Archive off: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR unset and review_ledger_archive.dir
-// unset or empty. Nothing is copied. Env wins over the operator config file
+// unset or empty. It writes nothing. The config file is still read to learn whether
+// the key is set. Env wins over the operator config file
 // (scripts/lib/config-path.js). include_diff default false
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF). warn_mb default 500
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB).
@@ -124,6 +127,15 @@ function repoBucket(repoDir) {
   return `${path.basename(path.resolve(repoDir))}-${prefix}`;
 }
 
+// A phase token from --phase or copyLedger's phases list. Reject before any
+// ledger read or archive write. ".." anywhere, a separator, empty, or absolute.
+function assertSafePhase(name) {
+  const s = String(name);
+  if (s === '' || path.isAbsolute(s) || s.includes('/') || s.includes('\\') || s.includes('..')) {
+    throw new Error('unsafe phase name');
+  }
+}
+
 function phaseNames(ledgerDir) {
   let names;
   try {
@@ -131,7 +143,30 @@ function phaseNames(ledgerDir) {
   } catch (e) {
     throw new Error(`cannot read ledger: ${e.message}`);
   }
-  return names.filter((n) => n.startsWith('review-') && fs.statSync(path.join(ledgerDir, n)).isDirectory()).sort();
+  return names.filter((n) => {
+    if (!n.startsWith('review-')) return false;
+    let st;
+    try { st = fs.lstatSync(path.join(ledgerDir, n)); } catch (_e) { return false; }
+    return st.isDirectory() && !st.isSymbolicLink();
+  }).sort();
+}
+
+// review-* entries that are symlinks (or unstatable). Not followed.
+function symlinkReviewPhases(ledgerDir) {
+  let names;
+  try {
+    names = fs.readdirSync(ledgerDir);
+  } catch (e) {
+    throw new Error(`cannot read ledger: ${e.message}`);
+  }
+  const out = [];
+  for (const n of names) {
+    if (!n.startsWith('review-')) continue;
+    let st;
+    try { st = fs.lstatSync(path.join(ledgerDir, n)); } catch (_e) { out.push(n); continue; }
+    if (st.isSymbolicLink()) out.push(n);
+  }
+  return out.sort();
 }
 
 function readChain(ledgerDir, phaseName) {
@@ -198,8 +233,8 @@ function phaseKeyMap(ledgerDir, phases) {
 
 function fileReadable(filePath) {
   try {
-    const st = fs.statSync(filePath);
-    if (!st.isFile()) return false;
+    const st = fs.lstatSync(filePath);
+    if (st.isSymbolicLink() || !st.isFile()) return false;
     fs.readFileSync(filePath);
     return true;
   } catch (_e) {
@@ -213,8 +248,15 @@ function fileReadable(filePath) {
 function phaseCopyable(ledgerDir, phaseName) {
   const chainPath = path.join(ledgerDir, phaseName, 'chain.json');
   let chainStat;
-  try { chainStat = fs.statSync(chainPath); } catch (_e) { return false; }
-  if (!chainStat.isFile()) return false;
+  try { chainStat = fs.lstatSync(chainPath); } catch (_e) { return false; }
+  if (chainStat.isSymbolicLink() || !chainStat.isFile()) return false;
+  let chain;
+  try {
+    chain = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
+  } catch (_e) {
+    return false;
+  }
+  if (!Array.isArray(chain) || !chain.some((e) => e && e.generation === 1)) return false;
   const rangePath = path.join(ledgerDir, phaseName, 'g1', 'range.json');
   const findingsPath = path.join(ledgerDir, phaseName, 'g1', 'findings.json');
   return fileReadable(rangePath) || fileReadable(findingsPath);
@@ -460,32 +502,59 @@ function withLedgerLock(lockDir, fn) {
   }
 }
 
+function copyRealFile(src, dest, skipped, label) {
+  let st;
+  try { st = fs.lstatSync(src); } catch (_e) { return; }
+  if (st.isSymbolicLink()) {
+    skipped.push(label);
+    return;
+  }
+  if (!st.isFile()) return;
+  copyFilePrivate(src, dest);
+}
+
 function copyPhaseFiles(ledgerDir, phaseName, destPhase, includeDiff) {
+  const skipped = [];
   const srcPhase = path.join(ledgerDir, phaseName);
-  copyFilePrivate(path.join(srcPhase, 'chain.json'), path.join(destPhase, 'chain.json'));
+  let phaseSt;
+  try { phaseSt = fs.lstatSync(srcPhase); } catch (_e) { return skipped; }
+  if (phaseSt.isSymbolicLink()) {
+    skipped.push(phaseName);
+    return skipped;
+  }
+  copyRealFile(path.join(srcPhase, 'chain.json'), path.join(destPhase, 'chain.json'), skipped, `${phaseName}/chain.json`);
   const receiptName = `receipt-${phaseName.slice('review-'.length)}.json`;
   const receiptSrc = path.join(ledgerDir, receiptName);
-  if (fs.existsSync(receiptSrc)) {
-    copyFilePrivate(receiptSrc, path.join(path.dirname(destPhase), receiptName));
-  }
-  const gens = fs.readdirSync(srcPhase).filter((n) => /^g[0-9]+$/.test(n)).sort();
+  copyRealFile(receiptSrc, path.join(path.dirname(destPhase), receiptName), skipped, receiptName);
+  let children = [];
+  try { children = fs.readdirSync(srcPhase); } catch (_e) { return skipped; }
+  const gens = children.filter((n) => /^g[0-9]+$/.test(n)).sort();
   for (const g of gens) {
     const srcG = path.join(srcPhase, g);
-    if (!fs.statSync(srcG).isDirectory()) continue;
+    let gst;
+    try { gst = fs.lstatSync(srcG); } catch (_e) { continue; }
+    if (gst.isSymbolicLink()) {
+      skipped.push(`${phaseName}/${g}`);
+      continue;
+    }
+    if (!gst.isDirectory()) continue;
     const destG = path.join(destPhase, g);
     mkdirPrivate(destG);
     for (const base of PHASE_FILES) {
-      const src = path.join(srcG, base);
-      if (fs.existsSync(src)) copyFilePrivate(src, path.join(destG, base));
+      copyRealFile(path.join(srcG, base), path.join(destG, base), skipped, `${phaseName}/${g}/${base}`);
     }
-    for (const name of fs.readdirSync(srcG)) {
-      if (/^seat-.*\.json$/.test(name)) copyFilePrivate(path.join(srcG, name), path.join(destG, name));
+    let seatNames = [];
+    try { seatNames = fs.readdirSync(srcG); } catch (_e) { seatNames = []; }
+    for (const name of seatNames) {
+      if (/^seat-.*\.json$/.test(name)) {
+        copyRealFile(path.join(srcG, name), path.join(destG, name), skipped, `${phaseName}/${g}/${name}`);
+      }
     }
     if (includeDiff) {
-      const diff = path.join(srcG, 'diff.txt');
-      if (fs.existsSync(diff)) copyFilePrivate(diff, path.join(destG, 'diff.txt'));
+      copyRealFile(path.join(srcG, 'diff.txt'), path.join(destG, 'diff.txt'), skipped, `${phaseName}/${g}/diff.txt`);
     }
   }
+  return skipped;
 }
 
 function entriesFromPhase(phase, chain) {
@@ -507,6 +576,9 @@ function mergeEntries(existing, incoming) {
 
 function copyLedger(opts) {
   const o = opts || {};
+  if (Array.isArray(o.phases)) {
+    for (const p of o.phases) assertSafePhase(p);
+  }
   const cfg = resolveArchiveConfig(o.home);
   if (!cfg.dir) return { copied: false };
   if (!o.ledgerDir) throw new Error('ledgerDir is required');
@@ -529,7 +601,7 @@ function copyLedger(opts) {
   if (!explicit) {
     const part = partitionLedgerPhases(liveForSelect, selected);
     selected = part.usable;
-    skipped = part.skipped;
+    skipped = symlinkReviewPhases(liveForSelect).concat(part.skipped);
     if (selected.length === 0) {
       throw new Error('phase content missing: no g1/range.json or g1/findings.json');
     }
@@ -564,7 +636,7 @@ function copyLedger(opts) {
     createdDirs.push(...mkdirPrivate(dest));
     let incoming = [];
     for (const name of selected) {
-      copyPhaseFiles(id.liveRealpath, name, path.join(dest, name), cfg.includeDiff);
+      skipped = skipped.concat(copyPhaseFiles(id.liveRealpath, name, path.join(dest, name), cfg.includeDiff) || []);
       incoming = incoming.concat(entriesFromPhase(name, readChain(id.liveRealpath, name)));
       const delay = testDelayMs();
       if (delay) sleepMs(delay);

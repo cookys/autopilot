@@ -31,3 +31,7 @@ Trigger: the sweep is changed to take its pinned fields from the pins file. Sour
 `hooks/tests/test-identity-guard.test.sh` checks that `.sh` tests which invoke git source `hooks/tests/lib.sh` (and scans `.js` files for non-test emails), but nothing checks that a `.js` test which runs `git commit` supplies its own git identity. Such a test passes on a dev machine through the HOME gitconfig and goes red under a temp HOME. `scripts/engine-qualify-impl.test.js` was the instance and already fixed it locally: its `withTempHome` writes a `.gitconfig`, so only the missing guard remains.
 
 Trigger: next change to test-identity-guard, or a new node test that runs git. Source: hderive g1 review (identity finding).
+
+## BL-0266 status
+
+Fixed 2026-10-23 by pricesdiag (d81f4160a): parsePrices now recognises the preflight UNSUPPORTED_JSON_NUMBER integer-literal error class instead of the literal 9007199254740992.

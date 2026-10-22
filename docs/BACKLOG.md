@@ -649,21 +649,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
 - **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Selected 102 / 269 / 83 on merges d997355a9, b8bdd61f3, 3765302f3. Main cause: decisions-sidecar.js reads src/engine/autopilot-engine.js as data (fileContains).
-
-### Verify Codex marketplace remove and hook de-duplication on a real Codex CLI
-- **Id**: BL-0214
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: 開發模式安裝改成使用者層 hook 設定後，有兩件事只用假的 Codex 測過，沒在真的 Codex 上驗：一是移除 marketplace 的子命令是否存在可用，好讓解除安裝能清掉註冊；二是使用者層與外掛層同名 hook 是否會去重。
-- **Impact**: 若子命令不存在，解除安裝會留下殘留註冊；若不去重，hook 可能每次觸發兩次。
-- **Trigger**: the next dev-mode install on Codex (dev-setup.sh --harness codex --install) on a host with the real CLI
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: follow-up of BL-0027 (merge d997355a9), 2026-10-19
-- **Pointer**: docs/backlog/verify-codex-marketplace-remove-and-hook-dedupe.md
-- **Context**: Check (a) that "codex plugin marketplace remove" exists and works so --uninstall clears the derived dev marketplace registration, and (b) whether a user-level and a plugin-level hook with the same name are de-duplicated.
+- **Context**: Selected 102 / 269 / 83 on merges d997355a9, b8bdd61f3, 3765302f3. Main cause: decisions-sidecar.js reads src/engine/autopilot-engine.js as data (fileContains). 2026-10-23 re-measured: resolve-review-loop.sh alone selects 452 of 542 suites.
 
 ### roundtable Phase 1 - the /roundtable skill, distilled from several manual rooms
 - **Id**: BL-0216
@@ -724,76 +710,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
 - **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
 
-### Managed rail: no_verdict leaves the phase in REVIEWING and resume refuses
-- **Id**: BL-0220
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: self
-- **Problem**: 審查沒有裁決時，階段會停在審查中，恢復執行會拒絕繼續。紀錄寫著可以等待後恢復，恢復卻不接受這個階段。
-- **Impact**: 審查格式出錯後活動停在不可恢復的階段，這次嘗試只能放棄。
-- **Trigger**: any managed campaign whose in-rail reviewer returns no_verdict (format fault) — the next run of that station
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: 1b-B campaign 2026-09-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-no-verdict-reviewing-resume.md
-- **Context**: The claim is kept, but the persisted phase stays REVIEWING, outside the durable-wait set, so resume is refused.
-
-### Managed rail: changed_files at the cap refuses repair when every sealed path was touched
-- **Id**: BL-0221
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: self
-- **Problem**: 實作已經改過每一條封存路徑時，變更檔數達到上限，修復回合會被拒絕，即使沒有再碰到新檔案。
-- **Impact**: 該修的回合進不去，封存路徑全被碰過的活動無法在軌道內修復。
-- **Trigger**: the hand changed every sealed output path and verification is red, so repair is refused because changed_files is at max_changed_files
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-changed-files-repair-refused.md
-- **Context**: Original effort label was Fix. The changed_files axis uses >= against the sealed cap, so a repair that adds no new path is refused.
-
-### next-touch-validation reads symbolic-ref HEAD and fails in a detached verification checkout
-- **Id**: BL-0222
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: self
-- **Problem**: 下一觸驗證測試會讀目前分支名稱。受管軌道的驗證檢出是分離狀態，沒有分支名稱，這個讀取會失敗。是否仍會紅尚未重跑確認。
-- **Impact**: 軌道內驗證可能因此變紅，同一提交在一般分支上卻是綠的。
-- **Trigger**: next-touch-validation reads symbolic-ref HEAD during the rail's detached verification checkout
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-17 detached checkout; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/next-touch-validation-symbolic-ref-detached.md
-- **Context**: Seen 2026-09-17: red in-rail, green on a branch. Whether it is still red when detached was not re-run.
-
-### Managed rail: a red campaign_verification keeps only digests, so the failing command is lost
-- **Id**: BL-0223
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: self
-- **Problem**: 驗證變紅時，紀錄只留摘要雜湊，失敗的指令和輸出都沒留下來，事後看不出是哪一步、印了什麼。
-- **Impact**: 只能重跑才知道失敗原因，當次的指令與輸出已經不在紀錄裡。
-- **Trigger**: a red campaign_verification whose receipt keeps only digests, so the failing command and its output are lost
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-17 impl-run1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-red-verification-digests-only.md
-- **Context**: The receipt sees stdout, stderr, and exit status, but nothing durable keeps the failing command or its tail.
-
-### Managed rail: graph-check allows max_wall_seconds to 14400 but the contract schema caps 7200
-- **Id**: BL-0224
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: self
-- **Problem**: 圖檢查允許牆鐘上限到一萬四千四百秒，契約上限是七千二百秒。收件時才拒絕，而且已經先花掉一次授權。
-- **Impact**: 收件前檢查放行、收件時才拒絕，一次授權額度已經燒掉。
-- **Trigger**: graph-check admits max_wall_seconds above 7200, then intake rejects and the grant attempt is already spent
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-17 intake-rejected; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-max-wall-seconds-schema-mismatch.md
-- **Context**: Original effort label was Fix. One limit, checked at graph time, so intake does not burn the attempt.
-
 ### Managed rail: ADJUDICATING or VERTICAL_VERIFICATION resume spends the claim before git-drift
 - **Id**: BL-0225
 - **Status**: open
@@ -813,14 +729,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-16
 - **Origin**: self
-- **Problem**: 審查者撤回一則必須修復、又沿用同一個發現編號時，系統把它當成沒有裁決，活動因此停住，雖然裁決其實讀得到。
-- **Impact**: 讀得到的撤回被當成沒有裁決，活動停在等待，修復被拖延。
-- **Trigger**: a rail review that withdraws a MUST-FIX and reuses the finding id is normalized as no_verdict
+- **Problem**: 審查者撤回必須修復並沿用同一編號時，現在只有發現文字以固定前綴開頭才算撤回。沒有任何審查者提示教這個前綴，原案例的寫法仍被判為沒有裁決。
+- **Impact**: 審查者照舊寫法撤回時，活動仍停在等待，修復被拖延。
+- **Trigger**: next guidance eval allowed to edit the in-rail reviewer prompt, or a rail review that withdraws a finding without the prefix parks as no_verdict
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: /l5 dogfood 2026-09-16 MiniMax r1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/managed-rail-revoked-finding-reused-id.md
-- **Context**: Drop withdrawn findings before the duplicate-id check and keep them advisory.
+- **Context**: Code half merged (reusedid c965c6d98): REVOKED: prefix drops the claim before the duplicate-id check. Prefix is taught nowhere; see sidecar.
 
 ### Managed rail does not pass the scorecard scope file, so fallback_ladder stays empty
 - **Id**: BL-0227
@@ -855,28 +771,28 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-08
 - **Origin**: self
-- **Problem**: 拓撲記錄留著一個已退役的模型。計畫審查因此失敗，包裝程式結束碼為三且沒有任何輸出。兩項補救都還沒做：派工前對照模型清單，以及讓包裝程式露出執行器的錯誤訊息。
-- **Impact**: 計畫審查會因過期席位名稱整圈停住，而且看不出是名稱錯了。
+- **Problem**: 拓撲推導現在會對照執行器自己的模型清單，已退役模型不再留在拓撲。剩一項：包裝程式遇到模型名稱被拒時仍結束碼為三、沒有任何輸出，看不出是名稱錯了。
+- **Impact**: 過期席位名稱從別的路徑進來時，計畫審查仍會整圈停住，而且看不出是名稱錯了。
 - **Trigger**: the next plan-review loop that ends required_seat_transport_exhausted, or the next topology regeneration
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: observed 2026-09-08 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/stale-topology-tuple-derails-plan-review.md
-- **Context**: Recorded model was retired. Two mitigations never done: validate with the runner model list, and surface runner stderr.
+- **Context**: Model-list check merged (topologycheck 4c05f1800, qoderclicn only, fail-open). Left: the wrapper still discards the runner stderr. See sidecar.
 
 ### consult_dispatch has no seat once the qc panel consumes the roster
 - **Id**: BL-0230
 - **Status**: open
 - **Since**: 2026-09-11
 - **Origin**: self
-- **Problem**: 品管席把名冊上的引擎都佔走之後，諮詢席就沒有位子。解析仍退回同一家族的預設席，諮詢程式接著拒絕，提問的人沒有正式通路。
-- **Impact**: 需要問另一個家族時沒有支援的路，只能繞過制度手動呼叫。
-- **Trigger**: next consult on a host whose qc panel covers the whole roster, or the next edit to consult resolution
+- **Problem**: 品管席佔走名冊後，諮詢席仍退回同家族原生席。警告現在已點名被排除的席位與原因；還缺專供諮詢的後備名單：與提問者去相關、非 panel 成員、只要求回傳文字。
+- **Impact**: 需要問另一個家族時，仍沒有正式通路，只能照警告自行宣告席位。
+- **Trigger**: next consult on a host whose qc panel covers the whole roster, or the next edit to consult eligibility in the topology resolver
 - **Trigger-Type**: event
-- **Effort**: S
+- **Effort**: M
 - **Source**: measured 2026-09-11 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/consult-dispatch-no-seat-after-qc-panel.md
-- **Context**: Resolver still falls back to a same-family native seat, and consult then refuses that seat.
+- **Context**: Warning half merged (consultseat 51290f69a). Left: topology eligibility plus a new config key. Native-fallback seats are dispatched, not refused; see sidecar.
 
 ### Per-hook by per-harness support matrix with verification dates
 - **Id**: BL-0231
@@ -974,7 +890,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 2026-07-13 usrquota diagnosis; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
-- **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist.
+- **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist. 2026-10-23: git log -S finds no swe-calibrate producer ever in scripts, evals or src; not closed, an external tool may still make them.
 
 ### Engine implement-review with verify_pass=false does not block
 - **Id**: BL-0238
@@ -1249,33 +1165,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/run-ledger-max-rotations-sweep-env.md
 - **Context**: Left out of bluefix d0d87b1c4. Default is 4. Detail is in the Pointer.
 
-### BL-0039 notes 7 and 8: re-anchor the instant2 fixture and add a filter check
-- **Id**: BL-0257
-- **Status**: open
-- **Since**: 2026-10-20
-- **Origin**: self
-- **Problem**: 某條待辦的兩則附註還沒做：測試夾具要重新定錨，篩選也沒檢查引擎、執行器或角色。旁註已隨提交刪除。
-- **Impact**: 夾具若漂移，負向測試可能不再測到原本要擋的情況。
-- **Trigger**: next change to that test's instant2 fixture, or when the capability-evidence producer contract is tightened
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: backlog deletion audit section C-3, commit e05a1edc3
-- **Pointer**: docs/backlog/bl0039-notes-instant2-filter.md
-- **Context**: Notes 7 and 8 survived the body fix; the sidecar was deleted. Detail is in the Pointer.
-
 ### P6 feed-trust follow-ups: confirm-mode answer step, plan wording, reject-then-confirm, repeated stderr
 - **Id**: BL-0261
 - **Status**: open
 - **Since**: 2026-10-20
 - **Origin**: self
-- **Problem**: 信任檢查還有四件小事：確認模式答覆後還要再跑一次才算數、計畫第五節用詞與實作不符、拒絕後再確認會安靜回成功、設定檔損壞時每次都重複同一則錯誤。
-- **Impact**: 不處理的話，確認流程會漏算、文件與行為不一致，錯誤訊息也會洗版。
-- **Trigger**: next change to qualification-feed-trust or the P6 plan
+- **Problem**: 信任檢查剩兩件事：確認模式下 owner 在面板回覆後，還得再跑一次答覆指令才算數；計畫第五節對紀錄驗證的用詞與實作不符。其餘兩項已修。
+- **Impact**: 前者要改技能說明才能自動化，後者是文件與行為不一致。
+- **Trigger**: next guidance eval allowed to edit the engine-onboarding skill text, or the next change to the P6 plan
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hetero-review p6trust g2
 - **Pointer**: docs/backlog/p6-trust-followups.md
-- **Context**: Four small follow-ups. Automating the extra answer step needs eval evidence before skill text changes.
+- **Context**: Items 3 and 4 merged (feedtrust d079b69bb). Items 1 and 2 left; item 1 is skill text at skills/engine-onboarding/SKILL.md:77 and needs eval evidence.
 
 ### familyOfEngine has no deepseek arm
 - **Id**: BL-0264
@@ -1301,19 +1203,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hderive g2 44a00373
-- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
-
-### prices 2^53 diagnostic matches only the literal
-- **Id**: BL-0266
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 價格解析在捕捉錯誤時，只看訊息裡有沒有那串固定的大整數文字，應該改認預檢不安全整數這類錯誤。受影響的只有診斷文字，正確性不變。
-- **Impact**: 診斷文字可能對不上真正的錯誤類別，計算結果本身不受影響。
-- **Trigger**: next change to that file
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: priceread g1 f29c3939
 - **Pointer**: docs/backlog/deferred-review-2026-10-21.md
 
 ### qualification-sweep does not read the headless pins file
@@ -1342,19 +1231,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hderive g1 review (identity finding)
 - **Pointer**: docs/backlog/deferred-review-2026-10-21.md
 - **Context**: the impl test itself is already fixed
-
-### hetero-review-loop collect accepts an empty review range
-- **Id**: BL-0269
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 審查收集在範圍內沒有任何提交或差異為空時，仍然會照常收集並產生看起來正常的收據，審的其實是空內容。
-- **Impact**: 衝突後沒有產生提交的挑選提交會讓審查空轉，卻留下像是通過的紀錄。
-- **Trigger**: next change to the collect subcommand of the review loop driver
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: landdocs 2026-10-21 empty-range finding
-- **Pointer**: docs/backlog/hetero-collect-empty-range.md
 
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271
@@ -1392,14 +1268,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-21
 - **Origin**: self
-- **Problem**: 當天的審查留下幾件小修：待決卡路徑含空白會壞、範圍走訪沒有共用、缺第二個範圍的隔離測試、注入文字與實際比對不符，以及檢查與判定的已知邊界。
-- **Impact**: 含空白的路徑、第二個範圍，或只改縮排的分支，會得到錯的結果或看不出原因的錯誤。
+- **Problem**: 當天審查留下的小修已大半修完。剩下已知邊界：以補丁編號判斷整合時不分辨空白、被刪的挑選提交仍算已整合；另有可等待的幾組小項，和凍結在評測檔裡的三項成本欄位問題。
+- **Impact**: 只改縮排的分支會被當成已整合，凍結檔內的成本欄位問題要等下一個新評測列才能修。
 - **Trigger**: the deferred review items from 2026-10-21 can be picked up now
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Includes the unquoted card path, the shared scope walk, the handoff buffer copy, the finalize error line, and the patch-id boundaries. Mostly fixed by fixa, bl273, runnerk, fixb and fixc; see the sidecar.
+- **Context**: Fixed by fixa, bl273, runnerk, fixb, fixc, bl276r (see sidecar). Left: patch-id boundaries, tokmech, dnone, deval, three dcard-v3 frozen items.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277
@@ -1413,7 +1289,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: 2026-10-21 discoverability audit
 - **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
-- **Context**: Detail in remaining-discoverability-entry-gaps.md. Roundtable stays on BL-0216 and task-card on BL-0243.
+- **Context**: Detail in remaining-discoverability-entry-gaps.md. Roundtable stays on BL-0216 and task-card on BL-0243. 2026-10-23 owner decision d-7a800dcb: the harness report warning stays off SessionStart.
 
 ### Two text defects in the shipped decision-card guidance are frozen by eval parity
 - **Id**: BL-0278

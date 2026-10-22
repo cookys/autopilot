@@ -8,3 +8,5 @@ Section copied from the shared sidecar `docs/backlog/live-state-dir-context-budg
 - **Related**: `scripts/resolve-review-loop.sh` also resolved `plan_review_resolved_from: native-fallback` on a host with three qualified seats, purely because `~/.autopilot/topology.json` did not exist yet.
 
 Restored 2026-10-19 from 41f1bff64^; see docs/plans/evidence/2026-10-19-backlog-deletion-audit/REPORT.md
+
+Partly fixed 2026-10-23 by topologycheck (4c05f1800): `resolve-dispatch-topology.js` now validates a qoderclicn engine against the runner `--list-models` and drops a retired seat with a stderr warning (fail-open on a missing binary, timeout or empty listing). Still open: the wrapper surfacing the runner stderr, which the merge left out of scope (not re-measured here).

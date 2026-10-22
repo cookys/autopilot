@@ -47,3 +47,7 @@ Known boundaries, not fixed:
 - dcardv3: the cost field only recognizes four keys.
 - dcardv3: spend is counted per result file.
 - These three dcardv3 items live in the dcard-v3 frozen file (evals/skill-onoff/prereg/FROZEN.json pins the sha256 of run-dcard-v3-campaign.js). Changing them would invalidate rows already recorded, so they are not fixed in v3 and are left for the next new row (v4 or a later tool).
+
+## Open after 2026-10-23 (BL-0276 narrowed)
+
+Everything under the two Fixed headings is done. What remains open is the patch-id boundaries, the tokmech, dnone and deval items under "Second half of 2026-10-21", and the three dcardv3 items frozen by evals/skill-onoff/prereg/FROZEN.json.

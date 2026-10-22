@@ -8,3 +8,5 @@ BL-0277. The row's Pointer is the audit archive README. This sidecar holds the l
 - Mission subcommands other than prepare and grant have no entry hit. prepare and grant are taught in skills/l5/references/hetero-impl-loop.md. The audit lists successor, init, consume, withdraw, control, finalize-abort, check and receipt as engine-internal or manual, with no skill entry. The audit's own suggestion was that they need not enter the table unless someone wants them kept and labelled internal. This row keeps that as an open gap, not a decision to teach every subcommand.
 - roundtable stays on BL-0216. Original trigger: three more manual rooms under the Phase 0 protocol, each with an evidence dir, or the owner asks for the skill by name.
 - task-card stays on BL-0243. Original trigger, unchanged: P3, handoff reads the snapshot and dev-flow calls task-card, after guidance and eval. discover-audit.md item 6 is the same deferral.
+
+Owner decision 2026-10-23 (d-7a800dcb): the `harness report --format warning` expiry warning is not wired to SessionStart.

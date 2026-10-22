@@ -10,3 +10,5 @@ Four small items left after the P6 feed-trust work. Surfaced by hetero-review p6
 Origin: self.
 
 Trigger: next change to qualification-feed-trust or the P6 plan.
+
+Update 2026-10-23: items 3 and 4 fixed by feedtrust (d079b69bb): a confirm after a reject now exits 1 with a reason (repeating the same decision stays idempotent), and a corrupt-store message is written once per process. Items 1 and 2 remain; item 1 is guidance text (skills/engine-onboarding/SKILL.md) and needs eval evidence.

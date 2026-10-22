@@ -21,6 +21,18 @@ NODE
 )"
 assert_contains "$CLASSIFY" "copies=2:1 reject=fail infra=inconclusive" "producer and validator share truthful stage classifier"
 
+# RED at 70c114131: version gate assertion failed (regex pinned claude 2.1.220 / codex-cli 0.146.0).
+# Version gate is a shape, not a pin: a newer claude / codex-cli must not make the probe refuse.
+VERSIONS="$(node - "$PROBE" <<'NODE'
+const fs = require('fs'); const source = fs.readFileSync(process.argv[2], 'utf8');
+const m = source.match(/const expectedVersion = [^\n]*;/);
+const expectedVersion = eval(m[0].replace('const expectedVersion =', '(') .replace(/;$/, ')'));
+const ok = (r, v) => expectedVersion(r).test(v);
+console.log(`claude_new=${ok('claude','2.1.308 (Claude Code)')} codex_new=${ok('codex','codex-cli 0.163.0')} claude_junk=${ok('claude','not a version')} codex_junk=${ok('codex','2.1.308')} pinned=${/2\.1\.220|0\.146\.0/.test(source)}`);
+NODE
+)"
+assert_contains "$VERSIONS" "claude_new=true codex_new=true claude_junk=false codex_junk=false pinned=false" "version gate accepts newer runtimes and no version is hardcoded"
+
 # The probe must still inject a neutral unknown frontmatter field (never a real
 # or planned one such as tier) into its disposable fixture, in both fixture copies.
 PROBE_SRC="$(cat "$PROBE")"

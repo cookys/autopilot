@@ -22,7 +22,9 @@ const BRACKETED_PASTE_END = '\x1b[201~';
 const BRACKETED_PASTE_BOUNDARY_SHA256 = '670510b6dbe957b6d2d8487263f61d59523fc2a536f2d4696d9146ce9448730e';
 const PTY_TRANSPORT_SENTINEL = 'AUTOPILOT_D3_PTY_TRANSPORT_READY_V1';
 const RAW_BOLD_PROMPT_MARKER = '\x1b[1m›';
-const EXPECTED_CODEX_VERSION = '0.146.0';
+// Oldest Codex the driver's PTY/TUI protocol was written against. Newer
+// versions run; the observed version is recorded in the evidence, not pinned.
+const MIN_CODEX_VERSION = '0.146.0';
 const INITIAL_READINESS_TIMEOUT_MS = 90_000;
 const AUTO_READY_PROMPT = 'Respond with exactly AUTO_READY.';
 const AUTO_READY_PROMPT_SHA256 = '2d799c1721cd48464a465ccf9d03663bd1602aa8ca66d80b042afbe4159ab3ef';
@@ -526,6 +528,17 @@ function persistTranscript(tui, artifactDir, stage) {
   };
 }
 
+function checkCodexVersion(versionText, minVersion = MIN_CODEX_VERSION) {
+  const match = String(versionText).match(/(\d+)\.(\d+)\.(\d+)/);
+  const min = minVersion.split('.').map(Number);
+  const got = match ? match.slice(1).map(Number) : null;
+  const older = got && (got[0] - min[0] || got[1] - min[1] || got[2] - min[2]) < 0;
+  if (!got || older) {
+    throw new Error(`expected Codex >= ${minVersion}, got ${versionText}`);
+  }
+  return got.join('.');
+}
+
 async function runLive(flags) {
   const codexBin = fs.realpathSync(flags['codex-bin']);
   const home = fs.realpathSync(flags.home);
@@ -547,10 +560,7 @@ async function runLive(flags) {
     return row;
   };
   const versionText = execFileSync(codexBin, ['--version'], { encoding: 'utf8' }).trim();
-  const versionMatch = versionText.match(/(\d+\.\d+\.\d+)/);
-  if (!versionMatch || versionMatch[1] !== EXPECTED_CODEX_VERSION) {
-    throw new Error(`expected Codex ${EXPECTED_CODEX_VERSION}, got ${versionText}`);
-  }
+  const codexVersion = checkCodexVersion(versionText);
   const adapterPath = path.join(pluginRoot, 'hooks', 'post-compact.js');
   const adapterOriginal = fs.readFileSync(adapterPath);
   const adapterMode = fs.statSync(adapterPath).mode;
@@ -571,7 +581,7 @@ async function runLive(flags) {
     ownerPid: process.pid,
   });
   event('driver_started', {
-    codex_version: versionMatch[1],
+    codex_version: codexVersion,
     codex_binary_sha256: sha256(fs.readFileSync(codexBin)),
     plugin_manifest_sha256: sha256(fs.readFileSync(path.join(pluginRoot, '.codex-plugin', 'plugin.json'))),
     hook_manifest_sha256: sha256(fs.readFileSync(path.join(pluginRoot, 'hooks', 'hooks.json'))),
@@ -582,7 +592,7 @@ async function runLive(flags) {
     schema_version: 1,
     artifact_type: 'codex_postcompact_production_live_receipt',
     observed_at: null,
-    codex_version: versionMatch[1],
+    codex_version: codexVersion,
     driver_sha256: sha256(fs.readFileSync(__filename)),
     manual: null,
     auto: null,
@@ -861,6 +871,7 @@ module.exports = {
   advanceAutoProtocol,
   allocatedPtyCommand,
   boundedWaitDecision,
+  checkCodexVersion,
   codexTuiArgs,
   createControllerFixture,
   hasDirectoryTrustChooser,

@@ -68,7 +68,8 @@ const challengeFrom = (raw) => {
   const matches = [...String(raw || '').matchAll(/AUTOPILOT_SKILL_CHALLENGE_[0-9a-f]{32}/g)].map((m) => m[0]);
   return [...new Set(matches)].length === 1 ? matches[0] : '';
 };
-const expectedVersion = (runtime) => runtime === 'claude' ? /^2\.1\.220(?:\s|$)/ : /^codex-cli 0\.146\.0(?:\s|$)/;
+// Version shape, not a pin: the observed version is recorded in the receipt.
+const expectedVersion = (runtime) => runtime === 'claude' ? /^\d+\.\d+\.\d+(?:\s|$)/ : /^codex-cli \d+\.\d+\.\d+(?:\s|$)/;
 const classifyAttempt = ({ executable, executed, version, codes, text, detailsGreen, challenge }) => {
   if (!executable || !executed || !version) return 'inconclusive';
   const steps = [...String(text).matchAll(/AUTOPILOT_STEP \S+ (-?\d+)\n([\s\S]*?)(?=AUTOPILOT_STEP \S+ -?\d+\n|$)/g)];
@@ -468,7 +469,7 @@ const classifyAttempt = ({ executable, executed, version, codes, text, detailsGr
   return !infra && rejected && codes.some((code) => code !== 0) ? 'fail' : 'inconclusive';
 };
 const claudeChallengeSeen = challengeToken(claudeStdout) === process.env.CLAUDE_CHALLENGE;
-const claudeVersionOk = /^2\.1\.220(?:\s|$)/.test(process.env.CLAUDE_VERSION.trim());
+const claudeVersionOk = /^\d+\.\d+\.\d+(?:\s|$)/.test(process.env.CLAUDE_VERSION.trim());
 const claudeOutcome = classifyAttempt({ executable: claudeInstalled, executed: claudeInstalled, version: claudeVersionOk, codes: [rc('claude_probe'), rc('claude_exec')], text: claudeStdout + '\n' + claudeStderr, detailsGreen: claudeValidationOk, challenge: claudeChallengeSeen });
 const list = parsed(read('codex_list.stdout'));
 const added = parsed(read('codex_add.stdout'));
@@ -478,7 +479,7 @@ const installedBody = installedSkill && fs.existsSync(installedSkill) ? fs.readF
 const codexDiscovery = JSON.stringify(list || '').includes('autopilot-frontmatter-probe@autopilot-frontmatter-probe-local');
 const codexSkillExact = installedBody.length > 0 && installedBody.equals(body);
 const codexChallengeSeen = challengeToken(codexStdout) === process.env.CODEX_CHALLENGE;
-const codexVersionOk = /^codex-cli 0\.146\.0(?:\s|$)/.test(process.env.CODEX_VERSION.trim());
+const codexVersionOk = /^codex-cli \d+\.\d+\.\d+(?:\s|$)/.test(process.env.CODEX_VERSION.trim());
 const codexOutcome = classifyAttempt({ executable: codexInstalled, executed: codexInstalled, version: codexVersionOk, codes: [rc('codex_probe'), rc('codex_list'), rc('codex_add'), rc('codex_exec')], text: codexStdout + '\n' + codexStderr, detailsGreen: codexDiscovery && codexSkillExact, challenge: codexChallengeSeen });
 fs.mkdirSync(retainedRoot, { recursive: true, mode: 0o700 });
 fs.chmodSync(retainedRoot, 0o700);
@@ -505,7 +506,7 @@ const attempt = (runtime, installed, version, outcome, before, after, stdout, st
   const versionPath = retainLog(runtime, 'version', versionRaw);
   return {
   runtime,
-  expected_version: runtime === 'claude' ? '2.1.220' : 'codex-cli 0.146.0',
+  expected_version: runtime === 'claude' ? '<major>.<minor>.<patch>' : 'codex-cli <major>.<minor>.<patch>',
   version: versionRaw.trim(),
   version_raw: versionRaw,
   version_bytes: Buffer.byteLength(versionRaw, 'utf8'),

@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-08-04T02:32:41.337Z",
-  "verified_at": "2026-08-04T02:32:41.337Z",
-  "expires_at": "2026-08-18T02:32:41.337Z",
+  "last_checked_at": "2026-10-23T12:00:00.000Z",
+  "verified_at": "2026-10-23T12:00:00.000Z",
+  "expires_at": "2026-11-06T12:00:00.000Z",
   "evidence": {
     "source": "local-execution-probe",
     "command": "isolated codex 0.146.0 TUI with installed default Autopilot package; manual /compact, model_auto_compact_token_limit=12000 two-turn rollover, and broken-adapter negative control",
@@ -35,7 +35,11 @@
     "2026-10-21, codex-cli 0.163.0, codex doctor: compact_token_budget at top level produces a redacted startup warning counted under \"startup warning deprecated 1\", so it is recognised but deprecated. It was not in the official doc text read. Do not recommend it.",
     "2026-10-21, codex-cli 0.163.0, codex doctor: default_subagent_model, default_subagent_reasoning_effort, and max_concurrent_threads_per_session are REFUTED at top level (each reported \"is ignored\") and CONFIRMED inside the [agents] table (accepted with no warning). The official doc lists agents.default_subagent_model, agents.default_subagent_reasoning_effort, and agents.max_concurrent_threads_per_session. agents.max_threads is the legacy alias of max_concurrent_threads_per_session; setting both gives \"Ignoring malformed agent role definition: duplicate field max_concurrent_threads_per_session\".",
     "2026-10-21, codex-cli 0.163.0, codex doctor: inside [features.multi_agent_v2] only enabled and max_concurrent_threads_per_session were accepted. default_subagent_model, default_subagent_reasoning_effort, and max_depth there fail to load.",
-    "2026-10-23 re-probe observed codex-cli 0.163.0 (matches). codex exec flags still present: --json, --sandbox, --model, --skip-git-repo-check, -c, --output-last-message, --cd. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
+    "2026-10-23 re-probe observed codex-cli 0.163.0 (matches). codex exec flags still present: --json, --sandbox, --model, --skip-git-repo-check, -c, --output-last-message, --cd. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results.",
+    "2026-10-23 deep probe on codex-cli 0.163.0 (temp CODEX_HOME): read_only_dispatch (`codex exec -s read-only --json`, hdeep evidence codex/readonly.jsonl), repo_skills (autopilot:dev-flow and autopilot:quality-pipeline listed, codex/skills.jsonl), plugin_packaging (marketplace add + plugin add rc=0, version 3.0.0-alpha.6, codex/mkt_add.txt, plugin_add.txt) and hooks (probe-codex-enforcement.js: block-capable, hook_invoked=true, blocked target not created, codex/enforcement.json) were re-tested and the record dates advanced for them.",
+    "post_compact and post_compact_recovery were NOT re-verified and the 2026-10-23 date does not apply to them: they remain as last proven on codex 0.146.0 (2026-08-04). The version pin in probe-codex-postcompact-production.js was relaxed to a floor and the live driver now starts on 0.163.0, but it timed out after 90000ms waiting for TUI readiness (the 0.163.0 prompt shows 'Ask Codex to do anything' and the driver's readiness markers did not match), so no receipt was produced.",
+    "mutation_dispatch stays unverified: `codex exec -s workspace-write` wrote a file in a throwaway repo (codex/mutation.jsonl), but that is the direct exec layer; no dispatch-hetero codex track evidence exists. blocking_gate stays warning: the enforcement probe is a fixture, not the registered package.",
+    "The repo-root hooks/hooks.json carries a `modules` field that codex 0.163.0 rejects ('failed to parse plugin hooks config ... unknown field modules'), printed on every exec; the supported Codex package is platforms/codex/plugin."
   ],
   "mission_enforcement_probe_digest": "76e97b27b3b3bbe9260d7baea631367f6965db36e5216aa57757a423ab300b79"
 }

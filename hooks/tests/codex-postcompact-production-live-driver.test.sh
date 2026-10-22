@@ -506,13 +506,21 @@ assert.strictEqual(reconciled.status, 'ready');
 assert.strictEqual(reconciled.reconcile.receipt.hook_trigger, 'manual');
 assert.strictEqual(reconciled.reconcile.receipt.classifications[0].classification, 'attach_active');
 
+// RED at 70c114131: driver.checkCodexVersion was undefined (TypeError) and runLive threw "expected Codex 0.146.0, got codex-cli 0.163.0".
+// Version gate: a floor, not a pin. The observed version is returned for the evidence.
+assert.strictEqual(driver.checkCodexVersion('codex-cli 0.163.0'), '0.163.0');
+assert.strictEqual(driver.checkCodexVersion('codex-cli 0.146.0'), '0.146.0');
+assert.strictEqual(driver.checkCodexVersion('codex-cli 1.2.3'), '1.2.3');
+assert.throws(() => driver.checkCodexVersion('codex-cli 0.145.9'), /expected Codex >= 0\.146\.0/);
+assert.throws(() => driver.checkCodexVersion('garbage'), /expected Codex >= 0\.146\.0/);
+
 Promise.all([
   verifyDirectoryTrustLaunch({ chooserVisible: false, acceptDirectoryTrust: true }),
   verifyDirectoryTrustLaunch({ chooserVisible: true, acceptDirectoryTrust: true }),
   verifyDirectoryTrustLaunch({ chooserVisible: false, acceptDirectoryTrust: false }),
   verifyStopUsesCarriageReturn(),
 ]).then(() => {
-  process.stdout.write('PASS [codex-postcompact-production-live-driver] 110 assertions\n');
+  process.stdout.write('PASS [codex-postcompact-production-live-driver] 115 assertions\n');
 }).catch((error) => {
   process.stderr.write(`${error.stack || error.message || String(error)}\n`);
   process.exitCode = 1;

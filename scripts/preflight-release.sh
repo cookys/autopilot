@@ -375,6 +375,14 @@ run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)
 run_check "official defaults snapshot age (build-qualification-defaults.js --check-snapshot-age, <= 30 days)" check_defaults_snapshot_age
 run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
 
+# ─── advisory: hook x harness support matrix staleness (BL-0231) ──────────────
+# NOT a check and NOT counted in $FAILS — hook-harness-matrix.js --check prints WARN for
+# evidence rows older than 60 days (exit 0) and fails only on doc drift / bogus rows. Both are
+# shown here at release prep; neither blocks the release.
+echo ""
+echo "── advisory: hook x harness matrix (60-day evidence staleness) ──"
+node scripts/hook-harness-matrix.js --check 2>&1 || echo "    NOTE: hook-harness-matrix.js --check exited non-zero (doc drift or bad evidence row) — advisory only"
+
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's
 # no-detected-modeled-match bucket so the owner sees it at release prep. Its exit

@@ -499,6 +499,46 @@ assert_eq "$(find "$BAD_UN_HOME/.codex" -maxdepth 1 -name 'hooks.json.bak-*' | w
 assert_file_absent "$BAD_UN_HOME/.codex/autopilot-dev-marketplace" "malformed hooks.json on uninstall still removes the derived marketplace"
 assert_contains "$OUT" "left untouched" "malformed hooks.json on uninstall reports the error"
 
+# --- BL-0214: --uninstall clears the autopilot-local registration via `codex plugin marketplace remove`
+# (verified present on real codex-cli 0.163.0; a stale dangling registration made every later `codex plugin marketplace list` fail).
+# RED at e9d0f9723: uninstall never called marketplace remove (no "marketplace remove autopilot-local" in the stub log) for either the registered-at-derived-dir case.
+MK_STUB="$TEST_TMP/mk-stub-bin"
+mkdir -p "$MK_STUB"
+cat > "$MK_STUB/codex" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  --version) echo "codex-cli test"; exit 0 ;;
+  plugin)
+    echo "codex $*" >> "$CODEX_STUB_MARKER"
+    if [[ "$2 $3" == "marketplace list" ]]; then
+      printf 'MARKETPLACE      ROOT\n'
+      printf 'autopilot-local  %s\n' "$CODEX_STUB_LISTED_ROOT"
+    fi
+    exit 0
+    ;;
+  *) exit 42 ;;
+esac
+SH
+chmod +x "$MK_STUB/codex"
+mk_uninstall() {
+  local home="$1" marker="$2" listed="$3"
+  HOME="$home" CODEX_HOME="$home/.codex" PATH="$MK_STUB:$NODE_RUNTIME_BIN:/usr/bin:/bin" \
+    CODEX_STUB_MARKER="$marker" CODEX_STUB_LISTED_ROOT="$listed" DEV_SETUP_CODEX_PIDS="" \
+    bash "$SCRIPT" --harness codex --uninstall 2>&1
+}
+MK_HOME="$TEST_TMP/codex-mk-remove"
+mkdir -p "$MK_HOME/.codex/autopilot-dev-marketplace"
+OUT="$(mk_uninstall "$MK_HOME" "$TEST_TMP/mk-marker-1" "$MK_HOME/.codex/autopilot-dev-marketplace")"; EXIT=$?
+assert_eq "$EXIT" "0" "uninstall with a registered dev marketplace exits 0"
+assert_contains "$(cat "$TEST_TMP/mk-marker-1")" "codex plugin marketplace remove autopilot-local" "uninstall removes the derived dev marketplace registration"
+assert_file_absent "$MK_HOME/.codex/autopilot-dev-marketplace" "uninstall still removes the derived dev marketplace dir"
+# Negative control: a registration pointing elsewhere is not ours to remove.
+MK2_HOME="$TEST_TMP/codex-mk-foreign"
+mkdir -p "$MK2_HOME/.codex"
+OUT="$(mk_uninstall "$MK2_HOME" "$TEST_TMP/mk-marker-2" "/somewhere/else")"; EXIT=$?
+assert_eq "$EXIT" "0" "uninstall with a foreign autopilot-local exits 0"
+assert_not_contains "$(cat "$TEST_TMP/mk-marker-2")" "marketplace remove" "uninstall leaves a foreign autopilot-local registration alone"
+
 assert_eq "$(fingerprint_dir "$OUTER_CODEX")" "$OUTER_CODEX_BEFORE" "exported CODEX_HOME is byte-identical after every codex case"
 
 finalize_test

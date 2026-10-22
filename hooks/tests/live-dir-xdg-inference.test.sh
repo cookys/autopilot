@@ -70,7 +70,7 @@ process.stdout.write(JSON.stringify({ writer, reader, live }));
   if grep -q '"source":"xdg"' <<<"$OUT" \
     && grep -q '"source":"xdg-inferred"' <<<"$OUT" \
     && grep -q '"context_window_size":1000000' <<<"$OUT" \
-    && printf '%s' "$OUT" | grep -vq '"live":null'; then
+    && grep -vq '"live":null' <<<"$OUT"; then
     ok "split env: writer xdg, reader xdg-inferred, live 1M"
   else
     bad "split env: $OUT"

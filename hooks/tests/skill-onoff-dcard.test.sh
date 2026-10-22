@@ -555,7 +555,7 @@ camp=$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID ONOFF_STUB_BIN="$FA
   node "$BASE/run-dcard-campaign.js" --results "$CRES" --runner stub --model sonnet < /dev/null 2>&1)
 camp_rc=$?
 set -e
-printf '%s\n' "$camp" | grep -Eq 'PASS|FAIL|STOP|INSTRUMENT-INVALID|SHIP|NOT-SHIP' || fail "campaign did not reach a verdict (exit $camp_rc): $camp"
+grep -Eq 'PASS|FAIL|STOP|INSTRUMENT-INVALID|SHIP|NOT-SHIP' <<<"$camp" || fail "campaign did not reach a verdict (exit $camp_rc): $camp"
 
 echo "=== stamp --check passes, mutated freeze file fails ==="
 node "$BASE/stamp-prereg.js" --row dcard --check >/dev/null || fail "stamp --check failed"

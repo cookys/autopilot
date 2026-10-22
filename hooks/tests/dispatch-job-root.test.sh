@@ -77,7 +77,7 @@ eq "nma1" "$(jf "$RUNS/nma1.manifest.json" root_run_id)" "no marker: author root
 node "$SM" set --level l3 --repo-root "$SBX" >/dev/null 2>&1
 MARK="$AUTOPILOT_SESSION_MODE_DIR/jobroot-sess-A.json"
 MROOT="$(jf "$MARK" root_run_id)"
-MINT_OK=no; printf '%s' "$MROOT" | grep -Eq '^job-[0-9]+-[0-9a-f]{8}$' && MINT_OK=yes
+MINT_OK=no; grep -Eq '^job-[0-9]+-[0-9a-f]{8}$' <<<"$MROOT" && MINT_OK=yes
 eq "yes" "$MINT_OK" "set mints job-<ts>-<rand> root (got: $MROOT)"
 eq "$MROOT" "$(node "$SM" root)" "root subcommand prints marker root"
 # re-set keeps nothing stale: explicit --root-run-id wins and env wins over mint

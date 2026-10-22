@@ -260,7 +260,7 @@ function normalizeCampaign(raw, label) {
     max_growth_ratio: value.max_growth_ratio,
     max_extra_churn: maxExtraChurn,
     max_repair_generations: maxRepairGenerations,
-    max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 14400),
+    max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 7200),
   };
   if (Object.prototype.hasOwnProperty.call(value, 'final_panel_reserve_seconds')) {
     result.final_panel_reserve_seconds = int(

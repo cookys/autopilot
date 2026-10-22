@@ -36,10 +36,14 @@ Known boundaries, not fixed:
 - The comment prefix at the top of hook-hosting.test.js is fixed. fixc 242f5c54b
 - A new fake agy that ignores both TERM and HUP confirms timeout -k still ends it. fixc 242f5c54b
 
+## Fixed 2026-10-23
+
+- When several scope files fail, the fail-open line prints every error, each prefixed with that scope file's basename and joined with "; ". bl276r
+- The comm shim no longer uses bash printf %q under #!/bin/sh. The GNU comm path is single-quoted, with an embedded single quote written as the four characters quote-backslash-quote-quote, so dash can read a path that contains special characters. bl276r
+
 ## 2026-10-22 review deferrals
 
 - dcardv3: a negative cost is not clamped to 0.
 - dcardv3: the cost field only recognizes four keys.
 - dcardv3: spend is counted per result file.
-- fixc: when several scope files fail, the fail-open line prints only the last error.
-- fixc: the comm shim uses #!/bin/sh together with bash printf %q, so dash may fail to read a path with special characters; the current paths do not trigger this.
+- These three dcardv3 items live in the dcard-v3 frozen file (evals/skill-onoff/prereg/FROZEN.json pins the sha256 of run-dcard-v3-campaign.js). Changing them would invalidate rows already recorded, so they are not fixed in v3 and are left for the next new row (v4 or a later tool).

@@ -592,6 +592,9 @@ restore_scope_locks() {
   if [ -n "${PAIR_A_FILE:-}" ]; then rm -f "${PAIR_A_FILE}.lock"; fi
   if [ -n "${ORDER_LOCK_DIR:-}" ]; then chmod u+w "$ORDER_LOCK_DIR" 2>/dev/null || true; fi
   if [ -n "${ORDER_LOCK_FILE:-}" ]; then rm -f "${ORDER_LOCK_FILE}.lock"; fi
+  if [ -n "${MULTI_UNW_DIR:-}" ]; then chmod u+w "$MULTI_UNW_DIR" 2>/dev/null || true; fi
+  if [ -n "${MULTI_A_FILE:-}" ]; then rm -f "${MULTI_A_FILE}.lock"; fi
+  if [ -n "${MULTI_B_FILE:-}" ]; then rm -f "${MULTI_B_FILE}.lock"; fi
 }
 trap 'restore_scope_locks; cleanup_test_tmp' EXIT
 chmod a-w "$PAIR_A_DIR"
@@ -652,5 +655,54 @@ assert_eq 0 "$__RUN_EXIT" "locked earlier scope: exit 0"
 assert_not_contains "$__RUN_STDERR" "$ORDER_A" "locked earlier scope: stderr has no fail-open line naming A"
 ORDER_AFTER="$(ORDER_SHOW || true)"
 assert_not_contains "$ORDER_AFTER" "$ORDER_A" "card A closed in the later writable scope"
+
+# RED at ba068e478: two failing scopes: locked scope error is on the fail-open line: 'timed out waiting for …--aaa.json lock' not found in output; two failing scopes: errors are joined with semicolon-space: '; ' not found in output (113 passed, 2 failed).
+# One id, two scope files, both closes fail for different reasons. Root "aaa"
+# sorts first and is only a live lock (locked). The unbound file is the
+# existing unwritable pattern: private directory chmod a-w, symlink back, and
+# a live lock beside the symlink. Each close errors before the id lookup, so
+# the card stays open. The fail-open line must carry both errors.
+MULTI_REPO="$TEST_TMP/dec-multi-fail"
+mkdir -p "$MULTI_REPO"
+git -C "$MULTI_REPO" init -q
+MULTI_META="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const { openDecision } = require(process.argv[1]);
+  const cwd = process.argv[2];
+  const a = openDecision({ cwd, root: "aaa", question: "locked scope" });
+  const b = openDecision({ cwd, question: "unwritable scope" });
+  if (a.status !== "ok" || b.status !== "ok") {
+    process.stderr.write((a.message || b.message || "open failed") + "\n");
+    process.exit(2);
+  }
+  process.stdout.write([a.file, b.id, b.file].join("\n"));
+' "$REPO_ROOT/scripts/open-decision.js" "$MULTI_REPO")"
+MULTI_A_FILE="$(printf '%s\n' "$MULTI_META" | sed -n '1p')"
+MULTI_B="$(printf '%s\n' "$MULTI_META" | sed -n '2p')"
+MULTI_B_FILE="$(printf '%s\n' "$MULTI_META" | sed -n '3p')"
+test "$MULTI_A_FILE" != "$MULTI_B_FILE" || fail "multi-fail scope files differ"
+MULTI_A_BASE="$(basename "$MULTI_A_FILE")"
+MULTI_B_BASE="$(basename "$MULTI_B_FILE")"
+MULTI_UNW_DIR="$TEST_TMP/dec-multi-unwritable"
+mkdir -p "$MULTI_UNW_DIR"
+mv "$MULTI_B_FILE" "$MULTI_UNW_DIR/$MULTI_B_BASE"
+ln -s "$MULTI_UNW_DIR/$MULTI_B_BASE" "$MULTI_B_FILE"
+chmod a-w "$MULTI_UNW_DIR"
+printf '%s\n' "$$" > "${MULTI_A_FILE}.lock"
+printf '%s\n' "$$" > "${MULTI_B_FILE}.lock"
+MULTI_SHOW() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$MULTI_REPO" --json
+}
+MULTI_PROMPT="$(printf '[待決回覆]\n%s｜both fail → x\n' "$MULTI_B")"
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-multi-fail",cwd:process.argv[1],prompt:process.argv[2]}))' "$MULTI_REPO" "$MULTI_PROMPT")"
+chmod u+w "$MULTI_UNW_DIR"
+rm -f "${MULTI_A_FILE}.lock" "${MULTI_B_FILE}.lock"
+assert_eq 0 "$__RUN_EXIT" "two failing scopes: exit 0"
+assert_contains "$__RUN_STDERR" "advisory-relay: decide-reply close fail-open: ${MULTI_B}: " "two failing scopes: fail-open line names the id"
+assert_contains "$__RUN_STDERR" "timed out waiting for ${MULTI_A_BASE} lock" "two failing scopes: locked scope error is on the fail-open line"
+assert_contains "$__RUN_STDERR" "timed out waiting for ${MULTI_B_BASE} lock" "two failing scopes: unwritable scope error is on the fail-open line"
+assert_contains "$__RUN_STDERR" "; " "two failing scopes: errors are joined with semicolon-space"
+MULTI_AFTER="$(MULTI_SHOW || true)"
+assert_contains "$MULTI_AFTER" "$MULTI_B" "two failing scopes: card stays open"
 
 finalize_test

@@ -1312,6 +1312,35 @@ process.exit(1);
         _consult_warn="consult_dispatch auto: stale topology cache is missing consult_ladder — regenerate via scripts/resolve-dispatch-topology.js"
       else
         _consult_warn="consult_dispatch auto: no qualified consult seat on this host after qc_panel exclusion — falling back to sonnet/high@claude-native"
+        # BL-0230: name the ladder seats that were skipped and why, so the asker can see which
+        # families were excluded and declare a consult seat. Advisory text only; the seat is
+        # never reused (a qc_panel seat must not double as the consult).
+        _consult_excluded=""
+        if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
+          _consult_excluded="$(node -e '
+function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
+const flashAlias = process.argv[6] || "gemini-flash";
+function normEngine(e) { return e === "gemini-flash" ? flashAlias : e; }
+try {
+  const ladder = JSON.parse(process.argv[1]).consult_ladder;
+  if (!Array.isArray(ladder)) process.exit(0);
+  const split = (i) => (process.argv[i] || "").split(" ").filter(Boolean);
+  const qE = split(2), qR = split(3), qF = split(4);
+  const implRunner = process.argv[5] || "";
+  const panel = new Set();
+  for (let i = 0; i < Math.min(qE.length, qR.length, qF.length); i++) panel.add(`${normEngine(qE[i])}|${normRunner(qR[i])}|${qF[i]}`);
+  const out = [];
+  for (const e of ladder) {
+    if (!e || !e.engine || !e.runner || !e.effort) continue;
+    const label = `${e.engine}/${e.effort}@${e.runner}`;
+    if (panel.has(`${normEngine(e.engine)}|${normRunner(e.runner)}|${e.effort}`)) out.push(`${label} (qc_panel member)`);
+    else if (implRunner && implRunner !== "auto" && normRunner(e.runner) === normRunner(implRunner)) out.push(`${label} (same runner as implementer)`);
+  }
+  process.stdout.write(out.join(", "));
+} catch {}
+' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" "$IMPL_RUNNER" "$(normalize_agy_alias gemini-flash)" 2>/dev/null)"
+        fi
+        [[ -n "$_consult_excluded" ]] && _consult_warn="${_consult_warn}; excluded: ${_consult_excluded}"
       fi
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];

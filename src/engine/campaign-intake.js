@@ -746,11 +746,31 @@ function runLedger(args, repo) {
   };
 }
 
+// BL-0255 (3.0.0 breaking rename): the admitted campaign control object carries the live
+// durable-state projection as `current_state` (it was `initial_state`, a misnomer: it is
+// re-seated from the ledger after every append, so it is the current state, not the intake
+// snapshot). There is deliberately no alias: control data that still names only the old
+// field is rejected loudly instead of being read as "no state".
+function requireCampaignCurrentState(control) {
+  if (control && typeof control === 'object'
+      && Object.prototype.hasOwnProperty.call(control, 'initial_state')
+      && !Object.prototype.hasOwnProperty.call(control, 'current_state')) {
+    const error = new Error(
+      'campaignControl.initial_state was renamed to campaignControl.current_state in 3.0.0 '
+      + '(breaking, no compatibility alias); this control data carries only the removed '
+      + '`initial_state` field - re-run the campaign intake to regenerate it',
+    );
+    error.code = 'campaign_control_legacy_initial_state';
+    throw error;
+  }
+  return control ? control.current_state : undefined;
+}
+
 function appendCampaignEvent(input = {}) {
   const control = input.campaignControl;
   const repo = path.resolve(input.repo || process.cwd());
   const claim = control && control.generation_claim;
-  const state = control && control.initial_state;
+  const state = requireCampaignCurrentState(control);
   const observedAt = input.observedAt;
   if (!control || control.status !== 'admitted'
       || !claim || claim.durable_journal !== true
@@ -3233,7 +3253,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     contract,
     contract_path: contractPath,
     seal_path: inspection.seal_path,
-    initial_state: durableState,
+    current_state: durableState,
     mission_claim: missionClaim.status === 'claimed' ? missionClaim : null,
     generation_claim: generation,
     full_enforcement: shadowAxes.length === 0,
@@ -3251,6 +3271,7 @@ module.exports = {
   defaultContextGate,
   reviewCandidatePanelRejection,
   appendCampaignEvent,
+  requireCampaignCurrentState,
   CampaignIntakeError,
   buildStrandedClaim,
   strandedClaimForSealedGrant,

@@ -11,7 +11,7 @@
 // Shape rules (G2-adjudicated):
 //   * The FIRST observation of a boundary rejection is never gated — recording
 //     evidence is not expansion. The gate fires only when a campaign ADMITTED
-//     in BOUNDARY_REJECTED (initial_state.phase) with a preserved candidate is
+//     in BOUNDARY_REJECTED (current_state.phase) with a preserved candidate is
 //     being converted to a terminal, or when Mission claims carrying an
 //     unreleased repair lock are drained/aborted/succeeded.
 //   * Repair evidence = the failed gate RERAN: a later outcome whose verdict
@@ -41,7 +41,7 @@ const ENGINE_TERMINAL_BYPASS = Object.freeze(new Set([
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
 
-// Boundary evidence extracted from campaign durable state (initial_state at
+// Boundary evidence extracted from campaign durable state (current_state at
 // admission) — the compared-against side of every receipt.
 function extractBoundaryEvidence(initialState) {
   if (!isObj(initialState)) return null;

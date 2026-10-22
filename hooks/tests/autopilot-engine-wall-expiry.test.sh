@@ -170,7 +170,7 @@ function statusCampaign(campaignId) {
     verificationEnvAllowlist: ['CI'],
   });
   const summary = JSON.stringify(result);
-  const state = result.campaign_control && result.campaign_control.initial_state;
+  const state = result.campaign_control && result.campaign_control.current_state;
   const lastEvent = result.campaign_control && result.campaign_control.terminal_event;
   const receipt = result.campaign_control && result.campaign_control.failure_receipt;
   console.log(`a_status=${result.status}`);
@@ -238,7 +238,7 @@ function statusCampaign(campaignId) {
     verificationEnv: { PATH: process.env.PATH || '', CI: ticket },
     verificationEnvAllowlist: ['CI'],
   });
-  const state = result.campaign_control && result.campaign_control.initial_state;
+  const state = result.campaign_control && result.campaign_control.current_state;
   const lastEvent = result.campaign_control && result.campaign_control.terminal_event;
   const receipt = result.campaign_control && result.campaign_control.failure_receipt;
   console.log(`b_status=${result.status}`);

@@ -152,7 +152,7 @@ function runCase({ ticket, changedFiles, finding, afterInitialScope }) {
   });
   assert.strictEqual(admitted.status, 'admitted', JSON.stringify(admitted).slice(0, 800));
   const campaignId = campaignIdFor(
-    admitted.initial_state.repo_identity,
+    admitted.current_state.repo_identity,
     admitted.contract.ticket,
     admitted.contract_digest,
   );
@@ -324,7 +324,7 @@ function runVerifyLedgerCase({ ticket, stdout, stderr }) {
   });
   assert.strictEqual(admitted.status, 'admitted', JSON.stringify(admitted).slice(0, 800));
   const campaignId = campaignIdFor(
-    admitted.initial_state.repo_identity,
+    admitted.current_state.repo_identity,
     admitted.contract.ticket,
     admitted.contract_digest,
   );
@@ -808,8 +808,8 @@ function transport(value) {
 }
 
 const fx = fixture('r121-journaled');
-assert.strictEqual(fx.campaignControl.initial_state.phase, 'PREPARED');
-assert.strictEqual(fx.campaignControl.initial_state.live_lease, null);
+assert.strictEqual(fx.campaignControl.current_state.phase, 'PREPARED');
+assert.strictEqual(fx.campaignControl.current_state.live_lease, null);
 
 let journalErrorCode = null;
 const engine = new AutopilotEngine({
@@ -882,7 +882,7 @@ NODE
 assert_r121_managed_campaign_con
 
 # R125: onCampaignEvent must re-derive live journal state at call time. After
-# a real IMPLEMENTATION_STARTED, overwrite campaignControl.initial_state with
+# a real IMPLEMENTATION_STARTED, overwrite campaignControl.current_state with
 # a stale snapshot that has no live_lease (bypass appender that forgot to
 # refresh), then fire BOUNDARY_REJECTED through the real composition bridge.
 assert_r125_campaign_bridge_reso() {
@@ -1029,9 +1029,9 @@ function transport(value) {
 }
 
 const fx = fixture('r125-stale-initial');
-assert.strictEqual(fx.campaignControl.initial_state.phase, 'PREPARED');
-assert.strictEqual(fx.campaignControl.initial_state.live_lease, null);
-const staleSnapshot = JSON.parse(JSON.stringify(fx.campaignControl.initial_state));
+assert.strictEqual(fx.campaignControl.current_state.phase, 'PREPARED');
+assert.strictEqual(fx.campaignControl.current_state.live_lease, null);
+const staleSnapshot = JSON.parse(JSON.stringify(fx.campaignControl.current_state));
 assert.strictEqual(staleSnapshot.live_lease, null);
 
 let journalErrorCode = null;
@@ -1041,10 +1041,10 @@ const engine = new AutopilotEngine({
   campaignIntake() { return fx.campaignControl; },
   campaignAdmissionReleaser() { return { status: 'released' }; },
   implementationDispatcher() {
-    const live = fx.campaignControl.initial_state;
+    const live = fx.campaignControl.current_state;
     assert.ok(live && live.live_lease, 'IMPLEMENTATION_STARTED must hold a live lease before the stale overwrite');
-    fx.campaignControl.initial_state = JSON.parse(JSON.stringify(staleSnapshot));
-    assert.strictEqual(fx.campaignControl.initial_state.live_lease, null);
+    fx.campaignControl.current_state = JSON.parse(JSON.stringify(staleSnapshot));
+    assert.strictEqual(fx.campaignControl.current_state.live_lease, null);
     return transport(boundaryDispatchResult(fx));
   },
 });
@@ -1082,13 +1082,13 @@ console.log(JSON.stringify({
 }));
 NODE
 )"
-  assert_exit_code "$?" "0" "r125 stale initial_state still journals BOUNDARY_REJECTED: $R125_OUT"
+  assert_exit_code "$?" "0" "r125 stale current_state still journals BOUNDARY_REJECTED: $R125_OUT"
   assert_contains "$R125_OUT" '"r125_journal_phase":"BOUNDARY_REJECTED"' \
-    "durable journal phase is BOUNDARY_REJECTED despite stale initial_state"
+    "durable journal phase is BOUNDARY_REJECTED despite stale current_state"
   assert_contains "$R125_OUT" '"r125_lease_released":true' \
     "mutation lease is released when identity is re-derived from the journal"
   assert_contains "$R125_OUT" '"r125_not_lease_fenced":true' \
-    "stale initial_state must not synthesize a LEASE_FENCED fallback identity"
+    "stale current_state must not synthesize a LEASE_FENCED fallback identity"
 }
 
 assert_r125_campaign_bridge_reso

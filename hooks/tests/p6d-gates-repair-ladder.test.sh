@@ -60,7 +60,7 @@ const mkControl = (phase, claimExtra = {}, extra = {}) => ({
   campaign_id: 'campaign-v1-' + 'd'.repeat(64),
   contract_digest: 'e'.repeat(64),
   generation_claim: { durable_journal: true, ...claimExtra },
-  initial_state: {
+  current_state: {
     phase,
     event_count: 3,
     live_lease: null,

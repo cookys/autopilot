@@ -769,7 +769,7 @@ if (runtime) {
     && intake.mission_claim.campaign_id === granted.payload.mission_campaign_id);
   check('intake-seals-final-panel-reserve-seconds-from-node-contract',
     intake.status === 'admitted'
-    && intake.initial_state.limits.final_panel_reserve_seconds === 30);
+    && intake.current_state.limits.final_panel_reserve_seconds === 30);
 
   // Durable zero-effect leaf after IMPLEMENTATION_STARTED: release Mission
   // admission without terminal receipt, stagnation, or MUTATION_FAILED.
@@ -849,8 +849,8 @@ if (runtime) {
   durableLeafControl = acquireLeaseFor(durableLeafControl);
   const preparedControlForEngine = () => ({
     ...durableLeafControl,
-    initial_state: {
-      ...durableLeafControl.initial_state,
+    current_state: {
+      ...durableLeafControl.current_state,
       phase: 'PREPARED',
       generation: 0,
       event_count: 0,
@@ -932,7 +932,7 @@ if (runtime) {
 
   const intentOnlyAppender = (input, events) => {
     if (events) events.push(input.eventType);
-    const state = input.campaignControl.initial_state;
+    const state = input.campaignControl.current_state;
     if (input.eventType === 'implementation_started') {
       return {
         status: 'appended',

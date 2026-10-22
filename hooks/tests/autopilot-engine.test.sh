@@ -5626,7 +5626,7 @@ const started = '2026-09-18T00:00:00.000Z';
 const later = '2026-09-18T00:02:00.000Z';
 const control = {
   status: 'admitted',
-  initial_state: {
+  current_state: {
     started_at: started,
     limits: { max_wall_seconds: 120, final_panel_reserve_seconds: 300 },
   },
@@ -6643,7 +6643,7 @@ const result = engine.runImplementationReviewLoop({
   verificationEnvAllowlist: ['CI'],
 });
 const summary = JSON.stringify(result);
-const state = result.campaign_control && result.campaign_control.initial_state;
+const state = result.campaign_control && result.campaign_control.current_state;
 const lastEvent = result.campaign_control && result.campaign_control.terminal_event;
 console.log(`status=${result.status}`);
 console.log(`phase=${result.phase}`);

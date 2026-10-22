@@ -242,7 +242,7 @@ const admitted = runCampaignIntake({ repo, contractPath: campaignPath, sealPath,
   claimGeneration: () => ({ owner: 'campaign_generation', status: 'claimed', generation: 1, nonce: ticket,
     ledger: path.join(repo, '.autopilot', 'injected-ledger.jsonl'), stage_identity: `run-ledger:1:${ticket}` }),
 });
-const campaignId = campaignIdFor(admitted.initial_state.repo_identity, admitted.contract.ticket, admitted.contract_digest);
+const campaignId = campaignIdFor(admitted.current_state.repo_identity, admitted.contract.ticket, admitted.contract_digest);
 const engine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-26T00:00:01.000Z',

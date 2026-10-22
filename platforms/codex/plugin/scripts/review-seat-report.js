@@ -17,11 +17,17 @@
 // Default group: family, with every distinct model name sorted and comma-joined. --by-model groups
 // by the model name and still shows the family.
 //
-// Exclusive verified: same finding across seats shares a key. Default key is phase + generation +
-// slug (text inside the first square brackets on the first line). A finding with no slug gets a
-// unique key. --cross-gen drops generation (phase + slug). A verified finding is exclusive when no
-// finding from a different seat under that key is also verified. Two seats in one family stay
-// different seats. The resolutions array on dispositions.json is ignored.
+// Exclusive verified: same finding across seats shares a key. Every phase, generation, and
+// exclusive key is prefixed with the absolute ledger directory (path.resolve of --ledger). Default
+// key is ledger + phase + generation + slug (text inside the first square brackets on the first
+// line). A finding with no slug gets a unique key. --cross-gen drops generation (ledger + phase +
+// slug). A verified finding is exclusive when no finding from a different seat under that key is
+// also verified. With --cross-gen the seat identity is seat id plus the model from that
+// generation's seat file; otherwise it is the seat id. Two seats in one family stay different
+// seats. The resolutions array on dispositions.json is ignored.
+//
+// A chain.json generation whose status is not finalized, aborted, or pending is skipped and counted
+// as unknown_status_skipped. A dangling symlink phase directory is corrupt_skipped, not a crash.
 //
 // Undisposed findings (no matching dispositions.json entry) are a separate column and are not in
 // the Ver%/Ref%/Def% denominator. An empty denominator is 0.
@@ -69,14 +75,24 @@ function readJson(file) {
   }
 }
 
-function listPhases(ledgerDir) {
+function listPhases(ledgerDir, scope) {
   let names;
   try {
     names = fs.readdirSync(ledgerDir);
   } catch {
     return null;
   }
-  return names.filter((name) => name.startsWith('review-') && fs.statSync(path.join(ledgerDir, name)).isDirectory()).sort();
+  const phases = [];
+  for (const name of names) {
+    if (!name.startsWith('review-')) continue;
+    try {
+      if (fs.statSync(path.join(ledgerDir, name)).isDirectory()) phases.push(name);
+    } catch {
+      noteCorrupt(scope, name);
+    }
+  }
+  phases.sort();
+  return phases;
 }
 
 function groupId(family, model, byModel) {
@@ -95,6 +111,7 @@ function noteCorrupt(scope, phaseName) {
 }
 
 function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
+  const ledgerKey = path.resolve(ledgerDir);
   const phaseDir = path.join(ledgerDir, phaseName);
   const chain = readJson(path.join(phaseDir, 'chain.json'));
   if (!chain.ok || !Array.isArray(chain.value)) {
@@ -112,6 +129,7 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
       scope.pending_skipped += 1;
       scope.pending_skipped_findings += readableFindingCount(phaseDir, entry.generation);
     } else if (entry.status === 'finalized') finalized.push(entry);
+    else scope.unknown_status_skipped += 1;
   }
 
   const loaded = [];
@@ -158,12 +176,12 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
 
   scope.phases_read += 1;
   scope.finalized_generations += loaded.length;
-  const phaseKey = phaseName;
+  const phaseKey = `${ledgerKey}\0${phaseName}`;
   if (loaded.length > 0) scope._phases.add(phaseKey);
-  for (const gen of loaded) scope._gens.add(`${phaseName}\0${gen.gen}`);
+  for (const gen of loaded) scope._gens.add(`${ledgerKey}\0${phaseName}\0${gen.gen}`);
 
   for (const gen of loaded) {
-    const genKey = `${phaseName}\0${gen.gen}`;
+    const genKey = `${ledgerKey}\0${phaseName}\0${gen.gen}`;
     for (const [seatId, info] of gen.seats) {
       const id = groupId(info.family, info.model, byModel);
       if (!bag.rows.has(id)) {
@@ -205,11 +223,12 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
       if (disposition === 'verified' && finding && finding.severity === 'Major') row.verified_major += 1;
       const slug = slugOf(finding && finding.text);
       const key = slug == null
-        ? `noslug\0${phaseName}\0${gen.gen}\0${finding && finding.id != null ? finding.id : index}`
-        : (bag.crossGen ? `${phaseName}\0${slug}` : `${phaseName}\0${gen.gen}\0${slug}`);
+        ? `noslug\0${ledgerKey}\0${phaseName}\0${gen.gen}\0${finding && finding.id != null ? finding.id : index}`
+        : (bag.crossGen ? `${ledgerKey}\0${phaseName}\0${slug}` : `${ledgerKey}\0${phaseName}\0${gen.gen}\0${slug}`);
+      const seatIdentity = bag.crossGen ? `${seatId}\0${model}` : seatId;
       bag.keyed.push({
         key,
-        seat: seatId,
+        seat: seatIdentity,
         verified: disposition === 'verified',
         group: id,
       });
@@ -227,6 +246,7 @@ function buildReport(ledgerDirs, options = {}) {
     aborted_skipped: 0,
     pending_skipped: 0,
     corrupt_skipped: 0,
+    unknown_status_skipped: 0,
     aborted_skipped_findings: 0,
     pending_skipped_findings: 0,
     corrupt_phases: [],
@@ -235,7 +255,7 @@ function buildReport(ledgerDirs, options = {}) {
   };
   const bag = { rows: new Map(), meta: new Map(), keyed: [], crossGen };
   for (const dir of ledgerDirs) {
-    const phases = listPhases(dir);
+    const phases = listPhases(dir, scope);
     if (phases == null) continue;
     scope.ledgers_read += 1;
     for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope);
@@ -361,7 +381,7 @@ function formatText(report) {
   const lines = [
     header,
     ...rows.map(lineOf),
-    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}`,
+    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}`,
     'Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves.',
     `key mode: ${report.key_mode}`,
   ];

@@ -274,7 +274,53 @@ test('3 cross-gen merges only with --cross-gen', () => {
   assert.strictEqual(plain.key_mode, 'phase+generation+slug');
   assert.strictEqual(sumEx(crossed), 0);
   assert.strictEqual(crossed.key_mode, 'phase+slug');
+
+  // Same seat id, different model per generation: cross-gen identity is seat+model.
+  const sameSeat = tmp();
+  const phase2 = path.join(sameSeat, 'review-gamma');
+  writeJson(path.join(phase2, 'chain.json'), [chainEntry(1, 'finalized'), chainEntry(2, 'finalized')]);
+  for (const [gen, model] of [[1, 'claude-fable-5-1'], [2, 'GLM-5.3']]) {
+    const g = path.join(phase2, `g${gen}`);
+    writeJson(path.join(g, 'findings.json'), {
+      findings: [finding(`m${gen}`, 'Major', 's0', '[dup-slug] again')],
+    });
+    writeJson(path.join(g, 'dispositions.json'), { findings: [disp(`m${gen}`, 'verified')] });
+    writeJson(path.join(g, `seat-s0.json`), seat(model));
+  }
+  const sameCrossed = buildReport([sameSeat], { crossGen: true });
+  assertCrossGenSeatModel(sameCrossed);
+  const idOnly = exclusiveBy(sameSeatItems(), (item) => item.seat);
+  assert.throws(() => assertCrossGenSeatModel({
+    totals: { exclusive_verified: idOnly },
+    groups: [{ exclusive_verified: idOnly }],
+  }));
 });
+
+function sameSeatItems() {
+  return [
+    { seat: 's0', model: 'claude-fable-5-1', verified: true },
+    { seat: 's0', model: 'GLM-5.3', verified: true },
+  ];
+}
+
+function exclusiveBy(items, seatOf) {
+  const seats = new Map();
+  for (const item of items) {
+    if (!seats.has('k')) seats.set('k', new Set());
+    seats.get('k').add(seatOf(item));
+  }
+  let n = 0;
+  for (const item of items) {
+    if (seats.get('k').size === 1) n += 1;
+  }
+  return n;
+}
+
+function assertCrossGenSeatModel(report) {
+  const sum = report.groups.reduce((n, row) => n + row.exclusive_verified, 0);
+  assert.strictEqual(sum, 0);
+  assert.strictEqual(report.totals.exclusive_verified, 0);
+}
 
 test('4 same slug in different phases is never merged', () => {
   const { buildReport } = load();
@@ -405,7 +451,7 @@ test('8 model list, by-model rows, and unplaceable muse-spark', () => {
 });
 
 test('9 multiple ledgers merge', () => {
-  const { buildReport } = load();
+  const { buildReport, formatText } = load();
   const a = tmp();
   const b = tmp();
   for (const dir of [a, b]) {
@@ -422,7 +468,60 @@ test('9 multiple ledgers merge', () => {
   assert.strictEqual(report.totals.verified_critical, 2);
   assert.strictEqual(report.scope.ledgers_read, 2);
   assert.strictEqual(report.scope.phases_read, 2);
+  assert.strictEqual(report.totals.phases, 2);
+  assert.strictEqual(report.totals.generations, 2);
+  assert.strictEqual(report.groups[0].phases, 2);
+  assert.strictEqual(report.groups[0].generations, 2);
+  assert.strictEqual(report.scope.distinct_phases, 2);
+  assert.strictEqual(report.scope.distinct_generations, 2);
+  const text = formatText(report);
+  const cells = totalCells(text);
+  assert.strictEqual(cells[cells.length - 3], '2');
+  assert.strictEqual(cells[cells.length - 2], '2');
+  const home = tmp();
+  const cli = runCli(['--ledger', a, '--ledger', b, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  assert.strictEqual(parsed.totals.phases, 2);
+  assert.strictEqual(parsed.totals.generations, 2);
+  assert.strictEqual(parsed.groups[0].phases, 2);
+  assert.strictEqual(parsed.groups[0].generations, 2);
 });
+
+// # RED at 6d258e575: test 9 phases/generations are 1 (ledger omitted from keys);
+// 9b exclusive is 0; test 3 same-seat cross-gen exclusive is 2; dangling symlink throws
+// ENOENT from statSync; status "weird" is silent and unknown_status_skipped is absent.
+test('9b two ledgers with the same phase, generation, and slug stay exclusive', () => {
+  const { buildReport } = load();
+  const a = tmp();
+  const b = tmp();
+  const specs = [[a, 's0', 'claude-opus-4'], [b, 's1', 'gpt-5']];
+  for (const [dir, seatId, model] of specs) {
+    const phase = path.join(dir, 'review-one');
+    writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+    writeJson(path.join(phase, 'g1', 'findings.json'), {
+      findings: [finding('f', 'Major', seatId, '[same-slug] t')],
+    });
+    writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('f', 'verified')] });
+    writeJson(path.join(phase, 'g1', `seat-${seatId}.json`), seat(model));
+  }
+  const report = buildReport([a, b], {});
+  assertLedgerQualifiedExclusive(report);
+  const oldKeyCount = exclusiveBy(
+    [{ seat: 's0', verified: true }, { seat: 's1', verified: true }],
+    (item) => item.seat,
+  );
+  assert.throws(() => assertLedgerQualifiedExclusive({
+    totals: { exclusive_verified: oldKeyCount, phases: 1, generations: 1 },
+    groups: [{ exclusive_verified: oldKeyCount }],
+  }));
+});
+
+function assertLedgerQualifiedExclusive(report) {
+  assert.strictEqual(report.totals.exclusive_verified, 2);
+  assert.strictEqual(report.totals.phases, 2);
+  assert.strictEqual(report.totals.generations, 2);
+}
 
 test('10 json output matches buildReport and usage exits 2', () => {
   const { buildReport } = load();
@@ -681,4 +780,73 @@ test('13b skipped finding counts and corrupt phase names', () => {
   assert.match(zero, /aborted skipped 0 \(0 findings\)/);
   assert.match(zero, /corrupt skipped 0/);
   assert.doesNotMatch(zero, /corrupt skipped 0 \(/);
+  assert.match(zero, /unknown-status skipped 0/);
+  assert.strictEqual(buildReport([onlyGood], {}).scope.unknown_status_skipped, 0);
 });
+
+test('14 dangling review-broken symlink is a corrupt phase', () => {
+  const { buildReport, formatText } = load();
+  const dir = tmp();
+  const home = tmp();
+  const good = path.join(dir, 'review-good');
+  writeJson(path.join(good, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(good, 'g1', 'findings.json'), {
+    findings: [finding('ok', 'Minor', 's0', '[ok] fine')],
+  });
+  writeJson(path.join(good, 'g1', 'dispositions.json'), { findings: [disp('ok', 'verified')] });
+  writeJson(path.join(good, 'g1', 'seat-s0.json'), seat('gpt-5'));
+  fs.symlinkSync(path.join(dir, 'no-such-phase-target'), path.join(dir, 'review-broken'));
+
+  const report = buildReport([dir], {});
+  assertBrokenSymlinkCounted(report, formatText(report));
+  const cli = runCli(['--ledger', dir, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  assertBrokenSymlinkCounted(parsed, formatText(parsed));
+  assert.strictEqual(parsed.totals.findings, 1);
+  assert.strictEqual(parsed.scope.phases_read, 1);
+
+  const without = {
+    ...report,
+    scope: { ...report.scope, corrupt_phases: [], corrupt_skipped: 0 },
+  };
+  assert.throws(() => assertBrokenSymlinkCounted(without, formatText(without)));
+});
+
+function assertBrokenSymlinkCounted(report, text) {
+  assert.ok(report.scope.corrupt_phases.includes('review-broken'), 'corrupt_phases');
+  assert.ok(report.scope.corrupt_skipped >= 1);
+  assert.match(text, /corrupt skipped \d+ \(.*review-broken.*\)/);
+}
+
+test('15 unknown chain status is skipped and counted', () => {
+  const { buildReport, formatText } = load();
+  const dir = tmp();
+  const home = tmp();
+  const phase = path.join(dir, 'review-weird');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'weird')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('w', 'Critical', 's0', '[w] hidden')],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('w', 'verified')] });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('claude-opus-4'));
+
+  const report = buildReport([dir], {});
+  assertUnknownStatus(report, formatText(report));
+  const cli = runCli(['--ledger', dir, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  assertUnknownStatus(parsed, formatText(parsed));
+  assert.strictEqual(parsed.totals.findings, 0);
+  assert.ok(Object.prototype.hasOwnProperty.call(parsed.scope, 'ledgers_read'));
+  assert.ok(Object.prototype.hasOwnProperty.call(parsed.scope, 'unknown_status_skipped'));
+
+  const zeroed = { ...report, scope: { ...report.scope, unknown_status_skipped: 0 } };
+  assert.throws(() => assertUnknownStatus(zeroed, formatText(zeroed)));
+});
+
+function assertUnknownStatus(report, text) {
+  assert.strictEqual(report.scope.unknown_status_skipped, 1);
+  assert.match(text, /unknown-status skipped 1/);
+  assert.strictEqual(report.totals.findings, 0);
+}

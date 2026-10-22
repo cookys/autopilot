@@ -4,6 +4,7 @@
 # id when no FLEET_PARENT is inherited) and FLEET_ROLE (review-seat for dispatch-review, hand for author/hetero).
 # Seams: a stub claude that dumps its environment; no fleet binary is ever called and no fleet message is sent.
 # RED at 7d6c745be: 1 passed, 19 failed (stub claude env has FLEET_LIFETIME/FLEET_PARENT/FLEET_ROLE all empty for author, review, hetero; durable stays durable; mint unit prints "||").
+# RED (second commit, base 499b0ce4f): 26 passed, 12 failed (hetero cc-shim, probe cc-shim and claude-native lacked --strict-mcp-config; probe lacked FLEET_*; qualification-review-provider claude child had no FLEET_*).
 . "$(dirname "$0")/lib.sh"
 export AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
@@ -37,6 +38,7 @@ cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
 if [ "${1:-}" = "--version" ]; then echo "claude 9.9.9 (test stub)"; exit 0; fi
 env | LC_ALL=C sort > "${STUB_DUMP:?}"
+printf '%s\n' "$@" > "${STUB_DUMP}.argv"
 [ -t 0 ] || timeout 2 cat >/dev/null 2>&1 || true
 echo "ok"
 exit 0
@@ -58,6 +60,7 @@ dv() { grep "^$2=" "$1" 2>/dev/null | head -1 | cut -d= -f2-; }
 check() {
   local label="$1" role="$2" d="$3"
   if [ ! -f "$d" ]; then fail "$label: the stub claude never ran (not_run): $(tail -c 300 "$d.out" 2>/dev/null | tr '\n' ' ')"; return; fi
+  assert_contains "$(cat "$d.argv" 2>/dev/null)" "--strict-mcp-config" "$label: claude argv carries --strict-mcp-config"
   eq "ephemeral" "$(dv "$d" FLEET_LIFETIME)" "$label: FLEET_LIFETIME == ephemeral"
   eq "$P" "$(dv "$d" FLEET_PARENT)" "$label: FLEET_PARENT == the launching session"
   eq "$role" "$(dv "$d" FLEET_ROLE)" "$label: FLEET_ROLE == $role"
@@ -73,6 +76,29 @@ run_rail review-ccshim X_UNUSED=1 "$REVIEW" --runner cc-shim --model MiniMax-M3 
 check "review cc-shim" review-seat "$E_DUMP"
 run_rail hetero X_UNUSED=1 bash "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch feat/fcc-h --prompt-file "$PROMPT" --run-id fcc-h
 check "hetero cc-shim" hand "$E_DUMP"
+# probe-engine-capability.sh: both claude branches (BL-0251: strict MCP + mint)
+for runner in cc-shim claude-native; do
+  d="$DUMPS/probe-$runner.env"; rm -f "$d" "$d.argv"
+  ( cd "$SBX" && timeout 90 env STUB_DUMP="$d" PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$P" \
+      ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=t bash "$REPO_ROOT/scripts/probe-engine-capability.sh" \
+      quota --runner "$runner" --model m-test --role reviewer --store "$TEST_TMP/probe-store-$runner" --live-spend >"$d.out" 2>&1 ) || true
+  check "probe $runner" probe "$d"
+done
+# qualification-review-provider.js (QRP_CLI_KIND=claude): eval-run children
+d="$DUMPS/qrp.env"; rm -f "$d" "$d.argv"
+printf '{"type":"result","is_error":false,"result":"{\\"findings\\":[]}","modelUsage":{"claude-sonnet-5-5":{}}}' > "$TEST_TMP/qrp.json"
+cat > "$TEST_TMP/qrp-stub" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+env | LC_ALL=C sort > "${STUB_DUMP:?}"; printf '%s\n' "$@" > "${STUB_DUMP}.argv"
+cat "$STUB_OUT"
+EOS
+chmod +x "$TEST_TMP/qrp-stub"
+STUB_DUMP="$d" STUB_OUT="$TEST_TMP/qrp.json" QRP_CLI_BIN="$TEST_TMP/qrp-stub" QRP_TRANSPORT=cli QRP_CLI_KIND=claude QRP_PROVIDER=t \
+  QRP_MODEL=claude-sonnet-5-5 CLAUDE_CODE_SESSION_ID="$P" node "$REPO_ROOT/scripts/qualification-review-provider.js" \
+  <<<'{"role":"reviewer","payload":{"format":"case_content","content":"diff --git a/f b/f\n+x\n"}}' >"$d.out" 2>&1 || true
+check "qualification-review-provider claude" eval-run "$d"
+
 # an inherited durable lifetime never survives: a child is never promoted to durable
 run_rail review-durable FLEET_LIFETIME=durable "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review with inherited FLEET_LIFETIME=durable" review-seat "$E_DUMP"

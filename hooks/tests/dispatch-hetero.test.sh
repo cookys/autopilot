@@ -2718,7 +2718,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
   "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --dangerously-skip-permissions --output-format json)" \
+  -p --session-id UUID --model mini --strict-mcp-config --dangerously-skip-permissions --output-format json)" \
   "hetero cc-shim argv matches frozen literal (no --effort given => none sent; the script's xhigh default is not forwarded)"
 
 # Seat effort rides to `claude -p --effort` on the implementer path too; `default` sends nothing; invalid is

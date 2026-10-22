@@ -37,7 +37,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Verification & review synthesis** — `dispatch-experience-critic.sh` `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `review-seat-report.js` `qc-panel.js` `qc-evidence-status.js` `lib/qc-evidence.sh` `render-review-page.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-foreman-polling.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh` `affected-suites.js` `plan-rubric-scaffold.js` `hetero-review-loop.js` `check-phase-review-receipt.js` `lib/review-chain-derive.js` `lib/review-packets.js` `lib/exclude-allowlist.js` `lib/seat-id-guard.js`
 
-`review-ledger-archive.js` `lib/review-ledger-copy.js`
+`review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js`
 

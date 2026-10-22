@@ -27,7 +27,9 @@
       "AUTOPILOT_HARNESS_ATTENTION": "output sentinel printed by src/harness/capabilities.js, not an environment variable",
       "AUTOPILOT_HARNESS_OK": "output sentinel printed by src/harness/capabilities.js, not an environment variable",
       "AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS": "test-only delay seam in scripts/lib/review-ledger-copy.js; not a user knob. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1",
-      "AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY": "test-only gate for the review-ledger copy delay. Exactly 1 enables AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS; not a user knob"
+      "AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY": "test-only gate for the review-ledger copy delay. Exactly 1 enables AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS; not a user knob",
+      "AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW": "test-only gate for the review-ledger rotate clock. Exactly 1 enables AUTOPILOT_TEST_NOW; not a user knob",
+      "AUTOPILOT_TEST_NOW": "test-only ISO date for review-ledger rotate and status. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1"
     },
     "config": {
       "artifact_type": "field of a qualification feed document, not an operator config key",
@@ -1069,6 +1071,32 @@
       "invalid_effect": "a value that is not a number >= 0 is ignored, so the threshold stays 500"
     },
     {
+      "name": "review_ledger_archive.rotate_after_months",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": 2,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS"],
+      "summary": "rotate compresses complete month directories strictly older than this many calendar months. The current month is never compressed.",
+      "type": "number",
+      "invalid_effect": "a value that is not a positive integer is ignored, so the age stays 2"
+    },
+    {
+      "name": "review_ledger_archive.rotate_remove_source",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": false,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE"],
+      "summary": "When true, rotate deletes the month directory after the tar listing matches. Default false keeps the directory.",
+      "type": "boolean",
+      "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so the source stays"
+    },
+    {
       "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR",
       "kind": "env",
       "audience": "user",
@@ -1100,6 +1128,28 @@
       "doc": "docs/settings-reference.md",
       "relates": ["review_ledger_archive.warn_mb"],
       "summary": "Overrides review_ledger_archive.warn_mb."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS",
+      "kind": "env",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["review_ledger_archive.rotate_after_months"],
+      "summary": "Overrides review_ledger_archive.rotate_after_months. A non positive integer is ignored."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE",
+      "kind": "env",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["review_ledger_archive.rotate_remove_source"],
+      "summary": "Overrides review_ledger_archive.rotate_remove_source. true, 1, or yes deletes the month directory after a matched listing."
     },
     {
       "name": "AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS",

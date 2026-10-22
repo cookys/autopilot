@@ -11,27 +11,52 @@
 //       same ledger changes nothing.
 //   status
 //       Print ledger count, byte size, and the archive root. When the byte size is
-//       over warn_mb, print a warning. The warning never blocks. When the archive
-//       directory is unset, print that the archive is off and exit 0.
-//   rotate, prune
+//       over warn_mb, print a warning. The warning never blocks. Also print how many
+//       month directories are already old enough to rotate and not yet compressed.
+//       When that count is above zero, print "run: review-ledger-archive.js rotate".
+//       The hint never changes the exit code. When the archive directory is unset,
+//       print that the archive is off and exit 0.
+//   rotate
+//       Compress complete month directories strictly older than rotate_after_months
+//       (default 2) into <bucket>/<YYYY-MM>.tar.gz. List the archive back and keep
+//       it only when the regular-file count matches. Delete the month directory only
+//       when rotate_remove_source is true. Manual. Not called from a hook.
+//       No archive dir: print "archive is off" on stderr and exit 1.
+//   prune
 //       Later phase. This round prints a one-line usage error.
 //
 // Directory: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR, else review_ledger_archive.dir
 // from the operator config. Empty or unset means off. include_diff:
 // AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF (default false). warn_mb:
-// AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB (default 500).
+// AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB (default 500). rotate_after_months:
+// AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS (default 2).
+// rotate_remove_source: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
+// (default false). AUTOPILOT_TEST_NOW is a local ISO date, honoured only when
+// AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1.
 // Plan: docs/plans/2026-10-22-review-ledger-retention.md
 //
 // Exit codes:
 //   0  success, including status when the archive is off
 //   1  operational error (caught here; the library throws)
-//   2  usage: missing --ledger, unknown flag, unknown subcommand, rotate, or prune
+//   2  usage: missing --ledger, unknown flag, unknown subcommand, or prune
 //
 // Usage: node scripts/review-ledger-archive.js <import|status> [--ledger <dir>] [--repo <dir>] [--phase <name>]
 
 const fs = require('fs');
 const path = require('path');
 const { copyLedger, describeArchive, resolveArchiveConfig } = require('./lib/review-ledger-copy');
+const { listRotatableMonths, rotateArchive } = require('./lib/review-ledger-tar');
+
+function resolveNow() {
+  if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW !== '1') return new Date();
+  const raw = process.env.AUTOPILOT_TEST_NOW;
+  if (!raw) return new Date();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw).trim());
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return new Date();
+  return d;
+}
 
 function phaseTokenUnsafe(name) {
   const s = String(name);
@@ -109,8 +134,30 @@ function main(argv) {
     return 0;
   }
   const args = parseArgs(argv);
-  if (args.cmd === 'rotate' || args.cmd === 'prune') {
-    usage(`${args.cmd} is not available yet`);
+  if (args.cmd === 'prune') {
+    usage('prune is not available yet');
+  }
+  if (args.cmd === 'rotate') {
+    if (args.ledger || args.repo || args.phases) usage('rotate takes no flags');
+    let cfg;
+    try {
+      cfg = resolveArchiveConfig();
+    } catch (err) {
+      throw err;
+    }
+    if (!cfg.dir) {
+      console.error('review-ledger-archive: archive is off');
+      return 1;
+    }
+    const result = rotateArchive({
+      dir: cfg.dir,
+      now: resolveNow(),
+      rotateAfterMonths: cfg.rotateAfterMonths,
+      rotateRemoveSource: cfg.rotateRemoveSource,
+    });
+    for (const line of result.warnings) console.error(line);
+    for (const line of result.lines) console.log(line);
+    return 0;
   }
   if (args.cmd === 'status') {
     if (args.ledger || args.repo) usage('status takes no flags');
@@ -134,6 +181,12 @@ function main(argv) {
     if (described.warn) {
       console.log(`review-ledger-archive: warning: ${described.bytes} bytes is over warn_mb ${described.warnMb}`);
     }
+    let cfg = null;
+    try { cfg = resolveArchiveConfig(); } catch (_e) { cfg = null; }
+    const months = cfg ? cfg.rotateAfterMonths : 2;
+    const rotatable = listRotatableMonths(described.dir, resolveNow(), months);
+    console.log(`rotatable months: ${rotatable.length}`);
+    if (rotatable.length > 0) console.log('run: review-ledger-archive.js rotate');
     return 0;
   }
   if (args.cmd === 'import') {

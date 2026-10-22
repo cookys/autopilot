@@ -166,6 +166,8 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `review_ledger_archive.dir` (config.json) | Directory that receives the archive (layout: repo bucket, month of the first collect, ledger id). Empty string means off. | unset (off) | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR`: same meaning; empty string means off; beats the config. |
 | `review_ledger_archive.include_diff` (config.json) | Also store `diff.txt`. Off, the archive keeps the report files only. | `false` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF`: true, 1, or yes copies `diff.txt`; false, 0, or no does not. Beats the config. |
 | `review_ledger_archive.warn_mb` (config.json) | `status` warns when the archive is larger than this many mebibytes. The warning never blocks. | `500` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB`: number >= 0; beats the config. A non-number is ignored, so the threshold stays 500. |
+| `review_ledger_archive.rotate_after_months` (config.json) | `rotate` compresses a complete month directory when it is strictly older than this many calendar months. The current month stays a directory. | `2` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS`: a positive integer; beats the config. Anything else is ignored, so the age stays 2. |
+| `review_ledger_archive.rotate_remove_source` (config.json) | After a tar listing matches, delete the month directory. Off, both the directory and the tar stay. | `false` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE`: true, 1, or yes deletes; false, 0, or no keeps the directory. Beats the config. |
 
 ## Residue cleanup
 

@@ -27,6 +27,10 @@
 # RED at 3c4f0f5f58e91e5ebef13a2347450ae7b649f63a: repoBucket uses
 # basename(repoDir), so a worktree named lane-x gets its own bucket and a
 # second ledger-id; the main checkout bucket is not mainrepo-<hash>.
+# RED at 0439fe7d4: rotate is still "not available yet" (exit 2). Cases ar–ax
+# and ba fail (no tar.gz, no "rotated"/"skipped"/"summary" lines, archive-off
+# stays exit 2). ay does not print "rotatable months:" or the rotate hint.
+# aw cannot patch scripts/lib/review-ledger-tar.js because the file is absent.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -331,10 +335,13 @@ unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
-# usage: rotate and prune are a one-line error
+# usage: prune is a one-line error. rotate with no archive dir exits 1 (case ba).
 ROT=$(node "$CLI" rotate 2>&1); ROT_RC=$?
-assert_exit_code "$ROT_RC" "2" "rotate exits 2"
-assert_contains "$ROT" "usage" "rotate prints usage"
+assert_exit_code "$ROT_RC" "1" "rotate with no archive dir exits 1"
+assert_contains "$ROT" "archive is off" "rotate with no archive dir says off"
+PRUNE=$(node "$CLI" prune 2>&1); PRUNE_RC=$?
+assert_exit_code "$PRUNE_RC" "2" "prune exits 2"
+assert_contains "$PRUNE" "usage" "prune prints usage"
 HELP=$(node "$CLI" --help 2>&1); HELP_RC=$?
 assert_exit_code "$HELP_RC" "0" "help exits 0"
 assert_contains "$HELP" "import" "help names import"
@@ -1634,5 +1641,254 @@ if [ "$DEST_AQ_MAIN" = "$DEST_AQ_LANE" ] && [ "$AQ_BUCKET_N" = 1 ] && [ "$AQ_LAN
 fi
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (ar) rotate. Fixtures come from import (layout A), then the month directory
+# is renamed. Clock is 2026-10-22, so 2026-07 is strictly older than 2 months
+# and 2026-09 is not. Default keeps the source directory.
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1
+export AUTOPILOT_TEST_NOW=2026-10-22
+LEDGER_AR="$TEST_TMP/ledger-ar"
+make_ledger "$LEDGER_AR" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AR="$TEST_TMP/archive-ar"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AR"
+node "$CLI" import --ledger "$LEDGER_AR" --repo "$REPO" >/dev/null
+AR_MONTH=$(find "$ARCH_AR" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+test -n "$AR_MONTH"
+AR_BUCKET=$(basename "$(dirname "$AR_MONTH")")
+cp -a "$AR_MONTH" "$(dirname "$AR_MONTH")/2026-07"
+cp -a "$AR_MONTH" "$(dirname "$AR_MONTH")/2026-09"
+AR_SRC_N=$(find "$(dirname "$AR_MONTH")/2026-07" -type f | wc -l | tr -d ' ')
+AR_OUT=$(node "$CLI" rotate 2>"$TEST_TMP/ar.err")
+assert_exit_code "$?" "0" "case ar: rotate exits 0"
+assert_contains "$AR_OUT" "rotated ${AR_BUCKET}/2026-07" "case ar: stdout names the rotated month"
+assert_contains "$AR_OUT" "summary:" "case ar: stdout has a summary line"
+test -d "$(dirname "$AR_MONTH")/2026-07"
+assert_exit_code "$?" "0" "case ar: source month kept by default"
+test -f "$(dirname "$AR_MONTH")/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case ar: 2026-07.tar.gz exists"
+test ! -e "$(dirname "$AR_MONTH")/2026-09.tar.gz"
+assert_exit_code "$?" "0" "case ar: 2026-09 is inside the window"
+test ! -e "$(dirname "$AR_MONTH")/2026-10.tar.gz"
+assert_exit_code "$?" "0" "case ar: current month is not compressed"
+test -d "$(dirname "$AR_MONTH")/2026-09"
+assert_exit_code "$?" "0" "case ar: 2026-09 directory remains"
+test -d "$(dirname "$AR_MONTH")/2026-10"
+assert_exit_code "$?" "0" "case ar: current month directory remains"
+AR_TAR_N=$(tar -tzf "$(dirname "$AR_MONTH")/2026-07.tar.gz" | grep -c -v '/$' || true)
+assert_eq "$AR_TAR_N" "$AR_SRC_N" "case ar: tar regular-file count matches the source"
+AR_TMP_N=$(find "$ARCH_AR" -name '*.tar.gz.tmp-*' | wc -l | tr -d ' ')
+assert_eq "$AR_TMP_N" "0" "case ar: no temporary tar left"
+
+# (as) second rotate is a skip: same bytes, same mtime, output says skipped.
+AR_SUM1=$(sha256sum "$(dirname "$AR_MONTH")/2026-07.tar.gz" | awk '{print $1}')
+AR_MT1=$(stat -c %Y "$(dirname "$AR_MONTH")/2026-07.tar.gz")
+AR_OUT2=$(node "$CLI" rotate 2>"$TEST_TMP/as.err")
+assert_exit_code "$?" "0" "case as: second rotate exits 0"
+assert_contains "$AR_OUT2" "skipped ${AR_BUCKET}/2026-07" "case as: second run says skipped"
+AR_SUM2=$(sha256sum "$(dirname "$AR_MONTH")/2026-07.tar.gz" | awk '{print $1}')
+AR_MT2=$(stat -c %Y "$(dirname "$AR_MONTH")/2026-07.tar.gz")
+assert_eq "$AR_SUM2" "$AR_SUM1" "case as: tar checksum unchanged"
+assert_eq "$AR_MT2" "$AR_MT1" "case as: tar mtime unchanged"
+test -d "$(dirname "$AR_MONTH")/2026-07"
+assert_exit_code "$?" "0" "case as: source still present"
+
+# (at) rotate_remove_source true deletes the month only after a matched listing.
+LEDGER_AT="$TEST_TMP/ledger-at"
+make_ledger "$LEDGER_AT" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AT="$TEST_TMP/archive-at"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE=true
+node "$CLI" import --ledger "$LEDGER_AT" --repo "$REPO" >/dev/null
+AT_MONTH=$(find "$ARCH_AT" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$AT_MONTH" "$(dirname "$AT_MONTH")/2026-07"
+node "$CLI" rotate >/dev/null
+assert_exit_code "$?" "0" "case at: rotate with remove exits 0"
+test ! -d "$(dirname "$AT_MONTH")/2026-07"
+assert_exit_code "$?" "0" "case at: source month removed"
+test -f "$(dirname "$AT_MONTH")/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case at: tar remains after removal"
+test -d "$(dirname "$AT_MONTH")/2026-10"
+assert_exit_code "$?" "0" "case at: current month kept"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
+
+# (au) no tar on PATH: rc 0, one warning, no archive, source intact. node is a symlink.
+LEDGER_AU="$TEST_TMP/ledger-au"
+make_ledger "$LEDGER_AU" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AU="$TEST_TMP/archive-au"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AU"
+node "$CLI" import --ledger "$LEDGER_AU" --repo "$REPO" >/dev/null
+AU_MONTH=$(find "$ARCH_AU" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$AU_MONTH" "$(dirname "$AU_MONTH")/2026-07"
+AU_PATH="$TEST_TMP/path-au"
+mkdir -p "$AU_PATH"
+ln -s "$(command -v node)" "$AU_PATH/node"
+PATH="$AU_PATH" node "$CLI" rotate >"$TEST_TMP/au.out" 2>"$TEST_TMP/au.err"
+assert_exit_code "$?" "0" "case au: missing tar exits 0"
+AU_WARN=$(grep -c . "$TEST_TMP/au.err" || true)
+assert_eq "$AU_WARN" "1" "case au: one warning line"
+grep -q 'tar' "$TEST_TMP/au.err"
+assert_exit_code "$?" "0" "case au: warning mentions tar"
+test ! -e "$(dirname "$AU_MONTH")/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case au: no tar.gz"
+test -d "$(dirname "$AU_MONTH")/2026-07"
+assert_exit_code "$?" "0" "case au: source intact"
+
+# (av) listing returns one fewer regular file: source kept, no tar.gz, no tmp, rc 0.
+LEDGER_AV="$TEST_TMP/ledger-av"
+make_ledger "$LEDGER_AV" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AV="$TEST_TMP/archive-av"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AV"
+node "$CLI" import --ledger "$LEDGER_AV" --repo "$REPO" >/dev/null
+AV_MONTH=$(find "$ARCH_AV" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$AV_MONTH" "$(dirname "$AV_MONTH")/2026-07"
+AV_PATH="$TEST_TMP/path-av"
+mkdir -p "$AV_PATH"
+ln -s "$(command -v node)" "$AV_PATH/node"
+cat > "$AV_PATH/tar" <<'EOF'
+#!/bin/bash
+real=/usr/bin/tar
+if [ "$1" = "-tzf" ]; then
+  "$real" "$@" | awk '{ if ($0 ~ /\/$/) print; else if (n++) print }'
+  exit 0
+fi
+exec "$real" "$@"
+EOF
+chmod +x "$AV_PATH/tar"
+PATH="$AV_PATH:$PATH" node "$CLI" rotate >"$TEST_TMP/av.out" 2>"$TEST_TMP/av.err"
+assert_exit_code "$?" "0" "case av: count mismatch exits 0"
+test -d "$(dirname "$AV_MONTH")/2026-07"
+assert_exit_code "$?" "0" "case av: source kept"
+test ! -e "$(dirname "$AV_MONTH")/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case av: no tar.gz left"
+AV_TMP=$(find "$ARCH_AV" -name '*.tar.gz.tmp-*' | wc -l | tr -d ' ')
+assert_eq "$AV_TMP" "0" "case av: no temporary tar left"
+grep -q . "$TEST_TMP/av.err"
+assert_exit_code "$?" "0" "case av: warning printed"
+
+# (aw) negative control: without the count comparison the shim case keeps a tar.gz.
+# RED with the comparison removed (if (false && listed !== sourceCount)): the
+# mismatch shim still exits 0 and leaves <bucket>/2026-07.tar.gz, so case av's
+# "no tar.gz left" assertion fails. Restoring the comparison deletes the temp
+# tar and keeps the source. Suite line: case aw: red-on-broken (tar kept without the count check).
+TAR_LIB="$REPO_ROOT/scripts/lib/review-ledger-tar.js"
+MUT_AW="$TEST_TMP/mut-aw"
+mkdir -p "$MUT_AW/scripts/lib" "$MUT_AW/bin"
+cp "$CLI" "$MUT_AW/scripts/review-ledger-archive.js"
+cp "$LIB" "$MUT_AW/scripts/lib/review-ledger-copy.js"
+cp "$TAR_LIB" "$MUT_AW/scripts/lib/review-ledger-tar.js"
+python3 - "$MUT_AW/scripts/lib/review-ledger-tar.js" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "if (listed !== sourceCount)"
+new = "if (false && listed !== sourceCount)"
+if old not in t:
+    sys.stderr.write("case aw: count comparison missing\\n")
+    sys.exit(2)
+p.write_text(t.replace(old, new, 1))
+PY
+assert_exit_code "$?" "0" "case aw: mutant applied"
+ln -s "$(command -v node)" "$MUT_AW/bin/node"
+cp "$AV_PATH/tar" "$MUT_AW/bin/tar"
+chmod +x "$MUT_AW/bin/tar"
+ARCH_AW="$TEST_TMP/archive-aw"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AW"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+node "$CLI" import --ledger "$LEDGER_AV" --repo "$REPO" >/dev/null
+AW_MONTH=$(find "$ARCH_AW" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$AW_MONTH" "$(dirname "$AW_MONTH")/2026-07"
+PATH="$MUT_AW/bin:$PATH" node "$MUT_AW/scripts/review-ledger-archive.js" rotate >"$TEST_TMP/aw.out" 2>"$TEST_TMP/aw.err"
+AW_RC=$?
+if [ "$AW_RC" = 0 ] && [ -f "$(dirname "$AW_MONTH")/2026-07.tar.gz" ]; then
+  echo "case aw: red-on-broken (tar kept without the count check)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "case aw: broken lib did not keep a tar.gz (negative control is blind) rc=$AW_RC"
+fi
+
+# (ax) rotate_after_months from the config file, then the env override.
+LEDGER_AX="$TEST_TMP/ledger-ax"
+make_ledger "$LEDGER_AX" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AX="$TEST_TMP/archive-ax"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AX"
+node "$CLI" import --ledger "$LEDGER_AX" --repo "$REPO" >/dev/null
+AX_MONTH=$(find "$ARCH_AX" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+AX_PARENT=$(dirname "$AX_MONTH")
+cp -a "$AX_MONTH" "$AX_PARENT/2026-06"
+cp -a "$AX_MONTH" "$AX_PARENT/2026-07"
+mkdir -p "$HOME/.autopilot"
+python3 - "$HOME/.autopilot/config.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+try:
+    cfg = json.load(open(p))
+except FileNotFoundError:
+    cfg = {}
+block = cfg.get("review_ledger_archive") or {}
+block["rotate_after_months"] = 3
+cfg["review_ledger_archive"] = block
+json.dump(cfg, open(p, "w"))
+PY
+node "$CLI" rotate >/dev/null
+assert_exit_code "$?" "0" "case ax: config rotate exits 0"
+test -f "$AX_PARENT/2026-06.tar.gz"
+assert_exit_code "$?" "0" "case ax: 2026-06 rotated when N is 3"
+test ! -e "$AX_PARENT/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case ax: 2026-07 is not older than 3 months"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS=2
+node "$CLI" rotate >/dev/null
+assert_exit_code "$?" "0" "case ax: env override rotate exits 0"
+test -f "$AX_PARENT/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case ax: env N=2 rotates 2026-07"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS
+python3 - "$HOME/.autopilot/config.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+cfg = json.load(open(p))
+block = cfg.get("review_ledger_archive") or {}
+block.pop("rotate_after_months", None)
+cfg["review_ledger_archive"] = block
+json.dump(cfg, open(p, "w"))
+PY
+
+# (ay) status prints the rotatable count and the hint, and exits 0.
+LEDGER_AY="$TEST_TMP/ledger-ay"
+make_ledger "$LEDGER_AY" alpha "2026-10-22T03:04:05.000Z"
+ARCH_AY="$TEST_TMP/archive-ay"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AY"
+node "$CLI" import --ledger "$LEDGER_AY" --repo "$REPO" >/dev/null
+AY_MONTH=$(find "$ARCH_AY" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$AY_MONTH" "$(dirname "$AY_MONTH")/2026-07"
+AY_OUT=$(node "$CLI" status 2>"$TEST_TMP/ay.err")
+assert_exit_code "$?" "0" "case ay: status exits 0"
+assert_contains "$AY_OUT" "rotatable months: 1" "case ay: rotatable count"
+assert_contains "$AY_OUT" "run: review-ledger-archive.js rotate" "case ay: rotate hint"
+node "$CLI" rotate >/dev/null
+AY_OUT2=$(node "$CLI" status)
+assert_exit_code "$?" "0" "case ay: status after rotate exits 0"
+assert_contains "$AY_OUT2" "rotatable months: 0" "case ay: count is zero after rotate"
+case "$AY_OUT2" in
+  *"run: review-ledger-archive.js rotate"*) fail "case ay: hint printed when count is zero" ;;
+  *) echo "case ay: no hint when nothing is rotatable"; __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+
+# (az) no hook and no finalize path invokes this CLI's rotate.
+AZ_HITS=$(grep -R -n --exclude-dir=tests -E 'review-ledger-archive\.js[[:space:]]+rotate|review-ledger-tar' \
+  "$REPO_ROOT/hooks" "$REPO_ROOT/scripts/hetero-review-loop.js" 2>/dev/null || true)
+assert_eq "$AZ_HITS" "" "case az: hooks and finalize do not reference rotate"
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (ba) archive off: rotate exits 1 with the off line.
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+BA_OUT=$(node "$CLI" rotate 2>&1); BA_RC=$?
+assert_exit_code "$BA_RC" "1" "case ba: rotate with archive off exits 1"
+assert_contains "$BA_OUT" "review-ledger-archive: archive is off" "case ba: off line"
+
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
+unset AUTOPILOT_TEST_NOW
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
 
 finalize_test

@@ -494,6 +494,13 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - deval (d9b0f0402): the dcard and dcard-v2 rows of the skill ON/OFF eval are recorded INSTRUMENT-INVALID (NOT-SHIP). The primary metric reads the decision file only after turn 2, so neither arm could be measured. The text was not shown to be ineffective. dskill B (12 guidance files) is not merged. A v3 waits on owner decision d-27318bdc.
 - subplan (d3878d429): the sub-agent concurrency advisory plan (`docs/plans/2026-10-21-subagent-concurrency-advisory.md`) is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
 
+### Settings changes
+
+- **New `review_ledger_archive.rotate_after_months`** (positive integer; default 2). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS`. `rotate` compresses complete months strictly older than this. An invalid value keeps 2.
+- **New `review_ledger_archive.rotate_remove_source`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE`. When true, `rotate` deletes the month directory after the tar listing matches.
+
+See [`docs/settings-reference.md`](docs/settings-reference.md).
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

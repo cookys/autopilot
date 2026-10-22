@@ -11,7 +11,9 @@
 // the key is set. Env wins over the operator config file
 // (scripts/lib/config-path.js). include_diff default false
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF). warn_mb default 500
-// (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB).
+// (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB). rotate_after_months default 2
+// (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS). rotate_remove_source
+// default false (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE).
 // AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps after each phase copy and
 // again between the archived chain.json read and its write, inside the ledger
 // lock. The chain gap makes a lockless copy drop one phase. Unset has no effect.
@@ -73,6 +75,19 @@ function parseWarn(value) {
   return n;
 }
 
+function parsePositiveInt(value) {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value < 1) return null;
+    return value;
+  }
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!/^[0-9]+$/.test(s)) return null;
+  const n = Number(s);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
 function dirFrom(value) {
   if (value == null) return null;
   if (typeof value !== 'string') throw new Error('review_ledger_archive.dir must be a string');
@@ -98,8 +113,10 @@ function resolveArchiveConfig(home) {
   const envDirSet = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR');
   const envDiffSet = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF');
   const envWarnSet = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB');
+  const envRotateSet = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS');
+  const envRemoveSet = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE');
   let block = {};
-  if (!envDirSet || !envDiffSet || !envWarnSet) {
+  if (!envDirSet || !envDiffSet || !envWarnSet || !envRotateSet || !envRemoveSet) {
     const cp = configPath({ home: homeDir, env });
     if (fs.existsSync(cp)) {
       let parsed;
@@ -119,10 +136,18 @@ function resolveArchiveConfig(home) {
   const dir = expandArchiveDir(envDirSet ? dirFrom(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR) : dirFrom(block.dir), homeDir);
   const includeRaw = envDiffSet ? parseBool(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF) : parseBool(block.include_diff);
   const warnRaw = envWarnSet ? parseWarn(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB) : parseWarn(block.warn_mb);
+  const rotateRaw = envRotateSet
+    ? parsePositiveInt(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS)
+    : parsePositiveInt(block.rotate_after_months);
+  const removeRaw = envRemoveSet
+    ? parseBool(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE)
+    : parseBool(block.rotate_remove_source);
   return {
     dir,
     includeDiff: includeRaw === null ? false : includeRaw,
     warnMb: warnRaw === null ? 500 : warnRaw,
+    rotateAfterMonths: rotateRaw === null ? 2 : rotateRaw,
+    rotateRemoveSource: removeRaw === null ? false : removeRaw,
   };
 }
 
@@ -731,4 +756,5 @@ module.exports = {
   repoBucket,
   copyLedger,
   describeArchive,
+  withLedgerLock,
 };

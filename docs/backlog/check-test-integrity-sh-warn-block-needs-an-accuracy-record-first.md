@@ -14,3 +14,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: M。
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 
+
+## Status 2026-10-23
+
+Merge 86274b421 (tintegrity) added precision rules (pure-add surface edits, same-topic replacement with a real assertion, if-! guard form). The tintegrity unit reported 83% false positive after it (v2 was 93.8%); mode stays warn until a re-replay is under 5% (BL-0060).

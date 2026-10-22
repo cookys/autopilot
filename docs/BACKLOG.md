@@ -361,14 +361,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-23
 - **Origin**: self
-- **Problem**: 測試完整性檢查目前只警告不擋。回放最近 60 個 merge 的違規，固定 seed 抽 150 筆，真陽性為 0，誤報太多，所以維持警告。
+- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免，但最新一次回放的誤報率仍有 83%，要降到 5% 以下才考慮翻成攔截。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
-- **Trigger**: (a) exempt a test removed with its feature when same-topic replacement is added, keep N4; (b) surface_touch only on modified or deleted lines; (c) assertion form "if ! cmd; then exit"; (d) replay same seed and 60 merges, judge every group.
+- **Trigger**: a re-replay of the same seed and 60 merges shows under 5% false positives, or someone proposes flipping mode to block
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
-- **Context**: Merge 53dc0ad3f tightened (a)(b)(c), added N1-N8 and F1-F5. v2: 668 violations, 16 groups, 1 true positive, 15 false positives (93.8% false-positive rate); stays warn. Evidence: docs/plans/evidence/2026-10-19-test-integrity-replay-v2/.
+- **Context**: v2 replay 93.8% false positive; after merge 86274b421 the unit reported 83% (not committed as evidence); bar is under 5%, so mode stays warn. See sidecar.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -710,20 +710,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
 - **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
 
-### Managed rail: ADJUDICATING or VERTICAL_VERIFICATION resume spends the claim before git-drift
-- **Id**: BL-0225
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: self
-- **Problem**: 在裁決中或垂直驗證階段恢復時，會在檢查版本是否漂移之前就花掉任務的領取額度。
-- **Impact**: 版本已漂移的恢復仍先消耗領取額度，一次嘗試白費。
-- **Trigger**: a drifted ADJUDICATING or VERTICAL_VERIFICATION resume spends the Mission claim before the git-drift check
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: plan 2026-09-16 section 6, rubric R6; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-adjudicating-resume-spends-claim.md
-- **Context**: Extend the pre-claim preflight from durable-wait phases to every git-candidate resume.
-
 ### Managed rail: a reviewer that withdraws a MUST-FIX and reuses the finding id is no_verdict
 - **Id**: BL-0226
 - **Status**: open
@@ -892,7 +878,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
 - **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist. 2026-10-23: git log -S finds no swe-calibrate producer ever in scripts, evals or src; not closed, an external tool may still make them.
 
-### Engine implement-review with verify_pass=false does not block
+### verify_pass=false still converges on a reviewer verdict; should it force rework?
 - **Id**: BL-0238
 - **Status**: open
 - **Since**: 2026-07-24
@@ -900,14 +886,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: codepower
 - **Report**: 2026-07-24 codepower
 - **Reply**: none
-- **Problem**: 實作審查在驗證沒過時仍不擋下，審查者放行就能收斂並當成已提交。有人回報過，程式仍依審查者的理由收斂。
+- **Problem**: 實作審查在驗證沒過時仍會依審查者放行而收斂。現在結果會帶 verify_red_convergence_warning，但收斂條件沒改；要不要改成驗證紅就強制重做，需要 owner 決定。
 - **Impact**: 驗證失敗的缺陷可以在審查放行後被當成已完成。
-- **Trigger**: Next edit to engine implement-review convergence or the review-loop verify field
-- **Trigger-Type**: peer
+- **Trigger**: owner decides whether a red verify round must force rework instead of converging on the reviewer verdict
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: codepower 2026-07-24 implement-review; restored 2026-10-19; dropped by f2955b99e; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/shared-sealed-zero-diff-validator.md
-- **Context**: Reported 2026-07-24. The engine still converges with the reviewer reason. Read, not executed.
+- **Context**: Merge 572e7eca6 adds the warning only; convergence unchanged. Direction if accepted: reviewer ship and (verify_pass or allowlisted absence), else rework. See sidecar.
 
 ### Watcher roots set has no upper bound
 - **Id**: BL-0239
@@ -1041,7 +1027,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
 - **Context**: See BL-0220: no_verdict leaves the phase in REVIEWING and resume refuses.
 
-### Managed-rail failure messages do not say what to do
+### The no-qualified-scorecard-row refusal does not name the seat or host
 - **Id**: BL-0249
 - **Status**: open
 - **Since**: 2026-10-19
@@ -1049,14 +1035,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: codepower twgs-revival
 - **Report**: 01M59ZPRRAH8CGMG59HHD8816N
 - **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
-- **Problem**: 受管軌道失敗時看不出該怎麼做：沒說登入失效、沒說哪個席位或主機，授權被釋放後還得人手重新授予。
-- **Impact**: 操作者無法從訊息判斷要重登、換席位還是重新授權。
-- **Trigger**: a managed-rail failure omits the auth failure, the seat or host, and that the released grant must be re-granted by hand
-- **Trigger-Type**: ready
+- **Problem**: 受管軌道的「沒有合格成績單列」拒絕訊息沒有說是哪個席位或哪台主機，操作者無法判斷該為哪一格補資格。登入失效提示、released grant 的處置說明與 readiness 失敗訊息已補上。
+- **Impact**: 操作者看到這則拒絕時，不知道要替哪個席位或哪台主機補考。
+- **Trigger**: owner decides to change the dispatch-contract.js refusal text, which several pin tests assert verbatim
+- **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
 - **Pointer**: docs/backlog/managed-rail-failure-messages-not-actionable.md
-- **Context**: provider readiness, scorecard, and grant release each name a gap the operator cannot act on from the message alone.
+- **Context**: Merge bf611fd7b fixed the rest. Left: scripts/dispatch-contract.js refusal text, pinned verbatim by four hooks/tests suites. See sidecar.
 
 ### One command that writes the autocompact window and the context budget
 - **Id**: BL-0250
@@ -1092,19 +1078,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/fleet-child-lifetime-parent-contract.md
 - **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable. On 2026-10-19 fleet 650f649 took effect on aimax395: FLEET_* children and non-TUI Claude sessions become ephemeral and drop ~10s after disconnect. Verify when starting.
 
-### roundtable follow-ups deferred by the second review
+### roundtable follow-up: three-process lock race
 - **Id**: BL-0252
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: self
-- **Problem**: 第二輪審查把四件圓桌後續留到下次再做：三行程鎖競爭、殘留暫存檔、重複系統列，以及用法說明與實際參數不符。
-- **Impact**: 高競爭下仍可能互搶；殘檔與重複列會累積；操作者看 USAGE 會漏掉已接受的參數。
+- **Problem**: 圓桌後續只剩一件：三行程同時競爭鎖時，回收與釋放之間仍有幾微秒的空窗。
+- **Impact**: 高競爭下三個行程仍可能互搶鎖。
 - **Trigger**: next time room-log.js or roundtable-window.js is touched
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: the second-generation review of the roundtable work
 - **Pointer**: docs/backlog/roundtable-follow-ups.md
-- **Context**: Four deferred points: a three-process reclaim/release race, leftover lock files, duplicate skipped-seat rows, and USAGE lagging parseCli. Detail is in the Pointer.
+- **Context**: Merge cb6e7c305 fixed (b) leftovers, (c) duplicate rows, (d) USAGE. Left: (a), the reclaim/release window in acquireLock and releaseLock; needs flock, fcntl or mkdir. See sidecar.
 
 ### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
 - **Id**: BL-0253
@@ -1217,20 +1203,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: hderive g1 27ae0ab9
 - **Pointer**: docs/backlog/deferred-review-2026-10-21.md
-
-### node tests that run git have no identity guard
-- **Id**: BL-0268
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 測試身分守衛會檢查呼叫 git 的殼層測試有沒有引入共用函式庫，也會掃腳本裡的非測試信箱，但沒有檢查會跑 git 提交的節點測試是否自備身分。
-- **Impact**: 這類測試在開發機靠家目錄設定會通過，換到暫時家目錄就變紅。
-- **Trigger**: next change to test-identity-guard, or a new node test that runs git
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: hderive g1 review (identity finding)
-- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
-- **Context**: the impl test itself is already fixed
 
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271

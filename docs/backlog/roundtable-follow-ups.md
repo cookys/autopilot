@@ -9,3 +9,7 @@ Second-generation review of the roundtable work, 2026-10-19. These four points w
 (c) Duplicate system rows: for the same `from` value starting with a dash, every send appends another skipped-seat system row. Deduplicate. Lives in `resolveSeats` and `sendText` in `scripts/roundtable-window.js`.
 
 (d) Usage mismatch: `send --seats X ROOM` and `input ROOM --once` are accepted by `parseCli` but not written in `USAGE`. Align them. Lives in `parseCli` and the `USAGE` string in `scripts/roundtable-window.js`.
+
+## Status 2026-10-23
+
+(b) leftover files, (c) duplicate skipped-seat rows and (d) USAGE mismatch fixed by cb6e7c305 (roomlog). Only (a), the three-process race, remains (BL-0252).

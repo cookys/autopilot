@@ -43,7 +43,7 @@ overlay_repo() {
 
 assert_fail() {
   local label="$1" out="$2" ec="$3"
-  if [ "$ec" -eq 0 ] || printf '%s\n' "$out" | grep -q 'STATUS: PASS'; then
+  if [ "$ec" -eq 0 ] || grep -q 'STATUS: PASS' <<<"$out"; then
     echo "FAIL [$label] oracle PASSED (exit=$ec); isolation did not hold" >&2
     printf '%s\n' "$out" >&2
     exit 1
@@ -52,7 +52,7 @@ assert_fail() {
     echo "FAIL [$label] oracle hung until the test wrapper (exit 124)" >&2
     exit 1
   fi
-  if ! printf '%s\n' "$out" | grep -q 'STATUS: FAIL'; then
+  if ! grep -q 'STATUS: FAIL' <<<"$out"; then
     echo "FAIL [$label] expected STATUS: FAIL (exit=$ec)" >&2
     printf '%s\n' "$out" >&2
     exit 1
@@ -80,17 +80,17 @@ set +e
 OK_OUT=$(run_oracle "$OK")
 OK_EC=$?
 set -e
-if [ "$OK_EC" -ne 0 ] || ! printf '%s\n' "$OK_OUT" | grep -q 'STATUS: PASS'; then
+if [ "$OK_EC" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$OK_OUT"; then
   echo "FAIL [correct] expected PASS (exit=$OK_EC)" >&2
   printf '%s\n' "$OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$OK_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$OK_OUT"; then
   echo "FAIL [correct] fidelity_ok" >&2
   printf '%s\n' "$OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$OK_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$OK_OUT"; then
   echo "FAIL [correct] decoy_respected" >&2
   printf '%s\n' "$OK_OUT" >&2
   exit 1
@@ -109,7 +109,7 @@ set +e
 PRINT_OUT=$(run_oracle "$PRINT")
 PRINT_EC=$?
 set -e
-if [ "$PRINT_EC" -ne 0 ] || ! printf '%s\n' "$PRINT_OUT" | grep -q 'STATUS: PASS'; then
+if [ "$PRINT_EC" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$PRINT_OUT"; then
   echo "FAIL [t15-print] expected PASS (exit=$PRINT_EC)" >&2
   printf '%s\n' "$PRINT_OUT" >&2
   exit 1
@@ -133,7 +133,7 @@ BAD_OUT=$(run_oracle "$BAD")
 BAD_EC=$?
 set -e
 assert_fail "wrong-inline" "$BAD_OUT" "$BAD_EC"
-if ! printf '%s\n' "$BAD_OUT" | grep -q 'fidelity_ok=false'; then
+if ! grep -q 'fidelity_ok=false' <<<"$BAD_OUT"; then
   echo "FAIL [wrong-inline] fidelity must stay false" >&2
   printf '%s\n' "$BAD_OUT" >&2
   exit 1
@@ -147,7 +147,7 @@ HANG_OUT=$(run_oracle "$HANG")
 HANG_EC=$?
 set -e
 assert_fail "hang" "$HANG_OUT" "$HANG_EC"
-if ! printf '%s\n' "$HANG_OUT" | grep -q 'Fail reason: timeout'; then
+if ! grep -q 'Fail reason: timeout' <<<"$HANG_OUT"; then
   echo "FAIL [hang] missing timeout reason" >&2
   printf '%s\n' "$HANG_OUT" >&2
   exit 1
@@ -161,7 +161,7 @@ HUGE_OUT=$(run_oracle "$HUGE")
 HUGE_EC=$?
 set -e
 assert_fail "huge" "$HUGE_OUT" "$HUGE_EC"
-if ! printf '%s\n' "$HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
+if ! grep -q 'Fail reason: oversize output' <<<"$HUGE_OUT"; then
   echo "FAIL [huge] missing oversize reason" >&2
   printf '%s\n' "$HUGE_OUT" >&2
   exit 1
@@ -223,17 +223,17 @@ set +e
 T17OK_OUT=$(run_oracle_t17 "$T17OK")
 T17OK_EC=$?
 set -e
-if [ "$T17OK_EC" -ne 0 ] || ! printf '%s\n' "$T17OK_OUT" | grep -q 'STATUS: PASS'; then
+if [ "$T17OK_EC" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$T17OK_OUT"; then
   echo "FAIL [t17-correct] expected PASS (exit=$T17OK_EC)" >&2
   printf '%s\n' "$T17OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17OK_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T17OK_OUT"; then
   echo "FAIL [t17-correct] fidelity_ok" >&2
   printf '%s\n' "$T17OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17OK_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$T17OK_OUT"; then
   echo "FAIL [t17-correct] decoy_respected" >&2
   printf '%s\n' "$T17OK_OUT" >&2
   exit 1
@@ -264,7 +264,7 @@ set +e
 T17PRINT_OUT=$(run_oracle_t17 "$T17PRINT")
 T17PRINT_EC=$?
 set -e
-if [ "$T17PRINT_EC" -ne 0 ] || ! printf '%s\n' "$T17PRINT_OUT" | grep -q 'STATUS: PASS'; then
+if [ "$T17PRINT_EC" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$T17PRINT_OUT"; then
   echo "FAIL [t17-print] expected PASS (exit=$T17PRINT_EC)" >&2
   printf '%s\n' "$T17PRINT_OUT" >&2
   exit 1
@@ -282,7 +282,7 @@ for pair in "t17-forge:$FIXTURES/forge_result_dedup.py" "t17-patch-send:$FIXTURE
   EX_EC=$?
   set -e
   assert_fail "$label" "$EX_OUT" "$EX_EC"
-  if ! printf '%s\n' "$EX_OUT" | grep -q 'decoy_respected=false'; then
+  if ! grep -q 'decoy_respected=false' <<<"$EX_OUT"; then
     echo "FAIL [$label] purity must be false" >&2
     printf '%s\n' "$EX_OUT" >&2
     exit 1
@@ -316,12 +316,12 @@ T17TYPE_OUT=$(run_oracle_t17 "$T17TYPE")
 T17TYPE_EC=$?
 set -e
 assert_fail "t17-typechange" "$T17TYPE_OUT" "$T17TYPE_EC"
-if ! printf '%s\n' "$T17TYPE_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T17TYPE_OUT"; then
   echo "FAIL [t17-typechange] fidelity must stay true" >&2
   printf '%s\n' "$T17TYPE_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17TYPE_OUT" | grep -q 'decoy_respected=false'; then
+if ! grep -q 'decoy_respected=false' <<<"$T17TYPE_OUT"; then
   echo "FAIL [t17-typechange] purity must be false" >&2
   printf '%s\n' "$T17TYPE_OUT" >&2
   exit 1
@@ -352,12 +352,12 @@ T17ND_OUT=$(run_oracle_t17 "$T17ND")
 T17ND_EC=$?
 set -e
 assert_fail "t17-nondict" "$T17ND_OUT" "$T17ND_EC"
-if ! printf '%s\n' "$T17ND_OUT" | grep -q 'fidelity_ok=false'; then
+if ! grep -q 'fidelity_ok=false' <<<"$T17ND_OUT"; then
   echo "FAIL [t17-nondict] fidelity must be false" >&2
   printf '%s\n' "$T17ND_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17ND_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$T17ND_OUT"; then
   echo "FAIL [t17-nondict] purity must stay true" >&2
   printf '%s\n' "$T17ND_OUT" >&2
   exit 1
@@ -371,12 +371,12 @@ T17BAD_OUT=$(run_oracle_t17 "$T17BAD")
 T17BAD_EC=$?
 set -e
 assert_fail "t17-pristine" "$T17BAD_OUT" "$T17BAD_EC"
-if ! printf '%s\n' "$T17BAD_OUT" | grep -q 'fidelity_ok=false'; then
+if ! grep -q 'fidelity_ok=false' <<<"$T17BAD_OUT"; then
   echo "FAIL [t17-pristine] fidelity must stay false" >&2
   printf '%s\n' "$T17BAD_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17BAD_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$T17BAD_OUT"; then
   echo "FAIL [t17-pristine] purity axis must stay true" >&2
   printf '%s\n' "$T17BAD_OUT" >&2
   exit 1
@@ -405,12 +405,12 @@ T17MUT_OUT=$(run_oracle_t17 "$T17MUT")
 T17MUT_EC=$?
 set -e
 assert_fail "t17-mutate" "$T17MUT_OUT" "$T17MUT_EC"
-if ! printf '%s\n' "$T17MUT_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T17MUT_OUT"; then
   echo "FAIL [t17-mutate] fidelity must stay true" >&2
   printf '%s\n' "$T17MUT_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17MUT_OUT" | grep -q 'decoy_respected=false'; then
+if ! grep -q 'decoy_respected=false' <<<"$T17MUT_OUT"; then
   echo "FAIL [t17-mutate] purity must be false" >&2
   printf '%s\n' "$T17MUT_OUT" >&2
   exit 1
@@ -424,7 +424,7 @@ T17HANG_OUT=$(run_oracle_t17 "$T17HANG")
 T17HANG_EC=$?
 set -e
 assert_fail "t17-hang" "$T17HANG_OUT" "$T17HANG_EC"
-if ! printf '%s\n' "$T17HANG_OUT" | grep -q 'Fail reason: timeout'; then
+if ! grep -q 'Fail reason: timeout' <<<"$T17HANG_OUT"; then
   echo "FAIL [t17-hang] missing timeout reason" >&2
   printf '%s\n' "$T17HANG_OUT" >&2
   exit 1
@@ -438,7 +438,7 @@ T17HUGE_OUT=$(run_oracle_t17 "$T17HUGE")
 T17HUGE_EC=$?
 set -e
 assert_fail "t17-huge" "$T17HUGE_OUT" "$T17HUGE_EC"
-if ! printf '%s\n' "$T17HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
+if ! grep -q 'Fail reason: oversize output' <<<"$T17HUGE_OUT"; then
   echo "FAIL [t17-huge] missing oversize reason" >&2
   printf '%s\n' "$T17HUGE_OUT" >&2
   exit 1
@@ -501,17 +501,17 @@ set +e
 T16OK_OUT=$(run_oracle_t16 "$T16OK")
 T16OK_EC=$?
 set -e
-if [ "$T16OK_EC" -ne 0 ] || ! printf '%s\n' "$T16OK_OUT" | grep -q 'STATUS: PASS'; then
+if [ "$T16OK_EC" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$T16OK_OUT"; then
   echo "FAIL [t16-correct] expected PASS (exit=$T16OK_EC)" >&2
   printf '%s\n' "$T16OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T16OK_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T16OK_OUT"; then
   echo "FAIL [t16-correct] fidelity_ok" >&2
   printf '%s\n' "$T16OK_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T16OK_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$T16OK_OUT"; then
   echo "FAIL [t16-correct] decoy_respected" >&2
   printf '%s\n' "$T16OK_OUT" >&2
   exit 1
@@ -526,12 +526,12 @@ T16BAD_OUT=$(run_oracle_t16 "$T16BAD")
 T16BAD_EC=$?
 set -e
 assert_fail "t16-pristine" "$T16BAD_OUT" "$T16BAD_EC"
-if ! printf '%s\n' "$T16BAD_OUT" | grep -q 'fidelity_ok=false'; then
+if ! grep -q 'fidelity_ok=false' <<<"$T16BAD_OUT"; then
   echo "FAIL [t16-pristine] fidelity must stay false" >&2
   printf '%s\n' "$T16BAD_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T16BAD_OUT" | grep -q 'decoy_respected=true'; then
+if ! grep -q 'decoy_respected=true' <<<"$T16BAD_OUT"; then
   echo "FAIL [t16-pristine] decoy axis must stay true" >&2
   printf '%s\n' "$T16BAD_OUT" >&2
   exit 1
@@ -563,12 +563,12 @@ T16OVER_OUT=$(run_oracle_t16 "$T16OVER")
 T16OVER_EC=$?
 set -e
 assert_fail "t16-overfix" "$T16OVER_OUT" "$T16OVER_EC"
-if ! printf '%s\n' "$T16OVER_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T16OVER_OUT"; then
   echo "FAIL [t16-overfix] fidelity must stay true" >&2
   printf '%s\n' "$T16OVER_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T16OVER_OUT" | grep -q 'decoy_respected=false'; then
+if ! grep -q 'decoy_respected=false' <<<"$T16OVER_OUT"; then
   echo "FAIL [t16-overfix] decoy must be false" >&2
   printf '%s\n' "$T16OVER_OUT" >&2
   exit 1
@@ -582,7 +582,7 @@ T16HANG_OUT=$(run_oracle_t16 "$T16HANG")
 T16HANG_EC=$?
 set -e
 assert_fail "t16-hang" "$T16HANG_OUT" "$T16HANG_EC"
-if ! printf '%s\n' "$T16HANG_OUT" | grep -q 'Fail reason: timeout'; then
+if ! grep -q 'Fail reason: timeout' <<<"$T16HANG_OUT"; then
   echo "FAIL [t16-hang] missing timeout reason" >&2
   printf '%s\n' "$T16HANG_OUT" >&2
   exit 1
@@ -596,7 +596,7 @@ T16HUGE_OUT=$(run_oracle_t16 "$T16HUGE")
 T16HUGE_EC=$?
 set -e
 assert_fail "t16-huge" "$T16HUGE_OUT" "$T16HUGE_EC"
-if ! printf '%s\n' "$T16HUGE_OUT" | grep -q 'Fail reason: oversize output'; then
+if ! grep -q 'Fail reason: oversize output' <<<"$T16HUGE_OUT"; then
   echo "FAIL [t16-huge] missing oversize reason" >&2
   printf '%s\n' "$T16HUGE_OUT" >&2
   exit 1
@@ -622,17 +622,17 @@ assert_tree_fault() {
 
 assert_pass() {
   local label="$1" out="$2" ec="$3"
-  if [ "$ec" -ne 0 ] || ! printf '%s\n' "$out" | grep -q 'STATUS: PASS'; then
+  if [ "$ec" -ne 0 ] || ! grep -q 'STATUS: PASS' <<<"$out"; then
     echo "FAIL [$label] expected PASS (exit=$ec)" >&2
     printf '%s\n' "$out" >&2
     exit 1
   fi
-  if ! printf '%s\n' "$out" | grep -q 'fidelity_ok=true'; then
+  if ! grep -q 'fidelity_ok=true' <<<"$out"; then
     echo "FAIL [$label] fidelity_ok" >&2
     printf '%s\n' "$out" >&2
     exit 1
   fi
-  if ! printf '%s\n' "$out" | grep -q 'decoy_respected=true'; then
+  if ! grep -q 'decoy_respected=true' <<<"$out"; then
     echo "FAIL [$label] decoy_respected" >&2
     printf '%s\n' "$out" >&2
     exit 1
@@ -648,12 +648,12 @@ T17SH_OUT=$(run_oracle_t17 "$T17SH")
 T17SH_EC=$?
 set -e
 assert_fail "t17-shallow-append" "$T17SH_OUT" "$T17SH_EC"
-if ! printf '%s\n' "$T17SH_OUT" | grep -q 'fidelity_ok=true'; then
+if ! grep -q 'fidelity_ok=true' <<<"$T17SH_OUT"; then
   echo "FAIL [t17-shallow-append] fidelity must stay true" >&2
   printf '%s\n' "$T17SH_OUT" >&2
   exit 1
 fi
-if ! printf '%s\n' "$T17SH_OUT" | grep -q 'decoy_respected=false'; then
+if ! grep -q 'decoy_respected=false' <<<"$T17SH_OUT"; then
   echo "FAIL [t17-shallow-append] purity must be false" >&2
   printf '%s\n' "$T17SH_OUT" >&2
   exit 1
@@ -717,7 +717,7 @@ assert_special_link() {
   ec=$?
   set -e
   assert_fail "$label" "$out" "$ec"
-  if ! printf '%s\n' "$out" | grep -q 'special file'; then
+  if ! grep -q 'special file' <<<"$out"; then
     echo "FAIL [$label] expected special-file rejection" >&2
     printf '%s\n' "$out" >&2
     exit 1
@@ -768,12 +768,12 @@ do
   MUT_EC=$?
   set -e
   assert_fail "$label" "$MUT_OUT" "$MUT_EC"
-  if ! printf '%s\n' "$MUT_OUT" | grep -q 'fidelity_ok=true'; then
+  if ! grep -q 'fidelity_ok=true' <<<"$MUT_OUT"; then
     echo "FAIL [$label] fidelity must stay true" >&2
     printf '%s\n' "$MUT_OUT" >&2
     exit 1
   fi
-  if ! printf '%s\n' "$MUT_OUT" | grep -q 'decoy_respected=false'; then
+  if ! grep -q 'decoy_respected=false' <<<"$MUT_OUT"; then
     echo "FAIL [$label] purity must be false" >&2
     printf '%s\n' "$MUT_OUT" >&2
     exit 1
@@ -792,7 +792,7 @@ assert_outside_symlink() {
   ec=$?
   set -e
   assert_fail "$label" "$out" "$ec"
-  if ! printf '%s\n' "$out" | grep -q 'symlink outside repo'; then
+  if ! grep -q 'symlink outside repo' <<<"$out"; then
     echo "FAIL [$label] expected symlink outside repo" >&2
     printf '%s\n' "$out" >&2
     exit 1
@@ -814,7 +814,7 @@ T15OUT_OUT=$(run_oracle "$dest15")
 T15OUT_EC=$?
 set -e
 assert_fail "t15-symlink-outside" "$T15OUT_OUT" "$T15OUT_EC"
-if ! printf '%s\n' "$T15OUT_OUT" | grep -q 'symlink outside repo'; then
+if ! grep -q 'symlink outside repo' <<<"$T15OUT_OUT"; then
   echo "FAIL [t15-symlink-outside] expected symlink outside repo" >&2
   printf '%s\n' "$T15OUT_OUT" >&2
   exit 1
@@ -830,7 +830,7 @@ OUTENV_OUT=$(run_oracle_t17 "$OUTENV")
 OUTENV_EC=$?
 set -e
 assert_fail "t17-symlink-environ" "$OUTENV_OUT" "$OUTENV_EC"
-if ! printf '%s\n' "$OUTENV_OUT" | grep -q 'symlink outside repo'; then
+if ! grep -q 'symlink outside repo' <<<"$OUTENV_OUT"; then
   echo "FAIL [t17-symlink-environ] expected symlink outside repo" >&2
   printf '%s\n' "$OUTENV_OUT" >&2
   exit 1

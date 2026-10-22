@@ -833,10 +833,10 @@ SNAP_STATUS=$?
 # G-01 features only: before=[timestamp], after=[timestamp, export] → persisted=1 introduced=1 fixed=0
 # G-02 violations only: before=[export], after=[] → fixed=1
 # G-03 both: before=[timestamp], after=[timestamp] → persisted=1, kind stays separate
-printf '%s\n' "$SNAP_ALL" | grep -q "feature gaps persisted, fixed and introduced by retries" || fail "i: snapshot section missing"
-printf '%s\n' "$SNAP_ALL" | grep -q "features only: persisted=1 fixed=0 introduced=1" || fail "i: feature-only counts: $SNAP_ALL"
-printf '%s\n' "$SNAP_ALL" | grep -q "violations only: persisted=0 fixed=1 introduced=0" || fail "i: violations-only counts: $SNAP_ALL"
-printf '%s\n' "$SNAP_ALL" | grep -q "both: persisted=1 fixed=0 introduced=0" || fail "i: both counts: $SNAP_ALL"
+grep -q "feature gaps persisted, fixed and introduced by retries" <<<"$SNAP_ALL" || fail "i: snapshot section missing"
+grep -q "features only: persisted=1 fixed=0 introduced=1" <<<"$SNAP_ALL" || fail "i: feature-only counts: $SNAP_ALL"
+grep -q "violations only: persisted=0 fixed=1 introduced=0" <<<"$SNAP_ALL" || fail "i: violations-only counts: $SNAP_ALL"
+grep -q "both: persisted=1 fixed=0 introduced=0" <<<"$SNAP_ALL" || fail "i: both counts: $SNAP_ALL"
 SUCC_ALL="$(node "$ANALYZER" --out "$SUCC")"
 SUCC_LINE="$(printf '%s\n' "$SUCC_ALL" | head -n 1)"
 node -e '
@@ -844,10 +844,10 @@ const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (j.verdict !== "SUCCESS" || j.reason !== null) process.exit(2);
 if (j.m1.diff < 6 || !(j.fisher_p <= 0.05)) process.exit(3);
 ' <<<"$SUCC_LINE" || fail "i: existing SUCCESS verdict line changed: $SUCC_LINE"
-printf '%s\n' "$SUCC_ALL" | grep -q "feature gaps persisted, fixed and introduced by retries" || fail "i: zero section missing on a set with no snapshots"
-printf '%s\n' "$SUCC_ALL" | grep -q "violations only: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print zeros"
-printf '%s\n' "$SUCC_ALL" | grep -q "features only: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print feature zeros"
-printf '%s\n' "$SUCC_ALL" | grep -q "both: persisted=0 fixed=0 introduced=0" || fail "i: empty snapshots should print both zeros"
+grep -q "feature gaps persisted, fixed and introduced by retries" <<<"$SUCC_ALL" || fail "i: zero section missing on a set with no snapshots"
+grep -q "violations only: persisted=0 fixed=0 introduced=0" <<<"$SUCC_ALL" || fail "i: empty snapshots should print zeros"
+grep -q "features only: persisted=0 fixed=0 introduced=0" <<<"$SUCC_ALL" || fail "i: empty snapshots should print feature zeros"
+grep -q "both: persisted=0 fixed=0 introduced=0" <<<"$SUCC_ALL" || fail "i: empty snapshots should print both zeros"
 echo "i green: snapshot section counts gaps persisted, fixed and introduced; verdict line unchanged"
 
 echo "OK t14 gate batch"

@@ -15,6 +15,7 @@
 # Negative controls run: audit calls disabled -> 73 FAILs; non-blind kimi argv + "--x" -> byte-compare FAILs.
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
+scrub_session_env   # a launching session's AUTOPILOT_PARENT_SESSION_ID etc. must not reach the rails under test
 SCRIPTS_PORCELAIN_BEFORE="$(git -C "$REPO_ROOT" status --porcelain scripts/)"
 
 PKT="$TEST_TMP/pkt"; mkdir -p "$PKT/tree"; printf '{}\n' > "$PKT/MANIFEST.json"; printf 'x\n' > "$PKT/tree/README.md"
@@ -33,7 +34,7 @@ cat > "$LAUNCHER" <<'EOF'
 #!/usr/bin/env bash
 # stub launcher: records argv, fabricates the kept seat per $SCEN, ALWAYS exits $LAUNCH_RC (default 0).
 printf '%s\n' "$*" >> "$LAUNCH_LOG"
-if printf '%s\n' "$@" | grep -qx -- '--preflight'; then
+if grep -qx -- '--preflight' < <(printf '%s\n' "$@"); then
   printf '%s\n' "$@" > "$PF_ARGV"
   if [ "${PF_RC:-0}" != 0 ]; then echo "${PF_ERR:-preflight red}" >&2; exit "$PF_RC"; fi
   # real launcher shape: one JSON line, runner_version only for kimi/agy preflight

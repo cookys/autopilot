@@ -34,8 +34,8 @@ run_case() {
   CASE_OUT="$(bash "$S" validate --no-l1 --range HEAD~1..HEAD --repo "$repo" 2>/dev/null || true)"
 }
 
-has_kind() { printf '%s' "$CASE_OUT" | grep -q "\"kind\": \"$1\""; }
-has_text() { printf '%s' "$CASE_OUT" | grep -q "$1"; }
+has_kind() { grep -q "\"kind\": \"$1\"" <<<"$CASE_OUT"; }
+has_text() { grep -q "$1" <<<"$CASE_OUT"; }
 
 report() {
   # report <id> <1 if the precise expectation holds>

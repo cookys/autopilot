@@ -131,7 +131,7 @@ for tool in node git; do ln -sf "$(command -v $tool)" "$SB/nopath/$tool"; done
 WPATH="$SB/nopath" run_hook_in "$REPO"
 eq "0" "$HOOK_RC" "no flock: exits 0"
 eq "1" "$(printf '%s\n' "$HOOK_ERR" | grep -c .)" "no flock: exactly one stderr line"
-eq "yes" "$(printf '%s' "$HOOK_ERR" | grep -qi flock && echo yes || echo no)" "no flock: stderr names flock"
+eq "yes" "$(grep -qi flock <<<"$HOOK_ERR" && echo yes || echo no)" "no flock: stderr names flock"
 eq "0" "$(count_watchers)" "no flock: no watcher"
 
 # --- 6. idle watcher exits by itself and frees the lock -----------------------------------------------------

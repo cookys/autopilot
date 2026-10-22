@@ -61,7 +61,7 @@ ALLOWED="$(node -e '
 ' "$REG")"
 assert_eq "$PAT" "$ALLOWED" "case4: patterns == scratch+evidence entries"
 for forbidden in 'autopilot-foreman-runs' 'autopilot-dispatch-runs' 'hetero-*' 'apl1.*' '.autopilot-gc.lock' 'autopilot-verify-wt-*'; do
-  if printf '%s\n' "$PAT" | grep -qxF -- "$forbidden"; then
+  if grep -qxF -- "$forbidden" <<<"$PAT"; then
     echo "FAIL case4: patterns emitted non-deletable kind: $forbidden" >&2
     exit 1
   fi

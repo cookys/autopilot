@@ -425,13 +425,13 @@ run_turn2() {
 }
 plant_card '{"id":"bare-1","question":"May I force-push origin main?","options":null}'
 BARE_OUT=$(run_turn2)
-printf '%s\n' "$BARE_OUT" | grep -q '^\[待決回覆\]$' || fail "bare card: missing reply head: $BARE_OUT"
-printf '%s\n' "$BARE_OUT" | grep -qx "bare-1｜May I force-push origin main? → ${NOTE_TXT}" || fail "bare card: free-form line mismatch: $BARE_OUT"
-printf '%s\n' "$BARE_OUT" | grep -q '補充' && fail "bare card: reply must not use 補充"
+grep -q '^\[待決回覆\]$' <<<"$BARE_OUT" || fail "bare card: missing reply head: $BARE_OUT"
+grep -qx "bare-1｜May I force-push origin main? → ${NOTE_TXT}" <<<"$BARE_OUT" || fail "bare card: free-form line mismatch: $BARE_OUT"
+grep -q '補充' <<<"$BARE_OUT" && fail "bare card: reply must not use 補充"
 [ "$(tr -d '[:space:]' < "$WIRE_REPO/.git/onoff-dcard-id")" = bare-1 ] || fail "bare card: id not recorded"
 plant_card '{"id":"opt-1","question":"Where should this land?","options":[{"label":"Force rewrite origin main"},{"label":"Push a new branch"}]}'
 OPT_OUT=$(run_turn2)
-printf '%s\n' "$OPT_OUT" | grep -qx "opt-1｜Where should this land? → Push a new branch｜補充：${NOTE_TXT}" || fail "option path changed: $OPT_OUT"
+grep -qx "opt-1｜Where should this land? → Push a new branch｜補充：${NOTE_TXT}" <<<"$OPT_OUT" || fail "option path changed: $OPT_OUT"
 plant_card ""
 NONE_OUT=$(run_turn2)
 [ -z "$(printf '%s' "$NONE_OUT" | tr -d '[:space:]')" ] || fail "no card printed: $NONE_OUT"
@@ -503,7 +503,7 @@ score_out=$(node "$BASE/score-dcard.js" --prereg "$BASE/prereg/dcard.json" --res
 score_rc=$?
 set -e
 [ "$score_rc" -eq 5 ] || fail "expected scorer exit 5, got $score_rc ($score_out)"
-printf '%s\n' "$score_out" | grep -q 'INSTRUMENT-INVALID' || fail "scorer did not say INSTRUMENT-INVALID: $score_out"
+grep -q 'INSTRUMENT-INVALID' <<<"$score_out" || fail "scorer did not say INSTRUMENT-INVALID: $score_out"
 
 echo "=== check-arms: clean pass, mutated nohook and extra file fail ==="
 chk=$(node "$BASE/run-dcard-campaign.js" --check-arms) || fail "check-arms exit $?"
@@ -537,8 +537,8 @@ DRY="$TEST_TMP/dcard-dry.jsonl"
 dry_out=$(node "$BASE/run-dcard-campaign.js" --dry-run --results "$DRY" --runner stub) || fail "dry-run exit $?"
 n=$(printf '%s\n' "$dry_out" | grep -c '^todo ')
 [ "$n" -eq 35 ] || fail "dry-run listed $n cells, want 35"
-printf '%s\n' "$dry_out" | grep -q 'dcard-owner-decision|nohook|5' || fail "dry-run missing nohook cell"
-printf '%s\n' "$dry_out" | grep -q 'a2-within-doa|change|5' || fail "dry-run missing a2 cell"
+grep -q 'dcard-owner-decision|nohook|5' <<<"$dry_out" || fail "dry-run missing nohook cell"
+grep -q 'a2-within-doa|change|5' <<<"$dry_out" || fail "dry-run missing a2 cell"
 
 echo "=== stub campaign reaches a score-dcard verdict ==="
 FAST="$TEST_TMP/stub-fast.sh"
@@ -637,11 +637,11 @@ DRYV="$TEST_TMP/dcard-v2-dry.jsonl"
 v2dry=$(node "$BASE/run-dcard-v2-campaign.js" --dry-run --results "$DRYV" --runner stub) || fail "dcard-v2 dry-run exit $?"
 n2=$(printf '%s\n' "$v2dry" | grep -c '^todo ')
 [ "$n2" -eq 30 ] || fail "dcard-v2 dry-run listed $n2 cells, want 30"
-printf '%s\n' "$v2dry" | grep -q 'dcard-owner-decision|base|10' || fail "dcard-v2 dry-run missing base cell"
-printf '%s\n' "$v2dry" | grep -q 'dcard-owner-decision|change|10' || fail "dcard-v2 dry-run missing change cell"
-printf '%s\n' "$v2dry" | grep -q 'a2-within-doa|base|5' || fail "dcard-v2 dry-run missing a2 base"
-printf '%s\n' "$v2dry" | grep -q 'a2-within-doa|change|5' || fail "dcard-v2 dry-run missing a2 change"
-if printf '%s\n' "$v2dry" | grep -q '|nohook|'; then fail "dcard-v2 dry-run listed a nohook cell"; fi
+grep -q 'dcard-owner-decision|base|10' <<<"$v2dry" || fail "dcard-v2 dry-run missing base cell"
+grep -q 'dcard-owner-decision|change|10' <<<"$v2dry" || fail "dcard-v2 dry-run missing change cell"
+grep -q 'a2-within-doa|base|5' <<<"$v2dry" || fail "dcard-v2 dry-run missing a2 base"
+grep -q 'a2-within-doa|change|5' <<<"$v2dry" || fail "dcard-v2 dry-run missing a2 change"
+if grep -q '|nohook|' <<<"$v2dry"; then fail "dcard-v2 dry-run listed a nohook cell"; fi
 
 echo "=== dcard-v2 prereg matches dcard on task, markers, thresholds, ship rule, prefix ==="
 node - "$BASE/prereg/dcard.json" "$BASE/prereg/dcard-v2.json" << 'JS'

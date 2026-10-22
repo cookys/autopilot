@@ -184,6 +184,15 @@ export AUTOPILOT_PRICES_FETCH=0
 # ...and never read the operator's real price cache: it would make ladder order depend on the host.
 export AUTOPILOT_PRICES_CACHE_DIR="$TEST_TMP/prices-cache"
 
+# scrub_session_env -- drop every session-identity variable a launching Claude Code session or
+# foreman leaks into the test process. Rails resolve their child's parent id from this chain
+# (scripts/lib/repo-identity.sh child_session_env_setup), so a suite whose output must not depend on
+# who launched it calls this right after sourcing lib.sh. Suites that exercise the identity chain set
+# their own values per command, after the call.
+scrub_session_env() {
+  unset AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CHILD_SESSION_ID AUTOPILOT_SESSION_ID CLAUDE_SESSION_ID CLAUDE_CODE_SESSION_ID
+}
+
 # The session-mode gate in dispatch-hetero.sh reads ${HOME}/.autopilot/session-mode when this
 # is unset — i.e. the OPERATOR's markers. A live l5/l6 marker there turned every dispatch test
 # red, and each stale marker cost the suite a node start per dispatch (2026-09-24: 20 expired

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// RED at c9c3fd66e: consult provider run succeeds (stderr: model call failed: claude CLI identity unverifiable: JSON envelope has no string result)
+
 // qualification-consult-discuss-transport.test.js — D3 transport-extension
 // identity-binding suite (plan: docs/plans/2026-08-28-consult-discuss-
 // qualification.md, D3 "Plus transport acceptance"). Proves, for EACH of
@@ -184,7 +186,21 @@ fs.writeFileSync(stubCli, `#!/usr/bin/env node
 const fs = require('fs');
 const stdin = fs.readFileSync(0, 'utf8');
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv: process.argv.slice(2), stdin }));
-if (process.env.STUB_OUTPUT !== undefined) fs.writeSync(1, process.env.STUB_OUTPUT);
+// claude -p --output-format json must be the envelope verifyClaudeRuntimeIdentity
+// parses: a string result plus a non-empty modelUsage keyed by --model.
+function writeAnswer(text) {
+  const fmtAt = process.argv.indexOf('--output-format');
+  if (fmtAt !== -1 && process.argv[fmtAt + 1] === 'json') {
+    const modelAt = process.argv.indexOf('--model');
+    const model = modelAt !== -1 ? String(process.argv[modelAt + 1]) : '';
+    const modelUsage = {};
+    if (model) modelUsage[model] = { inputTokens: 1, outputTokens: 1 };
+    fs.writeSync(1, JSON.stringify({ result: String(text), modelUsage }));
+    return;
+  }
+  fs.writeSync(1, text);
+}
+if (process.env.STUB_OUTPUT !== undefined) writeAnswer(process.env.STUB_OUTPUT);
 process.exit(Number(process.env.STUB_EXIT || 0));
 `, { mode: 0o755 });
 

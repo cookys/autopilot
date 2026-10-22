@@ -773,4 +773,31 @@ NODE
 )"
 assert_eq "validated-ok" "$JS_ON_FULL_OUT" "JS validator accepts the real fully-populated consult_dispatch=on resolver output"
 
+# ── 9. BL-0230: when the qc panel consumes the whole consult ladder, the native
+# fallback warning must NAME the excluded engines (and why), so the asker can see
+# which families were skipped and declare a consult seat. The panel member is never
+# reused as the consult seat.
+# RED at 0b04208d6c648da760c4ec8b993ce0976317513c: warning is the generic
+# "no qualified consult seat on this host after qc_panel exclusion" with no engine named.
+BL0230_TOPO="$TEST_TMP/bl0230-topology.json"
+cat > "$BL0230_TOPO" <<'JSON'
+{ "schema_version": 1, "generated_at": "2026-10-23T00:00:00.000Z", "host": "test-host",
+  "consult_ladder": [
+    { "rung": "gemini-flash/high@agy", "engine": "gemini-flash", "effort": "high", "runner": "agy", "family": "google", "endpoint": "", "role_source": "consult" }
+  ] }
+JSON
+BL0230_CFG="$TEST_TMP/bl0230-cfg.md"
+cat > "$BL0230_CFG" <<'EOF'
+consult_dispatch: auto
+qc_panel: gemini-flash
+qc_panel_runners: agy
+qc_panel_efforts: high
+qc_panel_endpoints: @none
+EOF
+BL0230_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BL0230_CFG" AUTOPILOT_TOPOLOGY_FILE="$BL0230_TOPO" bash "$SCRIPT" 2>/dev/null)"
+BL0230_WARN="$(json_get "$BL0230_OUT" capability_warnings)"
+assert_eq "native-fallback" "$(json_get "$BL0230_OUT" consult_resolved_from)" "BL-0230: fully-consumed ladder still falls back to native (qc seat never doubles as consult)"
+assert_contains "$BL0230_WARN" "excluded:" "BL-0230: fallback warning has an excluded list"
+assert_contains "$BL0230_WARN" "gemini-flash/high@agy (qc_panel member)" "BL-0230: fallback warning names the excluded engine and why"
+
 finalize_test

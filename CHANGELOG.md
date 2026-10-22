@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Off unless the directory is set. Finalize is not wired in this change.
+
 - seatcard: read-only `review-seat-report.js` aggregates per-family review seat statistics from hetero-review ledgers supplied by the caller.
 
 - treedorm: task-tree and qc-panel are recorded dormant in ADR-0002. Header lines on tree.js, qc-panel.js, calibration.sh and check-node-report.js, inventory labels, and the uncalled-script label test pin the dormancy text. BL-0069 (qc-panel refute pass graduate) is retired because the graduation condition can no longer hold after the abort.
@@ -245,6 +247,10 @@
 - Kimi K3 and K2.8 sat the 2026-10-16 retake exams (events 304-310; reviewer v6, discuss and K2.8 consult qualified, both brain seats failed); the shipped qualification defaults now carry them (74 to 79 rows; the two failed brain-seat rows, events 306 and 309, are not shipped per policy), evidence under docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen, and BL-0199 tracks the exam-credential rotation hazard.
 
 ### Settings changes
+
+- **New `review_ledger_archive.dir`** (string; default unset, which is off). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR`. Empty string means off. The environment wins. Nothing is written while it is off.
+- **New `review_ledger_archive.include_diff`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF`. True also stores `diff.txt`.
+- **New `review_ledger_archive.warn_mb`** (number >= 0; default 500). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB`. `status` warns above this many mebibytes and never blocks.
 
 Every release lists here what changed in the settings you can set (`scripts/check-settings-changelog.js` enforces it). The full list is now one page: [`docs/settings-reference.md`](docs/settings-reference.md), generated from the machine-readable `scripts/lib/config-keys.json`.
 

@@ -157,6 +157,16 @@ At SessionStart the report is at most 5 lines and is switched off together with 
 
 On every other SessionStart, only a `t2 + gap` above `autoCompactWindow - 33000` mismatch is shown (at most 2 lines). Nothing is printed when that pair fits. `AUTOPILOT_CONFIG_PAIR_CHECK=0` switches that reminder off, and so do `update_check: false` and `AUTOPILOT_UPDATE_CHECK=0`. The version-update SessionStart still uses only the block above, so the finding is not printed twice.
 
+## Review ledger archive
+
+Opt-in copy of hetero-review report files. Unset or an empty directory means the archive is off: nothing is read and nothing is written. The suggested path `~/.autopilot/review-ledger-archive` is not a default.
+
+| Setting | What it does | Default | Environment override |
+|---|---|---|---|
+| `review_ledger_archive.dir` (config.json) | Directory that receives the archive (layout: repo bucket, month of the first collect, ledger id). Empty string means off. | unset (off) | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR`: same meaning; empty string means off; beats the config. |
+| `review_ledger_archive.include_diff` (config.json) | Also store `diff.txt`. Off, the archive keeps the report files only. | `false` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF`: true, 1, or yes copies `diff.txt`; false, 0, or no does not. Beats the config. |
+| `review_ledger_archive.warn_mb` (config.json) | `status` warns when the archive is larger than this many mebibytes. The warning never blocks. | `500` | `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB`: number >= 0; beats the config. A non-number is ignored, so the threshold stays 500. |
+
 ## Residue cleanup
 
 | Setting | What it does | Default | Environment variable |

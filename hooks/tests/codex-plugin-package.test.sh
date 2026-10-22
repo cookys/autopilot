@@ -631,9 +631,9 @@ else
 fi
 cp "$SYNC_SANDBOX/hooks/lib/brief-head.js" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
 
-# RED at ba068e478: not red on this host. bash 5.3.9 printf %q of a directory named "comm odd'name" is backslash form (comm\ odd\'name), and dash shim --version printed GNU (suite PASS, 142 assertions). Older bash emits $'...' for that path, which dash cannot parse. The shim no longer uses %q.
+# RED at 25f202794: write_gnu_comm_shim restored to base ba068e478 printf %q; directory "comm odd'name" plus a tab makes %q emit comm\ odd\'name$'\t' and dash reports exec: comm odd'name$\t/comm: not found. FAIL dash runs the comm shim when the GNU comm path has a space, a single quote, and a tab: 'GNU' not found in output. 141 passed, 1 failed.
 # dash executes the shim file, so the shebang is not what runs. A path with a
-# space and a single quote must survive that.
+# space, a single quote, and a tab must survive that.
 DASH_GNU_COMM=""
 _dash_comm_ifs="${IFS-}"
 IFS=:
@@ -655,13 +655,14 @@ else
   if [ -z "$DASH_BIN" ]; then
     echo "SKIP dash comm shim: dash is not installed"
   else
-    DASH_ODD="$TEST_TMP/comm odd'name"
+    # Space, single quote, and a tab. bash 5.3 printf %q still emits $'...' for the tab.
+    DASH_ODD="$TEST_TMP/comm odd'name"$'\t'
     mkdir -p "$DASH_ODD"
     ln -s "$DASH_GNU_COMM" "$DASH_ODD/comm"
     DASH_SHIM_DIR="$(mktemp -d "$TEST_TMP/comm-shim-dash-XXXXXX")"
     write_gnu_comm_shim "$DASH_SHIM_DIR/comm" "$DASH_ODD/comm"
     DASH_VER="$("$DASH_BIN" "$DASH_SHIM_DIR/comm" --version 2>&1)" || true
-    assert_contains "$DASH_VER" "GNU" "dash runs the comm shim when the GNU comm path has a space and a single quote"
+    assert_contains "$DASH_VER" "GNU" "dash runs the comm shim when the GNU comm path has a space, a single quote, and a tab"
   fi
 fi
 

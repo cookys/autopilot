@@ -322,7 +322,8 @@ function campaignLastEvents(ledgerPath) {
   // Mirrors scripts/run-ledger.sh ledger_scan_files (:2814-2827) and the writer's rotation
   // (:3284-3303): `<ledger>.1` is the newest rotated segment, `<ledger>.N` the oldest, N up to
   // run_ledger.max_rotations (config, default 4; the env var is not read); read oldest first, live ledger last.
-  const maxRotations = require('../../scripts/lib/run-ledger-config').maxRotations();
+  const parsedRot = require('../../scripts/lib/run-ledger-config').configuredValue();
+  const maxRotations = Number.isSafeInteger(parsedRot) && parsedRot >= 1 ? parsedRot : 4;
   const files = [];
   for (let n = maxRotations; n >= 1; n -= 1) files.push(`${ledgerPath}.${n}`);
   files.push(ledgerPath);

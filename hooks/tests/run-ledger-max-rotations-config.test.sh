@@ -52,10 +52,31 @@ process.stdout.write(String(cli.ledgerScanFiles(p).length));' "$REPO_ROOT" "$TES
 assert_eq "$CLI" "3" "campaign cli scan follows config (.2 .1 live), ignores env=1 and the stray .3"
 
 # 4. malformed / out-of-range config -> 4
-for bad in '{"run_ledger":{"max_rotations":0}}' '{"run_ledger":{"max_rotations":65}}' '{"run_ledger":{"max_rotations":"2"}}' '{"run_ledger":{"max_rotations":1.5}}' '{"run_ledger":3}' 'not json'; do
+for bad in '{"run_ledger":{"max_rotations":"2"}}' '{"run_ledger":{"max_rotations":1.5}}' '{"run_ledger":3}' 'not json'; do
   printf '%s\n' "$bad" > "$CFG"
   assert_eq "$(resolver)" "4" "bad config $bad: resolver is 4"
   assert_eq "$(RUN_LEDGER_MAX_BYTES=1 bash -c '. <(sed -n "/^_run_ledger_cfg_max_rotations()/,/^}/p" "$0"); _run_ledger_cfg_max_rotations' "$RL")" "4" "bad config $bad: shell resolver is 4"
 done
+
+# 5. Read window keeps its pre-BL-0256 range: 0 = live only, no upper cap (> 64 still followed).
+# RED at 2f9a6edfe (first BL-0256 commit, range collapsed to 1..64): "config=0: cli scan reads live only" got 5 (scanned .4..),
+#   "config=100: ..." got 4; shell resolver 0/100 gave 4.
+scan_count() { # $1 config json; stray segments .1-.4 and .70 plus live
+  printf '%s\n' "$1" > "$CFG"
+  RUN_LEDGER_MAX_ROTATIONS=2 node -e '
+const cli = require(process.argv[1] + "/src/campaign/cli");
+const fs = require("fs"); const p = process.argv[2];
+for (const s of ["", ".1", ".2", ".3", ".4", ".70"]) fs.writeFileSync(p + s, "{}\n");
+process.stdout.write(String(cli.ledgerScanFiles(p).length));' "$REPO_ROOT" "$TEST_TMP/scan2.jsonl" < /dev/null
+}
+assert_eq "$(scan_count '{"run_ledger":{"max_rotations":0}}')" "1" "config=0: cli scan reads live only"
+assert_eq "$(scan_count '{"run_ledger":{"max_rotations":100}}')" "6" "config=100: cli scan follows past 64"
+SEAT_BIG="$(printf '{"run_ledger":{"max_rotations":100}}\n' > "$CFG"; node -e '
+const { configuredValue } = require(process.argv[1] + "/scripts/lib/run-ledger-config.js");
+process.stdout.write(String(configuredValue()));' "$REPO_ROOT" < /dev/null)"
+assert_eq "$SEAT_BIG" "100" "configuredValue passes 100 through unclamped"
+shell_resolver() { printf '%s\n' "$1" > "$CFG"; bash -c '. <(sed -n "/^_run_ledger_cfg_max_rotations()/,/^}/p" "$0"); _run_ledger_cfg_max_rotations' "$RL"; }
+assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":0}}')" "0" "shell resolver accepts 0"
+assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":100}}')" "100" "shell resolver accepts 100"
 
 finalize_test

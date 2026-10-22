@@ -165,7 +165,8 @@ const HELP_TEXT = `Usage:\n\
     it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
   seat-status prints the §2.7.5 admission projection for one engine+runner+role seat:\n\
     admission_status/expiry_warning/strikes_since_pass/critical_trigger/would_requalify/\n\
-    strike_threshold/strike_policy_version/rejected_strikes, plus seat_hash and the\n\
+    strike_threshold/strike_policy_version/rejected_strikes, plus engine/runner/role (the seat\n\
+    answered for), seat_hash and the\n\
     baseline (baseline_event_id/baseline_qualified_at). Calendar dates never gate admission;\n\
     AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
     seat-status --require-evidence (D7, plan 2026-08-28-consult-discuss-qualification.md) runs\n\
@@ -2683,6 +2684,12 @@ function cmdSeatStatus(args) {
     : computeSeatProjection(engine, runner, role, nowMs, effort, CAPABILITY_DIR, seatKind);
   process.stdout.write(`${JSON.stringify({
     ...result.projection,
+    // Which seat answered. The baseline filter already matches engine, runner and role (all three);
+    // echoing them lets a caller or test verify the identity the projection was computed for
+    // instead of trusting that the arguments reached the filter (BL-0257 note 8).
+    engine,
+    runner,
+    role,
     // Which partition answered. `null` is the legacy partition (rows with no effort), which is a
     // different seat from any named effort — printing it stops a reader assuming "any effort".
     effort: effort === undefined ? null : effort,

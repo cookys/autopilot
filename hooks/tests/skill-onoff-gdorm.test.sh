@@ -19,12 +19,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="$REPO_ROOT/evals/skill-onoff"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-cell() { # $1 outdir, remaining args to run-skill-onoff-eval.sh
+cell() { # $1 outdir, remaining args to run-skill-onoff-eval-gdorm.sh
   local out="$1"
   shift
   env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
     HOME="$HOME" \
-    bash "$BASE/run-skill-onoff-eval.sh" "$@" --out "$out" < /dev/null > "$out.stdout"
+    bash "$BASE/run-skill-onoff-eval-gdorm.sh" "$@" --out "$out" < /dev/null > "$out.stdout"
 }
 
 # Positive: the stub really executes the script, then records a Bash tool_use.
@@ -284,5 +284,74 @@ score "$TEST_TMP/score-infra.jsonl" fail
 
 echo "=== stamp --check ==="
 node "$BASE/stamp-prereg.js" --row gdorm --check >/dev/null || fail "stamp --check exit $?"
+
+echo "=== shared runner matches the dcard-v3 freeze digest ==="
+# RED at 353f3dd18: shared runner sha256 c693771066da10542fb6ecc1c239b1137f40403f920e07be4d06e3cf435398a1 != dcard-v3 freeze eb29cea61a05fdf9d6a41a04fbb0268840137bfe504324851b393a382ebcca1f (test exit 1). Same commit: stamp-prereg.js --row dcard-v3 --check rc=2, digest mismatch run-skill-onoff-eval.sh.
+python3 - "$BASE/run-skill-onoff-eval.sh" "$BASE/prereg/FROZEN.json" << 'PY' || fail "shared runner digest"
+import hashlib, json, sys
+digest = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
+frozen = json.load(open(sys.argv[2]))
+want = frozen["dcard-v3"]["files"]["run-skill-onoff-eval.sh"]
+if digest != want:
+    raise SystemExit(f"shared runner {digest} != dcard-v3 freeze {want}")
+PY
+
+echo "=== every FROZEN row that is ok at develop 778f39dee still checks ok ==="
+# Measured with stamp-prereg.js --row <row> --check on a worktree of 778f39dee.
+# Ok there: qs, qs-v2, qs-v3, dcard, dcard-v2, dcard-v3.
+# Not ok there: stage-graph-g67 (FROZEN row not stamped), stage-graph-g8
+# (digest mismatch: packs/manifest.json, run-skill-onoff-eval.sh,
+# run-skill-onoff-matrix.sh, stamp-prereg.js). gdorm is this branch's row.
+python3 - "$BASE" << 'PY' || fail "frozen row check"
+import json, os, subprocess, sys
+base = sys.argv[1]
+frozen = json.load(open(os.path.join(base, "prereg/FROZEN.json")))
+rows = []
+for key, val in frozen.items():
+    if not isinstance(val, dict) or not isinstance(val.get("files"), dict):
+        continue
+    if not val["files"] or not all(isinstance(h, str) and len(h) == 64 for h in val["files"].values()):
+        continue
+    if not os.path.isfile(os.path.join(base, "prereg", key + ".json")):
+        continue
+    rows.append(key)
+expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm"}
+env = os.environ.copy()
+env.pop("AUTOPILOT_SESSION_ID", None)
+env.pop("CLAUDE_CODE_SESSION_ID", None)
+bad = []
+for row in rows:
+    p = subprocess.run(
+        ["node", os.path.join(base, "stamp-prereg.js"), "--row", row, "--check"],
+        cwd=base, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+    )
+    ok = p.returncode == 0
+    if row in expect_ok and not ok:
+        bad.append(f"{row} rc={p.returncode} {(p.stderr or p.stdout).strip().splitlines()[-1:]}")
+    elif row not in expect_ok and ok:
+        bad.append(f"{row} unexpectedly ok")
+if bad:
+    raise SystemExit("; ".join(bad))
+PY
+
+echo "=== negative: one byte in a copy of the shared runner voids dcard-v3 ==="
+COPY="$TEST_TMP/skill-onoff-copy"
+rm -rf "$COPY"
+cp -a "$BASE" "$COPY"
+python3 - "$COPY/run-skill-onoff-eval.sh" << 'PY'
+import sys
+p = sys.argv[1]
+data = open(p, "rb").read()
+i = data.find(b"set -")
+if i < 0:
+    i = 0
+data = data[:i] + (b"#" if data[i:i+1] != b"#" else b"X") + data[i+1:]
+open(p, "wb").write(data)
+PY
+if env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+  node "$COPY/stamp-prereg.js" --row dcard-v3 --check --root "$COPY" < /dev/null >/dev/null 2>&1
+then
+  fail "mutated shared runner should make dcard-v3 --check fail"
+fi
 
 echo "gdorm stub tests passed"

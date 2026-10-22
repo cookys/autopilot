@@ -271,13 +271,6 @@ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
   chmod 600 "$SCRATCH_CONFIG/.credentials.json"
 fi
 printf '{"hasCompletedOnboarding":true}\n' > "$SCRATCH_HOME/.claude.json"
-# A task may ship seed-home.sh. It receives the scratch HOME and may write only
-# under that directory (gdorm-archive plants review_ledger_archive.dir there).
-# Absent => no-op. The real ~/.autopilot is never a seed target.
-if [ -x "$TASK_DIR/seed-home.sh" ]; then
-  bash "$TASK_DIR/seed-home.sh" "$SCRATCH_HOME"
-fi
-export ONOFF_CELL_HOME="$SCRATCH_HOME"
 
 # ── prompt: task.md VERBATIM — byte-identical across arms, no artifacts contract ──
 PROMPT_FILE="$OUT_DIR/prompt.md"
@@ -316,10 +309,6 @@ run_model_turn() {
       cd "$TEMP_REPO"
       export HOME="$SCRATCH_HOME"
       export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
-      # Config follows the scratch HOME. A caller-exported AUTOPILOT_CONFIG_FILE
-      # would point the cell at another home's config (the test harness file, or
-      # the operator file). gdorm-archive plants review_ledger_archive.dir here.
-      unset AUTOPILOT_CONFIG_FILE
       if [ -n "$resume" ]; then
         timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --resume "$resume" \
           --plugin-dir "$SCRATCH_PLUGIN" \
@@ -337,7 +326,6 @@ run_model_turn() {
       cd "$TEMP_REPO"
       export HOME="$SCRATCH_HOME"
       export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
-      unset AUTOPILOT_CONFIG_FILE
       export ONOFF_ARM="$ARM" ONOFF_TASK="$TASK_ID" ONOFF_PLUGIN_DIR="$SCRATCH_PLUGIN"
       export ONOFF_TURN="$turn_n"
       timeout "$TIMEOUT_LIMIT" "$ONOFF_STUB_BIN" "$prompt"
@@ -441,7 +429,6 @@ END_TIME=$(date +%s)
 # ── markers (deterministic; task-owned) ──
 MARKERS_OUT="$OUT_DIR/markers.env"
 set +e
-export ONOFF_OUT="$OUT_DIR" ONOFF_CELL_HOME="$SCRATCH_HOME"
 (
   cd "$TEMP_REPO"
   TRANSCRIPT="$TRANSCRIPT" TRANSCRIPT_TURN1="${TRANSCRIPT_TURN1:-}" TRANSCRIPT_TURN2="${TRANSCRIPT_TURN2:-}" \

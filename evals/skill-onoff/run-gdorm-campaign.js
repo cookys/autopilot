@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // run-gdorm-campaign.js — gdorm task-tree / qc-panel / ledger-archive campaign
-// (prereg/gdorm.json). Cells are serial and resumable via run-skill-onoff-matrix.sh.
+// (prereg/gdorm.json). Cells are serial and resumable via run-skill-onoff-matrix-gdorm.sh.
 //
 //   run-gdorm-campaign.js --results <file.jsonl> [--dry-run] [--check-arms]
 //       [--model sonnet] [--runner cc|stub] [--arms base,change] [--reps N]
@@ -216,7 +216,7 @@ for (const g of GROUPS) {
     die(`spend cap: spent ${money(spent).toFixed(2)} USD so far; next group ${g.task} [${g.arms.join(',')}] x ${g.reps} costs ${money(groupCost).toFixed(2)} USD; cap ${money(CAP).toFixed(2)} USD; refusing to dispatch`, 1);
   }
   console.log(`== task ${g.task}: [${g.arms.join(',')}] x ${g.reps}`);
-  const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix.sh'),
+  const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix-gdorm.sh'),
     '--model', model, '--reps', String(g.reps), '--results', path.resolve(resultsPath),
     '--tasks', g.task, '--arms', g.arms.join(','), '--runner', runner, '--arm-manifests', armsDir, '--check-skill', 'ceo-agent'], {
     stdio: 'inherit',

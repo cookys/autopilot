@@ -3,6 +3,8 @@
 # A marker is true only from a Bash tool_use in the transcript, or from a real
 # file in the cell. The agent's own prose never counts.
 # Requires: TRANSCRIPT, QUERY. Optional: ONOFF_OUT, ONOFF_CELL_HOME.
+# run-skill-onoff-eval-gdorm.sh exports both before this file runs. The shared
+# runner does not, so gdorm cells must use the gdorm runner.
 set -u
 
 gdorm_emit() { echo "marker_$1=$([ "$2" = true ] && echo true || echo false)"; }

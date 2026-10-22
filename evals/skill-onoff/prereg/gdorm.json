@@ -126,7 +126,8 @@
     "run-gdorm-campaign.js",
     "score-gdorm.js",
     "arms/gdorm",
-    "run-skill-onoff-eval.sh"
+    "run-skill-onoff-eval-gdorm.sh",
+    "run-skill-onoff-matrix-gdorm.sh"
   ],
   "freeze_packs": [
     "ceo-agent-gdorm-base778",

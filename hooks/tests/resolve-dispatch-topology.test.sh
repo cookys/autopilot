@@ -775,4 +775,39 @@ write_scorecard_row "gemini-x" "agy" "high" 90.0 "qualified" 2702 "reviewer"
 PATH="$CLAUDE_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer,plan_reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
 assert_eq "$(lad plan_review_panel)" "gemini-x/high@agy,claude-opus-5-5/high@claude-native" "Case 25: panel chair is the non-anthropic seat on an effort tie"
 
+# Case 26 (BL-0229): a recorded qoderclicn model the runner no longer lists is dropped at
+# derivation (stderr warning); a listing failure or empty listing fails open and keeps every seat.
+# RED at 8d2620ae4: stale seat kept: expected 'Qwen3.8-Max', got 'Qwen3.8-Max,qwen3.8-max-preview'; stderr lacked the dropped seat.
+QODER_BIN_DIR="$TEST_TMP/qoder-bin"
+mkdir -p "$QODER_BIN_DIR"
+write_qoder_stub() {
+  cat > "$QODER_BIN_DIR/qoderclicn" <<STUB
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--list-models" ]; then
+  $1
+fi
+exit 0
+STUB
+  chmod +x "$QODER_BIN_DIR/qoderclicn"
+}
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "Qwen3.8-Max" "qoderclicn" "high" 5.0 "qualified" 2801 "reviewer"
+write_scorecard_row "qwen3.8-max-preview" "qoderclicn" "high" 6.0 "qualified" 2802 "reviewer"
+qlad() { node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(t.reviewer_ladder.map(s=>s.engine).sort().join(","))' "$TOPOLOGY_OUT"; }
+
+write_qoder_stub 'printf "MODEL\nQwen3.8-Max\nDeepSeek-Flash\n"'
+QERR="$(PATH="$QODER_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" 2>&1 >/dev/null)"
+assert_eq "$(qlad)" "Qwen3.8-Max" "Case 26: retired qoder model is dropped, listed one kept (case-insensitive)"
+assert_contains "$QERR" "qwen3.8-max-preview" "Case 26: dropped seat is named on stderr"
+
+# negative control: listing command fails -> fail-open, both seats kept
+write_qoder_stub 'exit 1'
+PATH="$QODER_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(qlad)" "Qwen3.8-Max,qwen3.8-max-preview" "Case 26 (negative control): --list-models failure fails open"
+
+# negative control: empty listing -> fail-open
+write_qoder_stub 'printf ""'
+PATH="$QODER_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(qlad)" "Qwen3.8-Max,qwen3.8-max-preview" "Case 26 (negative control): empty listing fails open"
+
 finalize_test

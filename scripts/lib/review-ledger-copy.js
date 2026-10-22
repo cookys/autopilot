@@ -130,31 +130,43 @@ function readChain(ledgerDir, phaseName) {
   }
 }
 
-function generation1Timestamp(chain) {
-  const g1 = chain.find((e) => e && e.generation === 1);
-  if (!g1) throw new Error('chain.json has no generation 1 entry');
+function stampFromChain(g1) {
   const ts = g1.collected_at || g1.at;
-  if (typeof ts !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(ts)) {
-    throw new Error('generation 1 collected timestamp missing from chain.json');
-  }
-  return ts;
+  if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2}/.test(ts)) return ts;
+  return null;
 }
 
-function earliestCollect(ledgerDir) {
+// collected_at, then at, then g1/range.json mtime. range.json is written once at
+// collect and finalize does not rewrite it, so the mtime stays stable across
+// later generations. A missing stamp still throws the chain.json error.
+function generation1Timestamp(ledgerDir, phaseName, chain) {
+  const g1 = chain.find((e) => e && e.generation === 1);
+  if (!g1) throw new Error('chain.json has no generation 1 entry');
+  const fromChain = stampFromChain(g1);
+  if (fromChain) return fromChain;
+  const rangePath = path.join(ledgerDir, phaseName, 'g1', 'range.json');
+  try {
+    const mtimeMs = fs.statSync(rangePath).mtimeMs;
+    if (typeof mtimeMs === 'number' && Number.isFinite(mtimeMs)) {
+      return new Date(mtimeMs).toISOString();
+    }
+  } catch (_e) { /* no range.json */ }
+  throw new Error('generation 1 collected timestamp missing from chain.json');
+}
+
+function phaseStamps(ledgerDir) {
   const names = phaseNames(ledgerDir);
   if (names.length === 0) throw new Error('ledger has no review-<phase> directory');
-  let best = null;
-  for (const name of names) {
-    const ts = generation1Timestamp(readChain(ledgerDir, name));
-    if (best === null || ts < best) best = ts;
-  }
+  return names.map((name) => generation1Timestamp(ledgerDir, name, readChain(ledgerDir, name)));
+}
+
+function earliestStamp(stamps) {
+  let best = stamps[0];
+  for (const ts of stamps) if (ts < best) best = ts;
   return best;
 }
 
-function buildLedgerId(ledgerDir, repoDir) {
-  const sourceRealpath = fs.realpathSync(ledgerDir);
-  const ts = earliestCollect(sourceRealpath);
-  const bucket = repoBucket(repoDir);
+function idFromStamp(sourceRealpath, ts, bucket, repoDir) {
   const hash = crypto.createHash('sha1').update(sourceRealpath + ts).digest('hex').slice(0, 8);
   const date = ts.slice(0, 10);
   const month = ts.slice(0, 7);
@@ -166,6 +178,66 @@ function buildLedgerId(ledgerDir, repoDir) {
     ledgerId: `${date}-${bucket}-${hash}`,
     repoIdentity: repoIdentity(repoDir),
   };
+}
+
+// An existing archive for this source is reusable when its first_collect_at is
+// still the stamp of some phase now on disk. A chain reset rewrites g1/range.json
+// and no longer matches, so the caller mints a new id. A phase added later can
+// move the earliest stamp; matching the original stamp keeps the first id.
+function findReusable(archiveDir, bucket, sourceRealpath, stamps) {
+  const bucketDir = path.join(archiveDir, bucket);
+  let months;
+  try { months = fs.readdirSync(bucketDir); } catch (_e) { return null; }
+  const matches = [];
+  for (const month of months) {
+    if (month.startsWith('.')) continue;
+    const monthDir = path.join(bucketDir, month);
+    let st;
+    try { st = fs.statSync(monthDir); } catch (_e) { continue; }
+    if (!st.isDirectory()) continue;
+    let ids;
+    try { ids = fs.readdirSync(monthDir); } catch (_e) { continue; }
+    for (const ledgerId of ids) {
+      const metaPath = path.join(monthDir, ledgerId, 'archive.json');
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (_e) { continue; }
+      if (!meta || meta.source_realpath !== sourceRealpath) continue;
+      if (typeof meta.first_collect_at !== 'string') continue;
+      matches.push({
+        month,
+        ledgerId,
+        firstCollectAt: meta.first_collect_at,
+      });
+    }
+  }
+  if (matches.length === 0) return null;
+  const earliest = earliestStamp(stamps);
+  const exact = matches.find((m) => m.firstCollectAt === earliest);
+  if (exact) return exact;
+  const still = matches.filter((m) => stamps.includes(m.firstCollectAt));
+  if (still.length === 0) return null;
+  still.sort((a, b) => (a.firstCollectAt < b.firstCollectAt ? -1 : a.firstCollectAt > b.firstCollectAt ? 1 : 0));
+  return still[0];
+}
+
+function buildLedgerId(ledgerDir, repoDir, archiveDir) {
+  const sourceRealpath = fs.realpathSync(ledgerDir);
+  const stamps = phaseStamps(sourceRealpath);
+  const bucket = repoBucket(repoDir);
+  if (archiveDir) {
+    const reused = findReusable(archiveDir, bucket, sourceRealpath, stamps);
+    if (reused) {
+      return {
+        sourceRealpath,
+        firstCollectAt: reused.firstCollectAt,
+        bucket,
+        month: reused.month,
+        ledgerId: reused.ledgerId,
+        repoIdentity: repoIdentity(repoDir),
+      };
+    }
+  }
+  return idFromStamp(sourceRealpath, earliestStamp(stamps), bucket, repoDir);
 }
 
 function mkdirPrivate(dir) {
@@ -317,9 +389,30 @@ function copyLedger(opts) {
   if (!cfg.dir) return { copied: false };
   if (!o.ledgerDir) throw new Error('ledgerDir is required');
   if (!o.repoDir) throw new Error('repoDir is required');
-  const id = buildLedgerId(o.ledgerDir, o.repoDir);
-  const dest = path.join(cfg.dir, id.bucket, id.month, id.ledgerId);
   mkdirPrivate(cfg.dir);
+  // The per-ledger-id lock cannot cover id selection: two phases can compute
+  // different ids before either archive.json exists. A short lock named by the
+  // source realpath hash serializes that lookup, and the chosen archive.json is
+  // published before the lock is released so the next copy reuses it.
+  const sourceRealpath = fs.realpathSync(o.ledgerDir);
+  const sourceKey = crypto.createHash('sha1').update(sourceRealpath).digest('hex').slice(0, 16);
+  const sourceLock = path.join(cfg.dir, '.source-locks', `${sourceKey}.lock`);
+  let id;
+  withLedgerLock(sourceLock, () => {
+    id = buildLedgerId(o.ledgerDir, o.repoDir, cfg.dir);
+    const reserved = path.join(cfg.dir, id.bucket, id.month, id.ledgerId, 'archive.json');
+    if (!fs.existsSync(reserved)) {
+      const stub = {
+        source_realpath: id.sourceRealpath,
+        repo_identity: id.repoIdentity,
+        first_collect_at: id.firstCollectAt,
+        imported_from: null,
+        tool_version: toolVersion(),
+      };
+      writeAtomic(reserved, JSON.stringify(stub, null, 2) + '\n');
+    }
+  });
+  const dest = path.join(cfg.dir, id.bucket, id.month, id.ledgerId);
   const selected = o.phases
     ? o.phases.map((p) => (String(p).startsWith('review-') ? String(p) : `review-${p}`))
     : phaseNames(id.sourceRealpath);

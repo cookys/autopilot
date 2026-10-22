@@ -5,6 +5,9 @@
 # RED at d585f6027d8e29fce8349a3bda1f05ea439f6f46: finalize ignores
 # AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR (k/m/n write no archive.json), and the
 # try/catch and require markers are absent so o and p cannot patch the loop.
+# RED at 9291adb33678d22a13f3162d751ff1b07793c63f: a real-shaped chain.json
+# (no collected_at, no at) fails copy, import, and finalize with
+# "generation 1 collected timestamp missing from chain.json".
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -43,6 +46,47 @@ EOF
   printf '%s\n' '{"base":"aaa","head":"bbb"}' > "$dest/review-$phase/g1/range.json"
   printf '%s\n' 'DIFF' > "$dest/review-$phase/g1/diff.txt"
   printf '%s\n' "{\"phase\":\"$phase\"}" > "$dest/receipt-$phase.json"
+}
+
+# Real hetero-review chain.json: no collected_at and no at. The date comes from
+# g1/range.json mtime (touch -d), which collect writes once and finalize does not.
+make_real_ledger() {
+  local dest="$1" phase="$2" when="$3"
+  mkdir -p "$dest/review-$phase/g1"
+  cat > "$dest/review-$phase/chain.json" <<EOF
+[
+  {
+    "generation": 1,
+    "base": "aaa",
+    "head": "bbb",
+    "seats": ["s0"],
+    "reviewed_seats": ["s0"],
+    "total_seats": 1,
+    "reviewed_seats_count": 1,
+    "total_seats_count": 1,
+    "status": "pending",
+    "diff_sha256": "ab",
+    "full_range_sha256": "cd",
+    "findings_sha256": "ef",
+    "seat_artifact_sha256": "01",
+    "dispositions_path": "g1/dispositions.json",
+    "dispositions_sha256": "23"
+  }
+]
+EOF
+  printf '%s\n' '{"findings":[]}' > "$dest/review-$phase/g1/findings.json"
+  printf '%s\n' '{"dispositions":[]}' > "$dest/review-$phase/g1/dispositions.json"
+  printf '%s\n' '{"seat":"s0"}' > "$dest/review-$phase/g1/seat-s0.json"
+  printf '%s\n' '{"base":"aaa","head":"bbb"}' > "$dest/review-$phase/g1/range.json"
+  printf '%s\n' 'DIFF' > "$dest/review-$phase/g1/diff.txt"
+  printf '%s\n' "{\"phase\":\"$phase\"}" > "$dest/receipt-$phase.json"
+  touch -d "$when" "$dest/review-$phase/g1/range.json"
+  node -e '
+    const fs = require("fs");
+    const chain = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const g1 = chain.find((e) => e && e.generation === 1);
+    if (!g1 || "collected_at" in g1 || "at" in g1) process.exit(11);
+  ' "$dest/review-$phase/chain.json"
 }
 
 add_generation() {
@@ -485,5 +529,93 @@ unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+
+# Real-shaped chain.json (no collected_at / at). Ledger-id date is range.json mtime.
+REAL_WHEN="2026-01-20T08:09:10Z"
+
+# (q) copyLedger
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-q"
+LEDGER_Q="$TEST_TMP/ledger-q"
+make_real_ledger "$LEDGER_Q" alpha "$REAL_WHEN"
+DEST_Q=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_Q" "$REPO")
+assert_exit_code "$?" "0" "case q: copyLedger exits 0"
+assert_file_exists "$DEST_Q/archive.json" "case q: archive.json"
+assert_file_exists "$DEST_Q/review-alpha/chain.json" "case q: review-alpha/chain.json"
+REL_Q=${DEST_Q#"$TEST_TMP/archive-q/"}
+case "$REL_Q" in
+  */2026-01/2026-01-20-*) ;;
+  *) fail "case q: ledger-id date prefix is not the range.json mtime: $REL_Q" ;;
+esac
+node -e '
+  const fs = require("fs");
+  const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  if (!j.first_collect_at || !j.first_collect_at.startsWith("2026-01-20")) process.exit(12);
+' "$DEST_Q/archive.json"
+assert_exit_code "$?" "0" "case q: first_collect_at matches range.json mtime"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (r) import CLI
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-r"
+LEDGER_R="$TEST_TMP/ledger-r"
+make_real_ledger "$LEDGER_R" alpha "$REAL_WHEN"
+IMP_R=$(node "$CLI" import --ledger "$LEDGER_R" --repo "$REPO")
+assert_exit_code "$?" "0" "case r: import exits 0"
+DEST_R=$(printf '%s\n' "$IMP_R" | tail -1)
+assert_file_exists "$DEST_R/archive.json" "case r: archive.json"
+REL_R=${DEST_R#"$TEST_TMP/archive-r/"}
+case "$REL_R" in
+  */2026-01/2026-01-20-*) ;;
+  *) fail "case r: ledger-id date prefix is not the range.json mtime: $REL_R" ;;
+esac
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (s) finalize
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-s"
+LEDGER_S="$TEST_TMP/ledger-s"
+make_real_ledger "$LEDGER_S" ps "$REAL_WHEN"
+write_fin_disp "$TEST_TMP/disp-s.json" ps
+node "$LOOP" finalize --repo-root "$REPO" --ledger "$LEDGER_S" --phase ps --generation 1 --dispositions "$TEST_TMP/disp-s.json" >"$TEST_TMP/s.out" 2>"$TEST_TMP/s.err"
+assert_exit_code "$?" "0" "case s: finalize exits 0"
+S_META=$(find "$TEST_TMP/archive-s" -name archive.json)
+assert_file_exists "$S_META" "case s: archive.json"
+S_REL=${S_META#"$TEST_TMP/archive-s/"}
+case "$S_REL" in
+  */2026-01/2026-01-20-*/archive.json) ;;
+  *) fail "case s: ledger-id date prefix is not the range.json mtime: $S_REL" ;;
+esac
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (t) two phases, one source path. The second phase is added later with an earlier
+# range.json mtime. Both copies land in the ledger-id chosen by the first copy.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-t"
+LEDGER_T="$TEST_TMP/ledger-t"
+make_real_ledger "$LEDGER_T" alpha "2026-02-02T00:00:00Z"
+DEST_T1=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],phases:["alpha"]}).dest);' "$LIB" "$LEDGER_T" "$REPO")
+make_real_ledger "$LEDGER_T" beta "2026-01-15T00:00:00Z"
+DEST_T2=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],phases:["beta"]}).dest);' "$LIB" "$LEDGER_T" "$REPO")
+assert_eq "$DEST_T1" "$DEST_T2" "case t: later phase reuses the first ledger-id"
+T_IDS=$(find "$TEST_TMP/archive-t" -mindepth 3 -maxdepth 3 -type d | grep -v '/\.source-locks/' | grep -c . || true)
+assert_eq "$T_IDS" "1" "case t: one ledger-id directory"
+assert_file_exists "$DEST_T1/review-alpha/chain.json" "case t: alpha chain"
+assert_file_exists "$DEST_T1/review-beta/chain.json" "case t: beta chain"
+case "$DEST_T1" in
+  */2026-02/2026-02-02-*) ;;
+  *) fail "case t: reused id is not the first phase mtime: $DEST_T1" ;;
+esac
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (u) chain reset: same ledger path, g1/range.json mtime changed, different ledger-id.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-u"
+LEDGER_U="$TEST_TMP/ledger-u"
+make_real_ledger "$LEDGER_U" alpha "2026-03-03T00:00:00Z"
+DEST_U1=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_U" "$REPO")
+touch -d "2026-04-04T00:00:00Z" "$LEDGER_U/review-alpha/g1/range.json"
+DEST_U2=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_U" "$REPO")
+assert_neq "$DEST_U1" "$DEST_U2" "case u: range.json mtime change yields a new ledger-id"
+case "$DEST_U2" in
+  */2026-04/2026-04-04-*) ;;
+  *) fail "case u: new id date prefix is not the new mtime: $DEST_U2" ;;
+esac
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 
 finalize_test

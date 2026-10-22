@@ -636,8 +636,11 @@ const {
 const artifact = JSON.parse(fs.readFileSync(
   path.join(root, 'references/official-qualification-defaults.json'), 'utf8',
 ));
+// Pinned seat (BL-0257 notes 7 and 8): select by engine, runner, role and effort, not "first qualified".
+const PIN = { engine: 'claude-sonnet-5-5', runner: 'claude-native', role: 'consult', effort: 'high' };
 const src = artifact.defaults.find((d) => d.row && d.row.evidence
-  && d.row.status === 'qualified' && d.capability_evidence);
+  && d.row.status === 'qualified' && d.capability_evidence
+  && Object.keys(PIN).every((k) => d.row[k] === PIN[k]));
 if (!src) { process.stdout.write('NO_FIXTURE'); process.exit(0); }
 
 // Reuse the source administration's own TTL: it already passed the per-role expiry ceiling
@@ -685,12 +688,24 @@ const out = execFileSync('node', [ESC, 'seat-status',
   '--engine', row.engine, '--runner', row.runner, '--role', row.role,
   ...(row.effort === undefined ? [] : ['--effort', row.effort])], { env, encoding: 'utf8' });
 const projection = JSON.parse(out);
-process.stdout.write(`${projection.admission_status}:${projection.baseline_event_id}`);
+process.stdout.write(`${projection.admission_status}:${projection.baseline_event_id}:`
+  + `${row.engine}/${row.runner}/${row.role}/${row.effort}`);
 NODE
 )
-[ "$RECEIPT_OUT" = "qualified:1" ] \
+[ "${RECEIPT_OUT%:*}" = "qualified:1" ] \
   && ok "instant2: an evidence receipt issued later TODAY reads qualified with a baseline under the DEFAULT clock (was no_record / baseline null)" \
-  || bad "instant2: expected 'qualified:1', got '$RECEIPT_OUT'"
+  || bad "instant2: expected 'qualified:1:<seat>', got '$RECEIPT_OUT'"
+
+# RED at 4a6d7eba7: FAIL instant2-seat: expected the fixture seat to be claude-sonnet-5-5/claude-native/consult/high, got 'qualified:1' (28 passed, 1 failed)
+# instant2 seat pin (BL-0257 notes 7 and 8). The fixture used to take "the first qualified
+# default" of the shipped artifact, so which engine/runner/role it exercised was whatever
+# happened to sort first, and nothing checked it. It now names its seat and reports the seat
+# it actually recorded and queried; both must equal the pinned seat.
+INSTANT2_SEAT='claude-sonnet-5-5/claude-native/consult/high'
+case "$RECEIPT_OUT" in
+  *":$INSTANT2_SEAT") ok "instant2-seat: the receipt fixture exercised the pinned seat $INSTANT2_SEAT" ;;
+  *) bad "instant2-seat: expected the fixture seat to be $INSTANT2_SEAT, got '$RECEIPT_OUT'" ;;
+esac
 
 # (b) A strike written later the SAME UTC day as the read must COUNT. Under the
 # truncated clock foldSeatStrikes' `observedMs <= nowMs` window ended at

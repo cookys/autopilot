@@ -2266,16 +2266,6 @@
       "content_hash": "31a5dea10773b1247b0c690ac12e00a8cd27ba7f03f2b251a445efdcf536d96b",
       "disposition": "removed",
       "rationale": "P0 skills/ceo-agent/SKILL.md:501 ('| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.js fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event;'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
-    },
-    {
-      "content_hash": "fe9866ee9798d6b47b993f95d77bc9040161e146dd033b6d597d55669f381bc7",
-      "disposition": "removed",
-      "rationale": "P0 skills/ceo-agent/SKILL.md:502 ('| Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
-    },
-    {
-      "content_hash": "c5ca3facc5aca29a1def084d3245416c5e2661f81a504c3b3642f7b39e0fc3bf",
-      "disposition": "removed",
-      "rationale": "P0 skills/ceo-agent/SKILL.md:503 ('| Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
     }
   ]
 }

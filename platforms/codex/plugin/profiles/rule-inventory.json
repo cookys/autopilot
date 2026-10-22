@@ -22,7 +22,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "d7ab0f328b02e46107a837f460f5a0cff369dd2b3d6215d56c954a1bbc575983",
+      "sha256": "5af5650e66525e32925e71acd91104cabd232cdde084adbc850bbeb7affd894a",
       "segments": [
         {
           "id": "ceo.discovery-routing",
@@ -231,50 +231,50 @@
         {
           "id": "ceo.profile-projection-core",
           "category": "core",
-          "start_line": 428,
-          "end_line": 432
+          "start_line": 430,
+          "end_line": 434
         },
         {
           "id": "ceo.profile-guided-slice",
           "category": "guided",
-          "start_line": 433,
-          "end_line": 434
-        },
-        {
-          "id": "ceo.profile-autonomous-objective",
-          "category": "autonomous",
           "start_line": 435,
           "end_line": 436
         },
         {
+          "id": "ceo.profile-autonomous-objective",
+          "category": "autonomous",
+          "start_line": 437,
+          "end_line": 438
+        },
+        {
           "id": "ceo.profile-session-invariant",
           "category": "core",
-          "start_line": 437,
-          "end_line": 444
+          "start_line": 439,
+          "end_line": 446
         },
         {
           "id": "ceo.profile-runtime-lane",
           "category": "topology",
-          "start_line": 445,
-          "end_line": 445
+          "start_line": 447,
+          "end_line": 447
         },
         {
           "id": "ceo.profile-runtime-evidence",
           "category": "assurance",
-          "start_line": 446,
-          "end_line": 447
+          "start_line": 448,
+          "end_line": 449
         },
         {
           "id": "ceo.profile-runtime-compatibility",
           "category": "topology",
-          "start_line": 448,
-          "end_line": 451
+          "start_line": 450,
+          "end_line": 453
         },
         {
           "id": "ceo.mission-routing",
           "category": "topology",
-          "start_line": 452,
-          "end_line": 472
+          "start_line": 454,
+          "end_line": 474
         }
       ]
     },

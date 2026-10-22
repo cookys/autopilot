@@ -461,6 +461,8 @@ The task tree is dormant: do not run `scripts/tree.js`. See docs/adr/0002-task-t
 | Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
 | Absorb external OSS / prior art design without crediting source | The `intent` audit `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
 | Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow's intent-node skill routing enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every M/L/XL dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |
+| Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
+| Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
 
 ## Capability-adaptive projection (shadow)
 

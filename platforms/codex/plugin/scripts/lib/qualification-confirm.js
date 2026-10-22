@@ -73,13 +73,21 @@ function confirmationShape(line) {
   return typeof seat.effort === 'string' || seat.effort === null;
 }
 
+// The same corrupt-store message is written once per process, not once per row checked.
+const warned = new Set();
+function warnOnce(message) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  process.stderr.write(message);
+}
+
 function readConfirmations(cacheDir) {
   const file = confirmationsPath(cacheDir);
   let text;
   try {
     const stat = fs.lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile()) {
-      process.stderr.write(
+      warnOnce(
         `qualification-feed confirmations: skipped 1 line (${file} is not a regular file); no confirmations\n`,
       );
       return [];
@@ -87,7 +95,7 @@ function readConfirmations(cacheDir) {
     text = fs.readFileSync(file, 'utf8');
   } catch (error) {
     if (error && error.code === 'ENOENT') return [];
-    process.stderr.write(
+    warnOnce(
       `qualification-feed confirmations: skipped 1 line (${file} unreadable: ${error.code || error.message}); no confirmations\n`,
     );
     return [];
@@ -108,7 +116,7 @@ function readConfirmations(cacheDir) {
     }
   }
   if (skipped > 0) {
-    process.stderr.write(
+    warnOnce(
       `qualification-feed confirmations: skipped ${skipped} line(s) in ${file}\n`,
     );
   }
@@ -263,7 +271,11 @@ function answer(opts) {
   return withWriteLock(feedLock(cacheDir), () => {
     const batch = lookupBatch(cacheDir, cardId);
     if (!batch) return { ok: false, usage: true, reason: `unknown card id ${cardId}` };
-    const already = readBatches(cacheDir).some((line) => line.batch_id === batch.batch_id && (line.decision === 'confirm' || line.decision === 'rejected'));
+    const prior = readBatches(cacheDir).find((line) => line.batch_id === batch.batch_id && (line.decision === 'confirm' || line.decision === 'rejected'));
+    const already = Boolean(prior);
+    if (decision === 'confirm' && prior && prior.decision === 'rejected') {
+      return { ok: false, reason: `card ${cardId} was already rejected; a rejected batch cannot be confirmed`, card_id: cardId, batch_id: batch.batch_id };
+    }
     if (decision === 'confirm' && !already) {
       const fresh = [];
       for (const row of batch.rows) {

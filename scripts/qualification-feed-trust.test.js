@@ -20,6 +20,10 @@
 // rejected-row-not-reasked: the later card still listed the rejected implementer row. Reverted.
 // rejected-row-changed-digest-reasked: the changed-digest row was not the only row on the next card. Reverted.
 //
+// # RED at 3c2d3207ce9f67cec9e1a95eabfe194c133e7a71:
+// confirm-after-reject-fails-loud: confirm after reject exited 0 (expected 1). Reverted.
+// corrupt-confirmations-stderr-once-per-process: sync repeated the skipped-line message once per pending row (3 !== 1). Reverted.
+//
 // BL-0194 P6 stage C. Temp HOME, temp feed cache, temp git repo, temp
 // ENGINE_CAPABILITY_DIR. No network. No adopt command.
 
@@ -694,4 +698,39 @@ test('rejected-row-changed-digest-reasked', () => {
   const newest = opened[opened.length - 1];
   assert.equal(newest.rows.length, 1);
   assert.equal(newest.rows[0].record_id, 'aa'.repeat(32));
+});
+
+test('confirm-after-reject-fails-loud', () => {
+  const doc = baseDoc();
+  const { home, cacheDir } = homeWith(doc);
+  const env = childEnv(home);
+  const cwd = gitRepo();
+  assert.equal(runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd).status, 0);
+  const card = decisionCount(env, cwd)[0].id;
+  const args = (decision) => ['answer', '--card', card, '--decision', decision, '--feed-cache-dir', cacheDir, '--cwd', cwd];
+  assert.equal(runTrust(env, args('reject'), cwd).status, 0);
+  const late = runTrust(env, args('confirm'), cwd);
+  assert.equal(late.status, 1, late.stdout);
+  assert.match(late.stderr, /already rejected/);
+  assert.equal(confirmLines(cacheDir).length, 0);
+  // Repeating the same decision stays an idempotent ok.
+  assert.equal(runTrust(env, args('reject'), cwd).status, 0);
+});
+
+test('corrupt-confirmations-stderr-once-per-process', () => {
+  const doc = baseDoc();
+  const seed = qualEntry(doc);
+  doc.seat_metrics = doc.seat_metrics.filter((entry) => entry.kind !== 'qualification').concat([
+    withSeat(seed, 'reviewer', 'default', 'aa'.repeat(32), { window_end: '2026-10-12T10:00:00Z' }),
+    withSeat(seed, 'implementer', 'low', 'bb'.repeat(32), { window_end: '2026-10-12T11:00:00Z' }),
+    withSeat(seed, 'planner', 'low', 'dd'.repeat(32), { window_end: '2026-10-12T13:00:00Z' }),
+  ]);
+  const { home, cacheDir } = homeWith(doc);
+  fs.writeFileSync(path.join(cacheDir, 'confirmations.jsonl'), 'garbage line\n');
+  const env = childEnv(home);
+  const cwd = gitRepo();
+  const synced = runTrust(env, ['sync', '--feed-cache-dir', cacheDir, '--cwd', cwd], cwd);
+  assert.equal(synced.status, 0, synced.stderr);
+  const hits = synced.stderr.split('\n').filter((l) => /skipped 1 line/.test(l));
+  assert.equal(hits.length, 1, synced.stderr);
 });

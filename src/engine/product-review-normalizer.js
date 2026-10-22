@@ -26,7 +26,15 @@ function validFinding(value) {
     && value.source.trim().length > 0;
 }
 
-function result(status, findings = [], reason = null) {
+// BL-0226: the ONLY withdrawal signal is this fixed claim prefix (case-sensitive). A reviewer's
+// free-form "withdrawn" prose is self-report (ADR-0001) and is never honoured. A marked finding
+// leaves the live set (so a reused id is not a duplicate) but is kept as `advisory`, never verified.
+const REVOKED_MARKER = /^REVOKED:/;
+function isRevoked(finding) {
+  return REVOKED_MARKER.test(finding.claim);
+}
+
+function result(status, findings = [], reason = null, advisory = []) {
   const canonical = status === 'normalized' ? JSON.stringify(findings) : null;
   return {
     status,
@@ -34,6 +42,7 @@ function result(status, findings = [], reason = null) {
     findings,
     canonical,
     digest: canonical === null ? null : canonicalDigest(findings),
+    ...(advisory.length > 0 ? { advisory } : {}),
   };
 }
 
@@ -41,14 +50,16 @@ function normalizeStructured(value) {
   if (!Array.isArray(value) || !value.every(validFinding)) {
     return result('invalid', [], 'product review JSON must be an exact finding array');
   }
+  const live = value.filter((finding) => !isRevoked(finding)); // guard:revoked_filter
+  const advisory = value.filter(isRevoked).map((finding) => ({ ...finding }));
   const seen = new Set();
-  for (const finding of value) {
+  for (const finding of live) {
     if (seen.has(finding.finding_id)) {
       return result('invalid', [], `duplicate product review finding ${finding.finding_id}`);
     }
     seen.add(finding.finding_id);
   }
-  return result('normalized', value.map((finding) => ({ ...finding })));
+  return result('normalized', live.map((finding) => ({ ...finding })), null, advisory);
 }
 
 function normalizeProductReviewFindings(raw) {

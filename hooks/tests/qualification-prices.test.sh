@@ -155,6 +155,14 @@ for cw in usd_per_mtok_cache_write_5m_micro usd_per_mtok_cache_write_1h_micro; d
   reject_names "$cw string" "d => { d.rows[2].$cw = '5'; }" "rows[2].$cw"
   reject_names "$cw at 2^53" "d => { d.rows[2].$cw = 9007199254740992; }" "rows[2].$cw"
 done
+# BL-0266: the fall-through to validatePrices keys on the preflight's unsafe-integer error class
+# (UNSUPPORTED_JSON_NUMBER, integer literal), not on the literal 9007199254740992.
+# RED at c9b1d554699a874a321538317eb56a61fd386687:
+# error did not name rows[2].usd_per_mtok_cache_write_5m_micro for 18014398509481984 (149 checks, 148 passed, 1 failed).
+# Note: JS serialises 9007199254740993 as ...992, so only a value above 2^53 exercises the new path.
+for big in 18014398509481984; do
+  reject_names "cache_write_5m at $big" "d => { d.rows[2].usd_per_mtok_cache_write_5m_micro = $big; }" "rows[2].usd_per_mtok_cache_write_5m_micro"
+done
 accept_doc "per-row unknown field ignored" "d => { d.rows[2].future_field = -1; }"
 accept_doc "top-level unknown field ignored" "d => { d.future_field = { bad: true }; }"
 accept_doc "old cache_write name ignored even when invalid" "d => { d.rows[2].usd_per_mtok_cache_write_micro = -1; }"

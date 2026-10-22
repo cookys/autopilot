@@ -2279,7 +2279,7 @@ assert_contains "$ER_OUT" "empty review range" "empty-range: the refusal names t
 assert_file_absent "$LEDGER/review-p_er/g1" "empty-range: no generation directory is left behind"
 assert_file_absent "$LEDGER/review-p_er/chain.json" "empty-range: no chain entry is recorded"
 ER_X="$TEST_TMP/er_excl_repo"; mkdir -p "$ER_X/generated"
-( cd "$ER_X" && git init -q && git config user.email t@e.com && git config user.name T && echo a > generated/g.txt && git add . && git commit -q -m b \
+( cd "$ER_X" && git init -q && git config user.email "test@example.com" && git config user.name "Test User" && echo a > generated/g.txt && git add . && git commit -q -m b \
   && git checkout -q -b work && echo b >> generated/g.txt && git commit -q -am w )
 ER_XB=$(git -C "$ER_X" rev-parse HEAD~1)
 ER2_OUT=$(node "$SCRIPT" collect --repo-root "$ER_X" --ledger "$LEDGER" --phase p_er2 --generation 1 --branch work --phase-base "$ER_XB" --exclude "generated/**" --seats "m1/low@codex" 2>&1); ER2_RC=$?

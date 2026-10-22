@@ -75,13 +75,33 @@ resolve_config_ladder() {
   fi
 }
 
+# config_visible_lines <config_path>: the file with HTML comments (<!-- ... -->, multi-line or
+# inline) removed, so a `key:` line inside an explanatory comment is never read as a setting.
+config_visible_lines() {
+  awk '{
+    line = $0; out = ""
+    while (1) {
+      if (inc) {
+        i = index(line, "-->")
+        if (!i) { line = ""; break }
+        line = substr(line, i + 3); inc = 0
+      } else {
+        i = index(line, "<!--")
+        if (!i) { out = out line; break }
+        out = out substr(line, 1, i - 1); line = substr(line, i + 4); inc = 1
+      }
+    }
+    print out
+  }' "$1" 2>/dev/null
+}
+
 # read_field <config_path> <key> <default> [--whitespace-empty]
 read_field() {
   local config_path="$1" key="$2" def="$3" flag="${4:-}"
   local val=""
 
   if [[ -n "$config_path" && -r "$config_path" ]]; then
-    val="$(grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$config_path" 2>/dev/null \
+    val="$(config_visible_lines "$config_path" | grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" 2>/dev/null \
             | head -1 | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
             | sed -E 's/[[:space:]]+$//')"
   fi

@@ -278,12 +278,12 @@ resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "bui
 config_has_field() {
   local config_path="$1" key="$2"
   [[ -n "$config_path" && -r "$config_path" ]] || return 1
-  grep -qiE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$config_path"
+  config_visible_lines "$config_path" | grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" >/dev/null
 }
 
 read_explicit_field() {
   local config_path="$1" key="$2"
-  grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$config_path" 2>/dev/null \
+  config_visible_lines "$config_path" | grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" 2>/dev/null \
     | head -1 \
     | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
     | sed -E 's/[[:space:]]+$//'

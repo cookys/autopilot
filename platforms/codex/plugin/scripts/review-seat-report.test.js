@@ -209,8 +209,8 @@ test('1 multi-family counts every column', () => {
       verified_critical: 1,
       verified_major: 0,
       exclusive_verified: 2,
-      phases: 3,
-      generations: 3,
+      phases: 1,
+      generations: 1,
       seat_failures: 1,
     },
     scope: {
@@ -220,6 +220,10 @@ test('1 multi-family counts every column', () => {
       aborted_skipped: 0,
       pending_skipped: 0,
       corrupt_skipped: 0,
+      aborted_skipped_findings: 0,
+      pending_skipped_findings: 0,
+      distinct_phases: 1,
+      distinct_generations: 1,
     },
   });
 });
@@ -538,4 +542,143 @@ test('12c assertReportMatches rejects an all-zero stub', () => {
     groups: [{ family: 'anthropic', findings: 2, verified: 1 }],
     totals: { findings: 4 },
   }));
+});
+
+// Distinct TOTAL phases/gens are the union across families, so they are smaller
+// than the sum of the per-group Phases and Gens columns.
+function assertDistinctPhaseGens(report) {
+  assert.ok(report && report.totals && Array.isArray(report.groups), 'report');
+  const sumPhases = report.groups.reduce((sum, row) => sum + row.phases, 0);
+  const sumGens = report.groups.reduce((sum, row) => sum + row.generations, 0);
+  assert.ok(sumPhases > report.totals.phases, `phases ${report.totals.phases} not below group sum ${sumPhases}`);
+  assert.ok(sumGens > report.totals.generations, `gens ${report.totals.generations} not below group sum ${sumGens}`);
+  assert.strictEqual(report.totals.phases, report.scope.distinct_phases);
+  assert.strictEqual(report.totals.generations, report.scope.distinct_generations);
+}
+
+function totalCells(text) {
+  const line = text.split('\n').find((row) => row.startsWith('TOTAL'));
+  assert.ok(line, 'TOTAL row');
+  return line.trim().split(/\s{2,}/);
+}
+
+// # RED at 10e110bb8: 13a totals.phases 2 === group sum (distinct_phases undefined);
+// 13b scope lacks pending_skipped_findings and corrupt_phases; footer has no finding counts.
+test('13a one phase reviewed by two families has distinct TOTAL phases and gens', () => {
+  const { buildReport, formatText } = load();
+  const dir = tmp();
+  const home = tmp();
+  const phase = path.join(dir, 'review-shared');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [
+      finding('s1', 'Major', 's0', '[shared] one'),
+      finding('s2', 'Minor', 's1', '[shared] two'),
+    ],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), {
+    findings: [disp('s1', 'verified'), disp('s2', 'refuted')],
+  });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('claude-opus-4'));
+  writeJson(path.join(phase, 'g1', 'seat-s1.json'), seat('gpt-5'));
+
+  const report = buildReport([dir], {});
+  assert.strictEqual(report.groups.length, 2);
+  assert.strictEqual(report.groups[0].phases + report.groups[1].phases, 2);
+  assert.strictEqual(report.groups[0].generations + report.groups[1].generations, 2);
+  assert.strictEqual(report.totals.phases, 1);
+  assert.strictEqual(report.totals.generations, 1);
+  assertDistinctPhaseGens(report);
+
+  const text = formatText(report);
+  const cells = totalCells(text);
+  assert.strictEqual(cells[cells.length - 3], '1');
+  assert.strictEqual(cells[cells.length - 2], '1');
+
+  const cli = runCli(['--ledger', dir, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  assert.strictEqual(parsed.totals.phases, 1);
+  assert.strictEqual(parsed.totals.generations, 1);
+  assert.strictEqual(parsed.scope.distinct_phases, 1);
+  assert.strictEqual(parsed.scope.distinct_generations, 1);
+  assertDistinctPhaseGens(parsed);
+
+  const summed = {
+    ...report,
+    totals: {
+      ...report.totals,
+      phases: report.groups.reduce((sum, row) => sum + row.phases, 0),
+      generations: report.groups.reduce((sum, row) => sum + row.generations, 0),
+    },
+  };
+  assert.throws(() => assertDistinctPhaseGens(summed));
+});
+
+test('13b skipped finding counts and corrupt phase names', () => {
+  const { buildReport, formatText } = load();
+  const dir = tmp();
+  const home = tmp();
+  const phase = path.join(dir, 'review-mixed');
+  writeJson(path.join(phase, 'chain.json'), [
+    chainEntry(1, 'finalized'),
+    chainEntry(2, 'pending'),
+    chainEntry(3, 'aborted'),
+  ]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('ok', 'Minor', 's0', '[ok] kept')],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('ok', 'verified')] });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('claude-opus-4'));
+  writeJson(path.join(phase, 'g2', 'findings.json'), {
+    findings: [
+      finding('p1', 'Major', 's0', '[pend] a'),
+      finding('p2', 'Major', 's0', '[pend] b'),
+    ],
+  });
+  writeJson(path.join(phase, 'g3', 'findings.json'), {
+    findings: [
+      finding('a1', 'Critical', 's0', '[ab] a'),
+      finding('a2', 'Critical', 's0', '[ab] b'),
+      finding('a3', 'Minor', 's0', '[ab] c'),
+    ],
+  });
+  const corruptName = 'review-bl0044-g1-aborted-allowlist';
+  fs.mkdirSync(path.join(dir, corruptName), { recursive: true });
+  fs.writeFileSync(path.join(dir, corruptName, 'chain.json'), '{ not json');
+
+  const report = buildReport([dir], {});
+  assert.strictEqual(report.scope.pending_skipped, 1);
+  assert.strictEqual(report.scope.pending_skipped_findings, 2);
+  assert.strictEqual(report.scope.aborted_skipped, 1);
+  assert.strictEqual(report.scope.aborted_skipped_findings, 3);
+  assert.strictEqual(report.scope.corrupt_skipped, 1);
+  assert.deepStrictEqual(report.scope.corrupt_phases, [corruptName]);
+  assert.strictEqual(report.scope.ledgers_read, 1);
+  assert.strictEqual(report.scope.phases_read, 1);
+
+  const text = formatText(report);
+  assert.match(text, /pending skipped 1 \(2 findings\)/);
+  assert.match(text, /aborted skipped 1 \(3 findings\)/);
+  assert.match(text, /corrupt skipped 1 \(review-bl0044-g1-aborted-allowlist\)/);
+
+  const cli = runCli(['--ledger', dir, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  assert.strictEqual(parsed.scope.pending_skipped_findings, 2);
+  assert.strictEqual(parsed.scope.aborted_skipped_findings, 3);
+  assert.deepStrictEqual(parsed.scope.corrupt_phases, [corruptName]);
+
+  const onlyGood = tmp();
+  const good = path.join(onlyGood, 'review-clean');
+  writeJson(path.join(good, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(good, 'g1', 'findings.json'), {
+    findings: [finding('c', 'Minor', 's0', '[c] t')],
+  });
+  writeJson(path.join(good, 'g1', 'seat-s0.json'), seat('gpt-5'));
+  const zero = formatText(buildReport([onlyGood], {}));
+  assert.match(zero, /pending skipped 0 \(0 findings\)/);
+  assert.match(zero, /aborted skipped 0 \(0 findings\)/);
+  assert.match(zero, /corrupt skipped 0/);
+  assert.doesNotMatch(zero, /corrupt skipped 0 \(/);
 });

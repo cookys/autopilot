@@ -83,20 +83,35 @@ function groupId(family, model, byModel) {
   return byModel ? `m:${model}` : `f:${family}`;
 }
 
+function readableFindingCount(phaseDir, generation) {
+  const doc = readJson(path.join(phaseDir, `g${generation}`, 'findings.json'));
+  if (!doc.ok || !doc.value || !Array.isArray(doc.value.findings)) return 0;
+  return doc.value.findings.length;
+}
+
+function noteCorrupt(scope, phaseName) {
+  scope.corrupt_skipped += 1;
+  scope.corrupt_phases.push(phaseName);
+}
+
 function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
   const phaseDir = path.join(ledgerDir, phaseName);
   const chain = readJson(path.join(phaseDir, 'chain.json'));
   if (!chain.ok || !Array.isArray(chain.value)) {
-    scope.corrupt_skipped += 1;
+    noteCorrupt(scope, phaseName);
     return;
   }
 
   const finalized = [];
   for (const entry of chain.value) {
     if (!entry || typeof entry !== 'object') continue;
-    if (entry.status === 'aborted') scope.aborted_skipped += 1;
-    else if (entry.status === 'pending') scope.pending_skipped += 1;
-    else if (entry.status === 'finalized') finalized.push(entry);
+    if (entry.status === 'aborted') {
+      scope.aborted_skipped += 1;
+      scope.aborted_skipped_findings += readableFindingCount(phaseDir, entry.generation);
+    } else if (entry.status === 'pending') {
+      scope.pending_skipped += 1;
+      scope.pending_skipped_findings += readableFindingCount(phaseDir, entry.generation);
+    } else if (entry.status === 'finalized') finalized.push(entry);
   }
 
   const loaded = [];
@@ -105,7 +120,7 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
     const genDir = path.join(phaseDir, `g${gen}`);
     const findingsDoc = readJson(path.join(genDir, 'findings.json'));
     if (!findingsDoc.ok || !findingsDoc.value || !Array.isArray(findingsDoc.value.findings)) {
-      scope.corrupt_skipped += 1;
+      noteCorrupt(scope, phaseName);
       return;
     }
     const dispPath = path.join(genDir, 'dispositions.json');
@@ -113,7 +128,7 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
     if (fs.existsSync(dispPath)) {
       const dispDoc = readJson(dispPath);
       if (!dispDoc.ok || !dispDoc.value || !Array.isArray(dispDoc.value.findings)) {
-        scope.corrupt_skipped += 1;
+        noteCorrupt(scope, phaseName);
         return;
       }
       for (const item of dispDoc.value.findings) {
@@ -124,14 +139,14 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
     try {
       seatNames = fs.readdirSync(genDir).filter((name) => /^seat-.+\.json$/.test(name));
     } catch {
-      scope.corrupt_skipped += 1;
+      noteCorrupt(scope, phaseName);
       return;
     }
     const seats = new Map();
     for (const name of seatNames) {
       const doc = readJson(path.join(genDir, name));
       if (!doc.ok || !doc.value || typeof doc.value !== 'object') {
-        scope.corrupt_skipped += 1;
+        noteCorrupt(scope, phaseName);
         return;
       }
       const seatId = name.slice('seat-'.length, -'.json'.length);
@@ -144,6 +159,8 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
   scope.phases_read += 1;
   scope.finalized_generations += loaded.length;
   const phaseKey = phaseName;
+  if (loaded.length > 0) scope._phases.add(phaseKey);
+  for (const gen of loaded) scope._gens.add(`${phaseName}\0${gen.gen}`);
 
   for (const gen of loaded) {
     const genKey = `${phaseName}\0${gen.gen}`;
@@ -210,6 +227,11 @@ function buildReport(ledgerDirs, options = {}) {
     aborted_skipped: 0,
     pending_skipped: 0,
     corrupt_skipped: 0,
+    aborted_skipped_findings: 0,
+    pending_skipped_findings: 0,
+    corrupt_phases: [],
+    _phases: new Set(),
+    _gens: new Set(),
   };
   const bag = { rows: new Map(), meta: new Map(), keyed: [], crossGen };
   for (const dir of ledgerDirs) {
@@ -280,6 +302,13 @@ function buildReport(ledgerDirs, options = {}) {
   for (const row of groups) {
     for (const key of Object.keys(totals)) totals[key] += row[key];
   }
+  totals.phases = scope._phases.size;
+  totals.generations = scope._gens.size;
+  scope.distinct_phases = scope._phases.size;
+  scope.distinct_generations = scope._gens.size;
+  scope.corrupt_phases = [...new Set(scope.corrupt_phases)].sort();
+  delete scope._phases;
+  delete scope._gens;
   const dispositioned = totals.verified + totals.refuted + totals.deferred;
   totals.verified_pct = pct(totals.verified, dispositioned);
   totals.refuted_pct = pct(totals.refuted, dispositioned);
@@ -332,7 +361,7 @@ function formatText(report) {
   const lines = [
     header,
     ...rows.map(lineOf),
-    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped}, pending skipped ${scope.pending_skipped}, corrupt skipped ${scope.corrupt_skipped}`,
+    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}`,
     'Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves.',
     `key mode: ${report.key_mode}`,
   ];

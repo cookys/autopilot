@@ -341,38 +341,9 @@ All sizes require review. Major fixed now. Fix requires re-review. No severity w
 
 ## Shadow QC panel (task-tree engine)
 
-Condition: `docs/projects/<proj>/tree/` exists AND target is a verdict-bearing node (non-null `verdict`). Auto opt-in when tree present (KR5: zero change for non-opted-in users).
+Dormant. Do not run `scripts/qc-panel.js`. See docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 
-| What runs | How | Authority |
-|-----------|-----|-----------|
-| Authoritative reviewer | Existing flow (this doc) | Authoritative — findings drive fixes |
-| `scripts/qc-panel.js` | In parallel with authoritative reviewer | Shadow only — no fix action; informs calibration |
-
-**Amendment 4 liveness (binding)**: every panel run MUST (a) write verdict artifact JSON under `docs/projects/<proj>/tree/panel/` AND (b) emit a calibration sample via `scripts/calibration.sh add-sample`. Either fails → `qc-panel.js` non-zero; silently-dead shadow fails the gate.
-
-**Baseline separation (M2 binding)**:
-
-- Internal `calibration.sh add-sample` uses `--baseline self-report` (panel vs node-report self-verdict). **Liveness-only** — not in graduation math.
-- After both authoritative reviewer and panel verdicts exist, dispatcher adds a **second**, **graduation-bearing** sample with `--baseline reviewer`:
-
-```sh
-scripts/calibration.sh add-sample \
-  --panel-verdict <panel_verdict> \
-  --authoritative-verdict <authoritative_reviewer_verdict> \
-  --baseline reviewer \
-  [--class <severity_class>] \
-  [--tokens <panel_token_estimate>]
-```
-
-`scripts/calibration.sh report` uses agreement, false-pass-on-critical, sample_count, graduation **only over `baseline==reviewer`** (missing field = reviewer for backward compat). `self_report_sample_count` printed separately.
-
-Report feeds Board P5→active (Amendment 6). No authority shift before graduation criteria met.
-
-### Finding-survival (refute pass) — SHADOW / non-gating until calibrated
-
-Q1–Q3 interrogate the **implementer**; nothing checks the panel's own `MISSED:` before a fix round. Project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`): findings are claims, not orders. `qc-panel.js` 4th shape = **refute pass**: for each candidate miss, the **other** cross-family judge (not the raiser) tries to refute — wrong / already satisfied / out of scope. **Uncertainty AGAINST the finding** (`default-refuted-if-uncertain`): miss **survives only by explicitly defeating refutation**.
-
-🔴 **SHADOW only — non-gating until graduated.** Authoritative verdict **unchanged**: non-empty `MISSED:` still fails. Refute rides **alongside** as `refute_shadow:{refuted_misses[],survived_misses[]}` in panel JSON + calibration `--source` (`refute=refuted:N,survived:M,gating_misses:K`) — does **not** alter `verdict`. Suppressing a true critical via refute is worse than the bug; **calibration only**. Authoritative **only after** `scripts/calibration.sh` (`run-known-bad`) shows no false-suppress of criticals — same `GRAD_*` bar as the panel (min samples, min agreement, `false_pass_on_critical == 0`).
+When `review_ledger_archive.dir` is set, `node scripts/hetero-review-loop.js finalize` copies that ledger into the archive. Load an old or hand-made ledger with `node scripts/review-ledger-archive.js import --ledger <dir>`. `status` shows size and whether rotation is due; `rotate` and `prune` are manual housekeeping, and `prune` is a dry run unless `--execute` is given. See docs/plans/2026-10-22-review-ledger-retention.md.
 
 ## See Also
 

@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "inventory_sha256": "870aa1e83bba69aaa308b73bc8cb59fba74190c5a46344733d731b2ceb8a9c3b",
+  "inventory_sha256": "45c41d8b1732d78d16297f651fb277d68c26f4b455b107809409c7162cd45bc7",
   "source_manifest_sha256": "5ba748b8e81e63b7c9278375385cdc9e84c22932ca7b31d8e7c96eb084784caa",
   "source_map_sha256": "ede8e180aed5d4eb85d8e90a3d81afa49b79ae5a5c9c56de288f9a40fe65ea79",
   "hook_classes_sha256": "36e79d4f6b73ad9baefbc1664b5cd0ed32abd6666cdc7316f9390a654c590a51",
-  "rule_migration_sha256": "aace0e7f6ed865e0bc0d7ff5b0b6516f5a8af835ebc7f0625bf4fed4850298a6",
+  "rule_migration_sha256": "3bb12187c4a2a5a08149099dcc89b77051c9319a32f7d83b0d0545acd7866210",
   "guided_compatibility_sha256": "819a1253cf41a2a208a39739a4bdfcc49d2c89da614910adf15f2a3eaf667212",
-  "guided_dispositions_sha256": "2eb7315ed486aef27ab5bb1f509bbe7b704c0aa7c7d5ea7a2788287e72c97b8d",
+  "guided_dispositions_sha256": "96d7e9897f742d2cd4294c72f8bb054ce15a769b9ffbf73b2fff3e435310c9a1",
   "category_totals": {
     "core": 146,
-    "guided": 213,
+    "guided": 209,
     "autonomous": 12,
     "assurance": 102,
-    "topology": 176,
+    "topology": 140,
     "obsolete": 0
   },
   "core": {

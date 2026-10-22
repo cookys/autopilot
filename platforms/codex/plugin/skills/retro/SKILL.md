@@ -27,8 +27,7 @@ Run all six collection commands simultaneously using parallel Bash calls. Set `D
 
 Run the six collection commands — **1a** commits+stats, **1b** per-commit file breakdown, **1c** timestamps for session detection, **1d** file hotspots, **1e** project-completion delta, **1f** review-loop lens (`scripts/retro-review-loop.js --days DAYS --json` — the hetero-dispatch/review/debate effort git history can't see) — from [references/data-collection.md](references/data-collection.md), substituting `DAYS`.
 
-**1g** Escalation-ledger scan (quality-floor L4): for each project dir in the resolved `projects_dir` and `archive_dir`
-(`scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)"`; `none` ⇒ skip this step) with a `tree/events.jsonl` touched in the retro window, run `node scripts/tree.js escalations <proj>` and aggregate `escalation_opened` events by `stage`/`why_not_mechanical`; report counts + recurring themes. Recurring (≥2 similar) entries are DEMOTION CANDIDATES — hand them to `skills/distill`'s demotion-drafting step.
+**1g** The task-tree escalation scan is dormant. Do not run `node scripts/tree.js escalations`. See docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 
 ## Step 2: Compute Metrics
 
@@ -83,7 +82,7 @@ If a previous retro JSON exists, read it for delta comparison.
 
 ## Step 4: Output Report
 
-Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Transcript Coverage** (from 1f — always render), **Review-Loop Lens** (from 1f; preserve known/unknown and deterministic/heuristic labels), **Escalations** (counts + recurring themes from 1g), Ship of the Week, Observations (3), Habits for Next Week (3).
+Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Transcript Coverage** (from 1f — always render), **Review-Loop Lens** (from 1f; preserve known/unknown and deterministic/heuristic labels), **Escalations** (task-tree scan dormant, ADR-0002; no `tree.js` run), Ship of the Week, Observations (3), Habits for Next Week (3).
 
 ## Step 5: Persist Snapshot
 

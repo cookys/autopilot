@@ -1,3 +1,5 @@
+> **Dormant.** The task tree (`tree.js`) and qc-panel are not in default use. See [docs/adr/0002-task-tree-and-qc-panel-dormant.md](../docs/adr/0002-task-tree-and-qc-panel-dormant.md). The body below is unchanged historical contract.
+
 # Tree Contracts — Task-Tree Engine v1
 
 Canonical schemas for the append-only JSONL event log, node report, and

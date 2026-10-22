@@ -49,7 +49,7 @@ Prose execution sequence for code phases and diffs (see [`references/code-loop.m
 
 1. Run `node scripts/hetero-review-loop.js collect --phase <p> --generation <n> ...` to snapshot the range and collect reviewer outputs.
 2. Depth-0 writes dispositions for all candidate findings.
-3. Run `node scripts/hetero-review-loop.js finalize --phase <p> --generation <n> --dispositions <file>` to aggregate verdicts.
+3. Run `node scripts/hetero-review-loop.js finalize --phase <p> --generation <n> --dispositions <file>` to aggregate verdicts. When `review_ledger_archive.dir` is set, finalize copies the ledger; see the `scripts/review-ledger-archive.js` row in [`skills/quality-pipeline/SKILL.md`](../quality-pipeline/SKILL.md).
 4. On a `FIX-THEN-SHIP` verdict, dispatch the emitted hands brief through the topology using `bash scripts/dispatch-hetero.sh` at rung 0, then collect the next generation over the delta and finalize again, repeating until `SHIP-AS-IS`.
 5. Run `node scripts/check-phase-review-receipt.js` in receipt mode (`--packets` for a packet set).
 6. The eventual merge commit carries the existing `QC-Verdict` trailer unchanged.

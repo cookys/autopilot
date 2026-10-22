@@ -1,3 +1,5 @@
+> **Dormant.** Do not run this adapter or `scripts/tree.js` / qc-panel. See docs/adr/0002-task-tree-and-qc-panel-dormant.md. The body below is unchanged historical procedure.
+
 # Tree Adapter — CEO Agent
 
 Full procedure for the task-tree engine adapter. The SKILL.md section "Tree

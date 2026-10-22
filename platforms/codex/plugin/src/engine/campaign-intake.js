@@ -989,6 +989,12 @@ function abandonCampaignLease({
   ], repo);
 }
 
+const PREFLIGHT_CANDIDATE_PHASES = new Set([
+  CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+  CAMPAIGN_STATES.REVIEWING,
+  CAMPAIGN_STATES.ADJUDICATING,
+]);
+
 function verifyResumeCandidate({ projection, repo, base }) {
   const reference = projection.candidate_reference;
   const writerFence = reference && reference.writer_fence;
@@ -1908,6 +1914,28 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
   };
 }
 
+// BL-0249: a pre-spend rejection that released the Mission grant must tell the operator what
+// the release means and what to do: which seat/host failed, that a 401-style failure needs a
+// fresh login on that host, and that the released grant is NOT restored - it is re-granted by hand.
+function releasedGrantOperatorAction(rejection, roster) {
+  const r = roster && typeof roster === 'object' ? roster : {};
+  const seats = [];
+  for (const role of ['implementer', 'reviewer']) {
+    const engine = r[`${role}_engine`];
+    if (typeof engine === 'string' && engine.length > 0) {
+      const runner = typeof r[`${role}_runner`] === 'string' && r[`${role}_runner`].length > 0
+        ? r[`${role}_runner`] : 'unknown-runner';
+      seats.push(`${role}=${engine} (runner ${runner})`);
+    }
+  }
+  const seatText = seats.length > 0 ? seats.join(', ') : 'no seat named in the roster';
+  const code = rejection && typeof rejection.code === 'string' ? rejection.code : 'unknown';
+  return `the Mission grant was released with a no-effect receipt (rejection ${code}); `
+    + `configured seats: ${seatText}; host: ${require('os').hostname()}. `
+    + 'If the provider reported an authentication failure (401 / login expired), log in again on this host first. '
+    + 'The released grant is not restored: re-grant it by hand (mission grant) before retrying.';
+}
+
 function consumeEnforcedProviderReadiness({ adapters, contract, inspection, roster, now, level }) {
   const bundle = typeof adapters.providerReadiness === 'function'
     ? adapters.providerReadiness({ contract, inspection, roster, now }) : null;
@@ -1937,7 +1965,9 @@ function consumeEnforcedProviderReadiness({ adapters, contract, inspection, rost
   if (result.status !== 'ready') {
     throw new CampaignIntakeError(
       'provider_readiness_not_ready',
-      'enforced campaign exact-role readiness is not ready',
+      `enforced campaign exact-role readiness is not ready (status ${result.status}); `
+        + 'a probe-needed receipt means a seat has no live qualification yet - re-run the provider probe on this host '
+        + `(${require('os').hostname()}) and, for an authentication failure, log in again before retrying`,
     );
   }
   return result;
@@ -2475,7 +2505,11 @@ function runCampaignIntake(input = {}, adapters = {}) {
   }
   // Durable-wait resume preflight: verify a git_candidate against Git BEFORE
   // the Mission claim so a drifted resume cannot burn a grant attempt.
-  // ADJUDICATING / VERTICAL_VERIFICATION resumes are not preflighted (R6).
+  // Every git-candidate resume is preflighted: the durable-wait phases plus REVIEWING,
+  // ADJUDICATING and VERTICAL_VERIFICATION (BL-0225), so a drifted resume of any of them
+  // cannot spend the Mission claim. For the three added phases an adopted review range
+  // (reviewCandidate) has no writer-fenced git candidate to verify and is skipped; the
+  // durable-wait phases were always preflighted and stay so under reviewCandidate.
   // Fail-closed: any failure to read the sealed contract or project the ledger
   // is a blocked preflight, never a silent skip into the claim (a skipped check
   // would reinstate the spend the preflight exists to prevent).
@@ -2534,7 +2568,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
           reviewCandidateResumeFacts = { phase: projection.state.phase, reviewedHead };
         }
         if (projection
-            && NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
+            && (NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
+              || (input.reviewCandidate !== true
+                && PREFLIGHT_CANDIDATE_PHASES.has(projection.state.phase)))
             && projection.candidate_reference
             && projection.candidate_reference.kind === 'git_candidate') {
           verifyResumeCandidate({
@@ -2681,12 +2717,15 @@ function runCampaignIntake(input = {}, adapters = {}) {
       }
       steps.push(release);
     }
+    const released = steps.some((entry) => entry && entry.owner === 'mission_release'
+      && entry.status === 'released');
     return {
       status: 'blocked',
       reason: rejection.reason,
       rejection,
       steps,
       pre_spend_no_effect_receipt: receipt,
+      ...(released ? { operator_action: releasedGrantOperatorAction(rejection, input.roster) } : {}),
     };
   };
 

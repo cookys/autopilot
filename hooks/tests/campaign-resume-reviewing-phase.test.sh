@@ -24,6 +24,14 @@
 #   FAIL resumed REVIEWING run converges (real terminalize + transcript audit): 'c_status=converged' not found in output
 #   FAIL resumed REVIEWING run is not blocked: unexpected 'c_status=blocked' in output
 #   FAIL [campaign-resume-reviewing-phase] 24 passed, 2 failed
+# RED at 90fb2b1d2 (BL-0225 / BL-0249, stages B4/B5, fix stashed):
+#   b4_drifted_reviewing_intake status=blocked code=campaign_resume_git_drift claim_calls=1 release_calls=1
+#   b5_released_grant_message status=blocked code=provider_auth_failed names_released=false names_regrant=false names_seat=false names_host=false
+#   FAIL drifted REVIEWING resume is blocked by git-drift with zero Mission claim calls
+#   FAIL released-grant rejection names the release, the seat, the host and the manual re-grant
+# RED at e9e551435 (b6, durable-wait + reviewCandidate=true + drift; exclusion ANDed over every phase):
+#   b6_drifted_durable_wait_review_candidate status=blocked code=review_candidate_mode_mismatch claim_calls=1 release_calls=1
+#   FAIL drifted durable-wait resume with reviewCandidate=true is still blocked by git-drift before the claim
 TEST_NAME="campaign-resume-reviewing-phase"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -204,7 +212,7 @@ function boundaryResult(fx) {
     gate_attempts: 1, resources_created: 1, zero_diff_receipt_digest: null,
   };
 }
-function toReviewing(fx) {
+function toReviewing(fx, { stopAtBoundary = false } = {}) {
   const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
   const stdout = `${JSON.stringify(boundaryResult(fx))}\n`;
   const r = new AutopilotEngine({
@@ -223,6 +231,16 @@ function toReviewing(fx) {
     campaignContract: fx.contractPath, campaignSeal: fx.sealPath,
   });
   assert.strictEqual(r.phase, 'boundary_rejected');
+  if (stopAtBoundary) {
+    execFileSync('bash', [
+      path.join(root, 'scripts', 'run-ledger.sh'), 'stage-transition',
+      '--ledger', fx.ledger, '--run-id', fx.campaignId, '--stage', 'campaign',
+      '--generation', String(fx.control.generation_claim.generation),
+      '--nonce', fx.control.generation_claim.nonce, '--to-state', 'dead',
+      '--idempotency-key', `park:${fx.campaignId}`,
+    ], { cwd: fx.repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return null;
+  }
   const evidence = icc.canonicalDigest({ passed: true, fixture: fx.campaignId });
   const appended = intake.appendCampaignEvent({
     repo: fx.repo,
@@ -282,6 +300,63 @@ git(fxB3.repo, ['branch', '-D', fxB3.branch]);
 const claimedB3 = claim(fxB3, stateB3);
 console.log(`b3_intake_nocand_at_cap status=${claimedB3.status} resume_candidate=${Boolean(claimedB3.resume_candidate)} code=${claimedB3.code || claimedB3.reason_code || ''}`);
 
+// ---- B4/B5. BL-0225: a drifted git-candidate resume must not spend the Mission claim ----------
+// runCampaignIntake (not just claimCampaignGeneration) with a counting missionClaim adapter:
+// the git-drift preflight has to fire BEFORE the claim for REVIEWING / ADJUDICATING /
+// VERTICAL_VERIFICATION, not only for the durable-wait phases.
+function intakeClaimCount(fx, extraInput = {}) {
+  let claimCalls = 0;
+  let releaseCalls = 0;
+  const result = intake.runCampaignIntake({
+    repo: fx.repo, contractPath: fx.contractPath, sealPath: fx.sealPath, promptFile: fx.promptFile,
+    base: fx.base, branch: fx.branch, ledgerPath: fx.ledger, resume: true,
+    observedAt: '2026-08-30T00:00:05.000Z', roster, ...extraInput,
+  }, {
+    missionClaim: () => { claimCalls += 1; return { owner: 'mission', status: 'claimed', claim_id: 'claim-fixture' }; },
+    releaseMission: () => { releaseCalls += 1; return { owner: 'mission', status: 'released' }; },
+    readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+  });
+  const rej = result.rejection || {};
+  return `status=${result.status} code=${rej.code || ''} claim_calls=${claimCalls} release_calls=${releaseCalls}`;
+}
+const fxB4 = reviewingFixture('intake-drift-preclaim');
+toReviewing(fxB4);
+git(fxB4.repo, ['worktree', 'remove', '--force', fxB4.worktree]);
+git(fxB4.repo, ['branch', '-D', fxB4.branch]);
+console.log(`b4_drifted_reviewing_intake ${intakeClaimCount(fxB4)}`);
+// Durable-wait phase (BOUNDARY_REJECTED) + git candidate + reviewCandidate=true + drift: still preflighted.
+const fxB6 = reviewingFixture('intake-drift-durable-wait');
+toReviewing(fxB6, { stopAtBoundary: true });
+git(fxB6.repo, ['worktree', 'remove', '--force', fxB6.worktree]);
+git(fxB6.repo, ['branch', '-D', fxB6.branch]);
+console.log(`b6_drifted_durable_wait_review_candidate ${intakeClaimCount(fxB6, { reviewCandidate: true })}`);
+
+// BL-0249: a pre-spend rejection that releases the grant says so and says what to do next.
+function releasedGrantIntake(fx) {
+  const result = intake.runCampaignIntake({
+    repo: fx.repo, contractPath: fx.contractPath, sealPath: fx.sealPath, promptFile: fx.promptFile,
+    base: fx.base, branch: fx.branch, ledgerPath: fx.ledger,
+    observedAt: '2026-08-30T00:00:05.000Z', roster,
+  }, {
+    missionClaim: () => ({ owner: 'mission', status: 'claimed', claim_id: 'claim-fixture' }),
+    releaseMission: () => ({ owner: 'mission_release', status: 'released' }),
+    readiness: () => ({
+      owner: 'provider_readiness', status: 'rejected', code: 'provider_auth_failed',
+      reason: 'provider returned 401',
+    }),
+    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+  });
+  const action = result.operator_action || '';
+  return `status=${result.status} code=${(result.rejection || {}).code || ''}`
+    + ` names_released=${/released/.test(action)} names_regrant=${/mission grant/.test(action)}`
+    + ` names_seat=${action.includes('fixture-implementer')} names_host=${action.includes(require('os').hostname())}`;
+}
+const fxB5 = reviewingFixture('intake-released-grant');
+console.log(`b5_released_grant_message ${releasedGrantIntake(fxB5)}`);
+
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "reviewing-resume suite process exits 0"
@@ -321,6 +396,10 @@ assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate
 # fires before the changed-file cap predicate is reached, so B3 proves "blocked", not "blocked by
 # the cap". A change that lets this claim through, or re-routes it to another code, goes red.
 assert_eq "$(printf "%s\n" "$OUT" | grep "^b3_intake_nocand_at_cap ")" "b3_intake_nocand_at_cap status=rejected resume_candidate=false code=campaign_resume_git_drift" "B3 line matches in full (status, candidate, exact rejection code)"
+# BL-0225: the drift preflight runs before the Mission claim, so the claim adapter is never called.
+assert_eq "$(printf "%s\n" "$OUT" | grep "^b4_drifted_reviewing_intake ")" "b4_drifted_reviewing_intake status=blocked code=campaign_resume_git_drift claim_calls=0 release_calls=0" "drifted REVIEWING resume is blocked by git-drift with zero Mission claim calls"
+assert_eq "$(printf "%s\n" "$OUT" | grep "^b5_released_grant_message ")" "b5_released_grant_message status=blocked code=provider_auth_failed names_released=true names_regrant=true names_seat=true names_host=true" "released-grant rejection names the release, the seat, the host and the manual re-grant"
+assert_eq "$(printf "%s\n" "$OUT" | grep "^b6_drifted_durable_wait_review_candidate ")" "b6_drifted_durable_wait_review_candidate status=blocked code=campaign_resume_git_drift claim_calls=0 release_calls=0" "drifted durable-wait resume with reviewCandidate=true is still blocked by git-drift before the claim"
 # ---- C. engine: REVIEWING reached through a final-panel transient seat fault ----------------
 # Same lineage as final-panel-seat-resume-xproc run 1 (seat 2 transport fault -> gate_transient
 # -> durable_wait, ledger parked in REVIEWING) and a real --resume in a SEPARATE process, with the

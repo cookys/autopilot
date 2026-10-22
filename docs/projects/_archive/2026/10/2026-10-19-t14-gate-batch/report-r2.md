@@ -74,4 +74,4 @@ This is haiku-4-5, Claude Code CLI 2.1.303, one task set. It must not be extrapo
 - [BL-0254](../../../../../backlog/t14-batch-driver-infra-rerun-oauth.md) — the t14 batch driver does not re-run infra failures and does not see mid-run OAuth expiry.
 - [BL-0255](../../../../../backlog/campaign-control-initial-state-rename.md) — rename of the persisted `initial_state` field needs an owner decision.
 - [BL-0256](../../../../../backlog/run-ledger-max-rotations-sweep-env.md) — `RUN_LEDGER_MAX_ROTATIONS` reads the sweep environment with unclear intent.
-- [BL-0257](../../../../../backlog/bl0039-notes-instant2-filter.md) — BL-0039 notes 7 and 8: re-anchor the instant2 fixture and add a filter check.
+- BL-0257 (`docs/backlog/bl0039-notes-instant2-filter.md`, 2026-10-23 BL-0257 結案時刪除，內容見 git 歷史) — BL-0039 notes 7 and 8: re-anchor the instant2 fixture and add a filter check.

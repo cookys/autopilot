@@ -14,3 +14,5 @@ Original row from 5f3aa3b1d^:docs/BACKLOG.md:
 Audit finding: Audit #11: Status open, Effort S. A withdrawn MUST-FIX that reuses a finding id is still rejected as a duplicate finding. Trigger-Type event.
 
 Restored 2026-10-19 from 5f3aa3b1d^; see docs/plans/evidence/2026-10-19-backlog-deletion-audit/REPORT.md
+
+Partly fixed 2026-10-23 by reusedid (c965c6d98): `src/engine/product-review-normalizer.js` drops a finding whose claim starts with `REVOKED:` before the duplicate-id check and keeps it as advisory. Free-form withdrawal prose is deliberately not honoured (ADR-0001). Still open: `git grep 'REVOKED:'` finds the prefix only in the normalizer, so no reviewer prompt teaches it, and the original case (a finding ending in "REVOKED") is still no_verdict. Teaching the prefix is a guidance change and needs eval evidence.

@@ -8,3 +8,5 @@ Section copied from the shared sidecar `docs/backlog/live-state-dir-context-budg
 - **Guardrails**: do not solve it by letting a qc-panel seat double as the consult. The shape that fits is a consult-only fallback list of engines that are decorrelated but not panel members, with parse requirements relaxed to "returns text" rather than "returns a verdict". The warning should name which engines were excluded and why.
 
 Restored 2026-10-19 from 41f1bff64^; see docs/plans/evidence/2026-10-19-backlog-deletion-audit/REPORT.md
+
+Partly fixed 2026-10-23 by consultseat (51290f69a): the native-fallback warning in `resolve-review-loop.sh` now ends with `excluded: <seat> (qc_panel member | same runner as implementer), ...`. Correction of the Context above: `dispatch-consult.sh` does not refuse a native-fallback seat any more; it dispatches it with hetero=false (line 131), so the consult is answered by the same family that asks. Still open: the consult-only fallback list (decorrelated, not a panel member, text-only answer), which needs `resolve-dispatch-topology` eligibility and a new config key.

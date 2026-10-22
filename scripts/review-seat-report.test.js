@@ -992,3 +992,117 @@ test('21 negative control: removing dedupe doubles the two-path totals', () => {
   assert.strictEqual(report.totals.findings, 2);
   assert.notStrictEqual(report.totals.findings, honest.report.totals.findings);
 });
+
+function writePhase(ledgerDir, phaseName, spec) {
+  const generation = spec.generation == null ? 1 : spec.generation;
+  const status = spec.status || 'finalized';
+  const findingId = spec.findingId || 'f1';
+  const phase = path.join(ledgerDir, phaseName);
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(generation, status)]);
+  writeJson(path.join(phase, `g${generation}`, 'findings.json'), {
+    findings: [finding(findingId, spec.severity || 'Major', 's0', spec.text)],
+  });
+  writeJson(path.join(phase, `g${generation}`, 'dispositions.json'), {
+    findings: [disp(findingId, 'verified')],
+  });
+  writeJson(path.join(phase, `g${generation}`, 'seat-s0.json'), seat('gpt-5', spec.seatStatus || 'failed'));
+}
+
+function writeNamedPhases(ledgerDir, names) {
+  for (const name of names) {
+    writePhase(ledgerDir, `review-${name}`, {
+      text: `[${name}] shared bytes`,
+      findingId: `id-${name}`,
+    });
+  }
+}
+
+// # RED at d7fdf66ac: node --test --test-name-pattern '2[2-5]' scripts/review-seat-report.test.js → fail 4, pass 0.
+// 22: archive totals findings 5 !== Y-only 3 (flat subset counted in full). 23: duplicate_generations_skipped undefined !== 0.
+// 24: symlink to a ledger outside the root was read, findings 2 !== 1. 25: duplicate_generations_skipped undefined !== 0.
+
+test('22 subset flat ledger does not double-count generations already in layout A', () => {
+  const home = tmp();
+  const root = tmp();
+  const sourceX = tmp();
+  const sourceY = tmp();
+  writeNamedPhases(sourceX, ['a', 'b']);
+  writeNamedPhases(sourceY, ['a', 'b', 'c']);
+  const flat = path.join(root, 'old-flat');
+  fs.cpSync(sourceX, flat, { recursive: true });
+  const imported = importLayoutA(sourceY, root, home);
+  const yOnly = totalsOf(['--ledger', imported, '--json'], home);
+  const archived = totalsOf(['--archive', root, '--json'], home);
+  assert.deepStrictEqual(archived.report.totals, yOnly.report.totals);
+  assert.strictEqual(archived.report.scope.duplicate_generations_skipped, 2);
+  assert.match(archived.text, /duplicates skipped \d+, duplicate generations skipped 2/);
+  const crossY = totalsOf(['--ledger', imported, '--cross-gen', '--json'], home);
+  const crossBoth = totalsOf(['--archive', root, '--cross-gen', '--json'], home);
+  assert.deepStrictEqual(crossBoth.report.totals, crossY.report.totals);
+  // Negative control: buildReport with dedupeGenerations false counts every generation in X and Y.
+  // That total is larger than Y alone. If generation de-duplication is removed, the --archive
+  // totals rise to this no-dedupe total and the equality with Y-only goes red.
+  const inflated = load().buildReport([flat, imported], { dedupeGenerations: false });
+  assert.ok(inflated.totals.findings > yOnly.report.totals.findings);
+  assert.ok(inflated.totals.seat_failures > yOnly.report.totals.seat_failures);
+  assert.notDeepStrictEqual(archived.report.totals, inflated.totals);
+});
+
+test('23 a pending generation does not block the same finalized bytes', () => {
+  const home = tmp();
+  const x = tmp();
+  const y = tmp();
+  writePhase(x, 'review-a', { text: '[a] only x', findingId: 'a', status: 'finalized' });
+  writePhase(x, 'review-b', { text: '[b] same bytes', findingId: 'b', status: 'pending' });
+  writePhase(y, 'review-b', { text: '[b] same bytes', findingId: 'b', status: 'finalized' });
+  const { buildReport, formatText } = load();
+  const counted = buildReport([x, y], { dedupeGenerations: true });
+  const yOnly = buildReport([y], { dedupeGenerations: true });
+  assert.strictEqual(counted.totals.findings, 1 + yOnly.totals.findings);
+  assert.strictEqual(counted.totals.seat_failures, 1 + yOnly.totals.seat_failures);
+  assert.strictEqual(counted.scope.duplicate_generations_skipped, 0);
+  assert.strictEqual(counted.scope.pending_skipped, 1);
+  assert.match(formatText(counted), /duplicate generations skipped 0/);
+  const cli = runCli(['--ledger', y, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  assert.strictEqual(JSON.parse(cli.stdout).totals.findings, yOnly.totals.findings);
+  // Negative control: recordUncountedGenerationKeys puts the pending findings hash into the seen
+  // set before Y is counted. Y's finalized generation is then skipped, so findings fall below the
+  // counted total. If pending keys are inserted for real, this gap disappears and the assertion
+  // that Y was counted goes red.
+  const poisoned = buildReport([x, y], { dedupeGenerations: true, recordUncountedGenerationKeys: true });
+  assert.ok(poisoned.totals.findings < counted.totals.findings);
+  assert.strictEqual(poisoned.scope.duplicate_generations_skipped, 1);
+});
+
+test('24 archive symlink outside the root is not read and a parent loop terminates', () => {
+  const home = tmp();
+  const root = tmp();
+  const inside = tmp();
+  writeSeatLedger(inside, '[inside] counted');
+  importLayoutA(inside, root, home);
+  const outside = tmp();
+  writeSeatLedger(outside, '[outside] hidden');
+  fs.symlinkSync(outside, path.join(root, 'escape'));
+  fs.symlinkSync(root, path.join(root, 'loop-up'));
+  const { report, text } = totalsOf(['--archive', root, '--json'], home);
+  assert.strictEqual(report.totals.findings, 1);
+  assert.strictEqual(report.scope.archive_ledgers_read, 1);
+  assert.strictEqual(report.scope.ledgers_read, 1);
+  assert.doesNotMatch(text, /outside/);
+  const alone = totalsOf(['--ledger', outside, '--json'], home);
+  assert.strictEqual(alone.report.totals.findings, 1);
+});
+
+test('25 --ledger only keeps duplicate_generations_skipped at 0', () => {
+  const home = tmp();
+  const a = tmp();
+  const b = tmp();
+  writeSeatLedger(a, '[ledger] twice');
+  fs.cpSync(a, b, { recursive: true });
+  const { report, text } = totalsOf(['--ledger', a, '--ledger', b, '--json'], home);
+  assert.strictEqual(report.totals.findings, 2);
+  assert.strictEqual(report.scope.duplicate_generations_skipped, 0);
+  assert.strictEqual(report.scope.duplicates_skipped, 0);
+  assert.match(text, /duplicate generations skipped 0/);
+});

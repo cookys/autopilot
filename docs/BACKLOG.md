@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0284 -->
+<!-- next-id: BL-0285 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### 審查紀錄封存還沒進品質流程技能說明
+- **Id**: BL-0284
+- **Status**: open
+- **Since**: 2026-10-22
+- **Origin**: self
+- **Problem**: 審查紀錄的封存指令還沒寫進品質流程的技能說明，要等下一輪指引評估才能補。
+- **Impact**: 新的工作階段不會從技能說明知道可以封存審查紀錄。
+- **Trigger**: the next guidance eval that is allowed to edit the quality-pipeline skill text
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: review ledger retention P1
+- **Pointer**: docs/plans/2026-10-22-review-ledger-retention.md
 
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002

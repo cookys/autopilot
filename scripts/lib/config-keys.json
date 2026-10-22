@@ -25,7 +25,9 @@
   "ignore": {
     "env": {
       "AUTOPILOT_HARNESS_ATTENTION": "output sentinel printed by src/harness/capabilities.js, not an environment variable",
-      "AUTOPILOT_HARNESS_OK": "output sentinel printed by src/harness/capabilities.js, not an environment variable"
+      "AUTOPILOT_HARNESS_OK": "output sentinel printed by src/harness/capabilities.js, not an environment variable",
+      "AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS": "test-only delay seam in scripts/lib/review-ledger-copy.js; not a user knob. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1",
+      "AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY": "test-only gate for the review-ledger copy delay. Exactly 1 enables AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS; not a user knob"
     },
     "config": {
       "artifact_type": "field of a qualification feed document, not an operator config key",
@@ -1026,6 +1028,100 @@
       ],
       "summary": "Daily host-wide prune of autopilot temp roots, riding on the automatic reap.",
       "type": "boolean"
+    },
+    {
+      "name": "review_ledger_archive.dir",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR"],
+      "summary": "Directory for the opt-in review-ledger archive. Unset or empty means off: it writes nothing. The config file is still read to learn whether the key is set. The archive writes only when a dir is configured. The environment variable wins.",
+      "type": "string",
+      "invalid_effect": "a non-string is an error at copy time; empty string means off"
+    },
+    {
+      "name": "review_ledger_archive.include_diff",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": false,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF"],
+      "summary": "When true, the archive copy also stores diff.txt. Default false.",
+      "type": "boolean",
+      "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so diff.txt stays out"
+    },
+    {
+      "name": "review_ledger_archive.warn_mb",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": 500,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB"],
+      "summary": "status warns when the archive is larger than this many mebibytes. Never blocks.",
+      "type": "number",
+      "invalid_effect": "a value that is not a number >= 0 is ignored, so the threshold stays 500"
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR",
+      "kind": "env",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["review_ledger_archive.dir"],
+      "summary": "Overrides review_ledger_archive.dir. Empty string means off."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF",
+      "kind": "env",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["review_ledger_archive.include_diff"],
+      "summary": "Overrides review_ledger_archive.include_diff. true, 1, or yes copies diff.txt."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB",
+      "kind": "env",
+      "audience": "user",
+      "group": "review-ledger",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": "docs/settings-reference.md",
+      "relates": ["review_ledger_archive.warn_mb"],
+      "summary": "Overrides review_ledger_archive.warn_mb."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": "30000",
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Positive number replaces the 30000ms ledger-lock stale threshold. Tests only. Unset, zero, and non-numeric values keep 30000."
+    },
+    {
+      "name": "AUTOPILOT_REVIEW_LEDGER_REPO_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Points a temp copy of review-ledger-copy.js at the repo. Tests only."
     },
     {
       "name": "review.port",

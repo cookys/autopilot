@@ -40,7 +40,14 @@ const done = (code, verdict, counts) => {
   process.exit(code);
 };
 
-const cell = (task, arm, rep) => rows.find((r) => r.task_id === task && r.arm === arm && r.rep === rep);
+// Last row per task|arm|rep. The matrix appends a retry rather than replacing
+// the failed row, so cell, hits, invoked, and the infra check all read this map.
+const lastRow = new Map();
+for (const r of rows) {
+  if (!r || r.task_id == null || r.arm == null || r.rep == null) continue;
+  lastRow.set(`${r.task_id}|${r.arm}|${r.rep}`, r);
+}
+const cell = (task, arm, rep) => lastRow.get(`${task}|${arm}|${rep}`);
 const infra = [];
 for (const col of COLS) for (const arm of [OFF, ON]) for (let rep = 1; rep <= REPS; rep++) {
   const r = cell(col.task, arm, rep);

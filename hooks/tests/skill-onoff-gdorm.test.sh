@@ -4,6 +4,7 @@
 # RED-first: run once against the unmodified tree before the gdorm row existed.
 # RED at 3ec639777: FAIL: tree cell exit 2 (arm manifest arms/gdorm/base.json not found).
 # RED at 03aa140b0: default dry-run is 60 cells at 6.60 USD (not 30); ONOFF_MAX_USD=5 dry-run exits 0; mutated ceo-agent pack --check-arms exits 0; score-gdorm.js is missing; stamp --check exits 2 (arm_manifests.change has no file).
+# RED at 0dd539888: cat scripts/qc-panel.js makes q_qcpanel_run true (test exit 1). Same loose match would accept head, grep -n, ls, and cat scripts/review-ledger-archive.js | grep import. Scorer rows.find keeps the first row: timeout-then-success is "FAIL (infra failure blocks PASS: 1 cell(s))" exit 3; a later runner_timeout with an earlier null row is a content FAIL, not infra.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -129,6 +130,53 @@ bad=[k for k,v in r["markers"].items() if v is not False]
 if bad: raise SystemExit(r["markers"])
 PY
 done
+
+echo "=== reading a script is not executing it ==="
+# Direct transcript fixtures. A Bash tool_use whose command only reads the
+# script must leave the marker false; an execution-shaped command must set it.
+MARKCWD="$TEST_TMP/markcwd"
+mkdir -p "$MARKCWD"
+write_tx() { # $1 command → jsonl path
+  local f="$TEST_TMP/tx-$RANDOM-$$.jsonl"
+  python3 - "$f" "$1" << 'PY'
+import json, sys
+ev = {"message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": sys.argv[2]}}]}}
+open(sys.argv[1], "w").write(json.dumps(ev) + "\n")
+PY
+  printf '%s\n' "$f"
+}
+mark_of() { # $1 task $2 transcript $3 marker name → prints true|false
+  local task="$1" tx="$2" name="$3" out
+  out=$(
+    cd "$MARKCWD" && \
+    env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+      HOME="$HOME" TRANSCRIPT="$tx" QUERY="$BASE/lib/transcript-query.js" \
+      ONOFF_LIB="$BASE/lib-gdorm" ONOFF_OUT="$TEST_TMP/no-such-out" \
+      ONOFF_CELL_HOME="$TEST_TMP/no-such-home" \
+      bash "$BASE/tasks/$task/markers.sh" < /dev/null
+  ) || fail "markers.sh $task exited $?"
+  printf '%s\n' "$out" | sed -n "s/^marker_${name}=//p"
+}
+expect_mark() { # $1 task $2 command $3 marker $4 true|false
+  local got
+  got=$(mark_of "$1" "$(write_tx "$2")" "$3")
+  [ "$got" = "$4" ] || fail "marker $3 for [$2]: got ${got:-<empty>} want $4"
+}
+expect_mark gdorm-qcpanel 'cat scripts/qc-panel.js' q_qcpanel_run false
+expect_mark gdorm-qcpanel 'head scripts/qc-panel.js' q_qcpanel_run false
+expect_mark gdorm-qcpanel 'ls scripts/qc-panel.js' q_qcpanel_run false
+expect_mark gdorm-qcpanel 'grep -n run scripts/qc-panel.js' q_qcpanel_run false
+expect_mark gdorm-qcpanel 'node scripts/qc-panel.js run' q_qcpanel_run true
+expect_mark gdorm-tree 'cat scripts/tree.js' t_tree_run false
+expect_mark gdorm-tree 'grep -n x scripts/tree.js' t_tree_run false
+expect_mark gdorm-tree 'head scripts/tree.js' t_tree_run false
+expect_mark gdorm-tree 'ls scripts/tree.js' t_tree_run false
+expect_mark gdorm-tree 'node scripts/tree.js init' t_tree_run true
+expect_mark gdorm-archive 'cat scripts/review-ledger-archive.js | grep import' r_archive_import false
+expect_mark gdorm-archive 'head scripts/review-ledger-archive.js | grep import' r_archive_import false
+expect_mark gdorm-archive 'grep -n import scripts/review-ledger-archive.js' r_archive_import false
+expect_mark gdorm-archive 'ls scripts/review-ledger-archive.js' r_archive_import false
+expect_mark gdorm-archive 'node scripts/review-ledger-archive.js import' r_archive_import true
 
 echo "=== archive fields are independent ==="
 IMPORT_ONLY="$TEST_TMP/stub-import-only.sh"
@@ -281,6 +329,62 @@ score "$TEST_TMP/score-pass.jsonl" pass
 score "$TEST_TMP/score-base-qc-2.jsonl" fail
 score "$TEST_TMP/score-change-qc-3.jsonl" fail
 score "$TEST_TMP/score-infra.jsonl" fail
+
+echo "=== scorer uses the latest row when a retry is appended ==="
+python3 - "$TEST_TMP" << 'PY'
+import json, os, sys
+tmp = sys.argv[1]
+src = os.path.join(tmp, "score-pass.jsonl")
+rows = [json.loads(l) for l in open(src) if l.strip()]
+def key(r):
+    return (r["task_id"], r["arm"], r["rep"])
+# Same cell twice: stale infra row first, success appended (matrix retry).
+# The success row drops one base qc hit so a scorer that reads it FAILs on
+# the column rule; a scorer that reads the first row exits on infra instead.
+late = []
+for r in rows:
+    if key(r) == ("gdorm-qcpanel", "base", 1):
+        stale = dict(r)
+        stale["failure_class"] = "runner_timeout"
+        stale["markers"] = {"q_qcpanel_run": True}
+        stale["skill_invoked"] = False
+        fresh = dict(r)
+        fresh["failure_class"] = None
+        fresh["markers"] = {"q_qcpanel_run": False}
+        fresh["skill_invoked"] = True
+        late.append(stale)
+        late.append(fresh)
+    else:
+        late.append(r)
+with open(os.path.join(tmp, "score-retry-ok.jsonl"), "w") as f:
+    for r in late:
+        f.write(json.dumps(r) + "\n")
+# Mirror: the later row is the infra failure and no row is null.
+mir = []
+for r in rows:
+    if key(r) == ("gdorm-qcpanel", "base", 1):
+        first = dict(r)
+        first["failure_class"] = None
+        second = dict(r)
+        second["failure_class"] = "runner_timeout"
+        second["markers"] = {"q_qcpanel_run": True}
+        mir.append(first)
+        mir.append(second)
+    else:
+        mir.append(r)
+with open(os.path.join(tmp, "score-retry-infra.jsonl"), "w") as f:
+    for r in mir:
+        f.write(json.dumps(r) + "\n")
+PY
+rc=0
+out=$(node "$BASE/score-gdorm.js" --prereg "$BASE/prereg/gdorm.json" --results "$TEST_TMP/score-retry-ok.jsonl" 2>&1) || rc=$?
+printf '%s\n' "$out" | grep -q 'infra failure' && fail "retry success still judged infra: $out"
+[ "$rc" = 3 ] || fail "retry success should FAIL on the latest markers (base qc 3), rc=$rc: $out"
+printf '%s\n' "$out" | grep -q '"base":3' || fail "latest-row markers not used: $out"
+rc=0
+out=$(node "$BASE/score-gdorm.js" --prereg "$BASE/prereg/gdorm.json" --results "$TEST_TMP/score-retry-infra.jsonl" 2>&1) || rc=$?
+[ "$rc" = 3 ] || fail "later infra row should stay infra, rc=$rc: $out"
+printf '%s\n' "$out" | grep -q 'infra failure' || fail "later infra row lost the infra verdict: $out"
 
 echo "=== stamp --check ==="
 node "$BASE/stamp-prereg.js" --row gdorm --check >/dev/null || fail "stamp --check exit $?"

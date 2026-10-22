@@ -9,14 +9,113 @@ set -u
 
 gdorm_emit() { echo "marker_$1=$([ "$2" = true ] && echo true || echo false)"; }
 
-# $1 regex matched against the Bash command text (transcript-query detail).
+# $1 script basename. $2 optional subcommand that must follow the path (import).
+# A hit is an execution, not a read. The command is split on newlines, ';',
+# '&&', '||', and '|'. In that simple command the script path is the first
+# word, or it is preceded by node/npx/bash/sh (env may wrap that token).
+# cat head tail grep less sed awk ls wc stat file diff cmp never count.
 gdorm_bash_hit() {
-  local re="$1"
+  local base="$1" sub="${2:-}"
   [ -n "${TRANSCRIPT:-}" ] && [ -n "${QUERY:-}" ] && [ -f "$TRANSCRIPT" ] || return 1
-  node "$QUERY" "$TRANSCRIPT" tool-events | while IFS=$'\t' read -r _idx name detail; do
-    [ "$name" = "Bash" ] || continue
-    printf '%s\n' "$detail"
-  done | grep -Eq "$re"
+  node - "$TRANSCRIPT" "$base" "$sub" << 'JS'
+const fs = require('fs');
+const file = process.argv[2];
+const base = process.argv[3];
+const sub = process.argv[4] || '';
+const READERS = new Set(['cat','head','tail','grep','less','sed','awk','ls','wc','stat','file','diff','cmp']);
+const EXECS = new Set(['node','npx','bash','sh']);
+let text;
+try { text = fs.readFileSync(file, 'utf8'); } catch { process.exit(1); }
+const commands = [];
+for (const line of text.split('\n')) {
+  if (!line.trim()) continue;
+  let j;
+  try { j = JSON.parse(line); } catch { continue; }
+  const content = j && j.message && j.message.content;
+  if (!Array.isArray(content)) continue;
+  for (const b of content) {
+    if (!b || b.type !== 'tool_use' || b.name !== 'Bash') continue;
+    const cmd = b.input && typeof b.input.command === 'string' ? b.input.command : '';
+    if (cmd) commands.push(cmd);
+  }
+}
+function leaf(w) {
+  const s = w.replace(/^['"]|['"]$/g, '');
+  const i = s.lastIndexOf('/');
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+function simples(cmd) {
+  const parts = [];
+  let cur = '';
+  let quote = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      cur += c;
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+    if (c === '\n' || c === ';') { parts.push(cur); cur = ''; continue; }
+    if ((c === '&' && cmd[i + 1] === '&') || (c === '|' && cmd[i + 1] === '|')) {
+      parts.push(cur); cur = ''; i++; continue;
+    }
+    if (c === '|') { parts.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+function words(s) {
+  const out = [];
+  let cur = '';
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else cur += c;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (/\s/.test(c)) {
+      if (cur) out.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function isScript(w) {
+  return w === base || w.endsWith('/' + base);
+}
+function executed(ws) {
+  const idx = ws.findIndex(isScript);
+  if (idx < 0) return false;
+  if (READERS.has(leaf(ws[0]))) return false;
+  let ok = false;
+  if (idx === 0) ok = true;
+  else {
+    let j = 0;
+    if (leaf(ws[j]) === 'env') {
+      j++;
+      while (j < idx && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(ws[j]) || ws[j].startsWith('-'))) j++;
+    }
+    if (j < idx && EXECS.has(leaf(ws[j])) && ws.slice(j + 1, idx).every((t) => t.startsWith('-'))) ok = true;
+  }
+  if (!ok) return false;
+  if (sub && !ws.slice(idx + 1).includes(sub)) return false;
+  return true;
+}
+for (const cmd of commands) {
+  for (const simple of simples(cmd)) {
+    if (executed(words(simple))) process.exit(0);
+  }
+}
+process.exit(1);
+JS
 }
 
 # tree.js init writes <projects>/tree/events.jsonl. The cell repo is cwd.
@@ -34,14 +133,14 @@ gdorm_tree_event() {
 
 gdorm_tree_markers() {
   local hit=false
-  if gdorm_bash_hit 'scripts/tree\.js'; then hit=true; fi
+  if gdorm_bash_hit 'tree.js'; then hit=true; fi
   if [ "$hit" != true ] && gdorm_tree_event; then hit=true; fi
   gdorm_emit t_tree_run "$hit"
 }
 
 gdorm_qc_markers() {
   local hit=false
-  if gdorm_bash_hit 'qc-panel\.js'; then hit=true; fi
+  if gdorm_bash_hit 'qc-panel.js'; then hit=true; fi
   gdorm_emit q_qcpanel_run "$hit"
 }
 
@@ -75,7 +174,7 @@ gdorm_archive_file() {
 gdorm_archive_markers() {
   local imp=false file=false
   # Same Bash command must name the script and the import subcommand.
-  if gdorm_bash_hit 'review-ledger-archive\.js([^[:alnum:]_]|$).*import([^[:alnum:]_]|$)'; then
+  if gdorm_bash_hit 'review-ledger-archive.js' import; then
     imp=true
   fi
   if gdorm_archive_file; then file=true; fi

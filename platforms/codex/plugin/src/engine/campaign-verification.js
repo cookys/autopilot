@@ -450,6 +450,16 @@ function createVerificationReceipt({
   };
 }
 
+// The failing command and exit status kept beside (never inside) the receipt, so
+// receipt_digest is unchanged. Output stays in the ledger's bounded stdout/stderr tails.
+function redVerificationDetail({ receipt, executedArgv }) {
+  if (!receipt || receipt.verdict !== 'RED') return {};
+  return {
+    verify_argv: Array.isArray(executedArgv) ? executedArgv.map(String) : [],
+    verify_exit_status: receipt.exit_status,
+  };
+}
+
 function reusableGreenReceipt(receipt, request) {
   if (!receipt || receipt.verdict !== 'GREEN' || receipt.exit_status !== 0) return false;
   if (receipt.writer_lease_closed !== true
@@ -478,6 +488,7 @@ module.exports = {
   createDetachedCheckoutAttestation,
   createLedgerReconciliationReceipt,
   createVerificationReceipt,
+  redVerificationDetail,
   createVerificationRequest,
   createAdoptedWriterFence,
   createWriterFence,

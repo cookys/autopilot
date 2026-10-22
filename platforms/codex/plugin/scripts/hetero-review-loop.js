@@ -1713,6 +1713,25 @@ async function handleFinalize(flags) {
   const receiptPath = path.join(ledgerDir, `receipt-${phase}.json`);
   writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 
+  // Opt-in archive copy. Absent or empty dir: resolve config only, then return.
+  // Any failure is one stderr line. The summary and exit code stay as they were.
+  try {
+    const archiveLib = require('./lib/review-ledger-copy.js');
+    const archiveCfg = archiveLib.resolveArchiveConfig();
+    if (archiveCfg.dir) {
+      if (fs.existsSync(archiveCfg.dir)) {
+        fs.accessSync(archiveCfg.dir, fs.constants.W_OK);
+      }
+      archiveLib.copyLedger({
+        ledgerDir,
+        repoDir: repoRoot,
+        phases: [phase],
+      });
+    }
+  } catch (archiveErr) {
+    console.error(`review-ledger-archive: ${archiveErr && archiveErr.message ? archiveErr.message : archiveErr}`);
+  }
+
   const summary = {
     phase,
     generation,

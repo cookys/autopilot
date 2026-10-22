@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+// # RED at 572041858: AssertionError [ERR_ASSERTION]: claude reviewer run succeeds (stderr: model call failed: claude CLI identity unverifiable: JSON envelope has no string `result`) with 1 !== 0 at scripts/qualification-review-provider.test.js:99 via line 470.
+
 // qualification-review-provider.test.js — unit suite for the trusted host-side
 // qualification provider adapter. Covers the HTTP-mode env contract, the CLI
 // transport mode (codex / claude stubs: argv shape, stdin prompt, sidecar/stdout
@@ -253,8 +255,22 @@ if (process.env.STUB_SLEEP_MS) {
 }
 // writeSync: process.exit does NOT drain an async pipe write — a stub that
 // exits right after stdout.write would silently drop the tail of its answer.
-if (process.env.STUB_OUTPUT_FILE) fs.writeSync(1, fs.readFileSync(process.env.STUB_OUTPUT_FILE));
-else if (process.env.STUB_OUTPUT !== undefined) fs.writeSync(1, process.env.STUB_OUTPUT);
+// claude -p --output-format json must be the envelope verifyClaudeRuntimeIdentity
+// parses: a string result plus a non-empty modelUsage keyed by --model.
+function writeAnswer(text) {
+  const fmtAt = process.argv.indexOf('--output-format');
+  if (fmtAt !== -1 && process.argv[fmtAt + 1] === 'json') {
+    const modelAt = process.argv.indexOf('--model');
+    const model = modelAt !== -1 ? String(process.argv[modelAt + 1]) : '';
+    const modelUsage = {};
+    if (model) modelUsage[model] = { inputTokens: 1, outputTokens: 1 };
+    fs.writeSync(1, JSON.stringify({ result: String(text), modelUsage }));
+    return;
+  }
+  fs.writeSync(1, text);
+}
+if (process.env.STUB_OUTPUT_FILE) writeAnswer(fs.readFileSync(process.env.STUB_OUTPUT_FILE));
+else if (process.env.STUB_OUTPUT !== undefined) writeAnswer(process.env.STUB_OUTPUT);
 if (process.env.STUB_STDERR !== undefined) fs.writeSync(2, process.env.STUB_STDERR);
 process.exit(Number(process.env.STUB_EXIT || 0));
 `, { mode: 0o755 });
@@ -469,7 +485,7 @@ function parseResponse(child) {
   });
   equal(child.status, 0, `claude reviewer run succeeds (stderr: ${child.stderr})`);
   equal(captured.argv, [
-    '-p', '--model', 'fake-model-exact',
+    '-p', '--model', 'fake-model-exact', '--output-format', 'json',
     '--setting-sources', '', '--strict-mcp-config', '--tools', '',
   ], 'claude argv is the probed hermetic no-tools headless shape (no ambient settings)');
   check(captured.stdin.includes('+++ b/lib/mod.js'), 'diff travels on claude stdin');

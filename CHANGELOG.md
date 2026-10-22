@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- redfix: the three engine-qualify impl suites supply their own git identity, the qualification-review-provider stub emits the JSON envelope, and the codex-mirror-require-closure scanner ignores comments (with negative controls).
+
 - concfix (3224af2b0): subagent-budget-mutants.test.sh now records row failures through lib.sh fail and ends with finalize_test, so test-suite-finalize-gate is green again.
 
 - reds4: five suites that were already red on develop are now recorded as BL-0280, BL-0281 and BL-0282 with their causes (docs only, no code changed).

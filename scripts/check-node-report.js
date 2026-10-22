@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Dormant since 2026-08-22 (board abort); no workflow triggers it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md
 // check-node-report.js — Node report contract validator (Node.js version).
 //
 // Schema-validates a node report JSON file against the contract defined in

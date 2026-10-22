@@ -22,6 +22,24 @@
 #       - scripts/check-profile-isolation.js: inventory row missing label word 'no runtime caller'
 #       - scripts/profile-session.js: header missing Callers:/Archive-only/no runtime caller
 #       - scripts/profile-session.js: inventory row missing label word 'no runtime caller'
+# RED at 63329748c:
+# FAIL [uncalled-script-labels] scripts/tree.js: header missing ADR-0002 within the first 60 lines
+# FAIL [uncalled-script-labels] scripts/tree.js: inventory row missing Dormant (ADR-0002)
+# FAIL [uncalled-script-labels] scripts/qc-panel.js: header missing ADR-0002 within the first 60 lines
+# FAIL [uncalled-script-labels] scripts/qc-panel.js: inventory row missing Dormant (ADR-0002)
+# FAIL [uncalled-script-labels] scripts/calibration.sh: header missing ADR-0002 within the first 60 lines
+# FAIL [uncalled-script-labels] scripts/calibration.sh: inventory row missing Dormant (ADR-0002)
+# FAIL [uncalled-script-labels] scripts/check-node-report.js: header missing ADR-0002 within the first 60 lines
+# FAIL [uncalled-script-labels] scripts/check-node-report.js: inventory row missing Dormant (ADR-0002)
+# FAIL [uncalled-script-labels] 22 passed, 8 failed
+#       - scripts/tree.js: header missing ADR-0002 within the first 60 lines
+#       - scripts/tree.js: inventory row missing Dormant (ADR-0002)
+#       - scripts/qc-panel.js: header missing ADR-0002 within the first 60 lines
+#       - scripts/qc-panel.js: inventory row missing Dormant (ADR-0002)
+#       - scripts/calibration.sh: header missing ADR-0002 within the first 60 lines
+#       - scripts/calibration.sh: inventory row missing Dormant (ADR-0002)
+#       - scripts/check-node-report.js: header missing ADR-0002 within the first 60 lines
+#       - scripts/check-node-report.js: inventory row missing Dormant (ADR-0002)
 . "$(dirname "$0")/lib.sh"
 
 # A header counts only when one of the first 60 lines carries the label.
@@ -80,5 +98,35 @@ if header_has_label "$neg.stripped"; then
 else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
+
+# ADR-0002 dormancy pins. A header counts only inside the first 60 lines.
+header_has_adr0002() {
+  local file="$1"
+  # The mandated header is one line and spells the ADR as a path
+  # (docs/adr/0002-...), so the pin matches that line, not the token ADR-0002.
+  head -n 60 "$file" | grep -F -q 'Dormant since 2026-08-22 (board abort); no workflow triggers it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md'
+}
+
+check_dormant() {
+  local rel="$1" row
+  if header_has_adr0002 "$REPO_ROOT/$rel"; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$rel: header missing ADR-0002 within the first 60 lines"
+  fi
+  # The index row is the one whose link target is this script. A earlier
+  # mention (jsonl-store.js names scripts/tree.js) is not that row.
+  row="$(grep -F "](../$rel)" "$REPO_ROOT/docs/scripts-inventory.md" | head -n 1)"
+  if printf '%s\n' "$row" | grep -F -q 'Dormant (ADR-0002)'; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$rel: inventory row missing Dormant (ADR-0002)"
+  fi
+}
+
+check_dormant scripts/tree.js
+check_dormant scripts/qc-panel.js
+check_dormant scripts/calibration.sh
+check_dormant scripts/check-node-report.js
 
 finalize_test

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Dormant since 2026-08-22 (board abort); no workflow triggers it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md
 # calibration.sh — verdict-vs-outcome sample store and agreement reporter.
 #
 # Stores panel-vs-authoritative verdict pairs so the QC panel's actual

@@ -134,7 +134,25 @@ function releaseLock(lockFile, token) {
   restoreOrDrop(parked, lockFile);
 }
 
+// A process killed between rename and unlink/link leaves a parked file. Sweep
+// ones older than LEFTOVER_MS; a live mover holds its parked file for microseconds.
+const LEFTOVER_MS = 60000;
+function sweepLeftovers(lockFile) {
+  const dir = path.dirname(lockFile);
+  const base = path.basename(lockFile);
+  let names;
+  try { names = fs.readdirSync(dir); } catch { return; }
+  for (const name of names) {
+    if (!name.startsWith(`${base}.reclaim-`) && !name.startsWith(`${base}.release-`)) continue;
+    const full = path.join(dir, name);
+    try {
+      if (Date.now() - fs.statSync(full).mtimeMs > LEFTOVER_MS) fs.unlinkSync(full);
+    } catch { /* raced away */ }
+  }
+}
+
 function acquireLock(lockFile, hooks) {
+  sweepLeftovers(lockFile);
   const token = holderToken();
   const start = Date.now();
   const busyMs = (hooks && hooks.maxBusyMs) || 15000;

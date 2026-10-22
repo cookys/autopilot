@@ -588,3 +588,52 @@ process.exit(0);
     s.cleanup();
   }
 });
+
+// BL-0252 follow-ups (b), (c), (d).
+// # RED at d880aceb4: node --test scripts/roundtable-window.test.js exit 1, 3 new tests fail:
+// duplicate skipped-seat rows appended on a second send; stale room.jsonl.lock.reclaim-*/release-*
+// files survive an append; USAGE lacks `send [--seats ...]` and `input ROOM [--once]`.
+test('a second send does not append another skipped-seat row for the same from value', () => {
+  const s = scratch();
+  try {
+    const { append, readAll } = require('./lib/room-log');
+    append('room-dup', { from: '--to/x', kind: 'say', text: 'bad from', reply_to: null }, s.env);
+    append('room-dup', { from: 'ns/courier/ok', kind: 'say', text: 'good', reply_to: null }, s.env);
+    const log = path.join(s.dir, 'argv.log');
+    const fleet = writeFake(s.dir, 'fleet', fleetFake());
+    const env = { ...s.env, ROUNDTABLE_FLEET_BIN: fleet, FAKE_ARGV_LOG: log };
+    assert.equal(run(['send', 'room-dup', 'one'], env).status, 0);
+    assert.equal(run(['send', 'room-dup', 'two'], env).status, 0);
+    const sys = readAll('room-dup', s.env).filter((row) => row.kind === 'system' && /skipped seat --to\/x/.test(row.text));
+    assert.equal(sys.length, 1);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('append sweeps old reclaim-/release- lock leftovers and keeps fresh ones', () => {
+  const s = scratch();
+  try {
+    const { append } = require('./lib/room-log');
+    const dir = path.join(s.dir, 'room-sweep');
+    fs.mkdirSync(dir, { recursive: true });
+    const oldFiles = ['room.jsonl.lock.reclaim-1-aa', 'room.jsonl.lock.release-2-bb'].map((n) => path.join(dir, n));
+    const fresh = path.join(dir, 'room.jsonl.lock.reclaim-3-cc');
+    const other = path.join(dir, 'notes.txt');
+    for (const f of [...oldFiles, fresh, other]) fs.writeFileSync(f, 'x');
+    const past = new Date(Date.now() - 10 * 60 * 1000);
+    for (const f of oldFiles) fs.utimesSync(f, past, past);
+    append('room-sweep', { from: 'owner', kind: 'say', text: 'hi', reply_to: null }, s.env);
+    for (const f of oldFiles) assert.equal(fs.existsSync(f), false, f);
+    assert.equal(fs.existsSync(fresh), true);
+    assert.equal(fs.existsSync(other), true);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('USAGE documents send --seats and input --once', () => {
+  const r = run(['--help'], process.env);
+  assert.match(r.stdout, /send \[--seats h1,h2\] ROOM TEXT/);
+  assert.match(r.stdout, /input ROOM \[--seats h1,h2\] \[--once\]/);
+});

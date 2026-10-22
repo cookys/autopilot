@@ -238,10 +238,11 @@ function runOnce(ctx, arm, remainingUsd) {
       '--max-budget-usd', String(budget),
     ], { cwd: ctx.workDir, env: cleanEnv(home, configDir), encoding: 'utf8', input: '', timeout: 600000 });
     let cost = NaN;
-    try { cost = Number(JSON.parse(r.stdout).total_cost_usd); } catch (_) { /* no JSON: handled below */ }
+    try { cost = JSON.parse(r.stdout).total_cost_usd; } catch (_) { /* no JSON: handled below */ }
     // A child that died (timeout, signal, crash) or printed no readable cost may still have spent up to its
     // --max-budget-usd cap, so charge the cap: the stop-loss must not be bypassable by a missing cost.
-    const costUnknown = r.status !== 0 || !Number.isFinite(cost);
+    // Only a real, finite, non-negative JSON number is a known cost (Number(null) and Number('') would be 0).
+    const costUnknown = r.status !== 0 || !(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0);
     if (costUnknown) cost = budget;
     const text = fs.existsSync(debugFile) ? fs.readFileSync(debugFile, 'utf8') : '';
     return { ok: r.status === 0, cost, costUnknown, lines: parseHookLines(text), stderr: r.stderr };

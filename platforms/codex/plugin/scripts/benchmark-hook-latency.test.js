@@ -42,7 +42,7 @@ for (let i = 0; i < 20; i++) {
 lines.push(ts + ' [DEBUG] hooks module cc-plugin-telemetry@builtin telemetry.log settled in 1.2ms (native link, next() included)');
 fs.writeFileSync(val('--debug-file'), lines.join('\\n') + '\\n');
 if (sc === 'crash_no_json') process.exit(1);
-process.stdout.write(JSON.stringify({ total_cost_usd: Number(process.env.STUB_COST || 0.01), result: 'done' }));
+process.stdout.write(JSON.stringify({ total_cost_usd: (process.env.STUB_COST_RAW ? JSON.parse(process.env.STUB_COST_RAW) : Number(process.env.STUB_COST || 0.01)), result: 'done' }));
 `;
 
 function withCtx(fn) {
@@ -198,4 +198,23 @@ test('cost_unknown is 0 when every run reports total_cost_usd', () => withCtx((c
   const r = run(ctx, ['--samples', '1', '--max-usd', '5', '--out', ctx.out]);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.strictEqual(JSON.parse(fs.readFileSync(ctx.out, 'utf8')).cost_unknown, 0);
+}));
+
+for (const raw of ['null', '""', '"0.01"', '-1', '"abc"']) {
+  test(`NEGATIVE CONTROL: total_cost_usd=${raw} is not a known cost -> cap charged, stop-loss fires`, () => withCtx((ctx) => {
+    // RED at 617f267de: Number(null)/Number("") === 0 counted as a known cost, spent stayed 0, all runs executed.
+    const r = run(ctx, ['--samples', '10', '--max-usd', '0.6', '--out', ctx.out], { STUB_COST_RAW: raw });
+    assert.strictEqual(r.status, 3, r.stderr + r.stdout);
+    const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
+    assert.strictEqual(j.stopped, 'max_usd');
+    assert.strictEqual(j.cost_unknown, 2);
+    assert.strictEqual(j.spent_usd, 0.6);
+  }));
+}
+test('total_cost_usd = 0 (a real number) is a known cost', () => withCtx((ctx) => {
+  const r = run(ctx, ['--samples', '1', '--max-usd', '5', '--out', ctx.out], { STUB_COST_RAW: '0' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
+  assert.strictEqual(j.cost_unknown, 0);
+  assert.strictEqual(j.spent_usd, 0);
 }));

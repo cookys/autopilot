@@ -5,6 +5,7 @@
 # RED at 3ec639777: FAIL: tree cell exit 2 (arm manifest arms/gdorm/base.json not found).
 # RED at 03aa140b0: default dry-run is 60 cells at 6.60 USD (not 30); ONOFF_MAX_USD=5 dry-run exits 0; mutated ceo-agent pack --check-arms exits 0; score-gdorm.js is missing; stamp --check exits 2 (arm_manifests.change has no file).
 # RED at 0dd539888: cat scripts/qc-panel.js makes q_qcpanel_run true (test exit 1). Same loose match would accept head, grep -n, ls, and cat scripts/review-ledger-archive.js | grep import. Scorer rows.find keeps the first row: timeout-then-success is "FAIL (infra failure blocks PASS: 1 cell(s))" exit 3; a later runner_timeout with an earlier null row is a content FAIL, not infra.
+# RED at 8e500bd57: cat > run.sh << 'EOF' / node scripts/tree.js / EOF makes t_tree_run true (test exit 1). Heredoc body lines are split as commands.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -177,6 +178,21 @@ expect_mark gdorm-archive 'head scripts/review-ledger-archive.js | grep import' 
 expect_mark gdorm-archive 'grep -n import scripts/review-ledger-archive.js' r_archive_import false
 expect_mark gdorm-archive 'ls scripts/review-ledger-archive.js' r_archive_import false
 expect_mark gdorm-archive 'node scripts/review-ledger-archive.js import' r_archive_import true
+
+echo "=== a heredoc body is not an executed command ==="
+# The body is source text being written. A real command after the closing
+# delimiter still counts. bash run.sh after the heredoc is a known conservative
+# undercount: run.sh does not contain the tracked script path.
+heredoc_cmd() { # lines... → one command string
+  printf '%s\n' "$@"
+}
+expect_mark gdorm-tree "$(heredoc_cmd "cat > run.sh << 'EOF'" "node scripts/tree.js" "EOF")" t_tree_run false
+expect_mark gdorm-tree "$(heredoc_cmd "cat > run.sh << 'EOF'" "node scripts/tree.js" "EOF" "node scripts/tree.js")" t_tree_run true
+expect_mark gdorm-qcpanel "$(heredoc_cmd "cat > run.sh << EOF" "node scripts/qc-panel.js" "EOF")" q_qcpanel_run false
+expect_mark gdorm-qcpanel "$(heredoc_cmd "cat > run.sh << EOF" "node scripts/qc-panel.js" "EOF" "node scripts/qc-panel.js")" q_qcpanel_run true
+expect_mark gdorm-archive "$(heredoc_cmd "tee x << 'EOF'" "node scripts/review-ledger-archive.js import" "EOF")" r_archive_import false
+expect_mark gdorm-archive "$(heredoc_cmd "tee x << 'EOF'" "node scripts/review-ledger-archive.js import" "EOF" "node scripts/review-ledger-archive.js import")" r_archive_import true
+expect_mark gdorm-tree "$(heredoc_cmd "cat > run.sh << 'EOF'" "node scripts/tree.js" "EOF" "bash run.sh")" t_tree_run false
 
 echo "=== archive fields are independent ==="
 IMPORT_ONLY="$TEST_TMP/stub-import-only.sh"

@@ -44,26 +44,61 @@ function leaf(w) {
   const i = s.lastIndexOf('/');
   return i >= 0 ? s.slice(i + 1) : s;
 }
+function heredocOpener(segment) {
+  // <<[-]['"]?WORD['"]? at the end of a segment. Quotes around the word must match.
+  const m = segment.match(/<<(-?)\s*(?:'([^']*)'|"([^"]*)"|([A-Za-z0-9_]+))\s*$/);
+  if (!m) return null;
+  return { strip: m[1] === '-', delim: m[2] ?? m[3] ?? m[4] };
+}
 function simples(cmd) {
   const parts = [];
   let cur = '';
   let quote = null;
+  // A heredoc opener ends a segment. The body starts at the next unquoted
+  // newline and is not a command. The closer is a line that is exactly the
+  // delimiter (leading tabs stripped only for <<-).
+  let pending = null;
+  let skipping = null;
+  const pushSeg = () => {
+    const spec = heredocOpener(cur);
+    parts.push(cur);
+    cur = '';
+    if (spec) pending = spec;
+  };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
+    if (skipping) {
+      if (c === '\n') {
+        let line = skipping.line;
+        if (skipping.strip) line = line.replace(/^\t+/, '');
+        skipping.line = '';
+        if (line === skipping.delim) skipping = null;
+      } else {
+        skipping.line += c;
+      }
+      continue;
+    }
     if (quote) {
       cur += c;
       if (c === quote) quote = null;
       continue;
     }
     if (c === '"' || c === "'") { quote = c; cur += c; continue; }
-    if (c === '\n' || c === ';') { parts.push(cur); cur = ''; continue; }
-    if ((c === '&' && cmd[i + 1] === '&') || (c === '|' && cmd[i + 1] === '|')) {
-      parts.push(cur); cur = ''; i++; continue;
+    if (c === '\n' || c === ';') {
+      pushSeg();
+      if (c === '\n' && pending) {
+        skipping = { strip: pending.strip, delim: pending.delim, line: '' };
+        pending = null;
+      }
+      continue;
     }
-    if (c === '|') { parts.push(cur); cur = ''; continue; }
+    if ((c === '&' && cmd[i + 1] === '&') || (c === '|' && cmd[i + 1] === '|')) {
+      pushSeg(); i++; continue;
+    }
+    if (c === '|') { pushSeg(); continue; }
     cur += c;
   }
-  parts.push(cur);
+  if (!skipping) pushSeg();
   return parts;
 }
 function words(s) {

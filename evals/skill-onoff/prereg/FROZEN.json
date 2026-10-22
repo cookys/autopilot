@@ -1178,7 +1178,7 @@
       "arms/gdorm/README.md": "88c207a962dc45c0c84430a0e29de7ce474d3cb28948b4886a7d7048550dbc4a",
       "arms/gdorm/base.json": "e1c271594a50f7e1471ed9c88e9f88caebb91024b8281c86e635e1c46c7d9b2a",
       "arms/gdorm/change.json": "682be59deafd8c6e61192df7705aec75702c54272e79559adb4c34728ceaed3d",
-      "lib-gdorm/gdorm-markers.sh": "5d242eebfd77c5739d04a372ec67ce0306351bc2469679909fce2a2a6d720859",
+      "lib-gdorm/gdorm-markers.sh": "e209bebfc5ac1f16a0bb8437f142ebfcda2feaa02ab5a20a768639e11f5324ae",
       "prereg/gdorm.json": "df938e73332a22725e5de65f2dba9f43e903ba3596140badd340ca3570b1413f",
       "run-gdorm-campaign.js": "20298b5c5698ef2628cc4c96bfbe9fc79c2d449dfbcf6da3c5f692bc3474acaa",
       "run-skill-onoff-eval-gdorm.sh": "0fc82e57bd77366a934c8276710d9c1440ad4937f88527bc842ce89f3cac99a2",

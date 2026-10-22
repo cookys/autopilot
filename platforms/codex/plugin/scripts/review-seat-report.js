@@ -10,8 +10,9 @@
 // --archive walks each root (layout A is bucket / YYYY-MM / ledger-id /, the legacy flat form is
 // root / any-name /, and anything in between). A directory that contains review-*/chain.json is
 // one ledger and is not descended into. Symlinks are followed only when their realpath has not
-// already been entered. A file whose name ends in .tar.gz or .tar is not read; the footer lists
-// it as skipped because tar months need P3.
+// already been entered and that realpath stays inside the realpath of the archive root (path.relative,
+// not a bare prefix). A symlink that points outside the root is skipped and never read. A file whose
+// name ends in .tar.gz or .tar is not read; the footer lists it as skipped because tar months need P3.
 //
 // Dedupe: a ledger with archive.json is keyed by the ledger-id field in that file, or by the
 // directory basename when the field is absent. A ledger without archive.json, including every
@@ -19,6 +20,11 @@
 // fallback: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
 // once. Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that
 // was kept, which is the --ledger path when --archive is not used.
+//
+// With --archive, a second pass drops a finalized generation whose (phase, generation, findings.json
+// sha256) was already counted in this run, even when the rest of the ledger differs. Pending,
+// aborted, corrupt, and unknown-status generations never enter that set. Without --archive the
+// generation set is unused and duplicate_generations_skipped stays 0.
 //
 // A generation counts only when review-<phase>/chain.json says status "finalized". "aborted" and
 // "pending" generations are skipped and counted in the scope footer. A phase whose chain or
@@ -115,10 +121,37 @@ function groupId(family, model, byModel) {
   return byModel ? `m:${model}` : `f:${family}`;
 }
 
+function findingsPath(phaseDir, generation) {
+  return path.join(phaseDir, `g${generation}`, 'findings.json');
+}
+
+function readFindingsBytes(phaseDir, generation) {
+  try {
+    return fs.readFileSync(findingsPath(phaseDir, generation));
+  } catch {
+    return null;
+  }
+}
+
+function parseFindingsBytes(bytes) {
+  if (!bytes) return null;
+  try {
+    const value = JSON.parse(bytes.toString('utf8'));
+    if (!value || !Array.isArray(value.findings)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 function readableFindingCount(phaseDir, generation) {
-  const doc = readJson(path.join(phaseDir, `g${generation}`, 'findings.json'));
-  if (!doc.ok || !doc.value || !Array.isArray(doc.value.findings)) return 0;
-  return doc.value.findings.length;
+  const value = parseFindingsBytes(readFindingsBytes(phaseDir, generation));
+  return value ? value.findings.length : 0;
+}
+
+function generationDedupeKey(phaseName, generation, bytes) {
+  const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+  return `${phaseName}\0${generation}\0${hash}`;
 }
 
 function noteCorrupt(scope, phaseName) {
@@ -126,7 +159,7 @@ function noteCorrupt(scope, phaseName) {
   scope.corrupt_phases.push(phaseName);
 }
 
-function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
+function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe) {
   const ledgerKey = path.resolve(ledgerDir);
   const phaseDir = path.join(ledgerDir, phaseName);
   const chain = readJson(path.join(phaseDir, 'chain.json'));
@@ -134,6 +167,9 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
     noteCorrupt(scope, phaseName);
     return;
   }
+  const dedupeGenerations = Boolean(genDedupe && genDedupe.enabled);
+  const seenGenerations = genDedupe && genDedupe.seen;
+  const recordUncounted = Boolean(genDedupe && genDedupe.recordUncountedGenerationKeys);
 
   const finalized = [];
   for (const entry of chain.value) {
@@ -144,16 +180,32 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
     } else if (entry.status === 'pending') {
       scope.pending_skipped += 1;
       scope.pending_skipped_findings += readableFindingCount(phaseDir, entry.generation);
+      // Test-only poison: a pending key must not enter the set in production. Inserting it
+      // here makes a later finalized copy of the same bytes look like a duplicate.
+      if (dedupeGenerations && recordUncounted && seenGenerations) {
+        const pendingBytes = readFindingsBytes(phaseDir, entry.generation);
+        if (pendingBytes) seenGenerations.add(generationDedupeKey(phaseName, entry.generation, pendingBytes));
+      }
     } else if (entry.status === 'finalized') finalized.push(entry);
     else scope.unknown_status_skipped += 1;
   }
 
   const loaded = [];
+  const keysToRemember = [];
   for (const entry of finalized) {
     const gen = entry.generation;
     const genDir = path.join(phaseDir, `g${gen}`);
-    const findingsDoc = readJson(path.join(genDir, 'findings.json'));
-    if (!findingsDoc.ok || !findingsDoc.value || !Array.isArray(findingsDoc.value.findings)) {
+    const findingsBytes = readFindingsBytes(phaseDir, gen);
+    const findingsValue = parseFindingsBytes(findingsBytes);
+    if (dedupeGenerations && seenGenerations && findingsBytes) {
+      const seenKey = generationDedupeKey(phaseName, gen, findingsBytes);
+      if (seenGenerations.has(seenKey)) {
+        scope.duplicate_generations_skipped += 1;
+        continue;
+      }
+      keysToRemember.push(seenKey);
+    }
+    if (!findingsValue) {
       noteCorrupt(scope, phaseName);
       return;
     }
@@ -187,11 +239,14 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
       const model = typeof doc.value.model === 'string' && doc.value.model ? doc.value.model : 'unknown';
       seats.set(seatId, { model, status: doc.value.status, family: familyOfEngine(model) });
     }
-    loaded.push({ gen, findings: findingsDoc.value.findings, dispMap, seats });
+    loaded.push({ gen, findings: findingsValue.findings, dispMap, seats });
   }
 
   scope.phases_read += 1;
   scope.finalized_generations += loaded.length;
+  if (seenGenerations) {
+    for (const seenKey of keysToRemember) seenGenerations.add(seenKey);
+  }
   const phaseKey = `${ledgerKey}\0${phaseName}`;
   if (loaded.length > 0) scope._phases.add(phaseKey);
   for (const gen of loaded) scope._gens.add(`${ledgerKey}\0${phaseName}\0${gen.gen}`);
@@ -278,10 +333,21 @@ function directoryHasLedgerChain(dir) {
   return false;
 }
 
+function isRealpathInside(rootReal, candidateReal) {
+  const rel = path.relative(rootReal, candidateReal);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+
 function discoverArchive(root) {
   const ledgers = [];
   const tarMonths = [];
   const seen = new Set();
+  let rootReal;
+  try {
+    rootReal = fs.realpathSync(root);
+  } catch {
+    return { ledgers, tarMonths };
+  }
   function enter(dir, depth) {
     let real;
     try {
@@ -289,6 +355,7 @@ function discoverArchive(root) {
     } catch {
       return;
     }
+    if (!isRealpathInside(rootReal, real)) return;
     if (seen.has(real)) return;
     seen.add(real);
     let st;
@@ -396,7 +463,9 @@ function dedupeLedgers(candidates) {
     seenContent.add(contentKey);
     kept.push(entry);
   }
-  return { kept, duplicates };
+  // dedupeGenerations is true only on this return, which main uses solely when --archive
+  // was given. The test that splices out this call therefore turns generation de-dupe off too.
+  return { kept, duplicates, dedupeGenerations: true };
 }
 
 function buildReport(ledgerDirs, options = {}) {
@@ -415,16 +484,22 @@ function buildReport(ledgerDirs, options = {}) {
     corrupt_phases: [],
     archive_ledgers_read: options.archiveLedgersRead || 0,
     duplicates_skipped: options.duplicatesSkipped || 0,
+    duplicate_generations_skipped: 0,
     tar_months_skipped: options.tarMonths || [],
     _phases: new Set(),
     _gens: new Set(),
   };
   const bag = { rows: new Map(), meta: new Map(), keyed: [], crossGen };
+  const genDedupe = {
+    enabled: Boolean(options.dedupeGenerations),
+    seen: new Set(),
+    recordUncountedGenerationKeys: Boolean(options.recordUncountedGenerationKeys),
+  };
   for (const dir of ledgerDirs) {
     const phases = listPhases(dir, scope);
     if (phases == null) continue;
     scope.ledgers_read += 1;
-    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope);
+    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope, genDedupe);
   }
 
   const verifiedSeats = new Map();
@@ -547,7 +622,7 @@ function formatText(report) {
   const lines = [
     header,
     ...rows.map(lineOf),
-    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}, archive ledgers read ${scope.archive_ledgers_read || 0}, duplicates skipped ${scope.duplicates_skipped || 0}, tar months skipped ${(scope.tar_months_skipped || []).length}${(scope.tar_months_skipped || []).length ? ` (${scope.tar_months_skipped.map((row) => `${row.name}: ${row.reason}`).join(', ')})` : ''}`,
+    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}, archive ledgers read ${scope.archive_ledgers_read || 0}, duplicates skipped ${scope.duplicates_skipped || 0}, duplicate generations skipped ${scope.duplicate_generations_skipped || 0}, tar months skipped ${(scope.tar_months_skipped || []).length}${(scope.tar_months_skipped || []).length ? ` (${scope.tar_months_skipped.map((row) => `${row.name}: ${row.reason}`).join(', ')})` : ''}`,
     'Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves.',
     `key mode: ${report.key_mode}`,
   ];
@@ -614,6 +689,7 @@ function main(argv) {
     archiveLedgersRead,
     duplicatesSkipped: selected.duplicates,
     tarMonths,
+    dedupeGenerations: Boolean(selected.dedupeGenerations),
   });
   writeStdout(json ? formatJson(report) : formatText(report));
   process.exitCode = 0;

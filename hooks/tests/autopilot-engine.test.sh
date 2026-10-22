@@ -3177,6 +3177,8 @@ function runScenario(name, options) {
   console.log(`${name}_ratchet_entry_count=${ratchetEntries.length}`);
   console.log(`${name}_has_verify_field=${Object.prototype.hasOwnProperty.call(result, 'verify_cmd_provided')}`);
   console.log(`${name}_ledger_has_verify=${verifyEntries.length > 0}`);
+  const redWarn = result.verify_red_convergence_warning;
+  console.log(`${name}_red_warning=${redWarn ? `${redWarn.code}:round${redWarn.round}:exit${redWarn.verify_exit_status}:${redWarn.convergence_reason}` : 'absent'}`);
 }
 
 function runTopLevelReviewFindingsScenario() {
@@ -3261,6 +3263,11 @@ runScenario('repair_passes', {
   reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
   maxRounds: 3,
 });
+runScenario('verify_red_ship', {
+  verifySequence: ['fail'],
+  reviewVerdicts: ['SHIP-AS-IS'],
+  maxRounds: 1,
+});
 runScenario('fail_tie_continues', {
   verifySequence: ['fail', 'fail', 'fail'],
   reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
@@ -3297,6 +3304,14 @@ assert_contains "$OUT" "repair_passes_status=converged" "AutopilotEngine converg
 assert_contains "$OUT" "repair_passes_reason=verification" "AutopilotEngine repair pass records verification convergence"
 assert_contains "$OUT" "repair_passes_rounds=2" "AutopilotEngine repair pass returns second round"
 assert_contains "$OUT" "repair_passes_verify_passes=false,true" "AutopilotEngine records failed then passing verification"
+# BL-0238 verify-red warning
+# RED at 1feaf0188: FAIL AutopilotEngine warns when converging with verify_pass=false: verify_red_ship_red_warning=verify_red_converged:round1:exit1:reviewer not found (587 passed, 1 failed)
+assert_contains "$OUT" "verify_red_ship_status=converged" "AutopilotEngine verify-red + reviewer SHIP still converges (convergence condition unchanged)"
+assert_contains "$OUT" "verify_red_ship_reason=reviewer" "AutopilotEngine verify-red convergence keeps reviewer reason"
+assert_contains "$OUT" "verify_red_ship_red_warning=verify_red_converged:round1:exit1:reviewer" "AutopilotEngine warns when converging with verify_pass=false"
+assert_contains "$OUT" "verify_first_advisory_red_warning=absent" "AutopilotEngine omits verify-red warning when verification passed"
+assert_contains "$OUT" "repair_passes_red_warning=absent" "AutopilotEngine omits verify-red warning after repair passes"
+assert_contains "$OUT" "no_verify_red_warning=absent" "AutopilotEngine omits verify-red warning without verify-cmd"
 assert_contains "$OUT" "fail_tie_continues_status=non_converged" "AutopilotEngine continues fail-fail ties to max rounds"
 assert_contains "$OUT" "fail_tie_continues_rounds=3" "AutopilotEngine fail-fail tie reaches max rounds"
 assert_contains "$OUT" "fail_tie_continues_impl_calls=3" "AutopilotEngine dispatches repairs while verification keeps failing without regression"

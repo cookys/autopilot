@@ -2692,6 +2692,12 @@ function resultWithVerificationFields(result, state) {
         || (typeof result.commit === 'string' ? result.commit : null),
     };
   }
+  if (state && state.verifyRedConvergence) {
+    output = {
+      ...output,
+      verify_red_convergence_warning: state.verifyRedConvergence,
+    };
+  }
   if (state && state.verifyFirstSignalUnused) {
     output = {
       ...output,
@@ -10509,6 +10515,7 @@ class AutopilotEngine {
     const verifyState = {
       verifyCmdProvided,
       verifyFirstSignalUnused: false,
+      verifyRedConvergence: null,
       convergenceReason: null,
       ratchetRevertedRounds: 0,
       advisoryFindings: [],
@@ -12177,6 +12184,20 @@ class AutopilotEngine {
 
       if (review.verdict === convergenceVerdict) {
         if (verifyCmdProvided) verifyState.convergenceReason = 'reviewer';
+        // Warning only: a red verify round that the reviewer SHIP outranks.
+        // The convergence condition is unchanged (BL-0238).
+        if (verifyCmdProvided && currentVerifyPass === false) {
+          verifyState.verifyRedConvergence = {
+            code: 'verify_red_converged',
+            round,
+            verify_pass: false,
+            verify_exit_status: implementation && implementation.verify_exit_status !== undefined
+              ? implementation.verify_exit_status
+              : null,
+            convergence_reason: 'reviewer',
+            message: `converged on reviewer verdict ${review.verdict} at round ${round} although verification failed (verify_pass=false)`,
+          };
+        }
         return finish({
           status: 'converged',
           phase: 'converged',

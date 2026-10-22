@@ -305,18 +305,32 @@ function recordVerdict(ctx, attempts, outcome) {
 // dispatch-review no_verdict emission: exit_code, stage and a stderr_tail already
 // secret-masked by the emitter and re-capped here. Fails open like every store function.
 const FAILURE_TAIL_MAX = 2000;
+function failureFields(detail) {
+  const failure = {};
+  if (!detail || typeof detail !== 'object') return null;
+  if (Number.isSafeInteger(detail.exit_code)) failure.exit_code = detail.exit_code;
+  if (typeof detail.stage === 'string' && detail.stage.length > 0) {
+    failure.stage = detail.stage.slice(0, 64);
+  }
+  if (typeof detail.stderr_tail === 'string') {
+    failure.stderr_tail = detail.stderr_tail.slice(-FAILURE_TAIL_MAX);
+  }
+  return Object.keys(failure).length === 0 ? null : failure;
+}
+
+// The seat outcome the engine holds is the review wrapper; the parsed dispatch-review
+// no_verdict JSON sits at raw.reviewResult.result. Flat detail is also accepted.
+function failureFromOutcome(outcome) {
+  const parsed = outcome && outcome.raw && outcome.raw.reviewResult
+    ? outcome.raw.reviewResult.result : null;
+  return failureFields(parsed && parsed.status === 'no_verdict' ? parsed : outcome);
+}
+
 function recordFailure(ctx, attempts, outcome) {
   const file = seatFile(ctx);
-  if (!file || !outcome || typeof outcome !== 'object') return false;
-  const failure = {};
-  if (Number.isSafeInteger(outcome.exit_code)) failure.exit_code = outcome.exit_code;
-  if (typeof outcome.stage === 'string' && outcome.stage.length > 0) {
-    failure.stage = outcome.stage.slice(0, 64);
-  }
-  if (typeof outcome.stderr_tail === 'string') {
-    failure.stderr_tail = outcome.stderr_tail.slice(-FAILURE_TAIL_MAX);
-  }
-  if (Object.keys(failure).length === 0) return false;
+  if (!file) return false;
+  const failure = failureFromOutcome(outcome);
+  if (!failure) return false;
   return writeJson(file, { ...baseBody(ctx, attempts, null), failure });
 }
 
@@ -447,4 +461,5 @@ module.exports = {
   recordAttempt,
   recordVerdict,
   recordFailure,
+  failureFromOutcome,
 };

@@ -5879,6 +5879,8 @@ class AutopilotEngine {
           && outcome.raw_log.length > 0) {
         body.raw_log = outcome.raw_log;
       }
+      const seatFailure = isReviewed ? null : finalPanelSeatStore.failureFromOutcome(outcome);
+      if (seatFailure) body.failure = seatFailure;
       if (isReviewed && typeof outcome.packet_hash === 'string'
           && /^[0-9a-f]{64}$/.test(outcome.packet_hash)) {
         body.packet_hash = outcome.packet_hash;
@@ -6226,6 +6228,9 @@ class AutopilotEngine {
         if (storeCtx && outcome && outcome.reviewed === true) {
           finalPanelSeatStore.recordVerdict(storeCtx, seatAttempts.get(index), outcome);
         }
+        if (storeCtx && outcome && outcome.reviewed !== true) {
+          finalPanelSeatStore.recordFailure(storeCtx, seatAttempts.get(index), outcome);
+        }
         return { seat, outcome };
       });
       if (preparedSeats.length > 0) {
@@ -6258,6 +6263,13 @@ class AutopilotEngine {
           outcomes[entry.index] = { seat: entry.seat, outcome: finished };
           if (seatStoreCtx && finished && finished.reviewed === true) {
             finalPanelSeatStore.recordVerdict(
+              { ...seatStoreCtx, seat: entry.seat, seatIndex: entry.index },
+              seatAttempts.get(entry.index),
+              finished,
+            );
+          }
+          if (seatStoreCtx && finished && finished.reviewed !== true) {
+            finalPanelSeatStore.recordFailure(
               { ...seatStoreCtx, seat: entry.seat, seatIndex: entry.index },
               seatAttempts.get(entry.index),
               finished,

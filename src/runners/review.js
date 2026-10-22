@@ -26,7 +26,10 @@ const REVIEW_RESULT_FIELDS = [
 // verdict for HUMAN adjudication only — it is never copied into `verdict` or
 // `status`, and non-null is admitted only on status:no_verdict. Consumers deriving
 // authority from it are rejected by the check-canonical-invariants reader guard.
-const REVIEW_RESULT_OPTIONAL_FIELDS = ['unratified_verdict', 'frame_closed_by'];
+// BL-0246: transport-failure detail on a no_verdict (exit_code, stage, masked stderr_tail).
+const REVIEW_RESULT_OPTIONAL_FIELDS = [
+  'unratified_verdict', 'frame_closed_by', 'exit_code', 'stage', 'stderr_tail',
+];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
 const NO_FINDING_TAUTOLOGIES = new Set([
@@ -110,6 +113,18 @@ function validateReviewResult(value) {
     if (!REVIEW_RESULT_FIELDS.includes(field) && !REVIEW_RESULT_OPTIONAL_FIELDS.includes(field)) {
       throw new Error(`review output JSON has unknown field: ${field}`);
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'exit_code')
+      && !Number.isSafeInteger(value.exit_code)) {
+    throw new Error('review output JSON exit_code must be an integer');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'stage')
+      && !['cleanroom', 'runner'].includes(value.stage)) {
+    throw new Error('review output JSON stage must be cleanroom or runner');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'stderr_tail')
+      && typeof value.stderr_tail !== 'string') {
+    throw new Error('review output JSON stderr_tail must be a string');
   }
   if (Object.prototype.hasOwnProperty.call(value, 'frame_closed_by')) {
     if (!['end-marker', 'begin-marker'].includes(value.frame_closed_by)) {

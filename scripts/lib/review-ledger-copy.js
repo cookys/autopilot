@@ -4,7 +4,7 @@
 // Node built-ins only. Throws Error on failure. Never calls process.exit.
 // Finalize is wired in. It writes to the archive only when a dir is configured
 // (env or config key); unset means nothing is written. The caller (CLI or the
-// finalize hook) catches every error. The archive writes only when a dir is configured.
+// finalize hook) catches every error.
 //
 // Archive off: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR unset and review_ledger_archive.dir
 // unset or empty. It writes nothing. The config file is still read to learn whether

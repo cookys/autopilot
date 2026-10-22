@@ -3,8 +3,10 @@
 ## Unreleased
 
 - retp2: `review-seat-report --archive` reads layout A and legacy flat ledgers, de-dupes by ledger-id, realpath and content, footer counts, tar months skipped until P3.
+- retp2b: `review-seat-report` de-duplicates by generation, so a pending or aborted generation no longer shadows a finalized one, and symlinks are followed only inside the archive root.
+- retp3: `review-ledger-archive` gains `rotate`, `prune`, and a status hint; the report reads `tar.gz` months. Two new config keys. Owner decisions: the tar and the source are both kept by default, deletion only through `prune --execute`, and the reminder is only in the report footer and `status` (no SessionStart hook).
 - smwt (ab6c7040c): session-marker-write-target classifies scripts/check-test-outcome.js as an AUTOPILOT_SESSION_ID scrub (it deletes the name from the child env) and pins that the name appears once, inside ENV_STRIP; the suite had been red since bl0050.
-- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written. The archive writes only when a dir is configured.
+- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written.
 
 - seatcard: read-only `review-seat-report.js` aggregates per-family review seat statistics from hetero-review ledgers supplied by the caller.
 

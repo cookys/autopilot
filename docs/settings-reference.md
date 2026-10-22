@@ -159,7 +159,7 @@ On every other SessionStart, only a `t2 + gap` above `autoCompactWindow - 33000`
 
 ## Review ledger archive
 
-Opt-in copy of hetero-review report files. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written. The config file is still read to learn whether the key is set. The archive writes only when a dir is configured. The suggested path `~/.autopilot/review-ledger-archive` is not a default.
+Opt-in copy of hetero-review report files. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written. The config file is still read to learn whether the key is set. The suggested path `~/.autopilot/review-ledger-archive` is not a default.
 
 | Setting | What it does | Default | Environment override |
 |---|---|---|---|

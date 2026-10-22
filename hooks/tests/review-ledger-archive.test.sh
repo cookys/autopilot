@@ -1221,46 +1221,60 @@ unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
-# Round 8 phrase. The same four files must carry it, and must not carry the
-# stale clauses this round removed.
-R8_PHRASE='writes only when a dir is configured'
-R8_STALE_RE='not wired in this change|finalize hook is a later change|later, the finalize'
-R8_WORD_FILES=(
+# Round 8 phrase. Working tree only: no git history. Surviving fragments and
+# the stale clauses (held here as constants) share one check function.
+AF_KEEP_A='Finalize is wired in'
+AF_KEEP_B='only when a dir is configured'
+AF_STALE_A='Finalize is not wired in this change'
+AF_STALE_B='the finalize hook is a later change'
+AF_WORD_FILES=(
   "$REPO_ROOT/CHANGELOG.md"
   "$REPO_ROOT/docs/scripts-inventory.md"
   "$REPO_ROOT/scripts/lib/review-ledger-copy.js"
   "$REPO_ROOT/docs/settings-reference.md"
 )
 
-# (af) wording. Negative control: the same grep on the pre-change blob fails.
-for f in "${R8_WORD_FILES[@]}"; do
-  if grep -E "$R8_STALE_RE" "$f" >/dev/null; then
-    fail "case af: stale wording still in $f"
+# Prints how many wording checks fail. Zero means both surviving fragments
+# are present and neither stale constant is.
+af_wording_hits() {
+  local f="$1"
+  local hits=0
+  grep -F "$AF_STALE_A" "$f" >/dev/null && hits=$((hits + 1))
+  grep -F "$AF_STALE_B" "$f" >/dev/null && hits=$((hits + 1))
+  grep -F "$AF_KEEP_A" "$f" >/dev/null || hits=$((hits + 1))
+  grep -F "$AF_KEEP_B" "$f" >/dev/null || hits=$((hits + 1))
+  printf '%s\n' "$hits"
+}
+
+# (af) wording on the real files, then the same function on mutated copies.
+for f in "${AF_WORD_FILES[@]}"; do
+  AF_HITS=$(af_wording_hits "$f")
+  if [ "$AF_HITS" != 0 ]; then
+    fail "case af: $f wording hits $AF_HITS"
+  else
+    echo "case af: $f wording ok"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
   fi
-  grep -F "$R8_PHRASE" "$f" >/dev/null
-  assert_exit_code "$?" "0" "case af: $f has the configured-dir phrase"
 done
-if ! git grep -q -F "$R8_PHRASE" HEAD -- CHANGELOG.md docs/scripts-inventory.md scripts/lib/review-ledger-copy.js docs/settings-reference.md; then
-  R8_PRE=HEAD
-else
-  R8_PRE='HEAD^'
-fi
-R8_PRE_HITS=0
-for rel in CHANGELOG.md docs/scripts-inventory.md scripts/lib/review-ledger-copy.js docs/settings-reference.md; do
-  blob=$(git show "$R8_PRE:$rel")
-  if printf '%s\n' "$blob" | grep -E "$R8_STALE_RE" >/dev/null; then
-    R8_PRE_HITS=$((R8_PRE_HITS + 1))
-  fi
-  if printf '%s\n' "$blob" | grep -F "$R8_PHRASE" >/dev/null; then
-    R8_PRE_HITS=$((R8_PRE_HITS + 1))
-  fi
+AF_MUT=$(mktemp -d)
+AF_RED=0
+for f in "${AF_WORD_FILES[@]}"; do
+  af_base=$(basename "$f")
+  cp "$f" "$AF_MUT/$af_base"
+  sed -i \
+    -e "s/${AF_KEEP_A}/${AF_STALE_A}/g" \
+    -e "s/${AF_KEEP_B}/${AF_STALE_B}/g" \
+    "$AF_MUT/$af_base"
+  af_one=$(af_wording_hits "$AF_MUT/$af_base")
+  AF_RED=$((AF_RED + af_one))
 done
-if [ "$R8_PRE_HITS" = 0 ]; then
-  fail "case af: pre-change blob $R8_PRE already matches the new wording (negative control is blind)"
+if [ "$AF_RED" = 0 ]; then
+  fail "case af: mutated copies still pass (negative control is blind)"
 else
-  echo "case af: red-on-broken (pre-change $R8_PRE wording hits $R8_PRE_HITS)"
+  echo "case af: red-on-broken (hit count $AF_RED)"
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
+rm -rf "$AF_MUT"
 
 # (ag) chain.json without generation 1 is skipped. Other phases are archived.
 LEDGER_AG="$TEST_TMP/ledger-ag"

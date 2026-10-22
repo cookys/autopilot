@@ -2507,8 +2507,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
   // the Mission claim so a drifted resume cannot burn a grant attempt.
   // Every git-candidate resume is preflighted: the durable-wait phases plus REVIEWING,
   // ADJUDICATING and VERTICAL_VERIFICATION (BL-0225), so a drifted resume of any of them
-  // cannot spend the Mission claim. An adopted review range (reviewCandidate) has no
-  // writer-fenced git candidate to verify and is not preflighted here.
+  // cannot spend the Mission claim. For the three added phases an adopted review range
+  // (reviewCandidate) has no writer-fenced git candidate to verify and is skipped; the
+  // durable-wait phases were always preflighted and stay so under reviewCandidate.
   // Fail-closed: any failure to read the sealed contract or project the ledger
   // is a blocked preflight, never a silent skip into the claim (a skipped check
   // would reinstate the spend the preflight exists to prevent).
@@ -2567,9 +2568,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
           reviewCandidateResumeFacts = { phase: projection.state.phase, reviewedHead };
         }
         if (projection
-            && input.reviewCandidate !== true
             && (NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
-              || PREFLIGHT_CANDIDATE_PHASES.has(projection.state.phase))
+              || (input.reviewCandidate !== true
+                && PREFLIGHT_CANDIDATE_PHASES.has(projection.state.phase)))
             && projection.candidate_reference
             && projection.candidate_reference.kind === 'git_candidate') {
           verifyResumeCandidate({

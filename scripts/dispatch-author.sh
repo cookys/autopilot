@@ -846,7 +846,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor)"
-case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint ;; esac
+case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
 case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then

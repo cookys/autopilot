@@ -2018,7 +2018,7 @@ set_runner_flags() {
     codex)   IS_CODEX=1 ;;
     agy)     ;;
     grok)    IS_GROK=1 ;;
-    cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
+    cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
     cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the

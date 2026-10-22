@@ -743,11 +743,14 @@ setup_codex() {
     configured="$(awk '/^autopilot-local[[:space:]]/ { print $NF; exit }' <<<"$listed")"
     configured_real="$(readlink -f "$configured" 2>/dev/null || printf '%s' "$configured")"
     if [[ "$configured_real" != "$market_real" ]]; then
-      # `codex plugin marketplace remove` is not verified on this CLI (it is not
-      # `plugin remove`, which deletes the versioned cache). Try it only when
-      # autopilot-local points somewhere other than the derived dev marketplace,
-      # ignore a missing subcommand, then re-add. The grep guard above still
-      # skips add when the configured path is already this directory.
+      # `codex plugin marketplace remove <name>` exists (verified on codex-cli
+      # 0.163.0; it only drops the registration, unlike `plugin remove`, which
+      # deletes the versioned cache). Use it when autopilot-local points
+      # somewhere other than the derived dev marketplace, then re-add. The grep
+      # guard above still skips add when the configured path is already this
+      # directory. User-level and plugin-level hooks are not de-duplicated by
+      # name here; the derived marketplace ships an empty hooks manifest so the
+      # question never arises.
       codex plugin marketplace remove autopilot-local || true
       codex plugin marketplace add "$market"
     fi
@@ -767,6 +770,18 @@ uninstall_codex() {
   dir="$(codex_config_dir)"
   market="$dir/autopilot-dev-marketplace"
   codex_hooks_commit uninstall || hooks_status=$?
+  # Drop the registration while the directory still exists, but only when it is
+  # ours: a dangling autopilot-local makes every later `marketplace list` fail.
+  if have_cmd codex; then
+    local listed configured
+    listed="$(codex plugin marketplace list 2>/dev/null || true)"
+    if grep -q '^autopilot-local[[:space:]]' <<<"$listed"; then
+      configured="$(awk '/^autopilot-local[[:space:]]/ { print $NF; exit }' <<<"$listed")"
+      if [[ "$(readlink -f "$configured" 2>/dev/null || printf '%s' "$configured")" == "$(readlink -m "$market")" ]]; then
+        codex plugin marketplace remove autopilot-local || true
+      fi
+    fi
+  fi
   if [[ -e "$market" ]]; then
     rm -rf "$market"
     printf 'codex dev marketplace: removed %s\n' "$market"

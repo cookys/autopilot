@@ -245,8 +245,9 @@ function normalizeCampaignAuthority(contract) {
     'strict_dispatch.budget.max_wall_seconds',
     1,
   );
-  if (maxWallSeconds < 10 || maxWallSeconds > 14400) {
-    throw new TypeError('strict_dispatch.budget.max_wall_seconds must be in 10..14400');
+  // Upstream cap: implementation-campaign-contract.schema.json max_wall_seconds <= 7200, and the budget must equal it (below).
+  if (maxWallSeconds < 10 || maxWallSeconds > 7200) {
+    throw new TypeError('strict_dispatch.budget.max_wall_seconds must be in 10..7200');
   }
   let finalPanelReserveSeconds = 0;
   if (Object.prototype.hasOwnProperty.call(contract, 'final_panel_reserve_seconds')) {

@@ -66,15 +66,10 @@ function snapshot(root) {
   return out.join('\n');
 }
 
-function runCli(args, home) {
+function runCli(args, home, extraEnv = {}) {
   return spawnSync(process.execPath, [SCRIPT, ...args], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      HOME: home,
-      AUTOPILOT_SESSION_ID: undefined,
-      CLAUDE_CODE_SESSION_ID: undefined,
-    },
+    env: cleanEnv(home, extraEnv),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -958,10 +953,12 @@ test('20 a tar month is listed as skipped', () => {
   fs.writeFileSync(path.join(root, '2026-10.tar.gz'), '');
   const { report, text } = totalsOf(['--archive', root, '--json'], home);
   assert.strictEqual(report.totals.findings, 1);
+  assert.strictEqual(report.scope.tar_months_read, 0);
   assert.ok(Array.isArray(report.scope.tar_months_skipped));
-  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-10.tar.gz' && /P3/.test(row.reason)));
-  assert.match(text, /2026-10\.tar\.gz/);
-  assert.match(text, /tar months need P3/);
+  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-10.tar.gz' && /tar extract failed/.test(row.reason)));
+  assert.match(text, /tar months read 0/);
+  assert.match(text, /tar months skipped 1 \(2026-10\.tar\.gz: tar extract failed:/);
+  assert.doesNotMatch(text, /tar months need P3/);
 });
 
 test('21 negative control: removing dedupe doubles the two-path totals', () => {
@@ -1105,4 +1102,157 @@ test('25 --ledger only keeps duplicate_generations_skipped at 0', () => {
   assert.strictEqual(report.scope.duplicate_generations_skipped, 0);
   assert.strictEqual(report.scope.duplicates_skipped, 0);
   assert.match(text, /duplicate generations skipped 0/);
+});
+
+// # RED at 792413ef1: node scripts/review-seat-report.test.js → fail 5, pass 28.
+// 20: tar_months_read undefined !== 0 (footer still says "tar months need P3").
+// 26: tar-only table is the zero TOTAL row; directory table has openai/gpt-5 findings 1.
+// 27: tar_months_read undefined !== 0 (dir+tar still only skips the tar as P3).
+// 28: tar_months_read undefined !== 0 (.. member was not refused; CLI still exited 0).
+// 29: tar_months_read undefined !== 0 (corrupt gzip and plain .tar were not classified).
+// # NEGATIVE CONTROL: with `return name.split('/').some((part) => part === '..')` replaced by
+// # `return false` in tarMemberUnsafe, `node --test --test-name-pattern '28 a tar'` → fail 1, pass 0.
+// # 28: skipped rows did not include 2026-01.tar.gz reason "unsafe member path" (assert.ok false).
+// # Restoring the `..` segment check makes case 28 green.
+
+function tableLines(text) {
+  return text.split('\n').filter((line) => line && !line.startsWith('scope:') && !line.startsWith('Heuristic:') && !line.startsWith('key mode:'));
+}
+
+function rotateWithClock(archiveRoot, home, extra = {}) {
+  const result = spawnSync(process.execPath, [ARCHIVE_CLI, 'rotate'], {
+    encoding: 'utf8',
+    env: cleanEnv(home, {
+      AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR: archiveRoot,
+      AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW: '1',
+      AUTOPILOT_TEST_NOW: '2028-06-15',
+      ...extra,
+    }),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  return result.stdout;
+}
+
+function findMonthDir(archiveRoot) {
+  const buckets = fs.readdirSync(archiveRoot).filter((name) => !name.startsWith('.'));
+  assert.strictEqual(buckets.length, 1);
+  const bucketDir = path.join(archiveRoot, buckets[0]);
+  const months = fs.readdirSync(bucketDir).filter((name) => /^\d{4}-\d{2}$/.test(name));
+  assert.strictEqual(months.length, 1);
+  return { bucketDir, month: months[0], monthDir: path.join(bucketDir, months[0]) };
+}
+
+function assertTmpEmpty(dir) {
+  const names = fs.readdirSync(dir);
+  assert.deepStrictEqual(names, [], `TMPDIR leftovers: ${names.join(', ')}`);
+}
+
+test('26 tar-only month matches the directory report, row for row', () => {
+  const home = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[tar-read] same bytes');
+  const dirRoot = tmp();
+  importLayoutA(source, dirRoot, home);
+  const tarRoot = tmp();
+  importLayoutA(source, tarRoot, home);
+  const rotated = rotateWithClock(tarRoot, home);
+  assert.match(rotated, /rotated /);
+  const { bucketDir, monthDir } = findMonthDir(tarRoot);
+  assert.ok(fs.existsSync(path.join(bucketDir, `${path.basename(monthDir)}.tar.gz`)));
+  fs.rmSync(monthDir, { recursive: true, force: true });
+  const fromDir = totalsOf(['--archive', dirRoot, '--json'], home);
+  const childTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tmp-'));
+  const cli = runCli(['--archive', tarRoot, '--json'], home, { TMPDIR: childTmp });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const fromTar = { report: JSON.parse(cli.stdout), text: load().formatText(JSON.parse(cli.stdout)) };
+  assert.deepStrictEqual(tableLines(fromTar.text), tableLines(fromDir.text));
+  assert.deepStrictEqual(fromTar.report.groups, fromDir.report.groups);
+  assert.strictEqual(fromTar.report.scope.tar_months_read, 1);
+  assert.deepStrictEqual(fromTar.report.scope.tar_months_skipped, []);
+  assert.match(fromTar.text, /tar months read 1/);
+  assert.match(fromTar.text, /tar months skipped 0/);
+  assertTmpEmpty(childTmp);
+});
+
+test('27 directory beside the tar is the only copy counted', () => {
+  const home = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[both-present] once');
+  const root = tmp();
+  importLayoutA(source, root, home);
+  const onlyDir = totalsOf(['--archive', root, '--json'], home);
+  rotateWithClock(root, home);
+  const { monthDir, bucketDir, month } = findMonthDir(root);
+  assert.ok(fs.existsSync(monthDir));
+  assert.ok(fs.existsSync(path.join(bucketDir, `${month}.tar.gz`)));
+  const childTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tmp-'));
+  const cli = runCli(['--archive', root, '--json'], home, { TMPDIR: childTmp });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const both = JSON.parse(cli.stdout);
+  const text = load().formatText(both);
+  assert.deepStrictEqual(both.totals, onlyDir.report.totals);
+  assert.deepStrictEqual(both.groups, onlyDir.report.groups);
+  assert.strictEqual(both.scope.tar_months_read, 0);
+  assert.deepStrictEqual(both.scope.tar_months_skipped, []);
+  assert.strictEqual(both.scope.ledgers_read, onlyDir.report.scope.ledgers_read);
+  assert.match(text, /tar months read 0/);
+  assert.doesNotMatch(text, /unsafe member path|tar extract failed/);
+  assertTmpEmpty(childTmp);
+});
+
+test('28 a tar.gz with a .. member is refused and leaves no marker', () => {
+  const home = tmp();
+  const root = tmp();
+  const bucket = path.join(root, 'bucket');
+  const scratch = tmp();
+  const outside = tmp();
+  const marker = path.join(outside, 'MARKER');
+  fs.mkdirSync(bucket);
+  fs.writeFileSync(path.join(scratch, 'payload'), 'nope');
+  const tarFile = path.join(bucket, '2026-01.tar.gz');
+  const packed = spawnSync('tar', [
+    '-czf', tarFile,
+    '-C', scratch,
+    `--transform=s,^payload$,${path.relative(scratch, marker)},`,
+    'payload',
+  ], { encoding: 'utf8' });
+  assert.strictEqual(packed.status, 0, packed.stderr);
+  const listed = spawnSync('tar', ['-tzf', tarFile], { encoding: 'utf8' });
+  assert.ok(listed.stdout.split('\n').some((line) => line.split('/').includes('..')), listed.stdout);
+  const childTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tmp-'));
+  const cli = runCli(['--archive', root, '--json'], home, { TMPDIR: childTmp });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const report = JSON.parse(cli.stdout);
+  const text = load().formatText(report);
+  assert.strictEqual(report.scope.tar_months_read, 0);
+  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-01.tar.gz' && row.reason === 'unsafe member path'));
+  assert.match(text, /tar months skipped 1 \(2026-01\.tar\.gz: unsafe member path\)/);
+  assert.strictEqual(fs.existsSync(marker), false);
+  assertTmpEmpty(childTmp);
+});
+
+test('29 a corrupt tar.gz is skipped and the process exits 0', () => {
+  const home = tmp();
+  const root = tmp();
+  const bucket = path.join(root, 'bucket');
+  fs.mkdirSync(bucket);
+  fs.writeFileSync(path.join(bucket, '2026-03.tar.gz'), crypto.randomBytes(64));
+  fs.writeFileSync(path.join(bucket, '2026-04.tar'), crypto.randomBytes(8));
+  const source = tmp();
+  writeSeatLedger(source, '[corrupt] still counted');
+  fs.cpSync(source, path.join(root, 'legacy-flat'), { recursive: true });
+  const childTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tmp-'));
+  const cli = runCli(['--archive', root, '--json'], home, { TMPDIR: childTmp });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const report = JSON.parse(cli.stdout);
+  const text = load().formatText(report);
+  assert.strictEqual(report.totals.findings, 1);
+  assert.strictEqual(report.scope.tar_months_read, 0);
+  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-03.tar.gz' && /tar extract failed/.test(row.reason)));
+  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-04.tar' && row.reason === 'uncompressed tar not read'));
+  assert.match(text, /2026-03\.tar\.gz: tar extract failed:/);
+  assert.match(text, /2026-04\.tar: uncompressed tar not read/);
+  assert.doesNotMatch(text, /tar months need P3/);
+  assertTmpEmpty(childTmp);
 });

@@ -1,3 +1,6 @@
+// # RED at 72df15750 (unmodified room-log.js, 3 of 3 runs): node --test scripts/lib/room-log.test.js exit 1;
+// the two "never opens a gap for a third process" tests failed (a rename of the lock lets a third
+// process create it); the 5x40 stress test passed on base, so it is a regression guard only.
 // # RED at bd5338c1d: node --test scripts/lib/room-log.test.js exit 1.
 // tests 6, pass 1, fail 5. The five product tests threw MODULE_NOT_FOUND for
 // scripts/lib/room-log.js. The unlocked-writer negative control passed (duplicate seq).
@@ -417,6 +420,122 @@ test('a stale lock file does not block append', () => {
     assert.equal(row.seq, 1);
     assert.equal(fs.existsSync(lock), false);
     assert.equal(fs.readFileSync(roomPath('stale-room', s.env), 'utf8').includes('after stale'), true);
+  } finally {
+    s.cleanup();
+  }
+});
+
+// BL-0252 (a): a release or reclaim must never take another holder's live lock
+// out of the lock path, even for an instant. A third process that creates the
+// lock in that gap would hold it together with the holder that was moved aside.
+function withRenameProbe(lockFile, log, fn) {
+  const realRename = fs.renameSync;
+  const probe = lockGapProbe(lockFile, log);
+  fs.renameSync = function patched(from, to) {
+    const r = realRename.call(fs, from, to);
+    if (from === lockFile) probe();
+    return r;
+  };
+  try { fn(); } finally { fs.renameSync = realRename; }
+}
+
+function lockGapProbe(lockFile, log) {
+  return () => {
+    let fd;
+    try {
+      fd = fs.openSync(lockFile, 'wx');
+      log.push('third process created the lock while a live holder was moved aside');
+      fs.closeSync(fd);
+      fs.unlinkSync(lockFile);
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+  };
+}
+
+test('release of a lock reclaimed by another holder never opens a gap for a third process', () => {
+  const s = scratch();
+  try {
+    const { append } = load();
+    const room = 'release-gap-room';
+    const dir = path.join(s.dir, room);
+    const lock = path.join(dir, 'room.jsonl.lock');
+    const holderB = `B-${process.pid}-live`;
+    const gaps = [];
+    let swapped = false;
+    withRenameProbe(lock, gaps, () => {
+    append(room, { from: 'owner', kind: 'say', text: 'A holds, B reclaims', reply_to: null }, s.env, {
+      writeSync(fd, buf, off, len) {
+        if (!swapped) {
+          swapped = true;
+          // B reclaimed A's lock as stale and now holds it with a fresh mtime.
+          fs.unlinkSync(lock);
+          fs.writeFileSync(lock, holderB);
+        }
+        return fs.writeSync(fd, buf, off, len);
+      },
+    });
+    });
+    assert.deepEqual(gaps, []);
+    assert.equal(fs.readFileSync(lock, 'utf8'), holderB, 'B must still hold the lock after A released');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('reclaim that meets a freshly recreated lock never opens a gap for a third process', () => {
+  const s = scratch();
+  try {
+    const { append } = load();
+    const room = 'reclaim-gap-room';
+    const dir = path.join(s.dir, room);
+    fs.mkdirSync(dir, { recursive: true });
+    const lock = path.join(dir, 'room.jsonl.lock');
+    fs.writeFileSync(lock, 'stale-token');
+    const old = new Date(Date.now() - 10000);
+    fs.utimesSync(lock, old, old);
+    const gaps = [];
+    const freshToken = `fresh-${process.pid}`;
+    let contended = 0;
+    withRenameProbe(lock, gaps, () => {
+    append(room, { from: 'owner', kind: 'say', text: 'reclaim gap', reply_to: null }, s.env, {
+      afterStaleJudgement(lockFile) {
+        fs.unlinkSync(lockFile);
+        fs.writeFileSync(lockFile, freshToken);
+      },
+      onContended(lockFile) {
+        if (++contended === 1) fs.unlinkSync(lockFile);
+      },
+    });
+    });
+    assert.deepEqual(gaps, []);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('five writers times 40 rows keep seq exact and rows whole under contention', async () => {
+  const s = scratch();
+  try {
+    const kids = [];
+    for (let i = 0; i < 5; i++) {
+      kids.push(spawnNode([__filename], {
+        ...s.env,
+        ROOM_LOG_WORKER: 'append',
+        ROOM_LOG_ROOM: 'stress-room',
+        ROOM_LOG_N: '40',
+      }));
+    }
+    const done = await Promise.all(kids);
+    for (const d of done) assert.equal(d.code, 0, d.stderr);
+    const { readAll } = load();
+    const rows = readAll('stress-room', s.env);
+    assert.equal(rows.length, 200);
+    assertSeqExact(rows);
+    const raw = fs.readFileSync(path.join(s.dir, 'stress-room', 'room.jsonl'), 'utf8');
+    for (const line of raw.split('\n')) if (line) JSON.parse(line);
+    const left = fs.readdirSync(path.join(s.dir, 'stress-room')).filter((n) => n.startsWith('room.jsonl.lock'));
+    assert.deepEqual(left, []);
   } finally {
     s.cleanup();
   }

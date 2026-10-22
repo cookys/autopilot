@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0283 -->
+<!-- next-id: BL-0284 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -398,20 +398,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: test-integrity-l1 (v2.25.7) + W1/W2/W3 ship (v2.25.8); gpt-5.5 review verdict in session 2026-06-26; spec §8.3 / §12.
 - **Pointer**: docs/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md
 - **Context**: The override stays **DEFERRED**.
-
-### qc-panel refute pass — graduate from shadow to gating (calibration-gated)
-- **Id**: BL-0069
-- **Status**: open
-- **Since**: 2026-06-24
-- **Origin**: self
-- **Problem**: 品管面板的「反駁檢查」目前只做影子記錄，不影響結論，因為怕它誤把嚴重問題壓掉。要看校準報告確認安全後才改成真的把關。 (draft)
-- **Impact**: 不改則反駁檢查沒有實際效果，只是多花一點成本。 (draft)
-- **Trigger**: `scripts/calibration.sh report` over accumulated refute-shadow samples shows the refute pass does **not** false-suppress critical/`MISSED:` findings (meets the existing graduation-criteria data block). Until then it stays shadow.
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: 2026-06-24 v2.24.0 ship (`77214a1`) + depth-0 qc 🔵 (reviewer `a4162329`).
-- **Pointer**: docs/backlog/qc-panel-refute-pass-graduate-from-shadow-to-gating-calibration-gated.md
-- **Context**: v2.24.0 shipped the refute pass as **shadow / non-gating** — it emits `refute_shadow` + rides into the calibration `--source` tag but never alters `verdict` (a refute pass that suppresses a true critical is worse than the bug it fixes).
 
 ### `/l5` hetero-parallel width fan-out (machinery built, deliberately unwired)
 - **Id**: BL-0070
@@ -1442,5 +1428,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: BL-0275 relabel, 2026-10-22
 - **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
-- **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin.
+- **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
+
+### Skill and reference text still tells people to run the dormant tree and qc-panel
+- **Id**: BL-0283
+- **Status**: open
+- **Since**: 2026-10-22
+- **Origin**: owner
+- **Problem**: skill 與 reference 仍叫人去跑已經休眠的任務樹和品管面板。
+- **Impact**: 無腳本或 hook 觸發。照 ceo-agent 現文，CEO 開 L/XL 仍可能建樹；樹在後，quality-pipeline 現文叫 dispatcher 跑 qc-panel。
+- **Trigger**: the next guidance eval
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: treedorm 2026-10-22
+- **Pointer**: docs/backlog/dormant-tree-qc-panel-skill-text.md
+- **Context**: skills/ceo-agent/SKILL.md c2; skills/quality-pipeline/SKILL.md; references/blind-dispatch.md; references/tree-contracts.md has no dormant mark. Decision record: docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 

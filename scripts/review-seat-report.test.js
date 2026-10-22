@@ -850,3 +850,145 @@ function assertUnknownStatus(report, text) {
   assert.match(text, /unknown-status skipped 1/);
   assert.strictEqual(report.totals.findings, 0);
 }
+
+// # RED at 1295ec2fa: node --test --test-name-pattern '1[6-9]|2[01]' scripts/review-seat-report.test.js → fail 5, pass 1.
+// 16, 17, 19, 20, 21: status 2 !== 0, stderr is the old Usage line (--archive is an unknown flag).
+// 18 passed on the unmodified base because an unknown flag already exits 2.
+
+const ARCHIVE_CLI = path.join(__dirname, 'review-ledger-archive.js');
+
+function cleanEnv(home, extra = {}) {
+  const env = { ...process.env, HOME: home, ...extra };
+  delete env.AUTOPILOT_SESSION_ID;
+  delete env.CLAUDE_CODE_SESSION_ID;
+  return env;
+}
+
+function writeSeatLedger(dir, text) {
+  const phase = path.join(dir, 'review-alpha');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('a1', 'Major', 's0', text)],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('a1', 'verified')] });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('gpt-5'));
+}
+
+function importLayoutA(ledgerDir, archiveRoot, home) {
+  const result = spawnSync(process.execPath, [ARCHIVE_CLI, 'import', '--ledger', ledgerDir], {
+    encoding: 'utf8',
+    env: cleanEnv(home, { AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR: archiveRoot }),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  const dest = result.stdout.trim().split('\n').pop();
+  assert.ok(fs.existsSync(path.join(dest, 'archive.json')), 'import wrote archive.json');
+  return dest;
+}
+
+function totalsOf(args, home) {
+  const cli = runCli(args, home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const report = JSON.parse(cli.stdout);
+  return { report, text: load().formatText(report) };
+}
+
+test('16 two archive paths, layout A plus legacy flat, count once', () => {
+  const home = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[once] same bytes');
+  const legacyRoot = tmp();
+  fs.cpSync(source, path.join(legacyRoot, 'legacy-flat'), { recursive: true });
+  const layoutRoot = tmp();
+  importLayoutA(source, layoutRoot, home);
+  const single = totalsOf(['--ledger', source, '--json'], home);
+  const both = totalsOf(['--archive', legacyRoot, '--archive', layoutRoot, '--json'], home);
+  assert.strictEqual(both.report.totals.findings, single.report.totals.findings);
+  assert.strictEqual(both.report.totals.verified, single.report.totals.verified);
+  assert.strictEqual(both.report.totals.exclusive_verified, single.report.totals.exclusive_verified);
+  assert.strictEqual(both.report.scope.ledgers_read, 1);
+  assert.strictEqual(both.report.scope.archive_ledgers_read, 1);
+  assert.strictEqual(both.report.scope.duplicates_skipped, 1);
+  assert.match(both.text, /archive ledgers read 1/);
+  assert.match(both.text, /duplicates skipped 1/);
+});
+
+test('17 legacy flat and layout A in one root with different data are both found', () => {
+  const home = tmp();
+  const root = tmp();
+  const sourceA = tmp();
+  writeSeatLedger(sourceA, '[layout] one');
+  importLayoutA(sourceA, root, home);
+  const flat = path.join(root, 'legacy-other');
+  writeSeatLedger(flat, '[flat] two');
+  const { report } = totalsOf(['--archive', root, '--json'], home);
+  assert.strictEqual(report.totals.findings, 2);
+  assert.strictEqual(report.scope.ledgers_read, 2);
+  assert.strictEqual(report.scope.archive_ledgers_read, 2);
+  assert.strictEqual(report.scope.duplicates_skipped, 0);
+});
+
+test('18 nonexistent archive root exits 2', () => {
+  const home = tmp();
+  const missing = path.join(os.tmpdir(), `seat-report-missing-${process.pid}-no-such`);
+  const cli = runCli(['--archive', missing], home);
+  assert.strictEqual(cli.status, 2);
+  assert.match(cli.stderr, /Usage:/);
+});
+
+test('19 --ledger plus --archive of the same data counts once', () => {
+  const home = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[both] same');
+  const archiveRoot = tmp();
+  importLayoutA(source, archiveRoot, home);
+  const single = totalsOf(['--ledger', source, '--json'], home);
+  const both = totalsOf(['--ledger', source, '--archive', archiveRoot, '--json'], home);
+  assert.strictEqual(both.report.totals.findings, single.report.totals.findings);
+  assert.strictEqual(both.report.scope.ledgers_read, 1);
+  assert.strictEqual(both.report.scope.duplicates_skipped, 1);
+});
+
+test('20 a tar month is listed as skipped', () => {
+  const home = tmp();
+  const root = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[tar] live');
+  fs.cpSync(source, path.join(root, 'legacy-flat'), { recursive: true });
+  fs.writeFileSync(path.join(root, '2026-10.tar.gz'), '');
+  const { report, text } = totalsOf(['--archive', root, '--json'], home);
+  assert.strictEqual(report.totals.findings, 1);
+  assert.ok(Array.isArray(report.scope.tar_months_skipped));
+  assert.ok(report.scope.tar_months_skipped.some((row) => row.name === '2026-10.tar.gz' && /P3/.test(row.reason)));
+  assert.match(text, /2026-10\.tar\.gz/);
+  assert.match(text, /tar months need P3/);
+});
+
+test('21 negative control: removing dedupe doubles the two-path totals', () => {
+  const home = tmp();
+  const source = tmp();
+  writeSeatLedger(source, '[dedupe] matters');
+  const rootA = tmp();
+  const rootB = tmp();
+  fs.cpSync(source, path.join(rootA, 'copy-a'), { recursive: true });
+  fs.cpSync(source, path.join(rootB, 'copy-b'), { recursive: true });
+  const honest = totalsOf(['--archive', rootA, '--archive', rootB, '--json'], home);
+  assert.strictEqual(honest.report.totals.findings, 1, 'dedupe keeps one copy');
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  const call = 'dedupeLedgers(candidates); // dedupe-call';
+  assert.ok(src.includes(call), 'dedupe call is present');
+  const mutated = src
+    .replace(call, '{ kept: candidates, duplicates: 0 };')
+    .replace("require('./lib/stage-write')", `require(${JSON.stringify(path.join(__dirname, 'lib/stage-write'))})`);
+  const copy = path.join(tmp(), 'review-seat-report-no-dedupe.js');
+  fs.writeFileSync(copy, mutated);
+  const doubled = spawnSync(process.execPath, [copy, '--archive', rootA, '--archive', rootB, '--json'], {
+    encoding: 'utf8',
+    env: cleanEnv(home),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(doubled.status, 0, doubled.stderr);
+  const report = JSON.parse(doubled.stdout);
+  assert.strictEqual(report.totals.findings, 2);
+  assert.notStrictEqual(report.totals.findings, honest.report.totals.findings);
+});

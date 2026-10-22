@@ -3,8 +3,22 @@
 
 // review-seat-report.js — read-only per-reviewer-family statistics from hetero-review-loop ledgers.
 //
-// The caller passes every ledger directory. This process only reads. It never writes, moves, or
-// deletes, and it never looks at ~/.autopilot.
+// The caller passes every ledger directory (--ledger) and, optionally, one or more review-ledger
+// archive roots (--archive, repeatable). --archive alone is valid. This process only reads. It
+// never writes, moves, or deletes, and it never looks at ~/.autopilot on its own.
+//
+// --archive walks each root (layout A is bucket / YYYY-MM / ledger-id /, the legacy flat form is
+// root / any-name /, and anything in between). A directory that contains review-*/chain.json is
+// one ledger and is not descended into. Symlinks are followed only when their realpath has not
+// already been entered. A file whose name ends in .tar.gz or .tar is not read; the footer lists
+// it as skipped because tar months need P3.
+//
+// Dedupe: a ledger with archive.json is keyed by the ledger-id field in that file, or by the
+// directory basename when the field is absent. A ledger without archive.json, including every
+// --ledger directory, is keyed by realpath. A second copy with the same key is skipped. Content
+// fallback: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
+// once. Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that
+// was kept, which is the --ledger path when --archive is not used.
 //
 // A generation counts only when review-<phase>/chain.json says status "finalized". "aborted" and
 // "pending" generations are skipped and counted in the scope footer. A phase whose chain or
@@ -32,10 +46,12 @@
 // Undisposed findings (no matching dispositions.json entry) are a separate column and are not in
 // the Ver%/Ref%/Def% denominator. An empty denominator is 0.
 //
-// Exit codes: 0 success; 2 usage (no --ledger, unknown flag, or missing ledger directory).
+// Exit codes: 0 success; 2 usage (neither --ledger nor --archive, unknown flag, or a missing
+// ledger directory or archive root).
 //
-// Usage: node scripts/review-seat-report.js --ledger <dir> [--ledger <dir> ...] [--json] [--by-model] [--cross-gen]
+// Usage: node scripts/review-seat-report.js [--ledger <dir> ...] [--archive <root> ...] [--json] [--by-model] [--cross-gen]
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { familyOfEngine } = require('./lib/stage-write');
@@ -236,6 +252,153 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope) {
   }
 }
 
+const WALK_DEPTH_LIMIT = 16;
+const TAR_MONTH_REASON = 'tar months need P3';
+
+function isTarMonthName(name) {
+  return name.endsWith('.tar.gz') || name.endsWith('.tar');
+}
+
+function directoryHasLedgerChain(dir) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return false;
+  }
+  for (const name of names) {
+    if (!name.startsWith('review-')) continue;
+    try {
+      const st = fs.lstatSync(path.join(dir, name, 'chain.json'));
+      if (st.isFile() || st.isSymbolicLink()) return true;
+    } catch {
+      // not a ledger marker
+    }
+  }
+  return false;
+}
+
+function discoverArchive(root) {
+  const ledgers = [];
+  const tarMonths = [];
+  const seen = new Set();
+  function enter(dir, depth) {
+    let real;
+    try {
+      real = fs.realpathSync(dir);
+    } catch {
+      return;
+    }
+    if (seen.has(real)) return;
+    seen.add(real);
+    let st;
+    try {
+      st = fs.statSync(real);
+    } catch {
+      return;
+    }
+    if (!st.isDirectory()) return;
+    if (directoryHasLedgerChain(real)) {
+      ledgers.push(real);
+      return;
+    }
+    if (depth >= WALK_DEPTH_LIMIT) return;
+    let names;
+    try {
+      names = fs.readdirSync(real);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (isTarMonthName(name)) {
+        tarMonths.push({ name, reason: TAR_MONTH_REASON });
+        continue;
+      }
+      const child = path.join(real, name);
+      let childStat;
+      try {
+        childStat = fs.lstatSync(child);
+      } catch {
+        continue;
+      }
+      if (childStat.isSymbolicLink() || childStat.isDirectory()) enter(child, depth + 1);
+    }
+  }
+  enter(root, 0);
+  return { ledgers, tarMonths };
+}
+
+function ledgerIdentityKey(dir) {
+  const metaPath = path.join(dir, 'archive.json');
+  if (fs.existsSync(metaPath)) {
+    let id = null;
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      if (meta && typeof meta === 'object') {
+        id = meta.ledger_id || meta.ledgerId || meta['ledger-id'] || null;
+      }
+    } catch {
+      id = null;
+    }
+    if (!id) id = path.basename(dir);
+    return `id:${id}`;
+  }
+  try {
+    return `rp:${fs.realpathSync(dir)}`;
+  } catch {
+    return `rp:${path.resolve(dir)}`;
+  }
+}
+
+function ledgerContentKey(dir) {
+  const parts = [];
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    names = [];
+  }
+  for (const phase of names.filter((name) => name.startsWith('review-')).sort()) {
+    const phaseDir = path.join(dir, phase);
+    let gens = [];
+    try {
+      gens = fs.readdirSync(phaseDir).filter((name) => /^g\d+$/.test(name)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    } catch {
+      gens = [];
+    }
+    for (const genName of gens) {
+      const file = path.join(phaseDir, genName, 'findings.json');
+      let hash = 'missing';
+      try {
+        hash = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+      } catch {
+        hash = 'missing';
+      }
+      parts.push(`${phase}\0${genName.slice(1)}\0${hash}`);
+    }
+  }
+  return crypto.createHash('sha256').update(parts.join('\n')).digest('hex');
+}
+
+function dedupeLedgers(candidates) {
+  const seenId = new Set();
+  const seenContent = new Set();
+  const kept = [];
+  let duplicates = 0;
+  for (const entry of candidates) {
+    const idKey = ledgerIdentityKey(entry.dir);
+    const contentKey = ledgerContentKey(entry.dir);
+    if (seenId.has(idKey) || seenContent.has(contentKey)) {
+      duplicates += 1;
+      continue;
+    }
+    seenId.add(idKey);
+    seenContent.add(contentKey);
+    kept.push(entry);
+  }
+  return { kept, duplicates };
+}
+
 function buildReport(ledgerDirs, options = {}) {
   const byModel = Boolean(options.byModel);
   const crossGen = Boolean(options.crossGen);
@@ -250,6 +413,9 @@ function buildReport(ledgerDirs, options = {}) {
     aborted_skipped_findings: 0,
     pending_skipped_findings: 0,
     corrupt_phases: [],
+    archive_ledgers_read: options.archiveLedgersRead || 0,
+    duplicates_skipped: options.duplicatesSkipped || 0,
+    tar_months_skipped: options.tarMonths || [],
     _phases: new Set(),
     _gens: new Set(),
   };
@@ -381,7 +547,7 @@ function formatText(report) {
   const lines = [
     header,
     ...rows.map(lineOf),
-    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}`,
+    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}, archive ledgers read ${scope.archive_ledgers_read || 0}, duplicates skipped ${scope.duplicates_skipped || 0}, tar months skipped ${(scope.tar_months_skipped || []).length}${(scope.tar_months_skipped || []).length ? ` (${scope.tar_months_skipped.map((row) => `${row.name}: ${row.reason}`).join(', ')})` : ''}`,
     'Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves.',
     `key mode: ${report.key_mode}`,
   ];
@@ -403,32 +569,52 @@ function writeStdout(text) {
 }
 
 function usage() {
-  process.stderr.write('Usage: node scripts/review-seat-report.js --ledger <dir> [--ledger <dir> ...] [--json] [--by-model] [--cross-gen]\n');
+  process.stderr.write('Usage: node scripts/review-seat-report.js [--ledger <dir> ...] [--archive <root> ...] [--json] [--by-model] [--cross-gen]\n');
   process.exitCode = 2;
 }
 
 function main(argv) {
   const ledgers = [];
+  const archives = [];
   let json = false;
   let byModel = false;
   let crossGen = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--ledger') {
+    if (arg === '--ledger' || arg === '--archive') {
       const value = argv[i + 1];
       if (!value || value.startsWith('--')) return usage();
-      ledgers.push(value);
+      (arg === '--ledger' ? ledgers : archives).push(value);
       i += 1;
     } else if (arg === '--json') json = true;
     else if (arg === '--by-model') byModel = true;
     else if (arg === '--cross-gen') crossGen = true;
     else return usage();
   }
-  if (ledgers.length === 0) return usage();
-  for (const dir of ledgers) {
+  if (ledgers.length === 0 && archives.length === 0) return usage();
+  for (const dir of ledgers.concat(archives)) {
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return usage();
   }
-  const report = buildReport(ledgers, { byModel, crossGen });
+  const candidates = ledgers.map((dir) => ({ dir, fromArchive: false }));
+  const tarMonths = [];
+  for (const root of archives) {
+    const found = discoverArchive(root);
+    tarMonths.push(...found.tarMonths);
+    for (const dir of found.ledgers) candidates.push({ dir, fromArchive: true });
+  }
+  // Without --archive the candidate list is exactly the --ledger list. Skipping
+  // dedupe keeps the previous totals, including two directories with the same bytes.
+  const selected = archives.length === 0
+    ? { kept: candidates, duplicates: 0 }
+    : dedupeLedgers(candidates); // dedupe-call
+  const archiveLedgersRead = selected.kept.filter((entry) => entry.fromArchive).length;
+  const report = buildReport(selected.kept.map((entry) => entry.dir), {
+    byModel,
+    crossGen,
+    archiveLedgersRead,
+    duplicatesSkipped: selected.duplicates,
+    tarMonths,
+  });
   writeStdout(json ? formatJson(report) : formatText(report));
   process.exitCode = 0;
 }

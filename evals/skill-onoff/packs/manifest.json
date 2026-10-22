@@ -4354,6 +4354,71 @@
     "dcard-files-change3": {
       "dcard-files-change3/references/hetero-dispatch.md": "1cb8423210ce211009fc9464d1a81f5106283d90582df15f58254c90e541be3d",
       "dcard-files-change3/references/multi-agent-portability.md": "0efa4395b64a47bed88c9cde1d20a0dac46b8dbfa986b10f24b9998b9fb02dea"
+    },
+    "ceo-agent-gdorm-base": {
+      "ceo-agent-gdorm-base/SKILL.md": "6f6543a6e11653df11f27734db4a2b2c0009c917fba76fa4407987d5c3431447",
+      "ceo-agent-gdorm-base/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-gdorm-base/references/depth0-control-loop.md": "62c3c7020693630d0082e577dc2b7365d8fde325a726e17d67e4ae8f3d0918ad",
+      "ceo-agent-gdorm-base/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-gdorm-base/references/level-front-door.md": "23f509ca81dd524eb614d1d279b60e66478b1c92a81348fbee79ebc868e81bf7",
+      "ceo-agent-gdorm-base/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-gdorm-base/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "quality-pipeline-gdorm-base": {
+      "quality-pipeline-gdorm-base/SKILL.md": "c58e074c44e6eebec6c6a84a45652b0f707f42340da9d69a2a05b1cd60eee7e0",
+      "quality-pipeline-gdorm-base/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-gdorm-base/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-gdorm-base/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-gdorm-base/references/completeness-gate.md": "56f5865ef7121c69cf01dae3d3adf9287d32f0502414e9ba62c21e3cb74de0eb",
+      "quality-pipeline-gdorm-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-gdorm-base/references/test-integrity-gate.md": "de2b4f90bb1d1aafc02a07e35ee28b235c5910a86aa343b7044ec15528540459",
+      "quality-pipeline-gdorm-base/references/test-policy.md": "035c789662c05fd8e0d27fd2944281564cbff207804fd41d4dcaa31070b987d9"
+    },
+    "hetero-review-gdorm-base": {
+      "hetero-review-gdorm-base/SKILL.md": "392b6d8cf9f09d07e987c723863adb64a840a49c387ee7faa505cc434ba40493",
+      "hetero-review-gdorm-base/references/code-loop.md": "23f04723f4afbba8e68fb2e72285bda7dedc1e829d7352587aa1347df0b305f2",
+      "hetero-review-gdorm-base/references/plan-loop.md": "6ce48d5708afbd4c1c2fc4463e8e3c9ecb430d4b4c5a99ded378c4a16a064b40"
+    },
+    "gdorm-files-base": {
+      "gdorm-files-base/references/backlog-entry.md": "ecbcce27fd83041aa54b7368b2ec6fa6d545ed37cdb9c5e891ccfc288b2e03f1",
+      "gdorm-files-base/references/batch-dispatch.md": "e7942b164ee3e1e1060eeae853a6b2f9a9e6e419b293efd58806787e51ff7b40",
+      "gdorm-files-base/references/blind-dispatch.md": "0f73cdbbe1ec7dcf939d4b35e1680a99d3c54c49b9cc460cdb3899eab549d70b",
+      "gdorm-files-base/references/evidence-discipline.md": "e510bac6e6940811ffaf5d7aa8a7c3fa576540adfa5794650fe4d56d03fee952",
+      "gdorm-files-base/references/hetero-dispatch.md": "1cb8423210ce211009fc9464d1a81f5106283d90582df15f58254c90e541be3d",
+      "gdorm-files-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "gdorm-files-base/references/mods.md": "d3e604e15e039b2c24724f66d047cd94db5ec0e2342b1dc8b9a34c4ef1be1d2f",
+      "gdorm-files-base/references/multi-agent-portability.md": "0efa4395b64a47bed88c9cde1d20a0dac46b8dbfa986b10f24b9998b9fb02dea",
+      "gdorm-files-base/references/review-page.md": "be80aed61814f45f6160b48bf63e2cb5e44c5e7c20029a885708ba4d7dabc380",
+      "gdorm-files-base/references/reviewer-mvp-portfolio.md": "e33eeb7f8e0376842e569fc2ee95b8bd59d96cb0b780280e69b7498a29cab7b1",
+      "gdorm-files-base/references/routing-tiebreaks.md": "d17071a10d82512aaa6c8c07efad95bfd8ea01c78797e6eae33b4e9fcce69369",
+      "gdorm-files-base/references/tree-contracts.md": "1d7f2c49d947451dd7091cd7d94b543bec206ce923006e5f6be68ac2210e862b"
+    },
+    "fixture-scripts-gdorm": {
+      "fixture-scripts-gdorm/hooks/_shared/secret-patterns.js": "6e346778e58a6e030cbb2fd16299a6fa4b3e1466ec2bdcd3522b7f1b4d90460f",
+      "fixture-scripts-gdorm/scripts/calibration.sh": "a24d2ce3ef1f014db40bf1237eb65abde878d6fa8fc8bab2816b65a676470041",
+      "fixture-scripts-gdorm/scripts/lib/config-path.js": "ff2e02f2bee1175eccd8c5ec5ad8339ed83b9c5ce997da965c0d830da82e615b",
+      "fixture-scripts-gdorm/scripts/lib/review-ledger-copy.js": "400f898da901d04546087b14236570f1980be44ee4b1117f37f586ee4d2a53ea",
+      "fixture-scripts-gdorm/scripts/lib/review-ledger-tar.js": "3fff673c25fa2a4f9ecab95f3c055474679293e0770a6461a98e2494340c6179",
+      "fixture-scripts-gdorm/scripts/lifecycle-residue-receipt.js": "bc61d2c13af327e8ae972773651bcc3736f4eebc1d7faad204a1d1d0fd0f4a7e",
+      "fixture-scripts-gdorm/scripts/project-detect.js": "59b2f956fb01be5df8dea544567d19d68533996c0bd9f3999c5e6f2fcca39f6b",
+      "fixture-scripts-gdorm/scripts/qc-panel.js": "eb86a2438ed1c0caad369deea592906a32a77357a627b1a64511365a19d86739",
+      "fixture-scripts-gdorm/scripts/resolve-project-paths.sh": "ca86a36c1ba16383c1d8feab20a908691ecb989fb98c32395ef1b3159887219b",
+      "fixture-scripts-gdorm/scripts/review-ledger-archive.js": "c861b36b1e86341aa0ef6ca49f802c4c0e5485c6d2335504b4dd4c261a3654d2",
+      "fixture-scripts-gdorm/scripts/tree.js": "bff7f880f68586244d62233f9e97c0e0099d16a7549c3880e1cbcf49e35c35af",
+      "fixture-scripts-gdorm/src/engine/authenticated-control.js": "39a953e8a153648f2b5f0302dc95d8c08a3f3ffba2aaff41e9286b2468691e70",
+      "fixture-scripts-gdorm/src/engine/campaign-composition.js": "8cadc332328afe31ff157b25dd146eca6a5599a44ab3870a9aed8ca853baf22a",
+      "fixture-scripts-gdorm/src/engine/campaign-verification.js": "1f17625abb265a5911520004993501f3fed3ff63ca1913811008d00f54356a32",
+      "fixture-scripts-gdorm/src/engine/controller-execution.js": "cd3ca243687f31bc33ae7250d0a9a5615f58b08f1e6a78a8764c545032c6cc40",
+      "fixture-scripts-gdorm/src/engine/implementation-campaign.js": "c5d840208acd937c856115871425a90c4aacd20ce92e1a427a7b60180d6d5f1c",
+      "fixture-scripts-gdorm/src/engine/mission-campaign-identity.js": "618f0cdb2b6ee3238f5b16091c8616f19f82a0c6ac58842480ff332a2f170705",
+      "fixture-scripts-gdorm/src/engine/mission-convergence.js": "4b1eb3df0e9b9967762e3d6f455fdf92dba0afe933ab978980f319241db40d61",
+      "fixture-scripts-gdorm/src/engine/owner-kernel/canonical.js": "71cce05cbcf26156e14eaf160cc4d4f5eb45a4a613f884973d4457694f7b0c68",
+      "fixture-scripts-gdorm/src/engine/sealed-zero-diff-validator.js": "6c0981723d9472c8f02c75442de5008d05b26e1f01428d61dac9244a8a4c408e",
+      "fixture-scripts-gdorm/src/engine/work-order.js": "e1b09e9e3aafbd6ab1c8062e8f51cf55e24a902160f81cbc3c24be08fdfbd3b5",
+      "fixture-scripts-gdorm/src/lib/common.js": "d103d0ee9a6b023aeef191bad04224266ada0baa727fbd9f716d6e8c90f9b23e",
+      "fixture-scripts-gdorm/src/mission/interface.js": "7716f5f0c67cf1c280a2e2dbaef57dc6fdbf7e1a432bae6db60aa73a1c47349d",
+      "fixture-scripts-gdorm/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
+      "fixture-scripts-gdorm/src/status/task-status.js": "e6cf2adc45bf2446b21421857ad459e536bded722643909d4bab7ceafd2dada7"
     }
   },
   "pack_meta": {
@@ -10388,6 +10453,31 @@
       "kind": "dir",
       "source": "/tmp/tmp.CKP1O7fTd6/files",
       "ref": "daae02372e0bd4af0c3693848393f06eebf4b53d"
+    },
+    "ceo-agent-gdorm-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "3ec639777e0fd99660be3828abc0ea86123b9b01"
+    },
+    "quality-pipeline-gdorm-base": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "3ec639777e0fd99660be3828abc0ea86123b9b01"
+    },
+    "hetero-review-gdorm-base": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "3ec639777e0fd99660be3828abc0ea86123b9b01"
+    },
+    "gdorm-files-base": {
+      "kind": "dir",
+      "source": "/tmp/tmp.5s1S4at6Tm",
+      "ref": "HEAD"
+    },
+    "fixture-scripts-gdorm": {
+      "kind": "scripts",
+      "source": "hooks/_shared/secret-patterns.js,scripts/calibration.sh,scripts/lib/config-path.js,scripts/lib/review-ledger-copy.js,scripts/lib/review-ledger-tar.js,scripts/lifecycle-residue-receipt.js,scripts/project-detect.js,scripts/qc-panel.js,scripts/resolve-project-paths.sh,scripts/review-ledger-archive.js,scripts/tree.js,src/engine/authenticated-control.js,src/engine/campaign-composition.js,src/engine/campaign-verification.js,src/engine/controller-execution.js,src/engine/implementation-campaign.js,src/engine/mission-campaign-identity.js,src/engine/mission-convergence.js,src/engine/sealed-zero-diff-validator.js,src/lib/common.js,src/mission/interface.js,src/status/task-runtime.js,src/status/task-status.js",
+      "ref": "3ec639777e0fd99660be3828abc0ea86123b9b01"
     }
   }
 }

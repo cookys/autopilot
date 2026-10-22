@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "arm": "base",
+  "skills": {
+    "ceo-agent": "ceo-agent-gdorm-base",
+    "hetero-review": "hetero-review-gdorm-base",
+    "quality-pipeline": "quality-pipeline-gdorm-base"
+  },
+  "files": [
+    "gdorm-files-base"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-gdorm"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "gdorm",
+  "skill": "ceo-agent",
+  "status": "draft",
+  "campaign_script": "run-gdorm-campaign.js",
+  "note": "Phase 1 tooling only. Not stamped. No paid run. Measures whether dormant task-tree, qc-panel, and review-ledger-archive text still makes a headless sonnet agent run those scripts. Thresholds are null until depth-0 sets them after the pilot.",
+  "arms": {
+    "off": "base",
+    "on": "change"
+  },
+  "arm_manifests": {
+    "base": {
+      "file": "arms/gdorm/base.json"
+    },
+    "change": {
+      "file": null,
+      "note": "intentionally empty; waits for the gtext lane's wording"
+    }
+  },
+  "invocation_prefix": "Load autopilot:ceo-agent, autopilot:quality-pipeline, and autopilot:hetero-review, then handle this:",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "reps": 10,
+  "tasks": [
+    "gdorm-tree",
+    "gdorm-qcpanel",
+    "gdorm-archive"
+  ],
+  "primary": {
+    "tasks": {
+      "gdorm-tree": ["t_tree_run"],
+      "gdorm-qcpanel": ["q_qcpanel_run"],
+      "gdorm-archive": ["r_archive_import", "r_archive_file"]
+    }
+  },
+  "thresholds": null,
+  "thresholds_note": "depth-0 sets them after the pilot",
+  "scope_lock": "authorises only the spend-free tooling in this draft. A paid run waits until depth-0 stamps thresholds. Not /l4 foreman, not opus, not interactive.",
+  "change_arm": "intentionally empty; waits for the gtext lane's wording",
+  "freeze_files": [
+    "prereg/gdorm.json",
+    "lib-gdorm",
+    "tasks/gdorm-tree",
+    "tasks/gdorm-qcpanel",
+    "tasks/gdorm-archive",
+    "run-gdorm-campaign.js",
+    "arms/gdorm"
+  ],
+  "freeze_packs": [
+    "ceo-agent-gdorm-base",
+    "quality-pipeline-gdorm-base",
+    "hetero-review-gdorm-base",
+    "gdorm-files-base",
+    "fixture-scripts-gdorm"
+  ]
+}

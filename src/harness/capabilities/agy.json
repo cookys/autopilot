@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-10-23T12:00:00.000Z",
-  "verified_at": "2026-10-23T12:00:00.000Z",
-  "expires_at": "2026-11-06T12:00:00.000Z",
+  "last_checked_at": "2026-10-22T17:48:36.000Z",
+  "verified_at": "2026-10-22T17:48:36.000Z",
+  "expires_at": "2026-11-05T17:48:36.000Z",
   "evidence": {
     "source": "local-probe",
     "command": "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",

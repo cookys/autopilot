@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-10-23T12:00:00.000Z",
-  "verified_at": "2026-10-23T12:00:00.000Z",
-  "expires_at": "2026-11-06T12:00:00.000Z",
+  "last_checked_at": "2026-10-22T17:44:45.000Z",
+  "verified_at": "2026-10-22T17:44:45.000Z",
+  "expires_at": "2026-11-05T17:44:45.000Z",
   "evidence": {
     "source": "local-execution-probe",
     "command": "isolated codex 0.146.0 TUI with installed default Autopilot package; manual /compact, model_auto_compact_token_limit=12000 two-turn rollover, and broken-adapter negative control",

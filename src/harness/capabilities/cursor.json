@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "unverified",
   "harness_level": "H1",
-  "last_checked_at": "2026-10-23T12:00:00.000Z",
-  "verified_at": "2026-10-23T12:00:00.000Z",
-  "expires_at": "2026-11-06T12:00:00.000Z",
+  "last_checked_at": "2026-10-22T18:05:27.000Z",
+  "verified_at": "2026-10-22T18:05:27.000Z",
+  "expires_at": "2026-11-05T18:05:27.000Z",
   "evidence": {
     "source": "local-probe",
     "command": "cursor-agent --version; cursor-agent --list-models",

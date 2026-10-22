@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H3",
-  "last_checked_at": "2026-10-23T12:00:00.000Z",
-  "verified_at": "2026-10-23T12:00:00.000Z",
-  "expires_at": "2026-11-22T12:00:00.000Z",
+  "last_checked_at": "2026-10-22T18:36:57.000Z",
+  "verified_at": "2026-10-22T18:36:57.000Z",
+  "expires_at": "2026-11-21T18:36:57.000Z",
   "evidence": {
     "source": "local-probe",
     "command": "2026-10-23 hdeep deep probe on grok 1.0.67 / grok-4.7 low: headless JSON, plugin install --trust in temp HOME, grok inspect, throwaway-repo .grok/hooks event log and PreToolUse deny (hdeep evidence grok/headless.json, plugin_install.txt, inspect.txt, hooklog.txt, hooks_mut3.json), mutation_dispatch_summary.json over 289 dispatch JSON, plus reap/cleanup suites reap-dispatch-worktrees, dispatch-status-reap, reap-dispatch-branches, worktree-reap",

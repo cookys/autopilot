@@ -10,6 +10,7 @@
 # Downstream readers of AUTOPILOT_SESSION_ID below a rail (grep of the tree, 2026-10-15), pinned in case (i):
 #   src/engine/profile-runtime.js:588-590  deletes it from the runner env itself (the rail already scrubs it);
 #   src/engine/autopilot-engine.js:147-148 deletes it from the verification env;
+#   scripts/check-test-outcome.js: ENV_STRIP deletes it from the child env (scrub only, no read).
 #   hooks (run-approval-gate, foreman-guard, cost-fuse) read payload.session_id / CLAUDE_CODE_SESSION_ID first and
 #   only fall back to it; campaign intake (scripts/open-decision.js, task-card.js) reads a chain that continues to
 #   CLAUDE_CODE_SESSION_ID. None needs the variable to exist; the rails already `unset`/`env -u` it (author, review,
@@ -247,12 +248,16 @@ for f in src/engine/profile-runtime.js src/engine/autopilot-engine.js; do
 done
 eq "1" "$(grep -c 'delete runnerEnv.AUTOPILOT_SESSION_ID' "$REPO_ROOT/src/engine/profile-runtime.js")" "(i) profile-runtime.js deletes AUTOPILOT_SESSION_ID from the runner env (the rail's scrub is not new to it)"
 eq "1" "$(grep -c 'delete verificationEnvironment.AUTOPILOT_SESSION_ID' "$REPO_ROOT/src/engine/autopilot-engine.js")" "(i) autopilot-engine.js deletes it from the verification env"
+# RED at eeab54067b81ef0ceb813acfc5c72f61ef026a06: (i) no unreviewed reader ... got 'scripts/check-test-outcome.js '
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/check-test-outcome.js")" "(i) check-test-outcome.js names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(sed -n '/const ENV_STRIP = \[/,/^];$/p' "$REPO_ROOT/scripts/check-test-outcome.js" | grep -c 'AUTOPILOT_SESSION_ID')" "(i) that single AUTOPILOT_SESSION_ID site sits inside ENV_STRIP (a later real read turns this red)"
 # every other reader must treat it as an optional fallback after payload / CLAUDE_CODE_SESSION_ID (or be a scrub)
 unknown="$(cd "$REPO_ROOT" && for f in $readers; do
   case "$f" in
     src/engine/profile-runtime.js|src/engine/autopilot-engine.js) ;;
     scripts/session-mode.js|scripts/stage-advance.js) ;;                       # the resolver and its CLI
     scripts/dispatch-*.sh|scripts/run-grok-implementer-ab.sh|scripts/lib/*) ;;  # rails: they scrub it
+    scripts/check-test-outcome.js) ;;  # scrub: ENV_STRIP deletes it from the child env
     scripts/scaffold-mission.js) ;;                                             # prose: "never AUTOPILOT_SESSION_ID"
     scripts/open-decision.js|scripts/task-card.js) ;;                           # campaign intake: chain continues to CLAUDE_CODE_SESSION_ID
     hooks/run-approval-gate.js|hooks/foreman-guard.js|hooks/cost-fuse.js) ;;    # payload.session_id first, fallback only

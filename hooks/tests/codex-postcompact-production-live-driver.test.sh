@@ -514,6 +514,18 @@ assert.strictEqual(driver.checkCodexVersion('codex-cli 1.2.3'), '1.2.3');
 assert.throws(() => driver.checkCodexVersion('codex-cli 0.145.9'), /expected Codex >= 0\.146\.0/);
 assert.throws(() => driver.checkCodexVersion('garbage'), /expected Codex >= 0\.146\.0/);
 
+// Readiness for Codex >= 0.163: the composer placeholder replaces the "model: X /model to change" line.
+// Fixtures are synthetic reconstructions of the 0.163 composer (placeholder text per the 2026-10-23
+// harness deep test), including a cursor-move-split rendering; no real Codex is run here.
+// RED at 3cb8d9cba: driver.hasTuiReadinessMarker(new-format screen) was false so waitForTuiReady timed out after 90000ms; driver.hasComposerPlaceholder was undefined.
+const newFormatScreen = ['\u001b[1m>_ OpenAI Codex\u001b[0m', '\u001b[1m›\u001b[0m Ask Codex to do anything', '  gpt-test high · ~/proj'].join('\n');
+assert.strictEqual(driver.hasTuiReadinessMarker(newFormatScreen), true);
+assert.strictEqual(driver.hasTuiReadinessMarker('\u001b[2J\u001b[H\u001b[1;1H›\u001b[1;3HAsk\u001b[1;7HCodex\u001b[1;13Hto\u001b[1;16Hdo\u001b[1;19Hanything'), true);
+assert.strictEqual(driver.hasTuiReadinessMarker('Ask Codex to do anything'), false);
+assert.strictEqual(driver.hasTuiReadinessMarker('› Ask Codex to'), false);
+assert.strictEqual(driver.hasTuiReadinessMarker('› \nWelcome to Codex, OpenAI\'s command-line coding agent\nSign in with ChatGPT'), false);
+assert.strictEqual(driver.hasTuiReadinessMarker(`${cursorDiffChooserComplete}\n› Ask Codex to do anything`), true); // accumulated output keeps the accepted chooser text
+
 Promise.all([
   verifyDirectoryTrustLaunch({ chooserVisible: false, acceptDirectoryTrust: true }),
   verifyDirectoryTrustLaunch({ chooserVisible: true, acceptDirectoryTrust: true }),

@@ -14,6 +14,8 @@
 # aborts the whole import with "phase content missing: no g1/range.json or
 # g1/findings.json"; a range-only phase is never reached; a 184-phase import
 # is not attempted.
+# RED at 8694f710fe00e5df9f515e19f8e1872a91d345f0: enforceModes chmods the whole archive root; "~/x" is not
+# expanded; a live lock is not refreshed so a copy longer than staleMs is stolen.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -24,6 +26,7 @@ unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+unset AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS
 
 LIB="$REPO_ROOT/scripts/lib/review-ledger-copy.js"
 CLI="$REPO_ROOT/scripts/review-ledger-archive.js"
@@ -905,6 +908,280 @@ else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (ac) mode enforcement touches only dirs this call created and the ledger-id
+# subtree. Pre-existing root, file, and subdirectory modes stay put.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ac"
+ARCH_AC="$TEST_TMP/archive-ac"
+mkdir -p "$ARCH_AC/keepdir"
+printf '%s\n' '#!/bin/sh' > "$ARCH_AC/exec.sh"
+printf '%s\n' 'plain' > "$ARCH_AC/plain.txt"
+chmod 0755 "$ARCH_AC" "$ARCH_AC/keepdir" "$ARCH_AC/exec.sh"
+chmod 0644 "$ARCH_AC/plain.txt"
+LEDGER_AC="$TEST_TMP/ledger-ac"
+make_ledger "$LEDGER_AC" alpha "2026-08-01T00:00:00.000Z"
+DEST_AC=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_AC" "$REPO")
+assert_exit_code "$?" "0" "case ac: copy into a pre-existing root exits 0"
+assert_eq "$(stat -c %a "$ARCH_AC")" "755" "case ac: pre-existing archive root stays 0755"
+assert_eq "$(stat -c %a "$ARCH_AC/keepdir")" "755" "case ac: pre-existing subdirectory stays 0755"
+assert_eq "$(stat -c %a "$ARCH_AC/exec.sh")" "755" "case ac: pre-existing 0755 file stays 0755"
+assert_eq "$(stat -c %a "$ARCH_AC/plain.txt")" "644" "case ac: pre-existing 0644 file stays 0644"
+assert_eq "$(stat -c %a "$DEST_AC")" "700" "case ac: ledger-id dir is 0700"
+assert_eq "$(stat -c %a "$DEST_AC/archive.json")" "600" "case ac: ledger-id file is 0600"
+AC_BUCKET=$(dirname "$(dirname "$DEST_AC")")
+AC_MONTH=$(dirname "$DEST_AC")
+assert_eq "$(stat -c %a "$AC_BUCKET")" "700" "case ac: repo bucket created by this call is 0700"
+assert_eq "$(stat -c %a "$AC_MONTH")" "700" "case ac: month dir created by this call is 0700"
+MUT_AC="$TEST_TMP/mut-ac/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AC")"
+cp "$LIB" "$MUT_AC"
+python3 - "$MUT_AC" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "enforceModes(dest);"
+new = "enforceModes(cfg.dir);"
+if old not in t:
+    sys.stderr.write("case ac: enforceModes(dest) missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, new, 1))
+PY
+assert_exit_code "$?" "0" "case ac: whole-root enforceModes patched onto a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ac-neg"
+ARCH_ACN="$TEST_TMP/archive-ac-neg"
+mkdir -p "$ARCH_ACN/keepdir"
+printf '%s\n' 'plain' > "$ARCH_ACN/plain.txt"
+chmod 0755 "$ARCH_ACN" "$ARCH_ACN/keepdir"
+chmod 0644 "$ARCH_ACN/plain.txt"
+node -e 'const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]});' "$MUT_AC" "$LEDGER_AC" "$REPO" >/dev/null
+ACN_RC=$?
+ACN_PLAIN=$(stat -c %a "$ARCH_ACN/plain.txt")
+if [ "$ACN_RC" != 0 ]; then
+  fail "case ac: broken lib did not run (exit $ACN_RC)"
+elif [ "$ACN_PLAIN" = "644" ]; then
+  fail "case ac: whole-root enforceModes left the pre-existing file at 0644 (negative control is blind)"
+else
+  echo "case ac: red-on-broken (pre-existing file mode became $ACN_PLAIN)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (ad) "~" expands to the home argument / HOME. A still-relative dir is a
+# configuration error: one stderr line, nothing written, finalize rc/stdout unchanged.
+AD_HOME="$TEST_TMP/home-ad"
+mkdir -p "$AD_HOME/.autopilot"
+cat > "$AD_HOME/.autopilot/config.json" <<'EOF'
+{ "review_ledger_archive": { "dir": "~/x" } }
+EOF
+export HOME="$AD_HOME"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+LEDGER_AD="$TEST_TMP/ledger-ad"
+make_ledger "$LEDGER_AD" alpha "2026-08-02T00:00:00.000Z"
+AD_CWD="$TEST_TMP/cwd-ad"
+mkdir -p "$AD_CWD"
+DEST_AD=$(cd "$AD_CWD" && node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],home:process.argv[4]}).dest);' "$LIB" "$LEDGER_AD" "$REPO" "$AD_HOME")
+assert_exit_code "$?" "0" "case ad: ~/x via config and home argument exits 0"
+case "$DEST_AD" in
+  "$AD_HOME/x/"*) ;;
+  *) fail "case ad: ~/x did not land under HOME/x: $DEST_AD" ;;
+esac
+assert_file_absent "$AD_CWD/~" "case ad: literal tilde directory was not created"
+# env form of the same expansion
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="~/x-env"
+DEST_AD_ENV=$(cd "$AD_CWD" && node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],home:process.argv[4]}).dest);' "$LIB" "$LEDGER_AD" "$REPO" "$AD_HOME")
+case "$DEST_AD_ENV" in
+  "$AD_HOME/x-env/"*) ;;
+  *) fail "case ad: env ~/x-env did not land under HOME/x-env: $DEST_AD_ENV" ;;
+esac
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+# relative config: status exits 0, import exits non-zero, nothing created
+python3 - "$AD_HOME/.autopilot/config.json" <<'PY'
+import pathlib, sys
+pathlib.Path(sys.argv[1]).write_text('{ "review_ledger_archive": { "dir": "rel/x" } }\n')
+PY
+AD_CWD2="$TEST_TMP/cwd-ad-rel"
+mkdir -p "$AD_CWD2"
+REPO_BEFORE=$(find "$REPO" -print | sort)
+node "$CLI" status >"$TEST_TMP/ad-status.out" 2>"$TEST_TMP/ad-status.err"
+assert_exit_code "$?" "0" "case ad: status on a relative dir exits 0"
+assert_eq "$(wc -l < "$TEST_TMP/ad-status.err" | tr -d ' ')" "1" "case ad: status prints one stderr line"
+grep -q '^review-ledger-archive' "$TEST_TMP/ad-status.err"
+assert_exit_code "$?" "0" "case ad: status stderr starts with review-ledger-archive"
+grep -q 'misconfigured' "$TEST_TMP/ad-status.err"
+assert_exit_code "$?" "0" "case ad: status says the archive is misconfigured"
+assert_eq "$(cat "$TEST_TMP/ad-status.out")" "" "case ad: status writes no stdout"
+( cd "$AD_CWD2" && node "$CLI" import --ledger "$LEDGER_AD" --repo "$REPO" >"$TEST_TMP/ad-import.out" 2>"$TEST_TMP/ad-import.err" )
+assert_exit_code "$?" "1" "case ad: import of a relative dir exits 1"
+assert_eq "$(wc -l < "$TEST_TMP/ad-import.err" | tr -d ' ')" "1" "case ad: import prints one stderr line"
+grep -q '^review-ledger-archive' "$TEST_TMP/ad-import.err"
+assert_exit_code "$?" "0" "case ad: import stderr starts with review-ledger-archive"
+AD_CWD_COUNT=$(find "$AD_CWD2" -mindepth 1 -print | wc -l | tr -d ' ')
+assert_eq "$AD_CWD_COUNT" "0" "case ad: relative dir created nothing under cwd"
+REPO_AFTER=$(find "$REPO" -print | sort)
+assert_eq "$REPO_AFTER" "$REPO_BEFORE" "case ad: relative dir created nothing under the repo"
+# env form, finalize rc/stdout unchanged
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="rel/x"
+LEDGER_AD_FIN="$TEST_TMP/ledger-ad-fin"
+make_ledger "$LEDGER_AD_FIN" pj "2026-06-01T00:00:00.000Z"
+write_fin_disp "$TEST_TMP/disp-ad.json" pj
+AD_FIN_CWD="$TEST_TMP/cwd-ad-fin"
+mkdir -p "$AD_FIN_CWD"
+( cd "$AD_FIN_CWD" && node "$LOOP" finalize --repo-root "$REPO" --ledger "$LEDGER_AD_FIN" --phase pj --generation 1 --dispositions "$TEST_TMP/disp-ad.json" >"$TEST_TMP/ad-fin.out" 2>"$TEST_TMP/ad-fin.err" )
+assert_exit_code "$?" "0" "case ad: finalize with a relative dir exits 0"
+assert_eq "$(cat "$TEST_TMP/ad-fin.out")" "$BASE_OUT" "case ad: finalize stdout unchanged"
+assert_eq "$(wc -l < "$TEST_TMP/ad-fin.err" | tr -d ' ')" "1" "case ad: finalize prints one stderr line"
+grep -q '^review-ledger-archive' "$TEST_TMP/ad-fin.err"
+assert_exit_code "$?" "0" "case ad: finalize stderr starts with review-ledger-archive"
+AD_FIN_COUNT=$(find "$AD_FIN_CWD" -mindepth 1 -print | wc -l | tr -d ' ')
+assert_eq "$AD_FIN_COUNT" "0" "case ad: finalize relative dir created nothing under cwd"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+export HOME="$HOOK_HOME"
+MUT_AD="$TEST_TMP/mut-ad/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AD")"
+cp "$LIB" "$MUT_AD"
+python3 - "$MUT_AD" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+start = t.find("function expandArchiveDir(")
+if start < 0:
+    sys.stderr.write("case ad: expandArchiveDir missing\n")
+    sys.exit(2)
+end = t.find("\nfunction ", start + 1)
+if end < 0:
+    sys.stderr.write("case ad: expandArchiveDir end missing\n")
+    sys.exit(2)
+broken = """function expandArchiveDir(value, homeDir) {
+  return value;
+}
+"""
+p.write_text(t[:start] + broken + t[end+1:])
+PY
+assert_exit_code "$?" "0" "case ad: tilde expansion removed on a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="~/x"
+AD_NEG_CWD="$TEST_TMP/cwd-ad-neg"
+AD_NEG_HOME="$TEST_TMP/home-ad-neg"
+mkdir -p "$AD_NEG_CWD" "$AD_NEG_HOME"
+export HOME="$AD_NEG_HOME"
+( cd "$AD_NEG_CWD" && node -e 'const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],home:process.argv[4]});' "$MUT_AD" "$LEDGER_AD" "$REPO" "$AD_NEG_HOME" >"$TEST_TMP/ad-neg.out" 2>"$TEST_TMP/ad-neg.err" ) || true
+if [ -d "$AD_NEG_HOME/x" ]; then
+  fail "case ad: lib without tilde expansion still wrote HOME/x (negative control is blind)"
+elif [ -d "$AD_NEG_CWD/~" ]; then
+  echo "case ad: red-on-broken (literal ~ under cwd)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "case ad: broken lib did not create $AD_NEG_CWD/~ (negative control is blind)"
+fi
+rm -rf "$AD_NEG_CWD/~"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+export HOME="$HOOK_HOME"
+
+# (ae) the holder refreshes the owner file after each phase. A shortened stale
+# threshold cannot steal a live lock. A dead owner file older than the threshold
+# is recovered. The lock directory mtime is fresh; only the owner file is old.
+export AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS=1500
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ae"
+LEDGER_AE="$TEST_TMP/ledger-ae"
+make_ledger "$LEDGER_AE" p0 "2026-08-03T00:00:00.000Z"
+make_ledger "$LEDGER_AE" p1 "2026-08-03T00:00:01.000Z"
+make_ledger "$LEDGER_AE" p2 "2026-08-03T00:00:02.000Z"
+AE_A_DONE="$TEST_TMP/ae-a.done"
+AE_B_DONE="$TEST_TMP/ae-b.done"
+rm -f "$AE_A_DONE" "$AE_B_DONE"
+AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
+  const fs = require("fs");
+  const lib = require(process.argv[1]);
+  lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["p0", "p1", "p2"] });
+  fs.writeFileSync(process.argv[4], String(Date.now()));
+' "$LIB" "$LEDGER_AE" "$REPO" "$AE_A_DONE" &
+AE_A=$!
+AE_LOCK=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  AE_LOCK=$(find "$TEST_TMP/archive-ae" -type d -name '*.lock' ! -name '.ledger-id.lock' 2>/dev/null | head -1 || true)
+  if [ -n "$AE_LOCK" ]; then break; fi
+  sleep 0.05
+done
+if [ -z "$AE_LOCK" ]; then
+  fail "case ae: holder did not create the ledger lock"
+else
+  node -e 'const lib=require(process.argv[1]); const fs=require("fs"); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],phases:["p0"]}); fs.writeFileSync(process.argv[4], String(Date.now()));' "$LIB" "$LEDGER_AE" "$REPO" "$AE_B_DONE" &
+  AE_B=$!
+  wait "$AE_A"; AE_A_RC=$?
+  wait "$AE_B"; AE_B_RC=$?
+  assert_exit_code "$AE_A_RC" "0" "case ae: refreshing holder exits 0"
+  assert_exit_code "$AE_B_RC" "0" "case ae: waiter exits 0"
+  AE_A_TS=$(cat "$AE_A_DONE" 2>/dev/null || echo 0)
+  AE_B_TS=$(cat "$AE_B_DONE" 2>/dev/null || echo 0)
+  if [ "$AE_B_TS" -lt "$AE_A_TS" ]; then
+    fail "case ae: waiter finished before the holder (lock was taken over)"
+  else
+    echo "case ae: waiter finished after the holder"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+fi
+unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+# Dead holder: owner file is old, lock directory mtime is new.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ae-dead"
+AE_BUCKET=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.repoBucket(process.argv[2]));' "$LIB" "$REPO")
+mkdir -p "$TEST_TMP/archive-ae-dead/$AE_BUCKET/.ledger-id.lock"
+printf '%s\n' 'dead-token' > "$TEST_TMP/archive-ae-dead/$AE_BUCKET/.ledger-id.lock/owner"
+touch -d '5 seconds ago' "$TEST_TMP/archive-ae-dead/$AE_BUCKET/.ledger-id.lock/owner"
+timeout 8 node -e 'const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]});' "$LIB" "$LEDGER_AE" "$REPO" >"$TEST_TMP/ae-dead.out" 2>"$TEST_TMP/ae-dead.err"
+assert_exit_code "$?" "0" "case ae: stale owner file is recovered within 8s"
+AE_DEAD_IDS=$(count_ledger_ids "$TEST_TMP/archive-ae-dead")
+assert_eq "$AE_DEAD_IDS" "1" "case ae: recovered lock archived one ledger"
+MUT_AE="$TEST_TMP/mut-ae/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AE")"
+cp "$LIB" "$MUT_AE"
+python3 - "$MUT_AE" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "refreshLockOwner(ownerFile);"
+if old not in t:
+    sys.stderr.write("case ae: refreshLockOwner call missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, "/* refresh removed */;", 1))
+PY
+assert_exit_code "$?" "0" "case ae: refresh removed on a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ae-neg"
+AE_NA="$TEST_TMP/ae-na.done"
+AE_NB="$TEST_TMP/ae-nb.done"
+rm -f "$AE_NA" "$AE_NB"
+AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
+  const fs = require("fs");
+  const lib = require(process.argv[1]);
+  lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["p0", "p1", "p2"] });
+  fs.writeFileSync(process.argv[4], String(Date.now()));
+' "$MUT_AE" "$LEDGER_AE" "$REPO" "$AE_NA" &
+AE_NA_PID=$!
+AE_NLOCK=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  AE_NLOCK=$(find "$TEST_TMP/archive-ae-neg" -type d -name '*.lock' ! -name '.ledger-id.lock' 2>/dev/null | head -1 || true)
+  if [ -n "$AE_NLOCK" ]; then break; fi
+  sleep 0.05
+done
+node -e 'const lib=require(process.argv[1]); const fs=require("fs"); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],phases:["p0"]}); fs.writeFileSync(process.argv[4], String(Date.now()));' "$MUT_AE" "$LEDGER_AE" "$REPO" "$AE_NB" &
+AE_NB_PID=$!
+wait "$AE_NA_PID" || true
+wait "$AE_NB_PID" || true
+AE_NA_TS=$(cat "$AE_NA" 2>/dev/null || echo 0)
+AE_NB_TS=$(cat "$AE_NB" 2>/dev/null || echo 0)
+if [ "$AE_NB_TS" = 0 ] || [ "$AE_NA_TS" = 0 ] || [ "$AE_NB_TS" -ge "$AE_NA_TS" ]; then
+  fail "case ae: lib without refresh did not lose the live lock (negative control is blind) A=$AE_NA_TS B=$AE_NB_TS"
+else
+  echo "case ae: red-on-broken (waiter finished at $AE_NB_TS before holder $AE_NA_TS)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS
+unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
 finalize_test

@@ -9,8 +9,10 @@
 // (scripts/lib/config-path.js). include_diff default false
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF). warn_mb default 500
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB).
-// AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps inside the ledger lock so a
-// lockless copy loses a phase entry. AUTOPILOT_REVIEW_LEDGER_REPO_ROOT points a
+// AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps after each phase copy inside
+// the ledger lock so a lockless copy loses a phase entry.
+// AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS, when a positive number, replaces the
+// 30000ms lock stale threshold. AUTOPILOT_REVIEW_LEDGER_REPO_ROOT points a
 // temp copy of this file back at the repo.
 
 const fs = require('fs');
@@ -68,6 +70,19 @@ function dirFrom(value) {
   return value === '' ? null : value;
 }
 
+// "~" and "~/" expand against home. Anything still not absolute is a
+// configuration error: callers fail open and write nothing.
+function expandArchiveDir(value, homeDir) {
+  if (value == null) return null;
+  let dir = value;
+  if (dir === '~') dir = homeDir;
+  else if (dir.startsWith('~/')) dir = path.join(homeDir, dir.slice(2));
+  if (!dir.startsWith('/')) {
+    throw new Error(`archive dir is misconfigured: ${value}`);
+  }
+  return dir;
+}
+
 function resolveArchiveConfig(home) {
   const homeDir = home || os.homedir();
   const env = process.env;
@@ -92,7 +107,7 @@ function resolveArchiveConfig(home) {
       }
     }
   }
-  const dir = envDirSet ? dirFrom(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR) : dirFrom(block.dir);
+  const dir = expandArchiveDir(envDirSet ? dirFrom(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR) : dirFrom(block.dir), homeDir);
   const includeRaw = envDiffSet ? parseBool(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF) : parseBool(block.include_diff);
   const warnRaw = envWarnSet ? parseWarn(env.AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB) : parseWarn(block.warn_mb);
   return {
@@ -306,9 +321,23 @@ function archiveMeta(id, importedFrom) {
   };
 }
 
+// Create dir and any missing parents. Only directories this call actually
+// created are chmod 0700. An existing directory is left untouched.
 function mkdirPrivate(dir) {
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.chmodSync(dir, 0o700);
+  const created = [];
+  const abs = path.resolve(dir);
+  if (fs.existsSync(abs)) return created;
+  const parent = path.dirname(abs);
+  if (parent !== abs) created.push(...mkdirPrivate(parent));
+  try {
+    fs.mkdirSync(abs, { mode: 0o700 });
+  } catch (e) {
+    if (!e || e.code !== 'EEXIST') throw e;
+    return created;
+  }
+  try { fs.chmodSync(abs, 0o700); } catch (_e) { /* raced away */ }
+  created.push(abs);
+  return created;
 }
 
 function writeAtomic(target, content) {
@@ -348,9 +377,37 @@ function enforceModes(root) {
 // mkdir lock per ledger-id. Same shape as acquireChainLock: owner token, bounded
 // wait, stale tombstone renamed aside. Timeout throws. release() removes the lock
 // only while this owner's token is still in the owner file.
+function lockStaleMs() {
+  const n = Number(process.env.AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS);
+  return Number.isFinite(n) && n > 0 ? n : 30000;
+}
+
+// Owner-file mtime is the holder's last refresh. The lock directory mtime is
+// used only when the owner file is missing.
+function lockAgeMs(lockDir) {
+  const ownerFile = path.join(lockDir, 'owner');
+  try {
+    return Date.now() - fs.statSync(ownerFile).mtimeMs;
+  } catch (_e) {
+    try { return Date.now() - fs.statSync(lockDir).mtimeMs; } catch (_e2) { return null; }
+  }
+}
+
+function refreshLockOwner(ownerFile) {
+  const now = new Date();
+  try {
+    fs.utimesSync(ownerFile, now, now);
+  } catch (_e) {
+    try {
+      const token = fs.readFileSync(ownerFile, 'utf8');
+      fs.writeFileSync(ownerFile, token, { mode: 0o600 });
+    } catch (_e2) { /* holder lost the file */ }
+  }
+}
+
 function acquireLedgerLock(lockDir) {
   const timeoutMs = 15000;
-  const staleMs = 30000;
+  const staleMs = lockStaleMs();
   const ownerFile = path.join(lockDir, 'owner');
   const token = `${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
   mkdirPrivate(path.dirname(lockDir));
@@ -362,14 +419,13 @@ function acquireLedgerLock(lockDir) {
       break;
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
-      let ageMs;
-      try { ageMs = Date.now() - fs.statSync(lockDir).mtimeMs; } catch (_e) { continue; }
+      const ageMs = lockAgeMs(lockDir);
+      if (ageMs == null) continue;
       if (ageMs > staleMs) {
         const tomb = `${lockDir}.dead-${token}`;
         try { fs.renameSync(lockDir, tomb); } catch (_e) { continue; }
-        let tombAge = Infinity;
-        try { tombAge = Date.now() - fs.statSync(tomb).mtimeMs; } catch (_e) { /* gone */ }
-        if (tombAge <= staleMs) {
+        const tombAge = lockAgeMs(tomb);
+        if (tombAge != null && tombAge <= staleMs) {
           try { fs.renameSync(tomb, lockDir); continue; } catch (_e) { /* discard */ }
         }
         try { fs.rmSync(tomb, { recursive: true, force: true }); } catch (_e) { /* best effort */ }
@@ -455,7 +511,8 @@ function copyLedger(opts) {
   if (!cfg.dir) return { copied: false };
   if (!o.ledgerDir) throw new Error('ledgerDir is required');
   if (!o.repoDir) throw new Error('repoDir is required');
-  mkdirPrivate(cfg.dir);
+  const createdDirs = [];
+  createdDirs.push(...mkdirPrivate(cfg.dir));
   const explicit = Array.isArray(o.phases);
   let selected = explicit
     ? o.phases.map((p) => (String(p).startsWith('review-') ? String(p) : `review-${p}`))
@@ -481,7 +538,7 @@ function copyLedger(opts) {
   // realpaths, and two phases can both miss archive.json. One fixed-name lock
   // inside the repo bucket serializes lookup and the archive.json update.
   const bucket = repoBucket(o.repoDir);
-  mkdirPrivate(path.join(cfg.dir, bucket));
+  createdDirs.push(...mkdirPrivate(path.join(cfg.dir, bucket)));
   const idLock = path.join(cfg.dir, bucket, '.ledger-id.lock');
   let id;
   withLedgerLock(idLock, () => {
@@ -500,12 +557,18 @@ function copyLedger(opts) {
     writeAtomic(reserved, JSON.stringify(archiveMeta(id, imported), null, 2) + '\n');
   });
   const dest = path.join(cfg.dir, id.bucket, id.month, id.ledgerId);
-  withLedgerLock(`${dest}.lock`, () => {
-    mkdirPrivate(dest);
+  const destLock = `${dest}.lock`;
+  withLedgerLock(destLock, () => {
+    const ownerFile = path.join(destLock, 'owner');
+    createdDirs.push(...mkdirPrivate(path.dirname(dest)));
+    createdDirs.push(...mkdirPrivate(dest));
     let incoming = [];
     for (const name of selected) {
       copyPhaseFiles(id.liveRealpath, name, path.join(dest, name), cfg.includeDiff);
       incoming = incoming.concat(entriesFromPhase(name, readChain(id.liveRealpath, name)));
+      const delay = testDelayMs();
+      if (delay) sleepMs(delay);
+      refreshLockOwner(ownerFile);
     }
     const combinedPath = path.join(dest, 'chain.json');
     let existing = [];
@@ -513,8 +576,6 @@ function copyLedger(opts) {
       existing = JSON.parse(fs.readFileSync(combinedPath, 'utf8'));
       if (!Array.isArray(existing)) throw new Error('archived chain.json is not an array');
     }
-    const delay = testDelayMs();
-    if (delay) sleepMs(delay);
     const merged = mergeEntries(existing, incoming);
     writeAtomic(combinedPath, JSON.stringify(merged, null, 2) + '\n');
     const metaPath = path.join(dest, 'archive.json');
@@ -528,7 +589,17 @@ function copyLedger(opts) {
       ? onDisk.imported_from
       : (Object.prototype.hasOwnProperty.call(o, 'importedFrom') ? o.importedFrom : null);
     writeAtomic(metaPath, JSON.stringify(archiveMeta(id, imported), null, 2) + '\n');
-    enforceModes(cfg.dir);
+    enforceModes(dest);
+    const seen = new Set();
+    for (const d of createdDirs) {
+      if (seen.has(d)) continue;
+      seen.add(d);
+      if (d === dest || d.startsWith(dest + path.sep)) continue;
+      try {
+        const st = fs.lstatSync(d);
+        if (st.isDirectory() && !st.isSymbolicLink()) fs.chmodSync(d, 0o700);
+      } catch (_e) { /* already gone */ }
+    }
   });
   return { copied: true, dest, skipped };
 }

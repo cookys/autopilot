@@ -81,7 +81,16 @@ function main(argv) {
   }
   if (args.cmd === 'status') {
     if (args.ledger || args.repo) usage('status takes no flags');
-    const described = describeArchive();
+    let described;
+    try {
+      described = describeArchive();
+    } catch (err) {
+      if (err && typeof err.message === 'string' && err.message.indexOf('misconfigured') !== -1) {
+        console.error(`review-ledger-archive: ${err.message}`);
+        return 0;
+      }
+      throw err;
+    }
     if (described.off) {
       console.log('review-ledger-archive: archive is off');
       return 0;

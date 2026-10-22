@@ -1111,6 +1111,17 @@
       "note": "Sleeps inside the ledger-id lock so a lockless copy drops a phase entry."
     },
     {
+      "name": "AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": "30000",
+      "readers": ["scripts/lib/review-ledger-copy.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Positive number replaces the 30000ms ledger-lock stale threshold. Tests only. Unset, zero, and non-numeric values keep 30000."
+    },
+    {
       "name": "AUTOPILOT_REVIEW_LEDGER_REPO_ROOT",
       "kind": "env",
       "audience": "internal",

@@ -40,6 +40,12 @@
 #       - scripts/calibration.sh: inventory row missing Dormant (ADR-0002)
 #       - scripts/check-node-report.js: header missing ADR-0002 within the first 60 lines
 #       - scripts/check-node-report.js: inventory row missing Dormant (ADR-0002)
+# RED at 2ea016dd7: round 5 retargeted the pin to the evidence-backed header
+# (no script or hook calls it; stale skill text tracked in BL-0283). Removing
+# that header line from scripts/tree.js goes red:
+# FAIL [uncalled-script-labels] scripts/tree.js: header missing ADR-0002 within the first 60 lines
+# FAIL [uncalled-script-labels] 29 passed, 1 failed
+#       - scripts/tree.js: header missing ADR-0002 within the first 60 lines
 . "$(dirname "$0")/lib.sh"
 
 # A header counts only when one of the first 60 lines carries the label.
@@ -104,7 +110,7 @@ header_has_adr0002() {
   local file="$1"
   # The mandated header is one line and spells the ADR as a path
   # (docs/adr/0002-...), so the pin matches that line, not the token ADR-0002.
-  head -n 60 "$file" | grep -F -q 'Dormant since 2026-08-22 (board abort); no workflow triggers it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md'
+  head -n 60 "$file" | grep -F -q 'Dormant since 2026-08-22 (board abort): no script or hook calls it; stale skill text tracked in BL-0283 still describes it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md'
 }
 
 check_dormant() {

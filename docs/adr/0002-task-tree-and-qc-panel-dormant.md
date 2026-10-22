@@ -5,19 +5,21 @@
 
 ## Context
 
-Original goal: [`../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md`](../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md). Quote: "Manager context grows with the number of decisions made, never with the amount of work produced." Meaning: the CEO context grows with the number of decisions, not with the amount of work. Three means: work content lives in the tree/events.jsonl event log; qc-panel uses cross-family judges to check whether a node report overclaims; fetch --raw writes a manager_raw_read audit event.
+Original goal: [`../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md`](../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md). Quote: "Manager context grows with the number of decisions made, never with the amount of work produced." Three means: work content lives in the tree/events.jsonl event log; qc-panel uses cross-family judges to check whether a node report overclaims; fetch --raw writes a manager_raw_read audit event.
 
 Termination evidence: [`../projects/_archive/2026/06/2026-06-12-task-tree-engine/tree/events.jsonl`](../projects/_archive/2026/06/2026-06-12-task-tree-engine/tree/events.jsonl) line 33 is a board_signoff event dated 2026-08-22, decision=abort, authorized_by "board:cookys (CEO-delegated 2026-08-23)". Scope text verbatim: "amendment-6-overdue-review: 2/50 samples in 72 days, agreement 0/2, sample-accrual rate proves the shadow instrument cannot reach graduation on this repo's workflow; abort shadow, adapter stays inactive; re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)". Also commit 97c48b0af (2026-08-23).
 
-Current state: no in-progress project has a tree/ directory; archived projects hold 20 tree/events.jsonl files, the newest entry dated 2026-08-30.
+Current state: no in-progress project has a tree/ directory; archived projects hold 20 tree/events.jsonl files, the newest entry dated 2026-08-30. 2026-08-22 is the abort date. 2026-08-30 is the last event in an archived tree: a tree_initialized event at 2026-08-30T16:16:25Z in docs/projects/_archive/2026/08/2026-08-31-managed-campaign-rail-debt/tree/events.jsonl.
 
 The owner recalls the original need as "structuring the whole project flow", but the original design spec states the goal as keeping the manager's context from growing with the amount of work; the structured task tree on disk (the spec calls it the universal substrate) is the means. Facts from the spec (docs/plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md): North star is the quoted sentence; the task tree is structured data on disk owned by deterministic scripts; the manager talks to the tree only through its CLI.
 
 ## Decision
 
-Scripts, tests and archived records stay in place, not deleted. Both mechanisms are dormant and no workflow triggers them. A tree is no longer initialised by default. The re-entry condition quotes only this sentence of the abort scope: "re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)".
+Scripts, tests and archived records stay in place, not deleted. Both mechanisms are dormant and no script or hook triggers them. Following the current ceo-agent skill text, a CEO opening an L/XL project may still init a tree, and once a tree is initialised, quality-pipeline text makes the dispatcher run qc-panel; this risk is registered in BL-0283 and is to be fixed at the next guidance eval. A tree is no longer initialised by default. The re-entry condition quotes only this sentence of the abort scope: "re-entry = fresh campaign if reviewer-baseline sampling becomes routine (e.g. qc-panel shadow rows)".
 
 ## Consequences
+
+BL-0069 is retired because calibration samples no longer accrue after the abort, so its graduation condition cannot hold; the non-gating invariant in qc-panel.test.sh is kept. BL-0279 (c) is closed by this ADR.
 
 Superseded capabilities:
 

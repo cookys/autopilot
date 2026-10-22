@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Dormant since 2026-08-22 (board abort); no workflow triggers it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md
+// Dormant since 2026-08-22 (board abort): no script or hook calls it; stale skill text tracked in BL-0283 still describes it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md
 
 const fs = require('fs');
 const path = require('path');

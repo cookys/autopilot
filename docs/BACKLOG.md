@@ -1436,7 +1436,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-22
 - **Origin**: owner
 - **Problem**: skill 與 reference 仍叫人去跑已經休眠的任務樹和品管面板。
-- **Impact**: 照著舊文字會去初始化樹或跑面板，但沒有工作流程會觸發它們。
+- **Impact**: 無腳本或 hook 觸發。照 ceo-agent 現文，CEO 開 L/XL 仍可能建樹；樹在後，quality-pipeline 現文叫 dispatcher 跑 qc-panel。
 - **Trigger**: the next guidance eval
 - **Trigger-Type**: event
 - **Effort**: S

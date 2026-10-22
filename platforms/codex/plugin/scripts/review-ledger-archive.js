@@ -22,8 +22,13 @@
 //       it only when the regular-file count matches. Delete the month directory only
 //       when rotate_remove_source is true. Manual. Not called from a hook.
 //       No archive dir: print "archive is off" on stderr and exit 1.
-//   prune
-//       Later phase. This round prints a one-line usage error.
+//   prune --older-than <N>m [--execute]
+//       Delete month directories and month tars strictly older than N local
+//       calendar months. Dry-run is the default: print each path, delete
+//       nothing. --execute deletes, under the repo bucket lock. A target whose
+//       realpath is not strictly inside the archive dir, or a target that is
+//       itself a symlink, is refused: one line on stderr, exit 1, nothing
+//       deleted. Manual. Not called from a hook.
 //
 // Directory: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR, else review_ledger_archive.dir
 // from the operator config. Empty or unset means off. include_diff:
@@ -38,14 +43,14 @@
 // Exit codes:
 //   0  success, including status when the archive is off
 //   1  operational error (caught here; the library throws)
-//   2  usage: missing --ledger, unknown flag, unknown subcommand, or prune
+//   2  usage: missing --ledger, unknown flag, unknown subcommand, or a bad --older-than
 //
 // Usage: node scripts/review-ledger-archive.js <import|status> [--ledger <dir>] [--repo <dir>] [--phase <name>]
 
 const fs = require('fs');
 const path = require('path');
 const { copyLedger, describeArchive, resolveArchiveConfig } = require('./lib/review-ledger-copy');
-const { listRotatableMonths, rotateArchive } = require('./lib/review-ledger-tar');
+const { listRotatableMonths, rotateArchive, pruneArchive } = require('./lib/review-ledger-tar');
 
 function resolveNow() {
   if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW !== '1') return new Date();
@@ -103,7 +108,7 @@ function fail(err) {
 }
 
 function parseArgs(argv) {
-  const out = { cmd: null, ledger: null, repo: null, phases: null, unsafePhase: false };
+  const out = { cmd: null, ledger: null, repo: null, phases: null, unsafePhase: false, execute: false, olderThan: null, targets: null };
   const rest = argv.slice();
   if (rest.length === 0) usage('missing subcommand');
   out.cmd = rest.shift();
@@ -121,6 +126,21 @@ function parseArgs(argv) {
       if (phaseTokenUnsafe(name)) out.unsafePhase = true;
       if (!out.phases) out.phases = [];
       out.phases.push(name);
+    } else if (a === '--older-than') {
+      if (!rest.length) usage('missing value for --older-than');
+      const raw = rest.shift();
+      const m = /^([1-9]\d*)m$/.exec(raw);
+      if (!m) usage(`malformed --older-than ${raw}`);
+      out.olderThan = Number(m[1]);
+    } else if (a === '--execute') {
+      out.execute = true;
+    } else if (a === '--target') {
+      if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET !== '1') {
+        usage('unknown argument --target');
+      }
+      if (!rest.length) usage('missing value for --target');
+      if (!out.targets) out.targets = [];
+      out.targets.push(rest.shift());
     } else {
       usage(`unknown argument ${a}`);
     }
@@ -135,10 +155,29 @@ function main(argv) {
   }
   const args = parseArgs(argv);
   if (args.cmd === 'prune') {
-    usage('prune is not available yet');
+    if (args.ledger || args.repo || args.phases) usage('prune does not take --ledger, --repo, or --phase');
+    if (args.olderThan == null) usage('prune requires --older-than <N>m');
+    const cfg = resolveArchiveConfig();
+    if (!cfg.dir) {
+      console.error('review-ledger-archive: archive is off');
+      return 1;
+    }
+    const result = pruneArchive({
+      dir: cfg.dir,
+      now: resolveNow(),
+      olderThanMonths: args.olderThan,
+      execute: args.execute === true,
+      targets: args.targets || [],
+    });
+    for (const line of result.refusals) console.error(line);
+    if (result.refusals.length) return 1;
+    for (const line of result.lines) console.log(line);
+    return 0;
   }
   if (args.cmd === 'rotate') {
-    if (args.ledger || args.repo || args.phases) usage('rotate takes no flags');
+    if (args.ledger || args.repo || args.phases || args.execute || args.olderThan != null || args.targets) {
+      usage('rotate takes no flags');
+    }
     let cfg;
     try {
       cfg = resolveArchiveConfig();
@@ -160,7 +199,9 @@ function main(argv) {
     return 0;
   }
   if (args.cmd === 'status') {
-    if (args.ledger || args.repo) usage('status takes no flags');
+    if (args.ledger || args.repo || args.phases || args.execute || args.olderThan != null || args.targets) {
+      usage('status takes no flags');
+    }
     let described;
     try {
       described = describeArchive();
@@ -195,12 +236,7 @@ function main(argv) {
       return 1;
     }
     if (!args.ledger) usage('import requires --ledger <dir>');
-    let cfg;
-    try {
-      cfg = resolveArchiveConfig();
-    } catch (err) {
-      throw err;
-    }
+    const cfg = resolveArchiveConfig();
     if (cfg.dir && !archiveRootWritable(cfg.dir)) {
       console.error('review-ledger-archive: archive root is not writable');
       return 1;

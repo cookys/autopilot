@@ -111,6 +111,106 @@ function runTar(args) {
   return { ok: true, stdout: r.stdout || '' };
 }
 
+// True only when targetPath is not a symlink and its realpath sits strictly
+// inside the archive root (a path-separator boundary, so <archive>-evil fails,
+// and the archive root itself fails). Tests replace pruneTargetAllowed.
+function pruneTargetAllowed(archiveDir, targetPath) {
+  return pruneTargetAllowedChecked(archiveDir, targetPath);
+}
+
+function pruneTargetAllowedChecked(archiveDir, targetPath) {
+  let st;
+  try { st = fs.lstatSync(targetPath); } catch (_e) { return false; }
+  if (st.isSymbolicLink()) return false;
+  let rootReal;
+  try { rootReal = fs.realpathSync(archiveDir); } catch (_e) { return false; }
+  let targetReal;
+  try { targetReal = fs.realpathSync(targetPath); } catch (_e) { return false; }
+  if (targetReal === rootReal) return false;
+  const boundary = rootReal.endsWith(path.sep) ? rootReal : rootReal + path.sep;
+  return targetReal.startsWith(boundary);
+}
+
+function pruneTargetRefusal(archiveDir, targetPath) {
+  if (pruneTargetAllowed(archiveDir, targetPath)) return null;
+  let st;
+  try { st = fs.lstatSync(targetPath); } catch (_e) { return 'not under archive'; }
+  if (st.isSymbolicLink()) return 'symlink';
+  return 'not under archive';
+}
+
+function listPruneCandidates(archiveDir, now, n) {
+  const out = [];
+  eachBucket(archiveDir, (_bucket, bucketDir) => {
+    for (const month of monthDirs(bucketDir)) {
+      if (!monthPastAge(month, now, n)) continue;
+      out.push(path.join(bucketDir, month));
+    }
+    let names = [];
+    try { names = fs.readdirSync(bucketDir); } catch (_e) { names = []; }
+    for (const name of names) {
+      const m = /^(\d{4}-\d{2})\.tar\.gz$/.exec(name);
+      if (!m || !monthPastAge(m[1], now, n)) continue;
+      out.push(path.join(bucketDir, name));
+    }
+  });
+  return out;
+}
+
+function bucketDirForPrune(archiveDir, targetPath) {
+  let rootReal;
+  try { rootReal = fs.realpathSync(archiveDir); } catch (_e) { return null; }
+  let targetReal;
+  try { targetReal = fs.realpathSync(targetPath); } catch (_e) { return null; }
+  const rel = path.relative(rootReal, targetReal);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  const parts = rel.split(path.sep);
+  if (parts.length < 2) return null;
+  return path.join(rootReal, parts[0]);
+}
+
+// Dry-run unless opts.execute. Refusals are decided for every target before
+// any deletion. extra opts.targets are included (the CLI test seam).
+function pruneArchive(opts) {
+  const o = opts || {};
+  const now = o.now instanceof Date && !Number.isNaN(o.now.getTime()) ? o.now : new Date();
+  const extra = Array.isArray(o.targets) ? o.targets : [];
+  const seen = new Set();
+  const targets = [];
+  for (const t of listPruneCandidates(o.dir, now, o.olderThanMonths).concat(extra)) {
+    if (seen.has(t)) continue;
+    seen.add(t);
+    targets.push(t);
+  }
+  const refusals = [];
+  const accepted = [];
+  for (const t of targets) {
+    const reason = pruneTargetRefusal(o.dir, t);
+    if (reason) refusals.push(`review-ledger-archive: refused ${t} (${reason})`);
+    else accepted.push(t);
+  }
+  if (refusals.length) return { refusals, lines: [] };
+  accepted.sort();
+  if (o.execute !== true) return { refusals: [], lines: accepted };
+  const groups = new Map();
+  const loose = [];
+  for (const t of accepted) {
+    const bucketDir = bucketDirForPrune(o.dir, t);
+    if (!bucketDir) loose.push(t);
+    else {
+      if (!groups.has(bucketDir)) groups.set(bucketDir, []);
+      groups.get(bucketDir).push(t);
+    }
+  }
+  for (const bucketDir of Array.from(groups.keys()).sort()) {
+    withLedgerLock(path.join(bucketDir, '.ledger-id.lock'), () => {
+      for (const t of groups.get(bucketDir)) fs.rmSync(t, { recursive: true });
+    });
+  }
+  for (const t of loose) fs.rmSync(t, { recursive: true });
+  return { refusals: [], lines: accepted };
+}
+
 function rotateArchive(opts) {
   const o = opts || {};
   const now = o.now instanceof Date && !Number.isNaN(o.now.getTime()) ? o.now : new Date();
@@ -183,4 +283,6 @@ module.exports = {
   listRotatableMonths,
   rotateArchive,
   monthPastAge,
+  pruneTargetAllowed,
+  pruneArchive,
 };

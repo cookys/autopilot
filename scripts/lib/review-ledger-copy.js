@@ -638,12 +638,28 @@ function copyLedger(opts) {
   if (selected.length === 0) throw new Error('no phase selected');
   const liveForSelect = fs.realpathSync(o.ledgerDir);
   const known = phaseNames(liveForSelect);
-  for (const name of selected) {
-    if (!known.includes(name)) throw new Error(`unknown phase ${name}`);
-  }
   // Identity (phase_keys, source_realpath lookup) uses only phases that are
-  // copied. A skipped directory never enters the ledger-id.
+  // copied. A skipped directory never enters the ledger-id. An explicit
+  // symlink phase is reported skipped and is not read or merged.
   let skipped = [];
+  if (explicit) {
+    const sym = new Set(symlinkReviewPhases(liveForSelect));
+    const kept = [];
+    for (const name of selected) {
+      if (sym.has(name)) {
+        skipped.push(name);
+        continue;
+      }
+      if (!known.includes(name)) throw new Error(`unknown phase ${name}`);
+      kept.push(name);
+    }
+    selected = kept;
+    if (selected.length === 0) throw new Error('no phase selected');
+  } else {
+    for (const name of selected) {
+      if (!known.includes(name)) throw new Error(`unknown phase ${name}`);
+    }
+  }
   if (!explicit) {
     const part = partitionLedgerPhases(liveForSelect, selected);
     selected = part.usable;

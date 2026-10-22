@@ -31,6 +31,12 @@
 # and ba fail (no tar.gz, no "rotated"/"skipped"/"summary" lines, archive-off
 # stays exit 2). ay does not print "rotatable months:" or the rotate hint.
 # aw cannot patch scripts/lib/review-ledger-tar.js because the file is absent.
+# RED at c25d40e8ea08c1e99f40266a6794200606f5119b: prune is still
+# "not available yet" (exit 2). Dry-run lists nothing and --execute deletes
+# nothing (bb/bd). Sibling, archive-root, and symlink --target runs also exit 2
+# with no refusal line (be/bf/bg). The prefix-check mutant cannot be applied
+# because pruneTargetAllowed is absent (bh). status --phase x exits 0 (bj).
+# import --phase of a symlink phase exits 1 and copies no review-good (bk).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -1890,5 +1896,215 @@ unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
 unset AUTOPILOT_TEST_NOW
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
+
+# (bb) prune dry-run lists the old month directory and the old tar, and deletes nothing.
+# (bc) the same invocation has no --execute, so the files are still there afterwards.
+LEDGER_BB="$TEST_TMP/ledger-bb"
+make_ledger "$LEDGER_BB" alpha "2026-10-22T03:04:05.000Z"
+ARCH_BB="$TEST_TMP/archive-bb"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BB"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1
+export AUTOPILOT_TEST_NOW=2026-10-22
+node "$CLI" import --ledger "$LEDGER_BB" --repo "$REPO" >/dev/null
+BB_MONTH=$(find "$ARCH_BB" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+BB_BUCKET=$(dirname "$BB_MONTH")
+cp -a "$BB_MONTH" "$BB_BUCKET/2026-09"
+cp -a "$BB_MONTH" "$BB_BUCKET/2026-07"
+cp -a "$BB_MONTH" "$BB_BUCKET/2026-06"
+tar -czf "$BB_BUCKET/2026-06.tar.gz" -C "$BB_BUCKET" 2026-06
+BB_OUT=$(node "$CLI" prune --older-than 2m 2>"$TEST_TMP/bb.err")
+assert_exit_code "$?" "0" "case bb: dry-run prune exits 0"
+printf '%s\n' "$BB_OUT" | grep -F -x "$BB_BUCKET/2026-07" >/dev/null
+assert_exit_code "$?" "0" "case bb: dry-run lists the old month dir"
+printf '%s\n' "$BB_OUT" | grep -F -x "$BB_BUCKET/2026-06.tar.gz" >/dev/null
+assert_exit_code "$?" "0" "case bb: dry-run lists the old tar"
+printf '%s\n' "$BB_OUT" | grep -F -x "$BB_BUCKET/2026-06" >/dev/null
+assert_exit_code "$?" "0" "case bb: dry-run lists the 2026-06 month dir"
+case "$BB_OUT" in
+  *"$BB_BUCKET/2026-09"*) fail "case bb: dry-run listed a month that is not older than 2" ;;
+  *"$BB_BUCKET/2026-10"*) fail "case bb: dry-run listed the current month" ;;
+  *) echo "case bb: newer months omitted"; __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+test -d "$BB_BUCKET/2026-07"
+assert_exit_code "$?" "0" "case bc: month dir remains without --execute"
+test -f "$BB_BUCKET/2026-06.tar.gz"
+assert_exit_code "$?" "0" "case bc: tar remains without --execute"
+test -d "$BB_BUCKET/2026-06"
+assert_exit_code "$?" "0" "case bc: 2026-06 dir remains without --execute"
+test -d "$BB_BUCKET/2026-09"
+assert_exit_code "$?" "0" "case bc: newer month remains without --execute"
+
+# (bd) --execute deletes only the old targets.
+node "$CLI" prune --older-than 2m --execute >"$TEST_TMP/bd.out" 2>"$TEST_TMP/bd.err"
+assert_exit_code "$?" "0" "case bd: execute exits 0"
+test ! -d "$BB_BUCKET/2026-07"
+assert_exit_code "$?" "0" "case bd: old month dir deleted"
+test ! -d "$BB_BUCKET/2026-06"
+assert_exit_code "$?" "0" "case bd: old month dir 2026-06 deleted"
+test ! -e "$BB_BUCKET/2026-06.tar.gz"
+assert_exit_code "$?" "0" "case bd: old tar deleted"
+test -d "$BB_BUCKET/2026-09"
+assert_exit_code "$?" "0" "case bd: 2026-09 kept"
+test -d "$BB_BUCKET/2026-10"
+assert_exit_code "$?" "0" "case bd: current month kept"
+
+# (be) --execute with a sibling of the archive root: refuse, delete nothing.
+LEDGER_BE="$TEST_TMP/ledger-be"
+make_ledger "$LEDGER_BE" alpha "2026-10-22T03:04:05.000Z"
+ARCH_BE="$TEST_TMP/archive-be"
+SIB_BE="${ARCH_BE}-evil"
+mkdir -p "$SIB_BE"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BE"
+node "$CLI" import --ledger "$LEDGER_BE" --repo "$REPO" >/dev/null
+BE_MONTH=$(find "$ARCH_BE" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+BE_BUCKET=$(dirname "$BE_MONTH")
+cp -a "$BE_MONTH" "$BE_BUCKET/2026-07"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET=1
+node "$CLI" prune --older-than 2m --execute --target "$SIB_BE" >"$TEST_TMP/be.out" 2>"$TEST_TMP/be.err"
+assert_exit_code "$?" "1" "case be: sibling target exits 1"
+grep -F 'refused' "$TEST_TMP/be.err" >/dev/null
+assert_exit_code "$?" "0" "case be: stderr is a refusal"
+test -d "$BE_BUCKET/2026-07"
+assert_exit_code "$?" "0" "case be: nothing deleted inside the archive"
+test -d "$SIB_BE"
+assert_exit_code "$?" "0" "case be: sibling survives"
+
+# (bf) target == archive root: refuse, delete nothing.
+node "$CLI" prune --older-than 2m --execute --target "$ARCH_BE" >"$TEST_TMP/bf.out" 2>"$TEST_TMP/bf.err"
+assert_exit_code "$?" "1" "case bf: archive root target exits 1"
+grep -F 'refused' "$TEST_TMP/bf.err" >/dev/null
+assert_exit_code "$?" "0" "case bf: stderr is a refusal"
+test -d "$BE_BUCKET/2026-07"
+assert_exit_code "$?" "0" "case bf: old month still present"
+test -d "$ARCH_BE"
+assert_exit_code "$?" "0" "case bf: archive root survives"
+
+# (bg) a symlink inside the archive pointing outside is refused; the outside dir survives.
+OUT_BG="$TEST_TMP/outside-bg"
+mkdir -p "$OUT_BG/keep"
+printf '%s\n' 'OUTSIDE_SURVIVES' > "$OUT_BG/keep/file"
+ln -s "$OUT_BG" "$ARCH_BE/link-out"
+node "$CLI" prune --older-than 2m --execute --target "$ARCH_BE/link-out" >"$TEST_TMP/bg.out" 2>"$TEST_TMP/bg.err"
+assert_exit_code "$?" "1" "case bg: symlink target exits 1"
+grep -F 'refused' "$TEST_TMP/bg.err" >/dev/null
+assert_exit_code "$?" "0" "case bg: stderr is a refusal"
+test -d "$BE_BUCKET/2026-07"
+assert_exit_code "$?" "0" "case bg: old month still present"
+test -d "$OUT_BG/keep"
+assert_exit_code "$?" "0" "case bg: outside directory survives"
+grep -F 'OUTSIDE_SURVIVES' "$OUT_BG/keep/file" >/dev/null
+assert_exit_code "$?" "0" "case bg: outside file bytes survive"
+test -L "$ARCH_BE/link-out"
+assert_exit_code "$?" "0" "case bg: symlink itself was not removed"
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET
+
+# (bh) negative control: drop the realpath prefix check. Sibling, root, and
+# symlink refusals go red (exit 0, and the sibling is removed). Restoring the
+# check is the production file; be/bf/bg above stay green.
+# RED with pruneTargetAllowed reduced to "return true" (prefix check gone):
+#   case bh: red-on-broken (sibling rc=0 root rc=0 symlink rc=0)
+# The three refusal cases exit 0 instead of 1. rm of a symlink unlinks the
+# link; the outside directory is still on disk.
+MUT_BH="$TEST_TMP/mut-bh"
+mkdir -p "$MUT_BH/scripts/lib"
+cp "$CLI" "$MUT_BH/scripts/review-ledger-archive.js"
+cp "$LIB" "$MUT_BH/scripts/lib/review-ledger-copy.js"
+cp "$REPO_ROOT/scripts/lib/review-ledger-tar.js" "$MUT_BH/scripts/lib/review-ledger-tar.js"
+python3 - "$MUT_BH/scripts/lib/review-ledger-tar.js" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "function pruneTargetAllowed(archiveDir, targetPath) {\n  return pruneTargetAllowedChecked(archiveDir, targetPath);\n}"
+new = "function pruneTargetAllowed(archiveDir, targetPath) {\n  return true;\n}"
+if old not in t:
+    sys.stderr.write("case bh: pruneTargetAllowed wrapper missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, new, 1))
+PY
+assert_exit_code "$?" "0" "case bh: mutant applied"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+ARCH_BH="$TEST_TMP/archive-bh"
+SIB_BH="${ARCH_BH}-evil"
+mkdir -p "$SIB_BH" "$ARCH_BH"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BH"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET=1
+node "$CLI" import --ledger "$LEDGER_BE" --repo "$REPO" >/dev/null
+BH_MONTH=$(find "$ARCH_BH" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+cp -a "$BH_MONTH" "$(dirname "$BH_MONTH")/2026-07"
+OUT_BH="$TEST_TMP/outside-bh"
+mkdir -p "$OUT_BH"
+ln -s "$OUT_BH" "$ARCH_BH/link-out"
+node "$MUT_BH/scripts/review-ledger-archive.js" prune --older-than 2m --execute --target "$SIB_BH" >"$TEST_TMP/bh-sib.out" 2>"$TEST_TMP/bh-sib.err"
+BH_SIB_RC=$?
+# Rebuild a fresh archive for the root target. The sibling mutant may have
+# deleted the old month because the check no longer refuses.
+ARCH_BH_ROOT="$TEST_TMP/archive-bh-root"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BH_ROOT"
+node "$CLI" import --ledger "$LEDGER_BE" --repo "$REPO" >/dev/null
+node "$MUT_BH/scripts/review-ledger-archive.js" prune --older-than 2m --execute --target "$ARCH_BH_ROOT" >"$TEST_TMP/bh-root.out" 2>"$TEST_TMP/bh-root.err"
+BH_ROOT_RC=$?
+ARCH_BH_LINK="$TEST_TMP/archive-bh-link"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BH_LINK"
+node "$CLI" import --ledger "$LEDGER_BE" --repo "$REPO" >/dev/null
+ln -s "$OUT_BH" "$ARCH_BH_LINK/link-out"
+node "$MUT_BH/scripts/review-ledger-archive.js" prune --older-than 2m --execute --target "$ARCH_BH_LINK/link-out" >"$TEST_TMP/bh-link.out" 2>"$TEST_TMP/bh-link.err"
+BH_LINK_RC=$?
+if [ "$BH_SIB_RC" = 1 ] && [ "$BH_ROOT_RC" = 1 ] && [ "$BH_LINK_RC" = 1 ]; then
+  fail "case bh: broken prefix check still refused (negative control is blind) sib=$BH_SIB_RC root=$BH_ROOT_RC link=$BH_LINK_RC"
+else
+  echo "case bh: red-on-broken (sibling rc=$BH_SIB_RC root rc=$BH_ROOT_RC symlink rc=$BH_LINK_RC)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+test -d "$OUT_BH"
+assert_exit_code "$?" "0" "case bh: outside dir still exists after the mutant"
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET
+
+# (bi) --older-than missing or malformed is usage, exit 2.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BB"
+BI_OUT=$(node "$CLI" prune 2>&1); BI_RC=$?
+assert_exit_code "$BI_RC" "2" "case bi: prune with no --older-than exits 2"
+BI_BAD=$(node "$CLI" prune --older-than 2 2>&1); BI_BAD_RC=$?
+assert_exit_code "$BI_BAD_RC" "2" "case bi: --older-than without m exits 2"
+BI_ZERO=$(node "$CLI" prune --older-than 0m 2>&1); BI_ZERO_RC=$?
+assert_exit_code "$BI_ZERO_RC" "2" "case bi: --older-than 0m exits 2"
+
+# (bj) status --phase is a usage error.
+BJ_OUT=$(node "$CLI" status --phase x 2>&1); BJ_RC=$?
+assert_exit_code "$BJ_RC" "2" "case bj: status --phase x exits 2"
+
+# (bk) an explicit symlink phase is skipped, and readChain does not merge it.
+LEDGER_BK="$TEST_TMP/ledger-bk"
+OUTSIDE_BK="$TEST_TMP/outside-bk"
+make_ledger "$LEDGER_BK" good "2026-10-22T03:04:05.000Z"
+mkdir -p "$OUTSIDE_BK/g1"
+printf '%s\n' '[{"generation":1,"base":"OUTSIDE_BK","head":"zzz","status":"pending","collected_at":"2026-10-22T03:04:05.000Z"}]' > "$OUTSIDE_BK/chain.json"
+printf '%s\n' '{"base":"OUTSIDE_BK","head":"zzz"}' > "$OUTSIDE_BK/g1/range.json"
+ln -s "$OUTSIDE_BK" "$LEDGER_BK/review-evil"
+ARCH_BK="$TEST_TMP/archive-bk"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BK"
+node "$CLI" import --ledger "$LEDGER_BK" --repo "$REPO" --phase good --phase evil >"$TEST_TMP/bk.out" 2>"$TEST_TMP/bk.err"
+assert_exit_code "$?" "0" "case bk: explicit symlink phase import exits 0"
+grep -F 'review-ledger-archive: skipped review-evil' "$TEST_TMP/bk.err" >/dev/null
+assert_exit_code "$?" "0" "case bk: stderr names the symlinked phase"
+DEST_BK=$(cat "$TEST_TMP/bk.out")
+assert_file_exists "$DEST_BK/review-good/chain.json" "case bk: named real phase copied"
+assert_file_absent "$DEST_BK/review-evil" "case bk: symlink phase not copied"
+if grep -R -F 'OUTSIDE_BK' "$ARCH_BK" >/dev/null; then
+  fail "case bk: symlink phase was read and merged"
+else
+  echo "case bk: no read and no merge of the symlink phase"; __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+test -d "$OUTSIDE_BK"
+assert_exit_code "$?" "0" "case bk: outside directory survives"
+
+# (bl) no hook and no finalize path invokes prune.
+BL_HITS=$(grep -R -n --exclude-dir=tests -E 'review-ledger-archive\.js[[:space:]]+prune|pruneArchive\(' \
+  "$REPO_ROOT/hooks" "$REPO_ROOT/scripts/hetero-review-loop.js" 2>/dev/null || true)
+assert_eq "$BL_HITS" "" "case bl: hooks and finalize do not reference prune"
+
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
+unset AUTOPILOT_TEST_NOW
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET
 
 finalize_test

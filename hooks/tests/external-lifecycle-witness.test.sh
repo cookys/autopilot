@@ -6,7 +6,6 @@ const childProcess = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const net = require('net');
-const os = require('os');
 const path = require('path');
 
 const root = process.argv[2];
@@ -18,10 +17,60 @@ const {
 } = require(path.join(root, 'src', 'engine'));
 const { canonicalJson, sha256 } = require(path.join(root, 'src', 'engine', 'owner-kernel', 'canonical'));
 
-// Keep the Unix-domain socket path well below Linux's 108-byte limit even when
-// a test runner supplies an unusually long TMPDIR.
-const runtime = fs.mkdtempSync(path.join(os.homedir(), '.aew-'));
+// RED at c9c3fd66e: 0 passed 53 failed, first error daemon_exited_1_EXTERNAL_WITNESS_FILESYSTEM_UNSAFE under a /tmp HOME.
+// The runtime base is not os.homedir(): when HOME is under /tmp, every journal
+// ancestor walk hits mode 1777 /tmp and the daemon refuses (no sticky-bit
+// exemption). Use only a new subdirectory of XDG_RUNTIME_DIR. Never touch any
+// other entry there, and never fall back to /tmp.
+function ancestorUnsafeReason(directoryPath) {
+  const rootPath = path.parse(directoryPath).root;
+  let current = path.resolve(directoryPath);
+  for (;;) {
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      return `cannot stat ${current}: ${error.message}`;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      return `${current} is not a real directory`;
+    }
+    if ((stat.mode & 0o022) !== 0) {
+      return `${current} is group/world writable (mode ${(stat.mode & 0o777).toString(8)})`;
+    }
+    if (current === rootPath) return null;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+const xdgRuntime = process.env.XDG_RUNTIME_DIR;
+if (!xdgRuntime) {
+  process.stderr.write('XDG_RUNTIME_DIR is unset; refusing to fall back to /tmp or HOME\n');
+  process.exit(1);
+}
+if (!fs.existsSync(xdgRuntime)) {
+  process.stderr.write(`XDG_RUNTIME_DIR does not exist: ${xdgRuntime}\n`);
+  process.exit(1);
+}
+const xdgUnsafe = ancestorUnsafeReason(xdgRuntime);
+if (xdgUnsafe) {
+  process.stderr.write(`XDG_RUNTIME_DIR is unsafe: ${xdgUnsafe}\n`);
+  process.exit(1);
+}
+// Short prefix keeps the Unix socket path under Linux's 108-byte sun_path cap.
+const runtime = fs.mkdtempSync(path.join(xdgRuntime, 'elw-test.'));
 fs.chmodSync(runtime, 0o700);
+let runtimeRemoved = false;
+function removeRuntime() {
+  if (runtimeRemoved) return;
+  runtimeRemoved = true;
+  fs.rmSync(runtime, { recursive: true, force: true });
+}
+process.on('exit', removeRuntime);
+process.on('SIGINT', () => { removeRuntime(); process.exit(130); });
+process.on('SIGTERM', () => { removeRuntime(); process.exit(143); });
 const daemonModule = path.join(root, 'src', 'engine', 'external-lifecycle-witness.js');
 const CLIENT_KEY = 'b'.repeat(64);
 const ATTESTATION_HASH = 'c'.repeat(64);

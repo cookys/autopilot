@@ -186,6 +186,67 @@ for f in "$HOOKS_TESTS"/*.test.sh; do
   fi
 done
 
+# --- 6. Inventory three: node tests that commit via git carry their own identity (BL-0268) ---
+# RED at dcb44c46a: the scanner did not exist; the planted fixture node test that
+# runs a git commit via argv with no identity was not flagged (assert_contains on
+# empty output failed) and no rule covered node tests at all.
+node_commit_without_identity() {
+  node - "$@" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const args = process.argv.slice(2);
+const files = [];
+function walk(dir) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (ent.name === 'node_modules' || ent.name === '.git') continue;
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) walk(p);
+    else if (/\.test\.(js|cjs|mjs)$/.test(ent.name)) files.push(p);
+  }
+}
+if (args[0] === '--files') files.push(...args.slice(1));
+else walk(args[0]);
+// argv-form commit: 'commit' as a quoted array/argument element (not `kind: 'commit'`,
+// not a shell string such as 'git commit -m x' that is only data or runs elsewhere).
+const commitRe = /(?:\[|,)\s*['"]commit['"]\s*[,\]]/;
+const identityRe = /user\.email|GIT_AUTHOR_EMAIL|GIT_COMMITTER_EMAIL|GIT_CONFIG_GLOBAL|\bEMAIL\b/;
+for (const file of files) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+  if (commitRe.test(text) && !identityRe.test(text)) process.stdout.write(`${file}\n`);
+}
+NODE
+}
+
+NODE_ID_FIXTURES="$TEST_TMP/node-ident"
+mkdir -p "$NODE_ID_FIXTURES"
+cat > "$NODE_ID_FIXTURES/bad.test.js" <<'EOF'
+const { spawnSync } = require('child_process');
+spawnSync('git', ['-C', '/x', 'commit', '-q', '--allow-empty', '-m', 'init']);
+EOF
+cat > "$NODE_ID_FIXTURES/good.test.js" <<'EOF'
+const { spawnSync } = require('child_process');
+spawnSync('git', ['-C', '/x', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', 'init']);
+EOF
+cat > "$NODE_ID_FIXTURES/data.test.js" <<'EOF'
+const cases = ['git commit -m "data only"', { kind: 'commit' }];
+EOF
+NODE_ID_OUT="$(node_commit_without_identity --files "$NODE_ID_FIXTURES/bad.test.js" "$NODE_ID_FIXTURES/good.test.js" "$NODE_ID_FIXTURES/data.test.js")"
+assert_contains "$NODE_ID_OUT" "bad.test.js" "node scanner flags a git-commit node test with no identity (negative control)"
+case "$NODE_ID_OUT" in
+  *good.test.js*) fail "node scanner flagged a test that sets user.email" ;;
+  *) assert_eq 0 0 "node scanner passes a node test that sets user.email" ;;
+esac
+case "$NODE_ID_OUT" in
+  *data.test.js*) fail "node scanner flagged commit text that is only data" ;;
+  *) assert_eq 0 0 "node scanner ignores commit text that is only data" ;;
+esac
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  fail "node test commits via git without its own identity: ${f#$REPO_ROOT/}"
+done < <(node_commit_without_identity "$REPO_ROOT")
+
 # --- P3: identity gate hooks ---
 # RED at 183c6e9e: unmodified .githooks allow test-identity commit/merge (exit 0);
 # no pre-merge-commit; pre-push identity not judged (file transport 128 here).

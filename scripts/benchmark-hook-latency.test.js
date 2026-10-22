@@ -44,13 +44,18 @@ fs.writeFileSync(val('--debug-file'), lines.join('\\n') + '\\n');
 process.stdout.write(JSON.stringify({ total_cost_usd: Number(process.env.STUB_COST || 0.01), result: 'done' }));
 `;
 
-function setup() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-latency-test-'));
-  const stub = path.join(dir, 'claude');
-  fs.writeFileSync(stub, STUB, { mode: 0o755 });
-  const creds = path.join(dir, 'creds.json');
-  fs.writeFileSync(creds, '{"fake":"credentials"}');
-  return { dir, stub, creds, log: path.join(dir, 'stub.log'), out: path.join(dir, 'out', 'baseline.json') };
+function withCtx(fn) {
+  let dir;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-latency-test-'));
+    const stub = path.join(dir, 'claude');
+    fs.writeFileSync(stub, STUB, { mode: 0o755 });
+    const creds = path.join(dir, 'creds.json');
+    fs.writeFileSync(creds, '{"fake":"credentials"}');
+    return fn({ dir, stub, creds, log: path.join(dir, 'stub.log'), out: path.join(dir, 'out', 'baseline.json') });
+  } finally {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function run(ctx, args, env = {}) {
@@ -60,8 +65,7 @@ function run(ctx, args, env = {}) {
 
 const common = (ctx) => ['--samples', '5', '--max-usd', '5', '--out', ctx.out];
 
-test('normal run: parses hook intervals, writes the evidence schema, valid instrument', () => {
-  const ctx = setup();
+test('normal run: parses hook intervals, writes the evidence schema, valid instrument', () => withCtx((ctx) => {
   const r = run(ctx, common(ctx), {
     AUTOPILOT_SESSION_ID: 'leak1', CLAUDE_CODE_SESSION_ID: 'leak2', AUTOPILOT_PARENT_SESSION_ID: 'leak3',
   });
@@ -89,10 +93,9 @@ test('normal run: parses hook intervals, writes the evidence schema, valid instr
   assert.strictEqual(pc.spawns_per_call, 2); // audit-log + marker are one call
   assert.ok(pc.call_p95_ms >= 210);
   assert.strictEqual(j.spent_usd, 0.15);
-});
+}));
 
-test('child process isolation: fresh config dir with only .credentials.json, no session env, throwaway cwd', () => {
-  const ctx = setup();
+test('child process isolation: fresh config dir with only .credentials.json, no session env, throwaway cwd', () => withCtx((ctx) => {
   const realClaude = path.join(os.homedir(), '.claude');
   const r = run(ctx, ['--samples', '2', '--max-usd', '5', '--out', ctx.out], {
     AUTOPILOT_SESSION_ID: 'leak1', CLAUDE_CODE_SESSION_ID: 'leak2', AUTOPILOT_PARENT_SESSION_ID: 'leak3',
@@ -113,40 +116,36 @@ test('child process isolation: fresh config dir with only .credentials.json, no 
   }
   assert.strictEqual(dirs.size, 6, 'every run gets its own fresh config dir');
   for (const d of dirs) assert.ok(!fs.existsSync(d), 'config dir removed afterwards');
-});
+}));
 
-test('NEGATIVE CONTROL: zero arm still shows hook lines -> refuses to conclude', () => {
-  const ctx = setup();
+test('NEGATIVE CONTROL: zero arm still shows hook lines -> refuses to conclude', () => withCtx((ctx) => {
   const r = run(ctx, common(ctx), { STUB_SCENARIO: 'zero_leak' });
   assert.strictEqual(r.status, 4, r.stderr + r.stdout);
   const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
   assert.strictEqual(j.conclusion.refused, true);
   assert.strictEqual(j.conclusion.reason, 'zero_arm_has_hook_lines');
   assert.strictEqual(j.conclusion.verdict, null);
-});
+}));
 
-test('NEGATIVE CONTROL: positive control not measurable -> refuses to conclude', () => {
-  const ctx = setup();
+test('NEGATIVE CONTROL: positive control not measurable -> refuses to conclude', () => withCtx((ctx) => {
   const r = run(ctx, common(ctx), { STUB_SCENARIO: 'positive_blind' });
   assert.strictEqual(r.status, 4, r.stderr + r.stdout);
   const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
   assert.strictEqual(j.conclusion.refused, true);
   assert.strictEqual(j.conclusion.reason, 'positive_control_not_measured');
   assert.strictEqual(j.conclusion.verdict, null);
-});
+}));
 
-test('instrument invalid when marker p95 < 180 ms (not a refusal of the data, a refusal of the verdict)', () => {
-  const ctx = setup();
+test('instrument invalid when marker p95 < 180 ms (not a refusal of the data, a refusal of the verdict)', () => withCtx((ctx) => {
   // marker lines reported at ~100 ms: the instrument cannot see a 200 ms hook
   const r = run(ctx, common(ctx), { STUB_MARKER_SHORT: '1' });
   assert.strictEqual(r.status, 4, r.stderr + r.stdout);
   const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
   assert.strictEqual(j.conclusion.refused, true);
   assert.strictEqual(j.conclusion.reason, 'instrument_invalid_marker_p95_below_180');
-});
+}));
 
-test('NEGATIVE CONTROL: --max-usd exceeded stops immediately, reports spend, no verdict', () => {
-  const ctx = setup();
+test('NEGATIVE CONTROL: --max-usd exceeded stops immediately, reports spend, no verdict', () => withCtx((ctx) => {
   const r = run(ctx, ['--samples', '10', '--max-usd', '0.05', '--out', ctx.out], { STUB_COST: '0.02' });
   assert.strictEqual(r.status, 3, r.stderr + r.stdout);
   const calls = fs.readFileSync(ctx.log, 'utf8').trim().split('\n');
@@ -156,24 +155,22 @@ test('NEGATIVE CONTROL: --max-usd exceeded stops immediately, reports spend, no 
   assert.ok(j.spent_usd >= 0.05 && j.spent_usd <= 0.07, String(j.spent_usd));
   assert.strictEqual(j.conclusion.refused, true);
   assert.match(r.stderr, /max-usd/);
-});
+}));
 
-test('--dry-run prints plan and estimate, spawns nothing, writes nothing', () => {
-  const ctx = setup();
+test('--dry-run prints plan and estimate, spawns nothing, writes nothing', () => withCtx((ctx) => {
   const r = run(ctx, ['--samples', '30', '--max-usd', '1', '--out', ctx.out, '--dry-run']);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /90 runs/);
   assert.match(r.stdout, /estimated/i);
   assert.ok(!fs.existsSync(ctx.log));
   assert.ok(!fs.existsSync(ctx.out));
-});
+}));
 
-test('--max-usd is required', () => {
-  const ctx = setup();
+test('--max-usd is required', () => withCtx((ctx) => {
   const r = run(ctx, ['--samples', '2', '--out', ctx.out]);
   assert.strictEqual(r.status, 2);
   assert.match(r.stderr, /--max-usd/);
-});
+}));
 
 test('verdict opens the guard-port plan only when per-call p95 >= 150 ms AND >= 5 spawns per call', () => {
   const { conclude } = require(BIN);

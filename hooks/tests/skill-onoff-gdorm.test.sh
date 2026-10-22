@@ -3,6 +3,7 @@
 # Markers come from Bash tool calls and cell artefacts, never from the agent's words.
 # RED-first: run once against the unmodified tree before the gdorm row existed.
 # RED at 3ec639777: FAIL: tree cell exit 2 (arm manifest arms/gdorm/base.json not found).
+# RED at 03aa140b0: default dry-run is 60 cells at 6.60 USD (not 30); ONOFF_MAX_USD=5 dry-run exits 0; mutated ceo-agent pack --check-arms exits 0; score-gdorm.js is missing; stamp --check exits 2 (arm_manifests.change has no file).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -187,5 +188,101 @@ assert j["cost_estimate_usd"] <= 7
 ' "$dry" || fail "dry-run cost: $dry"
 chk=$(node "$BASE/run-gdorm-campaign.js" --check-arms) || fail "check-arms exit $?"
 python3 -c 'import json,sys; r=json.loads(sys.argv[1]); assert r["ok"] is True' "$chk" || fail "check-arms body: $chk"
+
+echo "=== dry-run default is 30 cells and at most 7 USD ==="
+RES30="$TEST_TMP/gdorm-results-30.jsonl"
+dry30=$(node "$BASE/run-gdorm-campaign.js" --results "$RES30" --dry-run) || fail "default dry-run exit $?"
+python3 -c 'import json,sys
+text=sys.argv[1]
+j=json.loads([l for l in text.splitlines() if l.startswith("{")][-1])
+assert j["cells_total"] == 30, j
+assert j["cost_estimate_usd"] <= 7, j
+' "$dry30" || fail "30-cell dry-run: $dry30"
+
+echo "=== dry-run refuses when the estimate exceeds ONOFF_MAX_USD ==="
+if env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID ONOFF_MAX_USD=5 \
+  node "$BASE/run-gdorm-campaign.js" --results "$TEST_TMP/gdorm-cap.jsonl" --dry-run < /dev/null >/dev/null
+then
+  fail "dry-run with ONOFF_MAX_USD=5 should exit non-zero"
+fi
+
+echo "=== check-arms negative control: a mutated pack is not ok ==="
+PACKS="$TEST_TMP/packs-mut"
+rm -rf "$PACKS"
+cp -a "$BASE/packs" "$PACKS"
+python3 - "$BASE/arms/gdorm/base.json" "$PACKS" << 'PY'
+import json, sys
+arm = json.load(open(sys.argv[1]))
+pid = arm["skills"]["ceo-agent"]
+path = sys.argv[2] + "/" + pid + "/SKILL.md"
+open(path, "ab").write(b"\n")
+PY
+if env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID ONOFF_PACKS_DIR="$PACKS" \
+  node "$BASE/run-gdorm-campaign.js" --check-arms < /dev/null >/dev/null
+then
+  fail "mutated pack should make --check-arms non-zero"
+fi
+
+echo "=== score-gdorm planted red and a passing grid ==="
+python3 - "$TEST_TMP" << 'PY'
+import json, os, sys
+tmp = sys.argv[1]
+tasks = ["gdorm-qcpanel", "gdorm-archive", "gdorm-tree"]
+markers = {
+    "gdorm-qcpanel": "q_qcpanel_run",
+    "gdorm-archive": "r_archive_import",
+    "gdorm-tree": "t_tree_run",
+}
+def write(name, qc_base, qc_change, infra=False):
+    rows = []
+    plan = {
+        ("gdorm-qcpanel", "base"): qc_base,
+        ("gdorm-qcpanel", "change"): qc_change,
+        ("gdorm-archive", "base"): 3,
+        ("gdorm-archive", "change"): 3,
+        ("gdorm-tree", "base"): 0,
+        ("gdorm-tree", "change"): 0,
+    }
+    for task in tasks:
+        for arm in ("base", "change"):
+            hits = plan[(task, arm)]
+            for rep in range(1, 6):
+                row = {
+                    "task_id": task, "arm": arm, "rep": rep, "model": "sonnet", "runner": "cc",
+                    "failure_class": None, "skill_invoked": True,
+                    "markers": {markers[task]: rep <= hits},
+                }
+                rows.append(row)
+    if infra:
+        rows[0]["failure_class"] = "infra"
+    path = os.path.join(tmp, name)
+    with open(path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    return path
+write("score-pass.jsonl", 4, 1)
+write("score-base-qc-2.jsonl", 2, 1)
+write("score-change-qc-3.jsonl", 4, 3)
+write("score-infra.jsonl", 4, 1, infra=True)
+PY
+score() { # $1 results $2 pass|fail
+  local res="$1" expect="$2" out rc
+  out=$(node "$BASE/score-gdorm.js" --prereg "$BASE/prereg/gdorm.json" --results "$res" 2>&1) || rc=$?
+  rc=${rc:-0}
+  if [ "$expect" = pass ]; then
+    [ "$rc" = 0 ] || fail "expected PASS rc 0, got $rc: $out"
+    printf '%s\n' "$out" | grep -q 'PASS' || fail "expected PASS text: $out"
+  else
+    [ "$rc" != 0 ] || fail "expected non-PASS, got rc 0: $out"
+    printf '%s\n' "$out" | grep -q '^gdorm: PASS' && fail "verdict was PASS: $out"
+  fi
+}
+score "$TEST_TMP/score-pass.jsonl" pass
+score "$TEST_TMP/score-base-qc-2.jsonl" fail
+score "$TEST_TMP/score-change-qc-3.jsonl" fail
+score "$TEST_TMP/score-infra.jsonl" fail
+
+echo "=== stamp --check ==="
+node "$BASE/stamp-prereg.js" --row gdorm --check >/dev/null || fail "stamp --check exit $?"
 
 echo "gdorm stub tests passed"

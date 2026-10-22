@@ -2,12 +2,14 @@
   "schema_version": 1,
   "arm": "base",
   "skills": {
-    "ceo-agent": "ceo-agent-gdorm-base",
-    "hetero-review": "hetero-review-gdorm-base",
-    "quality-pipeline": "quality-pipeline-gdorm-base"
+    "ceo-agent": "ceo-agent-gdorm-base778",
+    "distill": "distill-gdorm-base778",
+    "hetero-review": "hetero-review-gdorm-base778",
+    "quality-pipeline": "quality-pipeline-gdorm-base778",
+    "retro": "retro-gdorm-base778"
   },
   "files": [
-    "gdorm-files-base"
+    "gdorm-files-base778"
   ],
   "fixture_scripts": [
     "fixture-scripts-gdorm"

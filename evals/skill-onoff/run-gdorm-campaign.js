@@ -1,24 +1,26 @@
 #!/usr/bin/env node
 // run-gdorm-campaign.js — gdorm task-tree / qc-panel / ledger-archive campaign
-// (prereg/gdorm.json, status draft). Cells are serial and resumable via
-// run-skill-onoff-matrix.sh. The change arm is intentionally empty.
+// (prereg/gdorm.json). Cells are serial and resumable via run-skill-onoff-matrix.sh.
 //
 //   run-gdorm-campaign.js --results <file.jsonl> [--dry-run] [--check-arms]
 //       [--model sonnet] [--runner cc|stub] [--arms base,change] [--reps N]
 //       [--arms-dir <dir>] [--prereg <json>]
 //
-// Formal default: gdorm-tree, gdorm-qcpanel, gdorm-archive × {base,change} × 10.
+// Formal default: gdorm-tree, gdorm-qcpanel, gdorm-archive × {base,change} × 5.
 // Pilot: --reps 1 --arms base.
 // Every cell: --check-skill ceo-agent, ONOFF_PROMPT_PREFIX from the prereg,
 // ONOFF_LIB_OVERRIDE = lib-gdorm, timeout 10m, scratch HOME (the eval runner).
 // --dry-run prints the cell list and a cost estimate and never spawns the runner.
-// --check-arms checks the frozen base packs and that the change arm is still
-// the empty placeholder. Neither flag spawns the runner.
+// It exits non-zero when the estimated total exceeds ONOFF_MAX_USD.
+// --check-arms checks that base and change differ exactly in
+// allowed_arm_difference.files (disk bytes, not only the manifest). A mutated
+// pack copy fails the check. Neither flag spawns the runner.
 // ONOFF_MAX_USD cap default 7. Before each live group, spent plus the group's
-// estimate must stay inside the cap.
+// estimate must stay inside the cap. After the matrix, score-gdorm.js runs.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cp = require('child_process');
 
 const HERE = __dirname;
@@ -40,16 +42,11 @@ if (typeof PREFIX !== 'string' || !PREFIX.trim()) die('prereg.invocation_prefix 
 const LIB = path.join(HERE, 'lib-gdorm');
 const TIMEOUT = '10m';
 const TASKS = Array.isArray(P.tasks) && P.tasks.length ? P.tasks : ['gdorm-tree', 'gdorm-qcpanel', 'gdorm-archive'];
-// Per-cell USD upper bound for the formal campaign (3 tasks × 2 arms × 10 reps
-// = 60 cells). dcard-v3 used 0.20 USD/cell because those cells opened a card and
-// took a second turn (35 × 0.20 = 7.00). A gdorm cell is one headless turn that
-// plans or runs one script, so this uses a lower bound that still clears the
-// observed dcard per-cell floor of about 0.11 USD (6.3 USD / 55 rows = 0.1145,
-// rounded down only after cutting the second turn). 60 × 0.11 = 6.60 USD, which
-// stays at or under the 7 USD cap. Basis: one-turn sonnet cell, capped from the
-// dcard row's 6.3 USD / 55 rows, not from a gdorm receipt (none exists yet).
-const COST_PER_CELL_USD = 0.11;
-const COST_BASIS = 'one-turn cell, from the dcard row 6.3 USD / 55 rows (0.1145) held at 0.11; 60 formal cells * 0.11 = 6.60 USD, cap 7';
+// Per-cell USD estimate for the formal campaign (3 tasks × 2 arms × 5 reps
+// = 30 cells). A pilot of 6 real base cells averaged 0.183 USD, so the guard
+// uses 0.19. 30 × 0.19 = 5.70 USD, which stays at or under the 7 USD cap.
+const COST_PER_CELL_USD = 0.19;
+const COST_BASIS = 'pilot of 6 real base cells averaged 0.183 USD, held at 0.19; 30 formal cells * 0.19 = 5.70 USD, cap 7';
 
 function maxUsd() {
   const raw = process.env.ONOFF_MAX_USD;
@@ -88,7 +85,7 @@ function money(n) { return Number(n.toFixed(2)); }
 
 function parseReps() {
   const raw = val('--reps');
-  if (raw === undefined) return P.reps || 10;
+  if (raw === undefined) return P.reps || 5;
   if (!/^[0-9]+$/.test(String(raw)) || Number(raw) < 1) die('--reps must be a positive integer');
   return Number(raw);
 }
@@ -100,50 +97,69 @@ function parseArms() {
   return arms;
 }
 
-const REPS = flag('--check-arms') && !resultsPath ? (P.reps || 10) : parseReps();
+const REPS = flag('--check-arms') && !resultsPath ? (P.reps || 5) : parseReps();
 const ARMS = flag('--check-arms') && !resultsPath ? ['base', 'change'] : parseArms();
 const GROUPS = TASKS.map((task) => ({ task, arms: ARMS, reps: REPS }));
 
 function readJson(p) { return JSON.parse(fs.readFileSync(p, 'utf8')); }
 
+function sha256(buf) { return crypto.createHash('sha256').update(buf).digest('hex'); }
+function asList(v) { return [].concat(v || []); }
+function packFiles(id, manifest) {
+  const files = (manifest.packs || {})[id];
+  if (!files) throw new Error(`pack not in manifest.json: ${id}`);
+  const out = {};
+  for (const [rel, digest] of Object.entries(files)) {
+    const disk = fs.readFileSync(path.join(packsDir, rel));
+    const got = sha256(disk);
+    if (got !== digest) throw new Error(`digest mismatch ${rel}`);
+    out[rel.slice(id.length + 1)] = got;
+  }
+  return out;
+}
+function merged(arm, manifest) {
+  const out = {};
+  for (const [skill, id] of Object.entries(arm.skills || {})) {
+    if (!String(id).includes('gdorm')) throw new Error(`pack id lacks gdorm prefix: ${id}`);
+    for (const [rel, dig] of Object.entries(packFiles(id, manifest))) out[`skills/${skill}/${rel}`] = dig;
+  }
+  for (const id of asList(arm.files)) {
+    if (!String(id).includes('gdorm')) throw new Error(`pack id lacks gdorm prefix: ${id}`);
+    for (const [rel, dig] of Object.entries(packFiles(id, manifest))) {
+      if (Object.hasOwn(out, rel) && out[rel] !== dig) throw new Error(`path ${rel} conflicts inside arm ${arm.arm}`);
+      out[rel] = dig;
+    }
+  }
+  for (const id of asList(arm.fixture_scripts)) {
+    if (!String(id).includes('gdorm')) throw new Error(`pack id lacks gdorm prefix: ${id}`);
+    packFiles(id, manifest);
+  }
+  return out;
+}
 function checkArms() {
   const problems = [];
-  const basePath = path.join(armsDir, 'base.json');
-  if (!fs.existsSync(basePath)) problems.push('base.json missing');
-  else {
-    const base = readJson(basePath);
-    const manifest = readJson(path.join(packsDir, 'manifest.json'));
-    const packs = manifest.packs || {};
-    for (const skill of ['ceo-agent', 'quality-pipeline', 'hetero-review']) {
-      const id = (base.skills || {})[skill];
-      if (!id) problems.push(`base missing skill ${skill}`);
-      else if (!packs[id]) problems.push(`pack not in manifest: ${id}`);
-      else if (!String(id).includes('gdorm')) problems.push(`pack id lacks gdorm prefix: ${id}`);
-    }
-    const ids = [].concat(base.files || [], base.fixture_scripts || []);
-    for (const id of ids) {
-      if (!packs[id]) problems.push(`pack not in manifest: ${id}`);
-      else if (!String(id).includes('gdorm')) problems.push(`pack id lacks gdorm prefix: ${id}`);
-    }
-    if (![].concat(base.fixture_scripts || []).includes('fixture-scripts-gdorm')) {
-      problems.push('base fixture_scripts must include fixture-scripts-gdorm');
-    }
+  const manifest = readJson(path.join(packsDir, 'manifest.json'));
+  const base = readJson(path.join(armsDir, 'base.json'));
+  const change = readJson(path.join(armsDir, 'change.json'));
+  for (const skill of ['ceo-agent', 'quality-pipeline', 'hetero-review', 'distill', 'retro']) {
+    if (!(base.skills || {})[skill]) problems.push(`base missing skill ${skill}`);
+    if (!(change.skills || {})[skill]) problems.push(`change missing skill ${skill}`);
   }
-  if (fs.existsSync(path.join(armsDir, 'change.json'))) {
-    problems.push('change.json must stay absent until the gtext lane freezes wording');
-  }
-  const notePath = path.join(armsDir, 'README.md');
-  let note = '';
-  try { note = fs.readFileSync(notePath, 'utf8'); } catch { note = ''; }
-  if (!/intentionally empty/i.test(note) || !/gtext/i.test(note)) {
-    problems.push('arms/gdorm/README.md must say the change arm is intentionally empty and waits for the gtext lane');
-  }
-  return { ok: problems.length === 0, problems, change: 'empty' };
+  if (JSON.stringify(base.fixture_scripts) !== JSON.stringify(change.fixture_scripts)) problems.push('fixture_scripts differ between base and change');
+  if (!asList(base.fixture_scripts).includes('fixture-scripts-gdorm')) problems.push('base fixture_scripts must include fixture-scripts-gdorm');
+  const allowed = new Set((P.allowed_arm_difference || {}).files || []);
+  const mb = merged(base, manifest);
+  const mc = merged(change, manifest);
+  const differing = [];
+  for (const f of new Set([...Object.keys(mb), ...Object.keys(mc)])) if (mb[f] !== mc[f]) differing.push(f);
+  for (const f of differing) if (!allowed.has(f)) problems.push(`${f} differs between base and change but is not a registered change`);
+  for (const f of allowed) if (!differing.includes(f)) problems.push(`${f} is registered as changed but does not differ`);
+  return { ok: problems.length === 0, differing: differing.sort(), problems };
 }
 
 if (flag('--check-arms')) {
   let r;
-  try { r = checkArms(); } catch (e) { r = { ok: false, problems: [e.message], change: 'empty' }; }
+  try { r = checkArms(); } catch (e) { r = { ok: false, problems: [e.message], differing: [] }; }
   console.log(JSON.stringify(r));
   process.exit(r.ok ? 0 : 2);
 }
@@ -180,10 +196,12 @@ if (flag('--dry-run')) {
     max_usd: CAP, spent_usd: money(spentUsd(resultsPath)),
     invocation_prefix: PREFIX, lib: LIB, timeout: TIMEOUT, check_skill: 'ceo-agent',
   }));
+  if (cost > CAP + 1e-9) {
+    die(`spend cap: estimate ${cost.toFixed(2)} USD for ${rows.length} cells exceeds ONOFF_MAX_USD ${money(CAP).toFixed(2)} USD`, 1);
+  }
   process.exit(0);
 }
 
-if (ARMS.includes('change')) die('change arm is intentionally empty and waits for the gtext lane; refuse to dispatch it');
 if (runner === 'cc') {
   let r;
   try { r = checkArms(); } catch (e) { r = { ok: false, problems: [e.message] }; }
@@ -212,5 +230,7 @@ for (const g of GROUPS) {
   });
   if (r.status !== 0) die(`matrix failed for ${g.task} [${g.arms.join(',')}] (exit ${r.status})`);
 }
-console.log('gdorm draft has no scorer; thresholds are null until depth-0 sets them after the pilot');
-process.exit(0);
+const s = cp.spawnSync('node', [path.join(HERE, 'score-gdorm.js'), '--prereg', preregPath, '--results', path.resolve(resultsPath)], { encoding: 'utf8' });
+process.stderr.write(s.stderr || '');
+process.stdout.write(s.stdout || '');
+process.exit(s.status === null ? 2 : s.status);

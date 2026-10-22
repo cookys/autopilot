@@ -1076,5 +1076,130 @@
       "tasks/dcard-owner-decision/task.md": "01ae76544e2373e61c8147d2369e114338f551044d54a297165249297bb1c9d3",
       "tasks/dcard-owner-decision/turn2.sh": "197af73e3922dcefb300293f30bde5f48a4f31f6487a3883cbb8556eefc39caf"
     }
+  },
+  "gdorm": {
+    "frozen_at": "2026-10-22",
+    "stamped": true,
+    "note": "sha256 of the gdorm pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "ceo-agent-gdorm-base778": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 7,
+        "digest_sha256": "210220c0e5076f55a4cbedcd87b403e884e739840ea893bbeeccd3c185115e08"
+      },
+      "ceo-agent-gdorm-gtext": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 7,
+        "digest_sha256": "08b51f221096194d0f97baa1c1accccaff61077399d06834dc6c0d8b9dced55f"
+      },
+      "quality-pipeline-gdorm-base778": {
+        "kind": "skill",
+        "source": "quality-pipeline",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 8,
+        "digest_sha256": "92f1e4960a481ceb77cef475b939c2a34c894b20e8c9ecacfb36440c1eba6e6a"
+      },
+      "quality-pipeline-gdorm-gtext": {
+        "kind": "skill",
+        "source": "quality-pipeline",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 8,
+        "digest_sha256": "9f6468f3bf1e2712274fa875986466c2b4d6f0a2cdbdec273a3527781b835434"
+      },
+      "hetero-review-gdorm-base778": {
+        "kind": "skill",
+        "source": "hetero-review",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 3,
+        "digest_sha256": "04ae6b9ef4de31777275f554ca4234b9d365af42a1555b0b7471c359f118f45f"
+      },
+      "hetero-review-gdorm-gtext": {
+        "kind": "skill",
+        "source": "hetero-review",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 3,
+        "digest_sha256": "94129271fa36f7314eea40346ed961a373a05098b3defd24cf072790407ba40e"
+      },
+      "distill-gdorm-base778": {
+        "kind": "skill",
+        "source": "distill",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 2,
+        "digest_sha256": "1e79d07ee08ac0a26c99d0068fc4bcdec6609e57db6308640c24800c3cc4896c"
+      },
+      "distill-gdorm-gtext": {
+        "kind": "skill",
+        "source": "distill",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 2,
+        "digest_sha256": "0f91bf86f17a187ff8379d03d914d0db3166c517a028a2175c81ac90785839ff"
+      },
+      "retro-gdorm-base778": {
+        "kind": "skill",
+        "source": "retro",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 3,
+        "digest_sha256": "ef36ce2fa9e1b8a617f0731e89195ed3f6eb12152c07bd6d360f202ff4b4d538"
+      },
+      "retro-gdorm-gtext": {
+        "kind": "skill",
+        "source": "retro",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 3,
+        "digest_sha256": "1dafc0f718b4bfd27d1861db01f2e31dd5b03c5b42e0994c2e45f1c12e044e24"
+      },
+      "gdorm-files-base778": {
+        "kind": "dir",
+        "source": "/tmp/tmp.jxPnNtBI0o",
+        "ref": "778f39dee80687f58e9d7bcce9dad228daf26070",
+        "files": 14,
+        "digest_sha256": "e75589749e0cf5eeed059ec44f6327f8931116d15da942133ce6dcb40f1e2be7"
+      },
+      "gdorm-files-gtext": {
+        "kind": "dir",
+        "source": "/tmp/tmp.btdz6vcfKF",
+        "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08",
+        "files": 14,
+        "digest_sha256": "0e1228e77eac8239a7161e5f6f37273d7f6baac43066d3c871e8523681fd0042"
+      },
+      "fixture-scripts-gdorm": {
+        "kind": "scripts",
+        "source": "hooks/_shared/secret-patterns.js,scripts/calibration.sh,scripts/lib/config-path.js,scripts/lib/review-ledger-copy.js,scripts/lib/review-ledger-tar.js,scripts/lifecycle-residue-receipt.js,scripts/project-detect.js,scripts/qc-panel.js,scripts/resolve-project-paths.sh,scripts/review-ledger-archive.js,scripts/tree.js,src/engine/authenticated-control.js,src/engine/campaign-composition.js,src/engine/campaign-verification.js,src/engine/controller-execution.js,src/engine/implementation-campaign.js,src/engine/mission-campaign-identity.js,src/engine/mission-convergence.js,src/engine/sealed-zero-diff-validator.js,src/lib/common.js,src/mission/interface.js,src/status/task-runtime.js,src/status/task-status.js",
+        "ref": "3ec639777e0fd99660be3828abc0ea86123b9b01",
+        "files": 25,
+        "digest_sha256": "3d158e4b0e75720ac563b072745dcf9e4c39b79017b5899f24c57263adc7b8e4"
+      }
+    },
+    "files": {
+      "arms/gdorm/README.md": "88c207a962dc45c0c84430a0e29de7ce474d3cb28948b4886a7d7048550dbc4a",
+      "arms/gdorm/base.json": "e1c271594a50f7e1471ed9c88e9f88caebb91024b8281c86e635e1c46c7d9b2a",
+      "arms/gdorm/change.json": "682be59deafd8c6e61192df7705aec75702c54272e79559adb4c34728ceaed3d",
+      "lib-gdorm/gdorm-markers.sh": "8d619d25c3f985572738ef4e684a897be25a121cee33cd97941d18ceb41df3de",
+      "prereg/gdorm.json": "d4a89473d97e5f4c1fa603cd7e586b12a9e04809b4befe470896af3c6ba6d71f",
+      "run-gdorm-campaign.js": "908b488cf611ffec5f66d3e41034317aee76c901c2aa3bffb7d73275219951da",
+      "run-skill-onoff-eval.sh": "c693771066da10542fb6ecc1c239b1137f40403f920e07be4d06e3cf435398a1",
+      "score-gdorm.js": "ccff261a75bdfaffd65e96130f52d5960b601887c82dd3d21e4ee2c9f0af4ea4",
+      "tasks/gdorm-archive/init-repo.sh": "e2976fccdf27887158af6f6f0cf7de55747652697d68a3218137465d5a94d14f",
+      "tasks/gdorm-archive/markers.sh": "e68e3c9624a6c9b4febf5f8e690ef3fdef324d58ee0b1f6396917a28f06c360d",
+      "tasks/gdorm-archive/repo/README.md": "43433a4cd42f0d2f48982fb344cd1441942727acadbca09bdec61768a45512f1",
+      "tasks/gdorm-archive/repo/reviews/ledger-last-week/review-week/chain.json": "a3ec74ac7123810de3f2e2a20f446385b081c4a50ea7f91c621c7c56a561ec39",
+      "tasks/gdorm-archive/repo/reviews/ledger-last-week/review-week/g1/range.json": "4c8b9a96b4e0755d22b2acc7733ab7f6199179d898b293b5c33710c88e808ad0",
+      "tasks/gdorm-archive/seed-home.sh": "79308384a9c221420c5a11339cadebaf0b5873a33bbdf9448d5cba4fe166740c",
+      "tasks/gdorm-archive/task.md": "769291834e6ce7a6d25a8f827f00660fbf941501128a02cddd1a216dd53805cb",
+      "tasks/gdorm-qcpanel/init-repo.sh": "e2976fccdf27887158af6f6f0cf7de55747652697d68a3218137465d5a94d14f",
+      "tasks/gdorm-qcpanel/markers.sh": "f6c62eec59353daa0e5cb40c4f001ea54fb9eebc19e134cf2ee0220ab6b3137c",
+      "tasks/gdorm-qcpanel/repo/README.md": "8366ac0bf24c24632a19f3b05d4c35276721b8cd6aec471d68ac12c3b38d331f",
+      "tasks/gdorm-qcpanel/repo/docs/projects/gdorm-sample/tree/events.jsonl": "a70db0a3d4c4f95e2bb260f3fe935f57a2080e03b7a792089675c6e48639d2a0",
+      "tasks/gdorm-qcpanel/repo/docs/projects/gdorm-sample/tree/nodes/root/report.json": "5f69fe688bb0ec325efd7228a55fa02a79609beffc204ddc53d7748db945253c",
+      "tasks/gdorm-qcpanel/task.md": "3a851db55efbf9a365430a4764f1b06a5385be303bccc54962517de7dcb2bb2a",
+      "tasks/gdorm-tree/init-repo.sh": "e2976fccdf27887158af6f6f0cf7de55747652697d68a3218137465d5a94d14f",
+      "tasks/gdorm-tree/markers.sh": "aa461ae4cee58bebd7b5500135fa903824db71fe355ea0dcf8ed35275e700bdb",
+      "tasks/gdorm-tree/repo/README.md": "527fa5e788f95092d21c51d1bddfc492b23297d20699014a81572fd76c5384b5",
+      "tasks/gdorm-tree/task.md": "e3734e0c29dae6b245094df1371a8d85a0b0cafbe5cd78dd72b3590e75986a13"
+    }
   }
 }

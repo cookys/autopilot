@@ -1004,6 +1004,21 @@
       "type": "array"
     },
     {
+      "name": "run_ledger.max_rotations",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": 4,
+      "readers": [
+        "scripts/lib/run-ledger-config.js",
+        "scripts/run-ledger.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "How many rotated run-ledger segments are kept (integer 1 to 64; anything else means 4). Config only: the RUN_LEDGER_MAX_ROTATIONS environment variable is not read.",
+      "type": "number"
+    },
+    {
       "name": "residue.lease_hours",
       "kind": "config_key",
       "audience": "user",

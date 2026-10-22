@@ -48,7 +48,20 @@ set -euo pipefail
 DEFAULT_STALE_SECS=120
 DEFAULT_LOCK_TIMEOUT=15
 DEFAULT_MAX_BYTES=${RUN_LEDGER_MAX_BYTES:-262144}
-DEFAULT_MAX_ROTATIONS=${RUN_LEDGER_MAX_ROTATIONS:-4}
+# Rotation cap: ONLY run_ledger.max_rotations in the operator config (integer 1..64, else 4). The
+# RUN_LEDGER_MAX_ROTATIONS env var is deliberately not read (BL-0256): a sweep/test environment must not
+# change how many rotated segments the real ledger keeps. Same rule as scripts/lib/run-ledger-config.js.
+_run_ledger_cfg_max_rotations() {
+  local cfg="${AUTOPILOT_CONFIG_FILE:-${HOME:-}/.autopilot/config.json}" v=""
+  if [ -r "$cfg" ] && command -v jq >/dev/null 2>&1; then
+    v="$(jq -r 'if (.run_ledger|type)=="object" and (.run_ledger.max_rotations|type)=="number" and (.run_ledger.max_rotations|floor)==.run_ledger.max_rotations then .run_ledger.max_rotations else empty end' "$cfg" 2>/dev/null)" || v=""
+  fi
+  case "$v" in
+    ''|*[!0-9]*) printf '4' ;;
+    *) if [ "$v" -ge 1 ] && [ "$v" -le 64 ]; then printf '%s' "$v"; else printf '4'; fi ;;
+  esac
+}
+DEFAULT_MAX_ROTATIONS="$(_run_ledger_cfg_max_rotations)"
 DEFAULT_QUARANTINE_TTL_SECS=${RUN_LEDGER_QUARANTINE_TTL_SECS:-43200}
 DEFAULT_LEASE_GC_TTL_SECS=${RUN_LEDGER_LEASE_GC_TTL_SECS:-43200}
 DEFAULT_INQUIRY_WAIT_SECS=${RUN_LEDGER_INQUIRY_WAIT_SECS:-30}
@@ -2814,7 +2827,7 @@ command_query_latest() {
 # Appends always go to the live ledger only (under the ledger lock with rotation).
 ledger_scan_files() {
   local ledger="$1" idx max_rot
-  max_rot="${RUN_LEDGER_MAX_ROTATIONS:-$DEFAULT_MAX_ROTATIONS}"
+  max_rot="$DEFAULT_MAX_ROTATIONS"
   idx="$max_rot"
   while [ "$idx" -ge 1 ]; do
     if [ -f "${ledger}.${idx}" ]; then
@@ -3284,7 +3297,7 @@ atomic_append_ledger() {
 
   local max_bytes max_rot
   max_bytes="${RUN_LEDGER_MAX_BYTES:-$DEFAULT_MAX_BYTES}"
-  max_rot="${RUN_LEDGER_MAX_ROTATIONS:-$DEFAULT_MAX_ROTATIONS}"
+  max_rot="$DEFAULT_MAX_ROTATIONS"
 
   if [ -s "$tmp" ]; then
     local bytes
@@ -3305,7 +3318,7 @@ atomic_append_ledger() {
       : > "$tmp"
       # Carry forward every still-leased stage row (and its run's journals) so
       # rotation cannot expose a heartbeat without its active state/lease, and
-      # active campaigns survive segment GC under RUN_LEDGER_MAX_ROTATIONS.
+      # active campaigns survive segment GC under run_ledger.max_rotations.
       # Readers still use the oldest-to-live view; this is belt-and-braces for
       # the live segment under the same ledger lock as the append.
       if [ -f "${ledger}.1" ]; then

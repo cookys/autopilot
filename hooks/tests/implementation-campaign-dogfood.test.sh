@@ -1274,8 +1274,10 @@ assert_contains "$HANDOFF_OUT" "downstream_lsm_can_close_false=true" \
 # a campaign lease is live; status/inspect must remain found and heartbeats must
 # still bind to the original lease/generation (duplicate dispatch = 0).
 # ---------------------------------------------------------------------------
+printf '{"run_ledger":{"max_rotations":4}}\n' > "$TEST_TMP/rot4-config.json"
+printf '{"run_ledger":{"max_rotations":8}}\n' > "$TEST_TMP/rot8-config.json"
 ROT_OUT="$(
-  RUN_LEDGER_MAX_BYTES=450 RUN_LEDGER_MAX_ROTATIONS=4 \
+  RUN_LEDGER_MAX_BYTES=450 AUTOPILOT_CONFIG_FILE="$TEST_TMP/rot4-config.json" \
   node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 'use strict';
 const assert = require('assert');
@@ -1298,7 +1300,7 @@ const {
 
 const rotationEnv = {
   RUN_LEDGER_MAX_BYTES: '700',
-  RUN_LEDGER_MAX_ROTATIONS: '8',
+  AUTOPILOT_CONFIG_FILE: path.join(tmp, 'rot8-config.json'),
 };
 const rl = path.join(root, 'scripts', 'run-ledger.sh');
 const ledger = path.join(tmp, 'rotation-campaign.jsonl');

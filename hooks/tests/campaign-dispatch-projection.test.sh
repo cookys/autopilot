@@ -655,6 +655,12 @@ console.log(`over_refused=${refused}`);
 campaign.final_panel_reserve_seconds = 0;
 delete campaign.full_suite_reuse;
 console.log(`reuse_default_ok=${derive(JSON.parse(bytes)).budget.wall_seconds === 120}`);
+// cap14400: the campaign contract schema caps max_wall_seconds at 7200; the projection must not admit more.
+const wallCase = (n) => { const c = JSON.parse(bytes); c.max_wall_seconds = n; c.strict_dispatch.budget.max_wall_seconds = n; return c; };
+let wall7200 = false; try { wall7200 = derive(wallCase(7200)).budget.wall_seconds === 7200; } catch (_err) { wall7200 = false; }
+console.log(`wall7200_ok=${wall7200}`);
+let wall7201 = false; try { derive(wallCase(7201)); } catch (_err) { wall7201 = true; }
+console.log(`wall7201_refused=${wall7201}`);
 NODE
 )"
 assert_contains "$RESERVE_OUT" "absent_ok=true" "absent reserve defaults to 0"
@@ -662,6 +668,9 @@ assert_contains "$RESERVE_OUT" "reuse_default_ok=true" "absent full_suite_reuse 
 assert_contains "$RESERVE_OUT" "zero_ok=true" "reserve 0 is admitted"
 assert_contains "$RESERVE_OUT" "nine_ok=true" "reserve 900 is admitted"
 assert_contains "$RESERVE_OUT" "over_refused=true" "reserve 1801 is refused"
+# RED at d46a3e5a4: wall7201_refused=false (14400 ceiling admitted 7201 seconds)
+assert_contains "$RESERVE_OUT" "wall7200_ok=true" "cap14400: 7200 wall seconds is admitted"
+assert_contains "$RESERVE_OUT" "wall7201_refused=true" "cap14400: 7201 wall seconds is refused"
 
 # BL-0223 (RED at 801ab74e2: 7 of 7 new asserts failed, redVerificationDetail undefined): a RED campaign_verification must keep the failing command and its output.
 # RED at 801ab74e2: redVerificationDetail was not exported (TypeError) and the engine ledger

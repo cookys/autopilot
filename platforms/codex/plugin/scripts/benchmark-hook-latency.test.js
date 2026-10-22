@@ -41,6 +41,7 @@ for (let i = 0; i < 20; i++) {
 }
 lines.push(ts + ' [DEBUG] hooks module cc-plugin-telemetry@builtin telemetry.log settled in 1.2ms (native link, next() included)');
 fs.writeFileSync(val('--debug-file'), lines.join('\\n') + '\\n');
+if (sc === 'crash_no_json') process.exit(1);
 process.stdout.write(JSON.stringify({ total_cost_usd: Number(process.env.STUB_COST || 0.01), result: 'done' }));
 `;
 
@@ -180,3 +181,21 @@ test('verdict opens the guard-port plan only when per-call p95 >= 150 ms AND >= 
   assert.strictEqual(conclude({ enabled: mk(160, 4, 10), positive_control: marker, zero: [[]] }, false).verdict, 'no_move');
   assert.strictEqual(conclude({ enabled: mk(140, 5, 10), positive_control: marker, zero: [[]] }, false).verdict, 'no_move');
 });
+
+test('NEGATIVE CONTROL: child dies without parseable JSON -> its --max-budget-usd cap is charged, stop-loss still fires', () => withCtx((ctx) => {
+  // RED at 182b743fc: cost was recorded as 0, spent stayed 0 and all 30 runs executed (exit 4, stopped null).
+  const r = run(ctx, ['--samples', '10', '--max-usd', '0.6', '--out', ctx.out], { STUB_SCENARIO: 'crash_no_json' });
+  assert.strictEqual(r.status, 3, r.stderr + r.stdout);
+  const calls = fs.readFileSync(ctx.log, 'utf8').trim().split('\n');
+  assert.strictEqual(calls.length, 2, 'cap 0.5 then remaining 0.1 reaches 0.6');
+  const j = JSON.parse(fs.readFileSync(ctx.out, 'utf8'));
+  assert.strictEqual(j.stopped, 'max_usd');
+  assert.strictEqual(j.spent_usd, 0.6);
+  assert.strictEqual(j.cost_unknown, 2);
+}));
+
+test('cost_unknown is 0 when every run reports total_cost_usd', () => withCtx((ctx) => {
+  const r = run(ctx, ['--samples', '1', '--max-usd', '5', '--out', ctx.out]);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(JSON.parse(fs.readFileSync(ctx.out, 'utf8')).cost_unknown, 0);
+}));

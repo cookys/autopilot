@@ -237,10 +237,14 @@ function runOnce(ctx, arm, remainingUsd) {
       '--allowed-tools', 'Read', '--output-format', 'json', '--debug-file', debugFile,
       '--max-budget-usd', String(budget),
     ], { cwd: ctx.workDir, env: cleanEnv(home, configDir), encoding: 'utf8', input: '', timeout: 600000 });
-    let cost = 0;
-    try { cost = Number(JSON.parse(r.stdout).total_cost_usd) || 0; } catch (_) { /* cost stays 0, reported via ok:false */ }
+    let cost = NaN;
+    try { cost = Number(JSON.parse(r.stdout).total_cost_usd); } catch (_) { /* no JSON: handled below */ }
+    // A child that died (timeout, signal, crash) or printed no readable cost may still have spent up to its
+    // --max-budget-usd cap, so charge the cap: the stop-loss must not be bypassable by a missing cost.
+    const costUnknown = r.status !== 0 || !Number.isFinite(cost);
+    if (costUnknown) cost = budget;
     const text = fs.existsSync(debugFile) ? fs.readFileSync(debugFile, 'utf8') : '';
-    return { ok: r.status === 0, cost, lines: parseHookLines(text), stderr: r.stderr };
+    return { ok: r.status === 0, cost, costUnknown, lines: parseHookLines(text), stderr: r.stderr };
   } finally {
     if (runDir) fs.rmSync(runDir, { recursive: true, force: true });
   }
@@ -275,15 +279,17 @@ function main() {
     const raw = { enabled: [], positive_control: [], zero: [] };
     let spent = 0;
     let stopped = null;
+    let costUnknown = 0;
     outer:
     for (let s = 0; s < o.samples; s++) {
       for (const arm of ARMS) {
         if (spent >= o.maxUsd) { stopped = 'max_usd'; break outer; }
         const r = runOnce(ctx, arm, o.maxUsd - spent);
         spent += r.cost;
+        if (r.costUnknown) costUnknown++;
         if (!r.ok) process.stderr.write(`warning: ${arm} sample ${s + 1} exited non-zero: ${r.stderr.slice(0, 200)}\n`);
         raw[arm].push(r.lines);
-        process.stderr.write(`run ${arm} ${s + 1}/${o.samples}: ${r.lines.length} hook lines, cost ${r.cost.toFixed(4)}, spent ${spent.toFixed(4)}\n`);
+        process.stderr.write(`run ${arm} ${s + 1}/${o.samples}: ${r.lines.length} hook lines, cost ${r.cost.toFixed(4)}${r.costUnknown ? ' (unknown: cap charged)' : ''}, spent ${spent.toFixed(4)}\n`);
       }
     }
     const report = {
@@ -294,6 +300,7 @@ function main() {
       spent_usd: Math.round(spent * 1e6) / 1e6,
       max_usd: o.maxUsd,
       stopped,
+      cost_unknown: costUnknown,
       arms: {},
       conclusion: null,
     };

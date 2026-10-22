@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- seatcard: read-only `review-seat-report.js` aggregates per-family review seat statistics from hetero-review ledgers supplied by the caller.
+
 - treedorm: task-tree and qc-panel are recorded dormant in ADR-0002. Header lines on tree.js, qc-panel.js, calibration.sh and check-node-report.js, inventory labels, and the uncalled-script label test pin the dormancy text. BL-0069 (qc-panel refute pass graduate) is retired because the graduation condition can no longer hold after the abort.
 
 - redfix: the three engine-qualify impl suites supply their own git identity, the qualification-review-provider stub emits the JSON envelope, and the codex-mirror-require-closure scanner ignores comments (with negative controls).

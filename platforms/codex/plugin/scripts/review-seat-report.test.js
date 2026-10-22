@@ -1,0 +1,541 @@
+'use strict';
+
+// Per-family seat statistics from hetero-review ledgers. Fixtures live under os.tmpdir().
+// # RED at 278456ab0: node --test scripts/review-seat-report.test.js → fail 13, pass 1 (12c).
+// Cases 1-10 and 12a/12b: Cannot find module './review-seat-report.js' (MODULE_NOT_FOUND).
+// Case 11: CLI status 1 !== 0, same MODULE_NOT_FOUND for scripts/review-seat-report.js.
+
+const assert = require('assert');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const test = require('node:test');
+
+const SCRIPT = path.join(__dirname, 'review-seat-report.js');
+
+function load() {
+  delete require.cache[require.resolve('./review-seat-report.js')];
+  return require('./review-seat-report.js');
+}
+
+function tmp() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-'));
+}
+
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2));
+}
+
+function seat(model, status = 'reviewed', verdict = 'SHIP-AS-IS') {
+  return { runner: 'test', model, status, verdict };
+}
+
+function finding(id, severity, seatId, text) {
+  return { id, severity, seat: seatId, text };
+}
+
+function disp(id, disposition) {
+  return { id, disposition, rationale: 'r' };
+}
+
+function chainEntry(generation, status) {
+  return { generation, status };
+}
+
+function snapshot(root) {
+  const out = [];
+  function walk(dir) {
+    const names = fs.readdirSync(dir).sort();
+    for (const name of names) {
+      const abs = path.join(dir, name);
+      const rel = path.relative(root, abs);
+      const st = fs.lstatSync(abs);
+      if (st.isDirectory()) {
+        out.push(`dir ${rel}`);
+        walk(abs);
+      } else {
+        const hash = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+        out.push(`file ${rel} ${hash}`);
+      }
+    }
+  }
+  if (fs.existsSync(root)) walk(root);
+  return out.join('\n');
+}
+
+function runCli(args, home) {
+  return spawnSync(process.execPath, [SCRIPT, ...args], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: home,
+      AUTOPILOT_SESSION_ID: undefined,
+      CLAUDE_CODE_SESSION_ID: undefined,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+function assertReportMatches(report, expected) {
+  assert.ok(report && Array.isArray(report.groups), 'groups');
+  assert.strictEqual(report.groups.length, expected.groups.length, 'group count');
+  for (let i = 0; i < expected.groups.length; i++) {
+    const got = report.groups[i];
+    const exp = expected.groups[i];
+    for (const key of Object.keys(exp)) {
+      assert.deepStrictEqual(got[key], exp[key], `groups[${i}].${key}`);
+    }
+  }
+  if (expected.totals) {
+    for (const key of Object.keys(expected.totals)) {
+      assert.deepStrictEqual(report.totals[key], expected.totals[key], `totals.${key}`);
+    }
+  }
+  if (expected.scope) {
+    for (const key of Object.keys(expected.scope)) {
+      assert.strictEqual(report.scope[key], expected.scope[key], `scope.${key}`);
+    }
+  }
+}
+
+test('1 multi-family counts every column', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-alpha');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  const g = path.join(phase, 'g1');
+  writeJson(path.join(g, 'findings.json'), {
+    findings: [
+      finding('a1', 'Critical', 's0', '[alpha-bug] crash\nmore'),
+      finding('a2', 'Major', 's0', '[alpha-bug] related'),
+      finding('b1', 'Minor', 's1', '[other-note] note'),
+      finding('b2', 'Suggestion', 's1', 'no brackets here'),
+    ],
+  });
+  writeJson(path.join(g, 'dispositions.json'), {
+    findings: [disp('a1', 'verified'), disp('a2', 'refuted'), disp('b1', 'deferred'), disp('b2', 'verified')],
+    resolutions: [{ id: 'a1', resolution: 'ignored-for-stats' }],
+  });
+  writeJson(path.join(g, 'seat-s0.json'), seat('claude-opus-4'));
+  writeJson(path.join(g, 'seat-s1.json'), seat('gpt-5'));
+  writeJson(path.join(g, 'seat-s2.json'), seat('grok-3', 'failed'));
+
+  const report = buildReport([dir], {});
+  assertReportMatches(report, {
+    groups: [
+      {
+        family: 'anthropic',
+        models: ['claude-opus-4'],
+        findings: 2,
+        critical: 1,
+        major: 1,
+        minor: 0,
+        suggestion: 0,
+        verified: 1,
+        refuted: 1,
+        deferred: 0,
+        undisposed: 0,
+        verified_pct: 50,
+        refuted_pct: 50,
+        deferred_pct: 0,
+        verified_critical: 1,
+        verified_major: 0,
+        exclusive_verified: 1,
+        phases: 1,
+        generations: 1,
+        seat_failures: 0,
+      },
+      {
+        family: 'openai',
+        models: ['gpt-5'],
+        findings: 2,
+        critical: 0,
+        major: 0,
+        minor: 1,
+        suggestion: 1,
+        verified: 1,
+        refuted: 0,
+        deferred: 1,
+        undisposed: 0,
+        verified_pct: 50,
+        refuted_pct: 0,
+        deferred_pct: 50,
+        verified_critical: 0,
+        verified_major: 0,
+        exclusive_verified: 1,
+        phases: 1,
+        generations: 1,
+        seat_failures: 0,
+      },
+      {
+        family: 'xai',
+        models: ['grok-3'],
+        findings: 0,
+        critical: 0,
+        major: 0,
+        minor: 0,
+        suggestion: 0,
+        verified: 0,
+        refuted: 0,
+        deferred: 0,
+        undisposed: 0,
+        verified_pct: 0,
+        refuted_pct: 0,
+        deferred_pct: 0,
+        verified_critical: 0,
+        verified_major: 0,
+        exclusive_verified: 0,
+        phases: 1,
+        generations: 1,
+        seat_failures: 1,
+      },
+    ],
+    totals: {
+      findings: 4,
+      critical: 1,
+      major: 1,
+      minor: 1,
+      suggestion: 1,
+      verified: 2,
+      refuted: 1,
+      deferred: 1,
+      undisposed: 0,
+      verified_pct: 50,
+      refuted_pct: 25,
+      deferred_pct: 25,
+      verified_critical: 1,
+      verified_major: 0,
+      exclusive_verified: 2,
+      phases: 3,
+      generations: 3,
+      seat_failures: 1,
+    },
+    scope: {
+      ledgers_read: 1,
+      phases_read: 1,
+      finalized_generations: 1,
+      aborted_skipped: 0,
+      pending_skipped: 0,
+      corrupt_skipped: 0,
+    },
+  });
+});
+
+test('2 shared verified slug is not exclusive; unique slug is', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-beta');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  const g = path.join(phase, 'g1');
+  writeJson(path.join(g, 'findings.json'), {
+    findings: [
+      finding('c1', 'Major', 's0', '[same-slug] one'),
+      finding('c2', 'Major', 's1', '[same-slug] two'),
+      finding('c3', 'Critical', 's2', '[only-s2] three'),
+    ],
+  });
+  writeJson(path.join(g, 'dispositions.json'), {
+    findings: [disp('c1', 'verified'), disp('c2', 'verified'), disp('c3', 'verified')],
+  });
+  writeJson(path.join(g, 'seat-s0.json'), seat('claude-opus-4'));
+  writeJson(path.join(g, 'seat-s1.json'), seat('gpt-5'));
+  writeJson(path.join(g, 'seat-s2.json'), seat('grok-3'));
+  const report = buildReport([dir], {});
+  const by = Object.fromEntries(report.groups.map((row) => [row.family, row]));
+  assert.strictEqual(by.anthropic.exclusive_verified, 0);
+  assert.strictEqual(by.openai.exclusive_verified, 0);
+  assert.strictEqual(by.xai.exclusive_verified, 1);
+});
+
+test('3 cross-gen merges only with --cross-gen', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-gamma');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized'), chainEntry(2, 'finalized')]);
+  for (const [gen, seatId, model] of [[1, 's0', 'claude-opus-4'], [2, 's1', 'gpt-5']]) {
+    const g = path.join(phase, `g${gen}`);
+    writeJson(path.join(g, 'findings.json'), {
+      findings: [finding(`d${gen}`, 'Major', seatId, '[dup-slug] again')],
+    });
+    writeJson(path.join(g, 'dispositions.json'), { findings: [disp(`d${gen}`, 'verified')] });
+    writeJson(path.join(g, `seat-${seatId}.json`), seat(model));
+  }
+  const plain = buildReport([dir], {});
+  const crossed = buildReport([dir], { crossGen: true });
+  const sumEx = (report) => report.groups.reduce((n, row) => n + row.exclusive_verified, 0);
+  assert.strictEqual(sumEx(plain), 2);
+  assert.strictEqual(plain.key_mode, 'phase+generation+slug');
+  assert.strictEqual(sumEx(crossed), 0);
+  assert.strictEqual(crossed.key_mode, 'phase+slug');
+});
+
+test('4 same slug in different phases is never merged', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  for (const [phaseName, model] of [['review-p1', 'claude-opus-4'], ['review-p2', 'gpt-5']]) {
+    const phase = path.join(dir, phaseName);
+    writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+    const g = path.join(phase, 'g1');
+    writeJson(path.join(g, 'findings.json'), {
+      findings: [finding(`${phaseName}-f`, 'Minor', 's0', '[shared] text')],
+    });
+    writeJson(path.join(g, 'dispositions.json'), { findings: [disp(`${phaseName}-f`, 'verified')] });
+    writeJson(path.join(g, 'seat-s0.json'), seat(model));
+  }
+  const report = buildReport([dir], { crossGen: true });
+  assert.strictEqual(report.totals.exclusive_verified, 2);
+});
+
+test('5 undisposed findings stay out of the percentage denominator', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-und');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  const g = path.join(phase, 'g1');
+  writeJson(path.join(g, 'findings.json'), {
+    findings: [
+      finding('u1', 'Major', 's0', '[kept] yes'),
+      finding('u2', 'Minor', 's0', '[loose] no entry'),
+    ],
+  });
+  writeJson(path.join(g, 'dispositions.json'), { findings: [disp('u1', 'verified')] });
+  writeJson(path.join(g, 'seat-s0.json'), seat('claude-opus-4'));
+  const report = buildReport([dir], {});
+  const row = report.groups[0];
+  assert.strictEqual(row.verified, 1);
+  assert.strictEqual(row.undisposed, 1);
+  assert.strictEqual(row.verified_pct, 100);
+  assert.strictEqual(row.refuted_pct, 0);
+  assert.strictEqual(row.deferred_pct, 0);
+});
+
+test('6 aborted and pending generations are skipped and counted', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-skip');
+  writeJson(path.join(phase, 'chain.json'), [
+    chainEntry(1, 'finalized'),
+    chainEntry(2, 'aborted'),
+    chainEntry(3, 'pending'),
+  ]);
+  const g1 = path.join(phase, 'g1');
+  writeJson(path.join(g1, 'findings.json'), {
+    findings: [finding('k1', 'Suggestion', 's0', '[keep] only')],
+  });
+  writeJson(path.join(g1, 'dispositions.json'), { findings: [disp('k1', 'deferred')] });
+  writeJson(path.join(g1, 'seat-s0.json'), seat('claude-opus-4'));
+  const g2 = path.join(phase, 'g2');
+  writeJson(path.join(g2, 'findings.json'), {
+    findings: [finding('k2', 'Critical', 's0', '[drop] aborted')],
+  });
+  writeJson(path.join(g2, 'dispositions.json'), { findings: [disp('k2', 'verified')] });
+  writeJson(path.join(g2, 'seat-s0.json'), seat('claude-opus-4'));
+  const report = buildReport([dir], {});
+  assert.strictEqual(report.totals.findings, 1);
+  assert.strictEqual(report.totals.verified, 0);
+  assert.strictEqual(report.scope.finalized_generations, 1);
+  assert.strictEqual(report.scope.aborted_skipped, 1);
+  assert.strictEqual(report.scope.pending_skipped, 1);
+});
+
+test('7 corrupt findings.json is skipped without throwing', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const bad = path.join(dir, 'review-bad');
+  writeJson(path.join(bad, 'chain.json'), [chainEntry(1, 'finalized')]);
+  fs.mkdirSync(path.join(bad, 'g1'), { recursive: true });
+  fs.writeFileSync(path.join(bad, 'g1', 'findings.json'), '{ not json');
+  const good = path.join(dir, 'review-good');
+  writeJson(path.join(good, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(good, 'g1', 'findings.json'), {
+    findings: [finding('ok', 'Minor', 's0', '[ok] fine')],
+  });
+  writeJson(path.join(good, 'g1', 'dispositions.json'), { findings: [disp('ok', 'verified')] });
+  writeJson(path.join(good, 'g1', 'seat-s0.json'), seat('gpt-5'));
+  const report = buildReport([dir], {});
+  assert.strictEqual(report.totals.findings, 1);
+  assert.strictEqual(report.scope.corrupt_skipped, 1);
+  assert.strictEqual(report.scope.phases_read, 1);
+  assert.strictEqual(report.scope.finalized_generations, 1);
+});
+
+test('8 model list, by-model rows, and unplaceable muse-spark', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-models');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized'), chainEntry(2, 'finalized')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('m1', 'Minor', 's1', '[m] a')],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('m1', 'verified')] });
+  writeJson(path.join(phase, 'g1', 'seat-s1.json'), seat('GLM-5.2'));
+  writeJson(path.join(phase, 'g2', 'findings.json'), {
+    findings: [
+      finding('m2', 'Minor', 's1', '[m2] b'),
+      finding('m3', 'Suggestion', 's0', '[spark] c'),
+    ],
+  });
+  writeJson(path.join(phase, 'g2', 'dispositions.json'), {
+    findings: [disp('m2', 'refuted'), disp('m3', 'deferred')],
+  });
+  writeJson(path.join(phase, 'g2', 'seat-s1.json'), seat('GLM-5.3'));
+  writeJson(path.join(phase, 'g2', 'seat-s0.json'), seat('opencode-go/muse-spark-1.3-contributor'));
+
+  const grouped = buildReport([dir], {});
+  const zhipu = grouped.groups.find((row) => row.family === 'zhipu');
+  assert.ok(zhipu);
+  assert.deepStrictEqual(zhipu.models, ['GLM-5.2', 'GLM-5.3']);
+  assert.strictEqual(zhipu.findings, 2);
+  const unknown = grouped.groups.find((row) => row.family === 'unknown');
+  assert.ok(unknown);
+  assert.deepStrictEqual(unknown.models, ['opencode-go/muse-spark-1.3-contributor']);
+
+  const byModel = buildReport([dir], { byModel: true });
+  assert.strictEqual(byModel.by_model, true);
+  const names = byModel.groups.map((row) => row.models[0]).sort();
+  assert.deepStrictEqual(names, ['GLM-5.2', 'GLM-5.3', 'opencode-go/muse-spark-1.3-contributor']);
+  assert.strictEqual(byModel.groups.filter((row) => row.family === 'zhipu').length, 2);
+});
+
+test('9 multiple ledgers merge', () => {
+  const { buildReport } = load();
+  const a = tmp();
+  const b = tmp();
+  for (const dir of [a, b]) {
+    const phase = path.join(dir, 'review-one');
+    writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+    writeJson(path.join(phase, 'g1', 'findings.json'), {
+      findings: [finding('f', 'Critical', 's0', '[x] t')],
+    });
+    writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('f', 'verified')] });
+    writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('claude-opus-4'));
+  }
+  const report = buildReport([a, b], {});
+  assert.strictEqual(report.totals.findings, 2);
+  assert.strictEqual(report.totals.verified_critical, 2);
+  assert.strictEqual(report.scope.ledgers_read, 2);
+  assert.strictEqual(report.scope.phases_read, 2);
+});
+
+test('10 json output matches buildReport and usage exits 2', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const home = tmp();
+  const phase = path.join(dir, 'review-json');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('j', 'Major', 's0', '[j] t')],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('j', 'verified')] });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('gpt-5'));
+  const cli = runCli(['--ledger', dir, '--json'], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  const parsed = JSON.parse(cli.stdout);
+  const direct = buildReport([dir], {});
+  assert.deepStrictEqual(parsed.totals, direct.totals);
+  assert.strictEqual(parsed.schema_version, 1);
+  assert.strictEqual(parsed.by_model, false);
+  const missing = runCli([], home);
+  assert.strictEqual(missing.status, 2);
+  assert.match(missing.stderr, /Usage/);
+  const unknown = runCli(['--ledger', dir, '--nope'], home);
+  assert.strictEqual(unknown.status, 2);
+  const absent = runCli(['--ledger', path.join(dir, 'no-such-ledger')], home);
+  assert.strictEqual(absent.status, 2);
+});
+
+test('11 cli run does not change the fixture tree', () => {
+  const dir = tmp();
+  const home = tmp();
+  const phase = path.join(dir, 'review-ro');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  writeJson(path.join(phase, 'g1', 'findings.json'), {
+    findings: [finding('r', 'Minor', 's0', '[r] t')],
+  });
+  writeJson(path.join(phase, 'g1', 'dispositions.json'), { findings: [disp('r', 'refuted')] });
+  writeJson(path.join(phase, 'g1', 'seat-s0.json'), seat('claude-opus-4'));
+  const before = snapshot(dir);
+  const cli = runCli(['--ledger', dir], home);
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  assert.strictEqual(snapshot(dir), before);
+  assert.match(cli.stdout, /Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves\./);
+  assert.match(cli.stdout, /phase\+generation\+slug/);
+});
+
+test('12a mutating verified to refuted changes the counts', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-mut');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  const g = path.join(phase, 'g1');
+  writeJson(path.join(g, 'findings.json'), {
+    findings: [finding('z', 'Major', 's0', '[z] t')],
+  });
+  writeJson(path.join(g, 'dispositions.json'), { findings: [disp('z', 'verified')] });
+  writeJson(path.join(g, 'seat-s0.json'), seat('claude-opus-4'));
+  const before = buildReport([dir], {});
+  writeJson(path.join(g, 'dispositions.json'), { findings: [disp('z', 'refuted')] });
+  const after = buildReport([dir], {});
+  assert.notStrictEqual(before.totals.verified, after.totals.verified);
+  assert.strictEqual(before.totals.verified, 1);
+  assert.strictEqual(after.totals.verified, 0);
+  assert.strictEqual(after.totals.refuted, 1);
+});
+
+test('12b two seats with the same slug have exclusive 0', () => {
+  const { buildReport } = load();
+  const dir = tmp();
+  const phase = path.join(dir, 'review-ex');
+  writeJson(path.join(phase, 'chain.json'), [chainEntry(1, 'finalized')]);
+  const g = path.join(phase, 'g1');
+  writeJson(path.join(g, 'findings.json'), {
+    findings: [
+      finding('e1', 'Critical', 's0', '[twin] a'),
+      finding('e2', 'Critical', 's1', '[twin] b'),
+    ],
+  });
+  writeJson(path.join(g, 'dispositions.json'), {
+    findings: [disp('e1', 'verified'), disp('e2', 'verified')],
+  });
+  writeJson(path.join(g, 'seat-s0.json'), seat('claude-opus-4'));
+  writeJson(path.join(g, 'seat-s1.json'), seat('claude-sonnet-4'));
+  const report = buildReport([dir], {});
+  assert.strictEqual(report.groups.length, 1);
+  assert.strictEqual(report.groups[0].family, 'anthropic');
+  assert.strictEqual(report.groups[0].exclusive_verified, 0);
+});
+
+test('12c assertReportMatches rejects an all-zero stub', () => {
+  const stub = {
+    groups: [{
+      family: 'anthropic',
+      models: ['claude-opus-4'],
+      findings: 0,
+      critical: 0,
+      major: 0,
+      minor: 0,
+      suggestion: 0,
+      verified: 0,
+      refuted: 0,
+      deferred: 0,
+      undisposed: 0,
+      verified_pct: 0,
+      refuted_pct: 0,
+      deferred_pct: 0,
+      verified_critical: 0,
+      verified_major: 0,
+      exclusive_verified: 0,
+      phases: 0,
+      generations: 0,
+      seat_failures: 0,
+    }],
+    totals: { findings: 0 },
+  };
+  assert.throws(() => assertReportMatches(stub, {
+    groups: [{ family: 'anthropic', findings: 2, verified: 1 }],
+    totals: { findings: 4 },
+  }));
+});

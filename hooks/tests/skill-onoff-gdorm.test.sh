@@ -6,6 +6,7 @@
 # RED at 03aa140b0: default dry-run is 60 cells at 6.60 USD (not 30); ONOFF_MAX_USD=5 dry-run exits 0; mutated ceo-agent pack --check-arms exits 0; score-gdorm.js is missing; stamp --check exits 2 (arm_manifests.change has no file).
 # RED at 0dd539888: cat scripts/qc-panel.js makes q_qcpanel_run true (test exit 1). Same loose match would accept head, grep -n, ls, and cat scripts/review-ledger-archive.js | grep import. Scorer rows.find keeps the first row: timeout-then-success is "FAIL (infra failure blocks PASS: 1 cell(s))" exit 3; a later runner_timeout with an earlier null row is a content FAIL, not infra.
 # RED at 8e500bd57: cat > run.sh << 'EOF' / node scripts/tree.js / EOF makes t_tree_run true (test exit 1). Heredoc body lines are split as commands.
+# RED at c146eca31: cat <<'EOF' > run.sh / node scripts/tree.js / EOF makes t_tree_run true (test exit 1). The opener is anchored at the end of the segment, so a redirect, append, comment, leading-tab dash closer, or a second heredoc on the same line leaves the body classified as a command.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -193,6 +194,40 @@ expect_mark gdorm-qcpanel "$(heredoc_cmd "cat > run.sh << EOF" "node scripts/qc-
 expect_mark gdorm-archive "$(heredoc_cmd "tee x << 'EOF'" "node scripts/review-ledger-archive.js import" "EOF")" r_archive_import false
 expect_mark gdorm-archive "$(heredoc_cmd "tee x << 'EOF'" "node scripts/review-ledger-archive.js import" "EOF" "node scripts/review-ledger-archive.js import")" r_archive_import true
 expect_mark gdorm-tree "$(heredoc_cmd "cat > run.sh << 'EOF'" "node scripts/tree.js" "EOF" "bash run.sh")" t_tree_run false
+
+echo "=== heredoc opener anywhere on the line; here-string is not a heredoc ==="
+# Redirect, append, comment, dash-tab, and a second opener sit after or beside
+# the delimiter. Bodies are not commands. A here-string does not skip the next line.
+gdorm_exec_line() { # $1 task
+  case "$1" in
+    gdorm-tree) printf '%s\n' "node scripts/tree.js" ;;
+    gdorm-qcpanel) printf '%s\n' "node scripts/qc-panel.js" ;;
+    gdorm-archive) printf '%s\n' "node scripts/review-ledger-archive.js import" ;;
+  esac
+}
+gdorm_exec_marker() { # $1 task
+  case "$1" in
+    gdorm-tree) printf '%s\n' t_tree_run ;;
+    gdorm-qcpanel) printf '%s\n' q_qcpanel_run ;;
+    gdorm-archive) printf '%s\n' r_archive_import ;;
+  esac
+}
+for task in gdorm-tree gdorm-qcpanel gdorm-archive; do
+  line=$(gdorm_exec_line "$task")
+  name=$(gdorm_exec_marker "$task")
+  expect_mark "$task" "$(heredoc_cmd "cat <<'EOF' > run.sh" "$line" "EOF")" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "cat <<'EOF' > run.sh" "$line" "EOF" "$line")" "$name" true
+  expect_mark "$task" "$(heredoc_cmd "cat << EOF >> x.sh" "$line" "EOF")" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "cat << EOF >> x.sh" "$line" "EOF" "$line")" "$name" true
+  expect_mark "$task" "$(heredoc_cmd "cat > run.sh << 'EOF' # init" "$line" "EOF")" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "cat > run.sh << 'EOF' # init" "$line" "EOF" "$line")" "$name" true
+  expect_mark "$task" "$(heredoc_cmd "cat <<-EOF" "$line" $'\tEOF')" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "cat <<-EOF" "$line" $'\tEOF' "$line")" "$name" true
+  expect_mark "$task" "$(heredoc_cmd "cat <<E1 <<E2" "$line" "E1" "$line" "E2")" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "cat <<E1 <<E2" "$line" "E1" "$line" "E2" "$line")" "$name" true
+  expect_mark "$task" "grep x <<< '$line'" "$name" false
+  expect_mark "$task" "$(heredoc_cmd "grep x <<< '$line'" "$line")" "$name" true
+done
 
 echo "=== archive fields are independent ==="
 IMPORT_ONLY="$TEST_TMP/stub-import-only.sh"

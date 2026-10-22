@@ -44,26 +44,43 @@ function leaf(w) {
   const i = s.lastIndexOf('/');
   return i >= 0 ? s.slice(i + 1) : s;
 }
-function heredocOpener(segment) {
-  // <<[-]['"]?WORD['"]? at the end of a segment. Quotes around the word must match.
-  const m = segment.match(/<<(-?)\s*(?:'([^']*)'|"([^"]*)"|([A-Za-z0-9_]+))\s*$/);
-  if (!m) return null;
-  return { strip: m[1] === '-', delim: m[2] ?? m[3] ?? m[4] };
+function wordChar(ch) {
+  return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch === '_';
+}
+// i points at the first < of << (not <<<). One forward scan, no per-shape regex.
+function takeHeredoc(cmd, i) {
+  let j = i + 2;
+  let strip = false;
+  if (cmd[j] === '-') { strip = true; j++; }
+  while (j < cmd.length && (cmd[j] === ' ' || cmd[j] === '\t')) j++;
+  if (j >= cmd.length) return null;
+  const q = cmd[j];
+  if (q === "'" || q === '"') {
+    const close = cmd.indexOf(q, j + 1);
+    if (close < 0) return null;
+    return { end: close + 1, strip, delim: cmd.slice(j + 1, close) };
+  }
+  let k = j;
+  while (k < cmd.length && wordChar(cmd[k])) k++;
+  if (k === j) return null;
+  return { end: k, strip, delim: cmd.slice(j, k) };
 }
 function simples(cmd) {
   const parts = [];
   let cur = '';
   let quote = null;
-  // A heredoc opener ends a segment. The body starts at the next unquoted
-  // newline and is not a command. The closer is a line that is exactly the
-  // delimiter (leading tabs stripped only for <<-).
-  let pending = null;
+  // Every << / <<- outside quotes queues a body. The body starts on the next
+  // unquoted line and is not a command. Closers are exact delimiter lines
+  // (leading tabs allowed only for <<-). Several openers on one line take
+  // bodies in order. <<< is a here-string and queues nothing. Text after the
+  // delimiter stays on this command line and is split normally.
+  const pending = [];
   let skipping = null;
-  const pushSeg = () => {
-    const spec = heredocOpener(cur);
-    parts.push(cur);
-    cur = '';
-    if (spec) pending = spec;
+  const pushSeg = () => { parts.push(cur); cur = ''; };
+  const startSkip = () => {
+    if (skipping || pending.length === 0) return;
+    const spec = pending.shift();
+    skipping = { strip: spec.strip, delim: spec.delim, line: '' };
   };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
@@ -71,8 +88,12 @@ function simples(cmd) {
       if (c === '\n') {
         let line = skipping.line;
         if (skipping.strip) line = line.replace(/^\t+/, '');
-        skipping.line = '';
-        if (line === skipping.delim) skipping = null;
+        if (line === skipping.delim) {
+          skipping = null;
+          startSkip();
+        } else {
+          skipping.line = '';
+        }
       } else {
         skipping.line += c;
       }
@@ -84,12 +105,23 @@ function simples(cmd) {
       continue;
     }
     if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+    if (c === '<' && cmd[i + 1] === '<') {
+      if (cmd[i + 2] === '<') {
+        cur += '<';
+        while (cmd[i + 1] === '<') { i++; cur += '<'; }
+        continue;
+      }
+      const spec = takeHeredoc(cmd, i);
+      if (spec) {
+        cur += cmd.slice(i, spec.end);
+        pending.push({ strip: spec.strip, delim: spec.delim });
+        i = spec.end - 1;
+        continue;
+      }
+    }
     if (c === '\n' || c === ';') {
       pushSeg();
-      if (c === '\n' && pending) {
-        skipping = { strip: pending.strip, delim: pending.delim, line: '' };
-        pending = null;
-      }
+      if (c === '\n') startSkip();
       continue;
     }
     if ((c === '&' && cmd[i + 1] === '&') || (c === '|' && cmd[i + 1] === '|')) {

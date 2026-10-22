@@ -1441,6 +1441,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: treedorm 2026-10-22
-- **Pointer**: docs/adr/0002-task-tree-and-qc-panel-dormant.md
-- **Context**: skills/ceo-agent/SKILL.md c2; skills/quality-pipeline/SKILL.md; references/blind-dispatch.md; references/tree-contracts.md has no dormant mark.
+- **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
+- **Context**: skills/ceo-agent/SKILL.md c2; skills/quality-pipeline/SKILL.md; references/blind-dispatch.md; references/tree-contracts.md has no dormant mark. Decision record: docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 

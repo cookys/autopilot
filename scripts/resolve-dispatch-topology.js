@@ -546,6 +546,45 @@ function getJudge(repoRoot) {
   }
 }
 
+// BL-0229: a recorded qoderclicn model can be retired by the vendor while the scorecard still
+// holds it as qualified; a dispatch then dies with exit 3 and no output. Validate the engine against
+// the runner's own `--list-models` at derivation time and drop a seat the runner no longer offers.
+// FAIL-OPEN: a missing binary, timeout, non-zero exit or an empty/unparseable listing keeps the
+// seat (offline hosts must not lose their topology); only a successfully parsed listing that
+// lacks the engine removes it, with a stderr warning. Case-insensitive full-token equality.
+const MODEL_LIST_RUNNERS = new Set(['qoderclicn']);
+const modelInventoryCache = new Map();
+
+function runnerModelInventory(binPath) {
+  if (modelInventoryCache.has(binPath)) return modelInventoryCache.get(binPath);
+  let inventory = null;
+  try {
+    const res = spawnSync(binPath, ['--list-models'], { encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] });
+    if (!res.error && res.status === 0) {
+      const ids = new Set();
+      for (const line of String(res.stdout || '').split('\n')) {
+        const tok = line.trim().split(/\s+/)[0];
+        if (tok) ids.add(tok.toLowerCase());
+      }
+      ids.delete('model');
+      if (ids.size > 0) inventory = ids;
+    }
+  } catch {
+    inventory = null;
+  }
+  modelInventoryCache.set(binPath, inventory);
+  return inventory;
+}
+
+function seatModelRetired(runner, engine, binPath) {
+  if (!MODEL_LIST_RUNNERS.has(runner) || !binPath) return false;
+  const inventory = runnerModelInventory(binPath);
+  if (!inventory) return false;
+  if (inventory.has(String(engine).toLowerCase())) return false;
+  process.stderr.write(`resolve-dispatch-topology: dropping ${engine}@${runner}: model not in \`${path.basename(binPath)} --list-models\` (retired?)\n`);
+  return true;
+}
+
 function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
   const candidates = getCandidateSeats(repoRoot, role);
   const qualified = [];
@@ -564,6 +603,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     if (HTTP_RUNNERS.has(runner)) {
       if (!resolveEndpoint(engine, runner)) continue;
     } else if (!runnersInstalled[runner]) continue;
+    if (seatModelRetired(runner, engine, runnersInstalled[runner])) continue;
 
     // Query scorecard status with the row's runner token (or normalized).
     // When effort is empty/null, omit --effort to query the legacy partition.
@@ -769,6 +809,7 @@ function deriveTopology(repoRoot, options = {}) {
       if (!runner || !engine) continue;
 
       if (!runnersInstalled[runner]) continue;
+      if (seatModelRetired(runner, engine, runnersInstalled[runner])) continue;
       // claude-native is available for review/consult/discuss only; dispatch-hetero has no such runner.
       if (NON_IMPLEMENTER_RUNNERS.includes(runner)) continue;
 

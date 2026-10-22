@@ -1015,7 +1015,7 @@
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],
-      "summary": "How many rotated run-ledger segments are kept (integer 0 or more; 0 keeps only the live ledger; anything else means 4). Config only: the RUN_LEDGER_MAX_ROTATIONS environment variable is not read.",
+      "summary": "How many rotated run-ledger segments are kept (default 4). Readers follow segments .N down to .1 then the live ledger, so 0 reads only the live ledger; the writer still moves the live ledger to .1 on rotation even at 0. Each reader keeps its own rule for odd values (non-integers, negatives, above 64). Config only: the RUN_LEDGER_MAX_ROTATIONS environment variable is not read.",
       "type": "number"
     },
     {

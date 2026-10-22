@@ -48,18 +48,16 @@ set -euo pipefail
 DEFAULT_STALE_SECS=120
 DEFAULT_LOCK_TIMEOUT=15
 DEFAULT_MAX_BYTES=${RUN_LEDGER_MAX_BYTES:-262144}
-# Rotation cap: ONLY run_ledger.max_rotations in the operator config (integer >= 0, else 4; 0 = live only). The
-# RUN_LEDGER_MAX_ROTATIONS env var is deliberately not read (BL-0256): a sweep/test environment must not
-# change how many rotated segments the real ledger keeps. Same rule as scripts/lib/run-ledger-config.js.
+# Rotation cap: ONLY run_ledger.max_rotations in the operator config; the RUN_LEDGER_MAX_ROTATIONS env var is
+# deliberately not read (BL-0256): a sweep/test environment must not change how many rotated segments the real
+# ledger keeps. The config number is used as the string the env var used to carry (unset -> 4), so every value
+# (0, 1.5, -1, 100) behaves exactly as it did from the environment. Same source as scripts/lib/run-ledger-config.js.
 _run_ledger_cfg_max_rotations() {
   local cfg="${AUTOPILOT_CONFIG_FILE:-${HOME:-}/.autopilot/config.json}" v=""
   if [ -r "$cfg" ] && command -v jq >/dev/null 2>&1; then
-    v="$(jq -r 'if (.run_ledger|type)=="object" and (.run_ledger.max_rotations|type)=="number" and (.run_ledger.max_rotations|floor)==.run_ledger.max_rotations and .run_ledger.max_rotations>=0 then .run_ledger.max_rotations else empty end' "$cfg" 2>/dev/null)" || v=""
+    v="$(jq -r 'if (.run_ledger|type)=="object" and (.run_ledger.max_rotations|type)=="number" then .run_ledger.max_rotations else empty end' "$cfg" 2>/dev/null)" || v=""
   fi
-  case "$v" in
-    ''|*[!0-9]*) printf '4' ;;
-    *) printf '%s' "$v" ;;
-  esac
+  printf '%s' "${v:-4}"
 }
 DEFAULT_MAX_ROTATIONS="$(_run_ledger_cfg_max_rotations)"
 DEFAULT_QUARANTINE_TTL_SECS=${RUN_LEDGER_QUARANTINE_TTL_SECS:-43200}

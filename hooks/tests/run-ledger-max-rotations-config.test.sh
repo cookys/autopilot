@@ -52,10 +52,15 @@ process.stdout.write(String(cli.ledgerScanFiles(p).length));' "$REPO_ROOT" "$TES
 assert_eq "$CLI" "3" "campaign cli scan follows config (.2 .1 live), ignores env=1 and the stray .3"
 
 # 4. malformed / out-of-range config -> 4
-for bad in '{"run_ledger":{"max_rotations":"2"}}' '{"run_ledger":{"max_rotations":1.5}}' '{"run_ledger":3}' 'not json'; do
+shell_resolver() { printf '%s\n' "$1" > "$CFG"; bash -c '. <(sed -n "/^_run_ledger_cfg_max_rotations()/,/^}/p" "$0"); _run_ledger_cfg_max_rotations' "$RL"; }
+# work-order/engine resolver (module CLI): safe integer 1..64, everything else 4.
+for bad in '{"run_ledger":{"max_rotations":0}}' '{"run_ledger":{"max_rotations":65}}' '{"run_ledger":{"max_rotations":"2"}}' '{"run_ledger":{"max_rotations":1.5}}' '{"run_ledger":3}' 'not json'; do
   printf '%s\n' "$bad" > "$CFG"
   assert_eq "$(resolver)" "4" "bad config $bad: resolver is 4"
-  assert_eq "$(RUN_LEDGER_MAX_BYTES=1 bash -c '. <(sed -n "/^_run_ledger_cfg_max_rotations()/,/^}/p" "$0"); _run_ledger_cfg_max_rotations' "$RL")" "4" "bad config $bad: shell resolver is 4"
+done
+# shell resolver: not a number / no file / malformed -> 4
+for bad in '{"run_ledger":{"max_rotations":"2"}}' '{"run_ledger":3}' 'not json'; do
+  assert_eq "$(shell_resolver "$bad")" "4" "bad config $bad: shell resolver is 4"
 done
 
 # 5. Read window keeps its pre-BL-0256 range: 0 = live only, no upper cap (> 64 still followed).
@@ -75,8 +80,27 @@ SEAT_BIG="$(printf '{"run_ledger":{"max_rotations":100}}\n' > "$CFG"; node -e '
 const { configuredValue } = require(process.argv[1] + "/scripts/lib/run-ledger-config.js");
 process.stdout.write(String(configuredValue()));' "$REPO_ROOT" < /dev/null)"
 assert_eq "$SEAT_BIG" "100" "configuredValue passes 100 through unclamped"
-shell_resolver() { printf '%s\n' "$1" > "$CFG"; bash -c '. <(sed -n "/^_run_ledger_cfg_max_rotations()/,/^}/p" "$0"); _run_ledger_cfg_max_rotations' "$RL"; }
 assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":0}}')" "0" "shell resolver accepts 0"
 assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":100}}')" "100" "shell resolver accepts 100"
+
+# 6. Each consumer parses the value exactly as it parsed the env var (only the source changed): 1.5 and -1.
+# RED at c682062b2 (second commit): seat-store read 1.5 as 4 (not parseInt 1) -> "seat store 1.5: reads .1 and live only" got
+#   both .2 and .1 campaigns; shell resolver 1.5 gave 4 and -1 gave 4 (shadow keeps "1.5" / "-1").
+seat_read() { # $1 config json -> campaigns visible to the seat store, sorted
+  printf '%s\n' "$1" > "$CFG"
+  node -e '
+const fs = require("fs"); const p = process.argv[2];
+const row = (id) => JSON.stringify({ kind: "journal", op: "campaign_event", payload: JSON.stringify({ campaign_id: id, event: { event_type: "x" } }) }) + "\n";
+for (const f of ["", ".1", ".2"]) fs.writeFileSync(p + f, "");
+fs.writeFileSync(p, row("live")); fs.writeFileSync(p + ".1", row("one")); fs.writeFileSync(p + ".2", row("two"));
+const m = require(process.argv[1] + "/src/engine/final-panel-seat-store").campaignLastEvents(p);
+process.stdout.write([...m.keys()].sort().join(","));' "$REPO_ROOT" "$TEST_TMP/seat.jsonl" < /dev/null
+}
+assert_eq "$(seat_read '{"run_ledger":{"max_rotations":1.5}}')" "live,one" "seat store 1.5: parseInt 1, reads .1 and live only"
+assert_eq "$(seat_read '{"run_ledger":{"max_rotations":-1}}')" "live,one,two" "seat store -1: below 1 means 4"
+assert_eq "$(scan_count '{"run_ledger":{"max_rotations":1.5}}')" "2" "cli scan 1.5: floor 1 (.1 and live)"
+assert_eq "$(scan_count '{"run_ledger":{"max_rotations":-1}}')" "5" "cli scan -1: negative means 4 (.4-.1 and live)"
+assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":1.5}}')" "1.5" "shell resolver keeps 1.5 as the env var did"
+assert_eq "$(shell_resolver '{"run_ledger":{"max_rotations":-1}}')" "-1" "shell resolver keeps -1 as the env var did"
 
 finalize_test

@@ -20,6 +20,7 @@
     "blocking_gate": "unverified"
   },
   "notes": [
-    "Keep at H0 until current official CLI surface and local auth are surveyed and probed; expiry is intentionally a short stale-warning TTL, not a verified capability claim."
+    "Keep at H0 until current official CLI surface and local auth are surveyed and probed; expiry is intentionally a short stale-warning TTL, not a verified capability claim.",
+    "2026-10-23: the CLI is not installed on this host, so it was not re-probed."
   ]
 }

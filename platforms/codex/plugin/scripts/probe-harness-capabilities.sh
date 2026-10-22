@@ -73,6 +73,26 @@ CLAUDE_HELP="$PROBE_TMP/claude-help.txt"
 "$OPENCODE_BIN" --help >"$OPENCODE_HELP" 2>&1
 "$CLAUDE_BIN" --help >"$CLAUDE_HELP" 2>&1
 
+# shellcheck source=lib/agy-model-alias.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-model-alias.sh"
+# Resolve before any paid agy -p. A tier-encoded id must not be paired with --effort.
+AGY_MODEL="$(agy_resolve_model_alias gemini-flash-high "$AGY_BIN")" || {
+  printf 'error: %s\n' "$AGY_MODEL" >&2
+  exit 1
+}
+AGY_MODEL_DISPLAY="$(timeout 20 "$AGY_BIN" models 2>/dev/null | awk -F '\t' -v id="$AGY_MODEL" '$1 == id { print $2; exit }')"
+if [ -z "$AGY_MODEL_DISPLAY" ]; then
+  agy_ver="${AGY_MODEL#gemini-}"
+  agy_ver="${agy_ver%-flash-*}"
+  case "${AGY_MODEL##*-}" in
+    low) agy_tier="Low" ;;
+    medium) agy_tier="Medium" ;;
+    high) agy_tier="High" ;;
+    *) agy_tier="${AGY_MODEL##*-}" ;;
+  esac
+  AGY_MODEL_DISPLAY="Gemini ${agy_ver} Flash (${agy_tier})"
+fi
+
 # D2 is the only fresh paid behavior probe in this rerunnable driver. The exact
 # production agy transport passes the normalized model slug and no effort flag;
 # effort remains validated tuple metadata in the generated claim.
@@ -80,7 +100,7 @@ AGY_JSON="$PROBE_TMP/agy-structured.json"
 AGY_STDERR="$PROBE_TMP/agy-structured.stderr"
 set +e
 timeout 120 "$AGY_BIN" -p 'Return exactly AGY_CAPABILITY_OK and do not use tools.' \
-  --model gemini-3.6-flash-high \
+  --model "$AGY_MODEL" \
   --dangerously-skip-permissions \
   --output-format json \
   --print-timeout 90s >"$AGY_JSON" 2>"$AGY_STDERR"
@@ -110,6 +130,7 @@ D4_ROSTER_SHA="$(sha256sum "$REPO/docs/plans/evidence/2026-10-16-strict-l5-polic
 CLAUDE_HOOKS_SHA="$(sha256sum "$REPO/hooks/hooks.json" | cut -d' ' -f1)"
 
 export REPO AGY_BIN CODEX_BIN GROK_BIN OPENCODE_BIN CLAUDE_BIN
+export AGY_MODEL AGY_MODEL_DISPLAY
 export AGY_VERSION CODEX_VERSION GROK_VERSION OPENCODE_VERSION CLAUDE_VERSION
 export OBSERVED_AT AGY_HELP_SHA AGY_JSON_SHA CODEX_HELP_SHA GROK_HELP_SHA OPENCODE_HELP_SHA CLAUDE_HELP_SHA
 export D4_ROSTER_SHA CLAUDE_HOOKS_SHA
@@ -168,7 +189,7 @@ function claim(capabilityId, consumerId, targetIdentity, locator, documentSha, a
   };
 }
 
-const agyD2 = target('agy', 'Gemini 3.6 Flash (High)', 'telemetry', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION);
+const agyD2 = target('agy', env.AGY_MODEL_DISPLAY, 'telemetry', 'high', null, 'google', env.AGY_BIN, env.AGY_VERSION);
 const codexHook = target('codex', null, 'compaction_hook', null, null, 'openai', env.CODEX_BIN, env.CODEX_VERSION);
 // D4 provider rows bind to the canonical strict /l5 roster; the D2 agy telemetry claims bind to the agy CLI help (AGY_HELP_SHA), never to this document.
 const d4RosterLocator = 'repo:docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/canonical-roster.json#tuples';
@@ -181,9 +202,9 @@ for (const [suffix, assertion] of [
   claims.push(claim(
     `agy-structured-envelope-${suffix}`, 'D2', agyD2,
     `agy://cli-help/${env.AGY_VERSION}#output-format-json`, env.AGY_HELP_SHA, assertion,
-    [env.AGY_BIN, '-p', '<redacted>', '--model', 'gemini-3.6-flash-high', '--dangerously-skip-permissions', '--output-format', 'json', '--print-timeout', '90s'],
+    [env.AGY_BIN, '-p', '<redacted>', '--model', env.AGY_MODEL, '--dangerously-skip-permissions', '--output-format', 'json', '--print-timeout', '90s'],
     env.AGY_JSON_SHA, `structured-envelope-${suffix}`, env.OBSERVED_AT,
-    binding('gemini-3.6-flash-high', 'gemini-3.6-flash-high', 'high'),
+    binding(env.AGY_MODEL, env.AGY_MODEL, 'high'),
   ));
 }
 

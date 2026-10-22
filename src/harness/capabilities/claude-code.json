@@ -28,6 +28,7 @@
   "notes": [
     "Do not dispatch native Anthropic-backed Claude work while the subscription quota constraint is active.",
     "cc-shim is still eligible when it is explicitly bound to a third-party Anthropic-compatible provider token such as MiniMax or GLM; that provider quota is separate from Anthropic subscription quota.",
-    "Existing Claude Code plugin behavior must remain unchanged unless a phase explicitly touches Claude packaging."
+    "Existing Claude Code plugin behavior must remain unchanged unless a phase explicitly touches Claude packaging.",
+    "2026-10-23 re-probe observed claude 2.1.308 (table says 2.1.220). Flags still present: -p, --model, --output-format, --plugin-dir, --resume, --permission-mode, --max-budget-usd. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
   ]
 }

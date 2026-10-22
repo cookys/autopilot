@@ -31,6 +31,7 @@
     "blocking_gate (pre-push / stop-hook style enforcement on the Grok host) remains unverified.",
     "Working inside this clone also surfaces skills via .agents/skills as project skills; that path does not replace a user-level plugin install for other repos.",
     "Local installs record source_path; `grok plugin update` reports local as live. If skills look stale after a pull, re-run `grok plugin install <path> --trust` or update and re-check with `grok inspect`.",
-    "2026-10-16 re-probe (BL-0198) re-ran only headless_usage and the authoring transport (read_only_dispatch path) on grok 1.0.60 / grok-4.7. skills, agents, plugin_install, hooks, mutation_dispatch and blocking_gate were NOT re-verified in this probe: they carry over from the 2026-08 grok 0.2.118 / grok-4.5 probe, and a full re-probe of every field is due before 3.0.0."
+    "2026-10-16 re-probe (BL-0198) re-ran only headless_usage and the authoring transport (read_only_dispatch path) on grok 1.0.60 / grok-4.7. skills, agents, plugin_install, hooks, mutation_dispatch and blocking_gate were NOT re-verified in this probe: they carry over from the 2026-08 grok 0.2.118 / grok-4.5 probe, and a full re-probe of every field is due before 3.0.0.",
+    "2026-10-23 re-probe observed grok 1.0.67 (table says 1.0.60). Flags still present: -p, --model, --effort, --output-format. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
   ]
 }

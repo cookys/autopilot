@@ -3,8 +3,10 @@
 ## Unreleased
 
 - retp2: `review-seat-report --archive` reads layout A and legacy flat ledgers, de-dupes by ledger-id, realpath and content, footer counts, tar months skipped until P3.
+- retp2b: `review-seat-report` de-duplicates by generation, so a pending or aborted generation no longer shadows a finalized one, and symlinks are followed only inside the archive root.
+- retp3: `review-ledger-archive` gains `rotate`, `prune`, and a status hint; the report reads `tar.gz` months. Two new config keys. Owner decisions: the tar and the source are both kept by default, deletion only through `prune --execute`, and the reminder is only in the report footer and `status` (no SessionStart hook).
 - smwt (ab6c7040c): session-marker-write-target classifies scripts/check-test-outcome.js as an AUTOPILOT_SESSION_ID scrub (it deletes the name from the child env) and pins that the name appears once, inside ENV_STRIP; the suite had been red since bl0050.
-- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written. The archive writes only when a dir is configured.
+- Review-ledger archive (opt-in): `scripts/review-ledger-archive.js` `import` and `status` copy hetero-review report files into a home directory archive. Finalize is wired in. It writes to the archive only when a dir is configured (env or config key); unset means nothing is written.
 
 - seatcard: read-only `review-seat-report.js` aggregates per-family review seat statistics from hetero-review ledgers supplied by the caller.
 
@@ -493,6 +495,13 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - t14s7: BL-0055 second experiment closed as SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29, M3 26/29 vs 0/29); report archived, five BACKLOG rows added (BL-0253 to BL-0257).
 - deval (d9b0f0402): the dcard and dcard-v2 rows of the skill ON/OFF eval are recorded INSTRUMENT-INVALID (NOT-SHIP). The primary metric reads the decision file only after turn 2, so neither arm could be measured. The text was not shown to be ineffective. dskill B (12 guidance files) is not merged. A v3 waits on owner decision d-27318bdc.
 - subplan (d3878d429): the sub-agent concurrency advisory plan (`docs/plans/2026-10-21-subagent-concurrency-advisory.md`) is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
+
+### Settings changes
+
+- **New `review_ledger_archive.rotate_after_months`** (positive integer; default 2). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS`. `rotate` compresses complete months strictly older than this. An invalid value keeps 2.
+- **New `review_ledger_archive.rotate_remove_source`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE`. When true, `rotate` deletes the month directory after the tar listing matches.
+
+See [`docs/settings-reference.md`](docs/settings-reference.md).
 
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 

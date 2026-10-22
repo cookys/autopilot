@@ -4,22 +4,38 @@
 // review-seat-report.js — read-only per-reviewer-family statistics from hetero-review-loop ledgers.
 //
 // The caller passes every ledger directory (--ledger) and, optionally, one or more review-ledger
-// archive roots (--archive, repeatable). --archive alone is valid. This process only reads. It
-// never writes, moves, or deletes, and it never looks at ~/.autopilot on its own.
+// archive roots (--archive, repeatable). --archive alone is valid. This process does not write the
+// archive or any ledger, and it never looks at ~/.autopilot on its own. A <YYYY-MM>.tar.gz month is
+// extracted with the system tar into a directory from fs.mkdtempSync (under os.tmpdir()) and that
+// directory is removed with fs.rmSync after the report is rendered.
 //
 // --archive walks each root (layout A is bucket / YYYY-MM / ledger-id /, the legacy flat form is
 // root / any-name /, and anything in between). A directory that contains review-*/chain.json is
 // one ledger and is not descended into. Symlinks are followed only when their realpath has not
 // already been entered and that realpath stays inside the realpath of the archive root (path.relative,
-// not a bare prefix). A symlink that points outside the root is skipped and never read. A file whose
-// name ends in .tar.gz or .tar is not read; the footer lists it as skipped because tar months need P3.
+// not a bare prefix). A directory symlink that points outside the root is skipped and never read.
+// A file symlink inside the root is still read. Only a file named <YYYY-MM>.tar.gz is a month tar.
+// Any other name ending in .tar.gz or .tar is skipped as "not a month tar" and is not extracted.
+// A month tar is listed with tar -tvzf. The first character of each verbose line is the member
+// type (the type is not taken by splitting the line on whitespace). Regular files and directories
+// are allowed. A symlink or hardlink skips the whole tar as "link member". A character device,
+// block device, FIFO, or any other member type skips the whole tar as "special member". Nothing
+// is extracted in those cases. An absolute member or a member with a ".." segment is skipped as
+// "unsafe member path" and is not extracted. Extraction uses tar -xzf with no ownership-restore
+// flags, into a directory from fs.mkdtempSync that is removed after the report. Nested .tar and
+// .tar.gz files inside that directory are not opened. If <YYYY-MM>/ sits beside the month tar,
+// both are read: rotate_remove_source can drop the source month, and a later finalize recreates
+// a directory that holds only new phases, so each side can be incomplete. Identical content is
+// not counted twice (ledger content key, then generation de-dupe). The footer counts every month
+// tar that was extracted and read, including one that has a sibling directory. A tar that fails
+// to list or extract is skipped with "tar extract failed: ..." and the report continues.
+// The footer counts tar months read and tar months skipped.
 //
-// Dedupe: a ledger with archive.json is keyed by the ledger-id field in that file, or by the
-// directory basename when the field is absent. A ledger without archive.json, including every
-// --ledger directory, is keyed by realpath. A second copy with the same key is skipped. Content
-// fallback: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
-// once. Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that
-// was kept, which is the --ledger path when --archive is not used.
+// Dedupe: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
+// once, including two copies of the same ledger-id. A ledger-id whose phase set differs (a month
+// tar and a sibling directory that each hold part of one ledger) is kept and accumulated.
+// Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that was
+// kept, which is the --ledger path when --archive is not used.
 //
 // With --archive, a second pass drops a finalized generation whose (phase, generation, findings.json
 // sha256) was already counted in this run, even when the rest of the ledger differs. Pending,
@@ -59,7 +75,9 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { familyOfEngine } = require('./lib/stage-write');
 
 const METRIC_KEYS = [
@@ -159,8 +177,10 @@ function noteCorrupt(scope, phaseName) {
   scope.corrupt_phases.push(phaseName);
 }
 
-function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe) {
-  const ledgerKey = path.resolve(ledgerDir);
+function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe, ledgerKeyOverride) {
+  // Same bucket + ledger-id shares one key, so a tar extract and its sibling
+  // directory do not each add a generation.
+  const ledgerKey = ledgerKeyOverride || path.resolve(ledgerDir);
   const phaseDir = path.join(ledgerDir, phaseName);
   const chain = readJson(path.join(phaseDir, 'chain.json'));
   if (!chain.ok || !Array.isArray(chain.value)) {
@@ -308,9 +328,41 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe) {
 }
 
 const WALK_DEPTH_LIMIT = 16;
-const TAR_MONTH_REASON = 'tar months need P3';
+const MONTH_TAR_NAME = /^\d{4}-\d{2}\.tar\.gz$/;
+const NOT_A_MONTH_TAR = 'not a month tar';
 
-function isTarMonthName(name) {
+function tarFailureReason(result) {
+  const raw = result && (result.stderr || result.message)
+    ? String(result.stderr || result.message)
+    : 'tar failed';
+  const line = raw.split('\n').map((part) => part.trim()).filter(Boolean)[0] || 'tar failed';
+  return `tar extract failed: ${line.replace(/\s+/g, ' ').slice(0, 180)}`;
+}
+
+function runSystemTar(args) {
+  const result = spawnSync('tar', args, {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+  });
+  if (result.error) return { ok: false, stderr: result.error.message };
+  if (result.status !== 0) return { ok: false, stderr: result.stderr || '' };
+  return { ok: true, stdout: result.stdout || '' };
+}
+
+function tarMemberUnsafe(member) {
+  const name = String(member).replace(/\\/g, '/').replace(/\/+$/, '');
+  if (path.posix.isAbsolute(name) || path.win32.isAbsolute(name)) return true;
+  return name.split('/').some((part) => part === '..');
+}
+
+// Type is the first character. '-' and 'd' are the only members that may be extracted.
+function tarMemberTypeRefusal(typeChar) {
+  if (typeChar === '-' || typeChar === 'd') return null;
+  if (typeChar === 'l' || typeChar === 'h') return 'link member';
+  return 'special member';
+}
+
+function isTarName(name) {
   return name.endsWith('.tar.gz') || name.endsWith('.tar');
 }
 
@@ -338,83 +390,131 @@ function isRealpathInside(rootReal, candidateReal) {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
-function discoverArchive(root) {
-  const ledgers = [];
-  const tarMonths = [];
-  const seen = new Set();
-  let rootReal;
-  try {
-    rootReal = fs.realpathSync(root);
-  } catch {
-    return { ledgers, tarMonths };
+function layoutLedgerIdentity(relParts, ctx) {
+  if (!relParts || relParts.length < 2) return { bucket: null, ledgerId: null };
+  const month = relParts[relParts.length - 2];
+  if (!MONTH_TAR_NAME.test(`${month}.tar.gz`)) return { bucket: null, ledgerId: null };
+  if (ctx && ctx.fromTar) {
+    if (!ctx.bucket) return { bucket: null, ledgerId: null };
+    return { bucket: ctx.bucket, ledgerId: relParts[relParts.length - 1] };
   }
-  function enter(dir, depth) {
-    let real;
-    try {
-      real = fs.realpathSync(dir);
-    } catch {
-      return;
-    }
-    if (!isRealpathInside(rootReal, real)) return;
-    if (seen.has(real)) return;
-    seen.add(real);
-    let st;
-    try {
-      st = fs.statSync(real);
-    } catch {
-      return;
-    }
-    if (!st.isDirectory()) return;
-    if (directoryHasLedgerChain(real)) {
-      ledgers.push(real);
-      return;
-    }
-    if (depth >= WALK_DEPTH_LIMIT) return;
-    let names;
-    try {
-      names = fs.readdirSync(real);
-    } catch {
-      return;
-    }
-    for (const name of names) {
-      if (isTarMonthName(name)) {
-        tarMonths.push({ name, reason: TAR_MONTH_REASON });
-        continue;
-      }
-      const child = path.join(real, name);
-      let childStat;
-      try {
-        childStat = fs.lstatSync(child);
-      } catch {
-        continue;
-      }
-      if (childStat.isSymbolicLink() || childStat.isDirectory()) enter(child, depth + 1);
-    }
-  }
-  enter(root, 0);
-  return { ledgers, tarMonths };
+  if (relParts.length < 3) return { bucket: null, ledgerId: null };
+  return { bucket: relParts[relParts.length - 3], ledgerId: relParts[relParts.length - 1] };
 }
 
-function ledgerIdentityKey(dir) {
-  const metaPath = path.join(dir, 'archive.json');
-  if (fs.existsSync(metaPath)) {
-    let id = null;
+function discoverArchive(root, tempDirs = []) {
+  const ledgers = [];
+  const tarMonths = [];
+  let tarMonthsRead = 0;
+  const seen = new Set();
+
+  function walkRoot(start, readMonthTars, ctx) {
+    let rootReal;
     try {
-      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-      if (meta && typeof meta === 'object') {
-        id = meta.ledger_id || meta.ledgerId || meta['ledger-id'] || null;
-      }
+      rootReal = fs.realpathSync(start);
     } catch {
-      id = null;
+      return;
     }
-    if (!id) id = path.basename(dir);
-    return `id:${id}`;
+    function enter(dir, depth, relParts) {
+      let real;
+      try {
+        real = fs.realpathSync(dir);
+      } catch {
+        return;
+      }
+      if (!isRealpathInside(rootReal, real)) return;
+      if (seen.has(real)) return;
+      seen.add(real);
+      let st;
+      try {
+        st = fs.statSync(real);
+      } catch {
+        return;
+      }
+      if (!st.isDirectory()) return;
+      if (directoryHasLedgerChain(real)) {
+        const identity = layoutLedgerIdentity(relParts, ctx);
+        ledgers.push({ dir: real, bucket: identity.bucket, ledgerId: identity.ledgerId, fromTar: Boolean(ctx && ctx.fromTar) });
+        return;
+      }
+      if (depth >= WALK_DEPTH_LIMIT) return;
+      let names;
+      try {
+        names = fs.readdirSync(real);
+      } catch {
+        return;
+      }
+      for (const name of names) {
+        if (isTarName(name)) {
+          // An extracted month is already unpacked. Opening a nested tar would
+          // follow whatever the outer archive planted, including another month.
+          if (!readMonthTars) continue;
+          if (!MONTH_TAR_NAME.test(name)) {
+            tarMonths.push({ name, reason: NOT_A_MONTH_TAR });
+            continue;
+          }
+          const file = path.join(real, name);
+          const verbose = runSystemTar(['-tvzf', file]);
+          if (!verbose.ok) {
+            tarMonths.push({ name, reason: tarFailureReason(verbose) });
+            continue;
+          }
+          const named = runSystemTar(['-tzf', file]);
+          if (!named.ok) {
+            tarMonths.push({ name, reason: tarFailureReason(named) });
+            continue;
+          }
+          const typeLines = verbose.stdout.split('\n').filter((line) => line.length > 0);
+          const memberNames = named.stdout.split('\n').filter((line) => line.length > 0);
+          let refusal = null;
+          if (typeLines.length !== memberNames.length) {
+            refusal = tarFailureReason({ stderr: 'member list mismatch' });
+          }
+          for (const line of typeLines) {
+            if (refusal) break;
+            // Type is line[0]. Names may contain spaces, so the line is not split.
+            refusal = tarMemberTypeRefusal(line[0]);
+          }
+          if (!refusal && memberNames.some(tarMemberUnsafe)) refusal = 'unsafe member path';
+          if (refusal) {
+            tarMonths.push({ name, reason: refusal });
+            continue;
+          }
+          let extracted = null;
+          let keepExtract = false;
+          try {
+            extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-report-tar-'));
+            tempDirs.push(extracted);
+            const unpacked = runSystemTar(['-xzf', file, '-C', extracted]);
+            if (!unpacked.ok) {
+              tarMonths.push({ name, reason: tarFailureReason(unpacked) });
+            } else {
+              keepExtract = true;
+              tarMonthsRead += 1;
+              walkRoot(extracted, false, { fromTar: true, bucket: path.basename(real) });
+            }
+          } finally {
+            if (!keepExtract && extracted) {
+              fs.rmSync(extracted, { recursive: true, force: true });
+            }
+          }
+          continue;
+        }
+        const child = path.join(real, name);
+        let childStat;
+        try {
+          childStat = fs.lstatSync(child);
+        } catch {
+          continue;
+        }
+        if (childStat.isSymbolicLink() || childStat.isDirectory()) enter(child, depth + 1, relParts.concat(name));
+      }
+    }
+    enter(start, 0, []);
   }
-  try {
-    return `rp:${fs.realpathSync(dir)}`;
-  } catch {
-    return `rp:${path.resolve(dir)}`;
-  }
+
+  walkRoot(root, true, { fromTar: false, bucket: null });
+  return { ledgers, tarMonths, tarMonthsRead, tempDirs };
 }
 
 function ledgerContentKey(dir) {
@@ -448,18 +548,17 @@ function ledgerContentKey(dir) {
 }
 
 function dedupeLedgers(candidates) {
-  const seenId = new Set();
   const seenContent = new Set();
   const kept = [];
   let duplicates = 0;
   for (const entry of candidates) {
-    const idKey = ledgerIdentityKey(entry.dir);
+    // Same ledger-id with a different phase set is kept so generation de-dupe can
+    // merge a month tar with a sibling directory. Identical content is skipped.
     const contentKey = ledgerContentKey(entry.dir);
-    if (seenId.has(idKey) || seenContent.has(contentKey)) {
+    if (seenContent.has(contentKey)) {
       duplicates += 1;
       continue;
     }
-    seenId.add(idKey);
     seenContent.add(contentKey);
     kept.push(entry);
   }
@@ -485,6 +584,7 @@ function buildReport(ledgerDirs, options = {}) {
     archive_ledgers_read: options.archiveLedgersRead || 0,
     duplicates_skipped: options.duplicatesSkipped || 0,
     duplicate_generations_skipped: 0,
+    tar_months_read: options.tarMonthsRead || 0,
     tar_months_skipped: options.tarMonths || [],
     _phases: new Set(),
     _gens: new Set(),
@@ -495,11 +595,22 @@ function buildReport(ledgerDirs, options = {}) {
     seen: new Set(),
     recordUncountedGenerationKeys: Boolean(options.recordUncountedGenerationKeys),
   };
-  for (const dir of ledgerDirs) {
+  const identities = Array.isArray(options.ledgerIdentities) ? options.ledgerIdentities : null;
+  const seenLedgerIds = new Set();
+  for (let i = 0; i < ledgerDirs.length; i++) {
+    const dir = ledgerDirs[i];
     const phases = listPhases(dir, scope);
     if (phases == null) continue;
-    scope.ledgers_read += 1;
-    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope, genDedupe);
+    const ident = identities ? identities[i] : null;
+    if (ident) {
+      if (!seenLedgerIds.has(ident)) {
+        seenLedgerIds.add(ident);
+        scope.ledgers_read += 1;
+      }
+    } else {
+      scope.ledgers_read += 1;
+    }
+    for (const phaseName of phases) accumulatePhase(dir, phaseName, byModel, bag, scope, genDedupe, ident || null);
   }
 
   const verifiedSeats = new Map();
@@ -622,7 +733,7 @@ function formatText(report) {
   const lines = [
     header,
     ...rows.map(lineOf),
-    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}, archive ledgers read ${scope.archive_ledgers_read || 0}, duplicates skipped ${scope.duplicates_skipped || 0}, duplicate generations skipped ${scope.duplicate_generations_skipped || 0}, tar months skipped ${(scope.tar_months_skipped || []).length}${(scope.tar_months_skipped || []).length ? ` (${scope.tar_months_skipped.map((row) => `${row.name}: ${row.reason}`).join(', ')})` : ''}`,
+    `scope: ledgers read ${scope.ledgers_read}, phases read ${scope.phases_read}, finalized generations counted ${scope.finalized_generations}, aborted skipped ${scope.aborted_skipped} (${scope.aborted_skipped_findings} findings), pending skipped ${scope.pending_skipped} (${scope.pending_skipped_findings} findings), corrupt skipped ${scope.corrupt_skipped}${scope.corrupt_skipped > 0 ? ` (${scope.corrupt_phases.join(', ')})` : ''}, unknown-status skipped ${scope.unknown_status_skipped}, archive ledgers read ${scope.archive_ledgers_read || 0}, duplicates skipped ${scope.duplicates_skipped || 0}, duplicate generations skipped ${scope.duplicate_generations_skipped || 0}, tar months read ${scope.tar_months_read || 0}, tar months skipped ${(scope.tar_months_skipped || []).length}${(scope.tar_months_skipped || []).length ? ` (${scope.tar_months_skipped.map((row) => `${row.name}: ${row.reason}`).join(', ')})` : ''}`,
     'Heuristic: exclusive verified matches findings by slug, and slugs are named by the reviewers themselves.',
     `key mode: ${report.key_mode}`,
   ];
@@ -672,27 +783,45 @@ function main(argv) {
   }
   const candidates = ledgers.map((dir) => ({ dir, fromArchive: false }));
   const tarMonths = [];
-  for (const root of archives) {
-    const found = discoverArchive(root);
-    tarMonths.push(...found.tarMonths);
-    for (const dir of found.ledgers) candidates.push({ dir, fromArchive: true });
+  let tarMonthsRead = 0;
+  const tempDirs = [];
+  try {
+    for (const root of archives) {
+      const found = discoverArchive(root, tempDirs);
+      tarMonths.push(...found.tarMonths);
+      tarMonthsRead += found.tarMonthsRead;
+      for (const entry of found.ledgers) {
+        candidates.push({
+          dir: entry.dir,
+          fromArchive: true,
+          bucket: entry.bucket || null,
+          ledgerId: entry.ledgerId || null,
+        });
+      }
+    }
+    // Without --archive the candidate list is exactly the --ledger list. Skipping
+    // dedupe keeps the previous totals, including two directories with the same bytes.
+    const selected = archives.length === 0
+      ? { kept: candidates, duplicates: 0 }
+      : dedupeLedgers(candidates); // dedupe-call
+    const archiveLedgersRead = selected.kept.filter((entry) => entry.fromArchive).length;
+    const report = buildReport(selected.kept.map((entry) => entry.dir), {
+      byModel,
+      crossGen,
+      archiveLedgersRead,
+      duplicatesSkipped: selected.duplicates,
+      tarMonths,
+      tarMonthsRead,
+      dedupeGenerations: Boolean(selected.dedupeGenerations),
+      ledgerIdentities: selected.kept.map((entry) => (
+        entry.bucket && entry.ledgerId ? `${entry.bucket}\0${entry.ledgerId}` : null
+      )),
+    });
+    writeStdout(json ? formatJson(report) : formatText(report));
+    process.exitCode = 0;
+  } finally {
+    for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
   }
-  // Without --archive the candidate list is exactly the --ledger list. Skipping
-  // dedupe keeps the previous totals, including two directories with the same bytes.
-  const selected = archives.length === 0
-    ? { kept: candidates, duplicates: 0 }
-    : dedupeLedgers(candidates); // dedupe-call
-  const archiveLedgersRead = selected.kept.filter((entry) => entry.fromArchive).length;
-  const report = buildReport(selected.kept.map((entry) => entry.dir), {
-    byModel,
-    crossGen,
-    archiveLedgersRead,
-    duplicatesSkipped: selected.duplicates,
-    tarMonths,
-    dedupeGenerations: Boolean(selected.dedupeGenerations),
-  });
-  writeStdout(json ? formatJson(report) : formatText(report));
-  process.exitCode = 0;
 }
 
 module.exports = { buildReport, formatText, formatJson, familyOfEngine };

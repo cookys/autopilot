@@ -242,9 +242,10 @@ P1 naming changed: real chain.json has no timestamp, and mtime is not copy-stabl
 ## UNVERIFIED
 
 - The 7-day span is representative of a year. Verify: re-measure after 30 days of P1, `status` subcommand.
-- Gzip ratio for the json subset. Verify: `tar czf` on a copy of the report-files subset during P3, compare sizes.
+- Gzip ratio, measured 2026-10-22. A read-only `cp -r` of `~/.autopilot/review-ledger-archive/2026-10-22-autopilot-a6cb3442` into a temp directory, then system `tar czf`. Whole copy: 31654354 bytes uncompressed, 8341311 bytes gzip (ratio 0.264, about 3.79:1). Report-files subset (everything except `diff.txt`), measured 2026-10-22 on the same copy: 7116359 bytes uncompressed, 1970644 bytes gzip (ratio 0.277, about 3.61:1). A real rotate of the imported layout A month directory (2832 files, 6656825 bytes) produced a tar.gz of 1770908 bytes (ratio 0.266).
 - `a6cb3442` equals the first 8 hex of sha1 of this repo's `repoIdentity` string. Verify: compute it. On mismatch, the slug rule in 4.1 stands and the legacy directory name is only a label.
-- System `tar` works on Windows and under the agy sandbox. Verify: `scripts/probe-harness-capabilities.sh` or a real run there. Fallback is uncompressed plus a warning.
+- System `tar` on this host, measured 2026-10-22: `tar (GNU tar) 1.35`.
+- System `tar` works on Windows and under the agy sandbox. UNVERIFIED. Verify: `scripts/probe-harness-capabilities.sh` or a real run there. Fallback is uncompressed plus a warning. An uncompressed-fallback path exists. It is covered by case au (no tar on PATH) and case av (the tar listing does not match, so the month stays a directory) in `hooks/tests/review-ledger-archive.test.sh`.
 - Whether the original `/tmp` source ledger still exists. The home copy is the record this plan uses. Verify: the owner looks; do not delete the home copy to find out.
 - Mode 0700/0600 survives the platforms we ship on. Verify: the P1 test asserts `stat` mode after create.
 

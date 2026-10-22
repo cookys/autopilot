@@ -617,8 +617,8 @@ test('append sweeps old reclaim-/release- lock leftovers and keeps fresh ones', 
     const { append } = require('./lib/room-log');
     const dir = path.join(s.dir, 'room-sweep');
     fs.mkdirSync(dir, { recursive: true });
-    const oldFiles = ['room.jsonl.lock.reclaim-1-aa', 'room.jsonl.lock.release-2-bb'].map((n) => path.join(dir, n));
-    const fresh = path.join(dir, 'room.jsonl.lock.reclaim-3-cc');
+    const oldFiles = ['room.jsonl.lock.reclaim-999999991-aa', 'room.jsonl.lock.release-999999992-bb'].map((n) => path.join(dir, n));
+    const fresh = path.join(dir, 'room.jsonl.lock.reclaim-999999993-cc');
     const other = path.join(dir, 'notes.txt');
     for (const f of [...oldFiles, fresh, other]) fs.writeFileSync(f, 'x');
     const past = new Date(Date.now() - 10 * 60 * 1000);
@@ -636,4 +636,23 @@ test('USAGE documents send --seats and input --once', () => {
   const r = run(['--help'], process.env);
   assert.match(r.stdout, /send \[--seats h1,h2\] ROOM TEXT/);
   assert.match(r.stdout, /input ROOM \[--seats h1,h2\] \[--once\]/);
+});
+
+// # RED at fae019ded: node --test scripts/roundtable-window.test.js exit 1; the parked file named
+// with this live pid and an old mtime (what rename/link inherit from the original lock) was deleted.
+test('append keeps an old-mtime parked file whose mover pid is alive', () => {
+  const s = scratch();
+  try {
+    const { append } = require('./lib/room-log');
+    const dir = path.join(s.dir, 'room-live');
+    fs.mkdirSync(dir, { recursive: true });
+    const parked = path.join(dir, `room.jsonl.lock.reclaim-${process.pid}-dd`);
+    fs.writeFileSync(parked, 'x');
+    const past = new Date(Date.now() - 2 * 60 * 1000);
+    fs.utimesSync(parked, past, past);
+    append('room-live', { from: 'owner', kind: 'say', text: 'hi', reply_to: null }, s.env);
+    assert.equal(fs.existsSync(parked), true);
+  } finally {
+    s.cleanup();
+  }
 });

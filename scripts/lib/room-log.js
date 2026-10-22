@@ -135,8 +135,13 @@ function releaseLock(lockFile, token) {
 }
 
 // A process killed between rename and unlink/link leaves a parked file. Sweep
-// ones older than LEFTOVER_MS; a live mover holds its parked file for microseconds.
+// ones older than LEFTOVER_MS whose embedded pid is dead. mtime alone is not
+// enough: rename/link keep the original lock's mtime, so a live mover's parked
+// file can look old. The pid in the name says whether the mover is still alive.
 const LEFTOVER_MS = 60000;
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (err) { return err.code === 'EPERM'; }
+}
 function sweepLeftovers(lockFile) {
   const dir = path.dirname(lockFile);
   const base = path.basename(lockFile);
@@ -144,6 +149,8 @@ function sweepLeftovers(lockFile) {
   try { names = fs.readdirSync(dir); } catch { return; }
   for (const name of names) {
     if (!name.startsWith(`${base}.reclaim-`) && !name.startsWith(`${base}.release-`)) continue;
+    const m = /\.(?:reclaim|release)-(\d+)-/.exec(name.slice(base.length));
+    if (!m || pidAlive(Number(m[1]))) continue;
     const full = path.join(dir, name);
     try {
       if (Date.now() - fs.statSync(full).mtimeMs > LEFTOVER_MS) fs.unlinkSync(full);

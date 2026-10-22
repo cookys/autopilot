@@ -242,10 +242,29 @@ case "$NODE_ID_OUT" in
   *) assert_eq 0 0 "node scanner ignores commit text that is only data" ;;
 esac
 
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  fail "node test commits via git without its own identity: ${f#$REPO_ROOT/}"
-done < <(node_commit_without_identity "$REPO_ROOT")
+# RED at dff1d36fd: wiring the scanner through `done < <(...)` dropped its exit code;
+# a scan root that makes the scanner throw (nonexistent dir) left the guard green.
+# Planted bad root: old wiring printed nothing and passed; fixed wiring reports failure.
+node_identity_guard_check() {
+  local root="$1" out f
+  out="$(node_commit_without_identity "$root" 2>/dev/null)" || { echo "node identity scanner failed"; return 1; }
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    echo "node test commits via git without its own identity: ${f#$REPO_ROOT/}"
+    return 1
+  done <<< "$out"
+  return 0
+}
+if GUARD_CRASH_OUT="$(node_identity_guard_check "$TEST_TMP/no-such-scan-root")"; then
+  fail "node identity guard stayed green when the scanner crashed"
+else
+  assert_contains "$GUARD_CRASH_OUT" "scanner failed" "scanner crash fails the guard (negative control)"
+fi
+if NODE_GUARD_OUT="$(node_identity_guard_check "$REPO_ROOT")"; then
+  assert_eq 0 0 "node tests that commit carry their own identity"
+else
+  fail "$NODE_GUARD_OUT"
+fi
 
 # --- P3: identity gate hooks ---
 # RED at 183c6e9e: unmodified .githooks allow test-identity commit/merge (exit 0);

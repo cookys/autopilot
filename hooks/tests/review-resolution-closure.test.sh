@@ -50,6 +50,21 @@ function normChecks(N) {
   r.missing_packet_list_rejected = n(seatOut([]), { priorFindingIds: ids }).status === 'invalid';
   r.full_round_rejects_object_form = n(seatOut([]), {}).status === 'invalid';
   r.findings_carried_alongside = n(seatOut([], JSON.stringify([F('n1')]))).findings.length === 1;
+  // RED at b39f00016: node threw 'mutation revoked_filter did not change the source' and the suite FAILed 'node produced no output'; unmodified normalizer returned status invalid (duplicate product review finding d1) for a REVOKED: reuse of the id.
+  // BL-0226: only the fixed marker claim prefix `REVOKED:` withdraws a finding (ADR-0001: free-form
+  // "withdrawn" prose is the reviewer's say-so and counts for nothing); withdrawn items stay advisory.
+  const W = (id, claim) => ({ finding_id: id, claim, severity: '🟠', source: 'product-review' });
+  const rv = N.normalizeProductReviewFindings(JSON.stringify([W('d1', 'real bug'), W('d1', 'REVOKED: was mistaken')]));
+  r.revoked_reused_id_normalizes = rv.status === 'normalized' && rv.findings.length === 1 && rv.findings[0].claim === 'real bug';
+  r.revoked_kept_as_advisory = Array.isArray(rv.advisory) && rv.advisory.length === 1 && rv.advisory[0].finding_id === 'd1' && rv.advisory[0].claim.startsWith('REVOKED:');
+  r.revoked_not_in_digest = rv.canonical === JSON.stringify(rv.findings) && !rv.canonical.includes('REVOKED');
+  const rp = N.normalizeProductReviewFindings('🟠 [d1] real bug\n🟠 [d1] REVOKED: was mistaken');
+  r.revoked_prose_reused_id_normalizes = rp.status === 'normalized' && rp.findings.length === 1 && rp.advisory.length === 1;
+  r.revoked_only_unique_id_dropped = (() => { const x = N.normalizeProductReviewFindings(JSON.stringify([W('d2', 'REVOKED: nope')])); return x.status === 'normalized' && x.findings.length === 0 && x.advisory.length === 1; })();
+  r.unmarked_withdrawal_prose_still_duplicate = N.normalizeProductReviewFindings(JSON.stringify([W('d1', 'real bug'), W('d1', 'withdrawn, ignore this')])).status === 'invalid'
+    && N.normalizeProductReviewFindings(JSON.stringify([W('d1', 'real bug'), W('d1', 'revoked: lowercase is not the marker')])).status === 'invalid';
+  r.two_live_duplicates_still_invalid = N.normalizeProductReviewFindings(JSON.stringify([W('d1', 'a'), W('d1', 'b'), W('d1', 'REVOKED: c')])).status === 'invalid';
+  r.no_revoked_has_empty_advisory = n(JSON.stringify([F('n1')])).advisory === undefined || n(JSON.stringify([F('n1')])).advisory.length === 0;
   r.array_form_unchanged = n(JSON.stringify([F('n1')])).status === 'normalized' && n('none').status === 'normalized';
   return r;
 }
@@ -133,6 +148,7 @@ const NEGN = {
   full_round: [(s) => s.replace('if (priorFindingIds === null) {', 'if (false) {').replace(/if \(packetPaths === null \|\|[\s\S]*?\n  \}\n/, ''), 'full_round_rejects_object_form'],
   evidence_in_packet: [(s) => s.replace('&& evidenceInPacket(evidence, packetPaths); // guard:evidence_in_packet', ';'), 'evidence_outside_packet_not_addressed'],
   packet_list_required: [(s) => s.replace(/if \(packetPaths === null \|\|[\s\S]*?\n  \}\n/, '').replace('evidenceInPacket(evidence, packetPaths); // guard:evidence_in_packet', 'true;'), 'missing_packet_list_rejected'],
+  revoked_filter: [(s) => s.replace('const live = value.filter((finding) => !isRevoked(finding)); // guard:revoked_filter', 'const live = value;'), 'revoked_reused_id_normalizes'],
   duplicate: [(s) => s.replace('if (seen.has(entry.finding_id)) {', 'if (false) {'), 'rejects_duplicate_id'],
 };
 for (const [name, [mut, check]] of Object.entries(NEGN)) {

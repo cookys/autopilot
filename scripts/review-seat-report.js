@@ -14,20 +14,28 @@
 // one ledger and is not descended into. Symlinks are followed only when their realpath has not
 // already been entered and that realpath stays inside the realpath of the archive root (path.relative,
 // not a bare prefix). A directory symlink that points outside the root is skipped and never read.
-// A file symlink inside the root is still read. A <YYYY-MM>.tar.gz is listed with tar -tzf first;
-// an absolute member or a member with a ".." segment is skipped as "unsafe member path" and is not
-// extracted. Extraction uses tar -xzf with no ownership-restore flags. If <YYYY-MM>/ sits beside
-// that tar, only the directory is read and the tar is neither extracted nor counted as read or
-// skipped. A name ending in .tar (not .tar.gz) is skipped as "uncompressed tar not read". A tar.gz
-// that fails to list or extract is skipped with "tar extract failed: ..." and the report continues.
+// A file symlink inside the root is still read. Only a file named <YYYY-MM>.tar.gz is a month tar.
+// Any other name ending in .tar.gz or .tar is skipped as "not a month tar" and is not extracted.
+// A month tar is listed with tar -tvzf. The first character of each verbose line is the member
+// type (the type is not taken by splitting the line on whitespace). Regular files and directories
+// are allowed. A symlink or hardlink skips the whole tar as "link member". A character device,
+// block device, FIFO, or any other member type skips the whole tar as "special member". Nothing
+// is extracted in those cases. An absolute member or a member with a ".." segment is skipped as
+// "unsafe member path" and is not extracted. Extraction uses tar -xzf with no ownership-restore
+// flags, into a directory from fs.mkdtempSync that is removed after the report. Nested .tar and
+// .tar.gz files inside that directory are not opened. If <YYYY-MM>/ sits beside the month tar,
+// both are read: rotate_remove_source can drop the source month, and a later finalize recreates
+// a directory that holds only new phases, so each side can be incomplete. Identical content is
+// not counted twice (ledger content key, then generation de-dupe). The footer counts every month
+// tar that was extracted and read, including one that has a sibling directory. A tar that fails
+// to list or extract is skipped with "tar extract failed: ..." and the report continues.
 // The footer counts tar months read and tar months skipped.
 //
-// Dedupe: a ledger with archive.json is keyed by the ledger-id field in that file, or by the
-// directory basename when the field is absent. A ledger without archive.json, including every
-// --ledger directory, is keyed by realpath. A second copy with the same key is skipped. Content
-// fallback: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
-// once. Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that
-// was kept, which is the --ledger path when --archive is not used.
+// Dedupe: two ledgers whose set of (phase, generation, findings.json sha256) is identical count
+// once, including two copies of the same ledger-id. A ledger-id whose phase set differs (a month
+// tar and a sibling directory that each hold part of one ledger) is kept and accumulated.
+// Skipped duplicates are not accumulated. Report keys stay path.resolve of the ledger that was
+// kept, which is the --ledger path when --archive is not used.
 //
 // With --archive, a second pass drops a finalized generation whose (phase, generation, findings.json
 // sha256) was already counted in this run, even when the rest of the ledger differs. Pending,
@@ -318,7 +326,8 @@ function accumulatePhase(ledgerDir, phaseName, byModel, bag, scope, genDedupe) {
 }
 
 const WALK_DEPTH_LIMIT = 16;
-const UNCOMPRESSED_TAR_REASON = 'uncompressed tar not read';
+const MONTH_TAR_NAME = /^\d{4}-\d{2}\.tar\.gz$/;
+const NOT_A_MONTH_TAR = 'not a month tar';
 
 function tarFailureReason(result) {
   const raw = result && (result.stderr || result.message)
@@ -329,7 +338,10 @@ function tarFailureReason(result) {
 }
 
 function runSystemTar(args) {
-  const result = spawnSync('tar', args, { encoding: 'utf8' });
+  const result = spawnSync('tar', args, {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+  });
   if (result.error) return { ok: false, stderr: result.error.message };
   if (result.status !== 0) return { ok: false, stderr: result.stderr || '' };
   return { ok: true, stdout: result.stdout || '' };
@@ -341,10 +353,15 @@ function tarMemberUnsafe(member) {
   return name.split('/').some((part) => part === '..');
 }
 
-function gzipMonthName(name) {
-  if (!name.endsWith('.tar.gz')) return null;
-  const month = name.slice(0, -'.tar.gz'.length);
-  return /^\d{4}-\d{2}$/.test(month) ? month : null;
+// Type is the first character. '-' and 'd' are the only members that may be extracted.
+function tarMemberTypeRefusal(typeChar) {
+  if (typeChar === '-' || typeChar === 'd') return null;
+  if (typeChar === 'l' || typeChar === 'h') return 'link member';
+  return 'special member';
+}
+
+function isTarName(name) {
+  return name.endsWith('.tar.gz') || name.endsWith('.tar');
 }
 
 function directoryHasLedgerChain(dir) {
@@ -377,7 +394,7 @@ function discoverArchive(root, tempDirs = []) {
   let tarMonthsRead = 0;
   const seen = new Set();
 
-  function walkRoot(start) {
+  function walkRoot(start, readMonthTars) {
     let rootReal;
     try {
       rootReal = fs.realpathSync(start);
@@ -413,30 +430,39 @@ function discoverArchive(root, tempDirs = []) {
         return;
       }
       for (const name of names) {
-        if (name.endsWith('.tar') && !name.endsWith('.tar.gz')) {
-          tarMonths.push({ name, reason: UNCOMPRESSED_TAR_REASON });
-          continue;
-        }
-        const month = gzipMonthName(name);
-        if (name.endsWith('.tar.gz')) {
-          if (month) {
-            let siblingIsDir = false;
-            try {
-              siblingIsDir = fs.statSync(path.join(real, month)).isDirectory();
-            } catch {
-              siblingIsDir = false;
-            }
-            if (siblingIsDir) continue;
-          }
-          const file = path.join(real, name);
-          const listed = runSystemTar(['-tzf', file]);
-          if (!listed.ok) {
-            tarMonths.push({ name, reason: tarFailureReason(listed) });
+        if (isTarName(name)) {
+          // An extracted month is already unpacked. Opening a nested tar would
+          // follow whatever the outer archive planted, including another month.
+          if (!readMonthTars) continue;
+          if (!MONTH_TAR_NAME.test(name)) {
+            tarMonths.push({ name, reason: NOT_A_MONTH_TAR });
             continue;
           }
-          const members = listed.stdout.split('\n').filter(Boolean);
-          if (members.some(tarMemberUnsafe)) {
-            tarMonths.push({ name, reason: 'unsafe member path' });
+          const file = path.join(real, name);
+          const verbose = runSystemTar(['-tvzf', file]);
+          if (!verbose.ok) {
+            tarMonths.push({ name, reason: tarFailureReason(verbose) });
+            continue;
+          }
+          const named = runSystemTar(['-tzf', file]);
+          if (!named.ok) {
+            tarMonths.push({ name, reason: tarFailureReason(named) });
+            continue;
+          }
+          const typeLines = verbose.stdout.split('\n').filter((line) => line.length > 0);
+          const memberNames = named.stdout.split('\n').filter((line) => line.length > 0);
+          let refusal = null;
+          if (typeLines.length !== memberNames.length) {
+            refusal = tarFailureReason({ stderr: 'member list mismatch' });
+          }
+          for (const line of typeLines) {
+            if (refusal) break;
+            // Type is line[0]. Names may contain spaces, so the line is not split.
+            refusal = tarMemberTypeRefusal(line[0]);
+          }
+          if (!refusal && memberNames.some(tarMemberUnsafe)) refusal = 'unsafe member path';
+          if (refusal) {
+            tarMonths.push({ name, reason: refusal });
             continue;
           }
           let extracted = null;
@@ -450,7 +476,7 @@ function discoverArchive(root, tempDirs = []) {
             } else {
               keepExtract = true;
               tarMonthsRead += 1;
-              walkRoot(extracted);
+              walkRoot(extracted, false);
             }
           } finally {
             if (!keepExtract && extracted) {
@@ -472,30 +498,8 @@ function discoverArchive(root, tempDirs = []) {
     enter(start, 0);
   }
 
-  walkRoot(root);
+  walkRoot(root, true);
   return { ledgers, tarMonths, tarMonthsRead, tempDirs };
-}
-
-function ledgerIdentityKey(dir) {
-  const metaPath = path.join(dir, 'archive.json');
-  if (fs.existsSync(metaPath)) {
-    let id = null;
-    try {
-      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-      if (meta && typeof meta === 'object') {
-        id = meta.ledger_id || meta.ledgerId || meta['ledger-id'] || null;
-      }
-    } catch {
-      id = null;
-    }
-    if (!id) id = path.basename(dir);
-    return `id:${id}`;
-  }
-  try {
-    return `rp:${fs.realpathSync(dir)}`;
-  } catch {
-    return `rp:${path.resolve(dir)}`;
-  }
 }
 
 function ledgerContentKey(dir) {
@@ -529,18 +533,17 @@ function ledgerContentKey(dir) {
 }
 
 function dedupeLedgers(candidates) {
-  const seenId = new Set();
   const seenContent = new Set();
   const kept = [];
   let duplicates = 0;
   for (const entry of candidates) {
-    const idKey = ledgerIdentityKey(entry.dir);
+    // Same ledger-id with a different phase set is kept so generation de-dupe can
+    // merge a month tar with a sibling directory. Identical content is skipped.
     const contentKey = ledgerContentKey(entry.dir);
-    if (seenId.has(idKey) || seenContent.has(contentKey)) {
+    if (seenContent.has(contentKey)) {
       duplicates += 1;
       continue;
     }
-    seenId.add(idKey);
     seenContent.add(contentKey);
     kept.push(entry);
   }

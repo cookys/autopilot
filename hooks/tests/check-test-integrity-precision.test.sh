@@ -4,6 +4,7 @@
 # F cases are synthetic false positives the precise rules must not report.
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
 # RED at c65144649: N7 N8 F5 failed on the unmodified base.
+# RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -208,5 +209,61 @@ git -C "$repo" commit -qm "comment mention only"
 run_case "$repo"
 if has_kind deleted_line; then f5b=1; else f5b=0; fi
 if [ "$f5a" = 1 ] && [ "$f5b" = 1 ]; then report F5 1; else report F5 0; fi
+
+# ── F6 pure-add edit of a surface helper (BL-0060 v3 rule b) ───────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'export A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'export A=1\nexport B=2\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "append export"
+run_case "$repo"
+if has_kind surface_touch; then report F6 0; else report F6 1; fi
+
+# ── N9 surface file deleted outright still reported ─────────────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf '{}\n' > "$repo/tests/fixtures/golden.json"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/fixtures/golden.json
+git -C "$repo" commit -qm "delete fixture"
+run_case "$repo"
+if has_kind surface_touch && has_text 'tests/fixtures/golden.json'; then report N9 1; else report N9 0; fi
+
+# ── F7 test removed with its feature; same-topic replacement added ─────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo hi\n' > "$repo/scripts/tool.sh"
+printf 'assert_eq "$(bash scripts/tool.sh --gc)" "x" "gc works"\n' > "$repo/tests/tool-gc.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/tool-gc.test.sh
+mkdir -p "$repo/tests"
+printf 'assert_eq "$(bash scripts/tool.sh --gc 2>&1)" "unknown" "gc gone"\n' > "$repo/tests/tool-gc-removed.test.sh"
+commit_all "$repo" "remove gc feature, add removal test"
+run_case "$repo"
+if has_kind deleted_line; then report F7 0; else report F7 1; fi
+
+# ── N10 test deleted, unrelated test added; product stays (N4 shape) ───────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo hi\n' > "$repo/scripts/tool.sh"
+printf 'assert_eq 1 1 "gc"\nassert_eq "$(bash scripts/tool.sh)" "hi" "runs"\n' > "$repo/tests/tool-gc.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/tool-gc.test.sh
+mkdir -p "$repo/tests"
+printf 'assert_eq 1 1 "other"\n' > "$repo/tests/unrelated.test.sh"
+commit_all "$repo" "delete test, add unrelated"
+run_case "$repo"
+if has_kind deleted_line && has_text 'tests/tool-gc.test.sh'; then report N10 1; else report N10 0; fi
+
+# ── F8 "|| fail" rewritten as "if ! cmd; then ... exit 1" ──────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests"
+printf 'node build.js || fail "build failed"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf 'if ! node build.js\nthen\n  echo "build failed" >&2\n  exit 1\nfi\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "stricter form"
+run_case "$repo"
+if has_kind deleted_line; then report F8 0; else report F8 1; fi
 
 finalize_test

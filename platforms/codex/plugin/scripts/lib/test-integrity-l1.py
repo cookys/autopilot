@@ -1574,6 +1574,10 @@ _ASSERTION_LINE = {
         r"|\]\s*\|\|\s*\(?\s*fail\b"
         r"|\btest\s+\S.+\|\|\s*\(?\s*fail\b"
         r"|\bgrep\s+-q\s+\S.+\|\|\s*\(?\s*fail\b"
+        # BL-0060 v3: "if ! cmd; then ... exit" guard and "cmd || exit N" are the
+        # stricter spellings of "cmd || fail" (a failure ends the test).
+        r"|^\s*(?:if|elif)\s+!\s+\S"
+        r"|\|\|\s*exit\s+[1-9]"
     ),
 }
 _TAUTOLOGY = {
@@ -1587,6 +1591,7 @@ _TAUTOLOGY = {
         r"|\bassert\.equal\s*\(\s*true\s*,\s*true\s*\)"
     ),
     "shell": re.compile(
+        r"^\s*(?:if|elif)\s+!\s+(?:true|:)\s*(?:;|$)|"
         r"\[\s*1\s*=\s*1\s*\]|\[\s*\"a\"\s*=\s*\"a\"\s*\]|\[\s*'a'\s*=\s*'a'\s*\]|(?:^|[;&|])\s*true\s*\|\|\s*\(?\s*fail\b"
     ),
 }
@@ -1728,6 +1733,47 @@ def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_path
                 option = option.replace("\\", "/")
                 if norm == option or norm.endswith("/" + option):
                     return True
+    return False
+
+
+def _surface_edit_removes_lines(status, info):
+    """True when a changed surface file lost or rewrote a line (BL-0060 v3 rule b)."""
+    if not status.startswith("M"):
+        return True
+    hunks = (info or {}).get("hunks") or []
+    if not hunks:
+        return True
+    for hunk in hunks:
+        for line in hunk["lines"]:
+            if line.startswith("-"):
+                return True
+    return False
+
+
+_TEST_SUFFIX = re.compile(r"^(.+?)(?:\.test|_test|\.spec)?\.[^.]+$")
+
+
+def _test_stem(path):
+    base = os.path.basename(path)
+    match = _TEST_SUFFIX.match(base)
+    stem = match.group(1) if match else base
+    return re.sub(r"^test[_-]", "", stem)
+
+
+def deleted_test_has_same_topic_replacement(test_path, added_paths, test_path_regexes):
+    """Rule (a2): a deleted test is exempt when the same range ADDS a test file on
+    the same topic (its stem equals the deleted stem or extends it, such as
+    foo-gc.test.sh -> foo-gc-removed.test.sh). A range with no such replacement
+    still reports (N4 shape)."""
+    stem = _test_stem(test_path)
+    if not stem:
+        return False
+    for path in added_paths:
+        if path == test_path or not matches_patterns(path, test_path_regexes):
+            continue
+        other = _test_stem(path)
+        if other == stem or re.match(re.escape(stem) + r"[-_.]", other):
+            return True
     return False
 
 
@@ -2115,7 +2161,14 @@ def main():
 
         # BL-0060 rule (c): a file ADDED in the range is not a surface touch.
         # Modified (M), deleted (D) and renamed (R*) surface files still are.
-        if matches_patterns(new_path, surface_path_regexes) and not status.startswith("A"):
+        # v3: a Modified surface file is a touch only when the diff deletes or
+        # rewrites an existing line; pure additions (new helper, extra export) are
+        # not. A file with no text hunks (binary) stays reported.
+        if (
+            matches_patterns(new_path, surface_path_regexes)
+            and not status.startswith("A")
+            and _surface_edit_removes_lines(status, files_diff.get(new_path))
+        ):
             if new_path not in surface_touches:
                 surface_touches.append(new_path)
             if config["mode"] == "block":
@@ -2146,6 +2199,12 @@ def main():
         if isinstance(entry.get("status"), str) and entry["status"].startswith("D")
     ]
 
+    added_paths = [
+        entry["new_path"]
+        for entry in raw_files
+        if isinstance(entry.get("status"), str) and entry["status"].startswith("A")
+    ]
+
     def _append_deleted_line(file_path, line_no, detail):
         violations.append(
             {
@@ -2173,6 +2232,8 @@ def main():
             if deleted_test_target_also_deleted(
                 old_path, lang_key, old_text, deleted_paths, test_path_regexes, surface_path_regexes
             ):
+                continue
+            if deleted_test_has_same_topic_replacement(old_path, added_paths, test_path_regexes):
                 continue
             for hunk in info.get("hunks", []):
                 old_current = hunk["old_start"]

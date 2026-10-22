@@ -1761,9 +1761,16 @@ const candidate = validation.D8_PUBLICATION_SHA;
 const candidateTree = require('child_process').execFileSync(
   'git', ['-C', root, 'rev-parse', `${candidate}^{tree}`], { encoding: 'utf8' },
 ).trim();
-const candidateRef = `refs/heads/${require('child_process').execFileSync(
-  'git', ['-C', root, 'symbolic-ref', '-q', '--short', 'HEAD'], { encoding: 'utf8' },
-).trim()}`;
+// RED at ed6b722b30858f0eb32332088864b8188d699a74: in a detached checkout
+// (`git checkout --detach`) symbolic-ref exits 1 and execFileSync threw, failing
+// this test; a detached HEAD has no branch name, so fall back to a fixed ref name.
+let candidateBranch;
+try {
+  candidateBranch = require('child_process').execFileSync(
+    'git', ['-C', root, 'symbolic-ref', '-q', '--short', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+  ).trim();
+} catch (error) { candidateBranch = 'detached-verification-candidate'; }
+const candidateRef = `refs/heads/${candidateBranch}`;
 const reportText = fs.readFileSync(path.join(root, '.autopilot/evidence/grok-implementer-ab.json'));
 const frozen = {
   candidate, candidateTree,

@@ -24,6 +24,9 @@
 # AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY unset, or set to 2 or true,
 # still sleeps. A one-phase copy of a small ledger exceeds 1500 ms, so case an
 # fails closed. The ungated reader is the production file itself.
+# RED at 3c4f0f5f58e91e5ebef13a2347450ae7b649f63a: repoBucket uses
+# basename(repoDir), so a worktree named lane-x gets its own bucket and a
+# second ledger-id; the main checkout bucket is not mainrepo-<hash>.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -1530,5 +1533,106 @@ unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
+
+# (ao) bucket is the main repository name, shared by a worktree.
+AO_MAIN="$TEST_TMP/mainrepo"
+AO_LANE="$TEST_TMP/lane-x"
+mkdir -p "$AO_MAIN"
+git -C "$AO_MAIN" init -q
+git -C "$AO_MAIN" -c user.name='Ledger Test' -c user.email='ledger-test@example.com' commit --allow-empty -q -m init
+git -C "$AO_MAIN" worktree add -q "$AO_LANE" HEAD
+LEDGER_AO="$TEST_TMP/ledger-ao"
+make_ledger "$LEDGER_AO" alpha "2026-04-05T01:02:03.000Z"
+ARCH_AO="$TEST_TMP/archive-ao"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AO"
+DEST_AO_MAIN=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_AO" "$AO_MAIN")
+assert_exit_code "$?" "0" "case ao: copy from main checkout"
+DEST_AO_LANE=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_AO" "$AO_LANE")
+assert_exit_code "$?" "0" "case ao: copy from worktree"
+AO_BUCKETS=$(find "$ARCH_AO" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%f\n' | sort)
+AO_BUCKET_N=$(printf '%s\n' "$AO_BUCKETS" | grep -c . || true)
+assert_eq "$AO_BUCKET_N" "1" "case ao: one bucket directory"
+AO_BUCKET=$(printf '%s\n' "$AO_BUCKETS" | head -1)
+case "$AO_BUCKET" in
+  mainrepo-*) echo "case ao: bucket starts with mainrepo- ($AO_BUCKET)"; __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "case ao: bucket does not start with mainrepo- ($AO_BUCKET)" ;;
+esac
+case "$AO_BUCKET" in
+  lane-*) fail "case ao: bucket starts with lane- ($AO_BUCKET)" ;;
+  *) echo "case ao: bucket does not start with lane-"; __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+assert_eq "$DEST_AO_LANE" "$DEST_AO_MAIN" "case ao: worktree reused the main ledger-id"
+AO_IDS=$(find "$ARCH_AO" -mindepth 3 -maxdepth 3 -type d -printf '%f\n' | sort -u | grep -c . || true)
+assert_eq "$AO_IDS" "1" "case ao: one ledger-id directory"
+
+# (ap) bare repository: something.git -> something-<hash>
+AP_BARE="$TEST_TMP/bare-parent/something.git"
+mkdir -p "$(dirname "$AP_BARE")"
+git init --bare -q "$AP_BARE"
+LEDGER_AP="$TEST_TMP/ledger-ap"
+make_ledger "$LEDGER_AP" alpha "2026-04-06T01:02:03.000Z"
+ARCH_AP="$TEST_TMP/archive-ap"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AP"
+DEST_AP=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$LIB" "$LEDGER_AP" "$AP_BARE")
+assert_exit_code "$?" "0" "case ap: copy from bare repo"
+AP_REL=${DEST_AP#"$ARCH_AP/"}
+AP_BUCKET=$(printf '%s' "$AP_REL" | cut -d/ -f1)
+case "$AP_BUCKET" in
+  something-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+    echo "case ap: bucket is something-<hash> ($AP_BUCKET)"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+    ;;
+  *) fail "case ap: bucket is not something-<hash> ($AP_BUCKET)" ;;
+esac
+
+# (aq) negative control: basename(repoDir) naming fails case ao.
+MUT_AQ="$TEST_TMP/mut-aq/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AQ")"
+cp "$LIB" "$MUT_AQ"
+python3 - "$MUT_AQ" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = """function bucketNameFromIdentity(id, repoDir) {
+  if (typeof id === 'string' && id.startsWith('git-common-dir:')) {
+    const common = id.slice('git-common-dir:'.length);
+    const base = path.basename(common);
+    if (base === '.git') return path.basename(path.dirname(common));
+    return base.endsWith('.git') ? base.slice(0, -4) : base;
+  }
+  return path.basename(path.resolve(repoDir));
+}"""
+new = """function bucketNameFromIdentity(id, repoDir) {
+  return path.basename(path.resolve(repoDir));
+}"""
+if old not in t:
+    sys.stderr.write("case aq: bucketNameFromIdentity missing; cannot force basename(repoDir)\n")
+    sys.exit(0)
+p.write_text(t.replace(old, new, 1))
+PY
+assert_exit_code "$?" "0" "case aq: basename(repoDir) temp copy"
+if ! grep -q 'return path.basename(path.resolve(repoDir));' "$MUT_AQ"; then
+  fail "case aq: mutant did not switch to basename(repoDir)"
+fi
+ARCH_AQ="$TEST_TMP/archive-aq"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_AQ"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+DEST_AQ_MAIN=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$MUT_AQ" "$LEDGER_AO" "$AO_MAIN")
+DEST_AQ_LANE=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}).dest);' "$MUT_AQ" "$LEDGER_AO" "$AO_LANE")
+AQ_BUCKETS=$(find "$ARCH_AQ" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%f\n' | sort)
+AQ_BUCKET_N=$(printf '%s\n' "$AQ_BUCKETS" | grep -c . || true)
+AQ_LANE=0
+printf '%s\n' "$AQ_BUCKETS" | grep -q '^lane-' && AQ_LANE=1
+if [ "$AQ_BUCKET_N" -ge 2 ] || [ "$AQ_LANE" = 1 ]; then
+  echo "case aq: red-on-broken (buckets=$AQ_BUCKET_N lane_prefix=$AQ_LANE)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "case aq: basename(repoDir) lib still produced one non-lane bucket ($AQ_BUCKETS) (negative control is blind)"
+fi
+if [ "$DEST_AQ_MAIN" = "$DEST_AQ_LANE" ] && [ "$AQ_BUCKET_N" = 1 ] && [ "$AQ_LANE" = 0 ]; then
+  fail "case aq: broken lib reused one ledger-id in one mainrepo bucket"
+fi
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 
 finalize_test

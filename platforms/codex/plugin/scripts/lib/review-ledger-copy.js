@@ -126,11 +126,26 @@ function resolveArchiveConfig(home) {
   };
 }
 
+// Main checkout name from repoIdentity (`git-common-dir:<realpath>`). A common
+// dir named .git uses its parent (the working repository). Anything else,
+// including a bare repo, uses that directory's basename with one trailing
+// .git removed. When identity is missing, repoBucket still throws; a value
+// that is not git-common-dir keeps the repoDir basename.
+function bucketNameFromIdentity(id, repoDir) {
+  if (typeof id === 'string' && id.startsWith('git-common-dir:')) {
+    const common = id.slice('git-common-dir:'.length);
+    const base = path.basename(common);
+    if (base === '.git') return path.basename(path.dirname(common));
+    return base.endsWith('.git') ? base.slice(0, -4) : base;
+  }
+  return path.basename(path.resolve(repoDir));
+}
+
 function repoBucket(repoDir) {
   const id = repoIdentity(repoDir);
   if (!id) throw new Error(`repo identity unavailable for ${repoDir}`);
   const prefix = crypto.createHash('sha1').update(id).digest('hex').slice(0, 8);
-  return `${path.basename(path.resolve(repoDir))}-${prefix}`;
+  return `${bucketNameFromIdentity(id, repoDir)}-${prefix}`;
 }
 
 // A phase token from --phase or copyLedger's phases list. Reject before any

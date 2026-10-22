@@ -37,6 +37,12 @@
 # with no refusal line (be/bf/bg). The prefix-check mutant cannot be applied
 # because pruneTargetAllowed is absent (bh). status --phase x exits 0 (bj).
 # import --phase of a symlink phase exits 1 and copies no review-good (bk).
+# RED at 71eb5b4ffb1bd6d1c5522e920efc59b66cdbb464: rotate and prune take only the bucket lock. A copy that
+# holds <ledgerId>.lock and sleeps before writing review-beta loses that phase:
+# rotate tars and removes the old month, and review-beta is absent from the tar.
+# A planted <month>.tar.gz.tmp-123 is left behind. A *.lock directory under the
+# month is stored in the tar. pruneArchive calls fs.rmSync with no in-place
+# pruneTargetAllowed check in front of it.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -2120,5 +2126,197 @@ unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
 unset AUTOPILOT_TEST_NOW
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_PRUNE_TARGET
+
+# (bm) rotate waits on every per-ledger lock in the month. A copy adds
+# review-beta to an old month (the ledger keeps the month of its first collect)
+# while that lock is held. The tar contains the new phase file.
+# RED at 71eb5b4ffb1bd6d1c5522e920efc59b66cdbb464: case bm: red-on-broken (tar missing review-beta) when rotate
+# does not acquire <ledgerId>.lock; with the locks, the same race includes it.
+LEDGER_BM="$TEST_TMP/ledger-bm"
+make_ledger "$LEDGER_BM" alpha "2026-10-22T03:04:05.000Z"
+ARCH_BM="$TEST_TMP/archive-bm"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BM"
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1
+export AUTOPILOT_TEST_NOW=2026-10-22
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE=true
+node "$CLI" import --ledger "$LEDGER_BM" --repo "$REPO" >/dev/null
+BM_MONTH=$(find "$ARCH_BM" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+test -n "$BM_MONTH"
+BM_BUCKET=$(dirname "$BM_MONTH")
+mv "$BM_MONTH" "$BM_BUCKET/2026-07"
+make_ledger "$LEDGER_BM" beta "2026-10-22T04:05:06.000Z"
+BM_COPY_DONE="$TEST_TMP/bm-copy.done"
+rm -f "$BM_COPY_DONE"
+AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1 \
+  AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=1500 \
+  node -e '
+    const fs = require("fs");
+    const lib = require(process.argv[1]);
+    lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["alpha", "beta"] });
+    fs.writeFileSync(process.argv[4], "done");
+  ' "$LIB" "$LEDGER_BM" "$REPO" "$BM_COPY_DONE" &
+BM_COPY_PID=$!
+BM_LOCK=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40; do
+  BM_LOCK=$(find "$BM_BUCKET/2026-07" -mindepth 1 -maxdepth 1 -type d -name '*.lock' ! -name '.ledger-id.lock' 2>/dev/null | head -1 || true)
+  if [ -n "$BM_LOCK" ]; then break; fi
+  sleep 0.05
+done
+if [ -z "$BM_LOCK" ]; then
+  wait "$BM_COPY_PID" || true
+  fail "case bm: copy did not take the per-ledger lock"
+else
+  if [ -e "$BM_BUCKET/2026-07"/*/review-beta ]; then
+    wait "$BM_COPY_PID" || true
+    fail "case bm: review-beta existed before rotate started (race window missed)"
+  fi
+  node "$CLI" rotate >"$TEST_TMP/bm.out" 2>"$TEST_TMP/bm.err"
+  BM_ROT_RC=$?
+  wait "$BM_COPY_PID"
+  BM_COPY_RC=$?
+  assert_exit_code "$BM_ROT_RC" "0" "case bm: rotate exits 0"
+  assert_exit_code "$BM_COPY_RC" "0" "case bm: delayed copy exits 0"
+  test -f "$BM_BUCKET/2026-07.tar.gz"
+  assert_exit_code "$?" "0" "case bm: old month tar exists"
+  tar -tzf "$BM_BUCKET/2026-07.tar.gz" | grep -F 'review-beta/g1/findings.json' >/dev/null
+  assert_exit_code "$?" "0" "case bm: tar contains the phase the copy wrote"
+fi
+unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
+
+# Negative control: rotate that skips per-ledger locks tars during the delay,
+# before review-beta exists, then removes the month. The phase is not in the tar.
+TAR_LIB="$REPO_ROOT/scripts/lib/review-ledger-tar.js"
+MUT_BM="$TEST_TMP/mut-bm"
+mkdir -p "$MUT_BM/scripts/lib"
+cp "$CLI" "$MUT_BM/scripts/review-ledger-archive.js"
+cp "$LIB" "$MUT_BM/scripts/lib/review-ledger-copy.js"
+cp "$TAR_LIB" "$MUT_BM/scripts/lib/review-ledger-tar.js"
+python3 - "$MUT_BM/scripts/lib/review-ledger-tar.js" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "function withLedgerLocks(lockDirs, fn) {\n  const sorted = lockDirs.slice().sort();"
+new = "function withLedgerLocks(lockDirs, fn) {\n  return fn();\n  const sorted = lockDirs.slice().sort();"
+if old not in t:
+    sys.stderr.write("case bm: withLedgerLocks missing\n")
+    sys.exit(2)
+p.write_text(t.replace(old, new, 1))
+PY
+assert_exit_code "$?" "0" "case bm: lock-skip mutant applied"
+LEDGER_BM2="$TEST_TMP/ledger-bm-neg"
+make_ledger "$LEDGER_BM2" alpha "2026-10-22T03:04:05.000Z"
+ARCH_BM2="$TEST_TMP/archive-bm-neg"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BM2"
+node "$CLI" import --ledger "$LEDGER_BM2" --repo "$REPO" >/dev/null
+BM2_MONTH=$(find "$ARCH_BM2" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+BM2_BUCKET=$(dirname "$BM2_MONTH")
+mv "$BM2_MONTH" "$BM2_BUCKET/2026-07"
+make_ledger "$LEDGER_BM2" beta "2026-10-22T04:05:06.000Z"
+BM2_DONE="$TEST_TMP/bm2-copy.done"
+rm -f "$BM2_DONE"
+AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1 \
+  AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=1500 \
+  node -e '
+    const fs = require("fs");
+    const lib = require(process.argv[1]);
+    lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["alpha", "beta"] });
+    fs.writeFileSync(process.argv[4], "done");
+  ' "$LIB" "$LEDGER_BM2" "$REPO" "$BM2_DONE" &
+BM2_PID=$!
+BM2_LOCK=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40; do
+  BM2_LOCK=$(find "$BM2_BUCKET/2026-07" -mindepth 1 -maxdepth 1 -type d -name '*.lock' ! -name '.ledger-id.lock' 2>/dev/null | head -1 || true)
+  if [ -n "$BM2_LOCK" ]; then break; fi
+  sleep 0.05
+done
+if [ -z "$BM2_LOCK" ]; then
+  wait "$BM2_PID" || true
+  fail "case bm: negative control copy did not take the per-ledger lock"
+else
+  node "$MUT_BM/scripts/review-ledger-archive.js" rotate >"$TEST_TMP/bm-neg.out" 2>"$TEST_TMP/bm-neg.err"
+  BM2_ROT_RC=$?
+  wait "$BM2_PID" || true
+  BM2_HIT=0
+  if [ -f "$BM2_BUCKET/2026-07.tar.gz" ] && tar -tzf "$BM2_BUCKET/2026-07.tar.gz" | grep -F 'review-beta/g1/findings.json' >/dev/null; then
+    BM2_HIT=1
+  fi
+  if [ "$BM2_ROT_RC" = 0 ] && [ "$BM2_HIT" = 1 ]; then
+    fail "case bm: rotate without per-ledger locks still archived review-beta (negative control is blind)"
+  else
+    echo "case bm: red-on-broken (tar missing review-beta, rotate rc=$BM2_ROT_RC)"
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+fi
+unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
+
+# (bn) a leftover <month>.tar.gz.tmp-* is removed. A *.lock directory is not in
+# the tar and does not break the list-back count.
+LEDGER_BN="$TEST_TMP/ledger-bn"
+make_ledger "$LEDGER_BN" alpha "2026-10-22T03:04:05.000Z"
+ARCH_BN="$TEST_TMP/archive-bn"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$ARCH_BN"
+node "$CLI" import --ledger "$LEDGER_BN" --repo "$REPO" >/dev/null
+BN_MONTH=$(find "$ARCH_BN" -mindepth 2 -maxdepth 2 -type d -name '2026-10' | head -1)
+BN_BUCKET=$(dirname "$BN_MONTH")
+mv "$BN_MONTH" "$BN_BUCKET/2026-07"
+BN_LEDGER=$(find "$BN_BUCKET/2026-07" -mindepth 1 -maxdepth 1 -type d ! -name '*.lock' | head -1)
+mkdir -p "$BN_LEDGER.lock"
+printf '%s\n' 'lock-body' > "$BN_LEDGER.lock/owner"
+# Stale so rotate can take the lock instead of waiting out a live holder.
+touch -d '40 seconds ago' "$BN_LEDGER.lock" "$BN_LEDGER.lock/owner"
+printf '%s\n' 'stale' > "$BN_BUCKET/2026-07.tar.gz.tmp-123"
+printf '%s\n' 'other' > "$BN_BUCKET/2026-08.tar.gz.tmp-123"
+node "$CLI" rotate >"$TEST_TMP/bn.out" 2>"$TEST_TMP/bn.err"
+assert_exit_code "$?" "0" "case bn: rotate exits 0"
+assert_contains "$(cat "$TEST_TMP/bn.out")" "rotated " "case bn: month rotated"
+test ! -e "$BN_BUCKET/2026-07.tar.gz.tmp-123"
+assert_exit_code "$?" "0" "case bn: stale tmp tar of that month is gone"
+test -f "$BN_BUCKET/2026-08.tar.gz.tmp-123"
+assert_exit_code "$?" "0" "case bn: another month tmp tar is left"
+test -f "$BN_BUCKET/2026-07.tar.gz"
+assert_exit_code "$?" "0" "case bn: tar.gz exists (count matched)"
+if tar -tzf "$BN_BUCKET/2026-07.tar.gz" | grep -F '.lock' >/dev/null; then
+  fail "case bn: tar listing contains a .lock path"
+else
+  echo "case bn: tar listing has no .lock path"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+# (bo) in-place prune check refuses a symlink and a sibling path. The execute
+# path calls that check before rmSync.
+BO_ARCH="$TEST_TMP/archive-bo"
+BO_SIB="${BO_ARCH}-evil"
+mkdir -p "$BO_ARCH/bucket" "$BO_SIB"
+ln -s "$BO_SIB" "$BO_ARCH/link-out"
+node -e '
+  const lib = require(process.argv[1]);
+  const arch = process.argv[2];
+  const sib = process.argv[3];
+  const link = process.argv[4];
+  if (typeof lib.pruneTargetAllowedChecked !== "function") process.exit(2);
+  if (lib.pruneTargetAllowedChecked(arch, link) !== false) process.exit(3);
+  if (lib.pruneTargetAllowedChecked(arch, sib) !== false) process.exit(4);
+  if (lib.pruneTargetAllowedChecked(arch, arch + "/bucket") !== true) process.exit(5);
+' "$TAR_LIB" "$BO_ARCH" "$BO_SIB" "$BO_ARCH/link-out"
+assert_exit_code "$?" "0" "case bo: in-place check refuses symlink and sibling"
+python3 - "$TAR_LIB" <<'PY'
+import pathlib, sys
+t = pathlib.Path(sys.argv[1]).read_text()
+start = t.find("function pruneArchive")
+body = t[start:]
+call = body.find("pruneTargetAllowed(")
+rm = body.find("fs.rmSync")
+if call < 0 or rm < 0 or call > rm:
+    sys.stderr.write("case bo: pruneTargetAllowed is not called before rmSync\n")
+    sys.exit(2)
+PY
+assert_exit_code "$?" "0" "case bo: execute path checks the target before rmSync"
+
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW
+unset AUTOPILOT_TEST_NOW
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 
 finalize_test

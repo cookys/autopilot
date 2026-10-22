@@ -82,6 +82,9 @@ function countRegularFiles(root) {
     try { st = fs.lstatSync(cur); } catch (_e) { continue; }
     if (st.isSymbolicLink()) continue;
     if (st.isDirectory()) {
+      // Lock directories are not archive payload. Skip the whole tree so the
+      // source count matches a tar built with --exclude=*.lock.
+      if (path.basename(cur).endsWith('.lock')) continue;
       let names = [];
       try { names = fs.readdirSync(cur); } catch (_e) { continue; }
       for (const name of names) stack.push(path.join(cur, name));
@@ -157,6 +160,47 @@ function listPruneCandidates(archiveDir, now, n) {
   return out;
 }
 
+// Per-ledger locks live beside the ledger-id directory: <ledgerId>.lock.
+// Derive one from every real ledger directory, and include a lock directory
+// that is already present. Sorted full paths, so nested withLedgerLock calls
+// always take the same order.
+function ledgerLockPaths(monthDir) {
+  let names = [];
+  try { names = fs.readdirSync(monthDir); } catch (_e) { return []; }
+  const locks = new Set();
+  for (const name of names) {
+    if (name.startsWith('.')) continue;
+    const child = path.join(monthDir, name);
+    if (!isRealDir(child)) continue;
+    if (name.endsWith('.lock')) locks.add(child);
+    else locks.add(path.join(monthDir, `${name}.lock`));
+  }
+  return Array.from(locks).sort();
+}
+
+function withLedgerLocks(lockDirs, fn) {
+  const sorted = lockDirs.slice().sort();
+  const step = (i) => {
+    if (i >= sorted.length) return fn();
+    return withLedgerLock(sorted[i], () => step(i + 1));
+  };
+  return step(0);
+}
+
+function clearStaleTmpTars(bucketDir, month) {
+  let names = [];
+  try { names = fs.readdirSync(bucketDir); } catch (_e) { return; }
+  const prefix = `${month}.tar.gz.tmp-`;
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    const p = path.join(bucketDir, name);
+    let st;
+    try { st = fs.lstatSync(p); } catch (_e) { continue; }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    try { fs.unlinkSync(p); } catch (_e) { /* absent */ }
+  }
+}
+
 function bucketDirForPrune(archiveDir, targetPath) {
   let rootReal;
   try { rootReal = fs.realpathSync(archiveDir); } catch (_e) { return null; }
@@ -202,12 +246,39 @@ function pruneArchive(opts) {
       groups.get(bucketDir).push(t);
     }
   }
+  // Re-check immediately before each delete. A target that became a symlink
+  // or left the archive after the up-front pass is a refusal: stop, delete
+  // nothing further. Month directories also hold every per-ledger lock for
+  // that month until the delete finishes. Tar files take no extra lock.
+  const removeChecked = (t) => {
+    const locks = monthNameOk(path.basename(t)) && isRealDir(t) ? ledgerLockPaths(t) : [];
+    let refusal = null;
+    withLedgerLocks(locks, () => {
+      if (!pruneTargetAllowed(o.dir, t)) {
+        refusal = `review-ledger-archive: refused ${t} (${pruneTargetRefusal(o.dir, t) || 'not under archive'})`;
+        return;
+      }
+      fs.rmSync(t, { recursive: true });
+    });
+    return refusal;
+  };
+  let refusal = null;
   for (const bucketDir of Array.from(groups.keys()).sort()) {
+    if (refusal) break;
     withLedgerLock(path.join(bucketDir, '.ledger-id.lock'), () => {
-      for (const t of groups.get(bucketDir)) fs.rmSync(t, { recursive: true });
+      for (const t of groups.get(bucketDir)) {
+        if (refusal) return;
+        refusal = removeChecked(t);
+      }
     });
   }
-  for (const t of loose) fs.rmSync(t, { recursive: true });
+  if (!refusal) {
+    for (const t of loose) {
+      refusal = removeChecked(t);
+      if (refusal) break;
+    }
+  }
+  if (refusal) return { refusals: [refusal], lines: [] };
   return { refusals: [], lines: accepted };
 }
 
@@ -239,39 +310,42 @@ function rotateArchive(opts) {
           continue;
         }
         const monthDir = path.join(bucketDir, month);
-        const finalName = path.join(bucketDir, `${month}.tar.gz`);
-        const tmp = path.join(bucketDir, `${month}.tar.gz.tmp-${process.pid}`);
-        try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
-        const created = runTar(['-czf', tmp, '-C', bucketDir, month]);
-        if (created.missing) {
-          tarMissing = true;
-          warnings.push('review-ledger-archive: warning: tar is not available');
+        withLedgerLocks(ledgerLockPaths(monthDir), () => {
+          clearStaleTmpTars(bucketDir, month);
+          const finalName = path.join(bucketDir, `${month}.tar.gz`);
+          const tmp = path.join(bucketDir, `${month}.tar.gz.tmp-${process.pid}`);
           try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
-          lines.push(`warned ${label}`);
-          warned += 1;
-          continue;
-        }
-        if (!created.ok) {
-          try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
-          warnings.push(`review-ledger-archive: warning: tar failed for ${label}`);
-          lines.push(`warned ${label}`);
-          warned += 1;
-          continue;
-        }
-        const listedRun = runTar(['-tzf', tmp]);
-        const sourceCount = countRegularFiles(monthDir);
-        const listed = listedRun.ok ? countTarRegular(listedRun.stdout) : -1;
-        if (listed !== sourceCount) {
-          try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
-          warnings.push(`review-ledger-archive: warning: tar list count mismatch for ${label}`);
-          lines.push(`warned ${label}`);
-          warned += 1;
-          continue;
-        }
-        fs.renameSync(tmp, finalName);
-        if (remove) fs.rmSync(monthDir, { recursive: true, force: true });
-        lines.push(`rotated ${label}`);
-        rotated += 1;
+          const created = runTar(['--exclude=*.lock', '-czf', tmp, '-C', bucketDir, month]);
+          if (created.missing) {
+            tarMissing = true;
+            warnings.push('review-ledger-archive: warning: tar is not available');
+            try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
+            lines.push(`warned ${label}`);
+            warned += 1;
+            return;
+          }
+          if (!created.ok) {
+            try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
+            warnings.push(`review-ledger-archive: warning: tar failed for ${label}`);
+            lines.push(`warned ${label}`);
+            warned += 1;
+            return;
+          }
+          const listedRun = runTar(['-tzf', tmp]);
+          const sourceCount = countRegularFiles(monthDir);
+          const listed = listedRun.ok ? countTarRegular(listedRun.stdout) : -1;
+          if (listed !== sourceCount) {
+            try { fs.unlinkSync(tmp); } catch (_e) { /* absent */ }
+            warnings.push(`review-ledger-archive: warning: tar list count mismatch for ${label}`);
+            lines.push(`warned ${label}`);
+            warned += 1;
+            return;
+          }
+          fs.renameSync(tmp, finalName);
+          if (remove) fs.rmSync(monthDir, { recursive: true, force: true });
+          lines.push(`rotated ${label}`);
+          rotated += 1;
+        });
       }
     });
   });
@@ -284,5 +358,6 @@ module.exports = {
   rotateArchive,
   monthPastAge,
   pruneTargetAllowed,
+  pruneTargetAllowedChecked,
   pruneArchive,
 };

@@ -224,15 +224,15 @@ Items in 4.6. Also: changing how `scripts/hetero-review-loop.js` chooses the sou
 
 ## 8. Open questions
 
-Only the owner can answer these. Recommendations are in section 4. They are not decided.
+Decided 2026-10-22 (d-3d5e0503): owner accepted all recommendations.
 
-- `include_diff`: yes or no? Plan recommends no (default false).
-- After compress, keep the tar only, or keep both? Plan recommends both until `rotate_remove_source` is set.
-- Delete ever? Plan recommends only `prune --execute`, and never by default.
-- Reminder location: report footer plus status, or also SessionStart later?
-- Legacy copy: leave it (A), or import into layout A and delete the old directory by hand (B)?
-- Secret scan before copy: yes or no? Plan recommends no.
-- Suggested archive path `~/.autopilot/review-ledger-archive`: accept as the value the owner sets, still not a default?
+- `include_diff`: no. `diff.txt` is not stored; `include_diff` defaults to false.
+- After compress: keep both the tar and the original directory (`rotate_remove_source` stays false until the owner sets it).
+- Deletion: never automatic; only the explicit `prune` subcommand with `--execute`.
+- Reminder location: report footer and `status` subcommand only; no SessionStart hook.
+- Legacy manual copy: left in place (option A); P2 reads the legacy flat layout.
+- Secret scan before copy: no. Privacy control is directory mode 0700 and file mode 0600.
+- Suggested archive path `~/.autopilot/review-ledger-archive` stays a suggested value the owner sets in their own config; it is not a default.
 
 ## Review log
 

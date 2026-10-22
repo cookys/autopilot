@@ -170,11 +170,11 @@ function parsePrices(body) {
     preflightJsonSource(body, 'prices document');
     doc = JSON.parse(body);
   } catch (err) {
-    // 2^53 (9007199254740992) is exactly representable, so JSON.parse keeps it, but the
-    // preflight rejects that literal as an unsafe integer before a field check can name
-    // rows[i].<field>. Only that literal falls through to validatePrices. Every other
-    // preflight rejection (duplicate keys, other lossy literals) keeps its original error.
-    if (typeof err.message === 'string' && err.message.includes('9007199254740992')) {
+    // The preflight rejects an unsafe integer literal (2^53 and above, UNSUPPORTED_JSON_NUMBER)
+    // before a field check can name rows[i].<field>. Any such integer literal falls through to
+    // validatePrices. Every other preflight rejection (duplicate keys, fractional lossy
+    // literals) keeps its original error.
+    if (err && err.code === 'UNSUPPORTED_JSON_NUMBER' && /lossy numeric literal "-?\d+"/.test(String(err.message))) {
       let parsed;
       try {
         parsed = JSON.parse(body);

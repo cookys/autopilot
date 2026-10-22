@@ -282,6 +282,15 @@ fs.writeFileSync(process.argv[1], JSON.stringify(obj)+"\n");
 # meaningful. This function intentionally writes only under $TEST_TMP — never
 # into hooks/tests/fixtures/ — so the suite never dirties the repo working
 # tree.
+# BL-0249: the no-row refusal now names the seat, host and next step, so the
+# frozen PRE_SHA build and the current build legitimately differ in that one
+# message tail. Both sides are normalised to the same prefix before cmp; every
+# other byte must still match.
+norm_noqual_msg() {
+  sed -E 's/engine: no qualified scorecard row for [^"]*/engine: no qualified scorecard row <detail>/' "$1"
+}
+cmp_norm() { cmp -s <(norm_noqual_msg "$1") <(norm_noqual_msg "$2"); }
+
 assert_zero_pin_case() {
   local name="$1"
   shift
@@ -308,7 +317,7 @@ assert_zero_pin_case() {
   run_check "$cur_out" "${cur_cmd[@]}"; cur_ec=$?
 
   assert_eq "$cur_ec" "$pre_ec" "KR2 $name exit codes must match (pre=$pre_ec cur=$cur_ec)"
-  if cmp -s "$pre_out" "$cur_out"; then
+  if cmp_norm "$pre_out" "$cur_out"; then
     assert_eq "1" "1" "KR2 $name byte-identical"
   else
     fail "KR2 $name stdout not byte-identical to pre-change baseline"
@@ -519,7 +528,7 @@ run_check "$KR1_OMIT_PRE" \
 run_check "$KR1_OMIT_CUR" \
   env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/empty" ENGINE_CAPABILITY_DIR="$STORE_BASE/empty" \
   node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json
-if cmp -s "$KR1_OMIT_PRE" "$KR1_OMIT_CUR"; then
+if cmp_norm "$KR1_OMIT_PRE" "$KR1_OMIT_CUR"; then
   assert_eq "1" "1" "KR1 omit --resolved-live matches pre-change refusal bytes"
 else
   fail "KR1 omit --resolved-live diverged from pre-change"

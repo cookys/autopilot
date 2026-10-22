@@ -280,7 +280,7 @@ assert_not_contains "$FFT_OUT" "frozen surface was modified" "fresh digests rais
 EMPTY_SCORES="$TEST_TMP/scores-empty"; mkdir -p "$EMPTY_SCORES"
 KR6_OUT=$(ENGINE_SCORECARD_DIR="$EMPTY_SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/base.json" --repo "$MINI_REPO" --json 2>&1 || true)
 assert_contains "$KR6_OUT" "no qualified scorecard row" "no evidence + no override refused"
-assert_contains "$KR6_OUT" "qualification-override is the only evidence-free path" "the only bypass is named"
+assert_contains "$KR6_OUT" "--qualification-override, the only evidence-free path" "the only bypass is named"
 cat > "$TEST_TMP/override.json" <<'JSON'
 {"schema":1,"overrides":[{"engine":"gpt-5.3-codex-spark","runner":"codex","role":"implementer","reason":"first-use audition, operator accepts risk","operator":"cookys","expires":"2099-01-01"}]}
 JSON

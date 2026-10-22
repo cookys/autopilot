@@ -361,7 +361,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-23
 - **Origin**: self
-- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免，但最新一次回放的誤報率仍有 83%，要降到 5% 以下才考慮翻成攔截。
+- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免。最新量測（tintegrity 單元報告，未重放）誤報率 83%；最近一次正式重放是 v2 的 93.8%。要降到 5% 以下才考慮翻成攔截。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
 - **Trigger**: a re-replay of the same seed and 60 merges shows under 5% false positives, or someone proposes flipping mode to block
 - **Trigger-Type**: ready

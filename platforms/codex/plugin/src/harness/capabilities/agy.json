@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-08-03T22:31:50.000Z",
-  "verified_at": "2026-08-03T22:31:50.000Z",
-  "expires_at": "2026-08-17T22:31:50.000Z",
+  "last_checked_at": "2026-10-22T17:48:36.000Z",
+  "verified_at": "2026-10-22T17:48:36.000Z",
+  "expires_at": "2026-11-05T17:48:36.000Z",
   "evidence": {
     "source": "local-probe",
     "command": "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
@@ -15,11 +15,11 @@
   "capabilities": {
     "read_only_dispatch": "verified",
     "skill_import": "verified",
-    "agent_import": "verified",
-    "hooks": "unverified",
+    "agent_import": "unavailable",
+    "hooks": "warning",
     "structured_output": "verified",
     "mutation_dispatch": "unverified",
-    "blocking_gate": "unverified"
+    "blocking_gate": "warning"
   },
   "notes": [
     "agy plugin list showed autopilot imported with skills and agents, not hooks.",
@@ -29,6 +29,9 @@
     "2026-10-21, agy 1.4.4: whether flash resolves to gemini-3.8-flash is UNVERIFIABLE. The agy log shows no subagent model, and the invoke_subagent call recorded in the transcript carried Model \"inherit\". agy models lists gemini-4-argon-low, gemini-4-argon-medium, gemini-4-argon-high, gemini-3.8-flash-low, gemini-3.8-flash-medium, gemini-3.8-flash-high, claude-opus-5-5-*, claude-sonnet-5-5-*, and gpt-oss-120b-medium. --agent NAME on the main session did not change the main model label (stayed Gemini 4 Argon (Medium)), while --model gemini-3.8-flash-low changed it to Gemini 3.8 Flash (Low).",
     "2026-10-21: peer claim, not reproduced locally (c4140 argon): commandExecutionPolicy sandbox does not block GPU. Recorded as peer measured, not reproduced locally; not a capability.",
     "2026-10-21: UNVERIFIED peer claims, not tested locally: compaction thresholds hard-coded for gemini-4-argon, and settings.json contextWindow accepting only 256K, 512K, or 900K.",
-    "2026-10-23 re-probe observed agy 1.4.5 (table says 1.4.4). Confirmed still present in --help: -p, --model, --output-format, --print-timeout, --dangerously-skip-permissions, --effort, --input-format. The hardcoded model gemini-3.6-flash-high was rejected by 1.4.5 and the probe now resolves the alias live. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
+    "2026-10-23 re-probe observed agy 1.4.5 (table says 1.4.4). Confirmed still present in --help: -p, --model, --output-format, --print-timeout, --dangerously-skip-permissions, --effort, --input-format. The hardcoded model gemini-3.6-flash-high was rejected by 1.4.5 and the probe now resolves the alias live. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results.",
+    "2026-10-23 deep probe on agy 1.4.5 (gemini-flash-low resolved to gemini-3.8-flash-low): structured_output and read_only_dispatch re-verified (`agy -p --output-format json` rc=0, status SUCCESS, numeric usage; hdeep evidence agy/structured.json, alias.txt); skill_import re-verified (`agy plugin install` processed 30 skills, plugin list shows 30, model answered SKILL_YES; agy/install.txt, list.txt, skill.json).",
+    "agent_import FAILED (schema has no `failed` value, so recorded as unavailable): `agy plugin validate --json` reports 3 errors; agents/{debugger,planner,reviewer}.md carry `tools: Read, G...` as a string but agy requires a list, and the loader skips the agent (agy/validate.txt, install.txt, agents.txt). Fixing agents/*.md is a separate change.",
+    "hooks warning: native agy hooks work (a throwaway repo with .agents/hooks.json saw SessionStart, PreToolUse, PostToolUse and Stop; agy/hooklog.txt), but autopilot's hooks/hooks.json is not loaded because agy reads plugin hooks only from hooks.json at the plugin root (validate warning). blocking_gate warning: a native PreToolUse hook returning {\"decision\":\"deny\"} blocked the call (agy/hooks.json) but autopilot has no wiring for it. mutation_dispatch stays unverified: a direct `--dangerously-skip-permissions` write passed (agy/mutation.json) but there is no dispatch-track evidence."
   ]
 }

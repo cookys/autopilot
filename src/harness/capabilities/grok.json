@@ -3,14 +3,14 @@
   "display_name": "Grok Build (CLI)",
   "kind": "cli",
   "status": "verified",
-  "harness_level": "H2",
-  "last_checked_at": "2026-10-16T14:30:00.000Z",
-  "verified_at": "2026-10-16T14:30:00.000Z",
-  "expires_at": "2026-11-15T14:30:00.000Z",
+  "harness_level": "H3",
+  "last_checked_at": "2026-10-22T18:36:57.000Z",
+  "verified_at": "2026-10-22T18:36:57.000Z",
+  "expires_at": "2026-11-21T18:36:57.000Z",
   "evidence": {
     "source": "local-probe",
-    "command": "grok --version plus exact grok-4.7/high single-turn JSON probe (grok --model grok-4.7 --effort high -p ... --output-format json), and four scripts/dispatch-author.sh runs (docs/plans/evidence/2026-10-16-strict-l5-policy-refresh)",
-    "result": "grok 1.0.60; headless JSON returned text plus numeric usage for grok-4.7/high (usage block with input/output/reasoning/total tokens, modelUsage key grok-4.7-build); dispatch-author --runner grok --model grok-4.7 --effort high returned status=authored"
+    "command": "2026-10-23 hdeep deep probe on grok 1.0.67 / grok-4.7 low: headless JSON, plugin install --trust in temp HOME, grok inspect, throwaway-repo .grok/hooks event log and PreToolUse deny (hdeep evidence grok/headless.json, plugin_install.txt, inspect.txt, hooklog.txt, hooks_mut3.json), mutation_dispatch_summary.json over 289 dispatch JSON, plus reap/cleanup suites reap-dispatch-worktrees, dispatch-status-reap, reap-dispatch-branches, worktree-reap",
+    "result": "grok 1.0.67: headless rc=0 text OK with numeric usage; plugin install rc=0; inspect lists 30 skills and 3 agents under plugin: autopilot; SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop hook events all fired with stdin JSON; PreToolUse exit 2 denied the call (blocked.txt absent, allowed.txt present); 289 dispatch JSON: committed 258, failure 29, no_op 1, dirty 1, contained and worktree 289/289, timeout_enforced 289/289, orphan_worktree 0; the four cleanup suites PASS (37, 28, 149, 32 assertions)"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
@@ -18,20 +18,21 @@
     "agents": "verified",
     "plugin_install": "verified",
     "headless_usage": "verified",
-    "hooks": "warning",
-    "mutation_dispatch": "unverified",
-    "blocking_gate": "unverified"
+    "hooks": "verified",
+    "mutation_dispatch": "verified",
+    "blocking_gate": "warning"
   },
   "notes": [
     "Host path: install the repo root as a Grok plugin (`grok plugin install <clone|git-url> --trust`). Root layout (plugin.json + skills/ + agents/ + hooks/) is enough — no platforms/grok package required.",
-    "Skills discovery verified: all 28 SKILL.md packages appear under plugin: autopilot in `grok inspect`.",
+    "Skills discovery verified: all 30 SKILL.md packages appear under plugin: autopilot in `grok inspect`.",
     "Agents discovery verified: debugger, planner, reviewer load as autopilot:* agents.",
-    "Hooks: Grok registers the plugin hooks.json (inspect shows file plugin: autopilot). Runtime parity with Claude Code (event coverage, CLAUDE_PLUGIN_ROOT expansion, opt-in gates via ~/.autopilot/config.json) is NOT claimed — capability stays `warning` until event-level smoke is recorded.",
-    "mutation_dispatch remains unverified at H2 (same bar as codex/agy). Hetero runner paths that shell out to grok are separate from promoting this host to H3.",
-    "blocking_gate (pre-push / stop-hook style enforcement on the Grok host) remains unverified.",
     "Working inside this clone also surfaces skills via .agents/skills as project skills; that path does not replace a user-level plugin install for other repos.",
     "Local installs record source_path; `grok plugin update` reports local as live. If skills look stale after a pull, re-run `grok plugin install <path> --trust` or update and re-check with `grok inspect`.",
     "2026-10-16 re-probe (BL-0198) re-ran only headless_usage and the authoring transport (read_only_dispatch path) on grok 1.0.60 / grok-4.7. skills, agents, plugin_install, hooks, mutation_dispatch and blocking_gate were NOT re-verified in this probe: they carry over from the 2026-08 grok 0.2.118 / grok-4.5 probe, and a full re-probe of every field is due before 3.0.0.",
-    "2026-10-23 re-probe observed grok 1.0.67 (table says 1.0.60). Flags still present: -p, --model, --effort, --output-format. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
+    "2026-10-23 re-probe observed grok 1.0.67 (table says 1.0.60). Flags still present: -p, --model, --effort, --output-format. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results.",
+    "hooks verified at the event layer only (2026-10-23, hdeep evidence grok/hooklog.txt, hooks_mut3.json): a throwaway repo with .grok/hooks/t.json under `--trust --always-approve` saw SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop with stdin JSON. NOT verified: execution of autopilot's own hooks/hooks.json at runtime (CLAUDE_PLUGIN_ROOT expansion, opt-in gates); `grok inspect` only proves it is registered.",
+    "blocking_gate recorded as warning, not verified (the schema forbids verified below H4); PreToolUse blocking itself was verified (2026-10-23, hdeep evidence grok/hooklog.txt): a hook exiting 2 produced 'Hook denied' and the target file was not created, while the control call was allowed. Stop-hook blocking was NOT tested.",
+    "mutation_dispatch verified (2026-10-23) from mutation_dispatch_summary.json over 289 existing dispatch JSON files: committed 258, failure 29, no_op 1, dirty 1; contained=true and worktree on 289/289; timeout_enforced 289/289 with 27 timed_out; orphan_worktree 0; error_category network_failed 8. Harness_level H3 also rests on cleanup suites reap-dispatch-worktrees (37), dispatch-status-reap (28), reap-dispatch-branches (149) and worktree-reap (32), all green on 2026-10-23.",
+    "2026-10-23 deep probe: headless_usage, read_only_dispatch, plugin_install, skills and agents were re-run on grok 1.0.67 (headless rc=0; hdeep evidence grok/headless.json, plugin_install.txt, inspect.txt). Under headless, default acceptEdits still refuses Write ('headless run cannot ask for approval'); `--always-approve` is needed."
   ]
 }

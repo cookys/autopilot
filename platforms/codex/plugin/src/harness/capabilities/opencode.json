@@ -4,9 +4,9 @@
   "kind": "cli",
   "status": "warning",
   "harness_level": "H2",
-  "last_checked_at": "2026-08-03T22:31:50.000Z",
-  "verified_at": "2026-08-03T22:31:50.000Z",
-  "expires_at": "2026-08-17T22:31:50.000Z",
+  "last_checked_at": "2026-10-22T17:53:58.000Z",
+  "verified_at": "2026-10-22T17:53:58.000Z",
+  "expires_at": "2026-11-05T17:53:58.000Z",
   "evidence": {
     "source": "local-version-and-isolated-debug-skill-probes",
     "command": "opencode --version; isolated opencode debug skill probes on installed 1.17.15 and latest 1.18.11",
@@ -27,6 +27,8 @@
     "Run the smoke probe after every OpenCode2 upgrade.",
     "The documented session hook is absent in next-15402 and event subscription during setup deadlocks activation, so session lifecycle and resume hints are disabled.",
     "Do not promote OpenCode hooks to blocking gates without fresh probe evidence.",
-    "2026-10-23 re-probe observed opencode 1.19.4 (table says 1.18.11). opencode run flags still present: --model, --format, --agent. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
+    "2026-10-23 re-probe observed opencode 1.19.4 (table says 1.18.11). opencode run flags still present: --model, --format, --agent. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results.",
+    "2026-10-23 deep probe on opencode 1.19.4: repo_skills and plugin_packaging re-verified by scripts/lib/opencode-discovery-probe.js (skill_count 31, plugin_registered true, loaded version 3.0.0-alpha.6; hdeep evidence opencode/discovery.json); tool_hooks and intent_capture re-verified by hooks/tests/opencode-v2-plugin.test.sh with AUTOPILOT_PLUGIN_SMOKE=1 (21 assertions PASS; opencode/suite-opencode-v2-plugin-v1half.txt). status stays warning because the debug-skill truncation item was not re-tested.",
+    "blocking_gate stays unverified and inconclusive: opencode-deny-all-live.test.sh failed its own positive controls (ctl-bash-open, ctl-mcp-open), so its deny results are not trustworthy, and it tests permission deny rather than plugin-hook blocking (opencode/suite-opencode-deny-all-live.txt)."
   ]
 }

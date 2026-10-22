@@ -300,6 +300,26 @@ function recordVerdict(ctx, attempts, outcome) {
   return writeJson(file, baseBody(ctx, attempts, result));
 }
 
+// BL-0246: persist WHY a seat's transport failed. The attempt artifact keeps result:null (so
+// it is never reusable as a verdict) and gains a bounded `failure` block from the
+// dispatch-review no_verdict emission: exit_code, stage and a stderr_tail already
+// secret-masked by the emitter and re-capped here. Fails open like every store function.
+const FAILURE_TAIL_MAX = 2000;
+function recordFailure(ctx, attempts, outcome) {
+  const file = seatFile(ctx);
+  if (!file || !outcome || typeof outcome !== 'object') return false;
+  const failure = {};
+  if (Number.isSafeInteger(outcome.exit_code)) failure.exit_code = outcome.exit_code;
+  if (typeof outcome.stage === 'string' && outcome.stage.length > 0) {
+    failure.stage = outcome.stage.slice(0, 64);
+  }
+  if (typeof outcome.stderr_tail === 'string') {
+    failure.stderr_tail = outcome.stderr_tail.slice(-FAILURE_TAIL_MAX);
+  }
+  if (Object.keys(failure).length === 0) return false;
+  return writeJson(file, { ...baseBody(ctx, attempts, null), failure });
+}
+
 // ---- Reaping -------------------------------------------------------------------------
 // A campaign's seat subtree is read only by a resume, so it is dead weight once the
 // campaign is terminal. Only the journal says which: a parked campaign (durable wait,
@@ -426,4 +446,5 @@ module.exports = {
   lookupSeat,
   recordAttempt,
   recordVerdict,
+  recordFailure,
 };

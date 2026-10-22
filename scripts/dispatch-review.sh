@@ -915,8 +915,27 @@ salvage_unratified_verdict() {
 # runner-branch transport-failure exit (the funnel — g1 disposition 77d5af59).
 # Each caller sets SALVAGE_CAPTURE to its runner-specific parse target first;
 # unset falls back to PARSE_INPUT, and pre-marker calls salvage nothing.
+# BL-0246: transport-failure detail for the seat record. A caller that has a runner exit code sets
+# NV_RC, NV_STAGE ("cleanroom" | "runner") and NV_STDERR_FILE before emit_no_verdict; the emission
+# then carries exit_code, stage and a SECRET-MASKED stderr_tail (last 20 lines, 2000 bytes).
+# Absent when unset, so every other no_verdict keeps its shape.
+nv_stderr_tail() {
+  local f="$1"
+  [ -n "$f" ] && [ -r "$f" ] || return 0
+  tail -n 20 -- "$f" 2>/dev/null | tail -c 2000 | LC_ALL=C sed -E \
+    -e 's/(sk-|sk_|ghp_|gho_|xox[abprs]-|AIza|AKIA)[A-Za-z0-9_-]{8,}/[REDACTED]/g' \
+    -e 's/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]*)?/[REDACTED]/g' \
+    -e 's/([Bb]earer|[Bb]asic)[[:space:]]+[A-Za-z0-9._~+\/=-]{8,}/\1 [REDACTED]/g' \
+    -e 's/((api[_-]?key|token|secret|password|passwd|authorization|credential|refresh_token|access_token)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?)[^[:space:]"'"'"',}]+/\1[REDACTED]/gI' \
+    -e 's/[A-Za-z0-9+\/_-]{40,}/[REDACTED]/g'
+}
+
 emit_no_verdict() {
-  local reason="$1" format_reject_json=""
+  local reason="$1" format_reject_json="" nv_json="" nv_tail=""
+  if [ -n "${NV_RC:-}" ]; then
+    nv_tail="$(nv_stderr_tail "${NV_STDERR_FILE:-}")"
+    nv_json=", \"exit_code\": ${NV_RC}, \"stage\": \"$(json_escape "${NV_STAGE:-runner}")\", \"stderr_tail\": \"$(json_escape "$nv_tail")\""
+  fi
   # BL-0197: FORMAT_REJECT=1 (set only by the content battery and the duplicate /
   # trailing-block parser rails) tells the caller the seat answered but broke an output
   # rule, so a single-seat re-ask is meaningful. Transport, timeout and rc failures never
@@ -924,8 +943,8 @@ emit_no_verdict() {
   [ "${FORMAT_REJECT:-}" = "1" ] && format_reject_json=', "format_reject": true'
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json"
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json"
   exit 1
 }
 
@@ -1326,11 +1345,13 @@ if [[ "$RUNNER" = "codex" ]]; then
       printf '\n[dispatch-review: cleanroom codex exited non-zero (rc=%s)]\n' \
         "$CODEX_RC" >> "$RAW_LOG"
       SALVAGE_CAPTURE="$CODEX_OUT"
+      NV_RC="$CODEX_RC"; NV_STAGE="cleanroom"; NV_STDERR_FILE="$CODEX_ERR"
       emit_no_verdict "cleanroom codex exited non-zero (rc=$CODEX_RC)"
     fi
     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$CODEX_RC" >> "$RAW_LOG"
     SALVAGE_CAPTURE="$CODEX_OUT"
+    NV_RC="$CODEX_RC"; NV_STAGE="runner"; NV_STDERR_FILE="$CODEX_ERR"
     emit_no_verdict "codex exited non-zero (rc=$CODEX_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$CODEX_OUT"

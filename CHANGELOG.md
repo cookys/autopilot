@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- bl241doc: owner ruling 2026-10-23 (d-585003b0) on mods-visible-dispatch P2 to P4 recorded in the plan (R6) and BL-0241: P2 hook latency baseline kept, P3 wake-events/idle and P4 portfolio-replan withdrawn, P4 progress.json and work-round projection parked until radar asks. Docs only.
 - retp2: `review-seat-report --archive` reads layout A and legacy flat ledgers, de-dupes by ledger-id, realpath and content, footer counts, tar months skipped until P3.
 - retp2b: `review-seat-report` de-duplicates by generation, so a pending or aborted generation no longer shadows a finalized one, and symlinks are followed only inside the archive root.
 - retp3: `review-ledger-archive` gains `rotate`, `prune`, and a status hint; the report reads `tar.gz` months. Two new config keys. Owner decisions: the tar and the source are both kept by default, deletion only through `prune --execute`, and the reminder is only in the report footer and `status` (no SessionStart hook).

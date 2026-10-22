@@ -1021,19 +1021,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
 - **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
 
-### mods-visible-dispatch P2 to P4: do or withdraw
+### mods-visible-dispatch: P2 hook latency baseline, P4 progress.json parked
 - **Id**: BL-0241
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: 畫面上可見派工的後三段還沒做，也沒有人決定要繼續還是撤回。有可能已被新的階段圖路線取代，尚未確認。
-- **Impact**: 沒有裁決的話，未完成的三段會一直掛著，或被別的路線默默取代。
-- **Trigger**: owner decides do or withdraw for mods visible-dispatch P2 to P4; stage-graph route may supersede, unconfirmed
-- **Trigger-Type**: owner
-- **Effort**: L
-- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
+- **Problem**: 畫面上可見派工計畫只剩兩件事還掛著。一是 P2 的 hook 延遲量測，owner 已決定要做，工線 hooklat 進行中。二是 P4 的 progress.json（autopilot.progress/1）與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
+- **Impact**: 沒量延遲，就不知道每個 hook 讓工具呼叫慢多少。progress.json 掛起不影響現有功能，radar 要讀時再補。
+- **Trigger**: P2: workline hooklat lands the hook latency baseline; P4 progress.json and work-round projection: radar asks for it
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: May be superseded by the stage-graph route; unconfirmed. P5 is already BL-0110.
+- **Context**: P5 is already BL-0110.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242

@@ -10,3 +10,7 @@ Only the verify_pass section of the deleted sidecar. Other sections in that file
 Audit finding (section 3.3, dropped with the sidecar by f2955b99e): reported 2026-07-24 by codepower. A later read of src/engine/autopilot-engine.js still converges with the reviewer reason; that read was not executed. Origin peer. Reporter codepower. Reply none. Trigger-Type peer.
 
 Restored 2026-10-19 from f2955b99e^; see docs/plans/evidence/2026-10-19-backlog-deletion-audit/REPORT.md
+
+## Status 2026-10-23
+
+Merge 572e7eca6 (verifywarn) adds verify_red_convergence_warning to the implement-review result when it converges on the reviewer verdict with verify_pass=false. The convergence condition is unchanged; whether to force rework is an owner decision (BL-0238).

@@ -35,3 +35,7 @@ Trigger: next change to test-identity-guard, or a new node test that runs git. S
 ## BL-0266 status
 
 Fixed 2026-10-23 by pricesdiag (d81f4160a): parsePrices now recognises the preflight UNSUPPORTED_JSON_NUMBER integer-literal error class instead of the literal 9007199254740992.
+
+## BL-0268 status
+
+Fixed 2026-10-23 by 7ca204075 (idguardjs): test-identity-guard now flags a node test that runs git commit without its own identity, and a crashing scanner fails the guard. Row removed from docs/BACKLOG.md.

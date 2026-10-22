@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- bldone2 (docs only): BACKLOG archive, second batch. Closed BL-0268 (idguardjs 7ca204075) and BL-0225 (railintake bf611fd7b, sidecar removed); narrowed BL-0060 (tintegrity 86274b421, mode stays warn), BL-0249 (bf611fd7b, scorecard-row message left for an owner call), BL-0238 (verifywarn 572e7eca6, warning only; force-rework is an owner decision) and BL-0252 (roomlog cb6e7c305, only the three-process lock race left).
 - bldone (docs only): BACKLOG archive of merged work. Closed BL-0214, BL-0222, BL-0223, BL-0224, BL-0257, BL-0266 and BL-0269 (fix merged and read), plus BL-0220 and BL-0221 (already fixed in v2.36.111-era resume code, covered by campaign-resume-reviewing-phase and campaign-repair-at-file-cap, both green). Narrowed to what is left: BL-0226 (the REVOKED: prefix is taught nowhere), BL-0229 (wrapper stderr), BL-0230 (consult-only fallback list), BL-0261 (items 1 and 2) and BL-0276. Kept open with new facts: BL-0213 (still selects 452 of 542 suites for one script), BL-0237 (no in-repo producer, an external one cannot be ruled out), BL-0277 (owner decision d-7a800dcb).
 
 - bl241doc: owner ruling 2026-10-23 (d-585003b0) on mods-visible-dispatch P2 to P4 recorded in the plan (R6) and BL-0241: P2 hook latency baseline kept, P3 wake-events/idle and P4 portfolio-replan withdrawn, P4 progress.json and work-round projection parked until radar asks. Docs only.

@@ -437,13 +437,23 @@ projectionReject(
   /0\.\.2/,
 );
 projectionReject(
-  (selected) => { selected.campaign.max_wall_seconds = 14401; },
-  /1\.\.14400/,
+  (selected) => { selected.campaign.max_wall_seconds = 7201; },
+  /1\.\.7200/,
 );
-projectionAccept(
+// BL-0224: the graph ceiling equals the campaign contract schema ceiling (7200), so
+// an over-limit wall is rejected at graph time instead of burning a grant at intake.
+// RED at f5935a1b6: 7201 and 14400 were accepted by freezeMissionExecutionGraph.
+projectionReject(
   (selected) => {
     selected.reservation = { ...selected.reservation, wall_seconds: 14400 };
     selected.campaign.max_wall_seconds = 14400;
+  },
+  /1\.\.7200/,
+);
+projectionAccept(
+  (selected) => {
+    selected.reservation = { ...selected.reservation, wall_seconds: 7200 };
+    selected.campaign.max_wall_seconds = 7200;
   },
 );
 projectionAccept(
@@ -455,7 +465,7 @@ projectionAccept(
 // The per-node reservation ceiling (the aggregate governance bound) still rejects
 // a campaign wall request above what was reserved, even though the schema max rose.
 projectionReject(
-  (selected) => { selected.campaign.max_wall_seconds = 14400; },
+  (selected) => { selected.campaign.max_wall_seconds = 7200; },
   /campaign wall ceiling exceeds its reservation/,
 );
 projectionReject(
@@ -746,7 +756,7 @@ assert.equal(graphSchema.$defs.campaign.properties.max_changed_files.maximum, 40
 assert.equal(graphSchema.$defs.campaign.properties.baseline_churn.minimum, 1);
 assert.equal(graphSchema.$defs.campaign.properties.max_growth_ratio.maximum, 1.5);
 assert.equal(graphSchema.$defs.campaign.properties.max_extra_churn.maximum, 5000000);
-assert.equal(graphSchema.$defs.campaign.properties.max_wall_seconds.maximum, 14400);
+assert.equal(graphSchema.$defs.campaign.properties.max_wall_seconds.maximum, 7200);
 assert.equal(graphSchema.$defs.reservation.properties.engine_attempts.maximum, 3);
 const authoritySchema = JSON.parse(fs.readFileSync(
   path.join(root, 'schemas/task-authority-envelope.schema.json'),

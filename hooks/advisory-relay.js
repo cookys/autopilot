@@ -56,21 +56,23 @@ function closeDecideReply(payload) {
   }
   for (const id of ids) {
     // closeDecisionById locks before it looks up the id, so a locked scope file
-    // returns status error even when this card is not in it. Remember that and
-    // keep walking; a later scope file may still hold the card. One line is
-    // written only when every file was absent-or-error and an error was seen.
-    let remembered = '';
+    // returns status error even when this card is not in it. Keep every error
+    // and keep walking; a later scope file may still hold the card. One line is
+    // written only when the card was not closed in any scope file and at least
+    // one error was collected. Each error is prefixed with that file's basename.
+    const failures = [];
     let closed = false;
     for (const file of files) {
       let r;
+      const note = (msg) => { failures.push(`${path.basename(file)}: ${msg}`); };
       try {
         r = closeDecisionById(file, id);
       } catch (e) {
-        remembered = e && e.message ? e.message : String(e);
+        note(e && e.message ? e.message : String(e));
         continue;
       }
       if (r && r.status === 'error') {
-        remembered = r.message || 'close failed';
+        note(r.message || 'close failed');
         continue;
       }
       if (r && r.status !== 'absent') {
@@ -78,8 +80,8 @@ function closeDecideReply(payload) {
         break;
       }
     }
-    if (!closed && remembered) {
-      process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${remembered}\n`);
+    if (!closed && failures.length > 0) {
+      process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
   }
 }

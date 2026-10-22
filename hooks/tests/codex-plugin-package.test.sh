@@ -570,6 +570,19 @@ assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects a missing hooks/
 assert_contains "$OUT" "drift:" "sync-codex-plugin-skills --check prints drift: for a missing hooks/lib file"
 cp "$SYNC_SANDBOX/hooks/lib/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/payload.txt"
 
+# Shim that puts GNU comm on PATH. dash executes this file itself, so the
+# path is single-quoted. An embedded single quote is the four characters '\'' .
+# bash printf %q is not used: on older bash it emits $'...' which dash cannot read.
+write_gnu_comm_shim() {
+  local dest="$1" gnu="$2" quoted
+  quoted=${gnu//\'/\'\\\'\'}
+  {
+    printf '%s\n' '#!/bin/sh'
+    printf "exec '%s' \"\$@\"\n" "$quoted"
+  } > "$dest"
+  chmod +x "$dest"
+}
+
 # brief-head.js vs brief-header-template.js: LC_ALL=C sort order is not the
 # en_US.UTF-8 collation order. Both files live in the sandbox source and mirror
 # so the only drift is the removed mirror copy of brief-head.js.
@@ -607,11 +620,7 @@ elif [ -z "$GNU_COMM" ]; then
   echo "SKIP brief-head locale check: no GNU coreutils comm in PATH and /usr/bin/gnucomm is not executable"
 else
   COMM_SHIM_DIR="$(mktemp -d "$TEST_TMP/comm-shim-XXXXXX")"
-  cat > "$COMM_SHIM_DIR/comm" << EOF
-#!/bin/sh
-exec $(printf '%q' "$GNU_COMM") "\$@"
-EOF
-  chmod +x "$COMM_SHIM_DIR/comm"
+  write_gnu_comm_shim "$COMM_SHIM_DIR/comm" "$GNU_COMM"
   SHIM_VER="$(PATH="$COMM_SHIM_DIR:$PATH" comm --version 2>&1)"
   assert_contains "$SHIM_VER" "GNU" "locale comm shim --version contains GNU"
   OUT="$(PATH="$COMM_SHIM_DIR:$PATH" LANG="$COMM_LOCALE" LC_ALL="$COMM_LOCALE" bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
@@ -621,6 +630,40 @@ EOF
   assert_not_contains "$OUT" "not in sorted order" "UTF-8 --check does not warn that comm input is unsorted"
 fi
 cp "$SYNC_SANDBOX/hooks/lib/brief-head.js" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/lib/brief-head.js"
+
+# RED at ba068e478: not red on this host. bash 5.3.9 printf %q of a directory named "comm odd'name" is backslash form (comm\ odd\'name), and dash shim --version printed GNU (suite PASS, 142 assertions). Older bash emits $'...' for that path, which dash cannot parse. The shim no longer uses %q.
+# dash executes the shim file, so the shebang is not what runs. A path with a
+# space and a single quote must survive that.
+DASH_GNU_COMM=""
+_dash_comm_ifs="${IFS-}"
+IFS=:
+for _dash_comm_dir in $PATH; do
+  [ -n "$_dash_comm_dir" ] || continue
+  if [ -x "$_dash_comm_dir/comm" ] && "$_dash_comm_dir/comm" --version 2>&1 | grep -q "GNU coreutils"; then
+    DASH_GNU_COMM="$_dash_comm_dir/comm"
+    break
+  fi
+done
+IFS="$_dash_comm_ifs"
+if [ -z "$DASH_GNU_COMM" ] && [ -x /usr/bin/gnucomm ]; then
+  DASH_GNU_COMM="/usr/bin/gnucomm"
+fi
+if [ -z "$DASH_GNU_COMM" ]; then
+  echo "SKIP dash comm shim: no GNU coreutils comm in PATH and /usr/bin/gnucomm is not executable"
+else
+  DASH_BIN="$(command -v dash || true)"
+  if [ -z "$DASH_BIN" ]; then
+    echo "SKIP dash comm shim: dash is not installed"
+  else
+    DASH_ODD="$TEST_TMP/comm odd'name"
+    mkdir -p "$DASH_ODD"
+    ln -s "$DASH_GNU_COMM" "$DASH_ODD/comm"
+    DASH_SHIM_DIR="$(mktemp -d "$TEST_TMP/comm-shim-dash-XXXXXX")"
+    write_gnu_comm_shim "$DASH_SHIM_DIR/comm" "$DASH_ODD/comm"
+    DASH_VER="$("$DASH_BIN" "$DASH_SHIM_DIR/comm" --version 2>&1)" || true
+    assert_contains "$DASH_VER" "GNU" "dash runs the comm shim when the GNU comm path has a space and a single quote"
+  fi
+fi
 
 printf 'stale hook\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?

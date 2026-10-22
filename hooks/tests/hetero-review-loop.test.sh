@@ -207,7 +207,8 @@ assert_contains "$C6E_OUT" "receipt floor is 1 (--min-seats)" "case 6e: WARN nam
 # ("prevEntry.status === 'pending' && phase === 'p7'") must never resurrect.
 mkdir -p "$LEDGER/review-p7"
 SEED_BASE="$PHASE_BASE"
-SEED_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work~0)
+# the finalized g1 head must differ from the branch tip: collect refuses an empty g2 range (BL-0269)
+SEED_HEAD="$PHASE_BASE"
 cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
 [
   {
@@ -2264,5 +2265,31 @@ assert_not_contains "$(cat "$LEDGER/receipt-p_fc_on.json")" 'review_fresh_contex
 FC_M=$(pk_mutant fcstamp hetero-review-loop.js "...(freshContext === 'off' ? { review_fresh_context: 'off' } : {})," "...({}),") || fail "mutation setup failed (fresh-context)"
 FC_OUT=$(fc_finalize p_fc_mut "$(fc_resolver off)" "$FC_M/scripts/hetero-review-loop.js"); FC_RC=$?
 assert_not_contains "$(cat "$LEDGER/receipt-p_fc_mut.json")" 'review_fresh_context' "fresh-context (mutation): without the stamp an off receipt shows nothing"
+
+# RED at b7cd9d2bc: 7 failed (base == head exit 0; no 'empty review range' text; g1 dir and chain.json recorded; excluded-everything exit 0 with g1 left)
+# BL-0269: collect refuses an empty review range (base == head, or every changed path excluded) instead of
+# recording a zero-byte diff as a normal review. The generation directory is not left behind, so the same
+# generation number can be collected once the range has content.
+unset STUB_RESPONSE_s0 STUB_RESPONSE_s1
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+ER_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work)
+ER_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er --generation 1 --branch work --phase-base "$ER_HEAD" --seats "m1/low@codex" 2>&1); ER_RC=$?
+assert_exit_code "$ER_RC" "1" "empty-range: base == head is refused"
+assert_contains "$ER_OUT" "empty review range" "empty-range: the refusal names the empty range"
+assert_file_absent "$LEDGER/review-p_er/g1" "empty-range: no generation directory is left behind"
+assert_file_absent "$LEDGER/review-p_er/chain.json" "empty-range: no chain entry is recorded"
+ER_X="$TEST_TMP/er_excl_repo"; mkdir -p "$ER_X/generated"
+( cd "$ER_X" && git init -q && git config user.email t@e.com && git config user.name T && echo a > generated/g.txt && git add . && git commit -q -m b \
+  && git checkout -q -b work && echo b >> generated/g.txt && git commit -q -am w )
+ER_XB=$(git -C "$ER_X" rev-parse HEAD~1)
+ER2_OUT=$(node "$SCRIPT" collect --repo-root "$ER_X" --ledger "$LEDGER" --phase p_er2 --generation 1 --branch work --phase-base "$ER_XB" --exclude "generated/**" --seats "m1/low@codex" 2>&1); ER2_RC=$?
+assert_exit_code "$ER2_RC" "1" "empty-range: a range whose every changed path is excluded is refused"
+assert_contains "$ER2_OUT" "empty review range" "empty-range: excluded-everything names the empty range"
+assert_file_absent "$LEDGER/review-p_er2/g1" "empty-range: excluded-everything leaves no generation directory"
+ER3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); ER3_RC=$?
+assert_exit_code "$ER3_RC" "0" "empty-range: a non-empty range is still collected"
+ER_M=$(pk_mutant erange hetero-review-loop.js "if (diffBytes === 0) {" "if (false) {") || fail "mutation setup failed (empty-range)"
+ER4_OUT=$(node "$ER_M/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er4 --generation 1 --branch work --phase-base "$ER_HEAD" --seats "m1/low@codex" 2>&1); ER4_RC=$?
+assert_exit_code "$ER4_RC" "0" "empty-range (mutation): without the guard an empty range is collected again"
 
 finalize_test

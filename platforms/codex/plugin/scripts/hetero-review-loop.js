@@ -847,6 +847,14 @@ async function handleCollect(flags) {
   }
 
   const diffBytes = Buffer.byteLength(diffText, 'utf8');
+  // An empty diff (base == head, no commits, or every changed path excluded) would be reviewed and
+  // recorded like a normal one. Fail closed, and remove the still-empty generation directory so the
+  // same generation number can be collected once the range has content.
+  if (diffBytes === 0) {
+    try { fs.rmdirSync(gDir); } catch (_) { /* best effort */ }
+    console.error(`ERROR: empty review range: ${base}..${head} has no diff${excludedList.length ? ` after --exclude ${excludedList.join(',')}` : ''}${packetCtx ? ` for packet '${packetCtx.id}'` : ''}; nothing to review. A cherry-pick that conflicted and produced no commit leaves this shape; fix the range or --phase-base and collect again`);
+    process.exit(1);
+  }
   const diffSha256 = crypto.createHash('sha256').update(diffText, 'utf8').digest('hex');
 
   let fullRangeSha256 = diffSha256;

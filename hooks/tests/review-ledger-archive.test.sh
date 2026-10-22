@@ -10,6 +10,10 @@
 # "generation 1 collected timestamp missing from chain.json".
 # RED at 1b8cc7d49b9bbf3490f6f0eef2cd508b58aeab9d: cp -r of one ledger (mtimes
 # differ) imports as two ledger-ids; the date prefix follows range.json mtime.
+# RED at ff7f356bb2b3d1b201cdfeb923680ee3a85bfc54: an empty review-* directory
+# aborts the whole import with "phase content missing: no g1/range.json or
+# g1/findings.json"; a range-only phase is never reached; a 184-phase import
+# is not attempted.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -734,6 +738,170 @@ elif [ "$X_IDS" = "1" ]; then
   fail "case x: mtime phase key still produced one ledger-id (negative control is blind)"
 else
   echo "case x: red-on-broken (mtime key split one ledger into $X_IDS ids)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (y) one unusable phase must not abort the copy. Three real-shaped phases,
+# one empty aborted directory, one chain.json with no g1, one g1 that has
+# only range.json. Optional files are absent, not an error.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-y"
+LEDGER_Y="$TEST_TMP/ledger-y"
+make_real_ledger "$LEDGER_Y" good1 "" '{"base":"y","head":"1"}'
+make_real_ledger "$LEDGER_Y" good2 "" '{"base":"y","head":"2"}'
+make_real_ledger "$LEDGER_Y" good3 "" '{"base":"y","head":"3"}'
+mkdir -p "$LEDGER_Y/review-bl0044-g1-aborted-allowlist"
+mkdir -p "$LEDGER_Y/review-nog1"
+cp "$LEDGER_Y/review-good1/chain.json" "$LEDGER_Y/review-nog1/chain.json"
+mkdir -p "$LEDGER_Y/review-rangeonly/g1"
+cp "$LEDGER_Y/review-good1/chain.json" "$LEDGER_Y/review-rangeonly/chain.json"
+printf '%s\n' '{"base":"y","head":"range"}' > "$LEDGER_Y/review-rangeonly/g1/range.json"
+node "$CLI" import --ledger "$LEDGER_Y" --repo "$REPO" >"$TEST_TMP/y.out" 2>"$TEST_TMP/y.err"
+assert_exit_code "$?" "0" "case y: import with unusable phases exits 0"
+DEST_Y=$(cat "$TEST_TMP/y.out")
+for phase in good1 good2 good3 rangeonly; do
+  assert_file_exists "$DEST_Y/review-$phase/chain.json" "case y: review-$phase copied"
+  assert_file_exists "$DEST_Y/review-$phase/g1/range.json" "case y: review-$phase range.json"
+done
+assert_file_absent "$DEST_Y/review-bl0044-g1-aborted-allowlist" "case y: empty phase not copied"
+assert_file_absent "$DEST_Y/review-nog1" "case y: chain-only phase not copied"
+assert_file_absent "$DEST_Y/review-rangeonly/g1/findings.json" "case y: missing findings.json is not an error"
+assert_file_absent "$DEST_Y/review-rangeonly/g1/dispositions.json" "case y: missing dispositions.json is not an error"
+grep -F 'review-ledger-archive: skipped review-bl0044-g1-aborted-allowlist' "$TEST_TMP/y.err" >/dev/null
+assert_exit_code "$?" "0" "case y: stderr names the empty phase"
+grep -F 'review-ledger-archive: skipped review-nog1' "$TEST_TMP/y.err" >/dev/null
+assert_exit_code "$?" "0" "case y: stderr names the phase with no g1"
+grep -F 'review-ledger-archive: skipped review-rangeonly' "$TEST_TMP/y.err" >/dev/null && fail "case y: range-only phase was skipped"
+Y_IDS=$(count_ledger_ids "$TEST_TMP/archive-y")
+assert_eq "$Y_IDS" "1" "case y: one ledger-id"
+node -e '
+  const fs = require("fs");
+  const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const keys = Object.keys(j.phase_keys || {}).sort();
+  const want = ["review-good1", "review-good2", "review-good3", "review-rangeonly"];
+  if (keys.join() !== want.join()) process.exit(16);
+' "$DEST_Y/archive.json"
+assert_exit_code "$?" "0" "case y: phase_keys covers only copied phases"
+# A skipped phase must not change the id. Same copied bytes, no empty dirs.
+LEDGER_Y2="$TEST_TMP/ledger-y2"
+make_real_ledger "$LEDGER_Y2" good1 "" '{"base":"y","head":"1"}'
+make_real_ledger "$LEDGER_Y2" good2 "" '{"base":"y","head":"2"}'
+make_real_ledger "$LEDGER_Y2" good3 "" '{"base":"y","head":"3"}'
+mkdir -p "$LEDGER_Y2/review-rangeonly/g1"
+cp "$LEDGER_Y/review-rangeonly/chain.json" "$LEDGER_Y2/review-rangeonly/chain.json"
+cp "$LEDGER_Y/review-rangeonly/g1/range.json" "$LEDGER_Y2/review-rangeonly/g1/range.json"
+node "$CLI" import --ledger "$LEDGER_Y2" --repo "$REPO" >"$TEST_TMP/y2.out" 2>/dev/null
+assert_exit_code "$?" "0" "case y: twin without skipped phases exits 0"
+assert_eq "$(cat "$TEST_TMP/y2.out")" "$DEST_Y" "case y: skipped phases do not change the ledger-id"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (z) a ledger of only unusable phases exits non-zero and archives nothing.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-z"
+LEDGER_Z="$TEST_TMP/ledger-z"
+mkdir -p "$LEDGER_Z/review-bl0044-g1-aborted-allowlist"
+mkdir -p "$LEDGER_Z/review-nog1"
+printf '%s\n' '[{"generation":1,"base":"a","head":"b","status":"pending"}]' > "$LEDGER_Z/review-nog1/chain.json"
+node "$CLI" import --ledger "$LEDGER_Z" --repo "$REPO" >"$TEST_TMP/z.out" 2>"$TEST_TMP/z.err"
+assert_exit_code "$?" "1" "case z: only unusable phases exits 1"
+Z_IDS=$(count_ledger_ids "$TEST_TMP/archive-z")
+assert_eq "$Z_IDS" "0" "case z: nothing archived"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (aa) 184 phase directories, four of them empty. One id, 180 copied, under 60s.
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-aa"
+LEDGER_AA="$TEST_TMP/ledger-aa"
+node -e '
+  const fs = require("fs");
+  const path = require("path");
+  const dest = process.argv[1];
+  const chain = JSON.stringify([{
+    generation: 1, base: "aaa", head: "bbb", seats: ["s0"], status: "pending",
+    diff_sha256: "ab", findings_sha256: "ef"
+  }], null, 2) + "\n";
+  for (let i = 0; i < 180; i++) {
+    const name = "review-p" + String(i).padStart(3, "0");
+    const g1 = path.join(dest, name, "g1");
+    fs.mkdirSync(g1, { recursive: true });
+    fs.writeFileSync(path.join(dest, name, "chain.json"), chain);
+    fs.writeFileSync(path.join(g1, "range.json"), "{\"base\":\"aa\",\"head\":\"" + i + "\"}\n");
+  }
+  for (let i = 0; i < 4; i++) {
+    fs.mkdirSync(path.join(dest, "review-empty" + i), { recursive: true });
+  }
+' "$LEDGER_AA"
+assert_exit_code "$?" "0" "case aa: 184-phase fixture written"
+timeout 60 node "$CLI" import --ledger "$LEDGER_AA" --repo "$REPO" >"$TEST_TMP/aa.out" 2>"$TEST_TMP/aa.err"
+assert_exit_code "$?" "0" "case aa: 184-phase import finishes within 60s and exits 0"
+AA_IDS=$(count_ledger_ids "$TEST_TMP/archive-aa")
+assert_eq "$AA_IDS" "1" "case aa: one ledger-id"
+DEST_AA=$(cat "$TEST_TMP/aa.out")
+AA_PHASES=$(find "$DEST_AA" -mindepth 1 -maxdepth 1 -type d -name 'review-*' | wc -l)
+assert_eq "$AA_PHASES" "180" "case aa: 180 copied phases (184 minus 4 empty)"
+grep -c 'review-ledger-archive: skipped review-empty' "$TEST_TMP/aa.err" >/dev/null
+assert_eq "$(grep -c 'review-ledger-archive: skipped review-empty' "$TEST_TMP/aa.err")" "4" "case aa: four empty phases named on stderr"
+node -e '
+  const fs = require("fs");
+  const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const keys = Object.keys(j.phase_keys || {});
+  if (keys.length !== 180) process.exit(17);
+  if (keys.some((k) => k.startsWith("review-empty"))) process.exit(18);
+' "$DEST_AA/archive.json"
+assert_exit_code "$?" "0" "case aa: phase_keys omits the empty phases"
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+
+# (ab) red-on-broken: skip replaced by the old throw fails case y.
+MUT_AB="$TEST_TMP/mut-ab/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AB")"
+cp "$LIB" "$MUT_AB"
+python3 - "$MUT_AB" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+start = t.find("function partitionLedgerPhases(")
+if start < 0:
+    sys.stderr.write("case ab: partitionLedgerPhases missing\n")
+    sys.exit(2)
+end = t.find("\nfunction ", start + 1)
+if end < 0:
+    sys.stderr.write("case ab: partitionLedgerPhases end missing\n")
+    sys.exit(2)
+broken = """function partitionLedgerPhases(ledgerDir, names) {
+  for (const name of names) {
+    const rangePath = path.join(ledgerDir, name, 'g1', 'range.json');
+    const findingsPath = path.join(ledgerDir, name, 'g1', 'findings.json');
+    if (!fs.existsSync(rangePath) && !fs.existsSync(findingsPath)) {
+      throw new Error('phase content missing: no g1/range.json or g1/findings.json');
+    }
+  }
+  return { usable: names.slice(), skipped: [] };
+}
+"""
+p.write_text(t[:start] + broken + t[end+1:])
+PY
+assert_exit_code "$?" "0" "case ab: throwing partition patched onto a temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ab"
+# The CLI loads the real lib. Drive the broken copy the same way import does.
+node -e '
+  const fs = require("fs");
+  const lib = require(process.argv[1]);
+  const r = lib.copyLedger({
+    ledgerDir: process.argv[2],
+    repoDir: process.argv[3],
+    importedFrom: fs.realpathSync(process.argv[2]),
+  });
+  if (r && r.skipped) {
+    for (const name of r.skipped) console.error("review-ledger-archive: skipped " + name);
+  }
+  if (r && r.dest) console.log(r.dest);
+' "$MUT_AB" "$LEDGER_Y" "$REPO" >"$TEST_TMP/ab.out" 2>"$TEST_TMP/ab.err"
+AB_RC=$?
+AB_IDS=$(count_ledger_ids "$TEST_TMP/archive-ab")
+if [ "$AB_RC" = 0 ] && [ "$AB_IDS" = "1" ]; then
+  fail "case ab: throwing partition still imported the mixed ledger (negative control is blind)"
+else
+  echo "case ab: red-on-broken (throwing partition exit $AB_RC, ledger-ids $AB_IDS)"
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR

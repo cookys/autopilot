@@ -181,6 +181,42 @@ function phaseKeyMap(ledgerDir, phases) {
   return map;
 }
 
+function fileReadable(filePath) {
+  try {
+    const st = fs.statSync(filePath);
+    if (!st.isFile()) return false;
+    fs.readFileSync(filePath);
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+// A phase is copyable when it has chain.json and a readable g1/range.json or
+// g1/findings.json. Missing optional files (findings, dispositions, seats)
+// stay optional. An empty or aborted directory is not copyable.
+function phaseCopyable(ledgerDir, phaseName) {
+  const chainPath = path.join(ledgerDir, phaseName, 'chain.json');
+  let chainStat;
+  try { chainStat = fs.statSync(chainPath); } catch (_e) { return false; }
+  if (!chainStat.isFile()) return false;
+  const rangePath = path.join(ledgerDir, phaseName, 'g1', 'range.json');
+  const findingsPath = path.join(ledgerDir, phaseName, 'g1', 'findings.json');
+  return fileReadable(rangePath) || fileReadable(findingsPath);
+}
+
+// Full-ledger enumeration only. An explicit phase list (the finalize hook)
+// does not come through here, so a bad phase still throws from phaseContentKey.
+function partitionLedgerPhases(ledgerDir, names) {
+  const usable = [];
+  const skipped = [];
+  for (const name of names) {
+    if (phaseCopyable(ledgerDir, name)) usable.push(name);
+    else skipped.push(name);
+  }
+  return { usable, skipped };
+}
+
 // A chain reset rewrites g1/range.json, so the phase key changes. The same
 // source realpath still reuses this directory (the reset stays with the ledger
 // that already lived here). A different path with the new bytes does not match
@@ -420,13 +456,26 @@ function copyLedger(opts) {
   if (!o.ledgerDir) throw new Error('ledgerDir is required');
   if (!o.repoDir) throw new Error('repoDir is required');
   mkdirPrivate(cfg.dir);
-  const selected = o.phases
+  const explicit = Array.isArray(o.phases);
+  let selected = explicit
     ? o.phases.map((p) => (String(p).startsWith('review-') ? String(p) : `review-${p}`))
     : phaseNames(fs.realpathSync(o.ledgerDir));
   if (selected.length === 0) throw new Error('no phase selected');
-  const known = phaseNames(fs.realpathSync(o.ledgerDir));
+  const liveForSelect = fs.realpathSync(o.ledgerDir);
+  const known = phaseNames(liveForSelect);
   for (const name of selected) {
     if (!known.includes(name)) throw new Error(`unknown phase ${name}`);
+  }
+  // Identity (phase_keys, source_realpath lookup) uses only phases that are
+  // copied. A skipped directory never enters the ledger-id.
+  let skipped = [];
+  if (!explicit) {
+    const part = partitionLedgerPhases(liveForSelect, selected);
+    selected = part.usable;
+    skipped = part.skipped;
+    if (selected.length === 0) {
+      throw new Error('phase content missing: no g1/range.json or g1/findings.json');
+    }
   }
   // Id selection cannot use the per-ledger lock: two copies have different
   // realpaths, and two phases can both miss archive.json. One fixed-name lock
@@ -481,7 +530,7 @@ function copyLedger(opts) {
     writeAtomic(metaPath, JSON.stringify(archiveMeta(id, imported), null, 2) + '\n');
     enforceModes(cfg.dir);
   });
-  return { copied: true, dest };
+  return { copied: true, dest, skipped };
 }
 
 function describeArchive(home) {

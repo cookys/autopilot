@@ -113,6 +113,9 @@ function main(argv) {
       console.error('review-ledger-archive: archive is off');
       return 1;
     }
+    for (const name of result.skipped || []) {
+      console.error(`review-ledger-archive: skipped ${name}`);
+    }
     console.log(result.dest);
     return 0;
   }

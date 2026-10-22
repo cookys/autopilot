@@ -545,7 +545,7 @@ mkdir -p harness
 printf 'check() { [ "$1" = "$2" ]; }\n' > harness/lib.sh
 git add harness/lib.sh
 git commit -qm "seed harness surface"
-printf 'check() { [ "$1" = "$2" ]; }\n# touched\n' > harness/lib.sh
+printf 'check() { [ "$1" = "$2" ] && true; }\n# touched\n' > harness/lib.sh
 printf 'check a a\ncheck b b\n' > custom.suite.sh
 git add harness/lib.sh custom.suite.sh
 git commit -qm "add custom-convention suite"

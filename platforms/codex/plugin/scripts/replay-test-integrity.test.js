@@ -69,7 +69,7 @@ function makeRepo() {
     writeFile(dir, 'scripts/product.js', 'module.exports = 2;\n');
   });
   mergeBranch('branch-c', 'merge C touch lib.sh', () => {
-    writeFile(dir, 'hooks/tests/lib.sh', 'assert_eq() { :; }\n# touched\n');
+    writeFile(dir, 'hooks/tests/lib.sh', 'assert_eq() { return 0; }\n# touched\n');
   });
 
   fs.copyFileSync(REPLAY_SRC, path.join(dir, 'scripts/replay-test-integrity.js'));

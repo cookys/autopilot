@@ -5,6 +5,7 @@
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
 # RED at c65144649: N7 N8 F5 failed on the unmodified base.
 # RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
+# RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -265,5 +266,18 @@ printf 'if ! node build.js\nthen\n  echo "build failed" >&2\n  exit 1\nfi\n' > "
 commit_all "$repo" "stricter form"
 run_case "$repo"
 if has_kind deleted_line; then report F8 0; else report F8 1; fi
+
+# ── N11 same-stem "replacement" with only a comment / always-true guard ────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'echo hi\n' > "$repo/scripts/tool.sh"
+printf 'assert_eq "$(bash scripts/tool.sh --gc)" "x" "gc works"\n' > "$repo/tests/tool-gc.test.sh"
+commit_all "$repo" "base"
+git -C "$repo" rm -q tests/tool-gc.test.sh
+mkdir -p "$repo/tests"
+printf '# gc removed\nif ! true; then exit 1; fi\n' > "$repo/tests/tool-gc-removed.test.sh"
+commit_all "$repo" "delete test, add hollow same-stem file"
+run_case "$repo"
+if has_kind deleted_line && has_text 'tests/tool-gc.test.sh'; then report N11 1; else report N11 0; fi
 
 finalize_test

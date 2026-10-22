@@ -1760,7 +1760,7 @@ def _test_stem(path):
     return re.sub(r"^test[_-]", "", stem)
 
 
-def deleted_test_has_same_topic_replacement(test_path, added_paths, test_path_regexes):
+def deleted_test_has_same_topic_replacement(test_path, added_paths, test_path_regexes, files_diff=None, lang_of=None):
     """Rule (a2): a deleted test is exempt when the same range ADDS a test file on
     the same topic (its stem equals the deleted stem or extends it, such as
     foo-gc.test.sh -> foo-gc-removed.test.sh). A range with no such replacement
@@ -1772,8 +1772,18 @@ def deleted_test_has_same_topic_replacement(test_path, added_paths, test_path_re
         if path == test_path or not matches_patterns(path, test_path_regexes):
             continue
         other = _test_stem(path)
-        if other == stem or re.match(re.escape(stem) + r"[-_.]", other):
+        if not (other == stem or re.match(re.escape(stem) + r"[-_.]", other)):
+            continue
+        # The replacement must carry at least one real (non-tautological)
+        # assertion-class added line; a comment-only or always-true file is no
+        # replacement.
+        if files_diff is None or lang_of is None:
             return True
+        lang_key = lang_of(path)
+        for hunk in (files_diff.get(path) or {}).get("hunks", []):
+            for line in hunk["lines"]:
+                if line.startswith("+") and is_assertion_class_line(line[1:], lang_key):
+                    return True
     return False
 
 
@@ -2233,7 +2243,9 @@ def main():
                 old_path, lang_key, old_text, deleted_paths, test_path_regexes, surface_path_regexes
             ):
                 continue
-            if deleted_test_has_same_topic_replacement(old_path, added_paths, test_path_regexes):
+            if deleted_test_has_same_topic_replacement(
+                old_path, added_paths, test_path_regexes, files_diff, get_lang_key
+            ):
                 continue
             for hunk in info.get("hunks", []):
                 old_current = hunk["old_start"]

@@ -26,6 +26,7 @@
     "The V2 plugin API is beta and the package is pinned to the matching OpenCode2 nightly.",
     "Run the smoke probe after every OpenCode2 upgrade.",
     "The documented session hook is absent in next-15402 and event subscription during setup deadlocks activation, so session lifecycle and resume hints are disabled.",
-    "Do not promote OpenCode hooks to blocking gates without fresh probe evidence."
+    "Do not promote OpenCode hooks to blocking gates without fresh probe evidence.",
+    "2026-10-23 re-probe observed opencode 1.19.4 (table says 1.18.11). opencode run flags still present: --model, --format, --agent. Only --version and --help were run; skills, hooks, dispatch, gating and all other behaviours were NOT re-tested and keep their earlier results."
   ]
 }

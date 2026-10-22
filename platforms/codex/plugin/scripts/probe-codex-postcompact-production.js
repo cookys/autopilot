@@ -90,11 +90,20 @@ function stripTerminal(value) {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
+// Codex >= 0.163 no longer prints the "model: X /model to change" status line; an empty
+// composer shows the placeholder "Ask Codex to do anything" after the prompt glyph instead.
+// Words may be split by cursor-move sequences, so match with optional whitespace.
+function hasComposerPlaceholder(value) {
+  const text = stripTerminal(value);
+  return text.includes('›') && /Ask\s*Codex\s*to\s*do\s*anything/i.test(text);
+}
+
 function hasTuiReadinessMarker(value) {
   const raw = String(value);
-  return raw.includes('OpenAI Codex')
+  if (raw.includes('OpenAI Codex')
     && raw.includes(RAW_BOLD_PROMPT_MARKER)
-    && hasLoadedModelStatus(raw);
+    && hasLoadedModelStatus(raw)) return true;
+  return hasComposerPlaceholder(raw);
 }
 
 function hasLoadedModelStatus(value) {
@@ -874,6 +883,7 @@ module.exports = {
   checkCodexVersion,
   codexTuiArgs,
   createControllerFixture,
+  hasComposerPlaceholder,
   hasDirectoryTrustChooser,
   hasLoadedModelStatus,
   hasTuiReadinessMarker,

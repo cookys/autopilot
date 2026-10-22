@@ -20,6 +20,10 @@
 # with no generation 1 aborts the import; a read-only archive root is not
 # rejected before copy; --phase ../x is an unknown argument; a symlinked
 # review-* directory is followed.
+# RED at c8768d0b882d37b62e1076bbdead04421bda7a59: AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=3000 with
+# AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY unset, or set to 2 or true,
+# still sleeps. A one-phase copy of a small ledger exceeds 1500 ms, so case an
+# fails closed. The ungated reader is the production file itself.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -29,6 +33,7 @@ unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 unset AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS
 
@@ -258,6 +263,7 @@ assert_contains "$ST_OFF" "archive is off" "case g: off message"
 # (h) two processes, two phases, one ledger-id
 export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-h"
 export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1
 LEDGER_H="$TEST_TMP/ledger-h"
 make_ledger "$LEDGER_H" alpha "2026-05-01T00:00:00.000Z"
 make_ledger "$LEDGER_H" beta "2026-05-01T00:00:01.000Z"
@@ -282,6 +288,7 @@ node -e '
 ' $MERGED
 assert_exit_code "$?" "0" "case h: merged chain.json parses and has both phases"
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 
 # (i) negative control: lock acquisition removed, delay makes the race lose a phase
 MUT="$TEST_TMP/mut/review-ledger-copy.js"
@@ -289,6 +296,7 @@ mkdir -p "$(dirname "$MUT")"
 sed 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/' "$LIB" > "$MUT"
 export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
 export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1
 LOST=0
 I_RUNS=3
 for i in 1 2 3; do
@@ -317,6 +325,7 @@ echo "case i: lockless copies lost or failed $LOST/$I_RUNS"
 
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
 # usage: rotate and prune are a one-line error
@@ -430,6 +439,7 @@ unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 # (n) two phases, one ledger, concurrent finalize, one ledger-id.
 export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-n"
 export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1
 LEDGER_N="$TEST_TMP/ledger-n"
 make_ledger "$LEDGER_N" alpha "2026-09-01T00:00:00.000Z"
 make_ledger "$LEDGER_N" beta "2026-09-01T00:00:01.000Z"
@@ -454,6 +464,7 @@ node -e '
 ' $MERGED_N
 assert_exit_code "$?" "0" "case n: archived chain.json parses and has both phases"
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 
 # (o) negative control: catch rethrows, read-only finalize must diverge.
@@ -519,6 +530,7 @@ assert_exit_code "$?" "0" "case p: temp loop points at the lockless lib"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
 export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
 export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
+export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1
 LOST_P=0
 P_RUNS=3
 for i in 1 2 3; do
@@ -551,6 +563,7 @@ fi
 echo "case p: lockless finalizes lost or failed $LOST_P/$P_RUNS"
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 
@@ -1099,7 +1112,7 @@ make_ledger "$LEDGER_AE" p2 "2026-08-03T00:00:02.000Z"
 AE_A_DONE="$TEST_TMP/ae-a.done"
 AE_B_DONE="$TEST_TMP/ae-b.done"
 rm -f "$AE_A_DONE" "$AE_B_DONE"
-AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
+AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1 AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
   const fs = require("fs");
   const lib = require(process.argv[1]);
   lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["p0", "p1", "p2"] });
@@ -1131,6 +1144,7 @@ else
   fi
 fi
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 # Dead holder: owner file is old, lock directory mtime is new.
 export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ae-dead"
 AE_BUCKET=$(node -e 'const lib=require(process.argv[1]); process.stdout.write(lib.repoBucket(process.argv[2]));' "$LIB" "$REPO")
@@ -1160,7 +1174,7 @@ export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-ae-neg"
 AE_NA="$TEST_TMP/ae-na.done"
 AE_NB="$TEST_TMP/ae-nb.done"
 rm -f "$AE_NA" "$AE_NB"
-AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
+AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1 AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=800 node -e '
   const fs = require("fs");
   const lib = require(process.argv[1]);
   lib.copyLedger({ ledgerDir: process.argv[2], repoDir: process.argv[3], phases: ["p0", "p1", "p2"] });
@@ -1188,6 +1202,7 @@ fi
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
 
 # Round 8 phrase. The same four files must carry it, and must not carry the
@@ -1446,5 +1461,74 @@ else
 fi
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+
+# (an) the delay seam is ignored unless ALLOW is exactly the string 1.
+# A temp copy that still sleeps on the delay alone must miss the fast bound.
+LEDGER_AN="$TEST_TMP/ledger-an"
+make_ledger "$LEDGER_AN" one "2026-10-22T00:00:00.000Z"
+an_elapsed() {
+  local lib="$1" mode="$2" dest="$3"
+  mkdir -p "$dest"
+  if [ "$mode" = unset ]; then
+    env -u AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY \
+      AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=3000 \
+      AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$dest" \
+      node -e 'const t=Date.now(); const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}); process.stdout.write(String(Date.now()-t));' \
+      "$lib" "$LEDGER_AN" "$REPO"
+  else
+    AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY="$mode" \
+      AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=3000 \
+      AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$dest" \
+      node -e 'const t=Date.now(); const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3]}); process.stdout.write(String(Date.now()-t));' \
+      "$lib" "$LEDGER_AN" "$REPO"
+  fi
+}
+AN_UNSET=$(an_elapsed "$LIB" unset "$TEST_TMP/archive-an-unset")
+AN_TWO=$(an_elapsed "$LIB" 2 "$TEST_TMP/archive-an-two")
+AN_TRUE=$(an_elapsed "$LIB" true "$TEST_TMP/archive-an-true")
+if [ "$AN_UNSET" -ge 1500 ]; then
+  fail "case an: delay honoured with ALLOW unset (${AN_UNSET} ms)"
+else
+  echo "case an: ALLOW unset finished in ${AN_UNSET} ms"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+if [ "$AN_TWO" -ge 1500 ]; then
+  fail "case an: delay honoured with ALLOW=2 (${AN_TWO} ms)"
+else
+  echo "case an: ALLOW=2 finished in ${AN_TWO} ms"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+if [ "$AN_TRUE" -ge 1500 ]; then
+  fail "case an: delay honoured with ALLOW=true (${AN_TRUE} ms)"
+else
+  echo "case an: ALLOW=true finished in ${AN_TRUE} ms"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+MUT_AN="$TEST_TMP/mut-an/review-ledger-copy.js"
+mkdir -p "$(dirname "$MUT_AN")"
+cp "$LIB" "$MUT_AN"
+python3 - "$MUT_AN" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+old = "if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY !== '1') return 0;\n  "
+if old not in t:
+    sys.stderr.write("case an: ALLOW gate missing; file already reads the delay unconditionally\n")
+    sys.exit(0)
+p.write_text(t.replace(old, "", 1))
+PY
+assert_exit_code "$?" "0" "case an: ungated temp copy"
+export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
+AN_BROKEN=$(an_elapsed "$MUT_AN" unset "$TEST_TMP/archive-an-broken")
+if [ "$AN_BROKEN" -lt 1500 ]; then
+  fail "case an: lib that reads the delay without the ALLOW gate still finished in ${AN_BROKEN} ms (negative control is blind)"
+else
+  echo "case an: red-on-broken (${AN_BROKEN} ms)"
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT
+unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
+unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
+unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 
 finalize_test

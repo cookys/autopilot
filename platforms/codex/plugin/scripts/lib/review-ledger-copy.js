@@ -15,6 +15,9 @@
 // AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps after each phase copy and
 // again between the archived chain.json read and its write, inside the ledger
 // lock. The chain gap makes a lockless copy drop one phase. Unset has no effect.
+// Test-only, not a user knob. Honoured only when
+// AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY is exactly "1". Any other
+// value, including unset, ignores the delay (no sleep).
 // AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS, when a positive number, replaces the
 // 30000ms lock stale threshold. AUTOPILOT_REVIEW_LEDGER_REPO_ROOT points a
 // temp copy of this file back at the repo.
@@ -38,6 +41,8 @@ function sleepMs(ms) {
 }
 
 function testDelayMs() {
+  // Test-only, not a user knob. Same shape as the subagent-budget mutant gate.
+  if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY !== '1') return 0;
   const n = Number(process.env.AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }

@@ -24,19 +24,19 @@ const USAGE = `roundtable-window.js — window A (tmux)
       Print every complete row, then follow the file (poll every 500ms).
       Scrolling is tmux's own scrollback and copy mode.
       --once prints existing rows and exits.
-  input ROOM [--seats h1,h2]
+  input ROOM [--seats h1,h2] [--once]
       One-line prompt. Enter appends a say from owner and fleet-sends it
       to every seat. A line ending in a backslash continues on the next
       line. An empty line is ignored. Ctrl-D or exit quits.
-  send ROOM TEXT...
+  send [--seats h1,h2] ROOM TEXT...
       Non-interactive append-and-send (what input uses).
       TEXT is the remaining arguments after ROOM, joined by one space,
       verbatim. A word that looks like an option is text.
 
   --help, -h, --no-color, --once, and --seats are read only before the
   subcommand. A literal -- ends option parsing. tail still accepts --once
-  after ROOM. input still accepts --seats after ROOM. send does not:
-  put --seats before the subcommand.
+  after ROOM. input still accepts --seats and --once after ROOM. send
+  accepts --seats between send and ROOM; after ROOM it is text.
   --no-color    ANSI off. NO_COLOR does the same.
   Colour is ANSI foreground only. Same roles as window B:
   owner = you are here (38;5;173, nearest to PALETTE.here / claude),
@@ -238,8 +238,14 @@ function sendText(room, text, cliSeats, env) {
     reply_to: null,
     to: seats,
   }, env);
+  const already = new Set();
+  for (const prior of roomLog.readAll(room, env)) {
+    if (prior.kind === 'system' && prior.from === 'moderator') already.add(prior.text);
+  }
   for (const value of resolved.skipped) {
     const note = `skipped seat ${value}`;
+    if (already.has(note)) continue;
+    already.add(note);
     roomLog.append(room, {
       from: 'moderator',
       kind: 'system',

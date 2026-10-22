@@ -735,3 +735,19 @@ test('implementer --trials must be exactly the administration size', () => {
   assert.throws(() => runImplQualification(base), /exactly 2 trials/);
   assert.throws(() => runImplQualification({ ...base, trials: 1 }), /exactly 2 trials/);
 });
+
+// RED at e3671eb0c: test "--help states the --seat-file source precedence" fails with AssertionError 'help has a "Source precedence" paragraph' (actual false, expected true).
+// BL-0265: --help states which source wins when a --seat-file run fills an identity field.
+// Control: with the precedence paragraph removed from the help text this test is red.
+test('--help states the --seat-file source precedence', () => {
+  const run = spawnSync('node', [path.join(__dirname, 'engine-qualify.js'), '--help'], {
+    encoding: 'utf8', stdin: 'ignore', env: { PATH: process.env.PATH, HOME: tempRoot },
+  });
+  assert.strictEqual(run.status, 0);
+  const text = `${run.stdout}${run.stderr}`;
+  const at = text.indexOf('Source precedence');
+  assert.ok(at >= 0, 'help has a "Source precedence" paragraph');
+  const para = text.slice(at, at + 1400);
+  assert.match(para, /disagree[^.]*exits 2/s, 'seat identity fields: a disagreeing flag exits 2');
+  assert.match(para, /flag[^]*derived[^]*pins/s, 'flag > derived > pins order stated');
+});

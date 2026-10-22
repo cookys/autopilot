@@ -12,8 +12,9 @@
 // (scripts/lib/config-path.js). include_diff default false
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF). warn_mb default 500
 // (AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB).
-// AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps after each phase copy inside
-// the ledger lock so a lockless copy loses a phase entry.
+// AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS sleeps after each phase copy and
+// again between the archived chain.json read and its write, inside the ledger
+// lock. The chain gap makes a lockless copy drop one phase. Unset has no effect.
 // AUTOPILOT_REVIEW_LEDGER_LOCK_STALE_MS, when a positive number, replaces the
 // 30000ms lock stale threshold. AUTOPILOT_REVIEW_LEDGER_REPO_ROOT points a
 // temp copy of this file back at the repo.
@@ -648,6 +649,9 @@ function copyLedger(opts) {
       existing = JSON.parse(fs.readFileSync(combinedPath, 'utf8'));
       if (!Array.isArray(existing)) throw new Error('archived chain.json is not an array');
     }
+    // Test seam: both lockless copiers read before either writes.
+    const chainDelay = testDelayMs();
+    if (chainDelay) sleepMs(chainDelay);
     const merged = mergeEntries(existing, incoming);
     writeAtomic(combinedPath, JSON.stringify(merged, null, 2) + '\n');
     const metaPath = path.join(dest, 'archive.json');

@@ -257,7 +257,7 @@ assert_contains "$ST_OFF" "archive is off" "case g: off message"
 
 # (h) two processes, two phases, one ledger-id
 export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-h"
-export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=200
+export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
 LEDGER_H="$TEST_TMP/ledger-h"
 make_ledger "$LEDGER_H" alpha "2026-05-01T00:00:00.000Z"
 make_ledger "$LEDGER_H" beta "2026-05-01T00:00:01.000Z"
@@ -288,9 +288,10 @@ MUT="$TEST_TMP/mut/review-ledger-copy.js"
 mkdir -p "$(dirname "$MUT")"
 sed 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/' "$LIB" > "$MUT"
 export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
-export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=150
+export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
 LOST=0
-for i in 1 2 3 4 5 6; do
+I_RUNS=3
+for i in 1 2 3; do
   export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-i-$i"
   node -e 'const lib=require(process.argv[1]); lib.copyLedger({ledgerDir:process.argv[2],repoDir:process.argv[3],phases:["alpha"]});' "$MUT" "$LEDGER_H" "$REPO" >/dev/null 2>&1 &
   Q1=$!
@@ -309,10 +310,10 @@ for i in 1 2 3 4 5 6; do
     if (!phases.has("alpha") || !phases.has("beta")) process.exit(9);
   ' $MERGED_I >/dev/null 2>&1 || LOST=$((LOST + 1))
 done
-if [ "$LOST" -lt 1 ]; then
-  fail "case i: removing the lock never lost a phase or failed (negative control is blind)"
+if [ "$LOST" -ne "$I_RUNS" ]; then
+  fail "case i: removing the lock never lost a phase or failed (negative control is blind) lost=$LOST/$I_RUNS"
 fi
-echo "case i: lockless copies lost or failed $LOST/6"
+echo "case i: lockless copies lost or failed $LOST/$I_RUNS"
 
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
@@ -428,7 +429,7 @@ unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 
 # (n) two phases, one ledger, concurrent finalize, one ledger-id.
 export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-n"
-export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=200
+export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
 LEDGER_N="$TEST_TMP/ledger-n"
 make_ledger "$LEDGER_N" alpha "2026-09-01T00:00:00.000Z"
 make_ledger "$LEDGER_N" beta "2026-09-01T00:00:01.000Z"
@@ -517,9 +518,10 @@ PY
 assert_exit_code "$?" "0" "case p: temp loop points at the lockless lib"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
 export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
-export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=150
+export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
 LOST_P=0
-for i in 1 2 3 4 5 6; do
+P_RUNS=3
+for i in 1 2 3; do
   export AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR="$TEST_TMP/archive-p-$i"
   LEDGER_P="$TEST_TMP/ledger-p-$i"
   make_ledger "$LEDGER_P" alpha "2026-09-11T00:00:00.000Z"
@@ -543,10 +545,10 @@ for i in 1 2 3 4 5 6; do
     if (!phases.has("alpha") || !phases.has("beta")) process.exit(9);
   ' $MERGED_P >/dev/null 2>&1 || LOST_P=$((LOST_P + 1))
 done
-if [ "$LOST_P" -lt 1 ]; then
-  fail "case p: lockless concurrent finalize never lost a phase or failed"
+if [ "$LOST_P" -ne "$P_RUNS" ]; then
+  fail "case p: lockless concurrent finalize never lost a phase or failed lost=$LOST_P/$P_RUNS"
 fi
-echo "case p: lockless finalizes lost or failed $LOST_P/6"
+echo "case p: lockless finalizes lost or failed $LOST_P/$P_RUNS"
 unset AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR
 unset AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS
 unset AUTOPILOT_REVIEW_LEDGER_REPO_ROOT

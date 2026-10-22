@@ -273,6 +273,15 @@ const HELP = `Usage:
     semantic-fingerprint  the implementer constant EXPECTED_IMPL_CORPUS_HASH
     harness-version, containment-fingerprint, task-class, domain, language, tool
                           references/qualification-headless-pins.json
+  Source precedence (a field is filled from the first source that has it):
+    engine, model, model-version, runner, effort, prompt-config-hash:
+      the seat file supplies them; an explicit flag that disagrees with the
+      seat file value is not an override, it exits 2.
+    runner-version, family, semantic-fingerprint: explicit flag, else derived.
+    harness-version, containment-fingerprint, task-class, domain, language,
+    tool: explicit flag, else the pins file.
+  So: flag, then derived, then pins; the seat file wins only for the six
+  fields it carries. seat-preview prints the winner per field under "sources".
   Headless derivation is only pinned for the implementer role. Any other role
   that still needs a pinned field exits 2 and names the first missing scope
   flag (task-class, then domain, language, tool). A pins file that is unreadable,

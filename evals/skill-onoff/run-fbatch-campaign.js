@@ -60,6 +60,12 @@ function maxUsd() {
   return Number(raw);
 }
 
+// SCOPE OF THIS LINT: it only catches an accidental mention of a FINDINGS file in an arm. It does NOT stop a
+// deliberate evasion (letter-spaced "F I N D I N G S", or an indirect reference such as "write the report to the
+// filename just mentioned"); text matching cannot judge meaning and the regex is not to be extended further
+// (depth-0 ruling, gen 8). The real protection is a post-run transcript check on each paid cell (any write target
+// containing "findings" invalidates the cell). That check is NOT built yet: fbatch cells keep no transcript
+// (stub only, --runner cc refuses); see evals/skill-onoff/README.md.
 // Whitelist design: any FINDINGS-file token in an arm is a problem unless its whole clause is an approved sentence.
 const FINDINGS_FILE_TOKEN = /(?<![\w.-])[\w.-]*findings[\w.-]*\.[\w-]+|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
 const norm = (t) => t.replace(/\s+/g, ' ').trim();

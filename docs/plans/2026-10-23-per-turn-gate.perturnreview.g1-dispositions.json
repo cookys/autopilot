@@ -1,0 +1,163 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "per-turn-gate-2026-10-23-perturnreview",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "9db06c65233b6eac2607ecd04a134fe9695b18d8c93e536603234452a0316415",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the old rule mixed raw run counts with 27-30 valid runs. Section 1 now states margins as exact fractions of each arm's own valid count (equal to the 6-run and 3-run cuts at 30/30), Fisher on actual counts, and the power note says it was computed at 30."
+  },
+  {
+   "fingerprint": "d52942142bfa7096f9da75928ff381527e8b45940c6619afa3ae40d613ac1d34",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: items had no text field and no serialization. Section 3.2 now freezes one item-line grammar with a text field, rule numbering by position, v1 integer requested_at only (no stage names), malformed-input exit 2, and a one-item fixture."
+  },
+  {
+   "fingerprint": "989d8e7ad357e7db348eae7d075591158b69ed14d3f06be9ed0b581380e96195",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: scripts/check-hands-commit.js header lines 23-27 (exit 2 usage, exit 3 not verified) and scripts/check-repair-scope.js (exit 2 malformed or git error) conflict with the old any-nonzero rule. Section 3.2 now has a closed exit mapping: 0 holds, 1 finding, anything else not_verified and gate exit 2 with no retry; section 3.8 lists exits 2, 3, 127 as P2 negative controls."
+  },
+  {
+   "fingerprint": "cf0504c596793b889a9c8c77d9881fc7c4f4d9b4d4b48b9eb545ba0b4badf610",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: lineage identity, store and increment point were unnamed. Section 3.5 now names lineage_id (run_id of the first gated dispatch, passed on every redispatch and depth-0 repair), a per-lineage file under the git common dir updated under flock, and reservation before spawn with no refund."
+  },
+  {
+   "fingerprint": "ba6bf58654615a74fad0e6d19a6e60caaf5e30a6e67206f68755aaf0011905db",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: P1 completion left controlled comparisons ambiguous. The P1 row now defines complete as copied logs plus the filled eight-row table plus the preregistered non-controlled checks for candidates 3, 4, 6, 7, 8 plus the third batch; 1, 2, 5 may stay unresolved; unavailable differs from inconclusive."
+  },
+  {
+   "fingerprint": "d08bea47fe15ee32011573a0e923ad0efd6c3a2fcc5da4e595ae69272e0a64cc",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: the eval-to-rail bridge was not specified. The P4 row now freezes a t14 ## Gate fixture (each verify-turn.js check as a command item, never oracle.sh), turn n equals rail round n, a repair stays inside its round, and requires one uncounted seeded five-turn run through the adapter before the first counted run."
+  },
+  {
+   "fingerprint": "7860ff1ecf55d604a2245ea1eee6ff1c6df12b9ee9eef9e46b1d9f2cec7d9083",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: KR5 put the 0.8 threshold before the lanes that measure it. KR5 and the P5 row now say precision is computed once after the observe-mode pilot and evaluated before any enforcement or default proposal."
+  },
+  {
+   "fingerprint": "0ffa289b373c22c52834e9130efee1776e8813d17a78401e427d5d1d5bcfef1b",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: status line, section 6 and the closing paragraph said review had not started while the log recorded R2 and R3. All three now state the actual review state; R4 added to the log."
+  },
+  {
+   "fingerprint": "4ce2029f7814201ec2ed66055ea9a6d26804d8cd940db25461d86a24df96b5dc",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid and duplicates 8 and 25 in substance: stale status and section 6 text. Rewritten to name the 2026-10-23 round, generation 1 folded and generation 2 final, nothing dispatched, no further generation scheduled by the document; R4 log entry added; the stale-status quote in the reviewer checklist updated."
+  },
+  {
+   "fingerprint": "45224588edbeb23dc79c3566d7d9aa5be3fce2b6e6e5a94340817e32034b5090",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: section 3.2 was only a field list. Folded into the frozen grammar paragraph: heading recognition and block end, item delimiters, key forms, integer-only requested_at (stage names dropped in v1), malformed behavior, evidence truncation, and the fixture."
+  },
+  {
+   "fingerprint": "3cc7409fcf41eecfa3e2c8b58186d6fb20613c9f78978fe2efd48ef639d0af57",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: opt-in lineage counter was prose and KR1/3.5 contradicted 3.9 on depth-0 repair after the 6 are spent. Section 3.5 is now the single normative text with a three-step evaluation order (lineage zero goes straight to owner card, no model repair; round cap returns to depth-0, which must reserve and is refused at zero); KR1, section 2, 3.9 and P4 now cite it."
+  },
+  {
+   "fingerprint": "8ef661ef2b60ec2d5093d3fda1bdeb6138fb6128100e4b23a5ab56953fb73ca5",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: verdict regions overlapped (ceiling versus no-effect) and the 25-of-30 cut and count margins did not compose with 27-30 valid runs. Section 1 now has a fixed evaluation order (validity, ceiling, SUCCESS, FAIL-TRADE, no effect, INCONCLUSIVE) and rate-based margins; the ceiling is M1_C/nC at least 25/30."
+  },
+  {
+   "fingerprint": "0eb73f7e730b4b092d11dc27c255d7d32beef0ebc7a4bf38054cc24d0f6de06f",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: P4 left the G command list and the C arm path unspecified. The P4 row now freezes the t14 ## Gate fixture, runs both arms through the P3 adapter (C observe, G enforce), keeps oracle.sh as post-hoc scorer only, and states SUCCESS promotes the adapter and fixture shape, not resume, Stop or SubagentStop."
+  },
+  {
+   "fingerprint": "4ff5544bc1c0736e2a3e0cd7e7234dea8b16f41e3f41bf9c4096913606ba7c2f",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: hooks/_shared/opt-in.js reads cfg.hooks[name] (line 49) and AUTOPILOT_HOOK_<STEM> (line 40), not a top-level key or a bare AUTOPILOT var. Section 2 now states isEnabled('per_turn_gate') with hooks.per_turn_gate or AUTOPILOT_HOOK_PER_TURN_GATE, errors off, adapter calls the helper; section 3.6 refers to it."
+  },
+  {
+   "fingerprint": "6637be0cabbaaf8e74c245806ee8a12d3f077b2e8fb703eecfa3920acd019650",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: duplicate of 5 in substance. Addressed by the same P1 completion definition (controlled comparison not required; candidates 1, 2, 5 may stay unresolved; P5 and P6 may start with them open)."
+  },
+  {
+   "fingerprint": "f5b0a111da68c24a7684bb93bcc4b669f2041fb3358b8b37c4f3d7336640b179",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: check-hands-commit.js exit 3 means check did not run (lines 23-27). Covered by the section 3.2 exit mapping and the 3.9 sentence that listing it in ## Gate does not change its exit-3 meaning at its original call site."
+  },
+  {
+   "fingerprint": "c6ada0710bcce31c886af448091b456fdc007927f7502b59b328276119cca603",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: section 0 asserted the same settings while P1 candidate 6 treats loaded settings as unverified. Section 0 now says only the task, nominal alias and CLI pin are known shared; model id served, loaded settings and flags are P1 evidence."
+  },
+  {
+   "fingerprint": "711abdaa4eab79a0e4ab8b93d50fadfd6093c1b4e53db39bd1183e0a9f558d6a",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: FAIL-TRADE did not require validity and infra reruns were not closed. Section 1 now orders validity first, freezes a closed infra_fail class (runner_timeout, runner_error, auth_expired), allows reruns only after infra_fail, stops at the first non-infra attempt, forbids substitution; P3b row and tests cover classification, eligibility and stop-at-first."
+  },
+  {
+   "fingerprint": "0b516deaf1031e3d6f3069a4d425da0899e1e68fde2e09e75e82bfaebdc060c5",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the C arm path was unspecified. KR4 and the P4 row now require both arms through the identical P3 adapter with the same schedule, pin and checks, sole difference retry text dispatch, adapter hash and mode per attempt, and P4 cannot support promotion if C cannot use it."
+  },
+  {
+   "fingerprint": "ab947dfe93bd5e5d36a47114499a107a8f5107c970776f77e9dd6122d875d980",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same family as 2 and 10, plus uncovered handling and shell semantics. Section 3.2 now declares uncovered items by the literal command \"-\", fixes /bin/sh -c, worktree cwd, stderr-then-stdout evidence, 400-byte UTF-8 cut, newline and backtick sanitization, and malformed-block exit 2."
+  },
+  {
+   "fingerprint": "077cca4fce96ac5dadd011db8bca47414fa8e4fecc5a53d4903ab72a7d3bbad5",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: duplicate of 4 and 11 in substance, plus atomicity. Section 3.5 now specifies flock plus atomic rename, fail-closed store, reserve-before-spawn with no refund, serialised concurrent redispatch, and lists crash, concurrency, cross-engine and depth-0 boundary negative controls."
+  },
+  {
+   "fingerprint": "6a13e41beb6b143cf0f28418b80452291a784115c1e82e11416b547102a594d3",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: duplicate of 3 in substance. Closed by the same exit mapping and the not_verified record that a later clean pass cannot erase."
+  },
+  {
+   "fingerprint": "5e188b81c01b554daa19208f16eda41a89afc623dec151c634e3102882c0d024",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: duplicate of 14. Closed by the same section 2 rewrite; the on/off fixtures are named in the P3 on-path controls via the section 3.8 config-off control."
+  },
+  {
+   "fingerprint": "28b34dfabe271b5be870199555e21a168acd9fe13b891408d7fc614b2439eb7b",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: P2 does not spawn a model, so retry, cap, wiring and cross-engine controls cannot be red-before-green there. Section 3.8 and the P2 and P3 rows now split controls by scope and name exact allowed files: hooks/tests/per-turn-gate.test.sh, per-turn-gate-rail.test.sh, run-t14-gate-batch.test.sh and hooks/tests/fixtures/per-turn-gate/."
+  },
+  {
+   "fingerprint": "909d83f83149a1b205836d1c0d9ae87facf2c13cf1febc5872a1a5beaae6a99c",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: status and review log stale and cap rules restated across sections. Status, section 6, closing and log fixed (see 8 and 9); the review-log rule now requires a log line (R4) rather than an R1 line; caps are centralised in section 3.5 and KR1, section 2, 3.6, 3.9, P3, P4 and the reading order now cite it."
+  },
+  {
+   "fingerprint": "894b420a0ea1186d732f42820ef2790473fe7fe4270bb5ef9782899907d8a462",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid and subsumed by 8 and 9: the sentence \"Review has not started.\" is removed from section 6 and replaced by the actual state."
+  }
+ ]
+}

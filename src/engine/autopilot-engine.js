@@ -5024,6 +5024,16 @@ class AutopilotEngine {
         repair_lineage: { ...repairLineage },
       };
     };
+    const campaignRawLogLocation = (campaignId) => {
+      let common = null;
+      try { common = workOrder.resolveGitCommonDir(loopCwd); } catch (_error) { common = null; }
+      if (!common) return { rawLogRoot: null };
+      const autopilotDir = path.join(common, 'autopilot');
+      return {
+        rawLogRoot: path.join(autopilotDir, 'campaign-verify-logs', String(campaignId)),
+        relativeTo: autopilotDir,
+      };
+    };
     const recordAcceptedVerificationInvariants = (sourceCommit) => {
       acceptedInvariantIds.clear();
       for (const assertion of noRegressionAssertions) {
@@ -9358,6 +9368,9 @@ class AutopilotEngine {
             ...redVerificationDetail({
               receipt,
               executedArgv: verifyResult.executed_argv,
+              stdout: verifyResult.stdout,
+              stderr: verifyResult.stderr,
+              ...campaignRawLogLocation(campaignControl.campaign_id),
             }),
           },
         ));

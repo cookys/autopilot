@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { scan: scanSecretPatterns } = require('../../hooks/_shared/secret-patterns');
 
 const VERIFICATION_RECEIPT_SCHEMA_VERSION = 1;
@@ -450,13 +452,53 @@ function createVerificationReceipt({
   };
 }
 
+const RAW_LOG_STREAM_MAX_BYTES = 1024 * 1024;
+
+function capRawStream(text, maxBytes) {
+  const buf = Buffer.from(String(text || ''), 'utf8');
+  if (buf.length <= maxBytes) return { text: buf.toString('utf8'), truncated: false, bytes: buf.length };
+  const kept = buf.subarray(buf.length - maxBytes).toString('utf8');
+  return { text: kept, truncated: true, bytes: buf.length };
+}
+
+// Diagnostic only: full stdout/stderr of a RED verification, written beside the campaign
+// ledger (never inside it). Fail-open: any write error becomes a warning field.
+function writeRedVerificationRawLog({ receipt, stdout, stderr, rawLogRoot, relativeTo, maxBytes = RAW_LOG_STREAM_MAX_BYTES }) {
+  try {
+    if (typeof rawLogRoot !== 'string' || rawLogRoot.length === 0) {
+      return { verify_raw_log_warning: 'raw log directory unavailable' };
+    }
+    const out = capRawStream(stdout, maxBytes);
+    const err = capRawStream(stderr, maxBytes);
+    const mark = (s) => (s.truncated ? ` (truncated: kept last ${maxBytes} of ${s.bytes} bytes)` : '');
+    const body = `=== stdout${mark(out)} ===\n${out.text}\n=== stderr${mark(err)} ===\n${err.text}\n`;
+    const file = path.join(rawLogRoot, `verify-${String(receipt.receipt_digest).slice(0, 16)}.log`);
+    fs.mkdirSync(rawLogRoot, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, body, { mode: 0o600 });
+    return {
+      verify_raw_log: {
+        path: relativeTo ? path.relative(relativeTo, file) : file,
+        bytes: Buffer.byteLength(body, 'utf8'),
+        sha256: sha256(body),
+        truncated: out.truncated || err.truncated,
+      },
+    };
+  } catch (error) {
+    return { verify_raw_log_warning: `raw log not written: ${error && error.message ? error.message : String(error)}` };
+  }
+}
+
 // The failing command and exit status kept beside (never inside) the receipt, so
-// receipt_digest is unchanged. Output stays in the ledger's bounded stdout/stderr tails.
-function redVerificationDetail({ receipt, executedArgv }) {
+// receipt_digest is unchanged. Output stays in the ledger's bounded stdout/stderr tails;
+// the complete output goes to a sibling file referenced by path only.
+function redVerificationDetail({ receipt, executedArgv, stdout, stderr, rawLogRoot, relativeTo }) {
   if (!receipt || receipt.verdict !== 'RED') return {};
   return {
     verify_argv: Array.isArray(executedArgv) ? executedArgv.map(String) : [],
     verify_exit_status: receipt.exit_status,
+    ...(rawLogRoot !== undefined
+      ? writeRedVerificationRawLog({ receipt, stdout, stderr, rawLogRoot, relativeTo })
+      : {}),
   };
 }
 
@@ -489,6 +531,7 @@ module.exports = {
   createLedgerReconciliationReceipt,
   createVerificationReceipt,
   redVerificationDetail,
+  writeRedVerificationRawLog,
   createVerificationRequest,
   createAdoptedWriterFence,
   createWriterFence,

@@ -710,4 +710,69 @@ for k in argv_kept exit_kept green_empty digest_unchanged engine_wired; do
   assert_contains "$RED_OUT" "$k=true" "BL-0223 red verification detail: $k"
 done
 
+# BL-0223 follow-up (rawlog): a RED verification writes its complete output beside the ledger.
+# RED at 3d09a7d61: 54 passed, 7 failed (file_exists, has_head_beyond_tail, relative_path, size_sha, write_failure_fail_open, truncated_flagged, engine_wired); redVerificationDetail ignored stdout/stderr/rawLogRoot.
+RAWLOG_TMP="$(mktemp -d)"
+RAWLOG_OUT="$(node - "$REPO_ROOT" "$RAWLOG_TMP" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const cv = require(path.join(root, 'src', 'engine', 'campaign-verification'));
+const verifyCmd = 'echo boom >&2; exit 3';
+const argv = cv.verificationArgv(verifyCmd);
+const tree = 'a'.repeat(40);
+const request = cv.createVerificationRequest({ treeSha: tree, verifyCmd, env: { PATH: '/usr/bin:/bin' } });
+const fence = { schema_version: 1, artifact_type: 'implementation_campaign_writer_fence',
+  campaign_id: 'c1', status: 'closed', candidate_tree_sha: tree, candidate_commit: 'b'.repeat(40) };
+fence.receipt_digest = cv.canonicalDigest({ ...fence });
+const co = { schema_version: 1, artifact_type: 'implementation_campaign_checkout_attestation',
+  candidate_commit: 'b'.repeat(40), candidate_tree_sha: tree, mode: 'detached',
+  worktree_path_digest: 'c'.repeat(64) };
+co.receipt_digest = cv.canonicalDigest({ ...co });
+const mk = (status, stdout, stderr) => cv.createVerificationReceipt({
+  campaignId: 'c1', request, exitStatus: status,
+  startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:00:01Z',
+  writerFence: fence, checkoutAttestation: co, executedArgv: argv, stdout, stderr });
+const bigOut = `HEAD_RAW\n${'x'.repeat(10000)}\nTAIL_RAW`;
+const bigErr = `ERR_HEAD\n${'e'.repeat(6000)}\nERR_TAIL`;
+const red = mk(3, bigOut, bigErr);
+const digestBefore = red.receipt_digest;
+const logRoot = path.join(tmp, 'autopilot', 'campaign-verify-logs', 'c1');
+const d = cv.redVerificationDetail({ receipt: red, executedArgv: argv, stdout: bigOut, stderr: bigErr,
+  rawLogRoot: logRoot, relativeTo: path.join(tmp, 'autopilot') });
+const rl = d.verify_raw_log || {};
+const file = rl.path ? path.join(tmp, 'autopilot', rl.path) : '';
+const text = file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+console.log(`file_exists=${Boolean(text)}`);
+console.log(`has_head_beyond_tail=${text.includes('HEAD_RAW') && text.includes('ERR_HEAD') && text.length > 4096}`);
+console.log(`relative_path=${rl.path && !path.isAbsolute(rl.path)}`);
+console.log(`size_sha=${rl.bytes === Buffer.byteLength(text) && rl.sha256 === require('crypto').createHash('sha256').update(text).digest('hex')}`);
+console.log(`ledger_small=${JSON.stringify(d).length < 2000 && !JSON.stringify(d).includes('HEAD_RAW')}`);
+console.log(`digest_unchanged=${red.receipt_digest === digestBefore && !('verify_raw_log' in red)}`);
+const g = cv.redVerificationDetail({ receipt: mk(0, 'ok', ''), executedArgv: argv, stdout: 'ok', stderr: '',
+  rawLogRoot: path.join(tmp, 'green-logs'), relativeTo: tmp });
+console.log(`green_no_file=${Object.keys(g).length === 0 && !fs.existsSync(path.join(tmp, 'green-logs'))}`);
+const blocker = path.join(tmp, 'blocker');
+fs.writeFileSync(blocker, 'file');
+let failOpen = false;
+try {
+  const f = cv.redVerificationDetail({ receipt: red, executedArgv: argv, stdout: bigOut, stderr: bigErr,
+    rawLogRoot: path.join(blocker, 'sub'), relativeTo: tmp });
+  failOpen = typeof f.verify_raw_log_warning === 'string' && !f.verify_raw_log && f.verify_exit_status === 3;
+} catch (_err) { failOpen = false; }
+console.log(`write_failure_fail_open=${failOpen}`);
+const big = cv.redVerificationDetail({ receipt: red, executedArgv: argv, stdout: 'y'.repeat(1024 * 1024 + 50) + 'END', stderr: '',
+  rawLogRoot: path.join(tmp, 'cap'), relativeTo: tmp });
+console.log(`truncated_flagged=${Boolean(big.verify_raw_log) && big.verify_raw_log.truncated === true && big.verify_raw_log.bytes < 1024 * 1024 + 500}`);
+const eng = fs.readFileSync(path.join(root, 'src', 'engine', 'autopilot-engine.js'), 'utf8');
+console.log(`engine_wired=${/rawLogRoot|campaignRawLogLocation/.test(eng)}`);
+NODE
+)"
+rm -rf "$RAWLOG_TMP"
+for k in file_exists has_head_beyond_tail relative_path size_sha ledger_small digest_unchanged green_no_file write_failure_fail_open truncated_flagged engine_wired; do
+  assert_contains "$RAWLOG_OUT" "$k=true" "rawlog: $k"
+done
+
 finalize_test

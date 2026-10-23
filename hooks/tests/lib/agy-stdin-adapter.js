@@ -15,6 +15,8 @@
 //   AGY_STUB_RESULT=none   emit step_update events but NO `result` event
 //   AGY_STUB_CAPTURE=1     answer with `AGY-STUB bytes=N sha256=H tailsha=T argv=[...]` (T = sha256 of the
 //                          last AGY_STUB_TAIL bytes) instead of running the legacy stub
+//   AGY_STUB_NEEDLE_FILE=f in capture mode, append `needle=found|missing`: whether the prompt contains
+//                          file f byte-for-byte (for rails that wrap the payload in their own framing)
 // A prompt over 120000 bytes is NOT forwarded to the legacy stub (it would hit E2BIG): the
 // adapter answers itself with response "BIG-OK".
 const fs = require('fs');
@@ -53,6 +55,9 @@ let captureLine = '';
 if (process.env.AGY_STUB_CAPTURE) {
   const tail = Number(process.env.AGY_STUB_TAIL || 0);
   captureLine = `AGY-STUB bytes=${promptBytes.length} sha256=${sha(promptBytes)} tailsha=${tail ? sha(promptBytes.subarray(promptBytes.length - tail)) : ''} argv=[${args.join('|')}]`;
+  if (process.env.AGY_STUB_NEEDLE_FILE) {
+    captureLine += ` needle=${promptBytes.includes(fs.readFileSync(process.env.AGY_STUB_NEEDLE_FILE)) ? 'found' : 'missing'}`;
+  }
 }
 if (captureLine) process.stderr.write(`${captureLine}\n`); // rails that never parse the response (containment breach) still keep stderr
 const emit = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);

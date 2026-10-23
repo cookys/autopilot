@@ -97,14 +97,16 @@ for n in hbig herr hnone; do mkdir -p "$TEST_TMP/sbx-$n"; mk_sbx "$TEST_TMP/sbx-
 LS="$TEST_TMP/loop-repo"; mkdir -p "$LS/scripts" "$TEST_TMP/loop-ledger"
 (cd "$LS" && git init -q && git config user.email t@t && git config user.name t && echo base > keep.txt && git add keep.txt && git commit -q -m c1 \
   && git checkout -q -b work && python3 -c "open('big.txt','w').write('x'*150000)" && git add big.txt && git commit -q -m c2-oversized)
+LOOP_BIG="$TEST_TMP/loop-big.txt"; python3 -c "open('$LOOP_BIG','w').write('x'*150000)"
 LOOP_BASE="$(git -C "$LS" rev-parse HEAD~1)"
 WRAP="$TEST_TMP/review-wrap.sh"
-printf '#!/usr/bin/env bash\nexec %q "$@" --bin %q\n' "$REVIEW" "$(mk_stub loop AGY_STUB_CAPTURE=1)" > "$WRAP"; chmod +x "$WRAP"
+# the wrapper keeps the seat's stdout (it names the seat's raw_log) in $R/loopseat.out for rail_text
+printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub loop AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error AGY_STUB_NEEDLE_FILE=$LOOP_BIG)" "$R/loopseat.out" > "$WRAP"; chmod +x "$WRAP"
 
 run_case abig env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$BIG" --bin "$(mk_stub abig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)"
 run_case aerr env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub aerr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-author-boom)"
 run_case anone env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub anone AGY_STUB_RESULT=none)"
-run_case rbig env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$BIGDIFF" --bin "$(mk_stub rbig AGY_STUB_CAPTURE=1)"
+run_case rbig env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$BIGDIFF" --bin "$(mk_stub rbig AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error AGY_STUB_NEEDLE_FILE=$BIGDIFF)"
 run_case rerr env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rerr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-review-boom)"
 run_case rnone env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rnone AGY_STUB_RESULT=none)"
 run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)" --model gemini-3.7-flash-high --runner agy
@@ -119,14 +121,19 @@ rc() { cat "$R/$1.rc" 2>/dev/null || echo missing; }
 # --- 1. a >131071-byte prompt arrives intact through each caller --------------
 check_capture abig "author" "$BIG_BYTES" "$BIG"
 assert_not_contains "$(cat "$R/abig.out")" "single-argv ceiling" "author: no argv-ceiling refusal"
-# LIMITATION: dispatch-review.sh / the loop keep neither the agy response nor its stderr when the
-# fixture-less stub produces no agy transcript (containment breach), so byte-exact delivery cannot
-# be read back here; the review/loop rails share the helper proven above and are asserted to reach
-# agy (no ceiling refusal) with the oversized diff.
+# The review/loop rails keep no agy response for a fixture-less stub (containment audit), but they
+# do keep agy's stderr on a non-zero exit, so the capture stub runs in ERROR mode: its
+# `AGY-STUB bytes=… sha256=…` line (written to stderr before the result) is read back from the rail's
+# log. The prompt carries the rail's own framing, so byte-exactness is asserted as the stub finding
+# the whole source payload inside the received prompt (needle=found), plus the >limit byte count.
+check_capture rbig "review" 150000
+assert_contains "$(rail_text rbig)" "needle=found" "review: the >131071-byte diff arrived byte-exact inside the prompt"
+assert_contains "$(rail_text rbig)" "sha256=" "review: stub reported the prompt sha256"
 assert_not_contains "$(rail_text rbig)" "single-argv ceiling" "review: oversized diff is not refused by an argv ceiling"
-assert_contains "$(rail_text rbig)" "no_verdict" "review: oversized diff reached the agy seat (fail-closed no_verdict, not a refusal)"
 check_capture hbig "hetero" "$BIG_BYTES" "$BIG"
 assert_not_contains "$(cat "$R/loop.out")" "single-argv ceiling" "loop: oversized agy seat is not refused by an argv ceiling"
+check_capture loopseat "loop" 150000
+assert_contains "$(rail_text loopseat)" "needle=found" "loop: the >131071-byte payload arrived byte-exact inside the agy seat prompt"
 
 # --- 2+3. ERROR result / no result event -> the rail's existing typed failure --
 assert_neq "0" "$(rc aerr)" "author ERROR: non-zero exit"
@@ -139,6 +146,8 @@ assert_contains "$(cat "$R/rerr.out")" '"status": "no_verdict"' "review ERROR: t
 assert_contains "$(rail_text rerr)" 'zz-review-boom' "review ERROR: the agy error text is surfaced"
 assert_eq "1" "$(rc rnone)" "review no-result: exit 1"
 assert_contains "$(cat "$R/rnone.out")" '"status": "no_verdict"' "review no-result: typed no_verdict"
+assert_contains "$(cat "$R/herr.out")" '"status": "question_suspected"' "hetero ERROR: typed question_suspected (agent exited non-zero, no commit)"
+assert_contains "$(rail_text herr)" 'zz-hetero-boom' "hetero ERROR: the agy error text is surfaced"
 for c in herr hnone; do
   assert_neq "0" "$(rc $c)" "hetero $c: non-zero exit"
   assert_not_contains "$(cat "$R/$c.out")" '"status": "committed"' "hetero $c: never reported committed"

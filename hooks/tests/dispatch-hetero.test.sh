@@ -1690,9 +1690,16 @@ assert.ok(heteroSrc.includes('zero_diff_receipt'));
 // Invoke strict postcheck path via a tiny bash harness that sources the function
 // is heavy; instead run dispatch-hetero with a no-op stub + sealed contract when
 // the script supports --contract.
+// The agy rail sends the prompt on stdin as stream-json; front each inline stub with the adapter
+// (same wiring as make_agy_stdin_stub in lib.sh) so it still answers with a result envelope.
+function wrapAgyStdin(stub) {
+  fs.renameSync(stub, `${stub}.agy-implementation`);
+  fs.writeFileSync(stub, `#!/usr/bin/env bash\nexec node ${JSON.stringify(path.join(root, "hooks/tests/lib/agy-stdin-adapter.js"))} ${JSON.stringify(`${stub}.agy-implementation`)} "$@"\n`);
+  fs.chmodSync(stub, 0o755);
+}
 const stubNoop = path.join(tmp, 'stub-noop.sh');
 fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\n[ "${1:-}" != "--version" ] || { printf "1.1.10\\n"; exit 0; }\n"$AGY_FIXTURE_HELPER" "strict no-op fixture"\nexit 0\n');
-fs.chmodSync(stubNoop, 0o755);
+fs.chmodSync(stubNoop, 0o755); wrapAgyStdin(stubNoop);
 const sealDuringRun = path.join(tmp, 'seal-zero-diff-during-run.js');
 fs.writeFileSync(sealDuringRun, `#!/usr/bin/env node
 'use strict';
@@ -1741,7 +1748,7 @@ fs.writeFileSync(stubEqualityBranch, `#!/usr/bin/env bash
 node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
 "$AGY_FIXTURE_HELPER" "equality fixture"
 `);
-fs.chmodSync(stubEqualityBranch, 0o755);
+fs.chmodSync(stubEqualityBranch, 0o755); wrapAgyStdin(stubEqualityBranch);
 const stubPostcheckEmptyDiff = path.join(tmp, 'stub-postcheck-empty-diff.sh');
 fs.writeFileSync(stubPostcheckEmptyDiff, `#!/usr/bin/env bash
 [ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
@@ -1749,7 +1756,7 @@ node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
 git -c user.email=t@t -c user.name=t commit --allow-empty -q -m empty
 "$AGY_FIXTURE_HELPER" "empty diff fixture"
 `);
-fs.chmodSync(stubPostcheckEmptyDiff, 0o755);
+fs.chmodSync(stubPostcheckEmptyDiff, 0o755); wrapAgyStdin(stubPostcheckEmptyDiff);
 const sealedRunnerSentinel = path.join(tmp, 'sealed-runner-called');
 const stubSealed = path.join(tmp, 'stub-sealed-must-not-run.sh');
 fs.writeFileSync(
@@ -1760,7 +1767,7 @@ touch ${JSON.stringify(sealedRunnerSentinel)}
 exit 99
 `,
 );
-fs.chmodSync(stubSealed, 0o755);
+fs.chmodSync(stubSealed, 0o755); wrapAgyStdin(stubSealed);
 
 // Effectful: stub changes a scope-allowed but unsealed file → output boundary.
 const stubWrong = path.join(tmp, 'stub-wrong.sh');
@@ -1771,7 +1778,7 @@ git add src/other.js
 git -c user.email=t@t -c user.name=t commit -q -m other
 "$AGY_FIXTURE_HELPER" "wrong surface fixture"
 `);
-fs.chmodSync(stubWrong, 0o755);
+fs.chmodSync(stubWrong, 0o755); wrapAgyStdin(stubWrong);
 
 // Effectful correct: changes required path.
 const stubOk = path.join(tmp, 'stub-ok.sh');
@@ -1782,7 +1789,7 @@ git add src/target.js
 git -c user.email=t@t -c user.name=t commit -q -m target
 "$AGY_FIXTURE_HELPER" "required path fixture"
 `);
-fs.chmodSync(stubOk, 0o755);
+fs.chmodSync(stubOk, 0o755); wrapAgyStdin(stubOk);
 
 const script = path.join(root, 'scripts/dispatch-hetero.sh');
 function runDispatch(stub, contractPath, extraEnv = {}) {

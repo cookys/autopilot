@@ -14,7 +14,7 @@ Evidence: `docs/plans/evidence/2026-10-23-per-turn-gate-p0/README.md`, `.../2026
 
 | Question (plan section 4) | Status | Answer |
 |---|---|---|
-| Which hook points are viable (A1, A2, B1, C1) | answered, with limits | All four `produced` on CLI 2.1.309, alias `claude-haiku-4-5`. A1: after a block the hook is called again with `stop_hook_active` true and the model continues. A2: a second block is honored (the flag is a signal, not a limit). B1: a file counter at N=2 gave exactly two blocks. C1: a SubagentStop block makes the subagent continue. Limits: single short sessions, the throwaway hook alone; a trial with the plugin Stop hooks and the throwaway hook together was not run. Multi-turn `--resume` sessions, `--setting-sources project` (the flag the harness passes), and what the counter does across turns were not probed. Isolation rests on the trace alone (no side effect appeared even in the control run). |
+| Which hook points are viable (A1, A2, B1, C1) | answered, with limits | All four `produced` on CLI 2.1.309, alias `claude-haiku-4-5`. A1: after a block the hook is called again with `stop_hook_active` true and the model continues. A2: a second block is honored (the flag is a signal, not a limit). B1: a file counter at N=2 gave exactly two blocks. C1: a SubagentStop block makes the subagent continue. Limits: single short sessions, the throwaway hook alone; a trial with the plugin Stop hooks and the throwaway hook together was not run. Multi-turn `--resume` sessions, `--setting-sources project` (the flag the harness passes), and what the counter does across turns were not probed. Isolation rests on the trace alone. |
 | Measured M2_3 and its label | answered, with a disclosed deviation | M1 6/30, M2 13/30, M3 0/30; Fisher p 0.0169 against 23/30 and 0.7925 against 11/29; label A. Not rule-valid (no post-run task-hash comparison was captured); adopted by the owner on substitute evidence (d-baf11c30). The label is numeric compatibility only. |
 | Is the resolved model id recorded and stable | answered, uninformative | Recorded: `claude-haiku-4-5` in every run of the rerun. Stable across 30 runs, but the value is the alias itself, so it cannot reveal a snapshot change (candidate 1 stays unresolved). |
 | What a complete C run costs and how long it takes | answered | Last-result-object `total_cost_usd` (cumulative within a session): mean 0.524 USD, sample sd 0.1534, range 0.187 to 0.821 (`costs.tsv`); one auth probe 0.0166 USD; the batch cost 16.23 USD (15.73 runs plus 0.50 probes), mean run time 308 s, window 2.6 h; 29 of 30 completed five turns. |
@@ -39,15 +39,16 @@ CLAUDE.md rule: W4 is its own commit, apart from W1 to W3.
 
 ### 2.1 Hook design (from P0 evidence)
 
-- Event: Stop only. Reads stdin JSON (`session_id`, `cwd`, `transcript_path`, `stop_hook_active`). Calls the verifier command from configuration (new key in `config-keys.json`, doc entry required by `check-config-docs.js`), with a hard timeout.
+- Event: Stop only. Reads stdin JSON (`session_id`, `cwd`, `transcript_path`, `stop_hook_active`). Calls the configured verifier command (new `config-keys.json` key, documented per `check-config-docs.js`) with a hard timeout.
 - Reportable (mirrors `gate_turn_reportable` in `run-orchestration-eval.sh`; `verify-turn.js` itself exits 1 only on violations and records gaps without changing the exit code): mode `violations` (the W1 default) is reportable on exit 1 only; mode `violations+features` (the round-2 behaviour, W4) is also reportable on exit 0 with non-empty `feature_gaps`. The mode is a config key.
-- Decision: reportable and counter below N: print `{"decision":"block","reason":<text>}`, increment the counter. Not reportable, counter at N, verifier error (crash, timeout, unparseable output), or knob off: allow, and append a record (`allowed_reason`: clean, cap, error, off) to the hook log. Error never blocks.
+- Decision: reportable and counter below N: print `{"decision":"block","reason":<text>}`, increment the counter. Not reportable, counter at N, verifier error (crash, timeout, unparseable output) or knob off: allow. Error never blocks.
+- Log contract: every invocation appends exactly one record before exiting, blocks included: `{session, turn, decision: allow|block, reason: block|clean|cap|error|off, counter}`. Record count therefore equals invocation count (HOOKCOUNT) and blocks are countable (NC6, BLOCKMAX).
 - Counter: per `(session_id, turn)` file under the live-state directory (`lib/live-state-dir.js`). Turn boundary rule (to be confirmed in P2-0): a Stop call with `stop_hook_active` false starts a new turn: counter := 0 and turn index := previous + 1. A1/A2 showed the flag true on re-entry; that it is false on the first Stop of a resumed turn is unproven (P2-0). If not, count user prompts in `transcript_path`.
 - Inventory: opt-in manifest, hook-classes, `check-hook-inventory.js`, and the "When adding a new script" wiring in CLAUDE.md.
 
 ### 2.2 Verifier contract
 
-A project supplies a command with the interface, exit codes and JSON shape of `verify-turn.js` (`violations[]`, `feature_gaps[]`); only the t14 verifier is evaluated.
+A project supplies a command with the interface, exit codes and JSON shape of `verify-turn.js`; only the t14 verifier is evaluated.
 
 ### 2.3 Coexistence and timing
 
@@ -55,7 +56,7 @@ A project supplies a command with the interface, exit codes and JSON shape of `v
 
 ### 2.4 SubagentStop (C1)
 
-C1 was affirmative, so the drop consequence does not fire. It is still deferred: t14 has no subagents, so there is no baseline, and an unmeasured second hook breaks scorecard-first. Own plan when a task with subagents exists (O4).
+C1 was affirmative but is deferred: t14 has no subagents, so no baseline exists, and an unmeasured hook breaks scorecard-first (O4).
 
 ## 3. Evaluation design (ON arm)
 
@@ -70,7 +71,7 @@ Design choice for the owner (O1):
 
 Metrics: M1, M2, M3 as in P1 (two independent recomputations); per-feature results; blocks per turn and run; cap-exhausted runs; fail-open events; duration, turns, cost.
 
-Sample size and power: 30 per arm detects the expected benefit (control M3 0/30, round-2 gate 26/29). For the trade check, exact power (two-sided Fisher, alpha 0.05, control true rate 13/30, ON lower; the one-sided rule below has more) is 15.24% at a 15-point drop, 66.37% at 30 points and 96.73% at 40 points (acceptance review's figures; recomputed here, same result). A non-significant trade check means "no drop detected", never "no loss"; claiming no loss needs a preregistered non-inferiority margin and sample size, which this plan lacks.
+Sample size and power: 30 per arm detects the expected benefit (control M3 0/30, round-2 gate 26/29). For the trade check, exact power (two-sided Fisher, alpha 0.05, control true rate 13/30, ON lower; the one-sided rule below has more) is 15.24% at a 15-point drop, 66.37% at 30 points and 96.73% at 40 points (acceptance figures, recomputed). A non-significant trade check means "no drop detected", never "no loss"; claiming no loss needs a preregistered non-inferiority margin and sample size, which this plan lacks.
 
 Planned thresholds (planned values, not evidence; the preregistration commit fixes them):
 
@@ -79,7 +80,7 @@ Planned thresholds (planned values, not evidence; the preregistration commit fix
 - Instrument health: hook errors (fail-open on verifier error) in at most 2 of 30 runs; no run with more than N blocks in one turn; every ON run's gate-hook log call count equals the trace count of the gate hook's own executions (matched by its command path); plugin Stop hook executions are counted and reported separately, never in the comparison.
 - Labels: PASS (all gating thresholds), FAIL-TRADE (primary met, trade check failed), FAIL (primary missed), U (not valid). PASS permits documenting an evaluated opt-in, not a default.
 
-Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). An ON run adds model turns per block. The per-block cost, 0.105 (0.524 / 5) to 0.15 USD (longer context), is an unverified estimate. Round 2 averaged about 1.5 retries per run. Hard maximum: 5 turns x N=2 = 10 blocks per run.
+Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). An ON run adds model turns per block. Per-block cost, 0.105 (0.524 / 5) to 0.15 USD, is an unverified estimate. Round 2 averaged about 1.5 retries per run. Hard maximum: 5 turns x N=2 = 10 blocks per run.
 
 | Scenario | ON per run | 30 ON runs (with probes) | D2 total (adds C 16.2) |
 |---|---|---|---|
@@ -112,7 +113,7 @@ The P1 rerun could not be called valid because no artifact was written when the 
 | At least 27 of 30 completed five turns, in each arm separately | per id and end | `TURNS <id> arm n`; final tally lines `COMPLETE ON=x/30 C=y/30` (D1: ON only) |
 | Single resolved model id | per id | `MODEL <id> <value>` |
 | Hook active only in ON runs, and only the gate hook | per id | hook trace (`--debug hooks --debug-file`, same flags in both arms), `HOOKCOUNT <id> gate_trace=<n> gate_log=<n> plugin=<n>`; ON: gate_trace = gate_log; C: gate_trace = 0 |
-| Blocks per turn never exceed N | per id | `BLOCKMAX <id> <value>` from the hook log |
+| Blocks per turn never exceed N | per id | `BLOCKMAX <id> <value>` (max `block` records per turn in the log) |
 | Interleaving order as preregistered (D2) | per id | `ORDER <id> <arm>`, checked against the seeded list |
 | Cost within the cap | per id | `COST <id> run probe total projected`, per arm; `STOP_COST` |
 | Preregistration committed earlier | before first call | `PREREG <hash> <time>`, `merge-base --is-ancestor` result |
@@ -130,7 +131,7 @@ Each check ships with a mutation (a deliberately broken implementation, applied 
 | NC3 | Fail-open | Verifier crash, timeout, garbage JSON, missing command: allow and log `error`. Mutation: block on error. Fails: the per-case allow assertion. |
 | NC4 | Turn boundary | Two turns in one session: the second starts at counter 0. Mutation: counter never reset. Fails: the second turn's block assertion. |
 | NC5 | Wrapper `--audit` | Truncated `invocation.log` (one `END` dropped), missing `taskhash.post.txt`, duplicated `START`. Mutation: `--audit` stubbed to exit 0. Fails: the "exit non-zero" assertion for each of the three inputs. |
-| NC6 (P2-1) | Live gate in `-p` (2.1.309, real call) | Planted violation. Mutation: hook installed with the knob off (or pointed at a nonexistent verifier). Fails: the assertion that the transcript shows one block and the hook log one `block` record. Green: knob on, block seen; knob off, zero blocks. |
+| NC6 (P2-1) | Live gate in `-p` (2.1.309, real call) | Planted violation. Mutation: hook installed with the knob off (or pointed at a nonexistent verifier). Fails: the assertion that the transcript shows one block and the log holds one `decision: block` record. Green: knob on, one block record; knob off, one `allow/off` record and zero blocks. |
 | NC7 | Harness `--gate hook` (stub runner) | Planted violation. Mutation: `--gate hook` parsed but the hook not installed in the temp repo. Fails: the assertions that `gate.jsonl` and the hook log exist with one block; with `--gate off` neither may exist. |
 | NC8 | Task integrity | Dry run that edits a task file mid-batch. Mutation: wrapper without the post-batch listing. Fails: the `TASKHASH_DIFF fail` assertion and the `--audit` non-zero assertion. |
 | NC9 | Feature-only case | Fixture with exit 0 and non-empty `feature_gaps`. Mode `violations`: allow (`clean`). Mode `violations+features`: one block with the gap text. Mutation: both modes treat gaps as not reportable. Fails: the `violations+features` block assertion (also needed for W4 only). |

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0285 -->
+<!-- next-id: BL-0286 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### 回合被判定主工作目錄被改動，但分支位置其實沒動
+- **Id**: BL-0285
+- **Status**: open
+- **Since**: 2026-10-23
+- **Origin**: peer
+- **Reporter**: hangar
+- **Report**: 2026-10-23 bundle docs/hangar-harvest-2026-10
+- **Reply**: none
+- **Problem**: 有一次實作回合被判定為主工作目錄被改動而整輪作廢，但紀錄證明分支位置沒動，只有系統自己的簿記參照變了；原因還沒重現。
+- **Impact**: 可能無故作廢一輪已完成的實作與其花費。
+- **Trigger**: next edit to main-checkout-boundary.sh or the lifecycle-roots writer, or a third unexplained main_checkout_mutated rejection
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED hangar 2026-10-23 (bundle docs/hangar-harvest-2026-10 ea8b40a95); session d12f8e4c 2026-09-19, hypothesis, unreproduced
+- **Pointer**: docs/backlog/main-checkout-mutated-with-no-head-movement.md
 
 ### 審查紀錄封存還沒進品質流程技能說明
 - **Id**: BL-0284

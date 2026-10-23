@@ -23,7 +23,16 @@
  *   node scripts/run-approval.js status            # {mode, source, config_path}
  *   node scripts/run-approval.js persist --mode ask-once|off
  *
- * Exit codes: 0 ok; 2 usage error. Both subcommands print one JSON object to stdout.
+ *   node scripts/run-approval.js claude-native-status    # exit 0 + JSON when confirmed, exit 1 when not
+ *   node scripts/run-approval.js confirm-claude-native   # depth 0 runs this AFTER the owner says yes
+ *
+ * CLAUDE-NATIVE IMPLEMENTER GATE: `dispatch-hetero.sh --runner claude-native` refuses (exit 2,
+ * precondition_failed) unless config.json holds implementer_claude_native.confirmed_at. This is a
+ * machine-local, one-time owner confirmation; there is deliberately NO flag or env on the dispatch
+ * command line that grants it, so a model cannot confirm on the owner's behalf in the same command.
+ *
+ * Exit codes: 0 ok; 1 not confirmed (claude-native-status only); 2 usage error. Every subcommand
+ * prints one JSON object to stdout.
  */
 'use strict';
 const fs = require('fs');
@@ -108,6 +117,37 @@ function cmdPersist(args) {
   process.exit(0);
 }
 
+function cnativeConfirmedAt() {
+  const cfg = readConfig(configPath());
+  const v = cfg && cfg.implementer_claude_native && cfg.implementer_claude_native.confirmed_at;
+  return typeof v === 'string' && v && !Number.isNaN(Date.parse(v)) ? v : null;
+}
+
+function cmdCnativeStatus() {
+  const confirmedAt = cnativeConfirmedAt();
+  process.stdout.write(`${JSON.stringify({ confirmed: confirmedAt !== null, confirmed_at: confirmedAt, config_path: configPath() })}\n`);
+  process.exit(confirmedAt !== null ? 0 : 1);
+}
+
+function cmdCnativeConfirm() {
+  const file = configPath();
+  let existing = readConfig(file);
+  if (existing === null && fs.existsSync(file)) {
+    fail(`${file} exists but is not a JSON object — fix it by hand, refusing to overwrite`);
+  }
+  if (existing === null) existing = {};
+  const before = existing.implementer_claude_native && typeof existing.implementer_claude_native === 'object'
+    && !Array.isArray(existing.implementer_claude_native) ? existing.implementer_claude_native : {};
+  const confirmedAt = new Date().toISOString();
+  const next = { ...existing, implementer_claude_native: { ...before, confirmed_at: confirmedAt } };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(16).slice(2)}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+  process.stdout.write(`${JSON.stringify({ confirmed: true, confirmed_at: confirmedAt, config_path: file })}\n`);
+  process.exit(0);
+}
+
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -131,7 +171,9 @@ function usage() {
     'Usage: node scripts/run-approval.js status | persist --mode off|ask-once\n'
     + '  status   Print {mode, source, config_path} for the one-confirm-per-run knob.\n'
     + '  persist  Merge the mode into ~/.autopilot/config.json (other keys preserved).\n'
-    + '           Writes the mode ONLY — never red lines, DOA, or irreversible carve-outs.\n',
+    + '           Writes the mode ONLY — never red lines, DOA, or irreversible carve-outs.\n'
+    + '  claude-native-status   Exit 0 if the owner confirmed the claude-native implementer runner, else 1.\n'
+    + '  confirm-claude-native  Record implementer_claude_native.confirmed_at (run only after the owner says yes).\n',
   );
 }
 
@@ -142,6 +184,8 @@ function usage() {
   switch (cmd) {
     case 'status': cmdStatus(); break;
     case 'persist': cmdPersist(args); break;
-    default: fail(`unknown subcommand "${cmd}" (expected status|persist)`);
+    case 'claude-native-status': cmdCnativeStatus(); break;
+    case 'confirm-claude-native': cmdCnativeConfirm(); break;
+    default: fail(`unknown subcommand "${cmd}" (expected status|persist|claude-native-status|confirm-claude-native)`);
   }
 })();

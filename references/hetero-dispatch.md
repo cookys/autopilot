@@ -230,6 +230,16 @@ only where the installed runner exposes a verified enforceable surface:
 | `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
 | `codex`, `agy`, `grok`, `cc-shim`, `claude-native`, `cursor` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
 
+`claude-native` is also an **implementer** runner (`dispatch-hetero.sh --runner claude-native`: first-party
+Claude on the owner's native auth, same worktree, ledger, result JSON, wall timeout and kill-after as every other
+runner). It stays EXPLICIT-only and sits behind a **one-time owner confirmation**: without
+`implementer_claude_native.confirmed_at` in `~/.autopilot/config.json` the dispatch exits 2 with
+`status: precondition_failed` and depth 0 must ask the owner once, then run
+`node scripts/run-approval.js confirm-claude-native` (no flag on the dispatch command line grants it). The claude
+child gets a throwaway `CLAUDE_CONFIG_DIR` seeded by `scripts/lib/seed-claude-config.js` with ONLY a mode-0600
+`.credentials.json` (never the real `~/.claude`), removed when the dispatch ends. Review, consult and discuss
+use of `claude-native` is unchanged.
+
 The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
 negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
 runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps
@@ -248,7 +258,7 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/depth0-control-loop.md`](../skills/ceo-agent/references/depth0-control-loop.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, `"opencode"`, `"kimi"`, `"claude-native"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/depth0-control-loop.md`](../skills/ceo-agent/references/depth0-control-loop.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 ### Outcome states
 

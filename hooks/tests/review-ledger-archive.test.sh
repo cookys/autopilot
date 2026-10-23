@@ -1655,7 +1655,7 @@ DEST_AQ_LANE=$(node -e 'const lib=require(process.argv[1]); process.stdout.write
 AQ_BUCKETS=$(find "$ARCH_AQ" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%f\n' | sort)
 AQ_BUCKET_N=$(printf '%s\n' "$AQ_BUCKETS" | grep -c . || true)
 AQ_LANE=0
-printf '%s\n' "$AQ_BUCKETS" | grep -q '^lane-' && AQ_LANE=1
+grep -q '^lane-' <<<"$AQ_BUCKETS" && AQ_LANE=1
 if [ "$AQ_BUCKET_N" -ge 2 ] || [ "$AQ_LANE" = 1 ]; then
   echo "case aq: red-on-broken (buckets=$AQ_BUCKET_N lane_prefix=$AQ_LANE)"
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))

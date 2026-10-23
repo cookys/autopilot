@@ -646,7 +646,7 @@ assert_r10_result_json_never_default_timeout_source() {
   src_line="$(awk '/^# OUTPUT:/{p=1} p && /timeout_source/{print; exit}' "$SCRIPT")"
   [ -n "$src_line" ] || fail "assert_r10_result_json_never_default_timeout_source: missing OUTPUT timeout_source line"
   pre="${src_line%%\(*}"
-  if printf '%s' "$pre" | grep -q '"default"'; then
+  if grep -q '"default"' <<<"$pre"; then
     fail "assert_r10_result_json_never_default_timeout_source: OUTPUT timeout_source line still lists quoted default before parenthetical: $src_line"
     return
   fi

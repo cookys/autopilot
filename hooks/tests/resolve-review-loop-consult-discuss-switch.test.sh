@@ -292,7 +292,7 @@ assert_eq "" "$POP_A_UNLISTED" "Population A: every extractor match is a named m
 POP_A_STALE=""
 while IFS='|' read -r p _; do
   [ -f "$REPO_ROOT/$p" ] || continue
-  printf '%s\n' "$POP_A_MATCHED" | grep -qxF "$p" || POP_A_STALE="$POP_A_STALE $p"
+  grep -qxF "$p" <<<"$POP_A_MATCHED" || POP_A_STALE="$POP_A_STALE $p"
 done <<< "$POP_A_ALLOW"
 assert_eq "" "$POP_A_STALE" "Population A: no allowlisted file exists without matching the extractor (stale entries listed)"
 
@@ -425,7 +425,7 @@ POP_B_PINNED="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch
 POP_B_UNREVIEWED=""
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  printf '%s\n' "$POP_B_PINNED" | grep -qxF "$p" && continue
+  grep -qxF "$p" <<<"$POP_B_PINNED" && continue
   printf '%s\n' "$POP_B_DEFAULT_ALLOW" | cut -d'|' -f1 | grep -qxF "$p" && continue
   POP_B_UNREVIEWED="$POP_B_UNREVIEWED $p"
 done <<< "$POP_B_MATCHED"
@@ -436,7 +436,7 @@ while IFS='|' read -r p _; do
   # is TRACKED and does not match. A file that merely exists on disk (untracked, mid-rename, not yet
   # added by a parallel hand) is outside the grep's view, so calling it stale is a false red (BL-0104).
   git -C "$REPO_ROOT" ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || continue
-  printf '%s\n' "$POP_B_MATCHED" | grep -qxF "$p" || POP_B_STALE="$POP_B_STALE $p"
+  grep -qxF "$p" <<<"$POP_B_MATCHED" || POP_B_STALE="$POP_B_STALE $p"
 done <<< "$POP_B_DEFAULT_ALLOW"
 assert_eq "" "$POP_B_STALE" "Population B: no allowlisted file exists without matching 'reviewer_engine:' (stale entries listed)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare

@@ -209,8 +209,8 @@ JSON
   local XIX_REGION
   XIX_REGION="$(awk '/^# \(xix\)/,/^# \(xx\)/' "$GATE")"
   local TRACKED_AND_CHMOD=""
-  if printf '%s\n' "$XIX_REGION" | grep -q 'evals/consult-capability-evidence-corpus.json' \
-    && printf '%s\n' "$XIX_REGION" | grep -Eq 'chmod 000 "\$CONSULT_CORPUS"|chmod 000 .*evals/consult-capability-evidence-corpus'; then
+  if grep -q 'evals/consult-capability-evidence-corpus.json' <<<"$XIX_REGION" \
+    && grep -Eq 'chmod 000 "\$CONSULT_CORPUS"|chmod 000 .*evals/consult-capability-evidence-corpus' <<<"$XIX_REGION"; then
     TRACKED_AND_CHMOD="yes"
   fi
   assert_eq "$TRACKED_AND_CHMOD" "" \

@@ -67,10 +67,10 @@ const live = readLive(reader.base, sid);
 process.stdout.write(JSON.stringify({ writer, reader, live }));
 ' "$LIB" "$ROOT" "$PROC" "$UID_N" "$SID")"
 
-  if printf '%s' "$OUT" | grep -q '"source":"xdg"' \
-    && printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"' \
-    && printf '%s' "$OUT" | grep -q '"context_window_size":1000000' \
-    && printf '%s' "$OUT" | grep -vq '"live":null'; then
+  if grep -q '"source":"xdg"' <<<"$OUT" \
+    && grep -q '"source":"xdg-inferred"' <<<"$OUT" \
+    && grep -q '"context_window_size":1000000' <<<"$OUT" \
+    && grep -vq '"live":null' <<<"$OUT"; then
     ok "split env: writer xdg, reader xdg-inferred, live 1M"
   else
     bad "split env: $OUT"
@@ -107,7 +107,7 @@ const mode = (fs.statSync(cand).mode & 0o777).toString(8);
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 ' "$LIB" "$ROOT" "$PROC" "$CAND")"
 
-  if printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"' && printf '%s' "$OUT" | grep -q '"mode":"700"'; then
+  if grep -q '"source":"xdg-inferred"' <<<"$OUT" && grep -q '"mode":"700"' <<<"$OUT"; then
     ok "group bits tightened to 0700 ($OUT)"
   else
     bad "expected xdg-inferred mode 700, got $OUT"
@@ -143,7 +143,7 @@ const r = resolveLiveDir({
 const mode = (fs.statSync(cand).mode & 0o777).toString(8);
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 ' "$LIB" "$ROOT" "$PROC" "$CAND")"
-  if printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"' && printf '%s' "$OUT" | grep -q '"mode":"700"'; then
+  if grep -q '"source":"xdg-inferred"' <<<"$OUT" && grep -q '"mode":"700"' <<<"$OUT"; then
     ok "0777 under private parent accepted and chmod 0700 ($OUT)"
   else
     bad "expected xdg-inferred mode 700 for 0777 under 0700 parent, got $OUT"
@@ -179,7 +179,7 @@ const r = resolveLiveDir({
 const mode = (fs.statSync(cand).mode & 0o777).toString(8);
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 ' "$LIB" "$ROOT" "$PROC" "$CAND")"
-  if printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"' && printf '%s' "$OUT" | grep -q '"mode":"700"'; then
+  if grep -q '"source":"xdg-inferred"' <<<"$OUT" && grep -q '"mode":"700"' <<<"$OUT"; then
     ok "production 0775 under private parent accepted and chmod 0700 ($OUT)"
   else
     bad "expected xdg-inferred mode 700 for production 0775 under 0700 parent, got $OUT"
@@ -216,7 +216,7 @@ const mode = (fs.statSync(cand).mode & 0o777).toString(8);
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base, mode }));
 ' "$LIB" "$ROOT" "$PROC" "$CAND")"
   MODE_AFTER="$(stat -c '%a' "$CAND")"
-  if printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"'; then
+  if grep -q '"source":"xdg-inferred"' <<<"$OUT"; then
     bad "public parent must reject candidate, got $OUT"
   elif [ "$MODE_AFTER" != "775" ]; then
     bad "must not chmod when parent is public (mode=$MODE_AFTER out=$OUT)"
@@ -248,7 +248,7 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
 ' "$LIB" "$ROOT" "$PROC")"
   if [ -e "$PARENT" ]; then
     bad "must not create missing parent $PARENT (out=$OUT)"
-  elif printf '%s' "$OUT" | grep -q '"source":"xdg-inferred"'; then
+  elif grep -q '"source":"xdg-inferred"' <<<"$OUT"; then
     bad "missing parent must not resolve xdg-inferred: $OUT"
   else
     case "$OUT" in

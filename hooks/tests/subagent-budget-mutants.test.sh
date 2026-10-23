@@ -295,7 +295,7 @@ run_one() {
   )
   mrc=$?
   if [ "$row" = "reader_throw" ]; then
-    if [ "$mrc" -eq 0 ] && ! printf '%s' "$mout" | grep -q 'ASSERT '; then
+    if [ "$mrc" -eq 0 ] && ! grep -q 'ASSERT ' <<<"$mout"; then
       echo "reader_throw_fail_open PASS"
       return 0
     fi
@@ -315,7 +315,7 @@ run_one() {
     fail "$row unexpected PASS under mutant"
     return 1
   fi
-  if ! printf '%s' "$mout" | grep -q "ASSERT $row"; then
+  if ! grep -q "ASSERT $row" <<<"$mout"; then
     echo "$row mutant failed without marker ASSERT $row (rc=$mrc)" >&2
     printf '%s\n' "$mout" >&2
     fail "$row mutant failed without marker ASSERT $row (rc=$mrc)"

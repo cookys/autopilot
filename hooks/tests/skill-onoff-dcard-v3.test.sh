@@ -121,12 +121,13 @@ r=json.load(open(sys.argv[1]))
 if r.get("turn2") != "skipped_no_card": raise SystemExit(r.get("turn2"))
 if r.get("turn2_exit") != 0: raise SystemExit(r.get("turn2_exit"))
 PY
-# Golden row is the pre-change harness at 914a86f5b, same clock and identity as this run.
+# Golden row is the pre-change harness (parent of 60354af8e, the dcard-v3 harness change; blob df37607af), same clock and identity as this run.
+# (Pinned previously to 914a86f5b, a clone-local PARALLEL-RUN shadow commit that is not in develop history, so the object was missing everywhere else.)
 EVAL_SH="$BASE/run-skill-onoff-eval.sh"
 cp "$EVAL_SH" "$TEST_TMP/eval.new"
 restore_eval() { cp "$TEST_TMP/eval.new" "$EVAL_SH"; }
 trap restore_eval EXIT
-git show 914a86f5b:evals/skill-onoff/run-skill-onoff-eval.sh > "$EVAL_SH"
+git show 60354af8e^:evals/skill-onoff/run-skill-onoff-eval.sh > "$EVAL_SH"
 OUTG="$TEST_TMP/out-noturn2-golden"
 GIT_AUTHOR_DATE='2020-01-01T00:00:00Z' GIT_COMMITTER_DATE='2020-01-01T00:00:00Z' \
   ONOFF_STUB_BIN="$QUIET" \
@@ -163,13 +164,13 @@ git -C "$REPO" commit -q --allow-empty -m init --no-verify
 out=$(cd "$REPO" && HOME="$HOME" TRANSCRIPT="$TEST_TMP/empty.jsonl" FROZEN_BASE_SHA="$(git rev-parse HEAD)" \
   QUERY="$BASE/lib/transcript-query.js" AUTOPILOT_LIVE_DIR="$LIVE" DCARD_TURN2=ran \
   ONOFF_LIB="$BASE/lib-dcard-v3" bash "$BASE/tasks/$TASK/markers.sh") || fail "markers with unset snapshot exit $?"
-printf '%s\n' "$out" | grep -q '^marker_a_decision_file=false$' || fail "unset snapshot was not false: $out"
-printf '%s\n' "$out" | grep -q '^marker_m_hook_card=' || fail "markers did not emit m_hook_card"
+grep -q '^marker_a_decision_file=false$' <<<"$out" || fail "unset snapshot was not false: $out"
+grep -q '^marker_m_hook_card=' <<<"$out" || fail "markers did not emit m_hook_card"
 MISS="$TEST_TMP/no-such-snapshot"
 out2=$(cd "$REPO" && HOME="$HOME" TRANSCRIPT="$TEST_TMP/empty.jsonl" FROZEN_BASE_SHA="$(git rev-parse HEAD)" \
   QUERY="$BASE/lib/transcript-query.js" AUTOPILOT_LIVE_DIR="$LIVE" DCARD_TURN2=ran \
   DCARD_DECISIONS_PRE_TURN2="$MISS" ONOFF_LIB="$BASE/lib-dcard-v3" bash "$BASE/tasks/$TASK/markers.sh") || fail "missing dir markers exit"
-printf '%s\n' "$out2" | grep -q '^marker_a_decision_file=false$' || fail "missing snapshot dir was not false: $out2"
+grep -q '^marker_a_decision_file=false$' <<<"$out2" || fail "missing snapshot dir was not false: $out2"
 
 echo "=== a2-within-doa still runs through lib-dcard-v3 ==="
 OUTA="$TEST_TMP/out-a2"

@@ -105,7 +105,7 @@ eq "1" "$(count_watchers)" "exactly one watcher process after the first set"
 # --- 2. second set while held: no second writer, holder pid printed ----------------------------------
 do_set
 eq "0" "$SET_RC" "second set exits 0"
-eq "yes" "$([ -n "$FIRST_PID" ] && printf '%s' "$SET_ERR" | grep -q "pid $FIRST_PID" && echo yes || echo no)" "second set while held prints the holder pid"
+eq "yes" "$([ -n "$FIRST_PID" ] && grep -q "pid $FIRST_PID" <<<"$SET_ERR" && echo yes || echo no)" "second set while held prints the holder pid"
 sleep 1
 eq "$FIRST_PID" "$(envelope_pid)" "second set leaves the same writer.pid"
 eq "1" "$(count_watchers)" "still exactly one watcher after the second set"
@@ -136,7 +136,7 @@ rm -f "$MARKERS"/*.json
 WPATH="$SB/nopath" do_set
 eq "0" "$SET_RC" "no flock on PATH: set exits 0"
 eq "1" "$(find "$MARKERS" -name '*.json' | wc -l | tr -d ' ')" "no flock on PATH: marker is written"
-eq "yes" "$(printf '%s' "$SET_ERR" | grep -qi "flock" && echo yes || echo no)" "no flock on PATH: stderr names flock"
+eq "yes" "$(grep -qi "flock" <<<"$SET_ERR" && echo yes || echo no)" "no flock on PATH: stderr names flock"
 eq "0" "$(count_watchers)" "no flock on PATH: no watcher"
 
 # --- 6. non-repo cwd: behaviour stays as before (Mission routing rejects it, rc 2; no marker, no watcher) ----
@@ -144,7 +144,7 @@ rm -f "$MARKERS"/*.json
 do_set "$NONREPO"
 eq "2" "$SET_RC" "non-repo: set is still rejected by Mission routing (rc 2, pre-existing)"
 eq "0" "$(find "$MARKERS" -name '*.json' | wc -l | tr -d ' ')" "non-repo: no marker written"
-eq "no" "$(printf '%s' "$SET_ERR" | grep -q "session-mode: watcher" && echo yes || echo no)" "non-repo: no watcher stderr line"
+eq "no" "$(grep -q "session-mode: watcher" <<<"$SET_ERR" && echo yes || echo no)" "non-repo: no watcher stderr line"
 eq "0" "$(count_watchers)" "non-repo: no watcher"
 
 # --- 7. markerRepoIdentity() == scopeFromCwd().repo_identity (main, linked worktree, symlink, non-repo) -----

@@ -145,7 +145,7 @@ EOF
     --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
   RC=$?
   ERR="$(printf '%s' "$OUT" | sed -n 's/.*"error": "\([^"]*\)".*/\1/p')"
-  if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q '"status": "reviewed"'; then
+  if [ "$RC" -eq 0 ] && grep -q '"status": "reviewed"' <<<"$OUT"; then
     ok "chrome + complete block parses to reviewed (rc=$RC)"
   else
     bad "chrome + complete block expected reviewed, got rc=$RC status-line=[$OUT] reason=[$ERR]"
@@ -158,7 +158,7 @@ EOF
     --diff-file "$DIFF" --bin "$STUB" 2>/dev/null)"
   RC=$?
   ERR="$(printf '%s' "$OUT" | sed -n 's/.*"error": "\([^"]*\)".*/\1/p')"
-  if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q '"status": "no_verdict"'; then
+  if [ "$RC" -eq 1 ] && grep -q '"status": "no_verdict"' <<<"$OUT"; then
     ok "chrome + truncated block stays no_verdict (rc=$RC reason=[$ERR])"
   else
     bad "chrome + truncated block expected no_verdict, got rc=$RC out=[$OUT]"
@@ -210,14 +210,14 @@ EOF
   local OUT
   OUT="$(run_probe "$WORLD")"
   MODE="$(stat -c '%a' "$WORLD" 2>/dev/null || echo missing)"
-  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$WORLD" && [ "$MODE" = "700" ]; then
+  if grep -q '"source":"override"' <<<"$OUT" && grep -qF "$WORLD" <<<"$OUT" && [ "$MODE" = "700" ]; then
     ok "0o777 under private parent tightened to 0700 and accepted (got $OUT)"
   else
     bad "0o777 candidate expected chmod-accept override mode 700, mode=$MODE out=$OUT"
   fi
 
   OUT="$(run_probe "$LINK")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+  if grep -q '"source":"override"' <<<"$OUT"; then
     bad "symlink candidate must be rejected, got $OUT"
   else
     ok "symlink candidate rejected (got $OUT)"
@@ -225,14 +225,14 @@ EOF
 
   OUT="$(run_probe "$GROUP")"
   MODE="$(stat -c '%a' "$GROUP" 2>/dev/null || echo missing)"
-  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$GROUP" && [ "$MODE" = "700" ]; then
+  if grep -q '"source":"override"' <<<"$OUT" && grep -qF "$GROUP" <<<"$OUT" && [ "$MODE" = "700" ]; then
     ok "0o750 candidate tightened to 0700 and accepted (private parent) (got $OUT)"
   else
     bad "0o750 candidate expected chmod-accept override mode 700, mode=$MODE out=$OUT"
   fi
 
   OUT="$(run_probe "$GOOD")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$GOOD"; then
+  if grep -q '"source":"override"' <<<"$OUT" && grep -qF "$GOOD" <<<"$OUT"; then
     ok "mode 0700 candidate accepted as override"
   else
     bad "mode 0700 candidate expected override, got $OUT"
@@ -241,7 +241,7 @@ EOF
   OUT="$(run_probe "$MISSING")"
   local MODE
   MODE="$(stat -c '%a' "$MISSING" 2>/dev/null || echo missing)"
-  if [ -d "$MISSING" ] && [ "$MODE" = "700" ] && printf '%s' "$OUT" | grep -q '"source":"override"'; then
+  if [ -d "$MISSING" ] && [ "$MODE" = "700" ] && grep -q '"source":"override"' <<<"$OUT"; then
     ok "absent candidate created mode 0700 and accepted"
   else
     bad "absent candidate expected mkdir 0700 override, mode=$MODE out=$OUT"
@@ -277,7 +277,7 @@ const r = resolveLiveDir({
 });
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
 ' "$LIB" "$CAND")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$CAND"; then
+  if grep -q '"source":"override"' <<<"$OUT" && grep -qF "$CAND" <<<"$OUT"; then
     ok "multi-row findmnt prefers RAM fstype on row 2 (got $OUT)"
   else
     bad "multi-row findmnt expected override, got $OUT"
@@ -311,14 +311,14 @@ process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
   }
 
   OUT="$(run_proc "$TABDIR")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+  if grep -q '"source":"override"' <<<"$OUT"; then
     ok "proc mounts unescapes \011 tab mountpoint (got $OUT)"
   else
     bad "tab-escaped mountpoint expected override, got $OUT"
   fi
 
   OUT="$(run_proc "$NLDIR")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
+  if grep -q '"source":"override"' <<<"$OUT"; then
     ok "proc mounts unescapes \012 newline mountpoint (got $OUT)"
   else
     bad "newline-escaped mountpoint expected override, got $OUT"
@@ -382,9 +382,9 @@ const r = resolveLiveDir({
 });
 process.stdout.write(JSON.stringify({ source: r.source, base: r.base }));
 ' "$LIB" "$CAND" "$PROC")"
-  if printf '%s' "$OUT" | grep -q '"source":"ssd-fallback"'; then
+  if grep -q '"source":"ssd-fallback"' <<<"$OUT"; then
     bad "notFound+tmpfs /proc/mounts must not be ssd-fallback, got $OUT"
-  elif printf '%s' "$OUT" | grep -q '"source":"override"'; then
+  elif grep -q '"source":"override"' <<<"$OUT"; then
     ok "notFound without wildcard uses /proc/mounts tmpfs (got $OUT)"
   else
     bad "notFound+tmpfs /proc/mounts expected override, got $OUT"

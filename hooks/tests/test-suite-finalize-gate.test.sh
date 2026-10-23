@@ -60,9 +60,9 @@ finalizes() {
   P="$(grep -avE '^[[:space:]]*$' "$code" | tail -n 2 | head -n 1)"
   local bare='^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*$'
   local orx='^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*\|\|[[:space:]]*exit 1[[:space:]]*$'
-  printf '%s\n' "$L" | grep -qE "$bare|$orx" && return 0
-  if printf '%s\n' "$L" | grep -qE '^[[:space:]]*exit 0[[:space:]]*$'; then
-    printf '%s\n' "$P" | grep -qE "$orx" && return 0
+  grep -qE "$bare|$orx" <<<"$L" && return 0
+  if grep -qE '^[[:space:]]*exit 0[[:space:]]*$' <<<"$L"; then
+    grep -qE "$orx" <<<"$P" && return 0
   fi
   # a fail() that itself exits nonzero
   grep -aqE '^fail\(\)[[:space:]]*\{.*exit 1' "$code" && return 0
@@ -78,10 +78,10 @@ for f in "$REPO_ROOT"/hooks/tests/*.test.sh; do
   grep -avE '^[[:space:]]*#' "$f" | grep -qE '(^|[;&[:space:]])(\.|source)[[:space:]]+.*lib\.sh' || continue
   # ... and calls finalize_test as a command (non-comment line)
   if finalizes "$f"; then
-    printf '%s\n' "$ALLOWLIST" | grep -qx "$name" && stale="$stale $name"
+    grep -qx "$name" <<<"$ALLOWLIST" && stale="$stale $name"
     continue
   fi
-  printf '%s\n' "$ALLOWLIST" | grep -qx "$name" || violators="$violators $name"
+  grep -qx "$name" <<<"$ALLOWLIST" || violators="$violators $name"
 done
 
 assert_eq "" "${violators# }" "every lib.sh suite calls finalize_test (or is on the frozen allowlist)"

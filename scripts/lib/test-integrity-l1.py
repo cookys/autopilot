@@ -1815,6 +1815,11 @@ def _shell_code_mask(line):
                     break
                 j += 1
             end = j + 1 if j < n else n
+            if j >= n or "$(" in line[i:end]:
+                # Unclosed here, or holding a command substitution: its
+                # content may be live code (`x="$(cat <<'EOF'`). Fail closed:
+                # treat it as code, masking only the quote character.
+                end = i + 1
             mask[i:end] = [False] * (end - i)
             i = end
             prev_is_boundary = False
@@ -1856,10 +1861,36 @@ def _heredoc_body_lines(text):
     return out
 
 
+def _assertion_liveness(text):
+    """(live, dead) Counters of normalised assertion-like lines in a whole shell
+    file; dead = inside a heredoc body."""
+    from collections import Counter
+    live, dead = Counter(), Counter()
+    body_lines = _heredoc_body_lines(text)
+    for no, line in enumerate(text.split("\n"), 1):
+        if _surface_assertion_like(line, "shell"):
+            (dead if no in body_lines else live)[_norm_line(line, "shell")] += 1
+    return live, dead
+
+
+def _assertion_went_dead(base_text, head_text):
+    """True when some assertion text lost a live copy while gaining a dead
+    (heredoc body) one: the edit swallowed a real assertion into text, which a
+    -U0 diff can show with no assertion line added or removed at all."""
+    bl, bd = _assertion_liveness(base_text)
+    hl, hd = _assertion_liveness(head_text)
+    return any(hl[t] < bl[t] and hd[t] > bd[t] for t in bl)
+
+
+_COMPLEX_EXPANSION = re.compile(r"\$\{[^}]*[^A-Za-z0-9_}][^}]*\}|\$\(|`")
+
+
 def _norm_operand(tok):
     """$x, ${x} and "$x" compare equal."""
     tok = tok.strip()
-    if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "\"'":
+    if len(tok) >= 2 and tok[0] == "'" and tok[-1] == "'":
+        return tok  # single quotes do not expand: stay literal
+    if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
         tok = tok[1:-1]
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", tok)
 
@@ -1902,6 +1933,10 @@ def _degenerate_added(content, lang_key):
         return False
     if _assertion_shape(raw, True) is None:
         return True
+    if _COMPLEX_EXPANSION.search(_SQ_STRING.sub(" ", raw)):
+        # ${x:-}, ${x#..}, $((..)), $(..), `..`: cannot prove the operand is
+        # not the subject itself. Fail closed.
+        return True
     call = _ASSERT_CALL.match(raw)
     if call:
         args = _ARG.findall(call.group(2))
@@ -1932,7 +1967,7 @@ def _operands(content, lang_key):
     return out
 
 
-def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None):
+def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None, base_text=None):
     """True when a changed surface file should be reported as a touch.
 
     BL-0060 v3 rule b: a Modified file is a touch only when the diff deletes or
@@ -1956,6 +1991,10 @@ def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None):
         if head_text is None:
             return True  # cannot see the whole file: fail closed
         head_heredoc = _heredoc_body_lines(head_text)
+        if base_text is None:
+            return True
+        if _assertion_went_dead(base_text, head_text):
+            return True
     for hunk in hunks:
         new_no = hunk["new_start"]
         heredoc_end = None
@@ -2470,6 +2509,7 @@ def main():
                 files_diff.get(new_path),
                 get_lang_key(new_path),
                 read_blob(new_path, head_ref, repo_dir),
+                read_blob(old_path, base_ref, repo_dir),
             )
         ):
             if new_path not in surface_touches:

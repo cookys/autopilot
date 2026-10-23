@@ -12,6 +12,8 @@
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 # RED at d4415142e: F13 F14 F15 F16 F17 F18 failed (here-string / quoted / commented <<EOF opened a phantom heredoc, END-OF-FILE delimiter truncated, $expected_value subject dropped, [[ "$age"<"5" ]] without spaces rejected); N31 N32 passed.
 # RED at d4415142e (acceptance round 5): N33 N34 N35 failed (replacement moved into an existing heredoc, or always true via ${age}, accepted as equivalent).
+# RED at ae6cd0d61 (four-seat round 3): N36 F19 failed (double quote opened by $(cat <<'EOF' and closed lines later masked the heredoc opener; single-quoted '${x}' treated as self-comparison).
+# RED at ae6cd0d61 (acceptance round 6): N38 N39 N40 N41 failed (heredoc end word moved so a context assertion became text; ${age:-} / $((age)) / $(echo $age) accepted as equivalents).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -536,5 +538,31 @@ if has_kind surface_touch; then report N34 1; else report N34 0; fi
 repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "${age}" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report N35 1; else report N35 0; fi
+
+# ── N36 rule 1: heredoc opened inside "$( ... )" whose closing quote is on a later line ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'expected="$(cat <<\'EOF\'\nassert_eq "$age" "5"\nEOF\n)"')"
+run_case "$repo"
+if has_kind surface_touch; then report N36 1; else report N36 0; fi
+
+# ── F19 rule 1: single quotes do not expand, '${x}' is not a self-comparison ──
+repo="$(mk_surface 'assert_eq "$x" "0"' "assert_eq \"\$x\" '\${x}'")"
+run_case "$repo"
+if has_kind surface_touch; then report F19 0; else report F19 1; fi
+
+# ── N38 rule 1: moving the heredoc end word swallows an unchanged real assertion (-U0 shows no assertion line) ──
+repo="$(mk_surface $'cat <<\'END\'\ntext\nplaceholder\nEND\nassert_eq "$age" "0"' $'cat <<\'END\'\ntext\nassert_eq "$age" "0"\nEND')"
+run_case "$repo"
+if has_kind surface_touch; then report N38 1; else report N38 0; fi
+
+# ── N39 / N40 / N41 rule 1: operands whose value cannot be proven different from the subject ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "${age:-}"')"
+run_case "$repo"
+if has_kind surface_touch; then report N39 1; else report N39 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$((age))"')"
+run_case "$repo"
+if has_kind surface_touch; then report N40 1; else report N40 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$(echo $age)"')"
+run_case "$repo"
+if has_kind surface_touch; then report N41 1; else report N41 0; fi
 
 finalize_test

@@ -26,3 +26,5 @@ Files: `replay.json` (8 records), `merges60.txt`, `replay60.py`.
 Added added-line guards: a failure-masking tail (`|| true`, `|| ! false`, `|| :`, `; true`, `|| exit 0`) or a self-comparison of the first two assert arguments never counts as an equivalent; literal operands are unchanged. Replay re-run: 60 ranges, 0 errors, **8 records** (unchanged), FP 7/8 = 87.5%; TP `6fcfed4b` still fires. Controls N19 (masking tail), N20 (self-comparison), N21 (rename stays reported) added.
 
 Acceptance round 5 and g2 precision fixes (heredoc opener detection on code only, assertion-name subject, [[ a<b ]] token boundary, ${x}/$x self-comparison, head-file heredoc body lines): replay re-run, 60 ranges, 0 errors, **8 records** (unchanged); TP `6fcfed4b` still fires. Controls F13-F18, N31-N35 added.
+
+Four-seat round 3 and acceptance round 6 fixes (unclosed or $(...)-holding double quote is code for heredoc detection, single quotes stay literal in self-comparison, ${x:-}/$((x))/$(..) operands never equivalent, base-vs-head liveness of assertion lines): replay re-run, 60 ranges, 0 errors, **8 records** (unchanged); TP `6fcfed4b` still fires. Controls N36, F19, N38-N41 added.

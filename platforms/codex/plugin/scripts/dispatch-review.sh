@@ -922,12 +922,19 @@ salvage_unratified_verdict() {
 nv_stderr_tail() {
   local f="$1"
   [ -n "$f" ] && [ -r "$f" ] || return 0
-  tail -n 20 -- "$f" 2>/dev/null | tail -c 2000 | LC_ALL=C sed -E \
+  # Mask BEFORE the final 2000-byte cut: a cut ahead of masking can strand a key fragment with
+  # no recognisable prefix. The 8000-byte work cap drops its own partial first line for the same reason.
+  local raw; raw="$(tail -n 20 -- "$f" 2>/dev/null)"
+  if [ "${#raw}" -gt 8000 ]; then
+    raw="${raw: -8000}"
+    case "$raw" in *$'\n'*) raw="${raw#*$'\n'}" ;; *) raw="" ;; esac
+  fi
+  printf '%s' "$raw" | LC_ALL=C sed -E \
     -e 's/(sk-|sk_|ghp_|gho_|xox[abprs]-|AIza|AKIA)[A-Za-z0-9_-]{8,}/[REDACTED]/g' \
     -e 's/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]*)?/[REDACTED]/g' \
     -e 's/([Bb]earer|[Bb]asic)[[:space:]]+[A-Za-z0-9._~+\/=-]{8,}/\1 [REDACTED]/g' \
     -e 's/((api[_-]?key|token|secret|password|passwd|authorization|credential|refresh_token|access_token)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?)[^[:space:]"'"'"',}]+/\1[REDACTED]/gI' \
-    -e 's/[A-Za-z0-9+\/_-]{40,}/[REDACTED]/g'
+    -e 's/[A-Za-z0-9+\/_-]{40,}/[REDACTED]/g' | tail -c 2000
 }
 
 emit_no_verdict() {

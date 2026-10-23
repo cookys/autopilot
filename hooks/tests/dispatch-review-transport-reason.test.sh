@@ -2,6 +2,7 @@
 # BL-0246: a codex seat whose transport fails (runner or cleanroom) must leave its reason in the
 # no_verdict emission (exit_code, stage, secret-masked stderr_tail), and the final-panel seat
 # store must persist it. Non-failing / non-transport no_verdict shapes stay unchanged.
+# RED at 2f4157c7c (cut before mask): 4 FAIL of 18 - key fragment survives the 2000-byte cut (x2), token=x expansion gives len 4240 > 2000, schema rejects.
 # RED at f1749e8a6: 8 FAIL (5 passed) - exit_code/stage/stderr_tail absent from runner and cleanroom no_verdict (expected "<undef>", got "3"/"5"),
 #   and store.recordFailure is not a function.
 . "$(dirname "$0")/lib.sh"
@@ -56,6 +57,39 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" --schema "$REPO_ROOT/schemas/r
 assert_exit_code "$?" "0" "cleanroom no_verdict with failure fields validates against review-result schema"
 assert_contains "$TAIL" "Permission denied" "cleanroom stderr tail kept"
 assert_not_contains "$TAIL" "$SECRET" "cleanroom stderr tail masks the key"
+
+# BL-0246 g1: mask before the final cut. (1) a key straddling the 2000-byte boundary leaves no fragment;
+# (2) masking that EXPANDS the text still ends <= 2000 and validates against the schema.
+STUB2="$TEST_TMP/stub-codex-boundary"
+cat > "$STUB2" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+# 40-char sk- key followed by exactly 1980 bytes: the last-2000 cut lands 20 chars into the key.
+printf 'pre sk-ZZaaBBbbCCccDDddEEeeFFffGGggHHhh01\n' >&2
+for i in $(seq 1 659); do printf 'ab ' >&2; done
+printf 'x\n' >&2
+exit 3
+EOS
+chmod +x "$STUB2"
+OUT="$(AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB2" 2>/dev/null)"
+TAIL="$(field "$OUT" stderr_tail)"
+assert_not_contains "$TAIL" "GGggHHhh01" "no key fragment survives the cut (tail of key)"
+assert_not_contains "$TAIL" "EEeeFFffGG" "no key fragment survives the cut (middle of key)"
+STUB3="$TEST_TMP/stub-codex-expand"
+cat > "$STUB3" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+for i in $(seq 1 400); do printf 'token=x ' >&2; done
+echo >&2
+exit 3
+EOS
+chmod +x "$STUB3"
+OUT="$(AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB3" 2>/dev/null)"
+TAIL="$(field "$OUT" stderr_tail)"
+assert_eq "ok" "$([ "${#TAIL}" -le 2000 ] && echo ok || echo "len ${#TAIL}")" "expanded mask output is capped at 2000"
+printf '%s\n' "$OUT" > "$TEST_TMP/long-result.json"
+node "$REPO_ROOT/scripts/validate-json-schema.js" --schema "$REPO_ROOT/schemas/review-result.schema.json" --document "$TEST_TMP/long-result.json" >/dev/null 2>&1
+assert_exit_code "$?" "0" "expanded-mask result validates against review-result schema"
 
 # store persists the reason, bounded, and keeps result null (never reusable)
 SOUT="$(node - "$REPO_ROOT" "$TEST_TMP/seats" "$SECRET" <<'NODE'

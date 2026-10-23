@@ -1228,6 +1228,7 @@ Bounded convergence contract:
   🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
   🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
   MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- To withdraw a finding you raised in an earlier round, repeat its [stable-id] on a line whose claim starts exactly with REVOKED: (for example: 🔵 [retry-unbounded] REVOKED: the cap exists at retry.js:12). A withdrawal line takes no MUST-FIX or CUT/FOLLOW-UP label. Only that prefix withdraws a finding; withdrawal written as free text is not honoured, and a reused id without the prefix is a duplicate.
 - An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
 - When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
 - SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.

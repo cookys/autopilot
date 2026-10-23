@@ -4517,6 +4517,77 @@
       "gdorm-files-gtext/references/reviewer-mvp-portfolio.md": "e33eeb7f8e0376842e569fc2ee95b8bd59d96cb0b780280e69b7498a29cab7b1",
       "gdorm-files-gtext/references/routing-tiebreaks.md": "d17071a10d82512aaa6c8c07efad95bfd8ea01c78797e6eae33b4e9fcce69369",
       "gdorm-files-gtext/references/tree-contracts.md": "d2aba6c0a2bd4432013db1d5742bd677059105de87fc39640cdeef9e1d2341b9"
+    },
+    "ceo-agent-bpack-base": {
+      "ceo-agent-bpack-base/SKILL.md": "5af5650e66525e32925e71acd91104cabd232cdde084adbc850bbeb7affd894a",
+      "ceo-agent-bpack-base/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-bpack-base/references/depth0-control-loop.md": "62c3c7020693630d0082e577dc2b7365d8fde325a726e17d67e4ae8f3d0918ad",
+      "ceo-agent-bpack-base/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-bpack-base/references/level-front-door.md": "23f509ca81dd524eb614d1d279b60e66478b1c92a81348fbee79ebc868e81bf7",
+      "ceo-agent-bpack-base/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-bpack-base/references/tree-adapter.md": "14578dd7841cc9b0f47cc019c31e4362ad3f5b6c641b4ee0059cf65fd6beee09"
+    },
+    "ceo-agent-bpack-change": {
+      "ceo-agent-bpack-change/SKILL.md": "5af5650e66525e32925e71acd91104cabd232cdde084adbc850bbeb7affd894a",
+      "ceo-agent-bpack-change/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-bpack-change/references/depth0-control-loop.md": "420d24b4ff5e52c179ccbe324e8740ab68fbb0c2ce1f4178b2564533c537778d",
+      "ceo-agent-bpack-change/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-bpack-change/references/level-front-door.md": "c05b8a4effc40e35f4bc8f12a47d5f41a596544ebef9fdf2a791d317f54e86a1",
+      "ceo-agent-bpack-change/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-bpack-change/references/tree-adapter.md": "14578dd7841cc9b0f47cc019c31e4362ad3f5b6c641b4ee0059cf65fd6beee09"
+    },
+    "hetero-review-bpack-base": {
+      "hetero-review-bpack-base/SKILL.md": "7d46e7c791590e284793066a0a743a55e4d2c9d58d69dc8a730f45bf45dcd3d5",
+      "hetero-review-bpack-base/references/code-loop.md": "23f04723f4afbba8e68fb2e72285bda7dedc1e829d7352587aa1347df0b305f2",
+      "hetero-review-bpack-base/references/plan-loop.md": "6ce48d5708afbd4c1c2fc4463e8e3c9ecb430d4b4c5a99ded378c4a16a064b40"
+    },
+    "hetero-review-bpack-change": {
+      "hetero-review-bpack-change/SKILL.md": "7d46e7c791590e284793066a0a743a55e4d2c9d58d69dc8a730f45bf45dcd3d5",
+      "hetero-review-bpack-change/references/code-loop.md": "27e5f8f839107f5a29622a9c4eb514f2539a922df82075fbaccf41b3aa049239",
+      "hetero-review-bpack-change/references/plan-loop.md": "6ce48d5708afbd4c1c2fc4463e8e3c9ecb430d4b4c5a99ded378c4a16a064b40"
+    },
+    "harness-maintenance-bpack-base": {
+      "harness-maintenance-bpack-base/SKILL.md": "66ab749168c132ad8670af8f2ff34b874e5ce28d9bd3615adc76207e8463f64e"
+    },
+    "harness-maintenance-bpack-change": {
+      "harness-maintenance-bpack-change/SKILL.md": "e6342ae9c53ca8eaaa68f73d75b53da1a6a6be2e1449f3c2744c8c674ceb5649"
+    },
+    "bpack-files-base": {
+      "bpack-files-base/references/backlog-entry.md": "ecbcce27fd83041aa54b7368b2ec6fa6d545ed37cdb9c5e891ccfc288b2e03f1",
+      "bpack-files-base/references/batch-dispatch.md": "e7942b164ee3e1e1060eeae853a6b2f9a9e6e419b293efd58806787e51ff7b40",
+      "bpack-files-base/references/blind-dispatch.md": "5e48a17180f4c784cb39cdd33bb2c8d1dbc212ead662873caf7f4b4f91aa57f9",
+      "bpack-files-base/references/evidence-discipline.md": "e510bac6e6940811ffaf5d7aa8a7c3fa576540adfa5794650fe4d56d03fee952",
+      "bpack-files-base/references/hetero-dispatch.md": "45097267b0c3f84676c38250d6744f14b65ca68a4a6ac19ed7cb67f13cf954fc",
+      "bpack-files-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "bpack-files-base/references/mods.md": "d3e604e15e039b2c24724f66d047cd94db5ec0e2342b1dc8b9a34c4ef1be1d2f",
+      "bpack-files-base/references/multi-agent-portability.md": "2aaddc9c0917b03e11da208177e562634709031e05ae83e9360278287f18dd02",
+      "bpack-files-base/references/review-page.md": "be80aed61814f45f6160b48bf63e2cb5e44c5e7c20029a885708ba4d7dabc380",
+      "bpack-files-base/references/reviewer-mvp-portfolio.md": "e33eeb7f8e0376842e569fc2ee95b8bd59d96cb0b780280e69b7498a29cab7b1",
+      "bpack-files-base/references/routing-tiebreaks.md": "d17071a10d82512aaa6c8c07efad95bfd8ea01c78797e6eae33b4e9fcce69369",
+      "bpack-files-base/references/tree-contracts.md": "d2aba6c0a2bd4432013db1d5742bd677059105de87fc39640cdeef9e1d2341b9"
+    },
+    "bpack-files-change": {
+      "bpack-files-change/references/backlog-entry.md": "ecbcce27fd83041aa54b7368b2ec6fa6d545ed37cdb9c5e891ccfc288b2e03f1",
+      "bpack-files-change/references/batch-dispatch.md": "e7942b164ee3e1e1060eeae853a6b2f9a9e6e419b293efd58806787e51ff7b40",
+      "bpack-files-change/references/blind-dispatch.md": "5e48a17180f4c784cb39cdd33bb2c8d1dbc212ead662873caf7f4b4f91aa57f9",
+      "bpack-files-change/references/evidence-discipline.md": "e510bac6e6940811ffaf5d7aa8a7c3fa576540adfa5794650fe4d56d03fee952",
+      "bpack-files-change/references/hetero-dispatch.md": "4101c1f8f0aebac45f60d63ad12e062778e9ea103035f85b57e76704520bd694",
+      "bpack-files-change/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "bpack-files-change/references/mods.md": "d3e604e15e039b2c24724f66d047cd94db5ec0e2342b1dc8b9a34c4ef1be1d2f",
+      "bpack-files-change/references/multi-agent-portability.md": "031119f0488da73ad4a7cb94546b157736debad0c99e62afcbd669edc5ba0882",
+      "bpack-files-change/references/review-page.md": "be80aed61814f45f6160b48bf63e2cb5e44c5e7c20029a885708ba4d7dabc380",
+      "bpack-files-change/references/reviewer-mvp-portfolio.md": "e33eeb7f8e0376842e569fc2ee95b8bd59d96cb0b780280e69b7498a29cab7b1",
+      "bpack-files-change/references/routing-tiebreaks.md": "d17071a10d82512aaa6c8c07efad95bfd8ea01c78797e6eae33b4e9fcce69369",
+      "bpack-files-change/references/tree-contracts.md": "d2aba6c0a2bd4432013db1d5742bd677059105de87fc39640cdeef9e1d2341b9"
+    },
+    "fixture-scripts-bpack": {
+      "fixture-scripts-bpack/scripts/dispatch-tree.js": "918dd3930bc90ce5b69657e827cfb9eb1c34054e6c962489026cd2275a09428f"
+    },
+    "fixture-prompt-bpack-base": {
+      "fixture-prompt-bpack-base/REVIEW_PROMPT.md": "7fa55b78124ee1687aaafb03642986269490aaeec9562d330240ef0342a40c54"
+    },
+    "fixture-prompt-bpack-change": {
+      "fixture-prompt-bpack-change/REVIEW_PROMPT.md": "d2afe2abe67505e68bc9ce89a6ad9b0775a463f463d295adee6aa4264043f53c"
     }
   },
   "pack_meta": {

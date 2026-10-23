@@ -19,7 +19,7 @@ Run the read-only capability report first:
 node bin/autopilot.js harness report --stale-after 14d
 ```
 
-For a bounded SessionStart-style warning:
+For a bounded expiry warning (run on demand; no hook calls it at SessionStart, by owner decision):
 
 ```bash
 node bin/autopilot.js harness report --stale-after 14d --required-level H3 --format warning
@@ -36,6 +36,7 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
 | [`scripts/probe-harness-capabilities.sh`](../../scripts/probe-harness-capabilities.sh) | Re-probe the exact platform surfaces consumed by the capability-trigger mission and delegate the closed aggregate receipt write to the canonical claim validator. |
 | [`scripts/platform-capability-claims.js`](../../scripts/platform-capability-claims.js) | Generate and immediately revalidate content-addressed capability claims plus the exact D2/D3/D4 consumer partition. Only this script emits validated claim IDs. |
 | [`scripts/probe-todo-tools-pin.js`](../../scripts/probe-todo-tools-pin.js) | Single live-call probe: do the task tools (TaskCreate family) reach a headless session from this directory's environment? Run after touching settings/env wiring; `--expect-absent` is the planted-red arm. Exit 0 met / 1 contradicted / 2 indeterminate. |
+| [`scripts/install-token-discipline.js`](../../scripts/install-token-discipline.js) | Opt-in: write or remove the marked token-discipline block in Codex `AGENTS.md` and agy `GEMINI.md`; `--check` reports drift. Nothing calls `install` by default. |
 | [`scripts/hook-harness-matrix.js`](../../scripts/hook-harness-matrix.js) | Regenerate or check `docs/hook-harness-matrix.md` (hook x harness registered events; a date only where `hooks/harness-support-evidence.json` has a probe-backed row, else 未驗證). Add an evidence row after a live-fire probe; `--check` warns on rows older than 60 days. |
 | [`scripts/probe-codex-enforcement.js`](../../scripts/probe-codex-enforcement.js) | Live probe that the Codex plugin hook blocks a direct write (`--output <artifact.json>`). |
 | [`scripts/probe-codex-postcompact-production.js`](../../scripts/probe-codex-postcompact-production.js) | Bounded live check of the production Codex PostCompact adapter. |

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "arm": "change",
+  "skills": {
+    "ceo-agent": "ceo-agent-bpack-change",
+    "harness-maintenance": "harness-maintenance-bpack-change",
+    "hetero-review": "hetero-review-bpack-change"
+  },
+  "files": [
+    "bpack-files-change"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-bpack",
+    "fixture-prompt-bpack-change"
+  ]
+}

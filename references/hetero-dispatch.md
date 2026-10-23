@@ -862,7 +862,7 @@ scripts/dispatch-foreman.sh --resume --run-dir <run_dir> --answer-file <file>
 | Containment | `setsid` session; the kill targets its process group. Hands dispatched with ledger coords are their own sessions by the detach contract and survive by design |
 | Waiting | The protocol tells the foreman to wait with [`scripts/wait-dispatch-results.js`](../scripts/wait-dispatch-results.js) (`--ledger <path> --expect <run_id>.<stage>`), the wait side of the exit-file contract every detached rail already lands — never a shell poll loop |
 
-Not wired into `/l5` yet: routing a level's foreman through this rail is a skill change with its own bar (a second PATCH).
+`/l5` does not route its foreman through this rail automatically; the clone-per-unit recipe for running several foremen at once is in [`skills/l5/references/hetero-impl-loop.md`](../skills/l5/references/hetero-impl-loop.md) (Parallel units).
 
 ## Role-prompt reuse (engine-neutral bodies)
 

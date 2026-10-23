@@ -348,6 +348,16 @@ repo="$(mk_surface 'assert_eq "$actual" "$expected"' 'assert_eq "$other" "unrela
 run_case "$repo"
 if has_kind surface_touch; then report N15 1; else report N15 0; fi
 
+# ── N15c rule 1: added assertion whose MESSAGE echoes the removed operands must not offset it ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_gt "$n" "1" "age was 0 before"')"
+run_case "$repo"
+if has_kind surface_touch; then report N15c 1; else report N15c 0; fi
+
+# ── F11 rule 1: same-subject replacement with a message is still a replacement (no FP) ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "1" "age was 0 before"')"
+run_case "$repo"
+if has_kind surface_touch; then report F11 0; else report F11 1; fi
+
 # ── N15b rule 1: self-comparison / && true tautologies are reported ────────
 repo="$(mk_surface 'check() { [ "$1" = "$2" ]; }' 'check() { [ "$1" = "$2" ] && true; }')"
 run_case "$repo"

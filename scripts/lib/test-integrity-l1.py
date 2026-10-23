@@ -1776,7 +1776,9 @@ def _operands(content, lang_key):
     """Subject operands of an assertion line: identifiers/numbers minus the
     assertion vocabulary (function names such as assert_eq, test keywords)."""
     out = set()
-    for tok in _OPERAND_TOKEN.findall(_raw_code(content, lang_key)):
+    text = _SQ_STRING.sub(" ", _raw_code(content, lang_key))
+    text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
+    for tok in _OPERAND_TOKEN.findall(text):
         low = tok.lower()
         if low in _OPERAND_STOP or low == "expect" or low.startswith("assert"):
             continue
@@ -1830,7 +1832,7 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
 
 _DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
 _SQ_STRING = re.compile(r"'[^']*'")
-_DQ_KEEP = re.compile(r"\$\([^)]*\)|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?")
+_DQ_KEEP = re.compile(r"\$\([^)]*\)|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\d")
 
 
 def _subject_tokens(detail):

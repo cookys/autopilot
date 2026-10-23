@@ -1,124 +1,122 @@
 # Plan — per-turn gate (BL-0055): hook probe (P0) and baseline measurement (P1)
 
-> Status: draft 2026-10-20, narrowed 2026-10-23 to P0 and P1 only; hetero plan review round `per-turn-gate-2026-10-23-p0p1-v3` is open; nothing dispatched
+> Status: draft 2026-10-20, narrowed 2026-10-23 to P0 and P1 only; hetero plan review round `per-turn-gate-2026-10-23-p0p1-v3` has folded its generation 1 and its generation 2 (the final one) is open; nothing dispatched
 
 ## 0. Thesis and evidence
 
-BL-0055 asked whether a per-turn check that talks back to the model can hold stated rules without trading away features. Two frozen batches on one task answered that for a haiku alias. Owner decision d-9f311d27 (2026-10-20) was to write a plan, not to ship a default. Four plan-review generations on the earlier, larger plan did not converge (section 5), and owner decision d-b8606fdd (2026-10-23) narrowed the plan to the two phases whose results every later design depends on. Phases beyond P1 are not designed here (section 4).
+BL-0055 asked whether a per-turn check that talks back to the model can hold stated rules without trading away features. Two frozen batches on one task answered that for a haiku alias. Owner decision d-9f311d27 (2026-10-20) was to write a plan, not to ship a default. Six plan-review generations (g1 and g2 in each of three rounds) on the earlier, larger plan did not converge (section 5), and owner decision d-b8606fdd (2026-10-23) narrowed the plan to the two phases whose results every later design depends on. Phases beyond P1 are not designed here (section 4).
 
 Experiment 1 (`docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md`, plan `docs/plans/2026-10-19-t14-per-turn-gate-experiment.md`): model alias `claude-haiku-4-5`, task `t14-constraint-horizon`, n=30 per arm, verdict FAIL-TRADE. M1 constraints held C 1/30, G 29/30; M2 features built C 23/30, G 17/30; M3 both C 1/30, G 16/30. The retry text named violations only. Seven retried G runs kept a missing export to the end.
 
 Experiment 2 (`report-r2.md` in the same directory, plan `docs/plans/2026-10-19-t14-gate-round2.md`): the intended treatment change is the retry message, which also lists feature gaps and ends with a keep-what-works line. Verdict SUCCESS. M1 C 5/29, G 28/29 (Fisher p 1.99e-10); M2 C 11/29, G 27/29; M3 C 0/29, G 26/29. 28 mechanism runs, 43 G retries, four G runs exhausted retries (G-04, G-26, G-28, G-30). Other harness changes between the two batches (feedback flag, snapshot copy, analyzer, batch driver option) and unrecorded runtime differences exist, so the cross-batch difference is not attributed to the feedback text alone. Both experiments used Claude Code CLI 2.1.303, alias `claude-haiku-4-5`, one task, and a retry cap of 2. The reports' caveat stands: the result must not be extrapolated. The second experiment had two infra failures, G-15 attempt 1 runner_timeout (641 s) and C-16 attempt 1 runner_error (335 s, OAuth session expired mid-run), neither re-run.
 
-Numbers this plan may repeat, and no others: the counts above; C-arm mean duration 292 s (first) versus 269 s (second); C-arm mean cost 0.0764 versus 0.0737 USD; cost band about 0.065 to 0.099 USD per haiku run; wall time 6.5 to 7.5 hours for 30 pairs; harness commits compared `6d9b22427` and `a93e98299`.
+Historical figures this plan repeats, and no others: the counts above; C-arm mean duration 292 s (first) versus 269 s (second), as recorded by the driver; wall time 6.5 to 7.5 hours for 30 pairs; harness commits compared `6d9b22427` and `a93e98299`. The driver-recorded cost figures (about 0.065 to 0.099 USD per run) are first-response costs, not the cost of a complete five-turn run, and no cost estimate is made from them. Any other historical number (per-feature, per-half-schedule, constraint-failure counts) is a P1 output re-derived from the raw logs, not a premise. Thresholds and sample sizes below are planned values, not evidence.
 
-Open anomaly: the C arm M2 fell from 23/30 in the first experiment to 11/29 in the second. What the two batches are known to share is the task, the nominal alias, and the CLI pin. The model id actually served, the settings actually loaded, and the invocation flags were not recorded, so they are P1 evidence, not facts. `report-r2.md` says no cause was analysed. The drop is data to explain, not a reason to reopen the SUCCESS verdict. It also matters for any later design: an unexplained baseline makes a later comparison hard to size.
+Open anomaly: the C arm M2 fell from 23/30 in the first experiment to 11/29 in the second. What the two batches are known to share is the task, the nominal alias, and the CLI pin. The model id actually served, the settings actually loaded, and the invocation flags were not recorded, so they are P1 evidence, not facts. `report-r2.md` says no cause was analysed. The drop is data to explain, not a reason to reopen the SUCCESS verdict, and an unexplained baseline makes any later comparison hard to size.
 
-## 1. Scope, constraints, and what this plan does not do
+## 1. Scope, constraints, artifact policy
 
 In scope: P0 (probe what the hook layer can actually do) and P1 (measure the C-arm baseline and explain what can be explained). Both produce evidence notes only.
 
 Constraints, to be pasted into each dispatch:
 
-- Allowed paths for P0 and P1 are new files under `docs/plans/evidence/2026-10-20-per-turn-gate/` and scratch outside the repo. No script, test, hook, skill text, brief template, `CLAUDE.md`, `docs/BACKLOG.md`, or harness file is edited. A step that cannot be done without such an edit is reported BLOCKED, not worked around.
+- Allowed repo paths for P0 and P1 are new files under `docs/plans/evidence/2026-10-20-per-turn-gate/`. Everything else the work needs (throwaway hook scripts, the batch wrapper, run outputs, raw logs) lives in a scratch directory outside the repo. No script, test, hook, skill text, brief template, `CLAUDE.md`, `docs/BACKLOG.md`, or harness file in the repo is edited. A step that cannot be done without such an edit is reported BLOCKED, not worked around.
+- Artifact policy, one rule for both phases: raw logs and raw hook output stay in scratch. The repo receives derived notes, short excerpts, tables, and a sums file of sha256 values of every raw file with its original path. Hook stdin and run logs can carry session identifiers, so any excerpt committed is redacted of session ids, account names, and tokens.
 - Version stays 3.0.0. No version bump and no CHANGELOG entry.
-- ADR-0001 stands: claims come from re-derivation (a real run, an official documentation URL, a copied log with its hash), never from attestation or from reading source alone.
-- Nothing here makes any gate default-on or builds any gate. Raw logs are copied with a recorded sha256; the plan commits no raw session scratch other than what section 3 names.
+- ADR-0001 stands: claims come from re-derivation (a real run, an official documentation URL, a hashed log), never from attestation or from reading source alone.
 - Do not run `scripts/dispatch-hetero.sh`, `dispatch-author.sh`, or `engine-capability-state.js` by hand unless `ENGINE_CAPABILITY_DIR` is a fresh temp directory and `AUTOPILOT_STRIKE_WRITER=off`. Never set `AUTOPILOT_SESSION_ID` or `CLAUDE_CODE_SESSION_ID`.
 - A phase changes the plan only through a new plan review. A dispatch that widens the allowed paths is out of contract.
 
-Not in this plan: any gate script, rail adapter, retry formatter, `## Gate` brief block, lineage or retry budget, depth-0 repair path, owner-card flow, larger-model rerun, shadow pilot, or default decision. Their earlier designs are not carried forward as authority; the last full text is `git show ed02e7f3a:docs/plans/2026-10-20-per-turn-gate.md` and is history only.
+Runtime identity for both phases, preregistered: the executable is the `claude` on PATH and its `--version` must print 2.1.303 (the pin of both experiments); model alias `claude-haiku-4-5`; every run uses a dedicated config directory seeded only with a copy of the existing credentials file, never the real `~/.claude`, because a child process resets the real one; the settings sources used are written down. Before P0 and before the P1 window the hand records the version output and a successful authentication probe. A wrong version or a failed probe is BLOCKED. An authentication expiry in the middle of the P1 window makes the batch `unavailable` (label U, section 3.3); there is no mid-batch replacement or renewal.
+
+Not in this plan: any gate script, rail adapter, retry formatter, `## Gate` brief block, retry budget or state store, repair flow, owner-card flow, larger-model rerun, shadow pilot, or default decision. Their earlier designs are not carried forward as authority; the last full text is `git show ed02e7f3a:docs/plans/2026-10-20-per-turn-gate.md` and is history only.
 
 ## 2. P0 hook probe
 
-Purpose: replace three unverified readings of the hook layer with run output or an official documentation URL. Today `hooks.json` wires Stop hooks (opt-in-multiplexer, cost-tracker, dirty-protected-paths, owner-question-guard, awaiting-owner) and wires only awaiting-owner on SubagentStop. Reading that file proves nothing about runtime behaviour, so no claim below may rest on it alone.
+Purpose: replace unverified readings of the hook layer with run output or an official documentation URL. `hooks.json` wires five Stop hooks (opt-in-multiplexer, cost-tracker, dirty-protected-paths, owner-question-guard, awaiting-owner) and wires only awaiting-owner on SubagentStop. Reading that file proves nothing about runtime behaviour, so no answer may rest on it alone.
 
-Questions:
+Isolation, verified first. The scratch project's settings define only the throwaway hook for Stop and SubagentStop, and the run uses the dedicated config directory above so this plugin's hooks do not load. Step 0 proves the isolation: a run with a hook that only logs shows only that hook's log lines and none of the five plugin Stop hooks. If isolation cannot be shown, P0 is BLOCKED.
 
-- A. When a Stop hook returns a block decision, does the tool call the hook again, and does the second call carry `stop_hook_active` true? Is a second block honored or ignored when it is true?
-- B. Can a per-session counter kept in a file make the hook block exactly N times and allow the stop on call N+1?
-- C. Does a SubagentStop hook block force the subagent to continue?
+The throwaway hook is a script in scratch that appends the exact stdin JSON, its own exit status, and its stdout to a log file, and takes its decision from a counter file. Expected readings are written into the P0 note header and committed before any run, so the pairs are not chosen after seeing the log.
 
-Procedure: a scratch session outside the repo (a temporary directory with its own project settings, not an operator lane), with a throwaway hook script written under that directory that logs its stdin JSON to a file and returns its decision from a counter file. For A, make the hook return a block on the first call and record how many times it is invoked and what `stop_hook_active` carries each time. For B, set N=2 and record the three outcomes. For C, run a scratch subagent with a SubagentStop hook that blocks once and record whether the subagent continues. Paste the transcripts and the hook log under the evidence directory.
+Trials, each with a matched baseline that changes only the hook's decision:
 
-Completion: each of A, B, C has an answer labelled `produced` (run output pasted), `documented` (official URL cited), or `unproduced` (with the reason). A claim backed only by reading `hooks.json` or hook source is not an answer.
+- A0 baseline: the Stop hook never blocks. Record how the session stops and how many times the hook is called.
+- A1: the hook blocks call 1 and allows call 2. Record whether the tool calls the hook again, what `stop_hook_active` carries on each call, and whether the model continues after the block.
+- A2: the hook blocks calls 1 and 2 with distinct reasons. Record whether the second block is honored (the model continues again with the second reason) or ignored, and any third call.
+- B0 baseline: counter file at zero, so the hook never blocks. B1: counter N=2. Record exactly how many blocks occur before the stop is allowed.
+- C0 baseline: a scratch subagent with a SubagentStop hook that never blocks. C1: the hook blocks once. Record whether the subagent continues.
 
-Negative control: for each question, the opposite reading is stated before the run, and the note shows which of the two the output supports. If the output contradicts the expected reading, that is written down as the finding.
+Completion labels are assigned per trial, not per question: `produced` (run output excerpted and hashed), `documented` (official URL cited), or `unproduced` (with the reason). The note records the exact hook stdout, exit status, stdin fields, and transcript outcome for each trial, as excerpts.
 
-Consequence, fixed now: if C is `unproduced` or shows no continuation, a SubagentStop adapter is dropped from any later plan. The answers to A and B decide whether a Stop-hook adapter is feasible at all.
+Consequences, fixed now: if C1 is `unproduced` or shows no continuation, a SubagentStop adapter is dropped from any later plan. A1 and A2 decide whether a Stop-hook adapter can re-enter more than once; B1 decides whether a file counter can bound it. Negative or unproduced A1 or B1 means a Stop-hook adapter is not available (section 3.5).
 
 ## 3. P1 baseline measurement
 
-Purpose: say what is known about the C-arm M2 drop, using only evidence that can be re-derived, and measure the C-arm baseline again so that a later design can size itself. P1 makes no causal claim that the table below has not separated into "consistent with" and "excludes".
+Purpose: say what is known about the C-arm M2 drop, using only evidence that can be re-derived, and measure the C-arm baseline again so that a later design can size itself. P1 makes no causal claim that the table in section 3.4 has not separated into its labels.
 
-Step 1, copy the data. Locate the session scratch for both experiments and copy `results.jsonl`, and every per-run `oracle.log` and `run.log`, into `docs/plans/evidence/2026-10-20-per-turn-gate/`, recording the sha256 of each copied file in a sums file. If a file cannot be found or copied, say so in the note; no cause is named from data that was not copied.
+Step 1, copy and hash the data. Locate the session scratch for both experiments. For every run of both C arms copy into a scratch directory `results.jsonl` (once per experiment) and each run's `oracle.log`, `run.log`, and `result.json`, and write a sums file (path, sha256) into the evidence directory. Sources of record: `oracle.log` for scoring (M1, M2, M3, per-feature results), `result.json` for harness duration and turns completed, `run.log` for the CLI result objects (cost fields, resolved model id when present). If a file is missing, the note says so and no cause is named from data that was not copied. The original `run.log` files carry no invocation line, so the historical invocation and loaded-settings evidence is `unavailable`, not assumed equal.
 
-Step 2, preregister, before collecting any new outcome. Write a preregistration note to the evidence directory and commit it; it fixes: the metrics (section 3.1), the sample and window (section 3.2), the decision rules (section 3.3), and the checklist of non-controlled checks (section 3.4). Outcomes of the third batch are not read until that note exists.
+Step 2, derive the cost accounting. From the copied logs and the CLI's documentation or one measured run, establish whether `total_cost_usd` is cumulative across the CLI result objects of a run, then compute a cost estimate for the 30-run batch and write it into the preregistration. The hand does not launch the batch until the estimate is in the preregistration note and the owner has acknowledged it (otherwise BLOCKED).
 
-Step 3, run the third baseline batch. Step 4, fill the table and write the verdict.
+Step 3, preregister before any new outcome. Write a preregistration note into the evidence directory and commit it. It fixes: the run manifest and wrapper (section 3.2), the metrics (3.1), the validity checklist and labels (3.3), the observation-to-label function of every candidate (3.4), and the cost estimate. New outcomes are not read until that commit exists.
+
+Step 4, run the batch. Step 5, fill the tables and write the verdict.
 
 ### 3.1 Metrics
 
-For every run in the two earlier C arms and the new batch, from the raw `oracle.log` (not from a driver row): M1 (constraints held), M2 (features built), M3 (both), per-feature results for features 1 to 5 with export and footer reported separately, constraint 1 and 2 failures, mean duration and cost, and, where the raw logs carry them, the resolved model id and the invocation line with its settings flags. The earlier definitions of M1, M2, M3 are the ones in the experiment reports.
+For every run in the two earlier C arms and the new batch: M1, M2, M3 with the experiment-report definitions, from `oracle.log`; per-feature results for features 1 to 5; constraint 1 and 2 results; harness duration and turns completed from `result.json`; the CLI result objects from `run.log` (cost fields, resolved model id when present). The per-feature, constraint, and half-schedule tabulations are supplementary observations, reported without causal labels.
 
-### 3.2 Sample and window
+### 3.2 Sample, procedure, window
 
-A fresh C-only observe batch: 30 runs, same task bytes (the experiment-2 pins: `oracle.sh`, `CONSTRAINTS.md`, `turns/`, `task.md`, `repo/` byte-identical, `git hash-object` recorded), same alias, same CLI pin 2.1.303, observe mode so no retry text is ever sent, run sequentially in one continuous window of at most 8 hours, starting from a fresh authentication state. The per-run command is the harness invocation the earlier `run.log` files show; the hand copies those invocation lines and reuses them, and changes the harness or the batch driver not at all. If the batch cannot be run without a harness edit, the hand reports BLOCKED. Expected cost from the numbers in section 0: about 30 runs at roughly 270 to 290 s each (about 2.5 hours) and about 2.3 USD.
+The batch is 30 C-only observe runs with preallocated ids C-01 to C-30, run sequentially in one continuous window of at most 8 hours. The existing batch driver `evals/orchestration/run-t14-gate-batch.js` must not be used: it always schedules a G enforce run beside each C run and reruns incomplete ids, which breaks both C-only and no-replacement. The procedure is driver-free: 30 invocations of `evals/orchestration/run-orchestration-eval.sh` issued from a wrapper in scratch, each with the arguments the driver's C run uses (task `t14-constraint-horizon`, `--arm off`, `--gate observe`, model alias, five turns, scoring flags), reconstructed by reading the pinned driver and harness; the preregistration states this provenance. If the harness cannot be invoked that way without editing it, the hand reports BLOCKED.
 
-No run is replaced. A run that does not complete five turns is kept as an `incomplete` row and scored by the oracle on the repo as left. The batch is valid when at least 27 of 30 runs completed five turns on the pinned CLI version and one resolved model id (when the logs carry it); otherwise the batch is `unavailable`, which is reported as such and is not an inconclusive result.
+The preregistration note commits, before collection: the 30 ids with their output directories; the exact command per id; the CLI version output and authentication probe; the `git hash-object` of `oracle.sh`, `CONSTRAINTS.md`, `turns/`, `task.md`, and `repo/` (the experiment-2 pins). The wrapper invokes each id exactly once, refuses an existing output directory, never issues a second attempt, and logs every invocation before it starts. Observe mode means no retry text is ever sent. No run is replaced: a run that does not complete five turns is kept as an `incomplete` row, scored by the oracle on the repo as left.
 
-### 3.3 Decision rules, fixed now
+### 3.3 Validity, labels, decision rules
 
-Let M2_3 be M2 of the new batch over its n runs. "Consistent with" an earlier batch means a two-sided Fisher exact test on M2 against that batch's count (23/30 for the first, 11/29 for the second) gives p above 0.05; "inconsistent" means p at or below 0.05. Exactly one of the following labels is assigned, from the table:
+The batch is valid only if all of these hold, and any failure makes it `unavailable` (label U, with the failed items listed): all 30 ids were launched exactly once, in the preregistered order, sequentially, inside one window of at most 8 hours; the task hashes equal the preregistered ones; the CLI version was 2.1.303 for every run; the authentication probe passed and no expiry occurred; no deviation from the preregistered command occurred; and at least 27 of the 30 runs completed five turns. If resolved model ids appear in the logs, they must be a single value across all runs, otherwise the batch is U; if they are absent from the logs, the batch stays valid and candidate 1 is `unavailable`.
 
-- A, near the second batch: consistent with 11/29, inconsistent with 23/30. Reading: the first experiment's C arm looks like the outlier. Only reproduction evidence.
-- B, near the first batch: consistent with 23/30, inconsistent with 11/29. Reading: something about the second window or the observe path stays open.
-- C, between: consistent with both. Reading: the M2 baseline is unstable at this sample; a later design must assume a wide spread.
-- D, outside both: inconsistent with both. Reading: the instrument itself is unstable; no later phase is planned until that is investigated.
-- U, batch `unavailable`.
+For a valid batch, n is 30, every launched run counts, and `incomplete` rows enter the counts with their oracle-on-repo-as-left scores. M2_3 is M2 over those 30. "Not rejected" against an earlier batch means a two-sided Fisher exact test of M2_3/30 against that batch's count (23/30 for the first, 11/29 for the second) gives p above 0.05; "rejected" means p at or below 0.05. Exactly one label is assigned:
 
-The third batch is reproduction evidence only. It excludes no candidate cause by itself, and it is not a controlled comparison.
+- A: rejected against 23/30, not rejected against 11/29.
+- B: not rejected against 23/30, rejected against 11/29.
+- C: not rejected against either.
+- D: rejected against both.
+- U: the batch is not valid.
 
-### 3.4 Candidate causes and the table
+The labels describe statistics only. They do not diagnose the source of any discrepancy, and the batch is reproduction evidence only: it excludes no candidate cause by itself and is not a controlled comparison.
 
-The table has one row per candidate. Each row records, for the listed observation, one of three labels: consistent with the candidate, excludes the candidate, or unresolved. A check that cannot be run is recorded `unavailable` with its reason, which differs from `unresolved`. Any candidate may end unresolved; the table is complete when every row has a label and every checklist item below was either run or recorded unavailable.
+### 3.4 Candidate causes: observation-to-label function
 
-1. The alias resolved to a different snapshot or was served differently between the two windows. Observation: the resolved model id in the copied logs. If one id appears in both, that is consistent with a shared snapshot and does not exclude the candidate; if the field is absent or differs, record that.
-2. Provider-side variance or load by time of day. Observation: the new batch's start time against the two earlier windows (02:48Z to 09:30Z and a start at 12:19Z on 2026-10-19). Agreement or disagreement is reproduction evidence only.
-3. Plain sampling variance. Observation: the label A to D of section 3.3 against the counts in section 0. The comparison and thresholds are the ones fixed above, not chosen after the data.
-4. A harness side effect in observe mode. Observation: read the diff `6d9b22427..a93e98299` for any change on the observe path, and, if that read leaves it open, run a few C runs on the old harness commit. A diff with no observe-path change is consistent with no side effect and does not exclude the candidate.
-5. Scratch HOME or auth-state differences, including the OAuth expiry in C-16 attempt 1. Observation: whether the run logs show an auth error before that attempt and whether export and footer failures cluster after it. The new batch starts from a fresh authentication state.
-6. CLI settings or project settings loaded differently, or tool permissions differing. Observation: the invocation lines and the settings files actually loaded, copied from `run.log`, not assumed to match.
-7. Task-state leakage, such as stale artifacts in the shared task-repo copy. Observation: each run's work directory is created empty, and no file present at turn 1 that the task did not seed.
-8. Export and footer failures both rose (export 5/30 to 10/29, footer 2/30 to 9/29). Observation: the per-feature columns of the new batch. If both move together again this describes the symptom, not yet a cause.
+Each candidate gets exactly one of four labels, assigned by the rule stated here and written into the preregistration. `consistent`: the observation fits the candidate. `excludes`: the observation rules the candidate out. `unresolved`: the observation neither fits nor rules out. `unavailable`: the observation cannot be obtained. The table is complete when every row has a label and every item was either run or recorded unavailable; any row may end `unresolved`.
 
-Constraints 1 and 2 moved the other way (failed in 29 of 30 C runs, then 24 of 29), so a cause that predicts "the model got uniformly worse" must account for that column. The table includes it. Mean duration and cost barely moved, which excludes nothing by itself. Half-schedule M2 (11/15 then 12/15, versus 7/15 then 4/14) is also tabulated; it is not turned into a turn-5-only claim without the per-turn rows.
+1. Alias served a different snapshot. Ids present in both copied batches and different: consistent. Present and identical: unresolved (an identical id cannot rule out a backend change). Absent: unavailable. Never excludes.
+2. Provider-side variance by time of day. Always unresolved; the observation (new batch start time against the two earlier windows, 02:48Z to 09:30Z and a start at 12:19Z on 2026-10-19) is recorded. Never excludes.
+3. Plain sampling variance. Label C: consistent. Labels A, B, D: unresolved. U: unavailable. Never excludes.
+4. A harness side effect in observe mode. Read the diff `6d9b22427..a93e98299`. A change on the observe path: consistent. No change on the observe path: unresolved (a diff read cannot rule out timing effects). The diff cannot be read: unavailable. Old-harness runs are not part of this plan.
+5. Auth-state differences, including the OAuth expiry in C-16 attempt 1. The copied logs show an authentication error in the second batch before that attempt, or the run-order position of export and footer failures puts a majority of them after it: consistent. Neither: unresolved. Logs missing: unavailable. Never excludes.
+6. CLI settings or tool permissions differing. The historical invocation lines and loaded-settings evidence are `unavailable` (they were not logged); the label for this row is therefore `unavailable` unless the copied logs turn out to carry them, in which case: differ means consistent, same means unresolved.
+7. Task-state leakage. Every run's work-directory listing at turn 1 is recoverable from the logs and equals the seeded files: excludes. A non-seeded file at turn 1 in any run: consistent. Listing not recoverable: unavailable.
+
+The earlier eighth candidate (export and footer failures both rose) is a symptom, not a cause, and is dropped from the table; the per-feature columns are in the supplementary observations (3.1).
 
 ### 3.5 What P1 hands to the next decision
 
-P1 ends with a note that states the labels A to D or U, the table, the P0 answers, and a recommendation of GO or HOLD to write a plan for later phases. GO needs: P0 complete, a valid batch, and label A, B, or C. HOLD otherwise. The recommendation is advice; the owner decides, and any later plan gets its own review.
+P1 ends with a note stating the label A to D or U, the two tables, the P0 trial labels, the measured batch cost and duration, and a recommendation GO or HOLD to write a plan for later phases. GO needs all of: A1 and B1 each `produced` or `documented` and affirmative (the hook re-enters after a block and a file counter bounds the blocks at N), P0 run on CLI 2.1.303, a valid batch, and label A, B, or C. C1 may be unproduced or negative, which only drops the SubagentStop adapter. HOLD otherwise, including label D or U and any unproduced or negative A1 or B1; a negative P0 result is itself a finding the owner may act on. The recommendation is advice; the owner decides, and any later plan gets its own review.
 
 ## 4. Later phases and the questions P1 must answer for them
 
-Later phases (a verifier script, a dispatch-rail adapter, a batch-driver rework, a larger-model rerun, a shadow pilot on real lanes, a default decision) are written only after P1 data exists, each as its own plan with its own plan review. Nothing about their design is fixed here. P0 and P1 must leave these questions answered or marked unanswered:
-
-- Which hook points are viable (P0 A, B, C)?
-- How wide is the C-arm M2 spread on this task and host (P1 label), so a later comparison can be sized without guessing?
-- Is the resolved model id recorded in the raw logs, and is it stable across the batches?
-- Does the observe path perturb timing or results (candidate 4)?
-- What does a C run cost and how long does it take on this host (section 3.2 against the measured values)?
-- Which causes of the anomaly stay unresolved, so a later plan does not cite one it does not have?
-
-Questions about a gate's own design (retry budget, state storage, repair flow, which brief commands exist) are for the later plan.
+Later phases (a verifier script, a dispatch-rail adapter, a batch-driver rework, a larger-model rerun, a shadow pilot on real lanes, a default decision) are written only after P1 data exists, each as its own plan with its own plan review. Nothing about their design is fixed here. P0 and P1 must leave these questions answered or marked unanswered: which hook points are viable (A1, A2, B1, C1); how wide the C-arm M2 spread is on this task and host (the label), so a later comparison can be sized without guessing; whether the resolved model id is recorded in the raw logs and is stable; what a complete C run costs and how long it takes (Step 2 and the measured batch); and which causes of the anomaly stay unresolved, so a later plan does not cite one it does not have. Questions about a gate's own design (retry budget, state storage, repair flow, which brief commands exist) belong to the later plan.
 
 ## 5. Review history
 
-Four plan-review generations over three rounds reviewed the earlier, larger plan (a verifier, a rail adapter, a larger-model rerun, a shadow pilot, and a default decision). Each ended CONDITIONAL with blockers that moved around the same cluster: lineage and retry-budget bookkeeping, the rule for the larger-model rerun, and the arm structure of that rerun. The designs of those phases rested on a baseline that had not yet been measured, which is why this plan stops at P0 and P1. Artifacts (history only, removed from the tree so this review reads blind; all present at commit `ed02e7f3a` under `docs/plans/`): round `per-turn-gate-2026-10-20`, files `2026-10-20-per-turn-gate.{g1,g2}-artifact.json` and `.{g1,g2}-dispositions.json`; round `per-turn-gate-2026-10-23-perturnreview`, g1, g2 and dispositions, in git history only (`git show 91023e419 --stat` lists `2026-10-23-per-turn-gate.perturnreview.*`); round `per-turn-gate-2026-10-23-perturnreview-v2`, files `2026-10-23-per-turn-gate.perturnreview-v2.{g1-artifact,g1-dispositions,g2-artifact}.json`. Facts from those rounds that still apply here are folded into sections 2 and 3, including the correction that `scripts/check-repair-scope.js` is called from `src/engine/` and not from `scripts/dispatch-hetero.sh`, which calls `scripts/check-hands-commit.js` (around line 4328).
+Six plan-review generations over three rounds reviewed the earlier, larger plan (a verifier, a rail adapter, a larger-model rerun, a shadow pilot, and a default decision). Each ended CONDITIONAL, with blockers that moved around the same cluster: retry-budget and lineage bookkeeping, the decision rule for the larger-model rerun, and the arm structure of that rerun. Those designs rested on a baseline that had not yet been measured, which is why this plan stops at P0 and P1. Artifacts (history only, removed from the tree so this review reads blind; all present at commit `ed02e7f3a` under `docs/plans/`, except the middle round): round `per-turn-gate-2026-10-20`, files `2026-10-20-per-turn-gate.{g1,g2}-artifact.json` and `.{g1,g2}-dispositions.json`; round `per-turn-gate-2026-10-23-perturnreview`, g1, g2 and dispositions only at commit `91023e419` (`git show 91023e419 --stat` lists `2026-10-23-per-turn-gate.perturnreview.*`); round `per-turn-gate-2026-10-23-perturnreview-v2`, files `2026-10-23-per-turn-gate.perturnreview-v2.{g1-artifact,g1-dispositions,g2-artifact}.json`. Facts from those rounds that still apply here are folded into sections 2 and 3, including the correction that `scripts/check-repair-scope.js` is called from `src/engine/` and not from `scripts/dispatch-hetero.sh`, which calls `scripts/check-hands-commit.js` (around line 4328).
 
 ## Review log
 
 R0 (2026-10-20): authored by foreman lane bl55plan from the two t14 reports.
 
-R1 to R6 (2026-10-20 to 2026-10-23): the three earlier rounds above; all CONDITIONAL, none passed.
+R1 and R2 (2026-10-20): round `per-turn-gate-2026-10-20`, g1 and g2, both CONDITIONAL. R3 and R4 (2026-10-23): round `per-turn-gate-2026-10-23-perturnreview`, g1 and g2, both CONDITIONAL. R5 and R6 (2026-10-23): round `per-turn-gate-2026-10-23-perturnreview-v2`, g1 and g2, both CONDITIONAL.
 
-R7 (2026-10-23): narrowed to P0 and P1 by owner decision d-b8606fdd; new logical plan id `per-turn-gate-2026-10-23-p0p1-v3`; generation 1 open, maximum two generations.
+R7 (2026-10-23): narrowed to P0 and P1 by owner decision d-b8606fdd; new round `per-turn-gate-2026-10-23-p0p1-v3`, generation 1 CONDITIONAL (four seats, 25 findings, one STOP). Changes: P0 split into matched trials with isolation and per-trial labels; P1 driver-free C-only procedure with a preregistered manifest, conjunctive validity, closed observation-to-label functions, cost derivation before launch, and an artifact policy; GO requires A1 and B1 affirmative; review-history counts reconciled. Generation 2 of this round reviews these bytes and is final.

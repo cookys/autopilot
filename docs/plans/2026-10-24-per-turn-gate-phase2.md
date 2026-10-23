@@ -28,14 +28,14 @@ Test applied (CLAUDE.md, literal): list the requirements before and after. No it
 
 | ID | Change | Ruling | Evidence needed |
 |---|---|---|---|
-| W1 | Opt-in Stop hook `hooks/per-turn-gate.js`, default off: runs the project's verifier command, blocks on violations (exit 1) with its text, allows on error (fail-open) | mechanism (deterministic control flow; asks the model nothing new by itself). Ships as a new opt-in hook, default off, a PATCH-class surface held at 3.0.0 | unit tests with negative controls (section 4); the live probe P2-0 |
+| W1 | Opt-in Stop hook `hooks/per-turn-gate.js`, default off: runs the project's verifier command, blocks on violations (exit 1) with its text, allows on error (fail-open) | mechanism (deterministic control flow). New opt-in hook, default off, held at 3.0.0 | unit tests with negative controls (section 4); the live probe P2-0 |
 | W2 | File counter bounding blocks to N per turn (default 2, the historical cap), reset when a turn starts | mechanism | negative controls NC2, NC4 |
 | W3 | Turn index derived by the hook, passed to the verifier as `--turn` | mechanism | P2-0 probe, NC4 |
-| W4 | Mode `violations+features`: the feature-gap trigger (a block on exit 0 with gaps, which changes when the hook blocks) and the round-2 text (violations first, then gaps, ending with a keep-what-works line) | guidance: it changes when the model is stopped and what it is asked, not only the wording | ON/OFF evaluation (section 3). Until it passes, the hook ships with the text pass-through only and the doc says the text is unevaluated |
+| W4 | Mode `violations+features`: the feature-gap trigger (a block on exit 0 with gaps, which changes when the hook blocks) and the round-2 text (violations first, then gaps, ending with a keep-what-works line) | guidance: it changes when the model is stopped and what it is asked, not only the wording | Implemented in P2-1 behind a knob, default off, as its own commit (the hook renders `violations[]`/`feature_gaps[]` into the retry text); the evaluation runs that commit's W4 (hash in the preregistration); P2-4 decides default-on and shipping the text |
 | W5 | Eval instrument: `--gate hook` mode in `run-orchestration-eval.sh` (installs the hook into the temp repo's project settings; the task directory is untouched) and wrapper v2 | mechanism (test tooling; changes no shipped behaviour) | NC5, NC7 |
 | W6 | Any default-on decision | out of scope; guidance; needs its own plan | n/a |
 
-Hard rule from CLAUDE.md: W4 ships in its own commit, apart from W1 to W3; a mechanism commit does not edit requirement text.
+CLAUDE.md rule: W4 is its own commit, apart from W1 to W3.
 
 ### 2.1 Hook design (from P0 evidence)
 
@@ -51,7 +51,7 @@ A project supplies a command with the interface, exit codes and JSON shape of `v
 
 ### 2.3 Coexistence and timing
 
-`hooks.json` already wires five Stop hooks; the new one is opt-in. P2-0 runs one trial with the plugin hooks and the gate hook together; if the behaviour is not "a block from any hook blocks", W1 is BLOCKED. P2-0 also measures the verifier's wall time on a t14 repo; beyond the hook timeout budget the design is not shipped (section 6).
+`hooks.json` already wires five Stop hooks; the new one is opt-in. P2-0 runs one trial with the plugin hooks and the gate hook together; if the behaviour is not "a block from any hook blocks", W1 is BLOCKED. P2-0 also times the verifier on a t14 repo (section 6).
 
 ### 2.4 SubagentStop (C1)
 
@@ -61,7 +61,7 @@ C1 was affirmative, so the drop consequence does not fire. It is still deferred:
 
 Needed because W4 is guidance.
 
-Treatment: ON-hook = harness `--gate hook`, cap N=2, mode `violations+features` (W1 plus W4, as round 2). Task `t14-constraint-horizon`, alias `claude-haiku-4-5`, CLI 2.1.309, credentials-only config directory, fresh credentials copy and an auth probe before every id (rerun wrapper behaviour).
+Treatment: ON-hook = harness `--gate hook`, cap N=2, mode `violations+features` (W1 plus the W4 commit of P2-1, as round 2). Task `t14-constraint-horizon`, alias `claude-haiku-4-5`, CLI 2.1.309, credentials-only config directory, fresh credentials copy and an auth probe before every id.
 
 Design choice for the owner (O1):
 
@@ -70,16 +70,16 @@ Design choice for the owner (O1):
 
 Metrics: M1, M2, M3 as in P1 (two independent recomputations); per-feature results; blocks per turn and run; cap-exhausted runs; fail-open events; duration, turns, cost.
 
-Sample size and power: 30 per arm detects the expected benefit (control M3 0/30, round-2 gate 26/29). For the trade check, exact power (two-sided Fisher, alpha 0.05, control true rate 13/30, ON lower) is 15.24% at a 15-point drop, 66.37% at 30 points and 96.73% at 40 points (acceptance review's figures; recomputed here, same result). A non-significant trade check means "no drop detected", never "no loss"; claiming no loss needs a preregistered non-inferiority margin and sample size, which this plan lacks.
+Sample size and power: 30 per arm detects the expected benefit (control M3 0/30, round-2 gate 26/29). For the trade check, exact power (two-sided Fisher, alpha 0.05, control true rate 13/30, ON lower; the one-sided rule below has more) is 15.24% at a 15-point drop, 66.37% at 30 points and 96.73% at 40 points (acceptance review's figures; recomputed here, same result). A non-significant trade check means "no drop detected", never "no loss"; claiming no loss needs a preregistered non-inferiority margin and sample size, which this plan lacks.
 
 Planned thresholds (planned values, not evidence; the preregistration commit fixes them):
 
 - Primary: M3_ON >= 20/30 and one-sided Fisher p < 0.01 against the control M3 (concurrent in D2, 0/30 in D1).
-- Trade check (detects a drop only, see power above): no M2 drop detected (two-sided Fisher p > 0.05 or M2_ON not lower), and M1_ON >= 25/30.
-- Instrument health: hook errors (fail-open on verifier error) in at most 2 of 30 runs; no run with more than N blocks in one turn; every ON run has a hook log whose call count equals the trace's executed-hook count.
+- Trade check, one rule used in the preregistration, the audit and the verdict: one-sided Fisher (ON lower than C) on M2, p <= 0.05 is FAIL-TRADE; otherwise "no drop detected", never non-inferiority. Also M1_ON >= 25/30.
+- Instrument health: hook errors (fail-open on verifier error) in at most 2 of 30 runs; no run with more than N blocks in one turn; every ON run's gate-hook log call count equals the trace count of the gate hook's own executions (matched by its command path); plugin Stop hook executions are counted and reported separately, never in the comparison.
 - Labels: PASS (all gating thresholds), FAIL-TRADE (primary met, trade check failed), FAIL (primary missed), U (not valid). PASS permits documenting an evaluated opt-in, not a default.
 
-Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). An ON run adds model turns per block. The per-block cost, 0.105 (0.524 / 5) to 0.15 USD (longer context), is an unverified estimate. Round 2 averaged about 1.5 retries per run. The hard maximum is 5 turns x N=2 = 10 blocks per run.
+Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). An ON run adds model turns per block. The per-block cost, 0.105 (0.524 / 5) to 0.15 USD (longer context), is an unverified estimate. Round 2 averaged about 1.5 retries per run. Hard maximum: 5 turns x N=2 = 10 blocks per run.
 
 | Scenario | ON per run | 30 ON runs (with probes) | D2 total (adds C 16.2) |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe
 | Upper, plausible (6 blocks, 0.15) | 1.40 | 42.5 | 59 |
 | Hard maximum (10 blocks, 0.15) | 2.02 | 61.2 | 77.5 |
 
-Proposed caps, counted separately from earlier spend and never raised: D1 30 USD; D2 48 USD in total, split by the preregistered order: the C arm is budgeted 17 USD (30 runs at 0.524 plus probes, as in the rerun) and the ON arm 31 USD, each with its own running projection. Stop rule: after the first 5 ids of an arm, project mean plus 2 sample sd for its remaining ids; do not launch an id whose projection would pass that arm's cap (`STOP_COST`). Hitting a cap stops early and makes the batch U (section 3.3 of the parent plan); the owner decides on a rerun. The caps bound loss; they do not promise completion. P2-0 probes add at most 1 USD (P0 spent 0.162 for 11 sessions). Owner approval of the figures precedes launch.
+Proposed caps, separate from earlier spend, never raised: D1 30 USD; D2 48 USD, split C arm 17 USD (30 runs at 0.524 plus probes) and ON arm 31 USD, each with its own running projection. Stop rule: after the first 5 ids of an arm, project mean plus 2 sample sd for its remaining ids; do not launch an id whose projection would pass that arm's cap (`STOP_COST`). Hitting a cap stops early and makes the batch U; the owner decides on a rerun. The caps bound loss; they do not promise completion. P2-0 adds at most 1 USD (P0 spent 0.162). Owner approval precedes launch.
 
 Preregistration requirements, all of the P1 rerun's plus:
 
@@ -98,7 +98,7 @@ Preregistration requirements, all of the P1 rerun's plus:
 
 ### 3.1 Hard requirement: every validity condition has a contemporaneous artifact
 
-The P1 rerun could not be called valid because no artifact was written when the end-of-batch condition applied. Here each preregistered validity condition must have an artifact the wrapper writes when it applies, listed below before the first call; a condition without one is not a validity condition, and reconstruction afterwards does not count. The wrapper has `--selfcheck` (prints the table and asserts a writer exists for each row; its output is committed with the preregistration) and `--audit` (after the batch, exits non-zero if any artifact is absent or any condition fails). `--audit` is part of the verdict note; a batch is valid only if it exits 0.
+The P1 rerun could not be called valid because no artifact was written when the end-of-batch condition applied. Here each preregistered validity condition must have an artifact the wrapper writes when it applies, listed below before the first call; a condition without one is not a validity condition, and reconstruction afterwards does not count. The wrapper has `--selfcheck` (prints the table, asserts a writer per row; output committed with the preregistration) and `--audit` (exits non-zero if any artifact is absent or any condition fails); a batch is valid only if `--audit` exits 0.
 
 | Condition | Applies | Artifact written by the wrapper |
 |---|---|---|
@@ -109,9 +109,9 @@ The P1 rerun could not be called valid because no artifact was written when the 
 | Authentication probe passed, no expiry | per id | `PROBE_OK|PROBE_FAIL <id>`, `probes.tsv` row; `STOP_AUTH` |
 | No deviation from the preregistered command | per id | `CMD <id> <sha256 of argv>`, audited against the manifest |
 | Oracle score recoverable | per id, after the run | `SCORE <id> m1 m2 m3` or `SCORE_MISSING <id>` |
-| At least 27 of 30 completed five turns | per id and end | `TURNS <id> n` from `result.json`; final tally line |
+| At least 27 of 30 completed five turns, in each arm separately | per id and end | `TURNS <id> arm n`; final tally lines `COMPLETE ON=x/30 C=y/30` (D1: ON only) |
 | Single resolved model id | per id | `MODEL <id> <value>` |
-| Hook active only in ON runs, and only the gate hook | per id | hook trace (`--debug hooks --debug-file`, same flags in both arms), `HOOKCOUNT <id> trace=<n> log=<n>`; C runs 0 |
+| Hook active only in ON runs, and only the gate hook | per id | hook trace (`--debug hooks --debug-file`, same flags in both arms), `HOOKCOUNT <id> gate_trace=<n> gate_log=<n> plugin=<n>`; ON: gate_trace = gate_log; C: gate_trace = 0 |
 | Blocks per turn never exceed N | per id | `BLOCKMAX <id> <value>` from the hook log |
 | Interleaving order as preregistered (D2) | per id | `ORDER <id> <arm>`, checked against the seeded list |
 | Cost within the cap | per id | `COST <id> run probe total projected`, per arm; `STOP_COST` |
@@ -130,7 +130,7 @@ Each check ships with a mutation (a deliberately broken implementation, applied 
 | NC3 | Fail-open | Verifier crash, timeout, garbage JSON, missing command: allow and log `error`. Mutation: block on error. Fails: the per-case allow assertion. |
 | NC4 | Turn boundary | Two turns in one session: the second starts at counter 0. Mutation: counter never reset. Fails: the second turn's block assertion. |
 | NC5 | Wrapper `--audit` | Truncated `invocation.log` (one `END` dropped), missing `taskhash.post.txt`, duplicated `START`. Mutation: `--audit` stubbed to exit 0. Fails: the "exit non-zero" assertion for each of the three inputs. |
-| NC6 | Live gate in `-p` (2.1.309, real call) | Planted violation. Mutation: hook installed with the knob off (or pointed at a nonexistent verifier). Fails: the assertion that the transcript shows one block and the hook log one `block` record. Green: knob on, block seen; knob off, zero blocks. |
+| NC6 (P2-1) | Live gate in `-p` (2.1.309, real call) | Planted violation. Mutation: hook installed with the knob off (or pointed at a nonexistent verifier). Fails: the assertion that the transcript shows one block and the hook log one `block` record. Green: knob on, block seen; knob off, zero blocks. |
 | NC7 | Harness `--gate hook` (stub runner) | Planted violation. Mutation: `--gate hook` parsed but the hook not installed in the temp repo. Fails: the assertions that `gate.jsonl` and the hook log exist with one block; with `--gate off` neither may exist. |
 | NC8 | Task integrity | Dry run that edits a task file mid-batch. Mutation: wrapper without the post-batch listing. Fails: the `TASKHASH_DIFF fail` assertion and the `--audit` non-zero assertion. |
 | NC9 | Feature-only case | Fixture with exit 0 and non-empty `feature_gaps`. Mode `violations`: allow (`clean`). Mode `violations+features`: one block with the gap text. Mutation: both modes treat gaps as not reportable. Fails: the `violations+features` block assertion (also needed for W4 only). |
@@ -139,22 +139,22 @@ Each check ships with a mutation (a deliberately broken implementation, applied 
 
 | Phase | Content | Done when |
 |---|---|---|
-| P2-0 Probe (about 1 USD, needs O5) | On 2.1.309: (a) multi-turn `--resume` session with a counting Stop hook: `stop_hook_active` on the first Stop of each turn, session id stable across resume; (b) hook loaded under `--setting-sources project`; (c) hook with the five plugin Stop hooks loaded; (d) verifier wall time on a t14 repo. Expected readings committed first; NC6 (red with knob off, then green) is part of this probe | Each of (a) to (d) and NC6 is `produced` or `unproduced` with a reason; the turn-boundary rule and the coexistence rule are written down; any contradiction with section 2.1 goes back to plan review |
-| P2-1 Mechanism | W1, W2, W3 with tests NC1 to NC4 and the `violations` half of NC9, opt-in manifest, config key and docs, inventory entries; text pass-through only; W4 (mode `violations+features`, NC9 second half) is its own later commit, gated by P2-4 | Tests green on the final tree, each NC seen red first; affected-suites green; one commit per ruling |
-| P2-2 Instrument | W5 (`--gate hook`), wrapper v2 with `--selfcheck` and `--audit`; NC5, NC7, NC8 (each red then green); preregistration note including thresholds, order seed, cost cap and the table in 3.1 | Wrapper `--selfcheck` output and NC5 red/green committed; preregistration committed before any measured call; owner approves the cost (O1, O2) |
+| P2-0 Probe (about 1 USD, needs O5) | On 2.1.309: (a) multi-turn `--resume` session with a counting Stop hook: `stop_hook_active` on the first Stop of each turn, session id stable across resume; (b) hook loaded under `--setting-sources project`; (c) hook with the five plugin Stop hooks loaded; (d) verifier wall time on a t14 repo. Expected readings committed first; a probe-grade NC6 may run here (hook without a knob) but the gating NC6 is P2-1's | Each of (a) to (d) is `produced` or `unproduced` with a reason; the turn-boundary rule and the coexistence rule are written down; any contradiction with section 2.1 goes back to plan review |
+| P2-1 Mechanism | W1, W2, W3 with tests NC1 to NC4 and the `violations` half of NC9, opt-in manifest, config key and docs, inventory entries; W4 (mode `violations+features`, text rendering, NC9 second half, default off) as a separate later commit in this phase; NC6 live (knob off red, then green) | Tests green on the final tree, each NC (incl. NC6) seen red first; affected-suites green; one commit per ruling; the W4 commit hash is recorded for P2-2 |
+| P2-2 Instrument | W5 (`--gate hook`), wrapper v2 with `--selfcheck` and `--audit`; NC5, NC7, NC8 (each red then green); preregistration note including thresholds, order seed, cost cap and the table in 3.1 | `--selfcheck` output and NC5 red/green committed; preregistration committed before any measured call; owner approves the cost (O1, O2) |
 | P2-3 Batch | The 30 (D1) or 30+30 (D2) runs | `--audit` exit code and the artifact files committed with sums; raw logs stay in scratch |
-| P2-4 Verdict | Label PASS, FAIL-TRADE, FAIL or U; W4 text ships only on PASS; docs name what was and was not measured; recommendation to the owner | Verdict note and its recomputation by two independent methods; backlog row updated and archived after merge |
+| P2-4 Verdict | Label PASS, FAIL-TRADE, FAIL or U; on PASS the owner decides default-on and shipping the W4 text (the evaluated commit); docs name what was and was not measured; recommendation to the owner | Verdict note recomputed by two independent methods; backlog row archived after merge |
 
-A U batch may be rerun whole only by owner decision and a fresh preregistration.
+A U batch is rerun whole only by owner decision, with a fresh preregistration.
 
 ## 6. Risks and stop conditions
 
-- Treatment drift: a PASS covers this hook on this task, not the round-2 gate.
-- One task, one alias, one CLI pin (checked per id); a pin change goes to the owner.
+- Treatment drift: a PASS covers this hook and task only.
+- One task, one alias, one CLI pin (checked per id).
 - The hook traps a session (counter or turn rule wrong). Mitigations: fail-open, N cap, NC2, NC4, P2-0. An NC that cannot go red-then-green, or an undetectable turn boundary, returns to plan review.
-- Several Stop hooks disagree (P2-0 (c)), or verifier wall time exceeds the hook timeout: BLOCKED, not worked around.
+- Stop hooks disagree (P2-0 (c)), or verifier time exceeds the hook timeout: BLOCKED.
 - Authentication expiry mid-batch: STOP_AUTH, batch U.
-- W5 touches only `run-orchestration-eval.sh` and tests; the task directory and its hashes stay untouched (NC8).
+- W5 touches only `run-orchestration-eval.sh` and tests; task files stay untouched (NC8).
 
 ## 7. Decisions for the owner
 
@@ -164,8 +164,8 @@ A U batch may be rerun whole only by owner decision and a fresh preregistration.
 - O4: SubagentStop (C1) deferred.
 - O5: approve P2-0 (at most 1 USD).
 - O6: ship the hook opt-in, default off, at 3.0.0, no CHANGELOG entry until the owner's release call.
-- O7: a larger-model rerun stays out of this plan.
+- O7: larger-model rerun stays out.
 
 ## Review log
 
-R0 (2026-10-24): authored, lane ptgplan. R1: acceptance round 1 fixes.
+R0 (2026-10-24): authored, lane ptgplan. R1: acceptance and four-seat fixes.

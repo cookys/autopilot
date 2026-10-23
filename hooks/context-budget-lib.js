@@ -306,7 +306,20 @@ function budgetDecision(state, cfg) {
   return { tier: null, message: null };
 }
 
+// Short advisory lock for the per-session state file (shared by context-budget.js and the
+// state-checkpoint.js PostCompact arm). Returns a release function, or null when the lock could
+// not be taken inside ~1s: the hooks are advisory, so callers continue unlocked (fail open).
+function lockStateFile(file) {
+  try {
+    const store = require('../scripts/lib/jsonl-store.js');
+    const lockFile = `${file}.lock`;
+    store.acquireLock({ storeDir: require('path').dirname(file), lockFile, name: 'context-budget-state', timeoutMs: 1000 });
+    return () => store.releaseLock(lockFile);
+  } catch { return null; }
+}
+
 module.exports = {
+  lockStateFile,
   readContextTokens,
   readContextUsage,
   budgetDecision,

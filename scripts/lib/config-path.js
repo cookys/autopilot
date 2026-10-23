@@ -104,6 +104,8 @@ function readContextBudget(opts) {
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
     const cb = user && user.context_budget;
+    // Hand the parsed section to the caller so it does not read and parse the file again.
+    if (o.parsedOut) o.parsedOut.contextBudget = cb;
     if (cb && typeof cb === 'object') {
       if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
       if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }

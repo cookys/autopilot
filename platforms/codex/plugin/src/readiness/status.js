@@ -31,9 +31,12 @@ function familyOf(model) {
   if (/(gpt|codex|o1|o3|o4)/.test(value)) return 'openai';
   if (/(claude|opus|sonnet|haiku)/.test(value)) return 'anthropic';
   if (/(qwen|qwq)/.test(value)) return 'alibaba';
+  if (/deepseek/.test(value)) return 'deepseek';
+  if (/longcat/.test(value)) return 'meituan';
+  if (/beam/.test(value)) return 'reflection';
+  if (/(minimax|abab)/.test(value)) return 'minimax';
   if (/(gemini|flash|bison)/.test(value)) return 'google';
   if (/(grok|composer)/.test(value)) return 'xai';
-  if (/(minimax|abab)/.test(value)) return 'minimax';
   if (/(glm|zhipu)/.test(value)) return 'zhipu';
   if (/(kimi|moonshot)/.test(value)) return 'moonshot';
   return 'unknown';

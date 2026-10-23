@@ -2024,9 +2024,12 @@ function familyOf(engineName) {
   if (e.includes("gpt") || e.includes("codex") || e.includes("o1") || e.includes("o3") || e.includes("o4")) return "openai";
   if (e.includes("claude") || e.includes("opus") || e.includes("sonnet") || e.includes("haiku")) return "anthropic";
   if (e.includes("qwen") || e.includes("qwq")) return "alibaba";
+  if (e.includes("minimax") || e.includes("abab")) return "minimax";
+  if (e.includes("deepseek")) return "deepseek";
+  if (e.includes("longcat")) return "meituan";
+  if (e.includes("beam")) return "reflection";
   if (e.includes("gemini") || e.includes("flash") || e.includes("bison")) return "google";
   if (e.includes("grok") || e.includes("composer")) return "xai";
-  if (e.includes("minimax") || e.includes("abab")) return "minimax";
   if (e.includes("glm") || e.includes("zhipu")) return "zhipu";
   return "unknown";
 }

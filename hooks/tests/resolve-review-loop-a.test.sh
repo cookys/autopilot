@@ -138,6 +138,12 @@ BAD_IMPL_EXIT=$?
 assert_eq "3" "$BAD_IMPL_EXIT" "unknown implementer_runner fails config resolution"
 assert_contains "$BAD_IMPL_OUT" "invalid implementer_runner" "unknown implementer_runner reports the configured field"
 
+CN_IMPL_CFG="$TEST_TMP/rl-claude-native-impl.md"
+printf -- '- implementer_runner: claude-native\n- allow_same_runner_dual_seat: on\n' > "$CN_IMPL_CFG"
+CN_IMPL_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CN_IMPL_CFG" bash "$SCRIPT" --field implementer_runner 2>/dev/null)"
+assert_eq "0" "$?" "claude-native implementer_runner resolves"
+assert_eq "claude-native" "$CN_IMPL_OUT" "claude-native implementer_runner value round-trips"
+
 BAD_REV_CFG="$TEST_TMP/rl-bad-reviewer-runner.md"
 printf -- '- reviewer_runner: definitely-not-a-runner\n' > "$BAD_REV_CFG"
 BAD_REV_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BAD_REV_CFG" bash "$SCRIPT" --field reviewer_runner 2>&1)"

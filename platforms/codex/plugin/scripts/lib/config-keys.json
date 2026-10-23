@@ -1230,6 +1230,22 @@
       ]
     },
     {
+      "name": "implementer_claude_native.confirmed_at",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/run-approval.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "run_approval.mode"
+      ],
+      "summary": "ISO timestamp of the owner's one-time confirmation that dispatch-hetero may use the first-party claude-native implementer runner. Written only by `node scripts/run-approval.js confirm-claude-native`; without it the runner is refused.",
+      "type": "string"
+    },
+    {
       "name": "topology.exclude_seats",
       "kind": "config_key",
       "audience": "user",

@@ -43,7 +43,9 @@ const RUNNER_TOKENS = Object.freeze([
 ]);
 
 // Runners that count as available for the reviewer/consult/discuss ladders and the plan-review panel
-// but are NOT implementer runners (dispatch-hetero.sh --runner accepts no claude-native). Availability
+// but are NOT auto-selected implementer seats: dispatch-hetero.sh --runner claude-native exists, but only as an
+// EXPLICIT implementer runner behind a one-time owner confirmation (scripts/run-approval.js
+// confirm-claude-native), so the topology never routes to it. Availability
 // reuses the `claude` binary cc-shim resolves to (runner-binary.js). RUNNER_TOKENS stays implementer-only,
 // so candidates_to_qualify is unchanged and the implementer ladder skips these seats explicitly.
 const NON_IMPLEMENTER_RUNNERS = Object.freeze(['claude-native']);
@@ -813,7 +815,8 @@ function deriveTopology(repoRoot, options = {}) {
 
       if (!runnersInstalled[runner]) continue;
       if (seatModelRetired(runner, engine, runnersInstalled[runner])) continue;
-      // claude-native is available for review/consult/discuss only; dispatch-hetero has no such runner.
+      // claude-native is an implementer runner (dispatch-hetero --runner claude-native) only behind the one-time
+      // owner confirmation, so the implementer ladder never auto-selects it; review/consult/discuss still use it.
       if (NON_IMPLEMENTER_RUNNERS.includes(runner)) continue;
 
       const status = checkSeatStatus(repoRoot, engine, origRunner, effort, 'implementer')

@@ -901,9 +901,9 @@ esac
 case "$REV_EFFORT" in default|low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in default|low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in
-  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi) ;;
+  auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode|kimi) ;;
   *)
-    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi): ${IMPL_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode|kimi): ${IMPL_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -925,7 +925,7 @@ if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   # whole output anyway, this just names the rung and the fix).
   _auto_ladder="$(node -e '
 const fs = require("fs");
-const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","qoderclicn","cursor","opencode"]);
+const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","claude-native","qoderclicn","cursor","opencode"]);
 const VALID_EFFORTS = new Set(["default","low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
@@ -951,7 +951,7 @@ const rungs = doc.implementer_ladder.map((r) => ({
 for (const r of rungs) {
   if (!VALID_RUNNERS.has(r.runner)) {
     process.stdout.write(
-      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): " +
+      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode): " +
       r.engine + "/" + r.effort + "@" + r.runner
     );
     process.exit(3);
@@ -1025,9 +1025,9 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
         ;;
     esac
     case "$_lr" in
-      auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode) ;;
+      auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode) ;;
       *)
-        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode): ${_item}" >&2
+        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode): ${_item}" >&2
         exit 3
         ;;
     esac

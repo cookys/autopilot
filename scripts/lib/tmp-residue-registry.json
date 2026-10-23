@@ -753,6 +753,13 @@
       "owner": "scripts/lib/gitconfig-containment.sh",
       "retention_days": null,
       "reason": "denylist projection scratch from mktemp -t gitconfig-containment.XXXXXX; helper rm -f on every return path; the snapshot file is removed by the dispatch caller after restore; registry backstop prunes after retention"
+    },
+    {
+      "pattern": "claude-config-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/seed-claude-config.js",
+      "retention_days": null,
+      "reason": "seeded CLAUDE_CONFIG_DIR (only .credentials.json) for the claude-native implementer child; dispatch-hetero.sh removes it after the worker and in cleanup/abort_dispatch"
     }
   ]
 }

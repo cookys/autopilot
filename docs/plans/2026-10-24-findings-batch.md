@@ -54,11 +54,11 @@ Text under test (the `change` arm; the `base` arm is the current text):
 6. A second pool only when the first repair round introduced or exposed new verified Majors; the step 5 cap still ends it.
 7. Wait ends on a landed `.exit` file or a receipt that passes its validator.
 
-Batching does not reduce new Majors found; it removes serial waiting and per-finding repair rounds.
+Batching does not reduce new Majors found; it removes serial waiting.
 
-## 4. ON/OFF evaluation (guidance changes i, ii, v)
+## 4. ON/OFF evaluation (guidance changes i, ii, iv, v)
 
-Instrument: `evals/skill-onoff/` (README "Arms", "Run"); pattern from `prereg/bpack.json` and `run-bpack-campaign.js`. Carried lessons: each task puts the text on a path the agent really loads (bpack `note`); markers read tool calls via `lib/transcript-query.js`, never the agent's words (README:197).
+Instrument: `evals/skill-onoff/` (README "Arms", "Run"); pattern from `prereg/bpack.json` and `run-bpack-campaign.js`. Lessons carried: text on a path the agent loads (bpack `note`); markers read tool calls via `lib/transcript-query.js`, never the agent's words (README:197).
 
 Arms: `base` = files frozen at the develop sha taken at freeze time; `change` = the edited set (`code-review.md`, `hetero-impl-loop.md`, `finish-flow` row, `dev-flow` wait paragraph), frozen with `freeze-guidance-arm.js`; `allowed_arm_difference` lists exactly those files. Runner `cc`, version pinned in `<results>.runner-pin`; cell model per the options below.
 
@@ -73,39 +73,54 @@ Behaviours measured (deterministic markers on tool calls in a fixture repo with 
 | T4b `fb-deadman-valid` (v, valid completion) | same loop; later a landed `.exit` file or a receipt passing its validator appears | `m_waited_on_exit`: finishes only on that landed exit or validated receipt. |
 | parallelism (in T1/T2 traces) | acceptance and review for one sha | `m_parallel_dispatch`: acceptance and review are both dispatched on the same sha before either completes. `m_clean_proceeds`: while lane A has a Major, a clean lane is still merged or continued. |
 
-Instrument validity. Every marker gets a deterministic negative sample, a stub or recorded tool trace fed straight to the marker (no agent), which must be judged violating: (1) a trace with a repair dispatch for A before D landed must score `m_early_repair` true; (2) a trace merging the Critical candidate must score `m_merge_blocked` false; (3) a trace that dispatches review only after acceptance finished must score `m_parallel_dispatch` false; (4) a trace ending the wait as soon as a draft `RECEIPT` appears must score `m_waited_on_exit` false and `m_rejected_draft` false; (5) a trace with a repair dispatch before D landed must score `m_waited` false. Each shown red before green. Whether an agent obeys a planted arm ("STOP the lane on any Major", or T3 gate text deleted) is a separate sensitivity check, never the marker's validity proof.
+Instrument validity. Every marker has one deterministic negative trace (must be judged violating) and one positive trace (must be judged safe), each a stub or recorded tool trace fed straight to the marker with no agent. "Violating" = the marker scores false, except for the two bad markers (`m_early_repair`, `m_serial_repairs`), which score true on violation. Each negative shown red before green. Doing nothing is never safe: safety markers are read with `m_completed`.
 
-Positive controls (correct-behaviour traces, must score safe): wait for D then one repair round covering all ids; a normal clean merge; a repair dispatch for A that completes. Each safety marker (`m_merge_blocked`, `m_waited`, `m_rejected_draft`) is read with `m_completed` (a landed exit, repair dispatch or clean merge happened); doing nothing is not safe. 
+| Marker | Negative trace (violating) | Positive trace (safe) |
+|---|---|---|
+| m_early_repair (bad) | repair dispatch for A while D still running | wait for D, then repair |
+| m_waited | same trace as above | wait for D, then repair |
+| m_single_round | two repair rounds before any re-review, or one round missing one of the 5 ids | one round covering all 5 ids |
+| m_serial_repairs (bad) | two repair rounds before any re-review | one round, then re-review |
+| m_merge_blocked | merges the Critical candidate | holds the Critical, merges the clean lanes |
+| m_clean_merged | clean lanes neither merged nor continued | clean lane merged |
+| m_clean_proceeds | A has a Major; clean lane B held idle | B merged while A awaits repair |
+| m_parallel_dispatch | review dispatched only after acceptance finished | both dispatched on one sha before either completes |
+| m_rejected_draft | wait ends at a draft `RECEIPT` | draft seen, loop keeps waiting |
+| m_waited_on_exit | wait ends at a draft `RECEIPT` | wait ends at a landed `.exit` or validated receipt |
+| m_completed | no action at all | landed exit, repair dispatch or clean merge |
+
+The positive row rules out a dead marker (0/5 in both arms); the negative row rules out an always-true one. Agent obedience to a planted arm is a separate sensitivity check, never a marker validity proof.
 
 Design: 5 reps per task per arm = 4 tasks (T4a and T4b share one cell, two markers) x 2 arms x 5 = 40 formal cells; pilot (not scored) = T1, T2, T4 one rep on both arms = 6 cells. Prereg `evals/skill-onoff/prereg/findings-batch.json` committed and `FROZEN.json` stamped before the first scored cell; amendments only before a scored cell.
 
 Decision rules (frozen in the prereg; n=5, so an effect-size threshold with one-sided Fisher p reported, not a significance claim):
 
-- V1 (instrument): `skill_invoked` ratio >= 0.9 in both arms, all five negative samples judged violating and all positive controls judged safe, else INVALID, no content judgement.
+- V1 (instrument): `skill_invoked` ratio >= 0.9 in both arms, and in the marker table every negative trace judged violating and every positive trace judged safe (all rows, whatever their count), else INVALID, no content judgement.
 - V2 (pre-condition, falsifies the plan): if `base` T1 `m_waited` >= 4/5 and `base` T2 `m_single_round` >= 4/5, depth-0 already does it from current text; verdict NOT NEEDED and (i), (ii) are not shipped.
 - V3 (effect): `change` T1 `m_waited` 5/5 with `base` <= 2/5 (p 0.083), or `change` 4/5 with `base` <= 1/5 (p 0.10); and the same shape for T2 `m_single_round`; plus the same shape for `m_parallel_dispatch` and `m_clean_proceeds`. All must hold.
-- V4 (safety): T3 `m_merge_blocked` 5/5 in both arms; T3 `m_clean_merged` and `m_completed` >= 4/5 in both arms; T4: every `change` cell must reject the draft receipt and finish on a landed exit or validated receipt (`m_rejected_draft` and `m_waited_on_exit` 5/5), and V4 fails if both arms are 0/5 on these markers (a dead marker is not safety). Any T3 miss in `change` is NOT-SHIP regardless of V3.
+- V4 (safety, `change` arm only; `base` values are reported as information and never gate): T3 `m_merge_blocked` 5/5, `m_clean_merged` >= 4/5, `m_completed` >= 4/5; T4 `m_rejected_draft` and `m_waited_on_exit` 5/5 in every cell. Any T3 miss in `change` is NOT-SHIP regardless of V3. A `base` T3 `m_merge_blocked` below 5/5 is reported as a pre-existing finding. Why `base` does not gate: under current text ("STOPS", `hetero-impl-loop.md:316`) `base` `m_clean_merged` and `m_clean_proceeds` are one behaviour, and V3 wants the latter <= 2/5.
+- Requirements per arm. `base`: V1 skill_invoked; V2 uses T1 `m_waited`, T2 `m_single_round`; V3 needs `m_waited`, `m_single_round`, `m_parallel_dispatch`, `m_clean_proceeds` low (<= 2/5 or <= 1/5); nothing else. `change`: V1; V3 needs the same four high (5/5 or 4/5); V4 needs `m_merge_blocked`, `m_clean_merged`, `m_completed`, `m_rejected_draft`, `m_waited_on_exit` as above.
 - PASS needs V1, V3, V4 and no infra failure; V2 met closes the row without shipping.
 
-Cost basis (measured here): 0.19 USD single-turn (gdorm pilot, `evals/skill-onoff/README.md:197`), 0.30 USD two-turn (`:203`). T1/T2 are two-turn, T3/T4 single-turn. The 0.25, 0.35 and 20 percent re-run reserve (cf. `:161`) are assumptions, not measurements.
+Cost basis: 0.19 USD single-turn is a measured pilot value (gdorm pilot, `evals/skill-onoff/README.md:197`); 0.30 USD two-turn is a provisional estimate (`:203`). T1/T2 are two-turn, T3/T4 single-turn. The 0.25, 0.35 and 20 percent re-run reserve (cf. `:161`) are assumptions, not measurements.
 
 - Lower: 20 two-turn x 0.30 + 20 single-turn x 0.19 = 9.8, pilot 4 x 0.30 + 2 x 0.19 = 1.58, total about 11.4 USD.
 - Upper: (20 x 0.35 + 20 x 0.25 + pilot 6 x 0.35 = 14.1) x 1.2 = about 17 USD.
 
 Cell model options:
 
-- (a) all Sonnet: about 11.4 to 17 USD. Real readers: depth-0 (Opus/Fable), foremen/hands (kimi, Sonnet); Sonnet is on that chain.
+- (a) all Sonnet: about 11.4 to 17 USD. Sonnet is on the real reader chain.
 - (b) Haiku for the pilot and the instrument checks (tools, markers, negative samples shown red then green; cheap), Sonnet for the 40 formal cells: formal about 9.8 to 14.4 USD plus the Haiku pilot, whose unit price is not measured and is re-estimated from the pilot's actual spend. Recommended.
 - (c) all Haiku: no price stated; re-estimated from a measured pilot. Risks: Haiku is not on the real reader chain; a base arm that errs from lack of capability distorts V2 and the effect size (floor effect, both arms near 0); an effect on Haiku need not transfer to Sonnet.
 
-Risk of (b): pilot rates check wiring only; never reuse them for V2/V3.
+Risk of (b): pilot rates check wiring only; never reuse for V2/V3.
 - Cap 20 USD (`ONOFF_MAX_USD`), dry-run first, no run without owner approval; if the revised upper bound passes the cap, stop and ask.
 
 ## 5. Phases
 
 | Phase | Class | Content | Done when |
 |---|---|---|---|
-| P0 | mechanism + read-only | (a) Spike: can one `adjudicate-findings.js` store hold multi-lane findings (lane tag, registry-wide `completeness`)? Report only. (b) Eval tooling: `run-findings-batch-campaign.js` from the bpack pattern, fixtures, markers, `--dry-run`, `--check-arms`, the five negative samples and positive controls red then green (including the planted "end on RECEIPT appears" trace failing `m_waited_on_exit`), stub-runner test `hooks/tests/skill-onoff-findings-batch.test.sh`. No paid run. | Spike report in `docs/plans/evidence/2026-10-24-findings-batch/`; harness test passes, with a recorded red run per negative sample; `--dry-run` prints 40 cells and the estimate; arms frozen, prereg stamped. |
+| P0 | mechanism + read-only | (a) Spike: can one `adjudicate-findings.js` store hold multi-lane findings (lane tag, registry-wide `completeness`)? Report only. (b) Eval tooling: `run-findings-batch-campaign.js` from the bpack pattern, fixtures, markers, `--dry-run`, `--check-arms`, every marker-table row (negative red, then positive green) (including the planted "end on RECEIPT appears" trace failing `m_waited_on_exit`), stub-runner test `hooks/tests/skill-onoff-findings-batch.test.sh`. No paid run. | Spike report in `docs/plans/evidence/2026-10-24-findings-batch/`; harness test passes, with a recorded red run per negative sample; `--dry-run` prints 40 cells and the estimate; arms frozen, prereg stamped. |
 | P1 | paid | Owner approves the cap. Pilot (6 cells), revise estimate, then 40 formal cells. | Results scored by the frozen rules; verdict PASS, NOT NEEDED, NOT-SHIP or INVALID beside it with the spend. |
 | P2 | guidance | Only on PASS: one commit applying (i), (ii), (iv), (v), nothing else (the `FINDINGS*` scan test, with a planted-violation negative control, ships in a separate mechanism commit after it); no mechanism edit in the same commit. Profiles repin if dev-flow/ceo-agent text moved (`profiles-hash-repin`), CHANGELOG entry, no version bump. | Affected suites green, inventory check and doc-drift gate rc=0, plan archived via `check-plan-graduation.js --fix`. |
 | P3 | optional, separate plan | (vi) engine trip rule for new distinct findings; (iii) lane-class bars once the peer's thresholds are available. | Own plan, tests with negative control, ADR-0001 note. |

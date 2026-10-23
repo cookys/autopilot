@@ -53,7 +53,11 @@ if (PILOT && (val('--reps') !== undefined || val('--arms') !== undefined)) die('
 // = 30 cells). The gdorm pilot of 6 real base cells averaged 0.183 USD, so the
 // guard uses 0.19. 30 × 0.19 = 5.70 USD, which stays at or under the 7 USD cap.
 const COST_PER_CELL_USD = 0.19;
-const COST_BASIS = 'gdorm pilot of 6 real base cells averaged 0.183 USD, held at 0.19; 30 formal cells * 0.19 = 5.70 USD, pilot 5 cells = 0.95 USD, cap 7';
+// dcard-owner-decision runs a second turn (turn2.sh), so a cell costs more. 0.30 is a
+// placeholder until the pilot measures it. 20 cells * 0.19 + 10 cells * 0.30 = 6.80 USD.
+const COST_BY_TASK = { 'dcard-owner-decision': 0.30 };
+const cellCost = (task) => (Object.hasOwn(COST_BY_TASK, task) ? COST_BY_TASK[task] : COST_PER_CELL_USD);
+const COST_BASIS = 'gdorm pilot of 6 real base cells averaged 0.183 USD, held at 0.19; 20 formal cells * 0.19 + 10 dcard-owner-decision cells (two turns) * 0.30 = 6.80 USD, pilot 4 * 0.19 + 0.30 = 1.06 USD, cap 7';
 
 function maxUsd() {
   const raw = process.env.ONOFF_MAX_USD;
@@ -72,7 +76,7 @@ function priceRow(j) {
     if (v === null) v = finiteNum(j.usage.cost);
   }
   if (v === null) v = finiteNum(j.cost);
-  return v === null ? COST_PER_CELL_USD : v;
+  return v === null ? cellCost(j.task_id) : v;
 }
 function spentUsd(file) {
   let text = '';
@@ -158,8 +162,38 @@ function checkArms() {
     if (!(base.skills || {})[skill]) problems.push(`base missing skill ${skill}`);
     if (!(change.skills || {})[skill]) problems.push(`change missing skill ${skill}`);
   }
-  if (JSON.stringify(base.fixture_scripts) !== JSON.stringify(change.fixture_scripts)) problems.push('fixture_scripts differ between base and change');
-  if (!asList(base.fixture_scripts).includes('fixture-scripts-bpack')) problems.push('base fixture_scripts must include fixture-scripts-bpack');
+  // The REVIEW_PROMPT.md pack is T1's treatment, so it is the one fixture pack allowed to
+  // differ: each arm names exactly its own fixture-prompt pack, everything else must be
+  // equal, and the two prompt packs may differ by exactly one added REVOKED: line.
+  const isPrompt = (id) => /^fixture-prompt-bpack-/.test(id);
+  const promptBase = asList(base.fixture_scripts).filter(isPrompt);
+  const promptChange = asList(change.fixture_scripts).filter(isPrompt);
+  if (promptBase.join() !== 'fixture-prompt-bpack-base') problems.push('base fixture_scripts must name exactly fixture-prompt-bpack-base');
+  if (promptChange.join() !== 'fixture-prompt-bpack-change') problems.push('change fixture_scripts must name exactly fixture-prompt-bpack-change');
+  if (JSON.stringify(asList(base.fixture_scripts).filter((x) => !isPrompt(x))) !== JSON.stringify(asList(change.fixture_scripts).filter((x) => !isPrompt(x)))) problems.push('fixture_scripts differ between base and change beyond the fixture-prompt packs');
+  if (promptBase.length === 1 && promptChange.length === 1) {
+    try {
+      const fb = packFiles(promptBase[0], manifest);
+      const fc = packFiles(promptChange[0], manifest);
+      const names = [...new Set([...Object.keys(fb), ...Object.keys(fc)])];
+      let added = 0;
+      for (const f of names) {
+        if (fb[f] === fc[f]) continue;
+        if (!fb[f] || !fc[f]) { problems.push(`fixture prompt pack file ${f} exists in only one arm`); continue; }
+        const lb = fs.readFileSync(path.join(packsDir, promptBase[0], f), 'utf8').split('\n');
+        const lc = fs.readFileSync(path.join(packsDir, promptChange[0], f), 'utf8').split('\n');
+        // change must equal base with exactly one extra line inserted, and that line teaches REVOKED:
+        let i = 0;
+        while (i < lb.length && i < lc.length && lb[i] === lc[i]) i++;
+        const extra = lc[i];
+        const rest = lc.slice(i + 1).join('\n') === lb.slice(i).join('\n');
+        if (lc.length !== lb.length + 1 || !rest || !/REVOKED:/.test(extra || '')) problems.push(`fixture prompt pack file ${f} differs beyond one added REVOKED: line`);
+        else added++;
+      }
+      if (added !== 1) problems.push(`fixture prompt packs must differ by exactly one REVOKED: line (found ${added})`);
+    } catch (e) { problems.push(e.message); }
+  }
+  if (!asList(base.fixture_scripts).includes('fixture-scripts-bpack') || !asList(change.fixture_scripts).includes('fixture-scripts-bpack')) problems.push('base fixture_scripts must include fixture-scripts-bpack');
   const allowed = new Set((P.allowed_arm_difference || {}).files || []);
   const mb = merged(base, manifest);
   const mc = merged(change, manifest);
@@ -201,7 +235,7 @@ if (flag('--dry-run')) {
     rows.push({ status, key });
     console.log(`${status.padEnd(9)} ${key}`);
   }
-  const cost = Number((rows.length * COST_PER_CELL_USD).toFixed(2));
+  const cost = Number(rows.reduce((a, r) => a + cellCost(r.key.split('|')[0]), 0).toFixed(2));
   console.log(JSON.stringify({
     dry_run: true, pilot: PILOT, row: P.row, model, runner, cells_total: rows.length,
     cells_todo: rows.filter((r) => r.status === 'todo').length,
@@ -224,7 +258,7 @@ fs.mkdirSync(path.dirname(path.resolve(resultsPath)), { recursive: true });
 const keep = path.join(path.dirname(path.resolve(resultsPath)), 'bpack-cells');
 for (const g of GROUPS) {
   const spent = spentUsd(resultsPath);
-  const groupCost = g.arms.length * g.reps * COST_PER_CELL_USD;
+  const groupCost = g.arms.length * g.reps * cellCost(g.task);
   if (spent + groupCost > CAP + 1e-9) {
     die(`spend cap: spent ${money(spent).toFixed(2)} USD so far; next group ${g.task} [${g.arms.join(',')}] x ${g.reps} costs ${money(groupCost).toFixed(2)} USD; cap ${money(CAP).toFixed(2)} USD; refusing to dispatch`, 1);
   }

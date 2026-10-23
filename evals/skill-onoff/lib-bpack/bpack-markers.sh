@@ -2,7 +2,7 @@
 # lib-bpack/bpack-markers.sh — bpack markers. ONOFF_LIB_OVERRIDE points at this directory.
 # A marker is true only from a Bash tool_use in the transcript, or from a real file in the cell
 # (judged by the real normalizer). The agent's own prose never counts.
-# lib-bpack/dcard-markers.sh is a byte copy of lib/dcard-markers.sh: tasks/dcard-owner-decision/markers.sh
+# lib-bpack/dcard-markers.sh is a byte copy of lib-dcard-v3/dcard-markers.sh (a_decision_file reads the pre-turn-2 snapshot): tasks/dcard-owner-decision/markers.sh
 # loads dcard-markers.sh from ONOFF_LIB, and the bpack runner points ONOFF_LIB here.
 # Requires for the tree marker: TRANSCRIPT, QUERY. The revoked markers read review.txt in the cell repo (cwd).
 set -u

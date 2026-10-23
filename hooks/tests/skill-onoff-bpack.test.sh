@@ -44,7 +44,7 @@ cat > "$FX" << 'EOP'
  "thresholds":{"reps":5,"v1_min_invoked_ratio":0.9}}
 EOP
 
-echo "=== campaign dry-run: 30 cells, 5.70 USD ==="
+echo "=== campaign dry-run: 30 cells, 6.80 USD (T3 two-turn cells at 0.30) ==="
 RES="$TEST_TMP/res30.jsonl"
 dry=$(clean node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$RES" --dry-run < /dev/null) || fail "dry-run exit $?"
 python3 - "$dry" << 'PY' || fail "30-cell dry-run: $dry"
@@ -53,7 +53,7 @@ lines = sys.argv[1].splitlines()
 j = json.loads([l for l in lines if l.startswith("{")][-1])
 assert j["dry_run"] is True and j["pilot"] is False, j
 assert j["cells_total"] == 30, j
-assert abs(j["cost_estimate_usd"] - 5.70) < 1e-9, j
+assert abs(j["cost_estimate_usd"] - 6.80) < 1e-9, j
 assert j["max_usd"] == 7, j
 cells = [l.split()[1] for l in lines if l.startswith("todo")]
 assert len(cells) == 30, len(cells)
@@ -66,17 +66,19 @@ PY
 echo "=== dry-run refuses when the estimate exceeds ONOFF_MAX_USD ==="
 if clean ONOFF_MAX_USD=5 node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$TEST_TMP/cap.jsonl" --dry-run < /dev/null >/dev/null 2>&1
 then fail "ONOFF_MAX_USD=5 should make the 30-cell dry-run exit non-zero"; fi
-clean ONOFF_MAX_USD=5.70 node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$TEST_TMP/cap2.jsonl" --dry-run < /dev/null >/dev/null 2>&1 \
-  || fail "ONOFF_MAX_USD=5.70 should allow exactly 5.70"
+clean ONOFF_MAX_USD=6.80 node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$TEST_TMP/cap2.jsonl" --dry-run < /dev/null >/dev/null 2>&1 \
+  || fail "ONOFF_MAX_USD=6.80 should allow exactly 6.80"
+clean ONOFF_MAX_USD=6.79 node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$TEST_TMP/cap3.jsonl" --dry-run < /dev/null >/dev/null 2>&1 \
+  && fail "ONOFF_MAX_USD=6.79 should refuse a 6.80 estimate"
 
-echo "=== pilot: 5 cells (T1, T2 one rep both arms; T3 base one rep), 0.95 USD ==="
+echo "=== pilot: 5 cells (T1, T2 one rep both arms; T3 base one rep), 1.06 USD ==="
 pil=$(clean node "$BASE/run-bpack-campaign.js" --prereg "$FX" --results "$TEST_TMP/pilot.jsonl" --dry-run --pilot < /dev/null) || fail "pilot dry-run exit $?"
 python3 - "$pil" << 'PY' || fail "pilot dry-run: $pil"
 import json, sys
 lines = sys.argv[1].splitlines()
 j = json.loads([l for l in lines if l.startswith("{")][-1])
 assert j["pilot"] is True and j["cells_total"] == 5, j
-assert abs(j["cost_estimate_usd"] - 0.95) < 1e-9, j
+assert abs(j["cost_estimate_usd"] - 1.06) < 1e-9, j
 cells = sorted(l.split()[1] for l in lines if l.startswith("todo"))
 want = sorted(["bpack-revoked|base|1", "bpack-revoked|change|1", "bpack-tree|base|1", "bpack-tree|change|1", "dcard-owner-decision|base|1"])
 assert cells == want, cells
@@ -91,8 +93,8 @@ grep -q 'cannot read prereg' "$TEST_TMP/err1" || fail "campaign missing-prereg m
 : > "$TEST_TMP/empty.jsonl"
 rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$TEST_TMP/no-such-prereg.json" --results "$TEST_TMP/empty.jsonl" 2>&1 < /dev/null) || rc=$?
 [ "$rc" = 2 ] || fail "scorer with a missing prereg: rc=$rc want 2: $out"
-printf '%s\n' "$out" | grep -q 'prereg unreadable' || fail "scorer missing-prereg message: $out"
-printf '%s\n' "$out" | grep -q 'PASS' && fail "scorer printed PASS without a prereg: $out"
+grep -q 'prereg unreadable' <<<"$out" || fail "scorer missing-prereg message: $out"
+grep -q 'PASS' <<<"$out" && fail "scorer printed PASS without a prereg: $out"
 rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$FX" --results "$TEST_TMP/no-such-results.jsonl" 2>&1 < /dev/null) || rc=$?
 [ "$rc" = 2 ] || fail "scorer with missing results: rc=$rc want 2: $out"
 echo '{"row":"bpack"}' > "$TEST_TMP/bad-prereg.json"
@@ -135,16 +137,16 @@ score() { # $1 name $2 want-rc $3 optional: rule that must be false ("" for none
   local rc=0 out
   out=$(clean node "$BASE/score-bpack.js" --prereg "$FX" --results "$TEST_TMP/$1.jsonl" 2>&1 < /dev/null) || rc=$?
   [ "$rc" = "$2" ] || fail "score $1: rc=$rc want $2: $out"
-  if [ "$2" = 0 ]; then printf '%s\n' "$out" | grep -q '^bpack: PASS' || fail "score $1: no PASS line: $out"
-  else printf '%s\n' "$out" | grep -q '^bpack: PASS' && fail "score $1: verdict was PASS: $out"; fi
+  if [ "$2" = 0 ]; then grep -q '^bpack: PASS' <<<"$out" || fail "score $1: no PASS line: $out"
+  else grep -q '^bpack: PASS' <<<"$out" && fail "score $1: verdict was PASS: $out"; fi
   if [ -n "${3:-}" ]; then
-    printf '%s\n' "$out" | grep -q "\"$3\":false" || fail "score $1: rule $3 should be false: $out"
+    grep -q "\"$3\":false" <<<"$out" || fail "score $1: rule $3 should be false: $out"
     # the other two rules must still be true, so the failure is attributable to one threshold
     for other in b_revoked_prefix t_tree_run a_decision_file; do
-      [ "$other" = "$3" ] || printf '%s\n' "$out" | grep -q "\"$other\":true" || fail "score $1: rule $other should be true: $out"
+      [ "$other" = "$3" ] || grep -q "\"$other\":true" <<<"$out" || fail "score $1: rule $other should be true: $out"
     done
   fi
-  [ -z "${4:-}" ] || printf '%s\n' "$out" | grep -q -- "$4" || fail "score $1: missing text [$4]: $out"
+  [ -z "${4:-}" ] || grep -q -- "$4" <<<"$out" || fail "score $1: missing text [$4]: $out"
 }
 # base/change hits out of 5:           T1b T1c T2b T2c T3b T3c
 gen pass            1 4  1 4  4 4;  score pass 0
@@ -274,6 +276,39 @@ echo "=== real prereg / arms / stub grid ==="
 if [ "$B_ALL" = 1 ]; then
   chk=$(clean node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null) || fail "check-arms exit $?: $chk"
   python3 -c 'import json,sys; assert json.loads(sys.argv[1])["ok"] is True' "$chk" || fail "check-arms body: $chk"
+  echo "--- check-arms: fixture-prompt packs may differ by exactly one REVOKED: line ---"
+  mutate_prompt() { # $1 name $2 python expr on lines list 'L' (change prompt) -> prints packs dir
+    local d="$TEST_TMP/packs-$1"
+    rm -rf "$d"; cp -a "$BASE/packs" "$d"
+    python3 - "$d" "$2" << 'PY'
+import hashlib, json, sys
+d, expr = sys.argv[1], sys.argv[2]
+rel = "fixture-prompt-bpack-change/REVIEW_PROMPT.md"
+L = open(f"{d}/{rel}").read().split("\n")
+L = eval(expr)
+data = "\n".join(L).encode()
+open(f"{d}/{rel}", "wb").write(data)
+m = json.load(open(f"{d}/manifest.json"))
+m["packs"]["fixture-prompt-bpack-change"][rel] = hashlib.sha256(data).hexdigest()
+json.dump(m, open(f"{d}/manifest.json", "w"), indent=2)
+PY
+    printf '%s\n' "$d"
+  }
+  chk_ok=$(clean node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null) || fail "unmodified check-arms must be ok: $chk_ok"
+  P1=$(mutate_prompt extra-line 'L[:20] + ["- an extra unrelated instruction line"] + L[20:]')
+  out=$(clean ONOFF_PACKS_DIR="$P1" node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null 2>&1) && fail "one extra line in the change prompt must make --check-arms red: $out"
+  grep -q 'differs beyond one added REVOKED' <<<"$out" || fail "extra-line message: $out"
+  P2=$(mutate_prompt edited-line 'L[:3] + [L[3] + " tweak"] + L[4:]')
+  out=$(clean ONOFF_PACKS_DIR="$P2" node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null 2>&1) && fail "an edited line in the change prompt must make --check-arms red: $out"
+  P3=$(mutate_prompt no-revoked '[x for x in L if "REVOKED:" not in x]')
+  out=$(clean ONOFF_PACKS_DIR="$P3" node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null 2>&1) && fail "identical prompts (no REVOKED line) must make --check-arms red: $out"
+  P4="$TEST_TMP/arms-extra-fixture"; rm -rf "$P4"; cp -a "$BASE/arms/bpack" "$P4"
+  python3 - "$P4/change.json" << 'PY'
+import json, sys
+j = json.load(open(sys.argv[1])); j["fixture_scripts"].append("fixture-scripts-bpack"); j["fixture_scripts"].reverse()
+json.dump(j, open(sys.argv[1], "w"))
+PY
+  out=$(clean node "$BASE/run-bpack-campaign.js" --check-arms --arms-dir "$P4" < /dev/null 2>&1) && fail "a fixture_scripts difference outside the prompt packs must be red: $out"
   PACKS="$TEST_TMP/packs-mut"
   rm -rf "$PACKS"; cp -a "$BASE/packs" "$PACKS"
   python3 - "$BASE/arms/bpack/base.json" "$PACKS" << 'PY'
@@ -285,7 +320,7 @@ PY
   clean ONOFF_PACKS_DIR="$PACKS" node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null >/dev/null 2>&1 \
     && fail "a mutated pack should make --check-arms non-zero"
   d30=$(clean node "$BASE/run-bpack-campaign.js" --results "$TEST_TMP/real30.jsonl" --dry-run < /dev/null) || fail "real-prereg dry-run exit $?"
-  python3 -c 'import json,sys; j=json.loads([l for l in sys.argv[1].splitlines() if l.startswith("{")][-1]); assert j["cells_total"]==30 and abs(j["cost_estimate_usd"]-5.70)<1e-9, j' "$d30" || fail "real dry-run: $d30"
+  python3 -c 'import json,sys; j=json.loads([l for l in sys.argv[1].splitlines() if l.startswith("{")][-1]); assert j["cells_total"]==30 and abs(j["cost_estimate_usd"]-6.80)<1e-9, j' "$d30" || fail "real dry-run: $d30"
   rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$BASE/prereg/bpack.json" --results "$TEST_TMP/pass.jsonl" 2>&1 < /dev/null) || rc=$?
   [ "$rc" = 0 ] || fail "real prereg thresholds reject the passing stub grid: rc=$rc $out"
   rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$BASE/prereg/bpack.json" --results "$TEST_TMP/t1-base-high.jsonl" 2>&1 < /dev/null) || rc=$?

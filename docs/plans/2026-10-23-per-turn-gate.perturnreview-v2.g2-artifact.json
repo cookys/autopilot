@@ -1,0 +1,682 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "perturnreview-v2-g1",
+  "logical_plan_id": "per-turn-gate-2026-10-23-perturnreview-v2",
+  "session_id": "perturnreview-v2-s2",
+  "session_key": "f9f53263a04441162868e14b51e34000ecbb536297711596db1f2e320a683b06",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "18c50ad9453b35c064ac49f452577f85cfda226029c78c34ed26445bb83c2f73",
+  "manifest_sha256": "ac426621c9392ec930c79335b7f2f7ed27c568bfe9089b83fd6404da2d35c436",
+  "plan_sha256": "3cfbb713d8708ad20d7ff8b4aaf49ad97532d10fe0aa6683268c9219b82768a7",
+  "growth_ratio": {
+    "numerator": 38396,
+    "denominator": 36631
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "f68f39bb2e3d3756ea22e423d9ec7626f1b1f55585db6892a21274625d8e6f7c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "cc2df9f4bbbac4ae20d4000da522144266d8646f7b8cd75cd0c15ff1c8740229",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-5PE8VJ/stdout",
+          "digest": "cc2df9f4bbbac4ae20d4000da522144266d8646f7b8cd75cd0c15ff1c8740229"
+        },
+        "receipt_digest": "df18a30c8bffdf94dc977f54e7c93f107e6961bef2c301946301992f42b14e03"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "74bc7add823fa95f49297b180dbc51be02af0ead90ea1ac40b02df21f78bef6a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ecd5ebe7990623de223947af500d0aeda53819d986ebd81f1dc8de51805a7d6a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Z6wMMV",
+          "digest": "ecd5ebe7990623de223947af500d0aeda53819d986ebd81f1dc8de51805a7d6a"
+        },
+        "receipt_digest": "fba8c097c99cfce68150c63d7e7935393126b472000a14d68d39c99799926921"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "b0c301cd7013153c7ed54d0adc155a080ef5210a590c489611f81f7a12de7375"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dc8953e03b31d5c96babd27792beaf4a6d004c5801a7016e969c562c8267e671",
+          "stderr_sha256": "d5598849f123296db79d7f99e6d5f5689f6c0d7dc84fd3d37cbd173759ba8190"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-AxUyM7",
+          "digest": "dc8953e03b31d5c96babd27792beaf4a6d004c5801a7016e969c562c8267e671"
+        },
+        "receipt_digest": "ec8d2e9345ff0524fffa21c996d15e72a724c288697041f8fce37b8d92228780"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "6384391bb38e180d18b4cc5eaf2aff30f50b4162b0b6c3df6dbf779d3da98171"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8ee5859e9e006b9319d01cb335db2fe7a0812b197e337304689c27d171548fc0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-CRyAyC",
+          "digest": "8ee5859e9e006b9319d01cb335db2fe7a0812b197e337304689c27d171548fc0"
+        },
+        "receipt_digest": "4095ed8101efbe65692db3cfb1670fee126dd6833a835a1c32b52a654e73e083"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "eca10484eb062ef107ea7628a0efd2e7669d06ccf5727f52a8fbdd2e569a4a63"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-RdG2Y3",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "1e6a459d048cde0593ede3a729a2fca955ac98a51afb1871a356b0ed2e95d5b2"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5: lineage closure and allocation",
+      "claim": "Closing a lineage when exhaustion opens an owner card permits the same unresolved work item to allocate another budget.",
+      "evidence": "The work item is identified solely by its branch. Allocation rejects a new lineage only while a non-closed file exists for that branch. Exhaustion closes that file, and the allocation rule then permits a dispatch without an id to create another lineage on the same branch. No recorded owner response or distinct work-item identity is required.",
+      "evidence_reference": "Section 3.5, Storage, binding and locks; Unbinding; exhaustion step (1)",
+      "repair": "Keep exhausted work bound and inadmissible while its owner card is pending. Define an explicit authorized transition for resumption or replacement by a distinct work item, and test that a fresh run id on the exhausted branch cannot allocate another budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d45d103bd2df2764bad9fecddd5d079398f895c86a5a2389aa78b76f675b3a44"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5: batch-mode exhaustion",
+      "claim": "Batch mode can reach the lineage-exhaustion owner-card path despite its stated per-round-only behavior.",
+      "evidence": "Batch mode sets budget to 10 and changes only exhaustion step (2). If all five turns consume two retries and the tenth retry still leaves findings, step (1) matches first because retries_used equals budget. It opens an owner card and closes the lineage instead of taking the batch round-exhaustion path.",
+      "evidence_reference": "Section 3.5, ordered exhaustion steps (1) and (2), and Batch mode",
+      "repair": "Specify batch-mode handling of budget equality explicitly so the final failed retry records exhaustion without an owner card or depth-0 repair. Add a five-turn negative control that consumes all ten retries and leaves the last check failing.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eff36ef1dadc5ddd8b4070c5a64e808994cc263254cb2686d0349b4dfd14bb28"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 1: frozen infra_fail classification",
+      "claim": "The signal-based runner_error definition does not establish independence from model behavior and can rerun capability failures.",
+      "evidence": "Any child death from a signal the driver did not send before the first turn finishes qualifies as runner_error. That includes a model-triggered resource exhaustion that causes the operating system to kill the child. Such an attempt is rerun or excluded as an infra loss, although the validity rule requires model-dependent failures to remain in the denominator.",
+      "evidence_reference": "Section 1, Validity clause: runner_error definition and capability_fail treatment; P3b event-to-class table",
+      "repair": "Require independent infrastructure evidence for externally signaled deaths to qualify as infra_fail. Treat unexplained or application-induced signal deaths as terminal capability_fail, and include a first-turn resource-failure classification control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "99ac00210874e8d3edbcd4e3345e73e035b22bdcdd7023b269b359ac3ec325bf"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Section 1: power note and P4 preflight",
+      "claim": "Adequate power for the full SUCCESS rule remains unestablished.",
+      "evidence": "The quoted simulations measure marginal M1 detection at 30 runs per arm. The plan explicitly makes no adequacy claim for the conjunction and defers its power figure to the batch header. No joint outcome assumptions or adequacy criterion are specified for that calculation.",
+      "evidence_reference": "Section 1, Power note",
+      "repair": "Before counted P4 runs, specify joint M1/M2/M3 and mechanism scenarios, evaluate valid counts from 27 to 30 with attrition, and state what power is considered adequate or explicitly accept the resulting exploratory limitation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e2e9002bb3942ad2d84e948068a6c0540a0e82e58a7d2cff3d47eb9cf9dffbba"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR5 and P5 precision measurement",
+      "claim": "Final-state review alone cannot establish whether an earlier gate finding was correct.",
+      "evidence": "P5 records findings during lane execution but confirms them against final QC or review. A real defect may be repaired before final QC and therefore disappear from that review. The required gate record contains no checked commit identifier, and observe mode takes no retry snapshot, so the confirmation procedure does not yet bind findings to the state that produced them.",
+      "evidence_reference": "Section 3.1, Record shape; KR5; P5 procedure",
+      "repair": "Before the pilot, bind each finding to its checked commit or preserved state, independently assess that state, and define whether repeated reports count as separate findings. Compute precision from those adjudications.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "89e1bcd6d4afd66eedcd74b643b9ed4a585965c344dccd1253179d0ba4490ecc"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 1 KR4; section 4 P4 and P6 rows; section 3.5 batch-mode promotion paragraph",
+      "claim": "KR4 and the P4 row treat a SUCCESS as promotion of the rail adapter, but counted P4 pairs run that adapter in batch mode, which disables depth-0 repair and the lineage budget, so P4 does not measure the product path the per_turn_gate flag would enable.",
+      "evidence": "KR4 says P4 evidence supports promoting the rail adapter only, and the P4 deliverable says SUCCESS promotes the adapter and fixture shape. Section 3.5 batch mode says that on a per-round cap the run records gate_exhausted and moves to the next turn with no depth-0 repair and no owner card, sets budget to 10, and then says a SUCCESS promotes only the retry text of section 3.4 and the per-round cap and does not promote the depth-0 repair path or the lineage budget. P6 still opens a default-on owner card after P4 SUCCESS plus P5 precision 0.8, and that flag would turn on the unmeasured lineage and depth-0 path.",
+      "evidence_reference": "Plan section 1 KR4 paragraph; section 3.5 paragraphs starting Batch mode, used only by counted P4 pairs and A SUCCESS therefore promotes only; section 4 table rows P4 and P6.",
+      "repair": "Copy one promotion sentence into KR4, the P4 row, and both P6 terminal paths: SUCCESS promotes the section 3.4 retry text, the per-round cap, and the fresh-process rail retry measured in batch mode; lineage budget and depth-0 repair stay unpromoted opt-in safeguards. A P6 default-on card must repeat that limit. The other option is to run counted P4 pairs on the product path instead of batch mode.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e890579cc4327b5b6e8859ba8f7eb9bdf3beeb2819c6d8930174240ce8eb57f7"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 3.3 adapter A rationale and files-to-read list; section 3.9 original call-site paragraph",
+      "claim": "The plan treats check-repair-scope.js as a scope stop-loss already on the dispatch-hetero commit path that adapter A extends, but dispatch-hetero.sh never calls that script.",
+      "evidence": "dispatch-hetero.sh run_hands_content_gate invokes check-hands-commit.js over BASE_SHA..HEAD_SHA and does not reference check-repair-scope. check-repair-scope.js is loaded from campaign-intake.js, implementation-campaign.js, and autopilot-engine.js. A P3 or P4 retry on a non-campaign hetero dispatch will not trip that stop-loss, and P3 forbids editing check-repair-scope.js.",
+      "evidence_reference": "scripts/dispatch-hetero.sh run_hands_content_gate; src/engine/campaign-intake.js require of check-repair-scope; plan section 3.3 Why A is first and section 3.9.",
+      "repair": "State that adapter A inherits check-hands-commit.js and the branch ledger already in dispatch-hetero.sh, and that check-repair-scope.js stays a campaign-engine stop-loss off that path. If a gate retry must also trip repair-scope, that is a later plan, because this plan leaves the script unedited.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "93d7d77155b355fac4ec6f1eeeff80ac0b2069af3c9b661ffa54e513c294c03a"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 1 ordered P4 clauses FAIL (no effect) and FAIL-TRADE",
+      "claim": "The ordered decision rule labels a large negative M1 lift as no effect, because Fisher is one-sided G greater than C and FAIL-TRADE requires a positive 20-point lift.",
+      "evidence": "No effect matches when Fisher p is greater than 0.20 and lift is below 10 points. Lift is M1_G/nG minus M1_C/nC. When G is worse than C, the one-sided p is near 1 and lift is negative, so both no-effect predicates hold. FAIL-TRADE cannot fire without lift of at least 20 points. The later-clause INCONCLUSIVE bucket is never reached. Promotion is still refused, because no effect keeps the gate experimental, so this is a mislabel rather than a false promote.",
+      "evidence_reference": "Section 1 sentences defining the one-sided Fisher test G greater than C, SUCCESS (a), FAIL-TRADE, and FAIL (no effect).",
+      "repair": "Keep first-match order. Restrict no effect to a near-zero band, for example absolute lift below 10 points with two-sided p greater than 0.20, and send a large negative lift to INCONCLUSIVE or to a named harm label.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9a993263d7f6e4dd0c117a73f5f9c5bdd101c1a5f123c2293097ead9e14338ce"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 4 P1 data paragraph on harness commits 6d9b22427 and a93e98299, including candidate (4)",
+      "claim": "The P1 data paragraph states as fact that the harness diff between those two commits touches only the feedback flag, the snapshot copy, the analyzer, and the batch driver option, which overstates the git range and prejudges candidate (4) before the preregistered read of the diff.",
+      "evidence": "git diff --stat 6d9b22427 a93e98299 on evals/orchestration lists README.md, analyze-t14-gate.js, run-orchestration-eval.sh (71 insertions, 15 deletions), and run-t14-gate-batch.js. The same range also changes orchestration-eval-gate.test.sh, t14-gate-batch.test.sh, and scripts/lib/config-keys.json (AUTOPILOT_QC_OUTCOME). Candidate (4) is supposed to start by reading that diff, and the paragraph already says the observe C path should be unchanged.",
+      "evidence_reference": "Plan section 4 P1 data sentences naming harness commits 6d9b22427 and a93e98299 and candidate (4); git objects 6d9b22427 and a93e98299 in the autopilot repo.",
+      "repair": "Drop the touches-only sentence. Write that P1 will list every path in 6d9b22427..a93e98299 that can run on an observe C arm, including run-orchestration-eval.sh, and will not treat the observe path as unchanged until that list has no runtime files. Keep the four named items as the intended treatment, not as the measured diff.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7066fb25db567c27c1adea2a9314e752c52beae5d1236d6e092172f7f65704f0"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 0 product claim",
+      "claim": "The thesis makes a component-level causal claim that the two nonidentical experiment protocols cannot identify.",
+      "evidence": "Section 0 says the local checker plus revised retry changed final oracle scores, but the same section says feedback handling, snapshot logic, the analyzer, the batch-driver option, and unrecorded runtime conditions differed and that the cross-batch difference is not attributed to the feedback text alone. The evidence supports an association for the complete protocols, not that decomposition of the checker and retry text.",
+      "evidence_reference": "Section 0, experiment-comparison paragraph and product-claim paragraph",
+      "repair": "Replace changed with was associated with, or say that the two complete protocols produced these scores. Restrict the claim to one task, one alias, the recorded pins, and the nonidentical protocols; reserve component-level causal language for a successful P4 comparison using the product adapter.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b4171e2ded659288ab357ba1108935111d73f8f29607d336d0414be1bb8289c8"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 decision rule, sample size, and power note",
+      "claim": "The P4 design does not state or demonstrate adequate power for the full SUCCESS rule.",
+      "evidence": "The rule fixes 30 runs per arm, while the power note explicitly covers only marginal M1 detection and states that the plan makes no adequacy claim for the full conjunction after attrition. A full-rule figure is merely recorded later and cannot change the already frozen thresholds or sample size. Marginal M1 power therefore cannot establish power for the conjunction of lift, Fisher significance, M2 preservation, M3 preservation, mechanism-seen, and validity loss.",
+      "evidence_reference": "Section 1, P4 power note; P4 validity, ceiling, SUCCESS, and procedure clauses",
+      "repair": "Before freezing P4, declare a meaningful minimum probability of obtaining SUCCESS under specified alternatives and calculate full-rule power across valid counts, including M2, M3, mechanism-seen, and infra losses. If 30 per arm is not adequate, revise the sample-size ceiling, rate margins, and all denominator-specific clauses together before any counted run.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d82862faaa1f97e99a6616824f1b2e214926015aa4020c407fff00cebb7bb913"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 validity clause and terminal-outcome contract",
+      "claim": "Validity failures have no defined terminal verdict and therefore leave the ordered P4 decision rule incomplete.",
+      "evidence": "The validity clause says an omitted, extra, replaced, or post-hoc pair invalidates the batch. P4 acceptance requires exactly one of SUCCESS, FAIL-TRADE, no effect, or INCONCLUSIVE, while its negative controls describe several violations as making the batch invalid. Invalid is not an allowed verdict, and the plan does not say whether such a batch receives INCONCLUSIVE, receives no verdict, or may be rerun as a wholly new frozen batch.",
+      "evidence_reference": "Section 1 validity clause; section 4 P4 acceptance and negative-control cells; section 4 P4 procedure",
+      "repair": "Freeze one terminal rule for every validity failure. The simplest closed rule is to record the violation, emit INCONCLUSIVE with no promotion, and prohibit further inspection or replacement. If invalid batches instead have no verdict, state that explicitly and require an entirely new pre-registered manifest so the terminal-label contract remains unambiguous.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3d2951295b676a57b159670e510d49a84da9473b2fe5db323f402c690f31b073"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 infra-loss reruns and attempt isolation",
+      "claim": "The validity rule does not ensure that an infra rerun starts from the same pristine experimental state as the attempt it replaces.",
+      "evidence": "The manifest freezes run IDs, assignments, order or seed, and settings, and P4 freezes source bytes, but no per-attempt starting-state hash or mandatory clean-worktree reset is required. Auth expiry is eligible even after application output has begun. Without an explicit reset and equality check, a rerun could retain files, commits, settings, or other state from the failed attempt, making the scored result depend on which infra event occurred.",
+      "evidence_reference": "Section 1 validity clause; section 4 P3b bridge and P4 procedure",
+      "repair": "Add a frozen pair seed and expected pristine-state hash to the manifest. Require every attempt to destroy or isolate the prior attempt state, recreate the worktree from that seed, and verify the hash before execution. Record the attempt state hash, discard every row and oracle result from an infra attempt, and prohibit any scored reuse of files or commits produced by that attempt.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a2e17b6d486687e0758a8ebd83a2cb5cfcc84c3818e6bcda061368e87b83ef38"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 promotion scope and t14 Gate fixture",
+      "claim": "The P4 promotion statement exceeds the mechanism that P4 actually measures.",
+      "evidence": "The P4 row says SUCCESS promotes the adapter and fixture shape, but section 3.5 says SUCCESS promotes only the retry text and per-round cap, not the product depth-0 path or lineage budget. P3b also builds its Gate fixture from the task-specific verify-turn.js, which section 3.1 acknowledges is the oracle in disguise. Consequently the experiment cannot promote the general quality or oracle-free behavior of product Gate fixtures.",
+      "evidence_reference": "Section 3.1 oracle-disguise limitation; section 3.5 batch-mode promotion statement; section 4 P3b and P4 rows",
+      "repair": "Use one promotion statement everywhere: SUCCESS supports only the fresh-process rail adapter under the controlled command interface, the shared retry text, and per-round-cap behavior measured by P4. State that it does not validate the t14 verifier as a general Gate fixture, brief-derived check coverage, real-task effectiveness, session resume, Stop, SubagentStop, depth-0 repair, or lineage-budget behavior.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "76a87938e60ae72eb6a2e484bcdaac913910da53125e11d99bbd0678a6589488"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 lineage accounting versus P4 infra attempts",
+      "claim": "The plan gives incompatible meanings to an eval attempt, leaving P4 retry-budget behavior undefined across infra reruns.",
+      "evidence": "Section 3.5 says every eval attempt of P3b or P4 is a new work item with its own lineage. The validity clause instead uses attempt as a numbered try of the same frozen run ID, with up to three infra attempts followed by one valid attempt. Section 3.5 also says reservations are never refunded. If an infra failure occurs after gate retries, sharing the lineage preserves spent per-round and lineage counters, while assigning a fresh lineage resets them. The latter permits transport failures to change the treatment, and the former can leave the valid rerun unable to receive the same cap.",
+      "evidence_reference": "Section 3.5 batch-mode and reservation rules; section 1 validity clause",
+      "repair": "Separate transport attempts from the scored work item. Give each manifest run ID one outcome lineage, recreate its state for every transport attempt, discard all gate activity from an infra attempt, and start the one valid outcome attempt with a newly seeded outcome counter. Store the transport-attempt count separately with its three-attempt cap. Define every recorded field and test an auth expiry after one or two gate retries.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "772f8fcb52f55692c38200a8b09a55246d74a059d93b934c90fa93ba483caced"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Per-command timeout and process termination",
+      "claim": "The timeout contract does not specify how the gate terminates descendants of the shell-spawned command.",
+      "evidence": "Each item runs through /bin/sh -c and the plan says the gate sends SIGKILL on timeout, but it does not define a process group, descendant termination, or output-drain behavior. A shell can die while a spawned checker or test process continues, allowing that process to overlap the retry and mutate or inspect the worktree after the gate has classified the item as timed out.",
+      "evidence_reference": "Section 3.2 execution and exit mapping; section 3.8 P2 timeout control",
+      "repair": "Specify that the command starts in its own process group, timeout sends SIGKILL to the entire group, the gate reaps and waits for all descendants, and bounded output pipes are closed before classification. Add a fixture whose shell spawns a child that would write a sentinel after the parent times out; the test must prove the sentinel cannot appear before or during a retry.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bbf205d3072e5a6d0da3b706f1cb38c2b3ecfddbcc9cf72563070ee560955a65"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Whole-plan normative-state organization",
+      "claim": "Load-bearing rules are repeatedly restated despite the plan declaring single normative sources, and the repetitions have already produced divergent promotion language.",
+      "evidence": "The validity and three-attempt rule is stated in section 1, repeated throughout the P3b deliverable and acceptance cells, and again in procedure text. The P1 prerequisite appears in the KRs, phase order, multiple phase rows, risks, and closing guidance. The cap is narrated in experiment history, KRs, design, phases, risks, and reviewer instructions. Section 3.5 says SUCCESS promotes only retry text and per-round behavior, whereas the P4 row promotes the adapter and fixture shape. This size and duplication make a current normative contradiction easier to miss.",
+      "evidence_reference": "Sections 1, 3.5, 4, 5, 6, Reading order, and Acceptance for this document",
+      "repair": "Create one authoritative normative block for P4 validity and outcomes, gate execution, lineage accounting, and phase prerequisites. Replace all other normative restatements with exact section references; retain historical counts only in a clearly labeled evidence appendix. Remove the P4 promotion contradiction during that consolidation and mechanically check that no implementation row changes a referenced rule.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7727283e08facb80fd168ba506f1fa9e8e69bacb65071918b477c45e7ab54e68"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "e2e9002bb3942ad2d84e948068a6c0540a0e82e58a7d2cff3d47eb9cf9dffbba",
+      "rubric_id": "R2",
+      "affected_surface": "Section 1: power note and P4 preflight",
+      "claim": "Adequate power for the full SUCCESS rule remains unestablished.",
+      "evidence_reference": "Section 1, Power note",
+      "disposition": null
+    },
+    {
+      "fingerprint": "89e1bcd6d4afd66eedcd74b643b9ed4a585965c344dccd1253179d0ba4490ecc",
+      "rubric_id": "R7",
+      "affected_surface": "KR5 and P5 precision measurement",
+      "claim": "Final-state review alone cannot establish whether an earlier gate finding was correct.",
+      "evidence_reference": "Section 3.1, Record shape; KR5; P5 procedure",
+      "disposition": null
+    },
+    {
+      "fingerprint": "93d7d77155b355fac4ec6f1eeeff80ac0b2069af3c9b661ffa54e513c294c03a",
+      "rubric_id": "R6",
+      "affected_surface": "Section 3.3 adapter A rationale and files-to-read list; section 3.9 original call-site paragraph",
+      "claim": "The plan treats check-repair-scope.js as a scope stop-loss already on the dispatch-hetero commit path that adapter A extends, but dispatch-hetero.sh never calls that script.",
+      "evidence_reference": "scripts/dispatch-hetero.sh run_hands_content_gate; src/engine/campaign-intake.js require of check-repair-scope; plan section 3.3 Why A is first and section 3.9.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9a993263d7f6e4dd0c117a73f5f9c5bdd101c1a5f123c2293097ead9e14338ce",
+      "rubric_id": "R2",
+      "affected_surface": "Section 1 ordered P4 clauses FAIL (no effect) and FAIL-TRADE",
+      "claim": "The ordered decision rule labels a large negative M1 lift as no effect, because Fisher is one-sided G greater than C and FAIL-TRADE requires a positive 20-point lift.",
+      "evidence_reference": "Section 1 sentences defining the one-sided Fisher test G greater than C, SUCCESS (a), FAIL-TRADE, and FAIL (no effect).",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7066fb25db567c27c1adea2a9314e752c52beae5d1236d6e092172f7f65704f0",
+      "rubric_id": "R1",
+      "affected_surface": "Section 4 P1 data paragraph on harness commits 6d9b22427 and a93e98299, including candidate (4)",
+      "claim": "The P1 data paragraph states as fact that the harness diff between those two commits touches only the feedback flag, the snapshot copy, the analyzer, and the batch driver option, which overstates the git range and prejudges candidate (4) before the preregistered read of the diff.",
+      "evidence_reference": "Plan section 4 P1 data sentences naming harness commits 6d9b22427 and a93e98299 and candidate (4); git objects 6d9b22427 and a93e98299 in the autopilot repo.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-23T11:45:29.654Z"
+}

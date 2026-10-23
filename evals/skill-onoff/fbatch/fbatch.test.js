@@ -46,6 +46,50 @@ test('--check-arms rejects a change arm that asks a subagent to write a FINDINGS
   assert.strictEqual(r.status, 2);
   assert.match(r.stdout, /instructs a FINDINGS file/);
 });
+test('pilot rows are marked pilot+model and never count as done for the formal run', () => {
+  const f = path.join(tmp(), 'r.jsonl');
+  assert.strictEqual(run(['--pilot', '--results', f]).status, 0);
+  const rows = fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.strictEqual(rows.length, 6);
+  assert.ok(rows.every((r) => r.pilot === true && r.model === 'haiku'));
+  const j = JSON.parse(run(['--dry-run', '--results', f]).stdout.trim().split('\n').pop());
+  assert.strictEqual(j.cells_todo, 40);
+  run(['--results', f]);
+  const all = fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.strictEqual(all.filter((r) => r.pilot === false && r.model === 'sonnet').length, 40);
+  assert.strictEqual(all.filter((r) => r.pilot === true).length, 6);
+});
+test('foreign-model and pilot rows are excluded from done and from the verdict', () => {
+  const f = path.join(tmp(), 'r.jsonl');
+  const cell = (task, arm, rep, extra) => JSON.stringify({ row: 'x', task_id: task, arm, rep, failure_class: null, ...extra });
+  fs.writeFileSync(f, [cell('fb-mid-batch', 'base', 1, { model: 'haiku', pilot: false }), cell('fb-mid-batch', 'base', 2, { model: 'sonnet', pilot: true }), cell('fb-mid-batch', 'base', 3, {})].join('\n') + '\n');
+  const j = JSON.parse(run(['--dry-run', '--results', f]).stdout.trim().split('\n').pop());
+  assert.strictEqual(j.cells_todo, 40);
+  run(['--results', f]);
+  const all = fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.strictEqual(all.filter((r) => r.pilot === false && r.model === 'sonnet').length, 40);
+});
+test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-insensitive', () => {
+  const bad = [
+    'Never stop early; each lane writes FINDINGS.md.',
+    'Each lane creates FINDINGS.md.',
+    'Lanes must save findings.md to the worktree.',
+    'Do not stall. Every lane should produce a FINDINGS file at the end.',
+    'Each lane will dump FINDINGS into a report file.',
+    'No excuses; put the FINDINGS in FINDINGS.md.',
+  ];
+  const good = ['Never write a FINDINGS file; return findings as text.', 'Do not create a FINDINGS file. Return the findings as text.'];
+  for (const [lines, want] of [[bad, 2], [good, 0]]) {
+    for (const l of lines) {
+      const d = tmp(); fs.cpSync(path.join(__dirname, 'arms'), d, { recursive: true });
+      fs.appendFileSync(path.join(d, 'change', 'code-review.md'), `\n- ${l}\n`);
+      const r = run(['--check-arms', '--arms-dir', d]);
+      const out = JSON.parse(r.stdout);
+      const hit = out.problems.some((p) => /instructs a FINDINGS file/.test(p));
+      assert.strictEqual(hit, want === 2, `${l} -> ${r.stdout}`);
+    }
+  }
+});
 test('change arm says findings return as text and never asks for a FINDINGS write', () => {
   assert.match(arms.change['code-review.md'], /as text/);
   assert.match(arms.change['code-review.md'], /Never ask a Claude subagent to write a FINDINGS file/);

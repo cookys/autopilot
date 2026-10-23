@@ -60,6 +60,9 @@ function maxUsd() {
   return Number(raw);
 }
 
+const FINDINGS_VERB = /\b(writ(e|es|ing)|wrote|written|creat(e|es|ing)|sav(e|es|ing)|produc(e|es|ing)|output(s|ting)?|emit(s|ting)?|dump(s|ing)?|put(s|ting)?|record(s|ing)?|deliver(s|ing)?|persist(s|ing)?|generat(e|es|ing)|stor(e|es|ing)|drop(s|ping)?|leav(e|es|ing)|append(s|ing)?)\b/i;
+const NEGATION = /\b(never|not|no|don't|dont|do not|without|avoid|must not|mustn't)\b/i;
+
 function checkArms() {
   const problems = [];
   const a = L.loadArms(armsDir);
@@ -73,7 +76,12 @@ function checkArms() {
   for (const arm of ['base', 'change']) {
     for (const [f, txt] of Object.entries(a[arm])) {
       for (const line of txt.split('\n')) {
-        if (/FINDINGS/.test(line) && /\b(write|writes|deliver)\b/i.test(line) && !/\b(never|not)\b/i.test(line)) problems.push(`${arm}/${f}: instructs a FINDINGS file: ${line.trim()}`);
+        // Negation scopes to its own clause only: split on ';' and on a sentence-ending '.' (not the dot in FINDINGS.md).
+        for (const clause of line.split(/;|\.(?=\s|$)/)) {
+          if (!(/\bFINDINGS\b/.test(clause) || /\bfindings(\.[a-z]+\b|\s+(file|report|doc|document)\b)/i.test(clause))) continue;
+          if (!FINDINGS_VERB.test(clause) || NEGATION.test(clause)) continue;
+          problems.push(`${arm}/${f}: instructs a FINDINGS file: ${clause.trim()}`);
+        }
       }
     }
   }
@@ -94,6 +102,8 @@ const GROUPS = PILOT
   ? P.pilot_tasks.map((task) => ({ task, arms: ['base', 'change'], reps: 1 }))
   : P.tasks.map((task) => ({ task, arms: ARMS, reps: REPS }));
 const CAP = maxUsd();
+// A pilot run reads pilot rows of its own model; the formal run reads only non-pilot rows of the formal model.
+
 
 function readRows() {
   let text = '';
@@ -103,8 +113,11 @@ function readRows() {
   return rows;
 }
 
+// Formal-run view: pilot rows and rows from another model are never counted (pilot rates are never reused for V2/V3).
+const scoredRows = () => readRows().filter((j) => (PILOT ? j.pilot === true : j.pilot !== true) && j.model === MODEL);
+
 if (flag('--dry-run')) {
-  const done = new Set(readRows().filter((j) => !j.failure_class).map((j) => `${j.task_id}|${j.arm}|${j.rep}`));
+  const done = new Set(scoredRows().filter((j) => !j.failure_class).map((j) => `${j.task_id}|${j.arm}|${j.rep}`));
   const keys = [];
   for (const g of GROUPS) for (const arm of g.arms) for (let rep = 1; rep <= g.reps; rep++) {
     const key = `${g.task}|${arm}|${rep}`;
@@ -127,14 +140,14 @@ const chk = checkArms();
 if (!chk.ok) die(`--check-arms failed: ${chk.problems.join('; ')}`);
 const arms = L.loadArms(armsDir);
 fs.mkdirSync(path.dirname(path.resolve(resultsPath)), { recursive: true });
-const have = new Set(readRows().filter((j) => !j.failure_class).map((j) => `${j.task_id}|${j.arm}|${j.rep}`));
+const have = new Set(scoredRows().filter((j) => !j.failure_class).map((j) => `${j.task_id}|${j.arm}|${j.rep}`));
 for (const g of GROUPS) for (const arm of g.arms) for (let rep = 1; rep <= g.reps; rep++) {
   if (have.has(`${g.task}|${arm}|${rep}`)) continue;
   const { markers } = L.stubCell(g.task, arm, L.armText(arms[arm]));
-  fs.appendFileSync(resultsPath, `${JSON.stringify({ row: P.row, task_id: g.task, arm, rep, runner: 'stub', failure_class: null, skill_invoked: true, cost_usd: 0, markers })}\n`);
+  fs.appendFileSync(resultsPath, `${JSON.stringify({ row: P.row, pilot: PILOT, model: MODEL, task_id: g.task, arm, rep, runner: 'stub', failure_class: null, skill_invoked: true, cost_usd: 0, markers })}\n`);
 }
 if (PILOT) { console.log('pilot done: stub cells, not scored (a partial grid cannot PASS).'); process.exit(0); }
 const controls = L.negativeControls(arms);
-const v = L.verdict(readRows(), controls, REPS, P.row);
+const v = L.verdict(scoredRows(), controls, REPS, P.row);
 console.log(JSON.stringify({ controls, ...v }));
 process.exit(v.verdict === 'PASS' ? 0 : 1);

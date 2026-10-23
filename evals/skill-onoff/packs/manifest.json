@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_pack_manifest",
   "frozen_at": "P3",
-  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan §4)",
+  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan \u00a74)",
   "packs": {
     "dev-flow-card": {
       "dev-flow-card/SKILL.md": "cb5b0b48fc23ec03dfdd8f68a7b040a1780299cebc1c7c48110afb430f0332e8",
@@ -10707,6 +10707,61 @@
       "kind": "dir",
       "source": "/tmp/tmp.btdz6vcfKF",
       "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08"
+    },
+    "ceo-agent-bpack-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "ceo-agent-bpack-change": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "hetero-review-bpack-base": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "hetero-review-bpack-change": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "harness-maintenance-bpack-base": {
+      "kind": "skill",
+      "source": "harness-maintenance",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "harness-maintenance-bpack-change": {
+      "kind": "skill",
+      "source": "harness-maintenance",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "bpack-files-base": {
+      "kind": "dir",
+      "source": "repo files at ref",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "bpack-files-change": {
+      "kind": "dir",
+      "source": "repo files at ref",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "fixture-scripts-bpack": {
+      "kind": "dir",
+      "source": "hand-authored fixture stub (dispatch-tree.js), byte-frozen in packs/fixture-scripts-bpack",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "fixture-prompt-bpack-base": {
+      "kind": "dir",
+      "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "fixture-prompt-bpack-change": {
+      "kind": "dir",
+      "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
     }
   }
 }

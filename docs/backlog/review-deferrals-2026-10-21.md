@@ -2,13 +2,6 @@
 
 BL-0276. Recorded at closeout. Trigger-Type ready. Effort S.
 
-## patch-id integration (bl215, merge 3955ea75b)
-
-Known boundaries, not fixed:
-
-- A stable patch-id does not distinguish whitespace. A branch adopted after an indentation-only change still counts as integrated.
-- A cherry-pick that is later deleted on develop still counts as integrated.
-- Performance: each branch commit runs git several times.
 
 ## Second half of 2026-10-21
 
@@ -50,4 +43,8 @@ Known boundaries, not fixed:
 
 ## Open after 2026-10-23 (BL-0276 narrowed)
 
-Everything under the two Fixed headings is done. What remains open is the patch-id boundaries, the tokmech, dnone and deval items under "Second half of 2026-10-21", and the three dcardv3 items frozen by evals/skill-onoff/prereg/FROZEN.json.
+Everything under the two Fixed headings is done. What remains open is the tokmech (fix in review, unit tokrace), dnone and deval items under "Second half of 2026-10-21", and the three dcardv3 items frozen by evals/skill-onoff/prereg/FROZEN.json.
+
+## Follow-up from the pidbound review (merge 7e9b235e1)
+
+- `changePresentAtTip` in `scripts/repo-residue-sweep.js` lets an `fs.mkdtempSync` failure throw instead of returning null. It fails safe: the sweep aborts and nothing is deleted.

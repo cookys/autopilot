@@ -9,3 +9,7 @@ autopilot's dispatch-review agy seat waits for process exit before parsing, so i
 Suggested fix: once a fully closed envelope with status SUCCESS is detected, allow a grace period, then send TERM and then KILL to the process group, and record the result as `forced_exit`.
 
 Also record the upstream issue google-antigravity/antigravity-cli#582: since 1.1.1 the text print mode does not read stdin.
+
+## 2026-10-23: hands parked on background tasks
+
+agy-served `claude-sonnet-5-5-low` hands parked on their own background tasks ("root agent idle; waiting up to 40m0s for N background task(s)") until the dispatch wall timeout: unit tintacc twice with zero useful output, unit tokrace twice after committing. A foreground clause in the prompt did not prevent it. Short tasks completed normally.

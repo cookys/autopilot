@@ -10,3 +10,5 @@ BL-0277. The row's Pointer is the audit archive README. This sidecar holds the l
 - task-card stays on BL-0243. Original trigger, unchanged: P3, handoff reads the snapshot and dev-flow calls task-card, after guidance and eval. discover-audit.md item 6 is the same deferral.
 
 Owner decision 2026-10-23 (d-7a800dcb): the `harness report --format warning` expiry warning is not wired to SessionStart.
+
+Dispatch-tree withdrawal 2026-10-23: in two bpack pilots neither arm ever opened `skills/ceo-agent/references/depth0-control-loop.md`, so a dispatch-tree sentence placed there is never read. Teaching dispatch-tree needs a SKILL.md-level change with its own ON/OFF eval. The other gaps stay as listed.

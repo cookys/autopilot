@@ -1715,15 +1715,33 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # on a quota signal kill the group and report engine_quota_exhausted. Review prose
   # (`"type":"text"` events) is never scanned, so the word "quota" in a review is inert.
   OPENCODE_QUOTA=0
-  setsid timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+  # setsid gives the child its own process group (group-kill); when setsid is absent run without
+  # one and kill the timeout wrapper + its direct children instead (same fallback idea as dispatch-hetero.sh).
+  OC_SETSID=""; [ -n "$(type -P setsid)" ] && OC_SETSID="$(type -P setsid)"
+  # shellcheck disable=SC2086
+  $OC_SETSID timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
       env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR" &
   OC_PID=$!
+  # Deterministic detection: no pipelines (no SIGPIPE/pipefail dependence). Only structured error
+  # signals count: stdout NDJSON lines with "type":"error" (opencode: error.data.message), and
+  # stderr lines of the unambiguous shape `Error: ...` / `error: ...` / `{"type":"error"...}`.
+  # Free text (review prose, "reviewing quota handling in src/429.ts") is inert.
+  OC_QUOTA_RE='insufficient_quota|quota exceeded|exceeded your (current )?quota|rate.?limit|usage limit|too many requests|status"? *:? *429|HTTP 429'
+  oc_quota_hit() {
+    local errs
+    errs="$(grep -iE '"type" *: *"error"' "$OPENCODE_OUT" 2>/dev/null; grep -iE '^[[:space:]]*(error|fatal)[:[:space:]]|"type" *: *"error"' "$OPENCODE_ERR" 2>/dev/null)" || true
+    [ -n "$errs" ] || return 1
+    grep -qiE "$OC_QUOTA_RE" <<<"$errs"
+  }
   while kill -0 "$OC_PID" 2>/dev/null; do
-    if { grep -v '"type" *: *"text"' "$OPENCODE_OUT" 2>/dev/null; cat "$OPENCODE_ERR" 2>/dev/null; } \
-        | grep -qiE 'insufficient_quota|quota|rate.?limit|usage limit|too many requests|status"?:? *429|HTTP 429'; then
+    if oc_quota_hit; then
       OPENCODE_QUOTA=1
-      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+      if [ -n "$OC_SETSID" ]; then
+        kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+      else
+        pkill -KILL -P "$OC_PID" 2>/dev/null; kill -KILL "$OC_PID" 2>/dev/null
+      fi
       break
     fi
     sleep 0.2

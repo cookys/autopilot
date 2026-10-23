@@ -49,6 +49,42 @@ OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$S
 assert_eq "0" "$EXIT" "opencode bare 429 number in non-text event still reviewed"
 assert_not_contains "$OUT" 'engine_quota_exhausted' "bare 429 number is not quota exhaustion"
 
+# (d) healthy run whose STDERR merely mentions quota/429 in free text is not killed.
+STUB_ERRTXT="$TEST_TMP/opencode-stderr-text"
+cat > "$STUB_ERRTXT" <<SEOF
+#!/usr/bin/env bash
+if [ "\$1" = "run" ]; then echo 'reviewing quota handling in src/429.ts' >&2; fi
+exec "$STUB_OPENCODE_JSON" "\$@"
+SEOF
+chmod +x "$STUB_ERRTXT"
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_ERRTXT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode healthy stderr mentioning quota/429 still reviewed"
+assert_not_contains "$OUT" 'engine_quota_exhausted' "healthy stderr free text is not quota exhaustion"
+
+# (e) no setsid available: seat still works AND still detects quota promptly.
+setsid() { echo 'setsid: command not found' >&2; return 127; }
+export -f setsid
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode without setsid: normal path works"
+START=$SECONDS
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_QUOTA" --timeout 60s 2>&1)"; EXIT=$?
+ELAPSED=$((SECONDS - START))
+assert_contains "$OUT" 'engine_quota_exhausted' "opencode without setsid: quota still detected"
+[ "$ELAPSED" -lt 10 ]; assert_eq "0" "$?" "opencode without setsid: quota prompt (${ELAPSED}s)"
+PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"; sleep 0.5
+kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "opencode without setsid: child gone"
+unset -f setsid
+
+# (f) stdout structured quota error is prompt every time (5 repeats, each < 10s).
+for i in 1 2 3 4 5; do
+  START=$SECONDS
+  OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_QUOTA" --timeout 60s 2>&1)"
+  ELAPSED=$((SECONDS - START))
+  case "$OUT" in *engine_quota_exhausted*) R=0;; *) R=1;; esac
+  [ "$ELAPSED" -lt 10 ] || R=1
+  assert_eq "0" "$R" "opencode stdout quota repeat $i prompt+detected (${ELAPSED}s)"
+done
+
 # (c) normal stub unchanged.
 OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "opencode normal path exit 0"

@@ -126,7 +126,7 @@ rails refuse over it with a named reason instead of letting the exec fail:
 - `dispatch-review.sh` → `no_verdict` carrying the byte count, the ceiling, and the remedy. The
   review was fully set up, and the caller's fail-closed contract already treats `no_verdict` as "do
   not ship", so this is not a `precondition_failed`.
-- `dispatch-review.sh --runner opencode` → `no_verdict` with reason `engine_quota_exhausted` when the NDJSON stream (non-text events) or stderr shows a quota / rate-limit error; the child is group-killed promptly instead of retry-looping to the timeout.
+- `dispatch-review.sh --runner opencode` → `no_verdict` with reason `engine_quota_exhausted` when a structured `type:"error"` NDJSON event or an `Error:`-shaped stderr line shows a quota / rate-limit error (free text mentioning quota/429 is ignored); the child is group-killed promptly instead of retry-looping to the timeout (uses `setsid` when available, otherwise kills the wrapper and its children).
 - `dispatch-hetero.sh` → `precondition_failed`, raised **before** the worktree and branch exist, so
   that status's "nothing was created" claim stays true.
 - `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the

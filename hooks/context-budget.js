@@ -49,7 +49,10 @@
  * time a fresh statusline live total is readable, that total is recorded. Above
  * context_budget.post_compact_warn (default 100000; 0 disables; env
  * AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN) one T1-channel advisory fires. The check never changes
- * compaction. A missing live total leaves the check armed and exits 0.
+ * compaction. A missing live total leaves the check armed and exits 0. A live file written before
+ * the arm (postCompactArmedAt, ms) is the pre-compaction value and is skipped until a newer one lands.
+ * State file updates run under a short lock (<state>.lock via scripts/lib/jsonl-store.js) shared with
+ * the arm; an unobtainable lock fails open (unlocked, exit 0).
  * Fail-open: any error ⇒ exit 0. Separate state/script from
  * orchestrator-edit-gate (single-crash isolation, panel finding).
  *
@@ -68,10 +71,10 @@
 'use strict';
 
 const fs = require('fs');
-const { readContextBudget, applyPerModel, configPath } = require('../scripts/lib/config-path.js');
+const { readContextBudget, applyPerModel } = require('../scripts/lib/config-path.js');
 const path = require('path');
 const {
-  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
+  lockStateFile, readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, unreachableT2Warning, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
@@ -122,19 +125,19 @@ function normPostCompactWarn(raw) {
 function loadConfig() {
   // One parse of context_budget (config + env), shared with the SessionStart budget warning:
   // scripts/lib/config-path.js readContextBudget. seat and post_compact_warn are read here (BL-0271).
-  const cfg = readContextBudget();
+  const parsed = {};
+  const cfg = readContextBudget({ parsedOut: parsed });
   cfg.seat = 'session';
   cfg.postCompactWarn = POST_COMPACT_WARN_DEFAULT;
   try {
-    const user = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-    const cb = user && user.context_budget;
+    const cb = parsed.contextBudget;
     if (cb && typeof cb === 'object') {
       const fromConfig = normSeat(cb.seat, 'config', cfg.warnings);
       if (fromConfig) cfg.seat = fromConfig;
       const warn = normPostCompactWarn(cb.post_compact_warn);
       if (warn !== null) cfg.postCompactWarn = warn;
     }
-  } catch { /* absent or corrupt config keeps session and the default post-compact threshold */ }
+  } catch { /* a malformed section keeps session and the default post-compact threshold */ }
   const fromEnv = normSeat(process.env.AUTOPILOT_CONTEXT_BUDGET_SEAT, 'env AUTOPILOT_CONTEXT_BUDGET_SEAT', cfg.warnings);
   if (fromEnv) cfg.seat = fromEnv;
   const warnEnv = normPostCompactWarn(process.env.AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN);
@@ -310,6 +313,10 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
     const stDir = process.env.AUTOPILOT_CONTEXT_BUDGET_DIR || path.join(live.base, 'context-budget');
     fs.mkdirSync(stDir, { recursive: true });
     const stateFile = path.join(stDir, `${sid}.json`);
+    // Serialise the load-modify-save of the state file with the PostCompact arm (state-checkpoint.js).
+    // No lock inside ~1s ⇒ carry on unlocked (advisory hook, fail open). Released on every exit path.
+    const releaseLock = lockStateFile(stateFile);
+    if (releaseLock) process.on('exit', releaseLock);
     const st = loadState(stateFile);
     st.calls += 1;
     for (const w of cfg.warnings || []) warnOnce(st, w);
@@ -459,6 +466,10 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
         }
       }
     }
+    // (b) A live value written before the compaction event (st.postCompactArmedAt, set by the arm) is
+    // the pre-compaction size, so the first read after compaction must not measure it.
+    const liveWrittenMs = liveMain ? Date.parse(liveMain.written_at) : NaN;
+    if (Number.isFinite(st.postCompactArmedAt) && Number.isFinite(liveWrittenMs) && liveWrittenMs < st.postCompactArmedAt) measuredLive = null;
     try { advisePostCompact(st, sid, measuredLive, cfg); } catch { /* the size check never breaks the hook */ }
     if (cfg.liveWrite) {
       try { maybeWriteLive(live.base, sid, tpath, st, liveRaw); } catch { /* the writer never breaks the hook */ }

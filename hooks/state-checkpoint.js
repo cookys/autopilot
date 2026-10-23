@@ -185,15 +185,20 @@ function armPostCompactSizeCheck(sessionId) {
   fs.mkdirSync(stDir, { recursive: true });
   const file = path.join(stDir, `${sid}.json`);
   let st = { calls: 0, lastT1Context: 0, lastT2Context: 0, lastContext: 0, observedMax: 0 };
+  // Same short lock as context-budget.js; no lock ⇒ proceed unlocked (advisory, fail open).
+  const release = require('./context-budget-lib.js').lockStateFile(file);
+  try {
   try {
     const cur = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (cur && typeof cur === 'object' && !Array.isArray(cur)) st = cur;
   } catch { /* absent or corrupt: a fresh state still carries the arm */ }
   if (!Number.isFinite(st.calls)) st.calls = 0;
   st.postCompactGen = (Number.isFinite(st.postCompactGen) ? st.postCompactGen : 0) + 1;
+  st.postCompactArmedAt = Date.now();
   const tmp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, JSON.stringify(st));
   fs.renameSync(tmp, file);
+  } finally { if (release) release(); }
 }
 
 // === Main ===

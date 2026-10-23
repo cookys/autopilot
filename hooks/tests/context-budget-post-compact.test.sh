@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# (A live file written before the PostCompact arm is the pre-compaction value and is skipped, so each case writes the live file AFTER post_compact.)
 # BL-0271: after PostCompact, the next context-budget read of the statusline live file
 # advises once when the remaining tokens exceed context_budget.post_compact_warn.
 # RED at 84f106ad43771bd0387f00c5208f48ca1073ae7b: no post-compact advisory; 120000 after PostCompact left the advisory count at 0, so the exactly-one check exited 1.
@@ -71,8 +72,9 @@ esac
 
 # 40000 is at or below the default 100000: no advisory.
 reset_case
-write_live 40000
 post_compact
+sleep 0.05
+write_live 40000
 assert_exit_code "$PC_EXIT" 0 "PostCompact exits 0 at 40000"
 budget
 assert_exit_code "$CB_EXIT" 0 "context-budget exits 0 at 40000"
@@ -80,8 +82,9 @@ assert_eq "$(advisory_count)" "0" "40000 produces no post-compact advisory"
 
 # 120000 advises exactly once; a second tool call after the same compaction stays silent.
 reset_case
-write_live 120000
 post_compact
+sleep 0.05
+write_live 120000
 budget
 assert_exit_code "$CB_EXIT" 0 "context-budget exits 0 at 120000"
 assert_eq "$(advisory_count)" "1" "120000 produces exactly one post-compact advisory"
@@ -95,32 +98,37 @@ assert_eq "$(advisory_count)" "1" "a second call after the same compaction stays
 
 # A new PostCompact re-arms the one reminder.
 post_compact
+sleep 0.05
+write_live 120000
 budget
 assert_eq "$(advisory_count)" "2" "a second PostCompact re-arms one advisory"
 
 # 0 disables.
 reset_case
-write_live 120000
 export AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN=0
 post_compact
+sleep 0.05
+write_live 120000
 budget
 assert_eq "$(advisory_count)" "0" "post_compact_warn 0 disables the advisory"
 unset AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN
 
 # Invalid value falls back to 100000, so 120000 still advises once.
 reset_case
-write_live 120000
 export AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN=nope
 post_compact
+sleep 0.05
+write_live 120000
 budget
 assert_eq "$(advisory_count)" "1" "invalid post_compact_warn falls back to 100000"
 unset AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN
 
 # Env override beats the default: 200000 is above 120000, so no advisory.
 reset_case
-write_live 120000
 export AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN=200000
 post_compact
+sleep 0.05
+write_live 120000
 budget
 assert_eq "$(advisory_count)" "0" "env AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN overrides the default"
 unset AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN

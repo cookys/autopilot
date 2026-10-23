@@ -128,13 +128,20 @@ fi
 # Print manifest info for selftest/verification
 if [[ -n "${ARM_PLUGIN_DIR:-}" ]]; then
   echo "[runner] Loaded plugins: [$(basename "$ARM_PLUGIN_DIR")]" >&2
-  exec "$REAL_CLAUDE" "$@" --setting-sources project,local --plugin-dir "$ARM_PLUGIN_DIR"
+  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$ARM_PLUGIN_DIR"
 else
   echo "[runner] Loaded plugins: []" >&2
-  exec "$REAL_CLAUDE" "$@" --setting-sources project,local --plugin-dir "$EMPTY_PLUGIN_DIR"
+  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$EMPTY_PLUGIN_DIR"
 fi
 EOF
 chmod +x "$WRAPPER_DIR/claude"
+
+# BL-0251 fleet contract: every claude -p the eval runner spawns inherits FLEET_LIFETIME/FLEET_PARENT/FLEET_ROLE=eval-run
+# (child_session_mint also mints a CHILD_SESSION_ID nobody here uses -- harmless).
+_EVAL_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/repo-identity.sh
+[ -r "$_EVAL_SELF_DIR/lib/repo-identity.sh" ] && . "$_EVAL_SELF_DIR/lib/repo-identity.sh" || true
+declare -F child_session_mint >/dev/null 2>&1 && child_session_mint eval-run
 
 # Prepend WRAPPER_DIR to PATH
 export PATH="$WRAPPER_DIR:$PATH"

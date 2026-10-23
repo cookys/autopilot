@@ -5,6 +5,7 @@
 # Seams: a stub claude that dumps its environment; no fleet binary is ever called and no fleet message is sent.
 # RED at 7d6c745be: 1 passed, 19 failed (stub claude env has FLEET_LIFETIME/FLEET_PARENT/FLEET_ROLE all empty for author, review, hetero; durable stays durable; mint unit prints "||").
 # RED (second commit, base 499b0ce4f): 26 passed, 12 failed (hetero cc-shim, probe cc-shim and claude-native lacked --strict-mcp-config; probe lacked FLEET_*; qualification-review-provider claude child had no FLEET_*).
+# RED (third pass, base 3b7d283b0): 39 passed, 15 failed (probe-todo-tools-pin, run-eval-batch, probe-skill-frontmatter-portability lacked --strict-mcp-config and FLEET_*; run-skill-opt run_loop env had no FLEET_*). profile-context-isolation.test.sh also red at 3b7d283b0: child claude env "||" instead of ephemeral|profile-parent-1|profile-run.
 . "$(dirname "$0")/lib.sh"
 export AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
@@ -98,6 +99,48 @@ STUB_DUMP="$d" STUB_OUT="$TEST_TMP/qrp.json" QRP_CLI_BIN="$TEST_TMP/qrp-stub" QR
   QRP_MODEL=claude-sonnet-5-5 CLAUDE_CODE_SESSION_ID="$P" node "$REPO_ROOT/scripts/qualification-review-provider.js" \
   <<<'{"role":"reviewer","payload":{"format":"case_content","content":"diff --git a/f b/f\n+x\n"}}' >"$d.out" 2>&1 || true
 check "qualification-review-provider claude" eval-run "$d"
+
+# --- third pass: audit gaps found by independent verification (cv4) ---
+# probe-todo-tools-pin.js: spawnSync claude -p inherits env; must add strict MCP + the fleet contract (role probe)
+d="$DUMPS/todo-pin.env"; rm -f "$d" "$d.argv"
+( cd "$SBX" && STUB_DUMP="$d" CLAUDE_CODE_SESSION_ID="$P" node "$REPO_ROOT/scripts/probe-todo-tools-pin.js" --claude-bin "$BINDIR/claude" --timeout-seconds 30 >"$d.out" 2>&1 ) || true
+check "probe-todo-tools-pin" probe "$d"
+# run-eval-batch.sh: the claude wrapper that every run_eval.py query goes through
+d="$DUMPS/eval-batch.env"; rm -f "$d" "$d.argv"
+cat > "$TEST_TMP/eval-runner" <<'EOS'
+#!/usr/bin/env bash
+claude -p "query" --model m
+EOS
+chmod +x "$TEST_TMP/eval-runner"
+( cd "$SBX" && STUB_DUMP="$d" PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$P" RUN_EVAL_CMD="$TEST_TMP/eval-runner" TMPDIR="$TEST_TMP" \
+    bash "$REPO_ROOT/scripts/run-eval-batch.sh" --selftest >"$d.out" 2>&1 ) || true
+check "run-eval-batch" eval-run "$d"
+# probe-skill-frontmatter-portability.sh: the claude --bare -p exec (bare skips hooks/settings, NOT MCP)
+d="$DUMPS/psf.env"; rm -f "$d" "$d.argv"
+( cd "$SBX" && STUB_DUMP="$d" PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$P" \
+    bash "$REPO_ROOT/scripts/probe-skill-frontmatter-portability.sh" --check --output "$TEST_TMP/psf-receipt.json" >"$d.out" 2>&1 ) || true
+assert_contains "$(cat "$d.argv" 2>/dev/null)" "--bare" "probe-skill-frontmatter: the dump is the claude --bare exec"
+check "probe-skill-frontmatter-portability" probe "$d"
+# run-skill-opt.sh: the external run_loop (not in this repo) starts the claude -p children; only env can be handed down
+hopt="$TEST_TMP/hopt"; mkdir -p "$hopt/ap/scripts/lib" "$hopt/ap/skills/xs" "$hopt/ap/skill-creator-workspace/evals" "$hopt/home/.claude" "$hopt/bin" \
+  "$hopt/home/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
+cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$hopt/ap/scripts/lib/"
+echo '{}' > "$hopt/ap/skill-creator-workspace/evals/xs-evals.json"
+printf '{"claudeAiOauth":{"accessToken":"tok","expiresAt":99999999999999}}' > "$hopt/home/.claude/.credentials.json"
+REAL_PY="$(command -v python3)"
+cat > "$hopt/bin/python3" <<EOS
+#!/usr/bin/env bash
+if [ "\${1:-}" = "-c" ] && case "\${2:-}" in *run_loop*) true;; *) false;; esac; then env | LC_ALL=C sort > "\${STUB_DUMP:?}"; exit 0; fi
+exec "$REAL_PY" "\$@"
+EOS
+chmod +x "$hopt/bin/python3"
+d="$DUMPS/skill-opt.env"; rm -f "$d"
+( cd "$SBX" && HOME="$hopt/home" STUB_DUMP="$d" PATH="$hopt/bin:$PATH" CLAUDE_CODE_SESSION_ID="$P" bash "$hopt/ap/scripts/run-skill-opt.sh" xs >"$d.out" 2>&1 ) || true
+if [ ! -f "$d" ]; then fail "run-skill-opt: run_loop stub never ran: $(tail -c 300 "$d.out" | tr '\n' ' ')"; else
+  eq "ephemeral" "$(dv "$d" FLEET_LIFETIME)" "run-skill-opt: FLEET_LIFETIME == ephemeral"
+  eq "$P" "$(dv "$d" FLEET_PARENT)" "run-skill-opt: FLEET_PARENT == the launching session"
+  eq "eval-run" "$(dv "$d" FLEET_ROLE)" "run-skill-opt: FLEET_ROLE == eval-run"
+fi
 
 # an inherited durable lifetime never survives: a child is never promoted to durable
 run_rail review-durable FLEET_LIFETIME=durable "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"

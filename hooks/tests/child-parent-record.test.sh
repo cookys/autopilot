@@ -110,6 +110,8 @@ touch stub_edit.txt 2>/dev/null || true
 exit 0
 EOS
 chmod +x "$USTUB"
+# the agy rails send the prompt on stdin as stream-json; this copy decodes it back for the legacy stub
+AGYSTUB="$TEST_TMP/agystub"; cp "$USTUB" "$AGYSTUB"; make_agy_stdin_stub "$AGYSTUB"
 OCSTUB="$TEST_TMP/ocstub"; ln -sf "$USTUB" "$OCSTUB"
 PROBEBIN="$TEST_TMP/probebin"; mkdir -p "$PROBEBIN"
 for n in codex agy grok qoderclicn cursor-agent claude kimi opencode; do ln -sf "$USTUB" "$PROBEBIN/$n"; done
@@ -286,17 +288,17 @@ echo "create ok" > "$TEST_TMP/author-prompt.txt"
 scrub_case "(f) author codex" PATH="$BINDIR:$PATH" bash "$AUTHOR" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$USTUB" --timeout 30s --run-id cpr-a-codex
 # the kimi transport resolves `kimi` from PATH itself (--bin is only an existence check), so the stub is named kimi
 scrub_case "(f) author kimi" PATH="$PROBEBIN:$PATH" bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$PROMPT" --bin kimi --timeout 30s --run-id cpr-a-kimi
-scrub_case "(f) author agy" PATH="$BINDIR:$PATH" bash "$AUTHOR" --runner agy --model gemini-test --prompt-file "$PROMPT" --bin "$USTUB" --timeout 30s --run-id cpr-a-agy
+scrub_case "(f) author agy" PATH="$BINDIR:$PATH" bash "$AUTHOR" --runner agy --model gemini-test --prompt-file "$PROMPT" --bin "$AGYSTUB" --timeout 30s --run-id cpr-a-agy
 scrub_case "(f) review codex" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$USTUB" --run-id cpr-r-codex
 scrub_case "(f) review opencode" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner opencode --model oc-test --diff-file "$DIFF" --bin "$OCSTUB" --run-id cpr-r-opencode
 scrub_case "(f) review kimi" PATH="$BINDIR:$PATH" bash "$REVIEW" --runner kimi --model kimi-test --diff-file "$DIFF" --bin "$USTUB" --run-id cpr-r-kimi
 scrub_case "(f) explore codex" PATH="$BINDIR:$PATH" bash "$EXPLORE" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo "$SBX" --bin "$USTUB" --timeout 30s --no-probe
-scrub_case "(f) explore agy" PATH="$BINDIR:$PATH" bash "$EXPLORE" --runner agy --model gemini-test --prompt-file "$PROMPT" --repo "$SBX" --bin "$USTUB" --timeout 30s --no-probe
+scrub_case "(f) explore agy" PATH="$BINDIR:$PATH" bash "$EXPLORE" --runner agy --model gemini-test --prompt-file "$PROMPT" --repo "$SBX" --bin "$AGYSTUB" --timeout 30s --no-probe
 HN2=0
 # hetero_scrub <label> <runner> <bin-flag> [detached 0|1] [script path]
 hetero_scrub() {
   local label="$1" runner="$2" binflag="$3" detached="${4:-0}" script="${5:-$HETERO}"
-  local stub="$USTUB"; [ "$runner" = opencode ] && stub="$OCSTUB"
+  local stub="$USTUB"; [ "$runner" = opencode ] && stub="$OCSTUB"; [ "$runner" = agy ] && stub="$AGYSTUB"
   HN2=$((HN2+1)); local id="cpr-hs$HN2" led="$TEST_TMP/ledger-hs-$HN2.jsonl"
   local -a coords=(--run-id "$id"); local flag=0
   if [ "$detached" = 1 ]; then bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$led" >/dev/null; coords=(--ledger "$led" --run-id "$id" --stage implement); flag=1; fi

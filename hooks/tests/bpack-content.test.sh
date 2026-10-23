@@ -36,15 +36,36 @@ pack_of() {
   esac
 }
 
-echo "=== change pack bytes equal the shipped repo files; base differs ==="
+# pack_matches <pack file> <repo file> <pinned blob or empty> -> 0 when the pack is acceptable.
+# A pinned file is accepted ONLY as the pinned blob (the repo copy is not consulted); an unpinned file must equal the repo.
+pack_matches() {
+  [ -f "$1" ] || return 1
+  if [ -n "$3" ]; then [ "$(git hash-object "$1")" = "$3" ]; else cmp -s "$1" "$2"; fi
+}
+
+echo "=== rule-level negative control: repo and pack edited to the same third content ==="
+mkdir -p "$TEST_TMP/third"
+printf 'third content\n' > "$TEST_TMP/third/repo.md"; cp "$TEST_TMP/third/repo.md" "$TEST_TMP/third/pack.md"
+if pack_matches "$TEST_TMP/third/pack.md" "$TEST_TMP/third/repo.md" "${FROZEN_BLOB[references/hetero-dispatch.md]}"; then
+  assert_eq accepted rejected "negative control: pinned file, pack == repo but != pinned blob, is rejected by the pack rule"
+else
+  assert_eq rejected rejected "negative control: pinned file, pack == repo but != pinned blob, is rejected by the pack rule"
+fi
+if pack_matches "$TEST_TMP/third/pack.md" "$TEST_TMP/third/repo.md" ""; then
+  assert_eq accepted accepted "unpinned file: pack == repo is accepted"
+else
+  assert_eq rejected accepted "unpinned file: pack == repo is accepted"
+fi
+
+echo "=== change pack bytes equal the shipped repo files (or the pinned frozen blob); base differs ==="
 for f in "${CHANGED[@]}"; do
   c="$(pack_of "$f" change)"; b="$(pack_of "$f" base)"
-  # The pack is a frozen copy (prereg stamped). A later repo edit does not re-open it: a file may instead equal
-  # its pinned frozen blob (FROZEN_BLOB below). Without a pin the pack must still equal the repo.
-  if [ -f "$c" ] && { cmp -s "$c" "$REPO_ROOT/$f" || [ "$(git hash-object "$c")" = "${FROZEN_BLOB[$f]:-none}" ]; }; then
-    assert_eq ok ok "change pack == repo (or its pinned frozen blob): $f"
+  # The pack is a frozen copy (prereg stamped). A pinned file must equal its pinned blob and nothing else; an
+  # unpinned file must equal the repo.
+  if pack_matches "$c" "$REPO_ROOT/$f" "${FROZEN_BLOB[$f]:-}"; then
+    assert_eq ok ok "change pack == pinned frozen blob, or == repo when unpinned: $f"
   else
-    assert_eq "missing-or-different" ok "change pack == repo (or its pinned frozen blob): $f"
+    assert_eq "missing-or-different" ok "change pack == pinned frozen blob, or == repo when unpinned: $f"
   fi
   if [ -f "$b" ] && ! cmp -s "$b" "$c"; then
     assert_eq ok ok "base pack differs from change: $f"

@@ -1072,7 +1072,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Fixed: fixa, bl273, runnerk, fixb, fixc, bl276r, tokrace (aa49e22e8, tokmech), pidbound (fda71931d). Left: dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
+- **Context**: Fixed: fixa, bl273, runnerk, fixb, fixc, bl276r, tokrace (aa49e22e8, tokmech), pidbound (7e9b235e1). Left: dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277
@@ -1138,12 +1138,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 派遣審查與派遣撰寫兩支腳本的 claude 原生路徑，用真實的使用者設定目錄啟動子行程，違反腳本自己註解寫的規則：子行程只該拿到只放憑證檔的專用目錄。
 - **Impact**: claude 子行程可能把真實 ~/.claude/.claude.json 重設，造成使用者設定遺失。
-- **Trigger**: after the claude-native implementer unit (cnimpl) merges, reuse its scripts/lib/seed-claude-config.js
+- **Trigger**: after the claude-native implementer unit (cnimpl) merges, reuse its credentials-only config seeding helper (still being added by cnimpl, not yet merged)
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-10-24 bldone8 audit of dispatch-review.sh / dispatch-author.sh
 - **Pointer**: docs/backlog/dispatch-claude-children-real-claude-config.md
-- **Context**: Verified at develop: the claude-native branches set no config dir and keep the real HOME; seed-claude-config.js is not on develop yet. Details in sidecar.
+- **Context**: Verified at develop: the claude-native branches set no config dir and keep the real HOME; the credentials-only config seeding helper is not on develop yet. Details in sidecar.
 
 ### Seat schema admits / and . in engine and model; audit path-building consumers
 - **Id**: BL-0291

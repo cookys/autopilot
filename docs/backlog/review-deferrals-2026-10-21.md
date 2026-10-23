@@ -43,7 +43,7 @@ BL-0276. Recorded at closeout. Trigger-Type ready. Effort S.
 
 ## Open after 2026-10-23 (BL-0276 narrowed)
 
-Everything under the two Fixed headings is done. tokmech is fixed (unit tokrace, merge aa49e22e8) and pidbound is merged (fda71931d). What remains open is dnone and deval items under "Second half of 2026-10-21", and the three dcardv3 items frozen by evals/skill-onoff/prereg/FROZEN.json.
+Everything under the two Fixed headings is done. tokmech is fixed (unit tokrace, merge aa49e22e8) and pidbound is merged (7e9b235e1). What remains open is dnone and deval items under "Second half of 2026-10-21", and the three dcardv3 items frozen by evals/skill-onoff/prereg/FROZEN.json.
 
 ## Follow-up from the pidbound review (merge 7e9b235e1)
 

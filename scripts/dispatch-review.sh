@@ -992,6 +992,28 @@ CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT aft
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
 OC_PID=""; OC_SETSID=""   # opencode child pid + session launcher; cleanup kills the child on TERM/INT
+# Kill a pid and its whole descendant tree without pkill: list descendants via ps (pid,ppid),
+# kill leaves first, root last. No ps: kill the single pid and say so on stderr.
+oc_kill_tree() {
+  local root="$1" p pp c all="" frontier next table
+  if ! command -v ps >/dev/null 2>&1; then
+    echo "dispatch-review: ps not found; killing opencode pid $root only (descendants may survive)" >&2
+    kill -KILL "$root" 2>/dev/null; return 0
+  fi
+  table="$(ps -A -o pid= -o ppid= 2>/dev/null)" || table=""
+  frontier="$root"
+  while [ -n "$frontier" ]; do
+    next=""
+    for p in $frontier; do
+      while read -r c pp; do
+        [ "$pp" = "$p" ] && next="$next $c"
+      done <<<"$table"
+    done
+    all="$next $all"; frontier="$next"
+  done
+  for p in $all $root; do kill -KILL "$p" 2>/dev/null; done
+  return 0
+}
 OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
@@ -1030,7 +1052,7 @@ cleanup() {
     if [ -n "${OC_SETSID:-}" ]; then
       kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
     else
-      pkill -KILL -P "$OC_PID" 2>/dev/null; kill -KILL "$OC_PID" 2>/dev/null
+      oc_kill_tree "$OC_PID"
     fi
   fi
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
@@ -1749,7 +1771,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
       if [ -n "$OC_SETSID" ]; then
         kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
       else
-        pkill -KILL -P "$OC_PID" 2>/dev/null; kill -KILL "$OC_PID" 2>/dev/null
+        oc_kill_tree "$OC_PID"
       fi
       break
     fi
@@ -1757,6 +1779,8 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   done
   wait "$OC_PID" 2>/dev/null
   OPENCODE_RC=$?
+  # Final scan: a child that wrote a structured quota event and exited before the poll saw it.
+  if [ "$OPENCODE_QUOTA" -eq 0 ] && oc_quota_hit; then OPENCODE_QUOTA=1; fi
   OC_PID=""
   if [ "$OPENCODE_QUOTA" -eq 0 ]; then
     wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true

@@ -149,6 +149,69 @@ sleep 0.5
 kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "TERM case: child gone after TERM to dispatch-review"
 [ -n "$PID" ] && kill -KILL "$PID" 2>/dev/null
 
+# (i) child writes a structured quota event and exits at once (before any poll tick): final scan must catch it.
+STUB_FAST="$TEST_TMP/opencode-quota-fastexit"
+cat > "$STUB_FAST" <<'SEOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "$1" = "auth" ]; then [ "$2" = "export" ] && printf '{"credential":"fixture"}'; exit 0; fi
+echo '{"type":"error","error":{"name":"APIError","data":{"message":"You exceeded your current quota (insufficient_quota)"}}}'
+exit 1
+SEOF
+chmod +x "$STUB_FAST"
+for i in 1 2 3; do
+  OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_FAST" --timeout 60s 2>&1)"
+  assert_contains "$OUT" 'engine_quota_exhausted' "opencode quota event then instant exit is quota ($i)"
+done
+
+# (j) no setsid AND no pkill on PATH: the whole descendant tree (child + grandchild) is killed.
+NOPK_BIN="$TEST_TMP/nopkill-bin"; mkdir -p "$NOPK_BIN"
+for _d in "${_pdirs[@]}"; do
+  [ -d "$_d" ] || continue
+  for _f in "$_d"/*; do
+    _b="${_f##*/}"; { [ "$_b" = setsid ] || [ "$_b" = pkill ]; } && continue
+    [ -x "$_f" ] && [ ! -e "$NOPK_BIN/$_b" ] && ln -s "$_f" "$NOPK_BIN/$_b"
+  done
+done
+_OLD_PATH="$PATH"; PATH="$NOPK_BIN"
+[ -z "$(type -P setsid)$(type -P pkill)" ]; _nop=$?
+PATH="$_OLD_PATH"
+assert_eq "0" "$_nop" "no-setsid/no-pkill PATH really lacks both"
+GC_PID_FILE="$TEST_TMP/grandchild.pid"; export GC_PID_FILE
+STUB_GC="$TEST_TMP/opencode-grandchild"
+cat > "$STUB_GC" <<'SEOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "$1" = "auth" ]; then [ "$2" = "export" ] && printf '{"credential":"fixture"}'; exit 0; fi
+echo $$ > "$QUOTA_PID_FILE"
+sleep 300 &
+echo $! > "$GC_PID_FILE"
+if [ -n "$STUB_GC_QUOTA" ]; then
+  echo '{"type":"error","error":{"name":"APIError","data":{"message":"You exceeded your current quota (insufficient_quota)"}}}'
+fi
+wait
+SEOF
+chmod +x "$STUB_GC"
+rm -f "$QUOTA_PID_FILE" "$GC_PID_FILE"
+OUT="$(PATH="$NOPK_BIN" STUB_GC_QUOTA=1 "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_GC" --timeout 60s 2>&1)"
+assert_contains "$OUT" 'engine_quota_exhausted' "no setsid/pkill: quota detected"
+PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"; GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"; sleep 0.5
+[ -n "$PID" ] && [ -n "$GPID" ]; assert_eq "0" "$?" "no setsid/pkill: child and grandchild pids recorded"
+kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "no setsid/pkill quota: child gone"
+kill -0 "$GPID" 2>/dev/null; assert_eq "1" "$?" "no setsid/pkill quota: grandchild gone"
+[ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+
+rm -f "$QUOTA_PID_FILE" "$GC_PID_FILE"
+PATH="$NOPK_BIN" STUB_GC_QUOTA= "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_GC" --timeout 120s >/dev/null 2>&1 < /dev/null &
+DR_PID=$!
+for _ in $(seq 1 50); do [ -s "$GC_PID_FILE" ] && break; sleep 0.2; done
+PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"; GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"
+[ -n "$PID" ] && [ -n "$GPID" ]; assert_eq "0" "$?" "no setsid/pkill TERM: pids recorded"
+kill -TERM "$DR_PID" 2>/dev/null; wait "$DR_PID" 2>/dev/null; sleep 0.5
+kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "no setsid/pkill TERM: child gone"
+kill -0 "$GPID" 2>/dev/null; assert_eq "1" "$?" "no setsid/pkill TERM: grandchild gone"
+[ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+
 # (c) normal stub unchanged.
 OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "opencode normal path exit 0"

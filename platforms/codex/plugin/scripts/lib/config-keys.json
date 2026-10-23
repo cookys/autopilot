@@ -1342,6 +1342,19 @@
       "note": "Hours of recent on-disk activity that keep a clean worktree out of every removal path (default 24); 0 turns it off for fixtures that age nothing."
     },
     {
+      "name": "AUTOPILOT_AGY_STDIN_MAX_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/agy-stream-json.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [],
+      "note": "Fail-closed ceiling on the encoded agy stdin line (default 170000 bytes, BL-0021: agy's silent stdin wall is a deployment property). Raise only on a host where the tail-nonce probe was measured."
+    },
+    {
       "name": "AUTOPILOT_AUTHOR_CHROME_MAX_BYTES",
       "kind": "env",
       "audience": "internal",

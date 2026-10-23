@@ -81,8 +81,8 @@ R="$TEST_TMP/r"; mkdir -p "$R"
 # The rails scrub the environment before exec'ing agy, so stub controls are baked into a
 # per-scenario wrapper instead of being passed as env vars.
 mk_stub() { # name VAR=val...  -> echoes the wrapper path
-  local w="$TEST_TMP/stub-$1"; shift
-  { printf '#!/usr/bin/env bash\n'; for kv in "$@"; do printf 'export %s\n' "$(printf '%q' "$kv")"; done; printf 'exec %q "$@"\n' "$STUB"; } > "$w"
+  local name="$1" w="$TEST_TMP/stub-$1"; shift
+  { printf '#!/usr/bin/env bash\n'; for kv in "$@"; do printf 'export %s\n' "$(printf '%q' "$kv")"; done; printf 'case " $* " in *" --print= "*) : > %q;; esac\n' "$TEST_TMP/called-$name"; printf 'exec %q "$@"\n' "$STUB"; } > "$w"
   chmod +x "$w"; printf '%s' "$w"
 }
 run_case() { # name; env via caller; rest = command
@@ -115,6 +115,26 @@ run_case hnone env -C "$TEST_TMP/sbx-hnone" "$HETERO" --branch t/hnone --prompt-
 run_case loop env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$WRAP" node "$LOOP" collect \
   --repo-root "$LS" --ledger "$TEST_TMP/loop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$LOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
+# --- BL-0021 fail-closed ceiling: the stdin wall (~175-200 KB on this deployment) is silent, so a
+# prompt whose encoded line is over AUTOPILOT_AGY_STDIN_MAX_BYTES (default 170000) is refused, never sent.
+OVER="$TEST_TMP/over.txt"; node -e 'process.stdout.write("y".repeat(172000)+"OVER-TAIL")' > "$OVER"
+OVERDIFF="$TEST_TMP/over.diff"; node -e 'process.stdout.write("+"+"y".repeat(175000)+"\n")' > "$OVERDIFF"
+for n in hover hraise; do mkdir -p "$TEST_TMP/sbx-$n"; mk_sbx "$TEST_TMP/sbx-$n"; done
+OLOOP_BIG="$TEST_TMP/loop-over.txt"; python3 -c "open('$OLOOP_BIG','w').write('x'*175000)"
+OS="$TEST_TMP/loop-over-repo"; mkdir -p "$OS" "$TEST_TMP/oloop-ledger"
+(cd "$OS" && git init -q && git config user.email t@t && git config user.name t && echo base > keep.txt && git add keep.txt && git commit -q -m c1 \
+  && git checkout -q -b work && python3 -c "open('big.txt','w').write('x'*175000)" && git add big.txt && git commit -q -m c2-over)
+OLOOP_BASE="$(git -C "$OS" rev-parse HEAD~1)"
+OWRAP="$TEST_TMP/review-wrap-over.sh"
+printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub oloop AGY_STUB_CAPTURE=1)" "$R/oloopseat.out" > "$OWRAP"; chmod +x "$OWRAP"
+run_case aover env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub aover AGY_STUB_CAPTURE=1)"
+run_case rover env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$OVERDIFF" --bin "$(mk_stub rover AGY_STUB_CAPTURE=1)"
+run_case hover env -C "$TEST_TMP/sbx-hover" "$HETERO" --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
+run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect \
+  --repo-root "$OS" --ledger "$TEST_TMP/oloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$OLOOP_BASE" \
+  --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
+# override: raising the limit lets the same prompt through
+run_case araise env AUTOPILOT_AGY_STDIN_MAX_BYTES=400000 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub araise AGY_STUB_CAPTURE=1)"
 wait
 
 rc() { cat "$R/$1.rc" 2>/dev/null || echo missing; }
@@ -152,5 +172,33 @@ for c in herr hnone; do
   assert_neq "0" "$(rc $c)" "hetero $c: non-zero exit"
   assert_not_contains "$(cat "$R/$c.out")" '"status": "committed"' "hetero $c: never reported committed"
 done
+
+# --- 4. fail-closed ceiling (BL-0021) -----------------------------------------
+OVERMSG="agy_stdin_ceiling"
+OUT="$(AGY_STUB_RESULT=ok node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+assert_eq "3" "$RC" "helper: over-ceiling prompt exits 3"
+assert_contains "$OUT" "$OVERMSG" "helper: typed agy_stdin_ceiling reason on stderr"
+[ ! -e "$TEST_TMP/called-hlp" ] && pass "helper: agy never invoked over the ceiling" || fail "helper: agy was invoked over the ceiling"
+OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=400000 node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp2 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: raised limit lets the prompt through"
+OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=junk node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp3 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+assert_eq "3" "$RC" "NEGATIVE CONTROL: a malformed override falls back to the default (still refused)"
+for c in aover rover hover oloop; do
+  # (the stub runs inside bwrap on some rails, where a marker file cannot be written: the stub's own
+  # `AGY-STUB bytes=` capture line is the evidence that a prompt reached agy)
+  assert_not_contains "$(rail_text $c)$(rail_text ${c}seat)" "AGY-STUB bytes" "$c: agy stub never received the over-ceiling prompt"
+done
+assert_neq "0" "$(rc aover)" "author over-ceiling: non-zero exit"
+assert_contains "$(cat "$R/aover.out")" '"status": "runner_failed"' "author over-ceiling: typed runner_failed"
+assert_contains "$(rail_text aover)" "$OVERMSG" "author over-ceiling: reason surfaced"
+assert_eq "1" "$(rc rover)" "review over-ceiling: exit 1"
+assert_contains "$(cat "$R/rover.out")" '"status": "no_verdict"' "review over-ceiling: typed no_verdict"
+assert_contains "$(rail_text rover)" "$OVERMSG" "review over-ceiling: reason surfaced"
+assert_not_contains "$(cat "$R/hover.out")" '"status": "committed"' "hetero over-ceiling: never committed"
+assert_neq "0" "$(rc hover)" "hetero over-ceiling: non-zero exit"
+assert_contains "$(rail_text hover)" "$OVERMSG" "hetero over-ceiling: reason surfaced"
+assert_not_contains "$(rail_text oloopseat)" "AGY-STUB bytes" "loop over-ceiling: seat prompt never reached agy"
+assert_contains "$(rail_text oloopseat)$(cat "$R/oloop.out")" "$OVERMSG" "loop over-ceiling: reason surfaced"
+assert_contains "$(rail_text araise)" "AGY-STUB bytes" "override: raised limit delivered the over-170000 prompt to agy"
 
 finalize_test

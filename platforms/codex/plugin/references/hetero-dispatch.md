@@ -97,15 +97,26 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
-### agy prompt transport — stdin stream-json, no argv ceiling
+### agy prompt transport — stdin stream-json, argv wall removed, stdin wall fail-closed
 
 `agy -p <prompt>` puts the whole prompt in ONE argv string, and Linux caps a single argv string at
 `MAX_ARG_STRLEN` = 32 × PAGE_SIZE (131071 usable bytes) — a per-string limit unrelated to the far
 larger `ARG_MAX`. Over it, `execve` failed before agy started and the seat looked stalled. The old
 `agy-argv-ceiling.sh` guard refused such prompts by name.
 
-Since agy 1.2 the prompt travels on **STDIN** instead, so there is no ceiling any more (a 212901-byte
-prompt was verified on agy 1.4.6) and the guard is gone. Every agy prompt rail — `dispatch-review.sh`
+Since agy 1.2 the prompt travels on **STDIN** instead, so the argv wall is gone and that guard with
+it. **The stdin path has its own, silent wall** ([BL-0021](../docs/BACKLOG.md), kept open): a
+tail-nonce probe on this host got the nonce back at 175,145 B and not at 200,344 B, and above the
+wall agy still returns `status: SUCCESS` with `response: ""` — an empty "review" that reads as a clean
+pass. The same binary, model and bytes pass on another host, so the wall is a **deployment property**
+no constant can predict. The helper therefore **fails closed**: an encoded stdin line over
+`AUTOPILOT_AGY_STDIN_MAX_BYTES` (default **170000** bytes, deliberately below the measured-safe
+175,145; a positive integer, anything else falls back to the default) is refused with the typed reason
+`agy_stdin_ceiling` on stderr and helper exit **3**, and agy is never spawned. The rails surface it as
+their ordinary runner failure (author `runner_failed`, review `no_verdict`, hetero not `committed`,
+loop seat unreviewed). Raise the variable only on a host where you measured it; lifting the cap for
+good needs the per-machine measurement or a rail tail-nonce self-check BL-0021 describes. Every agy
+prompt rail — `dispatch-review.sh`
 (including the blind cleanroom launcher), `dispatch-hetero.sh`, `dispatch-author.sh`,
 `dispatch-explore.sh`, and `hetero-review-loop.js` through `dispatch-review.sh` — goes through
 [`scripts/lib/agy-stream-json.js`](../scripts/lib/agy-stream-json.js) (the dormant `qc-panel.js`

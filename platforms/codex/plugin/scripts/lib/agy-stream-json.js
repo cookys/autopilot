@@ -5,7 +5,16 @@
 // WHY: agy's `-p <prompt>` puts the whole prompt in ONE argv string, which Linux caps at
 // MAX_ARG_STRLEN (131071 bytes). agy >= 1.2 can instead read NDJSON from stdin
 // (`--input-format stream-json`, which requires `--output-format stream-json`), so the prompt
-// travels on a pipe and has no size ceiling (verified on agy 1.4.6 with a 212901-byte prompt).
+// travels on a pipe and the 131071 argv wall is gone.
+//
+// BUT THE STDIN PATH HAS ITS OWN, SILENT WALL (docs/backlog BL-0021). On this deployment a tail-nonce
+// probe got the nonce back at 175,145 B and NOT at 200,344 B, and above the wall agy still reports
+// `status: SUCCESS` with `response: ""` (or an answer about only the head) — an empty "review" that
+// reads as a clean pass. The wall is a DEPLOYMENT property (same binary, model and bytes pass on
+// another host), so no constant can predict it. Until the rail self-checks with a tail nonce, this
+// helper FAILS CLOSED: an encoded stdin line over STDIN_MAX_BYTES is refused (exit 3, reason
+// `agy_stdin_ceiling` on stderr) and agy is never spawned. Default 170000 sits below the measured-safe
+// 175,145; AUTOPILOT_AGY_STDIN_MAX_BYTES overrides it (positive integer; anything else = default).
 //
 // Verified wire facts (agy 1.4.6):
 //   * the flag is `--print=` — it NEEDS the `=`; a bare `--print` swallows the next flag as its
@@ -27,6 +36,7 @@
 //                1  `result.status` ERROR, or no `result` event at all — reason on stderr
 //                   (the rails already treat any non-zero runner exit as their engine failure)
 //                N  agy itself exited non-zero (N, passed through; stdout stays empty)
+//                3  agy_stdin_ceiling — the encoded prompt line is over STDIN_MAX_BYTES; agy was NOT run
 //                127 the agy command could not be spawned (spawn error, stderr names it)
 //                2  usage error
 
@@ -34,6 +44,13 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const STREAM_FLAGS = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--print='];
+
+const DEFAULT_STDIN_MAX_BYTES = 170000;
+
+function stdinMaxBytes(env = process.env) {
+  const raw = env.AUTOPILOT_AGY_STDIN_MAX_BYTES;
+  return /^[1-9][0-9]*$/.test(String(raw == null ? '' : raw).trim()) ? Number(String(raw).trim()) : DEFAULT_STDIN_MAX_BYTES;
+}
 
 function encodeUserLine(prompt) {
   return `${JSON.stringify({ event: 'user', message: { content: String(prompt) } })}\n`;
@@ -84,11 +101,18 @@ function main(argv) {
     try { prompt += fs.readFileSync(promptFile, 'utf8'); } catch (e) { usage(`cannot read prompt file: ${e.message}`); }
   }
 
+  const line = encodeUserLine(prompt);
+  const lineBytes = Buffer.byteLength(line, 'utf8');
+  const maxBytes = stdinMaxBytes();
+  if (lineBytes > maxBytes) {
+    process.stderr.write(`agy-stream-json.js: agy_stdin_ceiling: the encoded prompt is ${lineBytes} bytes, over the ${maxBytes}-byte fail-closed stdin ceiling; agy was not run. Above roughly 175-200 KB agy can return status SUCCESS with an empty response (BL-0021), so an oversized prompt is refused rather than sent — split the unit, or raise AUTOPILOT_AGY_STDIN_MAX_BYTES on a host where you measured it\n`);
+    process.exit(3);
+  }
   const child = spawn(cmd[0], [...cmd.slice(1), ...STREAM_FLAGS], { stdio: ['pipe', 'pipe', 'inherit'] });
   const chunks = [];
   child.stdout.on('data', (d) => chunks.push(d));
   child.stdin.on('error', () => {}); // agy may exit before reading everything: its exit code speaks
-  child.stdin.end(encodeUserLine(prompt));
+  child.stdin.end(line);
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
     process.on(sig, () => { try { child.kill(sig); } catch (_e) { /* gone */ } });
   }
@@ -109,4 +133,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { encodeUserLine, parseStream, STREAM_FLAGS };
+module.exports = { encodeUserLine, parseStream, STREAM_FLAGS, stdinMaxBytes, DEFAULT_STDIN_MAX_BYTES };

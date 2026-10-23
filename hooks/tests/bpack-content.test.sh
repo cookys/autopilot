@@ -19,6 +19,12 @@ CHANGED=(
   references/multi-agent-portability.md
 )
 
+# Frozen change-pack blobs for files the repo has since moved past (cnimpl added the claude-native implementer
+# paragraph to references/hetero-dispatch.md after the bpack run). Blob id of the file at 0967088f1.
+declare -A FROZEN_BLOB=(
+  [references/hetero-dispatch.md]=463ae330c0ce1d323c396e254fa7e3ec17dede85
+)
+
 # pack_of <repo path> <base|change> -> path of that file inside the arm's pack
 pack_of() {
   local p="$1" arm="$2"
@@ -33,10 +39,12 @@ pack_of() {
 echo "=== change pack bytes equal the shipped repo files; base differs ==="
 for f in "${CHANGED[@]}"; do
   c="$(pack_of "$f" change)"; b="$(pack_of "$f" base)"
-  if [ -f "$c" ] && cmp -s "$c" "$REPO_ROOT/$f"; then
-    assert_eq ok ok "change pack == repo: $f"
+  # The pack is a frozen copy (prereg stamped). A later repo edit does not re-open it: a file may instead equal
+  # its pinned frozen blob (FROZEN_BLOB below). Without a pin the pack must still equal the repo.
+  if [ -f "$c" ] && { cmp -s "$c" "$REPO_ROOT/$f" || [ "$(git hash-object "$c")" = "${FROZEN_BLOB[$f]:-none}" ]; }; then
+    assert_eq ok ok "change pack == repo (or its pinned frozen blob): $f"
   else
-    assert_eq "missing-or-different" ok "change pack == repo: $f"
+    assert_eq "missing-or-different" ok "change pack == repo (or its pinned frozen blob): $f"
   fi
   if [ -f "$b" ] && ! cmp -s "$b" "$c"; then
     assert_eq ok ok "base pack differs from change: $f"

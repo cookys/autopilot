@@ -109,11 +109,12 @@ mkdir -p "$EMPTY_PLUGIN_DIR"
 # Write the wrapper script
 cat << 'EOF' > "$WRAPPER_DIR/claude"
 #!/usr/bin/env bash
-WRAPPER_DIR=$(cd "$(dirname "$0")" && pwd)
+WRAPPER_DIR=$(cd "$(dirname "$0")" && pwd -P)
+# -ef compares inodes: a TMPDIR with a trailing slash or a symlink makes the PATH spelling differ from pwd, and a string compare would find this wrapper as the "real" claude and exec itself forever
 REAL_CLAUDE=""
 IFS=':' read -ra ADDR <<< "$PATH"
 for dir in "${ADDR[@]}"; do
-  if [[ "$dir" != "$WRAPPER_DIR" && -x "$dir/claude" ]]; then
+  if [[ ! "$dir" -ef "$WRAPPER_DIR" && -x "$dir/claude" ]]; then
     REAL_CLAUDE="$dir/claude"
     break
   fi

@@ -50,4 +50,25 @@ OUT=$("$SCRIPT" --selftest 2>&1); EXIT=$?
 assert_eq "1" "$EXIT" "Contaminated baseline selftest should fail (exit 1)"
 assert_contains "$OUT" "ERROR: Baseline arm loaded plugins: contaminated-plugin-hook" "Contaminated baseline error message"
 
+# 3. Wrapper self-exclusion with a trailing-slash and a symlinked TMPDIR: the wrapper must skip itself and exec the real claude on PATH
+# RED at cb1f9dbd9: 5 passed, 2 failed -- TMPDIR=slash and symlink-slash never reached the real claude (the wrapper found itself, exec loop until timeout 10)
+WS="$TEST_TMP/ws"; mkdir -p "$WS/bin" "$WS/real-tmp"; ln -s "$WS/real-tmp" "$WS/link-tmp"
+cat > "$WS/bin/claude" <<'EOS'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "${STUB_DUMP:?}"
+exit 0
+EOS
+chmod +x "$WS/bin/claude"
+cat > "$WS/runner" <<'EOS'
+#!/usr/bin/env bash
+claude -p q --model m >/dev/null 2>&1
+echo '{"summary": {"passed": 1, "total": 1}}'
+EOS
+chmod +x "$WS/runner"
+for variant in "slash:$WS/real-tmp/" "symlink:$WS/link-tmp" "symlink-slash:$WS/link-tmp/"; do
+  vn="${variant%%:*}"; vt="${variant#*:}"; rm -f "$WS/dump-$vn"
+  STUB_DUMP="$WS/dump-$vn" PATH="$WS/bin:$PATH" RUN_EVAL_CMD="$WS/runner" TMPDIR="$vt" timeout 10 bash "$SCRIPT" --selftest >/dev/null 2>&1 < /dev/null
+  assert_contains "$(cat "$WS/dump-$vn" 2>/dev/null)" "--strict-mcp-config" "run-eval-batch wrapper reaches the real claude with TMPDIR=$vn"
+done
+
 finalize_test

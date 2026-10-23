@@ -369,7 +369,7 @@ P0b — file-write-mode verdict head (full JSON was jq-valid; run dir `/tmp/p0b-
 
 </details>
 
-**`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
+**`/goal` × autopilot Stop hooks — coexist, but `owner-question-guard` can block a Stop.** The official docs state "`/goal` and a
 Stop hook both fire after every turn." `cost-tracker` and `session-summary` are side-effect-only.
 `hooks/owner-question-guard.js` does block: it returns Stop `decision: block`. `disableAllHooks` /
 `allowManagedHooksOnly` still errors visibly. (Coexistence verified firsthand via

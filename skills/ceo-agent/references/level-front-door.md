@@ -20,11 +20,11 @@ CEO **Involvement** enum (`ceo-agent/SKILL.md` Startup §2: 1=every-step /
 | Sugar | Execution posture | Engine |
 |-------|-------------------|--------|
 | `/l3 <goal>` | CEO executes **itself** on the main thread; escalates at the DOA boundary. The behavior you invoke today as "Level 3 全權處理", now an explicit command. | Claude (this session) |
-
-When the owner must decide (`/l3`–`/l6`), open a card with `node scripts/open-decision.js open` because a card needs a question, at least two options, a recommendation and a reason (`--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <why the owner must decide>`), write the printed id in the reply, act on an owner line starting `[待決回覆]`, then `node scripts/open-decision.js close --id <id>`.
 | `/l4 <goal>` | CEO dispatches **ONE sub-orchestrator "foreman"** (background + worktree-isolated) that runs dev-flow and returns a verdict + run-summary. CEO context stays clean; the run goes long unattended. | Claude (foreman + workers) |
 | `/l5 <goal>` | `/l4` **with the implementer loop run through** `bin/autopilot.js engine implement-review`, which internally dispatches heterogeneous implementation through `dispatch-hetero.sh` and decorrelated review through the resolved reviewer. | Claude foreman + engine-orchestrated hetero impl |
 | `/l6 <goal>` | `/l5` **with the verification AUTHORING also leaf-dispatched to a heterogeneous engine** (different family than the implementer); depth-0 keeps merge authority and authoritative qc. | Claude foreman + engine-orchestrated hetero impl + hetero verifier authoring |
+
+When the owner must decide (`/l3`–`/l6`), open a card with `node scripts/open-decision.js open` because a card needs a question, at least two options, a recommendation and a reason (`--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <why the owner must decide>`), write the printed id in the reply, act on an owner line starting `[待決回覆]`, then `node scripts/open-decision.js close --id <id>`.
 
 ### Startup-question presets
 

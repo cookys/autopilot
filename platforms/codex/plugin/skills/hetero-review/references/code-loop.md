@@ -39,4 +39,5 @@ Code reviews enforce incremental delta verification to prevent unbounded loops a
 - Each new generation reviews only the delta since the previous generation's head.
 - A new generation never re-reviews the entire phase range from scratch.
 - Verified findings from prior generations are tracked until closed by subsequent reviewer artifacts over the delta.
+- A reviewer withdraws its own earlier finding only by repeating the id on a line whose claim starts exactly `REVOKED:` (the `scripts/dispatch-review.sh` prompt teaches this); free-text "withdrawn" is not a withdrawal.
 - The generation chain must remain strictly contiguous from phase base to head.

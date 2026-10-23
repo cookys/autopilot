@@ -34,7 +34,7 @@ Metrics are pre-registered here, before any code, and measured with the same har
 
 ### 2.5.1 Fail-open / fail-closed table
 
-Read from the hook sources on this branch. "Block" means how the guard denies today: most emit a `permissionDecision` JSON on stdout and still exit 0; only the multiplexer and `context-budget.js` exit 2. On an internal error (unreadable stdin, bad JSON, thrown exception, lock timeout) every hook below fails open; no guard fails closed on its own error. The deliberate fail-closed cases are config-value fallbacks inside `dispatch-model-guard.js` (lines 133, 140, 147), which apply to garbage config, not to an internal error.
+Read from the hook sources on this branch. Most guards deny with a `permissionDecision` JSON on stdout and exit 0; only the multiplexer and `context-budget.js` exit 2. On an internal error (unreadable stdin, bad JSON, thrown exception, lock timeout) every hook below fails open. The deliberate fail-closed cases are config-value fallbacks in `dispatch-model-guard.js` (lines 133, 140, 147), for garbage config only.
 
 | Hook | Event | Current behaviour on internal error | Evidence (file:line) | Invariant the port keeps |
 |---|---|---|---|---|
@@ -67,7 +67,7 @@ Because a single in-process chain shares one try/catch scope unless each hook ge
 
 ## Candidate designs
 
-Existing prior art: `hooks/opt-in-multiplexer.js` already folds the opt-in hooks into one process per event (design D6 A12; manifest `hooks/opt-in-manifest.json`). The D6 harness `scripts/benchmark-hook-multiplexer.js`, its validator `scripts/validate-hook-multiplexer-benchmark.js` and the fixture `hooks/tests/fixtures/hook-multiplexer-benchmark.json` compare base and candidate commits. Recorded D6 result (validated: `node scripts/validate-hook-multiplexer-benchmark.js .autopilot/evidence/hook-multiplexer-benchmark.json` prints `ok`, exit 0). The report compares base `f6805529` with candidate `1e7e5b69` over 50 paired samples after 10 warmups; thresholds are in `hooks/tests/fixtures/hook-multiplexer-benchmark.json:42-49`; the harness is `scripts/benchmark-hook-multiplexer.js` (351 lines, last changed by `1e7e5b69a`). Median / p95 in ms, base to candidate:
+Prior art: `hooks/opt-in-multiplexer.js` folds the opt-in hooks into one process per event (design D6 A12; `hooks/opt-in-manifest.json`); its harness is `scripts/benchmark-hook-multiplexer.js`, validator `scripts/validate-hook-multiplexer-benchmark.js`. Recorded D6 result (validated: `node scripts/validate-hook-multiplexer-benchmark.js .autopilot/evidence/hook-multiplexer-benchmark.json` prints `ok`): base `f6805529` vs candidate `1e7e5b69`, 50 paired samples after 10 warmups; thresholds at `hooks/tests/fixtures/hook-multiplexer-benchmark.json:42-49`. Median / p95 in ms, base to candidate:
 
 | Report row (generated `.autopilot/evidence/hook-multiplexer-benchmark.json`; thresholds in the fixtures file above) | Base | Candidate | Processes as the D6 report counts them (an enabled run still spawns its children) |
 |---|---|---|---|
@@ -76,7 +76,7 @@ Existing prior art: `hooks/opt-in-multiplexer.js` already folds the opt-in hooks
 | `heavy-disabled` (line 582) | 193.0 / 223.6 | 45.6 / 55.9 | 4 to 1 |
 | `heavy-enabled` (line 866) | 197.3 / 227.4 | 151.5 / 181.1 | 4 to 1 |
 
-Verdict: the multiplexer passed its D6 gates; it removes disabled-hook spawns (about halving or better) and is neutral to modest for enabled hooks. It never measured folding default-on guards, so it gives no evidence for Designs A or B on KR2; the P2 baseline stays the reference. Design rationale: `docs/plans/2026-08-03-next-touch-debt-retirement.md:207-215`. Note the multiplexer still `spawnSync`s each enabled child, so it removes disabled spawns only, not enabled ones.
+Verdict: the multiplexer passed its D6 gates; it removes disabled-hook spawns and is neutral to modest for enabled hooks (it still `spawnSync`s each enabled child). It never measured folding default-on guards, so it is no evidence for Designs A or B on KR2. Design rationale: `docs/plans/2026-08-03-next-touch-debt-retirement.md:207-215`.
 
 Per-call spawns today (from `hooks/hooks.json`):
 
@@ -93,9 +93,7 @@ Per-call spawns today (from `hooks/hooks.json`):
 | PostToolUse | `Task\|Agent` | `run-approval-gate.js PostToolUse` |
 | PostToolUse | `TaskCreate\|TaskUpdate\|TaskList` | `session-tasks.js` |
 
-The 7 measured PostToolUse spawns are the seven `.*` entries.
-
-- A. One Node chain process for the five contiguous `.*` PostToolUse observers that precede the multiplexer (`intent-capture`, `reload-watch`, `audit-log`, `log-error`, `failure-escalation`), registered at the first one's position. `opt-in-multiplexer.js PostToolUse` and `context-budget.js` stay separate registrations at their current positions, so the order is preserved and PostToolUse goes from 7 to 3 spawns (KR1 holds exactly at its limit). Cuts 5 spawns to 1. None of the five is a callable module today: each is a top-level script that reads fd 0 (`intent-capture.js:203`, `reload-watch.js:76`, `audit-log.js:32`, `log-error.js:24`, `failure-escalation.js:175`) and ends with `process.exit` (`intent-capture.js:279`, `reload-watch.js:113`, `audit-log.js:68`, `log-error.js:61`, `failure-escalation.js:219`), so a bare `require` would consume stdin and end the chain at the first hook. The in-process adapter is therefore a named Phase 2 deliverable: read stdin once and replay it to each hook, intercept `process.exit` and map it to that hook's own status without ending the chain, capture each hook's stdout and stderr and merge them as `opt-in-multiplexer.js` does, and run each hook in its own try/catch. The alternative is to refactor each hook into an exported function plus an unchanged CLI wrapper (`audit-log.js:44-46` already `require`s `ask-decision.js` and `merge-task-status-lib.js` this way for their `onPostToolUse`). `context-budget.js` keeps its own process because it can exit 2 and holds a lock released on exit.
+- A. One Node chain process for the five contiguous `.*` PostToolUse observers that precede the multiplexer (`intent-capture`, `reload-watch`, `audit-log`, `log-error`, `failure-escalation`), registered at the first one's position. `opt-in-multiplexer.js PostToolUse` and `context-budget.js` stay separate registrations at their current positions, so the order is preserved and PostToolUse goes from 7 to 3 spawns.  None of the five is a callable module today: each is a top-level script that reads fd 0 (`intent-capture.js:203`, `reload-watch.js:76`, `audit-log.js:32`, `log-error.js:24`, `failure-escalation.js:175`) and ends with `process.exit` (`intent-capture.js:279`, `reload-watch.js:113`, `audit-log.js:68`, `log-error.js:61`, `failure-escalation.js:219`), so a bare `require` would consume stdin and end the chain at the first hook. The in-process adapter is therefore a named Phase 2 deliverable: read stdin once and replay it to each hook, intercept `process.exit` and map it to that hook's own status without ending the chain, capture each hook's stdout and stderr and merge them as `opt-in-multiplexer.js` does, and run each hook in its own try/catch. The alternative is to refactor each hook into an exported function plus an unchanged CLI wrapper (`audit-log.js:44-46` already `require`s `ask-decision.js` and `merge-task-status-lib.js` this way for their `onPostToolUse`). `context-budget.js` keeps its own process because it can exit 2 and holds a lock released on exit.
 - B. Extend `opt-in-multiplexer.js` to run default-on stems in-process too. Reuses the existing tested selector. Risk: it mixes the opt-in and default-on tiers that `check-hook-inventory.js` keeps separate.
 - C. Leave spawn count, shrink Node start (V8 compile cache, lazy requires). Lowest risk, smaller gain, may not reach KR1.
 - Chosen provisionally: A, with B rejected unless Phase 0 shows A cannot reuse the selector. Phase 0 confirms or flips this with explicit predicates: A is confirmed iff, for each of the five observers, the audit shows the stdin replay, `process.exit` interception and per-hook state paths can keep exit code, stdout, stderr and state effects identical, and the order-preserving topology above holds; if any observer fails that, it stays a separate registration (which may break KR1) or the design flips to B or C and the owner is told.
@@ -111,7 +109,7 @@ The 7 measured PostToolUse spawns are the seven `.*` entries.
 - Phase 1 (M): differential test harness with a baseline side (the current separate processes) and a candidate side (the new path), run on equal isolated fixtures: temporary state directories and environment, controlled time, and normalisation of process-dependent values. A payload corpus, including multi-call sequences, is fed to both sides, and the harness compares per hook the exit code, stdout, stderr and the resulting state (intent records, tool and failure counters, the disable flag, `context-budget` cadence and reminder state, file permissions, lock cleanup). Done when (a) it passes with the baseline run against itself, and (b) a negative control, a candidate that deliberately changes one exit code or one stdout byte, or drops one state write, is shown red and kept as a fixture, then removed.
 - Phase 2 (M): implement the chosen design for the PostToolUse `.*` observers, including the adapter and the `check-hook-inventory.js` expansion; update `hooks/hooks.json`. Done when the Phase 1 harness is identical on every compared channel and `node scripts/check-hook-inventory.js --check` is green.
 - Phase 3 (S): PreToolUse review. KR3 is at risk iff Phase 2 changed any PreToolUse registration, or an interim run of the harness shows PreToolUse spawns per call above 2 or call p95 above 142 ms under the load rule. Otherwise record "no change", with `git diff` of the PreToolUse block of `hooks/hooks.json` empty. If at risk, the applied change gets its own done-condition: the Phase 1 harness passes for the touched hooks and the interim run is back within KR3.
-- Phase 4 (S): rerun `scripts/benchmark-hook-latency.js` with the same settings; record against KR1-KR3; archive the evidence. Done when each KR is marked met or missed with data.
+- Phase 4 (S): rerun `scripts/benchmark-hook-latency.js` with the same settings; record against KR1-KR3; archive the evidence. Done when each KR is met or missed, with data.
 
 Dependencies: 0 -> 1 -> 2 -> 3 -> 4.
 
@@ -123,7 +121,7 @@ Script-gated: the differential test, `check-hook-inventory.js --check`, the P2 h
 
 - Guarantee of failure: a chained hook that throws and takes the other hooks down. Mitigation: each hook runs under its own try/catch with its original fail-open or fail-closed outcome.
 - Shared module state or `process.exit` inside a hook ending the whole chain early. Mitigation: Phase 0 audit and adapter.
-- Measurement noise (host load). Mitigation: rerun rule in § 2.
+- Measurement noise (host load). Mitigation: result-selection rule in § 2.
 - Hook counts drift in docs. Mitigation: `check-hook-inventory.js --check`.
 
 ## 7. Out of scope
@@ -140,4 +138,4 @@ Script-gated: the differential test, `check-hook-inventory.js --check`, the P2 h
 ## Review log
 
 - R0: author draft 2026-10-23.
-- G1 (2026-10-24): rubric `2026-10-23-guard-port.rubric.md`, manifest `2026-10-23-guard-port.plan-review-manifest.json`, artifact `2026-10-23-guard-port.g1-artifact.json`. Seats: sol (CONDITIONAL), grok (STOP), minimax (STOP), qwen (CONDITIONAL). Dispositions in `2026-10-23-guard-port.g1-dispositions.json`; all blockers were re-derived against the repo and folded (concurrency of one event's hooks, chain order, process.exit and stdin in the hooks, KR2 feasibility, result-selection rule, negative control, state comparison, inventory expansion, wrong context-budget lines).
+- G1 (2026-10-24): rubric `2026-10-23-guard-port.rubric.md`, manifest `2026-10-23-guard-port.plan-review-manifest.json`, artifact `2026-10-23-guard-port.g1-artifact.json`. Seats: sol CONDITIONAL, grok STOP, minimax STOP, qwen CONDITIONAL. Dispositions in `2026-10-23-guard-port.g1-dispositions.json`; every blocker was re-derived against the repo and folded.

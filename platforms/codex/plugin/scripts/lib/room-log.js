@@ -109,29 +109,63 @@ function holderToken() {
   return `${process.pid}.${crypto.randomBytes(8).toString('hex')}`;
 }
 
-// Put parked back at lockFile only when that path is free. link fails with
-// EEXIST instead of overwriting. If the path is taken, drop parked: the mover
-// lost the lock, and the path's holder stays the only one.
-function restoreOrDrop(parked, lockFile) {
+// The lock file is only ever removed by a process that holds a short-lived
+// guard file (lockFile + '.guard', created with 'wx') and has just verified the
+// file's content. The lock is never moved aside, so there is no instant at which
+// a live holder's lock is missing from its path for a third process to create.
+// The fast path (open 'wx') needs no guard: it cannot replace an existing file.
+// The guard names its owner by pid; a guard whose pid is dead (or an empty one
+// older than STALE_MS) is broken. Residual: two processes breaking the same dead
+// guard at the same instant can both proceed; that needs a crash while holding
+// the guard and is far narrower than the old rename gap.
+function guardOwnerDead(guard) {
+  let raw;
+  let st;
   try {
-    fs.linkSync(parked, lockFile);
-  } catch {
-    try { fs.unlinkSync(parked); } catch { /* already gone */ }
-    return;
+    st = fs.statSync(guard);
+    raw = fs.readFileSync(guard, 'utf8');
+  } catch { return false; }
+  const pid = Number(raw);
+  if (Number.isInteger(pid) && pid > 0) return !pidAlive(pid);
+  return Date.now() - st.mtimeMs > STALE_MS;
+}
+
+function withGuard(lockFile, fn) {
+  const guard = `${lockFile}.guard`;
+  const start = Date.now();
+  for (;;) {
+    let fd;
+    try {
+      fd = fs.openSync(guard, 'wx');
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      if (guardOwnerDead(guard)) {
+        try { fs.unlinkSync(guard); } catch { /* raced away */ }
+        continue;
+      }
+      if (Date.now() - start > 15000) throw new Error(`room log guard busy: ${guard}`);
+      sleepMs(2 + Math.floor(Math.random() * 6));
+      continue;
+    }
+    try {
+      try { writeAll(fd, Buffer.from(String(process.pid), 'utf8')); } finally { fs.closeSync(fd); }
+      return fn();
+    } finally {
+      try { fs.unlinkSync(guard); } catch { /* already gone */ }
+    }
   }
-  try { fs.unlinkSync(parked); } catch { /* canonical name still holds the inode */ }
 }
 
 function releaseLock(lockFile, token) {
-  const parked = `${lockFile}.release-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
-  try { fs.renameSync(lockFile, parked); } catch { return; }
-  let cur = null;
-  try { cur = fs.readFileSync(parked, 'utf8'); } catch { /* raced away */ }
-  if (cur === token) {
-    try { fs.unlinkSync(parked); } catch { /* already gone */ }
-    return;
-  }
-  restoreOrDrop(parked, lockFile);
+  try {
+    withGuard(lockFile, () => {
+      let cur = null;
+      try { cur = fs.readFileSync(lockFile, 'utf8'); } catch { return; }
+      if (cur === token) {
+        try { fs.unlinkSync(lockFile); } catch { /* already gone */ }
+      }
+    });
+  } catch { /* guard busy: the lock goes stale and is reclaimed */ }
 }
 
 // A process killed between rename and unlink/link leaves a parked file. Sweep
@@ -193,21 +227,17 @@ function acquireLock(lockFile, hooks) {
       if (hooks && typeof hooks.afterStaleJudgement === 'function') {
         hooks.afterStaleJudgement(lockFile, { token: judgedToken, ino: again.ino, mtimeMs: again.mtimeMs });
       }
-      const parked = `${lockFile}.reclaim-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
-      try { fs.renameSync(lockFile, parked); } catch { continue; }
-      let parkedStat;
-      let parkedToken;
-      try {
-        parkedStat = fs.statSync(parked);
-        parkedToken = fs.readFileSync(parked, 'utf8');
-      } catch {
-        continue;
-      }
-      if (parkedStat.ino === again.ino && parkedToken === judgedToken) {
-        try { fs.unlinkSync(parked); } catch { /* reclaimed by name */ }
-        continue;
-      }
-      restoreOrDrop(parked, lockFile);
+      withGuard(lockFile, () => {
+        let now;
+        let nowToken;
+        try {
+          now = fs.statSync(lockFile);
+          nowToken = fs.readFileSync(lockFile, 'utf8');
+        } catch { return; }
+        if (now.ino !== again.ino || nowToken !== judgedToken) return;
+        if (Date.now() - now.mtimeMs < STALE_MS) return;
+        try { fs.unlinkSync(lockFile); } catch { /* raced away */ }
+      });
     }
   }
 }

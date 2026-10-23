@@ -741,20 +741,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md
 - **Context**: Implementer leg already shipped. This row is only the Explorer formal suite. Brain re-sit lives in another row.
 
-### A stale topology tuple derails a plan-review loop
-- **Id**: BL-0229
-- **Status**: open
-- **Since**: 2026-09-08
-- **Origin**: self
-- **Problem**: 拓撲推導現在會對照執行器自己的模型清單，已退役模型不再留在拓撲。剩一項：包裝程式遇到模型名稱被拒時仍結束碼為三、沒有任何輸出，看不出是名稱錯了。
-- **Impact**: 過期席位名稱從別的路徑進來時，計畫審查仍會整圈停住，而且看不出是名稱錯了。
-- **Trigger**: the next plan-review loop that ends required_seat_transport_exhausted, or the next topology regeneration
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: observed 2026-09-08 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/stale-topology-tuple-derails-plan-review.md
-- **Context**: Model-list check merged (topologycheck 4c05f1800, qoderclicn only, fail-open). Left: the wrapper still discards the runner stderr. See sidecar.
-
 ### consult_dispatch has no seat once the qc panel consumes the roster
 - **Id**: BL-0230
 - **Status**: open
@@ -998,23 +984,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
 - **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
 - **Context**: Alignment check and full prompt shipped in merge e993e0fc0. The one-command writer is not built.
-
-### Child processes must declare lifetime and parent to fleet (FLEET_LIFETIME / FLEET_PARENT / FLEET_ROLE contract)
-- **Id**: BL-0251
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: openclaw hangar
-- **Report**: 01M5A264B59E7ETAETJRAEBXJQ
-- **Reply**: 2026-10-19 01M5A27RA0AFGZ3WCDYFVWQK5X
-- **Problem**: autopilot 派出的 claude 系子行程（review 席位、eval run 等）被 fleet 當成互動 session 登記，aimax395 名冊累積約 200 筆殘留；fleet 端將只認 entrypoint cli，並以明確的 FLEET_LIFETIME 為準。
-- **Impact**: 名冊被殘留子行程塞滿，操作者分不出哪些是真正的互動 session。
-- **Trigger**: the operator decides to start the autopilot-side work (child_session_mint exports the fleet contract)
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: PEER-REPORTED openclaw hangar 2026-10-19
-- **Pointer**: docs/backlog/fleet-child-lifetime-parent-contract.md
-- **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable. On 2026-10-19 fleet 650f649 took effect on aimax395: FLEET_* children and non-TUI Claude sessions become ephemeral and drop ~10s after disconnect. Verify when starting.
 
 ### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
 - **Id**: BL-0253

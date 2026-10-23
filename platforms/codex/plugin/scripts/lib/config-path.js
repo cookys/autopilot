@@ -103,8 +103,6 @@ function readContextBudget(opts) {
   const cfg = { t1: 100_000, t2: 150_000, gap: 50_000, mode: 'warn', explicitT1: false, explicitT2: false, envT1: false, envT2: false, perModel: [], liveWrite: true, step: 50_000, warnings: [] };
   try {
     const user = JSON.parse(fs.readFileSync(configPath({ env, home: o.home }), 'utf8'));
-    // Env-gated debug counter: one line per parse of the config file (tok-state-race.test.sh).
-    if (env.AUTOPILOT_CONFIG_PARSE_COUNT_FILE) { try { fs.appendFileSync(env.AUTOPILOT_CONFIG_PARSE_COUNT_FILE, 'parse\n'); } catch { /* debug only */ } }
     const cb = user && user.context_budget;
     // Hand the parsed section to the caller so it does not read and parse the file again.
     if (o.parsedOut) o.parsedOut.contextBudget = cb;

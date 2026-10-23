@@ -39,8 +39,16 @@ assert_eq "$(field postCompactGen)" "$N" "all $N PostCompact arms survive concur
 # (a) lock acquisition failure fails open.
 sleep 30 & HOLDER=$!
 printf '%s' "$HOLDER" > "${STATE}.lock"
+CALLS_BEFORE="$(field calls)"
 budget
 assert_exit_code "$CB_EXIT" 0 "context-budget exits 0 when the state lock is held"
+assert_eq "$(field calls)" "$((CALLS_BEFORE + 1))" "lock held: below T2 the hook still advances the state call counter"
+rm -f "$STATE"  # fresh state: first call always parses the transcript
+printf '%s\n' '{"type":"assistant","message":{"role":"assistant","usage":{"input_tokens":250000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}' > "$TRANSCRIPT"
+AUTOPILOT_CONTEXT_BUDGET_T1=100000 AUTOPILOT_CONTEXT_BUDGET_T2=150000 budget
+assert_exit_code "$CB_EXIT" 2 "lock held: over-T2 usage still exits 2 (advisory not silenced)"
+assert_contains "$(cat "$TEST_TMP/.cb.err")$(cat "$TEST_TMP/.cb.out")" "T2" "lock held: over-T2 text still emitted"
+printf '%s\n' '{"type":"assistant","message":{"role":"assistant","usage":{"input_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":1}}}' > "$TRANSCRIPT"
 kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
 rm -f "${STATE}.lock"
 
@@ -49,8 +57,8 @@ mkdir -p "$HOOK_HOME/.autopilot"
 printf '%s' '{"context_budget":{"seat":"session"}}' > "$HOOK_HOME/.autopilot/config.json"
 export AUTOPILOT_CONFIG_PARSE_COUNT_FILE="$TEST_TMP/parse-count"
 rm -f "$AUTOPILOT_CONFIG_PARSE_COUNT_FILE"
-budget
-assert_eq "$(wc -l < "$AUTOPILOT_CONFIG_PARSE_COUNT_FILE" 2>/dev/null | tr -d ' ')" "1" "config parsed exactly once"
+NODE_OPTIONS="--require $HOOKS_DIR/tests/count-config-reads.js" budget
+assert_eq "$(wc -l < "$AUTOPILOT_CONFIG_PARSE_COUNT_FILE" 2>/dev/null | tr -d ' ')" "1" "config file read exactly once"
 unset AUTOPILOT_CONFIG_PARSE_COUNT_FILE
 rm -f "$HOOK_HOME/.autopilot/config.json"
 
@@ -69,6 +77,14 @@ sleep 0.05
 write_live 60000
 budget
 assert_eq "$(field postCompactTokens)" "60000" "first post-compaction live value is measured"
+
+# (b) equal timestamps: a live value written in the same ms as the arm is stale.
+rm -rf "$AUTOPILOT_LIVE_DIR/context-budget"
+write_live 150000
+budget   # seed state
+node -e 'const fs=require("fs");const f=process.argv[1];const l=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));const s=JSON.parse(fs.readFileSync(f,"utf8"));s.postCompactArmedAt=Date.parse(l.written_at);s.postCompactGen=(s.postCompactGen||0)+1;fs.writeFileSync(f,JSON.stringify(s))' "$STATE" "$AUTOPILOT_LIVE_DIR/context/${SID}.json"
+budget
+assert_eq "$(field postCompactSeen)" "undefined" "live value with timestamp equal to the arm is not measured"
 
 # (b) default thresholds, cached second call: a 160k pre-compaction live value drives no T2.
 unset AUTOPILOT_CONTEXT_BUDGET_T1 AUTOPILOT_CONTEXT_BUDGET_T2

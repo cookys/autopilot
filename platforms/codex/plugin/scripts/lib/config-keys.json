@@ -1638,18 +1638,6 @@
       "relates": []
     },
     {
-      "name": "AUTOPILOT_CONFIG_PARSE_COUNT_FILE",
-      "kind": "env",
-      "audience": "internal",
-      "class": "test_seam",
-      "default": null,
-      "readers": [
-        "scripts/lib/config-path.js"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
       "name": "AUTOPILOT_CONTINUATION_CHECKPOINT",
       "kind": "env",
       "audience": "internal",

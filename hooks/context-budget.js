@@ -349,7 +349,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
     // pre-compaction size: drop its token total BEFORE any decision or state update reads it.
     // The window/model from the same record stay usable.
     const liveWrittenMs = liveMain ? Date.parse(liveMain.written_at) : NaN;
-    const preCompactLive = Number.isFinite(st.postCompactArmedAt) && Number.isFinite(liveWrittenMs) && liveWrittenMs < st.postCompactArmedAt;
+    const preCompactLive = Number.isFinite(st.postCompactArmedAt) && Number.isFinite(liveWrittenMs) && liveWrittenMs <= st.postCompactArmedAt;
     const liveTotal = liveMain && liveMain.context_window && !preCompactLive
       && Number.isFinite(liveMain.context_window.total_input_tokens)
       ? liveMain.context_window.total_input_tokens : null;

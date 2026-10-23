@@ -131,6 +131,51 @@ The D1 capability probe verified agy 1.1.10 native JSON output with separate res
 input/output/thinking/cache/total usage fields. Production transport selects the tiered model slug;
 roster effort remains metadata and is validated separately from the agy execution argv.
 
+#### agy gotchas on a dispatch host
+
+Peer report (hangar, 2026-10-23, bundle docs/hangar-harvest-2026-10 ea8b40a95). The bullets below are the peer's
+observations; the parts checked on this repo or on a host are marked "checked".
+
+- **Do not keep a behavioural persona in `~/.gemini/GEMINI.md`.** Observed on agy 1.0.12 (2026-06-25;
+  *re-test on the current agy before relying on it*; agy 1.4.5 is installed now and the file has since been
+  removed from the observing host): agy loads that global file into every session, including headless
+  `dispatch-hetero.sh` runs. A "mentor" persona (open with a protocol declaration, explain the why of each step,
+  end with a one-line answer) made agy narrate a 12-step implementation in the past tense while the worktree
+  stayed empty, and another run stopped right after the greeting. codex never reads this file, which is why
+  codex-implementer runs looked fine. agy exposed no switch to disable global context at that version. Keep
+  persona or style instructions out of the global file on any host that runs autopilot dispatch; if you must
+  keep it, snapshot and move it aside for the dispatch window and restore it afterwards. Not independently
+  reproduced here (checked: `scripts/install-token-discipline.js` also targets `~/.gemini/GEMINI.md`, so the file
+  is one autopilot itself writes a block into).
+  Symptom to recognise: an agy "implementation" report with an empty `git status`.
+- **Ubuntu 24.04+: bwrap needs an AppArmor userns allowance.** The readiness probe (agy inside `bwrap`),
+  codex `--sandbox read-only` and the cleanroom launcher all run under `bwrap`. With
+  `kernel.apparmor_restrict_unprivileged_userns=1` and no profile for `/usr/bin/bwrap`, bwrap cannot create a
+  user namespace, the engine is judged *unavailable*, and a roster with `on_engine_unavailable: ask` stops to ask
+  (a false outage; observed 2026-09-05, peer report). Checked on an Ubuntu host (2026-10-23): the
+  sysctl is `1`, `/usr/bin/bwrap`, `aa-status` and `agy` exist, and `/etc/apparmor.d/bwrap-userns-restrict` is
+  present, so the "distro already ships a profile" case below is real there. `on_engine_unavailable` is a roster
+  key in `scripts/check-contract-schema.js`; `scripts/lib/cleanroom-launch.sh` documents that its bwrap "must be
+  AppArmor-allowed". Check `sysctl kernel.apparmor_restrict_unprivileged_userns` and
+  `aa-status` first: some distro builds already ship a `bwrap-userns-restrict` profile. If none exists, the
+  narrowest fix is a profile that lets only `/usr/bin/bwrap` create a user namespace (do not flip the global
+  sysctl; that loosens the whole host). The profile below is the peer's, reported to have worked on one Ubuntu 24.04 host (AppArmor ABI 4.0) and not tested here,
+  saved as `/etc/apparmor.d/bwrap` and loaded with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`:
+
+  ```
+  abi <abi/4.0>,
+  include <tunables/global>
+
+  profile bwrap /usr/bin/bwrap flags=(unconfined) {
+    userns,
+
+    include if exists <local/bwrap>
+  }
+  ```
+
+  Revert: delete the file and run `sudo apparmor_parser -R /etc/apparmor.d/bwrap`. This changes host security
+  policy; review it against your own `userns` profiles (e.g. the `lxc-usernsexec` one) rather than copying blindly.
+
 ### Grok Build (host vs runner)
 
 Grok appears in autopilot in **two different roles**. Do not conflate them:

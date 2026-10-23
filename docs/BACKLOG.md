@@ -713,20 +713,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-revoked-finding-reused-id.md
 - **Context**: Code half merged (reusedid c965c6d98): REVOKED: prefix drops the claim before the duplicate-id check. Prefix is taught nowhere; see sidecar.
 
-### Managed rail does not pass the scorecard scope file, so fallback_ladder stays empty
-- **Id**: BL-0227
-- **Status**: open
-- **Since**: 2026-09-15
-- **Origin**: self
-- **Problem**: 受管軌道沒把記分卡範圍檔傳進去，後備梯永遠是空的。有證據的品管席若沒有釘選，收件就會拒絕。這件事現在是否仍成立尚未確認。
-- **Impact**: 有資格的品管席若沒釘選就進不了收件。是否仍如此尚未確認。
-- **Trigger**: a qc seat qualified by scorecard for reviewer is refused at intake without a pin because fallback_ladder stays empty
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: plan section 0 fact 1 / section 6, 2026-09-15; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-scorecard-scope-fallback-ladder.md
-- **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file. 2026-10-23 the defect was confirmed still present (scopeladder investigation); waiting on owner card d-c191e50b.
-
 ### Roster qualification: Explorer formal suite
 - **Id**: BL-0228
 - **Status**: open

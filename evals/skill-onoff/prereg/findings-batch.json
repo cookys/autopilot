@@ -1,0 +1,21 @@
+{
+  "row": "findings-batch",
+  "status": "draft, not stamped: FROZEN.json is stamped by the owner-approved P1 step, before the first scored cell",
+  "plan": "docs/plans (findings batch plan, sections 3-4)",
+  "model": "sonnet",
+  "reps": 5,
+  "tasks": ["fb-mid-batch", "fb-pool", "fb-critical-guard", "fb-deadman"],
+  "pilot_tasks": ["fb-mid-batch", "fb-pool", "fb-deadman"],
+  "arms_dir": "evals/skill-onoff/fbatch/arms",
+  "allowed_arm_difference": {
+    "files": ["code-review.md", "dev-flow-wait.md", "finish-flow-row.md", "hetero-impl-loop.md"]
+  },
+  "cost_per_cell_usd": { "fb-mid-batch": 0.30, "fb-pool": 0.30, "fb-critical-guard": 0.19, "fb-deadman": 0.19 },
+  "max_usd_default": 20,
+  "decision_rules": {
+    "V1": "skill_invoked ratio >= 0.9 in both arms and all three negative controls behave as stated, else INVALID",
+    "V2": "base T1 m_waited >= 4/5 and base T2 m_single_round >= 4/5 => NOT NEEDED",
+    "V3": "T1 m_waited and T2 m_single_round each: change 5/5 with base <= 2/5, or change 4/5 with base <= 1/5",
+    "V4": "T3 m_merge_blocked 5/5 in both arms; T4 m_waited_on_exit change >= base - 1; any T3 change miss => NOT-SHIP"
+  }
+}

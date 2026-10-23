@@ -381,7 +381,9 @@ EOF
   assert_contains "$OUT" '"status": "runner_failed"' "agy non-zero maps to runner_failed"
   assert_contains "$OUT" '"error": "runner exited 7"' "agy runner_failed includes exit code"
 
-  # --- 7.2: agy empty-output path should fail-closed (exit 1) ---
+  # --- 7.2: agy empty-output path should fail-closed. Since the BL-0021 response-side check the stdin
+  # helper itself refuses a SUCCESS with an empty response (agy_empty_response), so the rail reports
+  # runner_failed (exit 3) rather than the post-settle empty_output (exit 1) ---
   STUB_AGY_EMPTY="$TEST_TMP/runner-agy-empty"
   cat > "$STUB_AGY_EMPTY" <<'EOF'
 #!/usr/bin/env bash
@@ -392,8 +394,9 @@ EOF
   ln -sf "$STUB_AGY_EMPTY" "$STUB_BIN_DIR/agy"
   PATH="$STUB_BIN_DIR:$PATH"
   OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
-  assert_eq "1" "$EXIT" "agy empty-output exit 1"
-  assert_contains "$OUT" '"status": "empty_output"' "agy empty-output maps to empty_output"
+  assert_eq "3" "$EXIT" "agy empty-output exit 3 (runner_failed)"
+  assert_contains "$OUT" '"status": "runner_failed"' "agy empty-output maps to runner_failed"
+  assert_contains "$(cat "$(printf '%s' "$OUT" | grep -o '"raw_log": "[^"]*"' | head -1 | cut -d'"' -f4)" 2>/dev/null)$OUT" "agy_empty_response" "agy empty-output: agy_empty_response reason surfaced"
   assert_not_contains "$OUT" '"status": "authored"' "agy empty-output is not authored"
 fi
 

@@ -135,6 +135,24 @@ run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOO
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 # override: raising the limit lets the same prompt through
 run_case araise env AUTOPILOT_AGY_STDIN_MAX_BYTES=400000 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub araise AGY_STUB_CAPTURE=1)"
+# --- BL-0021 response-side detection: the wall is in TOKENS (~97.6k input tokens, agy 1.4.6), so a
+# SUCCESS with an empty response, or one whose usage.input_tokens is at/over the ceiling, is a failure.
+for n in hemp htrk hok; do mkdir -p "$TEST_TMP/sbx-$n"; mk_sbx "$TEST_TMP/sbx-$n"; done
+mkdir -p "$TEST_TMP/rloop-ledger"
+run_case aemp env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub aemp AGY_STUB_RESPONSE_EMPTY=1)"
+run_case atrk env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub atrk AGY_STUB_INPUT_TOKENS=97652)"
+run_case aok env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub aok AGY_STUB_INPUT_TOKENS=87366)"
+run_case acust env AUTOPILOT_AGY_INPUT_TOKEN_CEILING=100000 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub acust AGY_STUB_INPUT_TOKENS=97652)"
+run_case acustlow env AUTOPILOT_AGY_INPUT_TOKEN_CEILING=50000 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub acustlow AGY_STUB_INPUT_TOKENS=87366)"
+run_case remp env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub remp AGY_STUB_RESPONSE_EMPTY=1)"
+run_case rtrk env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rtrk AGY_STUB_INPUT_TOKENS=97652)"
+run_case hemp env -C "$TEST_TMP/sbx-hemp" "$HETERO" --branch t/hemp --prompt-file "$SMALL" --agy-bin "$(mk_stub hemp AGY_STUB_RESPONSE_EMPTY=1)" --model gemini-3.7-flash-high --runner agy
+run_case htrk env -C "$TEST_TMP/sbx-htrk" "$HETERO" --branch t/htrk --prompt-file "$SMALL" --agy-bin "$(mk_stub htrk AGY_STUB_INPUT_TOKENS=97652)" --model gemini-3.7-flash-high --runner agy
+RWRAP="$TEST_TMP/review-wrap-trk.sh"
+printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub ltrk AGY_STUB_INPUT_TOKENS=97652)" "$R/ltrkseat.out" > "$RWRAP"; chmod +x "$RWRAP"
+run_case ltrk env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$RWRAP" node "$LOOP" collect \
+  --repo-root "$LS" --ledger "$TEST_TMP/rloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$LOOP_BASE" \
+  --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 wait
 
 rc() { cat "$R/$1.rc" 2>/dev/null || echo missing; }
@@ -200,5 +218,60 @@ assert_contains "$(rail_text hover)" "$OVERMSG" "hetero over-ceiling: reason sur
 assert_not_contains "$(rail_text oloopseat)" "AGY-STUB bytes" "loop over-ceiling: seat prompt never reached agy"
 assert_contains "$(rail_text oloopseat)$(cat "$R/oloop.out")" "$OVERMSG" "loop over-ceiling: reason surfaced"
 assert_contains "$(rail_text araise)" "AGY-STUB bytes" "override: raised limit delivered the over-170000 prompt to agy"
+
+# --- 5. response-side detection (BL-0021, tokens not bytes) -------------------
+EMPTYMSG="agy_empty_response"; TRUNCMSG="agy_input_truncated"
+OUT="$(AGY_STUB_RESPONSE_EMPTY=1 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "helper: SUCCESS + empty response exits 1"; assert_contains "$OUT" "$EMPTYMSG" "helper: agy_empty_response reason"
+OUT="$(AGY_STUB_RESPONSE_EMPTY=1 node "$HELPER" run --emit envelope --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "helper: empty response also fails in envelope mode"
+OUT="$(AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "helper: 97652 input tokens (non-empty response) exits 1"; assert_contains "$OUT" "$TRUNCMSG" "helper: agy_input_truncated reason"
+OUT="$(AGY_STUB_INPUT_TOKENS=87366 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: 87366 input tokens succeeds"; assert_contains "$OUT" "stub ok" "helper: 87366 tokens keeps the response"
+OUT="$(AGY_STUB_INPUT_TOKENS=95000 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "helper: exactly the ceiling (95000) is refused"
+OUT="$(AGY_STUB_INPUT_TOKENS=94999 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: just under the ceiling (94999) passes"
+OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=100000 AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: raised token ceiling lets 97652 through"
+OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=50000 AGY_STUB_INPUT_TOKENS=87366 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "helper: lowered token ceiling refuses 87366"
+OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=junk AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "NEGATIVE CONTROL: a malformed token-ceiling override falls back to the default (still refused)"
+OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=0 AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "NEGATIVE CONTROL: a zero token-ceiling override falls back to the default"
+OUT="$(node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "0" "$RC" "helper: no usage field -> token check skipped, still succeeds"; assert_contains "$OUT" "token-ceiling check was skipped" "helper: missing usage field is noted on stderr"
+
+assert_neq "0" "$(rc aemp)" "author empty response: non-zero exit"
+assert_contains "$(cat "$R/aemp.out")" '"status": "runner_failed"' "author empty response: typed runner_failed"
+assert_contains "$(rail_text aemp)" "$EMPTYMSG" "author empty response: reason surfaced"
+assert_neq "0" "$(rc atrk)" "author 97652 tokens: non-zero exit"
+assert_contains "$(cat "$R/atrk.out")" '"status": "runner_failed"' "author 97652 tokens: typed runner_failed"
+assert_contains "$(rail_text atrk)" "$TRUNCMSG" "author 97652 tokens: reason surfaced"
+# (the stub's answer carries no author frame, so a delivered response ends "truncated/frame_missing", rc 5 —
+# what matters is that agy's answer got PAST the transport: not runner_failed, no agy_input_truncated)
+for c in aok acust; do
+  assert_not_contains "$(cat "$R/$c.out")" '"status": "runner_failed"' "author $c: transport let the response through"
+  assert_not_contains "$(rail_text $c)" "$TRUNCMSG" "author $c: no agy_input_truncated"
+  assert_contains "$(cat "$R/$c.out")" 'frame_missing' "author $c: response reached the author parser"
+done
+assert_neq "0" "$(rc acustlow)" "author 87366 tokens + lowered ceiling: refused"
+assert_contains "$(rail_text acustlow)" "$TRUNCMSG" "author lowered ceiling: reason surfaced"
+assert_eq "1" "$(rc remp)" "review empty response: exit 1"
+assert_contains "$(cat "$R/remp.out")" '"status": "no_verdict"' "review empty response: typed no_verdict"
+assert_contains "$(rail_text remp)" "$EMPTYMSG" "review empty response: reason surfaced"
+assert_eq "1" "$(rc rtrk)" "review 97652 tokens: exit 1"
+assert_contains "$(cat "$R/rtrk.out")" '"status": "no_verdict"' "review 97652 tokens: typed no_verdict"
+assert_contains "$(rail_text rtrk)" "$TRUNCMSG" "review 97652 tokens: reason surfaced"
+for c in hemp htrk; do
+  assert_neq "0" "$(rc $c)" "hetero $c: non-zero exit"
+  assert_not_contains "$(cat "$R/$c.out")" '"status": "committed"' "hetero $c: never reported committed"
+done
+assert_contains "$(rail_text hemp)" "$EMPTYMSG" "hetero empty response: reason surfaced"
+assert_contains "$(rail_text htrk)" "$TRUNCMSG" "hetero 97652 tokens: reason surfaced"
+assert_contains "$(rail_text ltrkseat)$(cat "$R/ltrk.out")" "$TRUNCMSG" "loop 97652 tokens: reason surfaced"
+assert_not_contains "$(cat "$R/ltrk.out")" '"reviewed": 1' "loop 97652 tokens: seat not counted as reviewed"
 
 finalize_test

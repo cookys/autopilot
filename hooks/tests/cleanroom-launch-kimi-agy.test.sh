@@ -226,7 +226,7 @@ I="$(cat "$TEST_TMP/l-agy/inner.txt")"
 assert_contains "$I" "autopilot-toolless-reviewer" "agy inner argv selects the tool-less agent"
 assert_contains "$I" "--dangerously-skip-permissions" "agy inner argv keeps the existing flag set"
 assert_contains "$I" "--print=" "agy inner argv carries the stdin stream-json flag (--print= with the =)"
-assert_not_contains "$I" "--output-format\njson" "agy inner argv no longer asks for the legacy json output"
+assert_not_contains "$I" $'--output-format\njson' "agy inner argv no longer asks for the legacy json output"
 assert_not_contains "$I" "PROMPT-BODY" "agy prompt text is not in host-visible argv"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/antigravity-oauth-token" "agy token copied on launch path"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/agents/autopilot-toolless-reviewer/agent.md" \

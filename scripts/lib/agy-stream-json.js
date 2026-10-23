@@ -16,6 +16,12 @@
 // `agy_stdin_ceiling` on stderr) and agy is never spawned. Default 170000 sits below the measured-safe
 // 175,145; AUTOPILOT_AGY_STDIN_MAX_BYTES overrides it (positive integer; anything else = default).
 //
+// SECOND LAYER (response side): the byte cap alone cannot guarantee fail-closed because the wall is in
+// tokens (~97.6k input tokens on agy 1.4.6). parseStream therefore also refuses (exit 1) a SUCCESS whose
+// response is empty after trim (`agy_empty_response`) and one whose `result.usage.input_tokens` is >=
+// AUTOPILOT_AGY_INPUT_TOKEN_CEILING (default 95000; non-positive-integer = default; `agy_input_truncated`),
+// even when the response is non-empty. No usage field -> the token check is skipped with a stderr note.
+//
 // Verified wire facts (agy 1.4.6):
 //   * the flag is `--print=` — it NEEDS the `=`; a bare `--print` swallows the next flag as its
 //     prompt and exits 2.
@@ -46,6 +52,15 @@ const { spawn } = require('child_process');
 const STREAM_FLAGS = ['--input-format', 'stream-json', '--output-format', 'stream-json', '--print='];
 
 const DEFAULT_STDIN_MAX_BYTES = 170000;
+// The wall is in TOKENS, not bytes (BL-0021, agy 1.4.6, 2026-10-24): input_tokens 87,366 answered, 97,652 and
+// 97,653 came back SUCCESS with response "" (the model never saw the tail). Token-dense content (base64, some CJK)
+// can cross it inside the byte cap, so the response side is checked too.
+const DEFAULT_INPUT_TOKEN_CEILING = 95000;
+
+function inputTokenCeiling(env = process.env) {
+  const raw = String(env.AUTOPILOT_AGY_INPUT_TOKEN_CEILING == null ? '' : env.AUTOPILOT_AGY_INPUT_TOKEN_CEILING).trim();
+  return /^[1-9][0-9]*$/.test(raw) ? Number(raw) : DEFAULT_INPUT_TOKEN_CEILING;
+}
 
 function stdinMaxBytes(env = process.env) {
   const raw = env.AUTOPILOT_AGY_STDIN_MAX_BYTES;
@@ -57,7 +72,7 @@ function encodeUserLine(prompt) {
 }
 
 // Returns {ok:true, result} for SUCCESS, {ok:false, reason} for ERROR / no result event.
-function parseStream(text) {
+function parseStream(text, env = process.env) {
   let result = null;
   for (const line of String(text).split('\n')) {
     const t = line.trim();
@@ -72,7 +87,18 @@ function parseStream(text) {
     return { ok: false, reason: `agy result status ${String(result.status)}: ${err}` };
   }
   if (typeof result.response !== 'string') return { ok: false, reason: 'agy result has no string response' };
-  return { ok: true, result };
+  if (result.response.trim() === '') {
+    return { ok: false, reason: 'agy_empty_response: agy reported SUCCESS with an empty response (the silent truncation signature, BL-0021); treated as a failure, not a clean pass' };
+  }
+  const used = result.usage && typeof result.usage === 'object' ? result.usage.input_tokens : undefined;
+  const ceiling = inputTokenCeiling(env);
+  if (typeof used === 'number' && Number.isFinite(used)) {
+    if (used >= ceiling) {
+      return { ok: false, reason: `agy_input_truncated: agy consumed ${used} input tokens, at or over the ${ceiling}-token fail-closed ceiling (about 97.6k is where agy 1.4.6 silently drops the prompt tail, BL-0021); the answer cannot be trusted. Split the unit or raise AUTOPILOT_AGY_INPUT_TOKEN_CEILING where you measured it` };
+    }
+    return { ok: true, result };
+  }
+  return { ok: true, result, note: 'agy result carries no usage.input_tokens; the token-ceiling check was skipped (only the empty-response and byte-cap checks apply)' };
 }
 
 function usage(msg) {
@@ -127,10 +153,11 @@ function main(argv) {
       process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
       process.exit(1);
     }
+    if (parsed.note) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
     process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response);
   });
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { encodeUserLine, parseStream, STREAM_FLAGS, stdinMaxBytes, DEFAULT_STDIN_MAX_BYTES };
+module.exports = { encodeUserLine, parseStream, STREAM_FLAGS, stdinMaxBytes, DEFAULT_STDIN_MAX_BYTES, inputTokenCeiling, DEFAULT_INPUT_TOKEN_CEILING };

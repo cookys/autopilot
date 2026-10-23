@@ -106,3 +106,12 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is S each.
 - **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
 
+- **Update 2026-10-24 (later; agy 1.4.6 re-measured: the wall is in tokens, and a response-side check now backs the byte cap)**: tail-nonce probe through stdin stream-json, binary sha256 `128780f5776959ba6a991bde1f0a8b699eee37a59ed30deb9926147fedfa56c4`, model gemini-3.8-flash-high:
+
+  | line bytes | status | response | `result.usage.input_tokens` |
+  |---|---|---|---|
+  | 170000 | SUCCESS | tail nonce (correct) | 87,366 |
+  | 200000 | SUCCESS | `""` | 97,652 |
+  | 250000 | SUCCESS | `""` | 97,653 |
+
+  Conclusions: the wall still exists in 1.4.6; it sits at about 97.6k input tokens, not at a byte count (this padding ran about 0.51 token per byte, and base64 or some CJK is denser, so it can cross the wall inside the 170000-byte cap). `scripts/lib/agy-stream-json.js` therefore has two layers: the byte cap (`agy_stdin_ceiling`, kept) and response-side detection of a SUCCESS with an empty response (`agy_empty_response`) or `usage.input_tokens` >= `AUTOPILOT_AGY_INPUT_TOKEN_CEILING` (default 95000, `agy_input_truncated`, even when the response is non-empty). A result without the usage field skips the token check with a stderr note. Tests: `hooks/tests/agy-stdin-transport.test.sh`. This entry stays OPEN: the 170000-byte cap is still conservative, lifting it safely still needs the tail-nonce self-check or a per-host measurement.

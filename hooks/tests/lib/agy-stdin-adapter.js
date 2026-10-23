@@ -17,6 +17,8 @@
 //                          last AGY_STUB_TAIL bytes) instead of running the legacy stub
 //   AGY_STUB_NEEDLE_FILE=f in capture mode, append `needle=found|missing`: whether the prompt contains
 //                          file f byte-for-byte (for rails that wrap the payload in their own framing)
+//   AGY_STUB_RESPONSE_EMPTY=1  answer SUCCESS with response "" (the BL-0021 silent-truncation signature)
+//   AGY_STUB_INPUT_TOKENS=N    attach usage:{input_tokens:N,...} to the result, like real agy 1.4.6
 // A prompt over 120000 bytes is NOT forwarded to the legacy stub (it would hit E2BIG): the
 // adapter answers itself with response "BIG-OK".
 const fs = require('fs');
@@ -88,4 +90,9 @@ try {
 } catch (_e) { /* legacy stub printed plain text */ }
 if (!result) result = { status: 'SUCCESS', response: stdout };
 if (!result.status) result.status = 'SUCCESS';
+if (process.env.AGY_STUB_RESPONSE_EMPTY) result.response = '';
+if (process.env.AGY_STUB_INPUT_TOKENS) {
+  const n = Number(process.env.AGY_STUB_INPUT_TOKENS);
+  result.usage = { input_tokens: n, output_tokens: 217, thinking_tokens: 208, cache_read_tokens: 0, total_tokens: n + 217 };
+}
 emit({ event: 'result', result });

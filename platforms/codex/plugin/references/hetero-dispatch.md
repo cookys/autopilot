@@ -114,7 +114,11 @@ no constant can predict. The helper therefore **fails closed**: an encoded stdin
 175,145; a positive integer, anything else falls back to the default) is refused with the typed reason
 `agy_stdin_ceiling` on stderr and helper exit **3**, and agy is never spawned. The rails surface it as
 their ordinary runner failure (author `runner_failed`, review `no_verdict`, hetero not `committed`,
-loop seat unreviewed). Raise the variable only on a host where you measured it; lifting the cap for
+loop seat unreviewed). The wall is really in **tokens** (agy 1.4.6, 2026-10-24: 87,366 input tokens answered,
+97,652 and 97,653 returned `SUCCESS` with `response: ""`), so the byte cap alone cannot fail closed for
+token-dense content; the helper also refuses, with the same rail failure types, a `SUCCESS` whose response
+is empty (`agy_empty_response`) or whose `result.usage.input_tokens` is at or over
+`AUTOPILOT_AGY_INPUT_TOKEN_CEILING` (default **95000**; `agy_input_truncated`). Raise the variable only on a host where you measured it; lifting the cap for
 good needs the per-machine measurement or a rail tail-nonce self-check BL-0021 describes. Every agy
 prompt rail — `dispatch-review.sh`
 (including the blind cleanroom launcher), `dispatch-hetero.sh`, `dispatch-author.sh`,

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dispatch-review.sh opencode: descendants must not survive the child (reparent orphan) and
-# oc_kill_tree must not miss processes forked after its first snapshot. Stubs only.
+# the whole process group is reaped even when there is no session launcher. Stubs only.
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
 export DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0
@@ -79,5 +79,74 @@ for i in 1 2 3; do
     [ -n "$p" ] && kill -0 "$p" 2>/dev/null && { ALIVE=$((ALIVE + 1)); kill -KILL "$p" 2>/dev/null; }
   done < "$FORK_PID_FILE"
   assert_eq "0" "$ALIVE" "forker $i: no forked descendant survives the tree kill"
+done
+
+# (3) no launcher: root forks a grandchild and exits IMMEDIATELY (no sleep) -> grandchild must not survive.
+STUB_IMM="$TEST_TMP/opencode-immediate"
+cat > "$STUB_IMM" <<'SEOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
+if [ "$1" = "auth" ]; then exit 0; fi
+sleep 300 > /dev/null 2>&1 < /dev/null &
+echo $! > "$GC_PID_FILE"
+exit 1
+SEOF
+chmod +x "$STUB_IMM"
+for i in 1 2 3 4 5 6; do
+  rm -f "$GC_PID_FILE"
+  PATH="$NOSL_BIN" "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_IMM" --timeout 60s >/dev/null 2>&1 < /dev/null
+  GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"; sleep 0.3
+  [ -n "$GPID" ]; assert_eq "0" "$?" "immediate-exit $i: grandchild pid recorded"
+  kill -0 "$GPID" 2>/dev/null; assert_eq "1" "$?" "immediate-exit $i: grandchild gone though root exited at once"
+  [ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+done
+
+# (4) no launcher: TERM / INT to dispatch-review reap the child AND its grandchild, and a bystander
+# process outside the group (an unrelated sleep) is never signalled (PID-reuse safety).
+CH_PID_FILE="$TEST_TMP/hang-child.pid"; export CH_PID_FILE
+STUB_HANG="$TEST_TMP/opencode-hang-gc"
+cat > "$STUB_HANG" <<'SEOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "export" ]; then printf '{"credential":"fixture"}'; exit 0; fi
+if [ "$1" = "auth" ]; then exit 0; fi
+echo $$ > "$CH_PID_FILE"
+sleep 300 &
+echo $! > "$GC_PID_FILE"
+wait
+SEOF
+chmod +x "$STUB_HANG"
+for SIG in TERM INT; do
+  rm -f "$CH_PID_FILE" "$GC_PID_FILE"
+  sleep 300 > /dev/null 2>&1 < /dev/null &
+  BYSTANDER=$!
+  set -m
+  PATH="$NOSL_BIN" "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_HANG" --timeout 120s >/dev/null 2>&1 < /dev/null &
+  DR_PID=$!
+  set +m
+  for _ in $(seq 1 50); do [ -s "$GC_PID_FILE" ] && break; sleep 0.2; done
+  CPID="$(cat "$CH_PID_FILE" 2>/dev/null)"; GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"
+  [ -n "$CPID" ] && [ -n "$GPID" ]; assert_eq "0" "$?" "$SIG no launcher: child and grandchild recorded"
+  kill -"$SIG" "$DR_PID" 2>/dev/null; wait "$DR_PID" 2>/dev/null; sleep 0.5
+  kill -0 "$CPID" 2>/dev/null; assert_eq "1" "$?" "$SIG no launcher: child gone"
+  kill -0 "$GPID" 2>/dev/null; assert_eq "1" "$?" "$SIG no launcher: grandchild gone"
+  kill -0 "$BYSTANDER" 2>/dev/null; assert_eq "0" "$?" "$SIG no launcher: unrelated process outside the group is still alive"
+  [ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+  kill -KILL "$BYSTANDER" 2>/dev/null; wait "$BYSTANDER" 2>/dev/null
+done
+
+# (5) bystander survives a quota kill and a normal exit too.
+for MODE in quota plain; do
+  sleep 300 > /dev/null 2>&1 < /dev/null &
+  BYSTANDER=$!
+  if [ "$MODE" = quota ]; then STUB="$STUB_FORK"; else STUB="$STUB_IMM"; fi
+  : > "$FORK_PID_FILE"; rm -f "$GC_PID_FILE"
+  PATH="$NOSL_BIN" "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB" --timeout 60s >/dev/null 2>&1 < /dev/null
+  sleep 0.3
+  kill -0 "$BYSTANDER" 2>/dev/null; assert_eq "0" "$?" "$MODE no launcher: unrelated process outside the group untouched"
+  GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"; [ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+  while read -r p; do [ -n "$p" ] && kill -KILL "$p" 2>/dev/null; done < "$FORK_PID_FILE"
+  kill -KILL "$BYSTANDER" 2>/dev/null; wait "$BYSTANDER" 2>/dev/null
 done
 finalize_test

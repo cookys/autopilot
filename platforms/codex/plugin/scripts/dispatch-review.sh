@@ -991,47 +991,7 @@ CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
-OC_PID=""; OC_SETSID=""   # opencode child pid + session launcher; cleanup kills the child on TERM/INT
-# Descendants of a pid via ps (pid,ppid) into OC_SNAP, deepest first. No pkill. Sets OC_SNAP="".
-OC_SNAP=""
-oc_snapshot() {
-  local root="$1" p pp c all="" frontier next table
-  OC_SNAP=""
-  table="$(ps -A -o pid= -o ppid= 2>/dev/null)" || table=""
-  frontier="$root"
-  while [ -n "$frontier" ]; do
-    next=""
-    for p in $frontier; do
-      while read -r c pp; do
-        [ "$pp" = "$p" ] && next="$next $c"
-      done <<<"$table"
-    done
-    all="$next $all"; frontier="$next"
-  done
-  OC_SNAP="$all"
-}
-# Kill a pid and its whole descendant tree without pkill. Freeze first (STOP the root, then every
-# newly seen descendant, re-snapshotting until the set stops growing, max 5 rounds) so nothing can
-# fork past the snapshot; then KILL leaves first, root last (KILL works on stopped processes).
-# No ps: kill the single pid and say so on stderr.
-oc_kill_tree() {
-  local root="$1" p round new stopped=" "
-  if ! command -v ps >/dev/null 2>&1; then
-    echo "dispatch-review: ps not found; killing opencode pid $root only (descendants may survive)" >&2
-    kill -KILL "$root" 2>/dev/null; return 0
-  fi
-  kill -STOP "$root" 2>/dev/null
-  for round in 1 2 3 4 5; do
-    oc_snapshot "$root"; new=0
-    for p in $OC_SNAP; do
-      case "$stopped" in *" $p "*) continue;; esac
-      kill -STOP "$p" 2>/dev/null; stopped="$stopped$p "; new=1
-    done
-    [ "$new" -eq 0 ] && break
-  done
-  for p in $OC_SNAP $stopped $root; do kill -KILL "$p" 2>/dev/null; done
-  return 0
-}
+OC_PID=""; OC_SETSID=""   # opencode child pid (= its process group id) + session launcher; cleanup kills the group on TERM/INT
 OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
@@ -1067,11 +1027,7 @@ cleanup() {
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
   # Kill the detached opencode child (own session) BEFORE its cwd/home tree is removed.
   if [ -n "${OC_PID:-}" ]; then
-    if [ -n "${OC_SETSID:-}" ]; then
-      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
-    else
-      oc_kill_tree "$OC_PID"
-    fi
+    kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
   fi
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
   [ -n "$OPENCODE_HOME_ROOT" ] && rm -rf "$OPENCODE_HOME_ROOT"
@@ -1764,14 +1720,19 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # on a quota signal kill the group and report engine_quota_exhausted. Review prose
   # (`"type":"text"` events) is never scanned, so the word "quota" in a review is inert.
   OPENCODE_QUOTA=0
-  # setsid gives the child its own process group (group-kill); when setsid is absent run without
-  # one and kill the timeout wrapper + its direct children instead (same fallback idea as dispatch-hetero.sh).
+  # The child always leads its own process group (PGID == OC_PID), so every kill is a group kill:
+  # with a session launcher that comes from the new session; without one, bash job control
+  # (`set -m`) makes the background job its own group leader. Members that outlive the root stay
+  # in the group, so they are reaped too and no pid list is ever kept.
   OC_SETSID=""; [ -n "$(type -P setsid)" ] && OC_SETSID="$(type -P setsid)"
+  # Job control only without the launcher: as a group leader the launcher would fork and detach from `wait`.
+  if [ -z "$OC_SETSID" ]; then set -m; fi
   # shellcheck disable=SC2086
   $OC_SETSID timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
       env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR" &
   OC_PID=$!
+  set +m
   # Deterministic detection: no pipelines (no SIGPIPE/pipefail dependence). Only structured error
   # signals count: stdout NDJSON lines with "type":"error" (opencode: error.data.message), and
   # stderr lines of the unambiguous shape `Error: ...` / `error: ...` / `{"type":"error"...}`.
@@ -1783,17 +1744,10 @@ elif [[ "$RUNNER" = "opencode" ]]; then
     [ -n "$errs" ] || return 1
     grep -qiE "$OC_QUOTA_RE" <<<"$errs"
   }
-  OC_SEEN=""
   while kill -0 "$OC_PID" 2>/dev/null; do
-    # No own process group: remember every descendant while the root lives, so ones that outlive it can be reaped.
-    if [ -z "$OC_SETSID" ] && command -v ps >/dev/null 2>&1; then oc_snapshot "$OC_PID"; OC_SEEN="$OC_SEEN $OC_SNAP"; fi
     if oc_quota_hit; then
       OPENCODE_QUOTA=1
-      if [ -n "$OC_SETSID" ]; then
-        kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
-      else
-        oc_kill_tree "$OC_PID"
-      fi
+      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
       break
     fi
     sleep 0.2
@@ -1802,12 +1756,8 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   OPENCODE_RC=$?
   # Final scan: a child that wrote a structured quota event and exited before the poll saw it.
   if [ "$OPENCODE_QUOTA" -eq 0 ] && oc_quota_hit; then OPENCODE_QUOTA=1; fi
-  # The root is gone but a descendant may have been reparented and survived: reap the leftovers.
-  if [ -n "$OC_SETSID" ]; then
-    kill -KILL -- "-$OC_PID" 2>/dev/null || true
-  else
-    for p in $OC_SEEN; do kill -0 "$p" 2>/dev/null && kill -KILL "$p" 2>/dev/null; done
-  fi
+  # The root is gone but a descendant may have been reparented and survived: it is still in the group.
+  kill -KILL -- "-$OC_PID" 2>/dev/null || true
   OC_PID=""
   if [ "$OPENCODE_QUOTA" -eq 0 ]; then
     wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true

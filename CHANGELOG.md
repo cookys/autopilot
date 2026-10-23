@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- bldone4 (docs only): BACKLOG archive, fifth batch. Closed BL-0256 (ledgerrot 69f9a23f0), BL-0213 (suitebudget 3eacdb233; owner chose a time budget and order, selection itself unchanged), BL-0238 (verifyrework 3eb254881), BL-0246 (finalpanelreason 788f92268), BL-0283 and BL-0284 (gtextship 98f180274, gdorm PASS cbb56ae52); sidecars removed, with the two archive/ADR links to them turned to plain text. BL-0241 now carries only the guard-port plan (P2 measured, evidence in docs/plans/evidence/2026-10-23-hook-latency-p2/) and the parked P4; BL-0227 and BL-0248 gained dated Context.
+
 - hangardoc (docs only): peer (hangar) harvest bundle docs/hangar-harvest-2026-10 ea8b40a95, docs part. Added BL-0285 (main_checkout_mutated with no HEAD movement, unreproduced) with its sidecar, and an `agy gotchas on a dispatch host` section in `docs/installation.md` (GEMINI.md persona, AppArmor userns for bwrap), both marked as peer reports. Not taken: the bundle's `review-deferrals-2026-10-21.md` rewrite (stale base, would undo the 2026-10-23 fixes), its code/test changes and its guidance-file edits (pending ON/OFF eval).
 
 - bldone3 (docs only): BACKLOG archive, third and fourth batches. Closed BL-0255 (initstate c38fc9620; sidecar removed; the archived report-r2.md link turned to plain text, precedent 15a8badc0), BL-0252 (roomlock 185d5fce7, sidecar removed), BL-0249 (contractmsg d758f76d3, sidecar removed) and BL-0265 (implhard 0af58eeaa); reworded BL-0231 after hookmatrix 2cdefb419 (60-day advisory wired into preflight), keeping the still-open work: matrix cells not yet verified by an actual firing, plus the owner decision on grok/agy native-event rows.

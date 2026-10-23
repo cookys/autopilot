@@ -33,7 +33,7 @@ NOT superseded: (1) the manager_raw_read audit: today only the depth-0 do-not-ed
 
 Skill and reference text that still contradicts the abort is not edited here. It waits for a guidance eval, tracked as BL-0283 in [`../BACKLOG.md`](../BACKLOG.md). Known sites: [`../../skills/ceo-agent/SKILL.md`](../../skills/ceo-agent/SKILL.md) line 309 (c2, L/XL default runs `tree.js init`); [`../../skills/quality-pipeline/SKILL.md`](../../skills/quality-pipeline/SKILL.md) (qc-panel described as a mandatory shadow reviewer; line 66 "the dispatcher MUST run `scripts/qc-panel.js`"); [`../../references/blind-dispatch.md`](../../references/blind-dispatch.md) line 297 (qc-panel listed as the blind-review exception); [`../../references/tree-contracts.md`](../../references/tree-contracts.md) carries no dormant marking.
 
-The full list of sentences (file:line, original text, suggested change) is in [`../backlog/dormant-tree-qc-panel-skill-text.md`](../backlog/dormant-tree-qc-panel-skill-text.md), tracked by BL-0283.
+The full list of sentences (file:line, original text, suggested change) was kept in `docs/backlog/dormant-tree-qc-panel-skill-text.md`, tracked by BL-0283. Both were removed on 2026-10-23 after the gtextship guidance change merged (98f180274, evaluated by gdorm, cbb56ae52); the list is in git history.
 
 ## Evidence
 

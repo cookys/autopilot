@@ -30,19 +30,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED hangar 2026-10-23 (bundle docs/hangar-harvest-2026-10 ea8b40a95); session d12f8e4c 2026-09-19, hypothesis, unreproduced
 - **Pointer**: docs/backlog/main-checkout-mutated-with-no-head-movement.md
 
-### 審查紀錄封存還沒進品質流程技能說明
-- **Id**: BL-0284
-- **Status**: open
-- **Since**: 2026-10-22
-- **Origin**: self
-- **Problem**: 審查紀錄的封存指令還沒寫進品質流程的技能說明，要等下一輪指引評估才能補。
-- **Impact**: 新的工作階段不會從技能說明知道可以封存審查紀錄。
-- **Trigger**: the next guidance eval that is allowed to edit the quality-pipeline skill text
-- **Trigger-Type**: event
-- **Effort**: XS
-- **Source**: review ledger retention P1
-- **Pointer**: docs/plans/2026-10-22-review-ledger-retention.md
-
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002
 - **Status**: open
@@ -653,20 +640,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
 - **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。
 
-### Affected-suites selects nearly every suite for a small diff
-- **Id**: BL-0213
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: 選擇器對很小的改動也選了幾乎全部套件。實測兩次合併：只改開發安裝腳本的一次選了 546 個（共 616），只改審查解析模組的一次選了 588 個（共 617）；其中固定必跑的只有 15 個，其餘多半是被少數共用檔案連鎖帶進來。
-- **Impact**: 結果閘要執行紀錄，選五百多個套件就記不成，每次 push 只能報沒有紀錄；品質流程的測試也要跑這麼多。
-- **Trigger**: the next small diff that selects more than half of all suites, or any push where the outcome gate reports no record
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: closeout4 investigation of node scripts/affected-suites.js --json on merges d997355a9 and b8bdd61f3, 2026-10-19
-- **Pointer**: docs/backlog/affected-suites-selects-nearly-every-suite.md
-- **Context**: Selected 102 / 269 / 83 on merges d997355a9, b8bdd61f3, 3765302f3. Main cause: decisions-sidecar.js reads src/engine/autopilot-engine.js as data (fileContains). 2026-10-23 re-measured: resolve-review-loop.sh alone selects 452 of 542 suites.
-
 ### roundtable Phase 1 - the /roundtable skill, distilled from several manual rooms
 - **Id**: BL-0216
 - **Status**: open
@@ -752,7 +725,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: plan section 0 fact 1 / section 6, 2026-09-15; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/managed-rail-scorecard-scope-fallback-ladder.md
-- **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file.
+- **Context**: Unconfirmed whether still true. v2.36.46 chose standing pins and did not make the rail pass the scope file. 2026-10-23 the defect was confirmed still present (scopeladder investigation); waiting on owner card d-c191e50b.
 
 ### Roster qualification: Explorer formal suite
 - **Id**: BL-0228
@@ -894,23 +867,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
 - **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist. 2026-10-23: git log -S finds no swe-calibrate producer ever in scripts, evals or src; not closed, an external tool may still make them.
 
-### verify_pass=false still converges on a reviewer verdict; should it force rework?
-- **Id**: BL-0238
-- **Status**: open
-- **Since**: 2026-07-24
-- **Origin**: peer
-- **Reporter**: codepower
-- **Report**: 2026-07-24 codepower
-- **Reply**: none
-- **Problem**: 實作審查在驗證沒過時仍會依審查者放行而收斂。現在結果會帶 verify_red_convergence_warning，但收斂條件沒改；要不要改成驗證紅就強制重做，需要 owner 決定。
-- **Impact**: 驗證失敗的缺陷可以在審查放行後被當成已完成。
-- **Trigger**: owner decides whether a red verify round must force rework instead of converging on the reviewer verdict
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: codepower 2026-07-24 implement-review; restored 2026-10-19; dropped by f2955b99e; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/shared-sealed-zero-diff-validator.md
-- **Context**: Merge 572e7eca6 adds the warning only; convergence unchanged. Direction if accepted: reviewer ship and (verify_pass or allowlisted absence), else rework. See sidecar.
-
 ### Watcher roots set has no upper bound
 - **Id**: BL-0239
 - **Status**: open
@@ -939,19 +895,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
 - **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
 
-### mods-visible-dispatch: P2 hook latency baseline, P4 progress.json parked
+### mods-visible-dispatch: P2 guard-port plan to write, P4 progress.json parked
 - **Id**: BL-0241
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: 畫面上可見派工計畫只剩兩件事還掛著。一是 P2 的 hook 延遲量測，owner 已決定要做，工線 hooklat 進行中。二是 P4 的 progress.json（autopilot.progress/1）與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
-- **Impact**: 沒量延遲，就不知道每個 hook 讓工具呼叫慢多少。progress.json 掛起不影響現有功能，radar 要讀時再補。
-- **Trigger**: P2: workline hooklat lands the hook latency baseline; P4 progress.json and work-round projection: radar asks for it
+- **Problem**: 畫面上可見派工計畫只剩兩件事。一是 P2 hook 延遲已量完，依預先登記的規則要開 guard-port 計畫，計畫還沒寫。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
+- **Impact**: 不寫 guard-port 計畫，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
+- **Trigger**: P2: the guard-port plan is written (next step); P4 progress.json and work-round projection: radar asks for it
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: P5 is already BL-0110.
+- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131): open_guard_port_plan, 7 PostToolUse spawns per call, call p95 197 ms; host load about 40. Evidence: docs/plans/evidence/2026-10-23-hook-latency-p2/.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242
@@ -1009,23 +965,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/eval-router-judge-harness-unbuilt.md
 - **Context**: Low priority. The harness was never built. The plan is archived.
 
-### Final-panel seat whose transport fails leaves no reason
-- **Id**: BL-0246
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: codepower twgs-revival
-- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
-- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
-- **Problem**: 最終審查有席位傳輸失敗時，座位紀錄沒留下結束碼、錯誤尾段與乾淨室階段。只有走乾淨室的席位會在那裡失敗。
-- **Impact**: 事後分不出是傳輸失敗還是審查本身有問題，只能重跑才知道原因。
-- **Trigger**: a final-panel seat fails in transport during the cleanroom and the seat record keeps no exit code, stderr tail, or stage
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
-- **Pointer**: docs/backlog/final-panel-seat-transport-failure-no-reason.md
-- **Context**: See BL-0223: a red campaign_verification keeps only digests, so the failing command is lost.
-
 ### Mission stays not ready after a section 11 downgrade
 - **Id**: BL-0248
 - **Status**: open
@@ -1041,7 +980,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
 - **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
-- **Context**: See BL-0220: no_verdict leaves the phase in REVIEWING and resume refuses.
+- **Context**: See BL-0220. 2026-10-23 BLOCKED: no "section 11 downgrade" concept in the repo; need a minimal repro from codepower twgs-revival (detail in the Pointer); the fleet MCP was down, request not sent.
 
 ### One command that writes the autocompact window and the context budget
 - **Id**: BL-0250
@@ -1107,20 +1046,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: t14 second experiment batch, 2026-10-20
 - **Pointer**: docs/backlog/t14-batch-driver-infra-rerun-oauth.md
 - **Context**: G-15 runner_timeout and C-16 runner_error were left at attempt 1. Depth-0 did not supplement this batch. Detail is in the Pointer.
-
-### RUN_LEDGER_MAX_ROTATIONS reads the sweep environment with unclear intent
-- **Id**: BL-0256
-- **Status**: open
-- **Since**: 2026-10-20
-- **Origin**: self
-- **Problem**: 帳本輪替上限會讀掃測時的環境變數，預設四次。掃測環境是否該影響正式輪替還不清楚。
-- **Impact**: 未決定就改，正式輪替可能跟著掃測設定走。
-- **Trigger**: the owner decides whether sweep-time environment values should influence ledger rotation
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: bluefix merge d0d87b1c4
-- **Pointer**: docs/backlog/run-ledger-max-rotations-sweep-env.md
-- **Context**: Left out of bluefix d0d87b1c4. Default is 4. Detail is in the Pointer.
 
 ### P6 feed-trust follow-ups: confirm-mode answer step, plan wording, reject-then-confirm, repeated stderr
 - **Id**: BL-0261
@@ -1248,18 +1173,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0275 relabel, 2026-10-22
 - **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
 - **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
-
-### Skill and reference text still tells people to run the dormant tree and qc-panel
-- **Id**: BL-0283
-- **Status**: open
-- **Since**: 2026-10-22
-- **Origin**: owner
-- **Problem**: skill 與 reference 仍叫人去跑已經休眠的任務樹和品管面板。
-- **Impact**: 無腳本或 hook 觸發。照 ceo-agent 現文，CEO 開 L/XL 仍可能建樹；樹在後，quality-pipeline 現文叫 dispatcher 跑 qc-panel。
-- **Trigger**: the next guidance eval
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: treedorm 2026-10-22
-- **Pointer**: docs/backlog/dormant-tree-qc-panel-skill-text.md
-- **Context**: skills/ceo-agent/SKILL.md c2; skills/quality-pipeline/SKILL.md; references/blind-dispatch.md; references/tree-contracts.md has no dormant mark. Decision record: docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 

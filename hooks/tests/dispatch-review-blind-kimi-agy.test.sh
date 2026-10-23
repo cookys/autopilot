@@ -305,9 +305,16 @@ EOF
     # script predates them, so drop exactly that paragraph from both sides; the rest of the prompt, the argv
     # shape and the env stay byte-compared.
     DROP_EXAMPLES='s/\n\nTwo complete, correct answers.*?\(closing marker line\)\n.*?\(closing marker line\)//s'
-    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec" | perl -0pe "$DROP_EXAMPLES")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec" | perl -0pe "$DROP_EXAMPLES")" \
+    # BL-0226 added one REVOKED withdrawal line to the prompt (the `- To withdraw a finding you raised ... is a
+    # duplicate.` bullet). The base script predates it, so drop exactly that line from both sides the same way.
+    DROP_WITHDRAW='s/^- To withdraw a finding you raised.*\n//m'
+    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec" | perl -0pe "$DROP_EXAMPLES" | perl -0pe "$DROP_WITHDRAW")" \
       "non-blind $CR argv/cwd-shape/env are byte-identical to base ${BASE_SHA:0:8}"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR head run carries the 3b rule-3 parent id (so the normalisation above drops something real)"
+    # The agy recorder only sees the --version probe (the prompt never reaches it), so only kimi carries the line.
+    if [ "$CR" = kimi ]; then
+        assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'REVOKED:' "non-blind $CR head run carries the BL-0226 REVOKED withdrawal line (so the drop above removes something real)"
+    fi
     assert_not_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'AUTOPILOT_PARENT_SESSION_ID=' "non-blind $CR base run has no parent id (the difference is the intended 3b change, not noise)"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'ARGV:' "non-blind $CR byte-compare base run actually ran the recorder"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'ARGV:' "non-blind $CR byte-compare head run actually ran the recorder"

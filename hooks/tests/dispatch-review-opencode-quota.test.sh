@@ -26,6 +26,7 @@ assert_not_contains "$OUT" 'rc=124' "opencode quota loop: not a bare timeout"
 [ "$ELAPSED" -lt 20 ]; assert_eq "0" "$?" "opencode quota loop: exits promptly (${ELAPSED}s)"
 PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"
 sleep 0.5
+[ -n "$PID" ]; assert_eq "0" "$?" "opencode quota loop: child pid was recorded"
 kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "opencode quota loop: child process is gone"
 
 # (b) negative control: "quota" inside review text is not quota exhaustion.
@@ -85,6 +86,7 @@ ELAPSED=$((SECONDS - START))
 assert_contains "$OUT" 'engine_quota_exhausted' "opencode without setsid: quota still detected"
 [ "$ELAPSED" -lt 10 ]; assert_eq "0" "$?" "opencode without setsid: quota prompt (${ELAPSED}s)"
 PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"; sleep 0.5
+[ -n "$PID" ]; assert_eq "0" "$?" "opencode without setsid: child pid was recorded"
 kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "opencode without setsid: child gone"
 
 # (f) stdout structured quota error is prompt every time (5 repeats, each < 10s).
@@ -96,6 +98,56 @@ for i in 1 2 3 4 5; do
   [ "$ELAPSED" -lt 10 ] || R=1
   assert_eq "0" "$R" "opencode stdout quota repeat $i prompt+detected (${ELAPSED}s)"
 done
+
+# (g) structured status_code / code 429 on an error event is quota; same fields on a healthy event are not.
+for FIELD in status_code code; do
+  STUB_F="$TEST_TMP/opencode-field-$FIELD"
+  cat > "$STUB_F" <<SEOF
+#!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "\$1" = "auth" ]; then [ "\$2" = "export" ] && printf '{"credential":"fixture"}'; exit 0; fi
+echo '{"type":"error","error":{"data":{"$FIELD":429,"message":"upstream refused"}}}'
+while :; do sleep 1; done
+SEOF
+  chmod +x "$STUB_F"
+  START=$SECONDS
+  OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_F" --timeout 60s 2>&1)"
+  ELAPSED=$((SECONDS - START))
+  assert_contains "$OUT" 'engine_quota_exhausted' "opencode error event with \"$FIELD\":429 is quota"
+  [ "$ELAPSED" -lt 20 ]; assert_eq "0" "$?" "opencode $FIELD:429 prompt (${ELAPSED}s)"
+done
+STUB_H="$TEST_TMP/opencode-healthy-code429"
+cat > "$STUB_H" <<SEOF
+#!/usr/bin/env bash
+if [ "\$1" = "run" ]; then echo '{"type":"step_finish","part":{"status_code":429,"code":429,"note":"status 429 in prose"}}'; fi
+exec "$STUB_OPENCODE_JSON" "\$@"
+SEOF
+chmod +x "$STUB_H"
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_H" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode healthy event with code 429 fields still reviewed"
+assert_not_contains "$OUT" 'engine_quota_exhausted' "healthy event 429 fields are not quota exhaustion"
+
+# (h) TERM to dispatch-review kills the opencode child (no orphan after the temp tree is removed).
+rm -f "$QUOTA_PID_FILE"
+STUB_LOOP="$TEST_TMP/opencode-hang"
+cat > "$STUB_LOOP" <<'SEOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo 1.19.2; exit 0; fi
+if [ "$1" = "auth" ]; then [ "$2" = "export" ] && printf '{"credential":"fixture"}'; exit 0; fi
+echo $$ > "$QUOTA_PID_FILE"
+while :; do sleep 1; done
+SEOF
+chmod +x "$STUB_LOOP"
+"$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_LOOP" --timeout 120s >/dev/null 2>&1 < /dev/null &
+DR_PID=$!
+for _ in $(seq 1 50); do [ -s "$QUOTA_PID_FILE" ] && break; sleep 0.2; done
+PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"
+[ -n "$PID" ]; assert_eq "0" "$?" "TERM case: child pid was recorded"
+kill -0 "$PID" 2>/dev/null; assert_eq "0" "$?" "TERM case: child alive before TERM"
+kill -TERM "$DR_PID" 2>/dev/null; wait "$DR_PID" 2>/dev/null
+sleep 0.5
+kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "TERM case: child gone after TERM to dispatch-review"
+[ -n "$PID" ] && kill -KILL "$PID" 2>/dev/null
 
 # (c) normal stub unchanged.
 OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?

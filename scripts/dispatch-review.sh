@@ -991,6 +991,7 @@ CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OC_PID=""; OC_SETSID=""   # opencode child pid + session launcher; cleanup kills the child on TERM/INT
 OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
@@ -1024,6 +1025,14 @@ cleanup() {
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
+  # Kill the detached opencode child (own session) BEFORE its cwd/home tree is removed.
+  if [ -n "${OC_PID:-}" ]; then
+    if [ -n "${OC_SETSID:-}" ]; then
+      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+    else
+      pkill -KILL -P "$OC_PID" 2>/dev/null; kill -KILL "$OC_PID" 2>/dev/null
+    fi
+  fi
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
   [ -n "$OPENCODE_HOME_ROOT" ] && rm -rf "$OPENCODE_HOME_ROOT"
   [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
@@ -1727,7 +1736,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # signals count: stdout NDJSON lines with "type":"error" (opencode: error.data.message), and
   # stderr lines of the unambiguous shape `Error: ...` / `error: ...` / `{"type":"error"...}`.
   # Free text (review prose, "reviewing quota handling in src/429.ts") is inert.
-  OC_QUOTA_RE='insufficient_quota|quota exceeded|exceeded your (current )?quota|rate.?limit|usage limit|too many requests|status"? *:? *429|HTTP 429'
+  OC_QUOTA_RE='insufficient_quota|quota exceeded|exceeded your (current )?quota|rate.?limit|usage limit|too many requests|status"? *:? *429|"(status_code|code)" *: *"?429([^0-9]|$)|HTTP 429'
   oc_quota_hit() {
     local errs
     errs="$(grep -iE '"type" *: *"error"' "$OPENCODE_OUT" 2>/dev/null; grep -iE '^[[:space:]]*(error|fatal)[:[:space:]]|"type" *: *"error"' "$OPENCODE_ERR" 2>/dev/null)" || true
@@ -1748,6 +1757,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   done
   wait "$OC_PID" 2>/dev/null
   OPENCODE_RC=$?
+  OC_PID=""
   if [ "$OPENCODE_QUOTA" -eq 0 ]; then
     wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   fi

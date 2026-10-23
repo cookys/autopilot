@@ -1,6 +1,6 @@
 # Plan — guard port: cut the per-tool-call hook spawns
 
-> Status: draft, generation 1 plan review folded (verdict CONDITIONAL, four seats; see Review log) / Owner: cookys / Branch: not yet created / Frame: autopilot hooks only
+> Status: draft, generation 2 plan review ended CONDITIONAL with unresolved blockers, awaiting depth-0 adjudication (see Review log) / Owner: cookys / Branch: not yet created / Frame: autopilot hooks only
 > Source: P2 of [mods-visible-dispatch](2026-10-03-mods-visible-dispatch.md); verdict `open_guard_port_plan`; BL-0241 in `docs/BACKLOG.md`.
 
 ## 0. Context / thesis
@@ -138,4 +138,5 @@ Script-gated: the differential test, `check-hook-inventory.js --check`, the P2 h
 ## Review log
 
 - R0: author draft 2026-10-23.
+- G2 (2026-10-24): artifact `2026-10-23-guard-port.g2-artifact.json`; sol CONDITIONAL, grok STOP, minimax STOP, qwen READY; 10 blocking findings remain open (latency-KR formulas, Design A output merge and isolation, Phase 1 vs Phase 2 candidate side, Phase 0 decision table, baseline wording). Generation cap reached; no dispositions written, depth-0 adjudicates.
 - G1 (2026-10-24): rubric `2026-10-23-guard-port.rubric.md`, manifest `2026-10-23-guard-port.plan-review-manifest.json`, artifact `2026-10-23-guard-port.g1-artifact.json`. Seats: sol CONDITIONAL, grok STOP, minimax STOP, qwen CONDITIONAL. Dispositions in `2026-10-23-guard-port.g1-dispositions.json`; every blocker was re-derived against the repo and folded.

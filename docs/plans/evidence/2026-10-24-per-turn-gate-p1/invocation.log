@@ -1,0 +1,59 @@
+prereg_commit 86fd6682a01d7ba6104b85433227fd163defaaf7 2026-10-24T00:19:46+08:00
+2026-10-23T16:20:02.454794687Z WRAPPER_START first=1 last=30 prereg=86fd6682a01d7ba6104b85433227fd163defaaf7
+2026-10-23T16:20:02.576021633Z START C-01 spent=0.0166 projected=16.3756 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:25:56.334180820Z END C-01 rc=0 cost_last_result=0.626432	5
+2026-10-23T16:25:56.358925240Z START C-02 spent=0.6430 projected=16.4567 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:30:43.280919335Z END C-02 rc=0 cost_last_result=0.503921	5
+2026-10-23T16:30:43.301840513Z START C-03 spent=1.1470 projected=16.4154 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:35:25.492632510Z END C-03 rc=0 cost_last_result=0.481349	5
+2026-10-23T16:35:25.520678681Z START C-04 spent=1.6283 projected=16.3514 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:41:11.730831427Z END C-04 rc=0 cost_last_result=0.573649	5
+2026-10-23T16:41:11.751185388Z START C-05 spent=2.2020 projected=16.3798 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:47:48.181892675Z END C-05 rc=0 cost_last_result=0.755037	5
+2026-10-23T16:47:48.205410367Z START C-06 spent=2.9570 projected=16.5895 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:53:09.730318781Z END C-06 rc=0 cost_last_result=0.507378	5
+2026-10-23T16:53:09.748036632Z START C-07 spent=3.4644 projected=16.5516 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T16:59:25.597726356Z END C-07 rc=0 cost_last_result=0.622168	5
+2026-10-23T16:59:25.614049183Z START C-08 spent=4.0866 projected=16.6285 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:04:09.82925615Z END C-08 rc=0 cost_last_result=0.506125	5
+2026-10-23T17:04:09.113261254Z START C-09 spent=4.5927 projected=16.5893 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:09:24.578630813Z END C-09 rc=0 cost_last_result=0.527956	5
+2026-10-23T17:09:24.607649023Z START C-10 spent=5.1206 projected=16.5719 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:15:08.994625695Z END C-10 rc=0 cost_last_result=0.619056	5
+2026-10-23T17:15:09.12891427Z START C-11 spent=5.7397 projected=16.6457 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-h
+2026-10-23T17:19:53.870089525Z END C-11 rc=0 cost_last_result=0.506449	5
+2026-10-23T17:19:53.893341568Z START C-12 spent=6.2461 projected=16.6068 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:25:01.963663835Z END C-12 rc=0 cost_last_result=0.511737	5
+2026-10-23T17:25:01.986026024Z START C-13 spent=6.7579 projected=16.5733 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:30:12.45652293Z END C-13 rc=0 cost_last_result=0.590530	5
+2026-10-23T17:30:12.70653247Z START C-14 spent=7.3484 projected=16.6185 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-h
+2026-10-23T17:35:50.838863792Z END C-14 rc=0 cost_last_result=0.682930	5
+2026-10-23T17:35:50.864487818Z START C-15 spent=8.0313 projected=16.7561 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:39:14.588167448Z END C-15 rc=0 cost_last_result=0.349893	5
+2026-10-23T17:39:14.613941556Z START C-16 spent=8.3812 projected=16.5607 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:44:02.56728280Z END C-16 rc=0 cost_last_result=0.554704	5
+2026-10-23T17:44:02.82032774Z START C-17 spent=8.9359 projected=16.5701 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-h
+2026-10-23T17:48:39.93952339Z END C-17 rc=0 cost_last_result=0.469932	5
+2026-10-23T17:48:39.105791061Z START C-18 spent=9.4059 projected=16.4948 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T17:53:49.704948733Z END C-18 rc=0 cost_last_result=0.555052	5
+2026-10-23T17:53:49.736255038Z START C-19 spent=9.9609 projected=16.5045 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T18:01:42.890912995Z END C-19 rc=0 cost_last_result=0.829331	5
+2026-10-23T18:01:42.912346786Z START C-20 spent=10.7902 projected=16.7885 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:06:30.507446027Z END C-20 rc=0 cost_last_result=0.488311	5
+2026-10-23T18:06:30.543452032Z START C-21 spent=11.2786 projected=16.7316 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:10:17.517609327Z END C-21 rc=0 cost_last_result=0.400895	5
+2026-10-23T18:10:17.529161519Z START C-22 spent=11.6795 projected=16.5872 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:15:48.103135657Z END C-22 rc=0 cost_last_result=0.586793	5
+2026-10-23T18:15:48.116923033Z START C-23 spent=12.2662 projected=16.6286 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:21:08.81175737Z END C-23 rc=0 cost_last_result=0.542514	5
+2026-10-23T18:21:08.93496975Z START C-24 spent=12.8088 projected=16.6259 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude-
+2026-10-23T18:25:46.954276621Z END C-24 rc=0 cost_last_result=0.506985	5
+2026-10-23T18:25:46.981443066Z START C-25 spent=13.3157 projected=16.5875 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:29:38.162912266Z END C-25 rc=0 cost_last_result=0.412027	5
+2026-10-23T18:29:38.193241891Z START C-26 spent=13.7278 projected=16.4543 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:32:58.585424860Z END C-26 rc=0 cost_last_result=0.310999	5
+2026-10-23T18:32:58.603842387Z START C-27 spent=14.0388 projected=16.2200 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:43:54.121496391Z END C-27 rc=0 cost_last_result=0.100794	1
+2026-10-23T18:43:54.156026249Z START C-28 spent=14.1396 projected=15.7755 cmd=HOME=<scratch>/p1base/run/cfg-home bash evals/orchestration/run-orchestration-eval.sh --task t14-constraint-horizon --arm off --runner cc --model claude
+2026-10-23T18:43:56.436902641Z END C-28 rc=0 cost_last_result=0.000000	1
+2026-10-23T18:43:56.446221642Z STOP_AUTH after C-28

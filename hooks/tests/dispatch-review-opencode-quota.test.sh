@@ -62,18 +62,30 @@ assert_eq "0" "$EXIT" "opencode healthy stderr mentioning quota/429 still review
 assert_not_contains "$OUT" 'engine_quota_exhausted' "healthy stderr free text is not quota exhaustion"
 
 # (e) no setsid available: seat still works AND still detects quota promptly.
-setsid() { echo 'setsid: command not found' >&2; return 127; }
-export -f setsid
-OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
+# Genuinely hide setsid: `type -P` searches PATH only, so stage a symlink farm of every PATH
+# executable except setsid and run the script under that PATH.
+NOSETSID_BIN="$TEST_TMP/nosetsid-bin"; mkdir -p "$NOSETSID_BIN"
+IFS=: read -ra _pdirs <<< "$PATH"
+for _d in "${_pdirs[@]}"; do
+  [ -d "$_d" ] || continue
+  for _f in "$_d"/*; do
+    _b="${_f##*/}"; [ "$_b" = setsid ] && continue
+    [ -x "$_f" ] && [ ! -e "$NOSETSID_BIN/$_b" ] && ln -s "$_f" "$NOSETSID_BIN/$_b"
+  done
+done
+_OLD_PATH="$PATH"; PATH="$NOSETSID_BIN"
+[ -z "$(type -P setsid)" ]; _nos=$?
+PATH="$_OLD_PATH"
+assert_eq "0" "$_nos" "no-setsid PATH really lacks setsid"
+OUT="$(PATH="$NOSETSID_BIN" "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "opencode without setsid: normal path works"
 START=$SECONDS
-OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_QUOTA" --timeout 60s 2>&1)"; EXIT=$?
+OUT="$(PATH="$NOSETSID_BIN" "$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_QUOTA" --timeout 60s 2>&1)"; EXIT=$?
 ELAPSED=$((SECONDS - START))
 assert_contains "$OUT" 'engine_quota_exhausted' "opencode without setsid: quota still detected"
 [ "$ELAPSED" -lt 10 ]; assert_eq "0" "$?" "opencode without setsid: quota prompt (${ELAPSED}s)"
 PID="$(cat "$QUOTA_PID_FILE" 2>/dev/null)"; sleep 0.5
 kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "opencode without setsid: child gone"
-unset -f setsid
 
 # (f) stdout structured quota error is prompt every time (5 repeats, each < 10s).
 for i in 1 2 3 4 5; do

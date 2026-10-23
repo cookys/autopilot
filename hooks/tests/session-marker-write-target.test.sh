@@ -13,6 +13,9 @@
 #   scripts/check-test-outcome.js: ENV_STRIP deletes it from the child env (scrub only, no read).
 #   scripts/benchmark-hook-latency.js: deletes it (with CLAUDE_CODE_SESSION_ID / AUTOPILOT_PARENT_SESSION_ID) from the
 #     env of every hook child it spawns, so the measurement starts from a clean session environment (scrub only).
+# RED at 5ccce9585: (i) no unreviewed reader of AUTOPILOT_SESSION_ID appeared ... got 'hooks/tests/lib.sh ' (94 passed, 1 failed)
+#   hooks/tests/lib.sh: scrub_session_env() unsets it (with the other session ids) so a suite starts from a clean
+#     session environment (scrub only; pinned below to that one unset line).
 #   hooks (run-approval-gate, foreman-guard, cost-fuse) read payload.session_id / CLAUDE_CODE_SESSION_ID first and
 #   only fall back to it; campaign intake (scripts/open-decision.js, task-card.js) reads a chain that continues to
 #   CLAUDE_CODE_SESSION_ID. None needs the variable to exist; the rails already `unset`/`env -u` it (author, review,
@@ -255,6 +258,9 @@ eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/check-test-outcome.
 eq "1" "$(sed -n '/const ENV_STRIP = \[/,/^];$/p' "$REPO_ROOT/scripts/check-test-outcome.js" | grep -c 'AUTOPILOT_SESSION_ID')" "(i) that single AUTOPILOT_SESSION_ID site sits inside ENV_STRIP (a later real read turns this red)"
 eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/benchmark-hook-latency.js")" "(i) benchmark-hook-latency.js names AUTOPILOT_SESSION_ID exactly once"
 eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/benchmark-hook-latency.js" | grep -cE "for \\(const k of \\[.*\\]\\) delete env\\[k\\]")" "(i) that single AUTOPILOT_SESSION_ID line is the env scrub loop line itself (a read elsewhere or a key dropped from the loop turns this red)"
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/tests/lib.sh")" "(i) hooks/tests/lib.sh names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/hooks/tests/lib.sh" | grep -cE '^[[:space:]]*unset .*AUTOPILOT_SESSION_ID')" "(i) that single lib.sh line is the unset line inside scrub_session_env (a read elsewhere or a key dropped from the unset list turns this red)"
+eq "1" "$(awk '/^scrub_session_env\(\)/{f=1} f&&/unset .*AUTOPILOT_SESSION_ID/{n++} f&&/^}/{f=0} END{print n+0}' "$REPO_ROOT/hooks/tests/lib.sh")" "(i) the lib.sh unset line sits inside the scrub_session_env function body"
 # every other reader must treat it as an optional fallback after payload / CLAUDE_CODE_SESSION_ID (or be a scrub)
 unknown="$(cd "$REPO_ROOT" && for f in $readers; do
   case "$f" in
@@ -263,6 +269,7 @@ unknown="$(cd "$REPO_ROOT" && for f in $readers; do
     scripts/dispatch-*.sh|scripts/run-grok-implementer-ab.sh|scripts/lib/*) ;;  # rails: they scrub it
     scripts/check-test-outcome.js) ;;  # scrub: ENV_STRIP deletes it from the child env
     scripts/benchmark-hook-latency.js) ;;  # scrub: deletes it from the spawned hook env (pinned scrub-only above)
+    hooks/tests/lib.sh) ;;  # scrub: scrub_session_env unsets it (pinned scrub-only above)
     scripts/scaffold-mission.js) ;;                                             # prose: "never AUTOPILOT_SESSION_ID"
     scripts/open-decision.js|scripts/task-card.js) ;;                           # campaign intake: chain continues to CLAUDE_CODE_SESSION_ID
     hooks/run-approval-gate.js|hooks/foreman-guard.js|hooks/cost-fuse.js) ;;    # payload.session_id first, fallback only

@@ -21,6 +21,8 @@ Notes for the next editor. Do not write these as settings:
 -->
 - reviewer_engine: real-engine
 - loop_max_rounds: 4
+- consult_dispatch: off
+- discuss_dispatch: off
 CFGEOF
 
 run_field() {

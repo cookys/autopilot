@@ -31,10 +31,23 @@ kill -0 "$PID" 2>/dev/null; assert_eq "1" "$?" "opencode quota loop: child proce
 # (b) negative control: "quota" inside review text is not quota exhaustion.
 STUB_TEXT="$TEST_TMP/opencode-quota-word"
 sed 's/conclusion=no concrete/conclusion=quota and rate limit handling reviewed, no concrete/' "$STUB_OPENCODE_JSON" > "$STUB_TEXT"
+grep -q quota "$STUB_TEXT" || fail "negative control stub lacks 'quota' (vacuous)"
 chmod +x "$STUB_TEXT"
 OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_TEXT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "opencode review text containing 'quota' still reviewed"
 assert_not_contains "$OUT" 'engine_quota_exhausted' "opencode review text 'quota' is not quota exhaustion"
+
+# (b2) bare 429 number in a non-text event (cost/tokens) is not quota exhaustion.
+STUB_429="$TEST_TMP/opencode-bare-429"
+cat > "$STUB_429" <<SEOF
+#!/usr/bin/env bash
+if [ "\$1" = "run" ]; then echo '{"type":"step_finish","part":{"cost":0.429,"tokens":{"input":429,"output":429}}}'; fi
+exec "$STUB_OPENCODE_JSON" "\$@"
+SEOF
+chmod +x "$STUB_429"
+OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_429" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode bare 429 number in non-text event still reviewed"
+assert_not_contains "$OUT" 'engine_quota_exhausted' "bare 429 number is not quota exhaustion"
 
 # (c) normal stub unchanged.
 OUT="$("$SCRIPT" --runner opencode --model fixture --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" 2>&1)"; EXIT=$?

@@ -1721,7 +1721,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   OC_PID=$!
   while kill -0 "$OC_PID" 2>/dev/null; do
     if { grep -v '"type" *: *"text"' "$OPENCODE_OUT" 2>/dev/null; cat "$OPENCODE_ERR" 2>/dev/null; } \
-        | grep -qiE 'insufficient_quota|quota|rate.?limit|usage limit|too many requests|\b429\b'; then
+        | grep -qiE 'insufficient_quota|quota|rate.?limit|usage limit|too many requests|status"?:? *429|HTTP 429'; then
       OPENCODE_QUOTA=1
       kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
       break

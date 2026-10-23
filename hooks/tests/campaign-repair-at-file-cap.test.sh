@@ -222,7 +222,7 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false, converge
   assert.strictEqual(r.phase, 'boundary_rejected');
   if (stopAtBoundary) {
     parkDead(fx);
-    return fx.control.initial_state;
+    return fx.control.current_state;
   }
   const evidence = icc.canonicalDigest({ passed: true, fixture: fx.campaignId });
   const appended = intake.appendCampaignEvent({
@@ -230,7 +230,7 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false, converge
     campaignControl: fx.control,
     observedAt: '2026-08-30T00:00:02.000Z',
     eventType: icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
-    generation: fx.control.initial_state.generation,
+    generation: fx.control.current_state.generation,
     stageIdentity: 'campaign-verification:fixture',
     payload: { passed: true, evidence_digest: evidence },
     artifactReference: { kind: 'verification_receipt', digest: evidence },
@@ -239,11 +239,11 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false, converge
   assert.strictEqual(appended.state.phase, icc.CAMPAIGN_STATES.REVIEWING);
   let last = appended;
   if (convergence) {
-    fx.control.initial_state = appended.state;
+    fx.control.current_state = appended.state;
     last = intake.appendCampaignEvent({
       repo: fx.repo, campaignControl: fx.control, observedAt: '2026-08-30T00:00:03.000Z',
       eventType: icc.CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
-      generation: fx.control.initial_state.generation,
+      generation: fx.control.current_state.generation,
       stageIdentity: 'campaign-convergence:fixture',
       payload: {
         reason: 'budget exhausted', exceeded_axes: ['changed_files'],
@@ -253,21 +253,21 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false, converge
     assert.strictEqual(last.state.phase, icc.CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION);
   }
   if (disposition) {
-    fx.control.initial_state = appended.state;
+    fx.control.current_state = appended.state;
     const reviewDigest = icc.canonicalDigest({ fixture: 'product-review', id: fx.campaignId });
     const rc = intake.appendCampaignEvent({
       repo: fx.repo, campaignControl: fx.control, observedAt: '2026-08-30T00:00:03.000Z',
       eventType: icc.CAMPAIGN_EVENTS.REVIEW_COMPLETED,
-      generation: fx.control.initial_state.generation,
+      generation: fx.control.current_state.generation,
       stageIdentity: 'campaign-review:fixture',
       payload: { review_digest: reviewDigest },
       artifactReference: { kind: 'product_review', digest: reviewDigest },
     });
-    fx.control.initial_state = rc.state;
+    fx.control.current_state = rc.state;
     last = intake.appendCampaignEvent({
       repo: fx.repo, campaignControl: fx.control, observedAt: '2026-08-30T00:00:04.000Z',
       eventType: icc.CAMPAIGN_EVENTS.AWAITING_DISPOSITION,
-      generation: fx.control.initial_state.generation,
+      generation: fx.control.current_state.generation,
       stageIdentity: 'campaign-disposition:fixture',
       payload: {
         reason: 'findings need a disposition',
@@ -314,14 +314,14 @@ console.log(`b_intake_status=${claimedB.status} code=${claimedB.code || claimedB
 
 // write side: the repair lifecycle on the claimed generation (only when the claim was admitted)
 function repairTo(fx, claimed, files, tag) {
-  let ctl = { ...fx.control, initial_state: claimed.resumed_state, generation_claim: claimed };
+  let ctl = { ...fx.control, current_state: claimed.resumed_state, generation_claim: claimed };
   const app = (input) => {
     const a = intake.appendCampaignEvent({ repo: fx.repo, campaignControl: ctl, ...input });
-    ctl = { ...ctl, initial_state: a.state };
+    ctl = { ...ctl, current_state: a.state };
     return a;
   };
   const E = icc.CAMPAIGN_EVENTS;
-  const g = ctl.initial_state.generation;
+  const g = ctl.current_state.generation;
   app({
     observedAt: '2026-08-30T00:00:06.000Z', eventType: E.DISPOSITION_RESUMED, generation: g,
     stageIdentity: `disp-${tag}`,

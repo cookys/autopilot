@@ -188,7 +188,7 @@ console.log(`e2_budget_blocked=${resumed.phase === 'campaign_wall_budget'}`);
 const control = {
   status: 'admitted',
   contract: {},
-  initial_state: {
+  current_state: {
     started_at: '2026-07-26T00:00:00.000Z', phase: 'AWAITING_DISPOSITION',
     usage: { changed_files: 1, churn: 0, elapsed_wall_seconds: 0 },
     limits: { max_changed_files: 1, max_churn: 100, max_wall_seconds: 7200 },
@@ -198,7 +198,7 @@ const at = '2026-07-26T00:00:10.000Z';
 console.log(`e3_initial_at_cap=${campaignMutationBudgetStatus(control, at).axis}`);
 console.log(`e3_initial_explicit_at_cap=${campaignMutationBudgetStatus(control, at, { repair: false }).axis}`);
 console.log(`e3_repair_at_cap=${campaignMutationBudgetStatus(control, at, { repair: true }).axis}`);
-control.initial_state.usage.changed_files = 2;
+control.current_state.usage.changed_files = 2;
 console.log(`e3_repair_over_cap=${campaignMutationBudgetStatus(control, at, { repair: true }).axis}`);
 NODE
 OUT1="$(node "$DRIVER" "$REPO_ROOT" "$REPO" "$BASE" "$TEST_TMP" 1 < /dev/null 2>&1)"; EXIT1=$?

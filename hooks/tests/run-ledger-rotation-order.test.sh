@@ -138,7 +138,7 @@ let control = opened.control;
 const observedAt = '2026-09-16T12:00:00.000Z';
 const append = (input) => {
   const appended = intake.appendCampaignEvent({ repo, campaignControl: control, ...input });
-  control = { ...control, initial_state: appended.state };
+  control = { ...control, current_state: appended.state };
   return appended;
 };
 

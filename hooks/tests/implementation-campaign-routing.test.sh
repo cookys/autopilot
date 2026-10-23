@@ -871,7 +871,7 @@ let appended = appendCampaignEvent({
   stageIdentity: 'campaign-mutation:0',
   payload: { sealed_contract: true },
 });
-control = { ...control, initial_state: appended.state };
+control = { ...control, current_state: appended.state };
 appended = appendCampaignEvent({
   repo,
   campaignControl: control,
@@ -894,7 +894,7 @@ appended = appendCampaignEvent({
     repair_lineage: repairLineage,
   },
 });
-control = { ...control, initial_state: appended.state };
+control = { ...control, current_state: appended.state };
 appended = appendCampaignEvent({
   repo,
   campaignControl: control,
@@ -911,7 +911,7 @@ appended = appendCampaignEvent({
     digest: 'e'.repeat(64),
   },
 });
-control = { ...control, initial_state: appended.state };
+control = { ...control, current_state: appended.state };
 const findings = JSON.stringify([{
   finding_id: 'icc-p3-note',
   claim: 'fixture note is outside the frozen acceptance',
@@ -1288,8 +1288,8 @@ console.log(`resume_status=${result.status}`);
 console.log(`resume_phase=${result.phase}`);
 console.log(`implementation_calls=${implementationCalls}`);
 console.log(`review_calls=${reviewCalls}`);
-console.log(`durable_phase=${result.campaign_control.initial_state
-  ? result.campaign_control.initial_state.phase
+console.log(`durable_phase=${result.campaign_control.current_state
+  ? result.campaign_control.current_state.phase
   : 'missing'}`);
 console.log(`completion=${result.campaign_control.completion
   ? result.campaign_control.completion.status
@@ -1553,7 +1553,7 @@ const step = (eventType, generation, stageIdentity, payload, extra = {}) => {
     payload,
     artifactReference: extra.artifactReference,
   });
-  control = { ...control, initial_state: appended.state };
+  control = { ...control, current_state: appended.state };
   return appended;
 };
 step(CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, 0, 'campaign-mutation:0', { sealed_contract: true });
@@ -2289,13 +2289,13 @@ let control = runCampaignIntake({
   observedAt: '2026-09-16T03:00:00.000Z',
 }, adapters);
 assert.strictEqual(control.status, 'admitted', JSON.stringify(control.rejection || control));
-control = { ...control, initial_state: appendCampaignEvent({
+control = { ...control, current_state: appendCampaignEvent({
   repo, campaignControl: control, observedAt: '2026-09-16T03:00:01.000Z',
   eventType: CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, generation: 0,
   stageIdentity: 'campaign-mutation:0', payload: { sealed_contract: true },
 }).state };
 const digest = 'b'.repeat(64);
-control = { ...control, initial_state: appendCampaignEvent({
+control = { ...control, current_state: appendCampaignEvent({
   repo, campaignControl: control, observedAt: '2026-09-16T03:00:02.000Z',
   eventType: CAMPAIGN_EVENTS.BOUNDARY_REJECTED, generation: 0,
   stageIdentity: 'campaign-mutation:0',

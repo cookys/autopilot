@@ -99,8 +99,8 @@ function durableManagedControl(fx, extraClaim = {}) {
     full_enforcement: false,
     shadow_axes: ['mission'],
     steps: [],
-    initial_state: {
-      ...fx.opened.control.initial_state,
+    current_state: {
+      ...fx.opened.control.current_state,
       phase: 'BOUNDARY_REJECTED',
       event_count: 1,
       live_lease: null,
@@ -265,10 +265,10 @@ const green = new AutopilotEngine({
       status: 'appended',
       event: { event_type: input.eventType, timestamp: '2026-08-30T00:00:01.000Z' },
       state: {
-        ...input.campaignControl.initial_state,
+        ...input.campaignControl.current_state,
         phase: input.eventType === 'vertical_verified' ? 'REVIEWING'
           : input.eventType === 'review_completed' ? 'ADJUDICATING'
-            : input.campaignControl.initial_state.phase,
+            : input.campaignControl.current_state.phase,
       },
     };
   },

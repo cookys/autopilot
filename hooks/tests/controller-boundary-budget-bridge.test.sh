@@ -116,7 +116,7 @@ function fixture(name) {
     contract,
     contract_path: contractPath,
     seal_path: sealPath,
-    initial_state: initialState,
+    current_state: initialState,
     generation_claim: {
       ledger: path.join(repo, '.autopilot', 'identity-ledger.jsonl'),
       generation: 1,

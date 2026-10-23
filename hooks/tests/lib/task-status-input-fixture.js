@@ -325,7 +325,7 @@ function buildFixture({ root, scratch, rootRunId }) {
   let control = opened.control;
   const append = (input) => {
     const appended = intake.appendCampaignEvent({ repo, campaignControl: control, ...input });
-    control = { ...control, initial_state: appended.state };
+    control = { ...control, current_state: appended.state };
     return appended;
   };
   append({

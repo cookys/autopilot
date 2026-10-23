@@ -175,7 +175,7 @@ function openCampaignLedger({ root, repo, ledger, contract, startedAt, env } = {
       campaign_id: campaignId,
       contract_digest: contractDigest,
       contract,
-      initial_state: initialState,
+      current_state: initialState,
       generation_claim: {
         ledger,
         generation: acquired.generation,
@@ -276,7 +276,7 @@ function driveCampaignToTerminalReady({
   const events = [];
   const append = (input) => {
     const appended = intake.appendCampaignEvent({ repo, campaignControl: control, ...input });
-    control = { ...control, initial_state: appended.state };
+    control = { ...control, current_state: appended.state };
     events.push(appended.event);
     return appended;
   };

@@ -384,7 +384,7 @@ const step = (eventType, generation, stageIdentity, payload, observedAt, extra =
     artifactReference: extra.artifactReference,
     usage: extra.usage,
   });
-  control = { ...control, initial_state: appended.state };
+  control = { ...control, current_state: appended.state };
   return appended;
 };
 step(CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, 0, 'campaign-implementation', {

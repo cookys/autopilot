@@ -266,13 +266,13 @@ const fxA = fixture('journaled');
 // the boundary event, otherwise the reducer branch under test is never entered.
 // The engine journals IMPLEMENTATION_STARTED itself; assert the campaign starts
 // from PREPARED so nothing here pre-empts it.
-assert.strictEqual(fxA.campaignControl.initial_state.phase, 'PREPARED');
-assert.strictEqual(fxA.campaignControl.initial_state.live_lease, null);
+assert.strictEqual(fxA.campaignControl.current_state.phase, 'PREPARED');
+assert.strictEqual(fxA.campaignControl.current_state.live_lease, null);
 assert.strictEqual(fxA.campaignControl.generation_claim.durable_journal, true);
 
-// The engine re-seats campaignControl.initial_state as it journals; keep the
+// The engine re-seats campaignControl.current_state as it journals; keep the
 // PREPARED snapshot for the negative-control replay below.
-const preparedStateA = JSON.parse(JSON.stringify(fxA.campaignControl.initial_state));
+const preparedStateA = JSON.parse(JSON.stringify(fxA.campaignControl.current_state));
 
 const resultA = runScenario(fxA);
 

@@ -772,7 +772,7 @@ const result = engine.runImplementationReviewLoop({
 assert.strictEqual(result.status, 'converged', JSON.stringify(result));
 assert.strictEqual(implementationCalls, 0);
 assert.strictEqual(Number(fs.readFileSync(countPath, 'utf8')), 1);
-assert.strictEqual(result.campaign_control.initial_state.phase, 'TERMINAL_READY');
+assert.strictEqual(result.campaign_control.current_state.phase, 'TERMINAL_READY');
 console.log('kill_resume_adopts_commit=true');
 // Rail defect 2026-09-17: every managed review dispatch (in-loop AND final panel) must carry an
 // explicit `--timeout` bounded by the sealed wall budget, never dispatch-review.sh's 5m default.

@@ -296,7 +296,7 @@ if (runtime) {
         verify_cmd: 'true',
         max_repair_generations: 1,
       },
-      initial_state: { generation: 1 },
+      current_state: { generation: 1 },
       generation_claim: { ledger: ledgerPath },
       steps: [],
     }),

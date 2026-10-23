@@ -247,7 +247,7 @@ function toReviewing(fx, { stopAtBoundary = false } = {}) {
     campaignControl: fx.control,
     observedAt: '2026-08-30T00:00:02.000Z',
     eventType: icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
-    generation: fx.control.initial_state.generation,
+    generation: fx.control.current_state.generation,
     stageIdentity: 'campaign-verification:fixture',
     payload: { passed: true, evidence_digest: evidence },
     artifactReference: { kind: 'verification_receipt', digest: evidence },

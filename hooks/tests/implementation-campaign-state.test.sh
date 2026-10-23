@@ -1019,12 +1019,12 @@ console.log(`invalid_max_phase=${invalidMax.phase}`);
 console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
 const campaignId = campaignIdFor(
-  admitted.initial_state.repo_identity,
+  admitted.current_state.repo_identity,
   admitted.contract.ticket,
   'c'.repeat(64),
 );
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
-function campaignControlFixture(nonce, initialState = admitted.initial_state) {
+function campaignControlFixture(nonce, initialState = admitted.current_state) {
   // Per-nonce ticket becomes the controller graph_node so sequential fixture
   // scenarios do not attach one shared active controller Work Order (which would
   // correctly preserve joint-budget usage across independent cases). Production
@@ -1042,7 +1042,7 @@ function campaignControlFixture(nonce, initialState = admitted.initial_state) {
     },
     contract_path: contractPath,
     seal_path: sealPath,
-    initial_state: initialState,
+    current_state: initialState,
     generation_claim: {
       ledger: campaignLedger,
       generation: 1,
@@ -1089,8 +1089,8 @@ function durableFailureControl() {
       claim_id: terminalClaimId,
       campaign_id: `campaign-v1-${'2'.repeat(64)}`,
     },
-    initial_state: {
-      ...admitted.initial_state,
+    current_state: {
+      ...admitted.current_state,
       phase: 'IMPLEMENTING',
       generation: 0,
       event_count: 1,
@@ -1149,10 +1149,10 @@ const durableTerminalEngine = new AutopilotEngine({
         timestamp: input.observedAt,
       },
       state: {
-        ...input.campaignControl.initial_state,
+        ...input.campaignControl.current_state,
         phase: 'TERMINAL_STOP',
         live_lease: null,
-        event_count: input.campaignControl.initial_state.event_count + 1,
+        event_count: input.campaignControl.current_state.event_count + 1,
       },
     };
   },
@@ -1212,7 +1212,7 @@ const resumedPastMutation = new AutopilotEngine({
   clock: () => '2026-07-26T00:00:01.000Z',
   campaignIntake() {
     return campaignControlFixture('phase-resume', {
-      ...admitted.initial_state,
+      ...admitted.current_state,
       phase: 'VERTICAL_VERIFICATION',
     });
   },
@@ -1238,7 +1238,7 @@ console.log(`phase_resume_release_calls=${phaseResumeReleaseCalls}`);
 
 let fileBudgetImplementationCalls = 0;
 let fileBudgetReleaseCalls = 0;
-const exhaustedFileState = JSON.parse(JSON.stringify(admitted.initial_state));
+const exhaustedFileState = JSON.parse(JSON.stringify(admitted.current_state));
 exhaustedFileState.usage.changed_files = exhaustedFileState.limits.max_changed_files;
 const exhaustedFileBudget = new AutopilotEngine({
   cwd: repo,
@@ -1266,7 +1266,7 @@ console.log(`file_budget_calls=${fileBudgetImplementationCalls}`);
 console.log(`file_budget_release_calls=${fileBudgetReleaseCalls}`);
 
 let churnBudgetImplementationCalls = 0;
-const exhaustedChurnState = JSON.parse(JSON.stringify(admitted.initial_state));
+const exhaustedChurnState = JSON.parse(JSON.stringify(admitted.current_state));
 exhaustedChurnState.usage.churn = exhaustedChurnState.limits.max_churn;
 const exhaustedChurnBudget = new AutopilotEngine({
   cwd: repo,
@@ -1435,7 +1435,7 @@ function durableManagedControl(nonce) {
   // release is covered by mission-runtime-v2.
   const control = campaignControlFixture(
     nonce,
-    JSON.parse(JSON.stringify(admitted.initial_state)),
+    JSON.parse(JSON.stringify(admitted.current_state)),
   );
   return {
     ...control,
@@ -1464,7 +1464,7 @@ function runDurableLeafCase(label, leafOverrides = {}) {
       if (input.eventType === 'mutation_failed' || input.eventType === 'terminal_stop') {
         mutationFailed = true;
       }
-      const state = input.campaignControl.initial_state;
+      const state = input.campaignControl.current_state;
       if (input.eventType === 'implementation_started') {
         return {
           status: 'appended',
@@ -1615,7 +1615,7 @@ const durableReleaseFail = (() => {
     },
     campaignEventAppender(input) {
       events.push(input.eventType);
-      const state = input.campaignControl.initial_state;
+      const state = input.campaignControl.current_state;
       if (input.eventType === 'implementation_started') {
         return {
           status: 'appended',
@@ -1727,7 +1727,7 @@ const strictContract = {
   ticket: 'icc-p1-intake',
   profile: 'poc',
   mission_grant_ref: 'a'.repeat(64),
-  repo_identity: admitted.initial_state.repo_identity,
+  repo_identity: admitted.current_state.repo_identity,
   base_sha: base,
   branch: strictBranch,
   vertical_acceptance: ['root identity zero-effect'],
@@ -1881,7 +1881,7 @@ const strictContractDigest = crypto.createHash('sha256')
   .update(strictContractBytes)
   .digest('hex');
 const strictCampaignId = campaignIdFor(
-  admitted.initial_state.repo_identity,
+  admitted.current_state.repo_identity,
   strictContract.ticket,
   strictContractDigest,
 );
@@ -1933,7 +1933,7 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
       if (input.eventType === 'mutation_failed' || input.eventType === 'terminal_stop') {
         mutationFailed = true;
       }
-      const state = input.campaignControl.initial_state;
+      const state = input.campaignControl.current_state;
       if (input.eventType === 'implementation_started') {
         return {
           status: 'appended',
@@ -3678,8 +3678,8 @@ const resumed = runCampaignIntake({
 }, adapters);
 console.log(`implicit_code=${implicit.rejection.code}`);
 console.log(`resumed_status=${resumed.status}`);
-console.log(`resumed_events=${resumed.initial_state.event_count}`);
-console.log(`resumed_elapsed=${resumed.initial_state.usage.elapsed_wall_seconds}`);
+console.log(`resumed_events=${resumed.current_state.event_count}`);
+console.log(`resumed_elapsed=${resumed.current_state.usage.elapsed_wall_seconds}`);
 NODE
 )"
 assert_exit_code "$?" "0" "durable resume intake process exits zero"

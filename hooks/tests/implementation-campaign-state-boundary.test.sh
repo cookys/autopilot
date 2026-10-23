@@ -174,7 +174,7 @@ const started = appendCampaignEvent({
   stageIdentity: 'campaign-mutation:0',
   payload: { sealed_contract: true },
 });
-control = { ...control, initial_state: started.state };
+control = { ...control, current_state: started.state };
 const brDigest = '9'.repeat(64);
 const rejected = appendCampaignEvent({
   repo,

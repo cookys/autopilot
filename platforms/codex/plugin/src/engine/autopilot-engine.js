@@ -40,6 +40,7 @@ const {
   resolveReviewStation,
   strandedClaimForSealedGrant,
   withStrandedClaim,
+  requireCampaignCurrentState,
 } = require('./campaign-intake');
 const {
   projectMissionMode,
@@ -1538,7 +1539,7 @@ function campaignWallBudgetStatus(control, observedAt, options = {}) {
   if (!control || control.status !== 'admitted') {
     return { exhausted: false, elapsed_seconds: null };
   }
-  const state = control.initial_state;
+  const state = requireCampaignCurrentState(control);
   const startedAt = state && Date.parse(state.started_at);
   const observed = Date.parse(observedAt);
   let limit = state && state.limits && state.limits.max_wall_seconds;
@@ -1565,7 +1566,7 @@ function campaignWallBudgetStatus(control, observedAt, options = {}) {
 }
 
 // Whole seconds left on the campaign's sealed wall budget at `observedAt`, from the SAME
-// limit source campaignWallBudgetStatus reads (initial_state.limits.max_wall_seconds), so
+// limit source campaignWallBudgetStatus reads (current_state.limits.max_wall_seconds), so
 // a review seat's `--timeout` can never disagree with the budget check that precedes it.
 // `{ exhausted: true }` when the budget is spent (callers block); `seconds: null` with
 // `exhausted: false` when there is no sealed budget at all (legacy unmanaged loop) — then no
@@ -1574,11 +1575,11 @@ function campaignWallRemainingSeconds(control, observedAt, options = {}) {
   const budget = campaignWallBudgetStatus(control, observedAt, options);
   if (budget.exhausted) return { exhausted: true, seconds: null };
   if (!Number.isSafeInteger(budget.elapsed_seconds)) return { exhausted: false, seconds: null };
-  let limit = control.initial_state.limits.max_wall_seconds;
+  let limit = control.current_state.limits.max_wall_seconds;
   const consumer = options && options.consumer === 'panel' ? 'panel' : 'review';
   if (consumer === 'panel') {
-    const fromLimits = control.initial_state.limits
-      && control.initial_state.limits.final_panel_reserve_seconds;
+    const fromLimits = control.current_state.limits
+      && control.current_state.limits.final_panel_reserve_seconds;
     limit += Number.isSafeInteger(fromLimits) ? fromLimits : 0;
   }
   const remaining = limit - budget.elapsed_seconds;
@@ -1593,7 +1594,7 @@ function campaignWallRemainingSeconds(control, observedAt, options = {}) {
 function campaignMutationBudgetStatus(control, observedAt, options = {}) {
   const wall = campaignWallBudgetStatus(control, observedAt);
   if (wall.exhausted || !control || control.status !== 'admitted') return wall;
-  const state = control.initial_state;
+  const state = control.current_state;
   const usage = state && state.usage;
   const limits = state && state.limits;
   if (!usage || !limits) {
@@ -3045,7 +3046,7 @@ class AutopilotEngine {
     candidate = null,
     forceTerminal = false,
   }) {
-    const state = campaignControl && campaignControl.initial_state;
+    const state = campaignControl && campaignControl.current_state;
     if (!campaignControl || campaignControl.status !== 'admitted'
         || !state || !campaignControl.generation_claim
         || campaignControl.generation_claim.durable_journal !== true) {
@@ -3075,7 +3076,7 @@ class AutopilotEngine {
     // artifact), local repair is structurally impossible and terminalization
     // proceeds — refusing would deadlock a legitimately dead campaign.
     // First observations are untouched (fresh failures arrive here with
-    // initial_state.phase != BOUNDARY_REJECTED).
+    // current_state.phase != BOUNDARY_REJECTED).
     const ladderBoundary = repairLadder.extractBoundaryEvidence(state);
     // Production shape: intake attaches resume bindings to the GENERATION-CLAIM
     // object (campaign-intake.js — surfaced as campaignControl.generation_claim),
@@ -3177,7 +3178,7 @@ class AutopilotEngine {
         reason: 'campaign event appender did not return durable terminal state',
       };
     }
-    campaignControl.initial_state = appended.state;
+    campaignControl.current_state = appended.state;
     campaignControl.terminal_event = appended.event;
     campaignControl.failure_receipt = {
       ...receiptBody,
@@ -4935,7 +4936,7 @@ class AutopilotEngine {
       ? [...campaignControl.contract.vertical_acceptance]
       : [];
     const campaignStartedAtEpoch = Math.floor(
-      Date.parse(campaignControl.initial_state.started_at) / 1000,
+      Date.parse(campaignControl.current_state.started_at) / 1000,
     );
     const retentionExpiresAt = campaignStartedAtEpoch
       + campaignControl.contract.max_wall_seconds;
@@ -4950,8 +4951,8 @@ class AutopilotEngine {
       worktree_instance_id: null,
       cleanup_epoch: 0,
       cleanup_receipt_id: null,
-      generation: campaignControl.initial_state.generation,
-      inherited_churn: campaignControl.initial_state.usage.churn,
+      generation: campaignControl.current_state.generation,
+      inherited_churn: campaignControl.current_state.usage.churn,
       delta_churn: 0,
       retention_owner: campaignControl.campaign_id,
       retention_reason: 'implementation-campaign-repair-lineage',
@@ -5086,7 +5087,7 @@ class AutopilotEngine {
       if (!appended || appended.status !== 'appended' || !appended.state) {
         throw new Error('campaign event appender did not return durable state');
       }
-      campaignControl.initial_state = appended.state;
+      campaignControl.current_state = appended.state;
       return appended;
     };
     const isWallBudgetJournalError = (error) => (
@@ -5096,7 +5097,7 @@ class AutopilotEngine {
     const terminalizeWallExpiry = ({ stage, candidate = null }) => {
       const observedAt = this.now();
       const budget = campaignWallBudgetStatus(campaignControl, observedAt);
-      const limits = campaignControl.initial_state && campaignControl.initial_state.limits;
+      const limits = campaignControl.current_state && campaignControl.current_state.limits;
       const named = candidate && (candidate.commit || candidate.branch)
         ? {
           commit: candidate.commit || null,
@@ -5123,12 +5124,12 @@ class AutopilotEngine {
     };
     const recordGreenVerification = (receipt, repairGeneration) => {
       if (resumeReviewDigest
-          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+          && campaignControl.current_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
         return;
       }
       // Resume from REVIEWING: vertical_verified is already journaled and the reducer
       // admits it only from VERTICAL_VERIFICATION / BOUNDARY_REJECTED.
-      if (campaignControl.initial_state.phase === CAMPAIGN_STATES.REVIEWING) return;
+      if (campaignControl.current_state.phase === CAMPAIGN_STATES.REVIEWING) return;
       recordCampaignEvent({
         eventType: CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
         generation: repairGeneration,
@@ -5152,7 +5153,7 @@ class AutopilotEngine {
           implementationSha: resumeCandidate.scope_implementation_sha,
         });
         currentBase = resumeCandidate.commit;
-        implementationRound = campaignControl.initial_state.generation + 1;
+        implementationRound = campaignControl.current_state.generation + 1;
         if (!resumeCandidate.repair_lineage
             || resumeCandidate.repair_lineage.lineage_id !== campaignControl.campaign_id
             || resumeCandidate.repair_lineage.branch !== branch
@@ -5165,7 +5166,7 @@ class AutopilotEngine {
           JSON.parse(JSON.stringify(resumeCandidate.repair_lineage)),
           {
             worktree_reused: true,
-            generation: campaignControl.initial_state.generation,
+            generation: campaignControl.current_state.generation,
           },
         );
         if (!Number.isSafeInteger(repairLineage.cleanup_epoch)
@@ -5773,7 +5774,7 @@ class AutopilotEngine {
       // full-diff gate journal and the repair ticket.
       if (scope !== 'final' && verticalFailed !== true) {
         if (resumeReviewDigest
-            && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+            && campaignControl.current_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
           if (reviewDigest !== resumeReviewDigest) {
             return {
               reviewed: false,
@@ -7083,8 +7084,8 @@ class AutopilotEngine {
         frozenDenominator: campaignController.frozen_denominator,
         deliverableId: controllerGraphNode,
         completedDeliverables: campaignController.completed_deliverables || [],
-        generation: Number.isSafeInteger(campaignControl.initial_state.generation)
-          ? campaignControl.initial_state.generation : 0,
+        generation: Number.isSafeInteger(campaignControl.current_state.generation)
+          ? campaignControl.current_state.generation : 0,
         activeProcess: { pid: process.pid },
         gateState: campaignController.gate_journal || null,
         resourceDebtState: campaignController.resource_debt || null,
@@ -8074,7 +8075,7 @@ class AutopilotEngine {
       }
       // An interrupted review resumes at the phase the ledger already holds: its adoption event
       // is journaled, so it is not recorded twice. Only a first run and a returned head adopt.
-      const adoptionAlreadyJournaled = campaignControl.initial_state.phase
+      const adoptionAlreadyJournaled = campaignControl.current_state.phase
         !== CAMPAIGN_STATES.PREPARED && !returnedHead;
       adoptedCandidate = {
         committed: true,
@@ -8090,7 +8091,7 @@ class AutopilotEngine {
         resources_created: 0,
         writer_fence: createAdoptedWriterFence({
           campaignId: campaignControl.campaign_id,
-          stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
+          stageIdentity: `campaign-adoption:${campaignControl.current_state.generation}`,
           candidateCommit: adoptedHead,
           candidateTreeSha: admissionStep.tree_sha,
         }),
@@ -8098,15 +8099,15 @@ class AutopilotEngine {
       try {
         if (!adoptionAlreadyJournaled) recordCampaignEvent({
           eventType: CAMPAIGN_EVENTS.CANDIDATE_ADOPTED,
-          generation: campaignControl.initial_state.generation,
-          stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
+          generation: campaignControl.current_state.generation,
+          stageIdentity: `campaign-adoption:${campaignControl.current_state.generation}`,
           usage: {
             // BL-0154: the campaign requires usage to be monotonic, but the cumulative base..head
             // count shrinks when a returned fix fully reverts a file. Book the larger of the prior
             // durable value and this round's count (a high-water mark of files touched).
             changed_files: Math.max(
-              Number.isSafeInteger(campaignControl.initial_state.usage.changed_files)
-                ? campaignControl.initial_state.usage.changed_files : 0,
+              Number.isSafeInteger(campaignControl.current_state.usage.changed_files)
+                ? campaignControl.current_state.usage.changed_files : 0,
               Array.isArray(admissionStep.changed_files)
                 ? admissionStep.changed_files.length : 0,
             ),
@@ -8175,7 +8176,7 @@ class AutopilotEngine {
           // for verification, so no mutation is attempted.
           return {
             phase: 'VERTICAL_VERIFICATION',
-            repair_generation: campaignControl.initial_state.generation,
+            repair_generation: campaignControl.current_state.generation,
             candidate: adoptedCandidate,
             controller: campaignController,
             verification: null,
@@ -8190,10 +8191,10 @@ class AutopilotEngine {
         const claim = campaignControl.generation_claim || {};
         const fromController = attachingExistingController && priorController
           ? {
-            phase: priorController.phase || campaignControl.initial_state.phase,
+            phase: priorController.phase || campaignControl.current_state.phase,
             repair_generation: Number.isSafeInteger(priorController.repair_generation)
               ? priorController.repair_generation
-              : campaignControl.initial_state.generation,
+              : campaignControl.current_state.generation,
             candidate: resumeCandidate
               || priorController.candidate
               || null,
@@ -8235,7 +8236,7 @@ class AutopilotEngine {
           ]);
           const rawPhase = (fromController && fromController.phase)
             || claim.resume_phase
-            || campaignControl.initial_state.phase
+            || campaignControl.current_state.phase
             || null;
           const phase = resumable.has(rawPhase) ? rawPhase : 'ADJUDICATING';
           return {
@@ -8243,8 +8244,8 @@ class AutopilotEngine {
             repair_generation: Number.isSafeInteger(
               fromController && fromController.repair_generation,
             ) ? fromController.repair_generation
-              : (Number.isSafeInteger(campaignControl.initial_state.generation)
-                ? campaignControl.initial_state.generation : 0),
+              : (Number.isSafeInteger(campaignControl.current_state.generation)
+                ? campaignControl.current_state.generation : 0),
             candidate: sealedCandidate,
             controller: campaignController,
             verification: (fromController && fromController.verification)
@@ -8339,13 +8340,13 @@ class AutopilotEngine {
         const mapped = typeMap[eventType] || eventType;
         let eventPayload = payload || {};
         if (mapped === CAMPAIGN_EVENTS.AWAITING_DISPOSITION && campaignControl
-            && campaignControl.initial_state) {
+            && campaignControl.current_state) {
           const estimate = estimateRepairRoundSeconds(ledger);
           const remaining = Math.max(
             0,
-            campaignControl.initial_state.limits.max_wall_seconds
+            campaignControl.current_state.limits.max_wall_seconds
               - campaignClockElapsedSeconds(
-                campaignControl.initial_state,
+                campaignControl.current_state,
                 Date.parse(this.now()),
               ),
           );
@@ -8363,7 +8364,7 @@ class AutopilotEngine {
         // synthesized `controller-<event>:<gen>` identity is not the lease owner,
         // so the reducer answers LEASE_FENCED and the journal strands mid-mutation
         // with the lease held. Re-derive live state from the durable journal at
-        // call time rather than trusting campaignControl.initial_state, which a
+        // call time rather than trusting campaignControl.current_state, which a
         // bypass appender can leave stale. Re-seat the field so the subsequent
         // append reduces against the same live snapshot.
         const claim = campaignControl && campaignControl.generation_claim;
@@ -8375,11 +8376,11 @@ class AutopilotEngine {
             campaignControl.campaign_id,
           );
           if (projection && projection.state) {
-            campaignControl.initial_state = projection.state;
+            campaignControl.current_state = projection.state;
           }
         }
         const identity = resolveCampaignEventLeaseIdentity(
-          campaignControl.initial_state,
+          campaignControl.current_state,
           mapped,
           {
             generation: Number.isSafeInteger(generation) ? generation : 0,
@@ -9068,7 +9069,7 @@ class AutopilotEngine {
             && receipt.passed === true
             && new Set(['after_initial_mutation', 'after_repair_mutation']).has(checkpoint)) {
           try {
-            const state = campaignControl.initial_state;
+            const state = campaignControl.current_state;
             const eventType = state.phase === CAMPAIGN_STATES.IMPLEMENTING
               ? CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED
               : CAMPAIGN_EVENTS.REPAIR_COMPLETED;
@@ -9121,8 +9122,8 @@ class AutopilotEngine {
                 campaign_id: campaignControl.campaign_id,
                 candidate: { ...candidate },
                 checkpoint,
-                generation: campaignControl.initial_state.generation,
-                phase: campaignControl.initial_state.phase,
+                generation: campaignControl.current_state.generation,
+                phase: campaignControl.current_state.phase,
               });
             }
           } catch (error) {
@@ -9385,9 +9386,9 @@ class AutopilotEngine {
           envAllowlist: verificationEnvAllowlist,
         });
         // Sealed knob only (limits are integers: 1 = reuse allowed, 0 = always run fresh).
-        const reuseAllowed = !(campaignControl.initial_state
-          && campaignControl.initial_state.limits
-          && campaignControl.initial_state.limits.full_suite_reuse === 0);
+        const reuseAllowed = !(campaignControl.current_state
+          && campaignControl.current_state.limits
+          && campaignControl.current_state.limits.full_suite_reuse === 0);
         const cached = verificationCache.get(suiteRequest.request_digest);
         if (reuseAllowed && reusableGreenReceipt(cached, suiteRequest)) {
           const reusedAt = this.now();
@@ -9800,7 +9801,7 @@ class AutopilotEngine {
         );
       }
       const parkEstimate = estimateRepairRoundSeconds(ledger);
-      const parkState = campaignControl && campaignControl.initial_state;
+      const parkState = campaignControl && campaignControl.current_state;
       const parkRemaining = parkState
         ? Math.max(
           0,
@@ -9915,9 +9916,9 @@ class AutopilotEngine {
               campaignControl.failure_receipt
               && campaignControl.failure_receipt.wall
             ) || {
-              max_wall_seconds: campaignControl.initial_state
-                && campaignControl.initial_state.limits
-                && campaignControl.initial_state.limits.max_wall_seconds,
+              max_wall_seconds: campaignControl.current_state
+                && campaignControl.current_state.limits
+                && campaignControl.current_state.limits.max_wall_seconds,
               elapsed_wall_seconds: campaignWallBudgetStatus(
                 campaignControl,
                 this.now(),
@@ -10179,8 +10180,8 @@ class AutopilotEngine {
         const terminalObservedAt = this.now();
         const appended = recordCampaignEvent({
           eventType: terminalEvent,
-          generation: campaignControl.initial_state.generation,
-          stageIdentity: `campaign-terminal:${campaignControl.initial_state.generation}`,
+          generation: campaignControl.current_state.generation,
+          stageIdentity: `campaign-terminal:${campaignControl.current_state.generation}`,
           payload,
           artifactReference: {
             kind: 'campaign_terminal',
@@ -10262,8 +10263,8 @@ class AutopilotEngine {
               frozenDenominator: progressed.frozen_denominator,
               deliverableId: nodeId,
               completedDeliverables: nextCompleted,
-              generation: Number.isSafeInteger(campaignControl.initial_state.generation)
-                ? campaignControl.initial_state.generation : 0,
+              generation: Number.isSafeInteger(campaignControl.current_state.generation)
+                ? campaignControl.current_state.generation : 0,
               activeProcess: isObj(progressed.process_parentage)
                 ? progressed.process_parentage : { pid: process.pid },
               gateState: progressed.gate_journal || null,
@@ -10384,8 +10385,8 @@ class AutopilotEngine {
       campaignControl
       && campaignControl.terminal_failure
       && campaignControl.terminal_failure.status === 'terminalized'
-      && campaignControl.initial_state
-      && campaignControl.initial_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
+      && campaignControl.current_state
+      && campaignControl.current_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
       && lastImplementation
       && lastImplementation.status === 'acceptance_failed',
     );
@@ -10393,8 +10394,8 @@ class AutopilotEngine {
       campaignControl
       && campaignControl.terminal_failure
       && campaignControl.terminal_failure.status === 'terminalized'
-      && campaignControl.initial_state
-      && campaignControl.initial_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
+      && campaignControl.current_state
+      && campaignControl.current_state.phase === CAMPAIGN_STATES.TERMINAL_STOP
       && campaignControl.failure_receipt
       && campaignControl.failure_receipt.wall,
     );
@@ -10408,7 +10409,7 @@ class AutopilotEngine {
       ),
       phase: converged ? 'campaign_terminal_ready' : (
         journaledAcceptanceFailure || journaledWallExpiry
-          ? campaignControl.initial_state.phase
+          ? campaignControl.current_state.phase
           : (composition.phase || 'campaign_terminal')
       ),
       reason: converged ? null : composition.reason || 'campaign requires follow-up',
@@ -11145,6 +11146,9 @@ class AutopilotEngine {
             ? { ...(trustedMissionAdapters || {}), adoptionAdmission: this.adoptionAdmission }
             : (trustedMissionAdapters || undefined));
         }
+        // BL-0255: a control object that still carries only the removed `initial_state`
+        // field fails loudly here (campaign intake failed closed) instead of reading as no state.
+        if (intake && intake.status === 'admitted') requireCampaignCurrentState(intake);
       } catch (error) {
         intake = {
           status: 'blocked',
@@ -11290,7 +11294,7 @@ class AutopilotEngine {
       verifyState.verifyCmdProvided = true;
       campaignMaxRounds = (
         intake.contract.max_repair_generations
-        - intake.initial_state.generation
+        - intake.current_state.generation
         + 1
       );
       campaignDispatchIdentity = {
@@ -11325,7 +11329,7 @@ class AutopilotEngine {
 
     const releaseCampaignNoEffect = (rejection, options = {}) => {
       if (!campaignControl || campaignControl.status !== 'admitted') return null;
-      const state = campaignControl.initial_state;
+      const state = campaignControl.current_state;
       const claim = campaignControl.generation_claim || null;
       const leafProof = options && options.leafProof ? options.leafProof : null;
       if (!isCampaignAdmissionReleasable(state, claim, leafProof)) {
@@ -11409,8 +11413,8 @@ class AutopilotEngine {
     const boundaryRejectedNoCandidate = campaignControl
       && campaignControl.status === 'admitted'
       && input.resume === true
-      && (campaignControl.initial_state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
-        || campaignControl.initial_state.phase === 'boundary_rejected')
+      && (campaignControl.current_state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
+        || campaignControl.current_state.phase === 'boundary_rejected')
       && !durableResumeCandidate;
     if (boundaryRejectedNoCandidate) {
       const reason = 'no candidate — re-dispatch is a new attempt';
@@ -11432,8 +11436,8 @@ class AutopilotEngine {
     }
     if (campaignControl
         && campaignControl.status === 'admitted'
-        && campaignControl.initial_state.phase !== CAMPAIGN_STATES.PREPARED
-        && (!durableResumablePhases.has(campaignControl.initial_state.phase)
+        && campaignControl.current_state.phase !== CAMPAIGN_STATES.PREPARED
+        && (!durableResumablePhases.has(campaignControl.current_state.phase)
           // An adopted range carries no writer-fenced git candidate; its head is re-derived by
           // the adoption admission instead.
           || (!durableResumeCandidate && input.reviewCandidate !== true))) {
@@ -11441,7 +11445,7 @@ class AutopilotEngine {
         owner: 'campaign_generation',
         status: 'rejected',
         code: 'campaign_resume_phase_unsupported',
-        reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
+        reason: `campaign resume from ${campaignControl.current_state.phase} cannot dispatch implementation`,
       };
       const terminalFailure = this.terminalizeManagedCampaignFailure({
         campaignControl,

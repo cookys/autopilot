@@ -160,6 +160,7 @@
         "grok",
         "cc-shim",
         "pi",
+        "claude-native",
         "qoderclicn",
         "cursor",
         "opencode",

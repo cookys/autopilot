@@ -117,20 +117,42 @@ function cmdPersist(args) {
   process.exit(0);
 }
 
+// The claude-native owner confirmation lives ONLY in the canonical machine-local config
+// (<HOME>/.autopilot/config.json). AUTOPILOT_CONFIG_FILE and any other override are ignored on
+// purpose: otherwise a hand-written confirmation file plus an env var would pass the gate.
+function cnativeConfigPath() {
+  return path.join(require('os').homedir(), '.autopilot', 'config.json');
+}
+
+// Strict ISO 8601 date-time (UTC or offset), a real calendar date, not in the future.
+function validConfirmedAt(v) {
+  if (typeof v !== 'string') return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(v);
+  if (!m) return false;
+  const [y, mo, d, h, mi, se] = m.slice(1, 7).map(Number);
+  if (mo < 1 || mo > 12 || h > 23 || mi > 59 || se > 59) return false;
+  const cal = new Date(Date.UTC(y, mo - 1, d));
+  if (cal.getUTCFullYear() !== y || cal.getUTCMonth() !== mo - 1 || cal.getUTCDate() !== d) return false;
+  const tz = m[7];
+  if (tz !== 'Z' && (Number(tz.slice(1, 3)) > 23 || Number(tz.slice(4, 6)) > 59)) return false;
+  const t = Date.parse(v);
+  return !Number.isNaN(t) && t <= Date.now();
+}
+
 function cnativeConfirmedAt() {
-  const cfg = readConfig(configPath());
+  const cfg = readConfig(cnativeConfigPath());
   const v = cfg && cfg.implementer_claude_native && cfg.implementer_claude_native.confirmed_at;
-  return typeof v === 'string' && v && !Number.isNaN(Date.parse(v)) ? v : null;
+  return validConfirmedAt(v) ? v : null;
 }
 
 function cmdCnativeStatus() {
   const confirmedAt = cnativeConfirmedAt();
-  process.stdout.write(`${JSON.stringify({ confirmed: confirmedAt !== null, confirmed_at: confirmedAt, config_path: configPath() })}\n`);
+  process.stdout.write(`${JSON.stringify({ confirmed: confirmedAt !== null, confirmed_at: confirmedAt, config_path: cnativeConfigPath() })}\n`);
   process.exit(confirmedAt !== null ? 0 : 1);
 }
 
 function cmdCnativeConfirm() {
-  const file = configPath();
+  const file = cnativeConfigPath();
   let existing = readConfig(file);
   if (existing === null && fs.existsSync(file)) {
     fail(`${file} exists but is not a JSON object — fix it by hand, refusing to overwrite`);

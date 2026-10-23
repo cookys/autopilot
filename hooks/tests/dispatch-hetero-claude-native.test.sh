@@ -25,7 +25,9 @@ mkdir -p "$REAL_CLAUDE/projects/p1"
 printf '{"claudeAiOauth":{"accessToken":"stub"}}\n' > "$REAL_CLAUDE/.credentials.json"
 printf '{"hooks":{}}\n' > "$REAL_CLAUDE/settings.json"
 export CLAUDE_CONFIG_DIR="$REAL_CLAUDE"
-export AUTOPILOT_CONFIG_FILE="$TEST_TMP/autopilot-config.json"   # absent = no owner confirmation
+export HOME="$TEST_TMP/home"; mkdir -p "$HOME"   # canonical config <HOME>/.autopilot/config.json; absent = no owner confirmation
+unset AUTOPILOT_CONFIG_FILE
+CANON_CFG="$HOME/.autopilot/config.json"
 
 ARGV_LOG="$TEST_TMP/claude-argv.log"
 SEEN_LOG="$TEST_TMP/claude-seen.log"
@@ -71,7 +73,29 @@ node "$REPO_ROOT/scripts/run-approval.js" claude-native-status >/dev/null 2>&1
 assert_eq "1" "$?" "status is unconfirmed before confirm"
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null
 assert_eq "0" "$?" "confirm-claude-native succeeds"
-assert_contains "$(cat "$AUTOPILOT_CONFIG_FILE")" 'confirmed_at' "confirmation persisted in config"
+assert_contains "$(cat "$CANON_CFG")" 'confirmed_at' "confirmation persisted in config"
+
+# Reject confirmations that are not strict, real, non-future ISO 8601 date-times (real dispatch path)
+cp "$CANON_CFG" "$TEST_TMP/good-cfg.json"
+i=0
+for bad in '"1"' '"2026-02-30T00:00:00Z"' '""' '12345' 'null' '"2999-01-01T00:00:00Z"' '"2026-01-01"'; do
+  i=$((i+1))
+  printf '{"implementer_claude_native":{"confirmed_at":%s}}\n' "$bad" > "$CANON_CFG"
+  OUT="$(run --branch "feat/cn-bad$i")"; RC=$?
+  assert_eq "2" "$RC" "invalid confirmed_at $bad exits 2"
+  assert_file_absent "$ARGV_LOG" "invalid confirmed_at $bad: stub never invoked"
+done
+cp "$TEST_TMP/good-cfg.json" "$CANON_CFG"
+
+# (e) hand-written confirmation referenced via AUTOPILOT_CONFIG_FILE must NOT count
+mv "$CANON_CFG" "$CANON_CFG.off"
+printf '{"implementer_claude_native":{"confirmed_at":"2026-01-01T00:00:00Z"}}\n' > "$TEST_TMP/forged.json"
+OUT="$(AUTOPILOT_CONFIG_FILE="$TEST_TMP/forged.json" run --branch feat/cn-forged)"; RC=$?
+assert_eq "2" "$RC" "(e) env-pointed forged confirmation exits 2"
+assert_file_absent "$ARGV_LOG" "(e) forged confirmation: stub never invoked"
+assert_eq "" "$(git -C "$SBX" branch --list feat/cn-forged)" "(e) no branch created"
+assert_eq "1" "$(git -C "$SBX" worktree list | wc -l)" "(e) no worktree created"
+mv "$CANON_CFG.off" "$CANON_CFG"
 
 # (c-neg) confirmed but source credentials missing -> refuse exit 2, stub never invoked
 mv "$REAL_CLAUDE/.credentials.json" "$REAL_CLAUDE/.credentials.json.off"

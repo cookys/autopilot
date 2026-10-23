@@ -212,6 +212,16 @@
       "file": "scripts/dispatch-hetero.sh",
       "match": "requires a sealed campaign strict projection",
       "reason": "BL-0017 hint text only inside the precondition_failed message; the dollar-paren is escaped and never executed."
+    },
+    {
+      "file": "scripts/lib/seed-claude-config.js",
+      "match": "os.tmpdir()",
+      "reason": "Default parent only; the allocation uses the registered claude-config-* prefix and the caller (dispatch-hetero.sh) removes the directory on every exit path."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "seed-claude-config.js\" --parent",
+      "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed right after the worker and in cleanup/abort_dispatch."
     }
   ]
 }

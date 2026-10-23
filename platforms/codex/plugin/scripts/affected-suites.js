@@ -37,8 +37,9 @@
 // --attribute (needs --run and --base; not --files): after the run, re-run ONLY the non-zero entries at
 // the base commit in a temporary detached git worktree under the OS temp dir (always removed, also
 // on failure or TERM/INT), same command, env and entry timeout. An entry non-zero at base is
-// `preexisting`; zero at base, or absent at base, is `new`. A base re-run killed by the entry timeout (rc 124) proves nothing, so that entry is
-// `unattributed` (a failure, never preexisting). Prints `attribution: preexisting N: ...`,
+// `preexisting`; zero at base, or absent at base, is `new`. A base re-run killed by the entry timeout, or one that exits 124 (timeout's exit code;
+// it may be a timeout inside the suite itself, indistinguishable from outside) proves nothing, so that entry
+// is `unattributed` (a failure, never preexisting; fail-closed: worst case is one more failure to look at). Prints `attribution: preexisting N: ...`,
 // `attribution: new N: ...` and `attribution: unattributed N: ...`. Exit code with --attribute:
 // non-zero (1) if any entry is `new` or `unattributed` (or an empty selection is not a pass); 3 is
 // kept for a budget stop (any suite skipped for budget, even when the executed failures are all
@@ -639,7 +640,8 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
 }
 
 // --attribute: re-run only the non-zero entries at the base commit in a temporary detached worktree
-// (always removed, also on TERM/INT), then label each preexisting (non-zero at base, finished normally), new, or unattributed (base timed out).
+// (always removed, also on TERM/INT), then label each preexisting (non-zero at base, finished normally), new, or unattributed (base timed out or exited 124,
+// which may be a timeout inside the suite; fail-closed, never washed into preexisting).
 function removeWorktree(root, tmp, wt) {
   try { execFileSync('git', ['worktree', 'remove', '--force', wt], { cwd: root, stdio: 'ignore' }); } catch { /* fall through to rm */ }
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
@@ -678,7 +680,7 @@ async function attribute(root, baseSha, results, entryTimeout) {
       const { rc, timedOut: to } = await runEntry(wt, r.path, entryTimeout, true);
       r.base_rc = rc;
       // Only a base run that finished normally and was non-zero is evidence of a preexisting failure;
-      // a base run killed by the entry timeout proves nothing either way.
+      // a base run killed by the entry timeout, or exiting 124 (possibly the suite's own timeout), proves nothing.
       if (to || rc === 124) groups.unattributed.push(r.path);
       else (rc !== 0 ? groups.preexisting : groups.new).push(r.path);
     }

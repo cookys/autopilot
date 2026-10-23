@@ -987,6 +987,17 @@ test('--attribute: base timeout is unattributed, not preexisting, exit non-zero'
   } finally { r.cleanup(); }
 });
 
+test('--attribute: base exits 124 on its own (no --entry-timeout) is unattributed, not preexisting, exit 1', () => {
+  const r = makeRepo(TLAYOUT('#!/usr/bin/env bash\nexit 124\n', GREEN));
+  try {
+    const head = r.change({ 'scripts/tool.js': 'y\n', 'hooks/tests/a.test.sh': '#!/usr/bin/env bash\necho scripts/tool.js\nexit 1\n', 'hooks/tests/b.test.sh': GREEN + 'echo scripts/tool.js\n' });
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--attribute']);
+    assert.strictEqual(p.status, 1, p.stdout + p.stderr);
+    assert.match(p.stdout, /attribution: preexisting 0/);
+    assert.match(p.stdout, /attribution: unattributed 1: hooks\/tests\/a\.test\.sh/);
+  } finally { r.cleanup(); }
+});
+
 test('--attribute: usage errors without --run / --base', () => {
   const r = makeRepo(TLAYOUT(GREEN, GREEN));
   try {

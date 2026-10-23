@@ -111,7 +111,7 @@ manifest_session_id_json() {
 # a child is never promoted to durable), FLEET_PARENT (an inherited FLEET_PARENT, else the launching CC session id --
 # fleet exposes no session address to a child env) and FLEET_ROLE (display only; optional $1, else an inherited
 # FLEET_ROLE, else "child"), so fleet registers the claude child as a short-lived worker, not an interactive session.
-# Contract source: docs/backlog/fleet-child-lifetime-parent-contract.md (not verified against fleet source here).
+# Contract source: docs/fleet-child-contract.md (not verified against fleet source here).
 child_session_mint() {
   export FLEET_LIFETIME=ephemeral
   local _fp="${FLEET_PARENT:-${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}}"

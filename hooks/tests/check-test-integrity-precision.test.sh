@@ -10,6 +10,8 @@
 # RED at 42482c4ca (tirules round 3): N19 N20 failed (masking tail, self-comparison counted as equivalent); N21 passed.
 # RED at 96e05a96b: F12 N28 failed (N27 passed); N29 N30 failed (continuation / heredoc wrapper accepted as equivalent): [[ < ]] treated as redirect; assertion function name counted as subject identifier.
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
+# RED at d4415142e: F13 F14 F15 F16 F17 F18 failed (here-string / quoted / commented <<EOF opened a phantom heredoc, END-OF-FILE delimiter truncated, $expected_value subject dropped, [[ "$age"<"5" ]] without spaces rejected); N31 N32 passed.
+# RED at d4415142e (acceptance round 5): N33 N34 N35 failed (replacement moved into an existing heredoc, or always true via ${age}, accepted as equivalent).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -472,5 +474,67 @@ if has_kind surface_touch; then report N29 1; else report N29 0; fi
 repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<\'EOF_BODY\'\nassert_eq "$age" "0"\nEOF_BODY')"
 run_case "$repo"
 if has_kind surface_touch; then report N30 1; else report N30 0; fi
+
+# ── F13 rule 1: a here-string is not a heredoc opener ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F13 0; else report F13 1; fi
+
+# ── F14 rule 1: <<EOF inside a quoted string is data ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F14 0; else report F14 1; fi
+
+# ── F15 rule 1: <<EOF inside a trailing comment is data ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F15 0; else report F15 1; fi
+
+# ── F16 rule 1: heredoc delimiter with a dash closes at its full name ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F16 0; else report F16 1; fi
+
+# ── N31 rule 1: assertion wrapped in a dash-delimited heredoc is still text ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\nassert_eq "$age" "5"\nEND-OF-FILE')"
+run_case "$repo"
+if has_kind surface_touch; then report N31 1; else report N31 0; fi
+
+# ── F17 rule 2: subject variable named expected_value is a subject, removed with its assertion ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'expected_value=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$expected_value" "1"\nassert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "remove variable and its assertion"
+run_case "$repo"
+if has_kind deleted_line; then report F17 0; else report F17 1; fi
+
+# ── F18 rule 1: [[ a<b ]] without spaces is a comparison operator ──
+repo="$(mk_surface '[[ "$age"<"5" ]]' '[[ "$age"<"9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F18 0; else report F18 1; fi
+
+# ── N32 rule 1: [ a<b ] without spaces stays a redirect ──
+repo="$(mk_surface '[ "$age"<"5" ]' '[ "$age"<"9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N32 1; else report N32 0; fi
+
+# ── N33 rule 1: replacement lands inside a heredoc that opens outside the hunk ──
+repo="$(mk_surface $'cat <<\'END\'\ntext one\nplaceholder\nEND\nassert_eq "$age" "0"' $'cat <<\'END\'\ntext one\nassert_eq "$age" "5"\nEND')"
+run_case "$repo"
+if has_kind surface_touch; then report N33 1; else report N33 0; fi
+
+# ── N34 rule 1: assertion rewritten to compare $age with ${age} is always true ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "${age}"')"
+run_case "$repo"
+if has_kind surface_touch; then report N34 1; else report N34 0; fi
+
+# ── N35 rule 1: [ "$age" = "${age}" ] is always true ──
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "${age}" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N35 1; else report N35 0; fi
 
 finalize_test

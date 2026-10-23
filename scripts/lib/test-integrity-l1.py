@@ -1777,10 +1777,91 @@ _ARG = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|]+')
 _STRICT_ARGS = re.compile(
     r'(?:\s+(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|()<>!#"\'`]+))*'
 )
-_HEREDOC_OPEN = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+_HEREDOC_OPEN = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\1")
 _BRACKET = re.compile(r"^\[\[?\s(.+)\s\]\]?$")
 _TEST_OP = re.compile(r"\s(-[a-z]{2}|==?|!=|=~|<|>)\s")
 _QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
+
+
+def _shell_code_mask(line):
+    """Per-character flags: True where the character is shell CODE, False inside
+    a quoted span (quotes included), an escaped pair, or a trailing comment.
+    Mirrors shell_code_view's scanner but keeps positions."""
+    n = len(line)
+    mask = [True] * n
+    i = 0
+    prev_is_boundary = True
+    while i < n:
+        c = line[i]
+        if c == "\\" and i + 1 < n:
+            mask[i:i + 2] = [False, False]
+            i += 2
+            prev_is_boundary = False
+            continue
+        if c == "'":
+            j = line.find("'", i + 1)
+            end = n if j == -1 else j + 1
+            mask[i:end] = [False] * (end - i)
+            i = end
+            prev_is_boundary = False
+            continue
+        if c == '"':
+            j = i + 1
+            while j < n:
+                if line[j] == "\\":
+                    j += 2
+                    continue
+                if line[j] == '"':
+                    break
+                j += 1
+            end = j + 1 if j < n else n
+            mask[i:end] = [False] * (end - i)
+            i = end
+            prev_is_boundary = False
+            continue
+        if c == "#" and prev_is_boundary:
+            mask[i:] = [False] * (n - i)
+            break
+        prev_is_boundary = c.isspace() or c in ";&|("
+        i += 1
+    return mask
+
+
+def _heredoc_open(body):
+    """First real heredoc opener in a shell line (not a here-string, not inside
+    a quoted span or a comment), else None."""
+    mask = None
+    for m in _HEREDOC_OPEN.finditer(body):
+        if mask is None:
+            mask = _shell_code_mask(body)
+        if mask[m.start()]:
+            return m
+    return None
+
+
+def _heredoc_body_lines(text):
+    """1-based line numbers of shell heredoc BODY lines in a whole file."""
+    out = set()
+    end = None
+    for no, body in enumerate(text.split("\n"), 1):
+        if end is not None:
+            if body.strip() == end:
+                end = None
+            else:
+                out.add(no)
+            continue
+        hd = _heredoc_open(body)
+        if hd:
+            end = hd.group(2)
+    return out
+
+
+def _norm_operand(tok):
+    """$x, ${x} and "$x" compare equal."""
+    tok = tok.strip()
+    if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "\"'":
+        tok = tok[1:-1]
+    return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", tok)
 
 
 def _assertion_shape(raw, strict):
@@ -1798,10 +1879,14 @@ def _assertion_shape(raw, strict):
     br = _BRACKET.match(raw)
     if br:
         inner = _QUOTED.sub("Q", br.group(1))
+        dbl = raw.startswith("[[")
+        if dbl:
+            # Inside [[ ]] < and > are comparison operators at any token
+            # boundary, spaced or not.
+            inner = re.sub(r"\s*([<>])\s*", r" \1 ", inner)
         if strict:
-            # In [[ ]] a spaced < or > is a comparison operator; in [ ] it
-            # is a redirection and stays rejected.
-            probe = re.sub(r"\s[<>]\s", " ", inner) if raw.startswith("[[") else inner
+            # In [ ] a < or > is a redirection and stays rejected.
+            probe = re.sub(r"\s[<>]\s", " ", inner) if dbl else inner
             if re.search(r"[|&;()<>!#`]", probe):
                 return None
         op = _TEST_OP.search(" " + inner + " ")
@@ -1820,7 +1905,15 @@ def _degenerate_added(content, lang_key):
     call = _ASSERT_CALL.match(raw)
     if call:
         args = _ARG.findall(call.group(2))
-        if len(args) >= 2 and args[0] == args[1]:
+        if len(args) >= 2 and _norm_operand(args[0]) == _norm_operand(args[1]):
+            return True
+        return False
+    br = _BRACKET.match(raw)
+    if br:
+        # [ a OP b ] / [[ a OP b ]]: a self-comparison is always true.
+        toks = _ARG.findall(re.sub(r"\s*([<>])\s*", r" \1 ", br.group(1)) if raw.startswith("[[") else br.group(1))
+        if len(toks) == 3 and toks[1] in ("=", "==", "-eq", "-le", "-ge", "=~") \
+                and _norm_operand(toks[0]) == _norm_operand(toks[2]):
             return True
     return False
 
@@ -1839,7 +1932,7 @@ def _operands(content, lang_key):
     return out
 
 
-def _surface_edit_removes_lines(status, info, lang_key=None):
+def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None):
     """True when a changed surface file should be reported as a touch.
 
     BL-0060 v3 rule b: a Modified file is a touch only when the diff deletes or
@@ -1858,7 +1951,13 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
     removed_asserts = []
     added_asserts = []
     inert_added = set()  # added assertion lines that never execute as written
+    head_heredoc = None
+    if lang_key == "shell":
+        if head_text is None:
+            return True  # cannot see the whole file: fail closed
+        head_heredoc = _heredoc_body_lines(head_text)
     for hunk in hunks:
+        new_no = hunk["new_start"]
         heredoc_end = None
         heredoc_opened_added = False
         prev_continues = False
@@ -1868,13 +1967,19 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
                 if lang_key and _surface_assertion_like(line[1:], lang_key):
                     removed_asserts.append(line[1:])
                 continue
+            if line.startswith("\\"):
+                continue
             body = line[1:]
-            in_heredoc = heredoc_end is not None
+            cur_no = new_no
+            new_no += 1
+            in_heredoc = heredoc_end is not None or (
+                head_heredoc is not None and cur_no in head_heredoc
+            )
             if in_heredoc:
                 if body.strip() == heredoc_end:
                     heredoc_end = None
             elif lang_key == "shell":
-                hd = _HEREDOC_OPEN.search(body)
+                hd = _heredoc_open(body)
                 if hd:
                     heredoc_end = hd.group(2)
                     heredoc_opened_added = line.startswith("+")
@@ -1917,15 +2022,18 @@ _SQ_STRING = re.compile(r"'[^']*'")
 _DQ_KEEP = re.compile(r"\$\([^)]*\)|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\d")
 
 
+_LEAD_CALL = re.compile(r"^\s*(?:(?:!|if|then|elif|while|until)\s+|\(\s*)*(?:assert|expect)\w*", re.I)
+
+
 def _subject_tokens(detail):
     """Identifier tokens an assertion exercises. Message/literal text inside
     quotes is ignored; variable references and $(...) bodies are kept."""
+    # Drop only the syntactic call name (the first command word of the
+    # assertion), never an assert/expect-looking name in the arguments.
+    detail = _LEAD_CALL.sub("", detail, count=1)
     text = _SQ_STRING.sub(" ", detail)
     text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
-    return {
-        t for t in _IDENT_TOKEN.findall(text)
-        if not (t.lower().startswith(("assert", "expect")))
-    }
+    return set(_IDENT_TOKEN.findall(text))
 
 
 # Identifier-like tokens (>= 4 chars) used by the rule-2 identifier exemption.
@@ -2357,7 +2465,12 @@ def main():
         if (
             matches_patterns(new_path, surface_path_regexes)
             and not status.startswith("A")
-            and _surface_edit_removes_lines(status, files_diff.get(new_path), get_lang_key(new_path))
+            and _surface_edit_removes_lines(
+                status,
+                files_diff.get(new_path),
+                get_lang_key(new_path),
+                read_blob(new_path, head_ref, repo_dir),
+            )
         ):
             if new_path not in surface_touches:
                 surface_touches.append(new_path)

@@ -1,0 +1,3 @@
+VERDICT: FIX-THEN-SHIP
+FINDINGS:
+🟠 [F1] MUST-FIX the retry loop in lib/retry.js has no cap, so a persistent failure spins forever; cap it at one retry

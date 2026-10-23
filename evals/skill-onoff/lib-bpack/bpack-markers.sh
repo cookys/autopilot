@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# lib-bpack/bpack-markers.sh — bpack markers. ONOFF_LIB_OVERRIDE points at this directory.
+# A marker is true only from a Bash tool_use in the transcript, or from a real file in the cell
+# (judged by the real normalizer). The agent's own prose never counts.
+# lib-bpack/dcard-markers.sh is a byte copy of lib/dcard-markers.sh: tasks/dcard-owner-decision/markers.sh
+# loads dcard-markers.sh from ONOFF_LIB, and the bpack runner points ONOFF_LIB here.
+# Requires for the tree marker: TRANSCRIPT, QUERY. The revoked markers read review.txt in the cell repo (cwd).
+set -u
+
+_bpack_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+. "$_bpack_here/../lib-gdorm/gdorm-markers.sh"   # gdorm_bash_hit: execution, not a read
+
+bpack_emit() { echo "marker_$1=$([ "$2" = true ] && echo true || echo false)"; }
+
+bpack_tree_markers() {
+  local hit=false
+  if gdorm_bash_hit 'dispatch-tree.js'; then hit=true; fi
+  bpack_emit t_tree_run "$hit"
+}
+
+# review.txt: finding lines follow a "FINDINGS:" line. b_revoked_prefix: the line for F1 has a claim that
+# starts exactly with REVOKED: (same line grammar as src/engine/product-review-normalizer.js).
+# b_normalizes: the real normalizer turns the finding lines into status "normalized".
+bpack_revoked_markers() {
+  local normalizer="$_bpack_here/../../../src/engine/product-review-normalizer.js"
+  local out
+  out="$(node - "review.txt" "$normalizer" << 'JS'
+const fs = require('fs');
+const [file, normalizerPath] = process.argv.slice(2);
+let text;
+try { text = fs.readFileSync(file, 'utf8'); } catch { console.log('false false'); process.exit(0); }
+const lines = text.split(/\r?\n/);
+const at = lines.findIndex((l) => /^FINDINGS:/.test(l.trim()));
+if (at < 0) { console.log('false false'); process.exit(0); }
+const first = lines[at].trim().replace(/^FINDINGS:\s*/, '');
+const body = [];
+if (first) body.push(first);
+for (const l of lines.slice(at + 1)) {
+  if (/^NO-FINDING-PROOF:/.test(l.trim()) || /^VERDICT:/.test(l.trim())) break;
+  if (l.trim()) body.push(l.trim());
+}
+const LINE = /^(?:[-*]\s+)?(?:(🔴|🟠|🟡|🔵)(?:\s+(Critical|Major|Minor|Suggestion))?|(Critical|Major|Minor|Suggestion))\s+\[([A-Za-z0-9._:-]{1,128})\]\s+(.+)$/i;
+let prefix = false;
+for (const l of body) {
+  const m = l.match(LINE);
+  if (m && m[4] === 'F1' && /^REVOKED:/.test(m[5].trim())) prefix = true;
+}
+let normalizes = false;
+try {
+  const { normalizeProductReviewFindings } = require(normalizerPath);
+  normalizes = normalizeProductReviewFindings(body.join('\n')).status === 'normalized';
+} catch { normalizes = false; }
+console.log(`${prefix} ${normalizes}`);
+JS
+)" || out="false false"
+  bpack_emit b_revoked_prefix "$([ "${out%% *}" = true ] && echo true || echo false)"
+  bpack_emit b_normalizes "$([ "${out##* }" = true ] && echo true || echo false)"
+}

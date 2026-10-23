@@ -1065,7 +1065,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-21
 - **Origin**: self
-- **Problem**: 當天審查留下的小修已大半修完。當天審查留下的小項多已修完，剩下幾組可等待的小項，以及凍結在評測檔裡的三項成本欄位問題。
+- **Problem**: 當天審查留下的小項多已修完，剩下幾組可等待的小項，以及凍結在評測檔裡的三項成本欄位問題。
 - **Impact**: 凍結檔內的成本欄位問題要等下一個新評測列才能修。
 - **Trigger**: the deferred review items from 2026-10-21 can be picked up now
 - **Trigger-Type**: ready
@@ -1152,8 +1152,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 座位 schema 現在允許引擎與模型名稱含斜線和句點（oqseat 單元），所以含上層目錄的名稱也能通過檢查；所有用這些名稱組檔案路徑的使用端都需要逐一檢查。
 - **Impact**: 若某處直接把 id 拼進檔案路徑，可能寫到預期目錄之外。
-- **Trigger**: the oqseat lane merges to develop
-- **Trigger-Type**: event
+- **Trigger**: the audit can be picked up now; no merge needed
+- **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 2026-10-24 oqseat review (lane/oqseat, not yet on develop)
 - **Pointer**: docs/backlog/seat-schema-slash-dot-path-consumers.md

@@ -3658,28 +3658,31 @@ _worker_has_busy_descendant() {
     }'
 }
 
-# Commit-quiescence: while the runner lives, poll cheaply; once HEAD != base AND the
+# Commit-quiescence: while the runner lives, poll cheaply; once HEAD is a strict descendant of base AND the
 # worktree is clean AND the agent CLI has had no descendant process AND the log has not
-# grown, all for COMMIT_QUIET_SECS, TERM the worker group (KILL after a short grace).
+# grown, all continuously for COMMIT_QUIET_SECS (clock starts when all hold), TERM the worker group (KILL after a short grace).
 # A running tool or test (a descendant) resets the clock: quiet output alone is not done.
 # Sleeps in 0.2s steps so a worker that exits (or is timed out) returns at once.
 _supervise_commit_quiet() {
   local rp="$1" poll="${HETERO_COMMIT_QUIET_POLL:-10}"
-  local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=0 head n
+  local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=-1 head n
   [ "$poll" -gt "$quiet" ] && poll="$quiet"
   [ "$poll" -ge 1 ] || poll=1
   while kill -0 "$rp" 2>/dev/null; do
     n=0
     while [ "$n" -lt $((poll * 5)) ] && kill -0 "$rp" 2>/dev/null; do sleep 0.2; n=$((n + 1)); done
     kill -0 "$rp" 2>/dev/null || return 0
+    # Every tick re-checks ALL eligibility conditions; any failure restarts the clock, which
+    # only runs from the first tick where everything holds (never from earlier quiet).
     size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
-    if [ "$size" != "$last_size" ]; then last_size="$size"; since=0; continue; fi
-    if _worker_has_busy_descendant "$rp"; then since=0; continue; fi
-    since=$((since + poll))
-    [ "$since" -ge "$quiet" ] || continue
+    if [ "$size" != "$last_size" ]; then last_size="$size"; since=-1; continue; fi
+    if _worker_has_busy_descendant "$rp"; then since=-1; continue; fi
     head="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
-    [ -n "$head" ] && [ "$head" != "$BASE_SHA" ] || continue
-    [ -z "$(git -C "$WT" status --porcelain 2>/dev/null)" ] || continue
+    if [ -z "$head" ] || [ "$head" = "$BASE_SHA" ] \
+       || ! git -C "$WT" merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
+       || [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then since=-1; continue; fi
+    [ "$since" -ge 0 ] || since=$SECONDS
+    [ $((SECONDS - since)) -ge "$quiet" ] || continue
     COMMIT_QUIET_ENDED=1
     _watchdog_signal_worker TERM || true
     local i=0

@@ -51,6 +51,8 @@ case "$HETERO_TEST_MODE" in
   commit_busy) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; sleep 12; echo second > second.txt; git add second.txt; git -c user.email=t@t -c user.name=t commit -q -m second ;;
   commit_chatter) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; while :; do echo tick; sleep 1; done ;;
   dirty_sleep) echo ok > ok.txt; sleep 120 ;;
+  late_commit) trap 'date +%s > "$HETERO_TEST_PIDFILE.term"; exit 0' TERM; read -t 12 _ <> "$HETERO_TEST_PIDFILE.fifo"; echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; date +%s > "$HETERO_TEST_PIDFILE.commit"; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
+  orphan_sleep) git checkout -q --orphan other; git rm -rfq . 2>/dev/null; git -c user.email=t@t -c user.name=t commit -q --allow-empty -m orphan; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
 esac
 exit 0
 BODY
@@ -97,6 +99,23 @@ assert_eq "$(json_get "$J" status)" committed "detached status"
 assert_eq "$(json_get "$J" note)" ended_after_commit_quiet "detached note"
 assert_eq "$(json_get "$J" timed_out)" false "detached timed_out"
 no_child commit_sleep
+
+# Quiet long BEFORE the commit must not pre-load the counter: the worker is only ended after
+# N full seconds of eligibility (commit landed, tree clean) have elapsed (regression e7ba248c).
+rm -f "$TEST_TMP/late_commit.pid.commit" "$TEST_TMP/late_commit.pid.term"
+HETERO_COMMIT_QUIET_POLL=1 run_case late_commit --commit-quiet-secs 5 --timeout 60s
+J="$(last_json "$OUT")"
+assert_eq "$(json_get "$J" note)" ended_after_commit_quiet "late commit note"
+CT="$(cat "$TEST_TMP/late_commit.pid.commit" 2>/dev/null || echo 0)"
+TT="$(cat "$TEST_TMP/late_commit.pid.term" 2>/dev/null || echo 0)"
+[ "$CT" -gt 0 ] && [ "$TT" -gt 0 ] || fail "late_commit: missing commit/term stamps ($CT/$TT)"
+[ $((TT - CT)) -ge 5 ] || fail "late_commit ended $((TT - CT))s after commit, want >= 5"
+
+# An orphan HEAD (not a descendant of BASE) is not an advance (regression efc6bb63).
+run_case orphan_sleep --commit-quiet-secs 3 --timeout 12s
+J="$(last_json "$OUT")"
+assert_eq "$(json_get "$J" note)" "" "orphan no note"
+assert_eq "$(json_get "$J" timed_out)" true "orphan times out"
 
 run_case commit_chatter --commit-quiet-secs 3 --timeout 12s
 J="$(last_json "$OUT")"

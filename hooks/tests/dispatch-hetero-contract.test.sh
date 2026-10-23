@@ -345,6 +345,12 @@ assert_eq "$rc" 2 "R3d: pin removed → precondition_failed"
 assert_contains "$out" 'resolved-live: no standing pin for implementer' "R3d: without a pin the document is not handed over"
 assert_contains "$out" 'no qualified scorecard row' "R3d: refusal names the missing evidence (tail: $(printf '%s' "$out" | grep -o '"error": .*' | cut -c1-300 | head -1))"
 assert_file_absent "$RUN_MARKER_PATH"
+# BL-0249: the refusal names the actual seat and host and the next step.
+# RED at 021c9bba6: R3d-seat/R3d-host/R3d-next FAIL -- message was the generic
+# "for configured role/engine/runner (...)" with no role=/engine=/runner=/host.
+assert_contains "$out" 'no qualified scorecard row for role=implementer engine=gpt-5.3-codex-spark runner=codex' "R3d-seat: refusal names the actual role/engine/runner"
+assert_contains "$out" "on host $(hostname)" "R3d-host: refusal names this host"
+assert_contains "$out" 'run engine-qualify for this seat on this host' "R3d-next: refusal says what to do next"
 # AUTOPILOT_RESOLVED_LIVE=off restores the pre-wiring bytes: the pin exists but is not consulted
 ENGINE_CAPABILITY_DIR="$PIN_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" pin-seat \
   --engine gpt-5.3-codex-spark --runner codex --role implementer --effort high --endpoint @none \

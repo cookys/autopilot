@@ -1555,7 +1555,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
               expires: override.expires,
             };
           } else {
-            reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+            reasons.push(`engine: no qualified scorecard row for role=${storeRole} engine=${resolvedEngine.model} runner=${resolvedEngine.runner} on host ${os.hostname()} (run engine-qualify for this seat on this host, or pass a per-invocation --qualification-override, the only evidence-free path)`);
           }
         }
       }

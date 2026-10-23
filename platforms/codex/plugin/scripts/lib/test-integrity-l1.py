@@ -1591,6 +1591,7 @@ _TAUTOLOGY = {
         r"|\bassert\.equal\s*\(\s*true\s*,\s*true\s*\)"
     ),
     "shell": re.compile(
+        r"\[\[?\s*(?!Q\s)(\S+)\s+(?:=|==|-eq)\s+\1\s+\]?\]|&&\s*true\s*(?:;|\}|$)|"
         r"^\s*(?:if|elif)\s+!\s+(?:true|:)\s*(?:;|$)|"
         r"\[\s*1\s*=\s*1\s*\]|\[\s*\"a\"\s*=\s*\"a\"\s*\]|\[\s*'a'\s*=\s*'a'\s*\]|(?:^|[;&|])\s*true\s*\|\|\s*\(?\s*fail\b"
     ),
@@ -1736,6 +1737,53 @@ def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_path
     return False
 
 
+_OPERAND_STOP = frozenset(
+    "if elif then else fi do done not and or true false test eq ne lt gt le ge "
+    "echo exit return fail assert expect should self def".split()
+)
+_OPERAND_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[0-9]+")
+
+
+_SHELL_BARE_TEST = re.compile(r"\[\[?\s.+\s\]\]?")
+_RAW_TAUTOLOGY = re.compile(
+    r"\[\[?\s*(\S+)\s+(?:=|==|-eq)\s+\1\s+\]\]?|&&\s*true\s*(?:;|\}|$)|\[\s*1\s+-eq\s+1\s*\]"
+)
+
+
+def _raw_code(content, lang_key):
+    """The line with comments dropped but string literals kept."""
+    return content.strip() if _code_without_comment(content, lang_key) else ""
+
+
+def _surface_assertion_like(content, lang_key):
+    """Non-tautological assertion-class line, or (shell) a bare [ ... ] /
+    [[ ... ]] condition. Used only by the surface-touch net-assertion rule."""
+    raw = _raw_code(content, lang_key)
+    if not raw:
+        return False
+    if lang_key == "shell" and _RAW_TAUTOLOGY.search(raw):
+        return False
+    if is_assertion_class_line(content, lang_key):
+        return True
+    return lang_key == "shell" and bool(_SHELL_BARE_TEST.search(raw))
+
+
+def _norm_line(content, lang_key):
+    return re.sub(r"\s+", " ", _raw_code(content, lang_key))
+
+
+def _operands(content, lang_key):
+    """Subject operands of an assertion line: identifiers/numbers minus the
+    assertion vocabulary (function names such as assert_eq, test keywords)."""
+    out = set()
+    for tok in _OPERAND_TOKEN.findall(_raw_code(content, lang_key)):
+        low = tok.lower()
+        if low in _OPERAND_STOP or low == "expect" or low.startswith("assert"):
+            continue
+        out.add(tok)
+    return out
+
+
 def _surface_edit_removes_lines(status, info, lang_key=None):
     """True when a changed surface file should be reported as a touch.
 
@@ -1752,20 +1800,45 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
     if not hunks:
         return True
     removed = 0
-    removed_asserts = 0
-    added_asserts = 0
+    removed_asserts = []
+    added_asserts = []
     for hunk in hunks:
         for line in hunk["lines"]:
             if line.startswith("-"):
                 removed += 1
-                if lang_key and is_assertion_class_line(line[1:], lang_key):
-                    removed_asserts += 1
+                if lang_key and _surface_assertion_like(line[1:], lang_key):
+                    removed_asserts.append(line[1:])
             elif line.startswith("+"):
-                if lang_key and is_assertion_class_line(line[1:], lang_key):
-                    added_asserts += 1
+                if lang_key and _surface_assertion_like(line[1:], lang_key):
+                    added_asserts.append(line[1:])
     if not lang_key:
         return removed > 0
-    return removed_asserts - added_asserts > 0
+    # Each removed assertion needs its own added equivalent on the same subject.
+    pool = [(_norm_line(a, lang_key), _operands(a, lang_key)) for a in added_asserts]
+    for gone in removed_asserts:
+        norm, ops = _norm_line(gone, lang_key), _operands(gone, lang_key)
+        match = None
+        for idx, (a_norm, a_ops) in enumerate(pool):
+            if a_norm == norm or (ops and ops <= a_ops):
+                match = idx
+                break
+        if match is None:
+            return True
+        pool.pop(match)
+    return False
+
+
+_DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+_SQ_STRING = re.compile(r"'[^']*'")
+_DQ_KEEP = re.compile(r"\$\([^)]*\)|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?")
+
+
+def _subject_tokens(detail):
+    """Identifier tokens an assertion exercises. Message/literal text inside
+    quotes is ignored; variable references and $(...) bodies are kept."""
+    text = _SQ_STRING.sub(" ", detail)
+    text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
+    return set(_IDENT_TOKEN.findall(text))
 
 
 # Identifier-like tokens (>= 4 chars) used by the rule-2 identifier exemption.
@@ -2254,24 +2327,16 @@ def main():
         for _hunk in _info.get("hunks", []):
             for _ln in _hunk["lines"]:
                 if _ln.startswith("-"):
-                    product_removed_tokens.update(_IDENT_TOKEN.findall(_ln[1:]))
-    # Lines this range itself added to product files (e.g. a removed-key guard
-    # that names the deleted identifier) are tombstones, not live uses.
-    product_added_lines = {}
-    for _p, _info in files_diff.items():
-        if matches_patterns(_p, test_path_regexes):
-            continue
-        for _hunk in _info.get("hunks", []):
-            for _ln in _hunk["lines"]:
-                if _ln.startswith("+"):
-                    product_added_lines.setdefault(_p, set()).add(_ln[1:].strip())
+                    _live = _code_without_comment(_ln[1:], get_lang_key(_p))
+                    product_removed_tokens.update(_IDENT_TOKEN.findall(_live))
     _absent_cache = {}
 
     def _absent_at_head(token):
         if token not in _absent_cache:
             # Absent from live code at the head: hits in test files (e.g. an
-            # assert_not_contains tombstone), prose (.md/.txt), docs/evals
-            # history and comment-only lines do not keep the identifier alive.
+            # assert_not_contains tombstone), prose (.md/.txt) and docs/evals
+            # history do not keep the identifier alive; any product line at the
+            # head (code, comment, or a changed line) does.
             res = run_command(
                 ["git", "grep", "-nwF", "-e", token, head_ref, "--"], repo_dir, check=False
             )
@@ -2291,11 +2356,6 @@ def main():
                         continue
                     if hit_path.endswith((".md", ".txt")) or hit_path.startswith(("docs/", "evals/")):
                         continue
-                    if content.strip() in product_added_lines.get(hit_path, ()):
-                        continue
-                    hit_lang = get_lang_key(hit_path)
-                    if hit_lang and not _code_without_comment(content, hit_lang):
-                        continue
                     live = True
                     break
                 _absent_cache[token] = not live
@@ -2304,7 +2364,7 @@ def main():
         return _absent_cache[token]
 
     def _subject_identifier_removed(detail):
-        for token in set(_IDENT_TOKEN.findall(detail)):
+        for token in _subject_tokens(detail):
             if token in product_removed_tokens and _absent_at_head(token):
                 return True
         return False

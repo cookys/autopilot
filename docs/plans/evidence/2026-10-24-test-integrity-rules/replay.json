@@ -1,43 +1,67 @@
 {
- "ranges_scanned": 60,
- "ranges_with_violations": 2,
- "errors": [],
- "records": [
-  {
-   "range": "6fcfed4b19dc9d9fe955665d42d669ff112e8670^1..6fcfed4b19dc9d9fe955665d42d669ff112e8670",
-   "merge_sha": "6fcfed4b19dc9d9fe955665d42d669ff112e8670",
-   "merge_subject": "",
-   "kind": "surface_touch",
-   "file": ".github/workflows/test.yml",
-   "line": null,
-   "detail": ".github/workflows/test.yml"
-  },
-  {
-   "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_subject": "",
-   "kind": "deleted_line",
-   "file": "hooks/tests/resolve-worktree-teardown.test.sh",
-   "line": 52,
-   "detail": "assert_eq \"$age\" \"0\" \"default age should be 0\""
-  },
-  {
-   "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_subject": "",
-   "kind": "deleted_line",
-   "file": "hooks/tests/resolve-worktree-teardown.test.sh",
-   "line": 95,
-   "detail": "assert_eq \"5\" \"$age\" \"overridden age should be 5\""
-  },
-  {
-   "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
-   "merge_subject": "",
-   "kind": "deleted_line",
-   "file": "hooks/tests/resolve-worktree-teardown.test.sh",
-   "line": 105,
-   "detail": "assert_eq \"$parsed\" \"0\" \"node should parse JSON and extract age\""
-  }
- ]
+  "ranges_scanned": 60,
+  "records": [
+    {
+      "merge_sha": "6fcfed4b19dc9d9fe955665d42d669ff112e8670",
+      "kind": "surface_touch",
+      "file": ".github/workflows/test.yml"
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 39,
+      "detail": "    assert_contains \"$output\" '\"stale_reaper_age_days\": 0' \"default age should be 0\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 40,
+      "detail": "    assert_contains \"$output\" '\"reaper_scope\": \"marker-only\"' \"default scope should be marker-only\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 52,
+      "detail": "    assert_eq \"$age\" \"0\" \"default age should be 0\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 73,
+      "detail": "    assert_contains \"$output\" '\"stale_reaper_age_days\": 3' \"should override age\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 85,
+      "detail": "    assert_contains \"$output\" '\"stale_reaper_age_days\": 0' \"garbage age should fall back to 0\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 95,
+      "detail": "    assert_eq \"5\" \"$age\" \"overridden age should be 5\""
+    },
+    {
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "layer": "L0",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "kind": "deleted_line",
+      "line": 105,
+      "detail": "    assert_eq \"$parsed\" \"0\" \"node should parse JSON and extract age\""
+    }
+  ],
+  "errors": []
 }

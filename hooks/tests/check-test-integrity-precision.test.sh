@@ -5,7 +5,8 @@
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
 # RED at c65144649: N7 N8 F5 failed on the unmodified base.
 # RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
-# RED at <base of tirules>: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
+# RED at da158d42d: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
+# RED at 566272d61 (tirules round 1 head): N14 N15 N16 N17 N18 failed (rules 1-2 too loose: tautology rewrite, unrelated added assertion, comment-only/changed-line/message-token exemptions).
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 . "$(dirname "$0")/lib.sh"
 
@@ -324,5 +325,68 @@ printf 'assert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/co
 commit_all "$repo" "drop assertion, key stays"
 run_case "$repo"
 if has_kind deleted_line; then report N13 1; else report N13 0; fi
+
+# surface-file fixture builder
+mk_surface() { # mk_surface <old> <new>
+  local r; r="$(new_repo)"
+  printf '## Mode\nmode: block\n## Integrity Surface Paths\n- "harness/**"\n' > "$r/.claude/test-integrity-config.md"
+  mkdir -p "$r/harness"
+  printf '%s\n' "$1" > "$r/harness/lib.sh"
+  commit_all "$r" "base"
+  printf '%s\n' "$2" > "$r/harness/lib.sh"
+  commit_all "$r" "edit"
+  echo "$r"
+}
+
+# ── N14 rule 1: assertion rewritten into an always-true form ───────────────
+repo="$(mk_surface 'check() { [ "$1" = "$2" ]; }' 'check() { [ 1 -eq 1 ]; }')"
+run_case "$repo"
+if has_kind surface_touch; then report N14 1; else report N14 0; fi
+
+# ── N15 rule 1: unrelated added assertion must not offset a removed one ────
+repo="$(mk_surface 'assert_eq "$actual" "$expected"' 'assert_eq "$other" "unrelated"')"
+run_case "$repo"
+if has_kind surface_touch; then report N15 1; else report N15 0; fi
+
+# ── N15b rule 1: self-comparison / && true tautologies are reported ────────
+repo="$(mk_surface 'check() { [ "$1" = "$2" ]; }' 'check() { [ "$1" = "$2" ] && true; }')"
+run_case "$repo"
+if has_kind surface_touch; then report N15b 1; else report N15b 0; fi
+
+# ── N16 rule 2: key removed from code but left in a comment ────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n# legacy_widget_key\n' > "$repo/scripts/foo.sh"
+printf 'test_legacy_widget_key() {\n assert_eq "$legacy_widget_key" "1"\n}\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf '# legacy_widget_key\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "drop key, comment stays"
+run_case "$repo"
+if has_kind deleted_line; then report N16 1; else report N16 0; fi
+
+# ── N17 rule 2: changed product line still uses the key (key=1 -> key=2) ───
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$legacy_widget_key" "1"\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=2\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "change key value, drop assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N17 1; else report N17 0; fi
+
+# ── N18 rule 2: only a message word matches a removed comment ──────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n# obsolete_message\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$legacy_widget_key" "1" "obsolete_message"\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=1\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "drop comment and assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N18 1; else report N18 0; fi
 
 finalize_test

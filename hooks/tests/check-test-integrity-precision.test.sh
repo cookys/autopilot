@@ -415,4 +415,29 @@ repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$years" "0"')"
 run_case "$repo"
 if has_kind surface_touch; then report N21 1; else report N21 0; fi
 
+# ── N22 (c) if-then-fi: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'if assert_eq "$age" "0"; then :; fi')"
+run_case "$repo"
+if has_kind surface_touch; then report N22 1; else report N22 0; fi
+
+# ── N23 (f) || true # ignored: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" || true # ignored')"
+run_case "$repo"
+if has_kind surface_touch; then report N23 1; else report N23 0; fi
+
+# ── N24 && :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" && :')"
+run_case "$repo"
+if has_kind surface_touch; then report N24 1; else report N24 0; fi
+
+# ── N25 subshell || :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' '( assert_eq "$age" "0" ) || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N25 1; else report N25 0; fi
+
+# ── N26 redirect || :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" > /dev/null || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N26 1; else report N26 0; fi
+
 finalize_test

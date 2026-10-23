@@ -1772,24 +1772,47 @@ def _norm_line(content, lang_key):
     return re.sub(r"\s+", " ", _raw_code(content, lang_key))
 
 
-_MASK_TAIL = re.compile(
-    r"(?:\|\||;)\s*(?:true|:|! false|exit 0|return 0)\s*;?\s*$"
-)
-_ASSERT_CALL = re.compile(r"^\s*(?:assert\w*|expect\w*)\s+(.*)$", re.I)
+_ASSERT_CALL = re.compile(r"^\s*((?:assert\w*|expect\w*))\s+(.*)$", re.I)
 _ARG = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|]+')
+_STRICT_ARGS = re.compile(
+    r'(?:\s+(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|()<>!#"\'`]+))*'
+)
+_BRACKET = re.compile(r"^\[\[?\s(.+)\s\]\]?$")
+_TEST_OP = re.compile(r"\s(-[a-z]{2}|==?|!=|=~|<|>)\s")
+_QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
+
+
+def _assertion_shape(raw, strict):
+    """(kind, key) of a bare assertion statement, else None. kind/key is the
+    assertion function, or the test operator of a [ a OP b ] form. strict
+    additionally demands NOTHING else on the line (no ||, &&, ;, |, !, if,
+    subshell, redirection, trailing comment)."""
+    call = _ASSERT_CALL.match(raw)
+    if call:
+        if strict and not _STRICT_ARGS.fullmatch(" " + call.group(2)):
+            return None
+        return ("fn", call.group(1).lower())
+    br = _BRACKET.match(raw)
+    if br:
+        inner = _QUOTED.sub("Q", br.group(1))
+        if strict and re.search(r"[|&;()<>!#`]", inner):
+            return None
+        op = _TEST_OP.search(" " + inner + " ")
+        return ("op", op.group(1)) if op else None
+    return None
 
 
 def _degenerate_added(content, lang_key):
-    """An added assertion that cannot fail: a failure-masking tail, or a
-    self-comparison of its first two arguments. Never an equivalent."""
+    """An added assertion that is not a strict bare assertion statement, or is
+    a self-comparison of its first two arguments. Never an equivalent."""
     raw = _raw_code(content, lang_key)
     if lang_key != "shell" or not raw:
         return False
-    if _MASK_TAIL.search(raw):
+    if _assertion_shape(raw, True) is None:
         return True
     call = _ASSERT_CALL.match(raw)
     if call:
-        args = _ARG.findall(call.group(1))
+        args = _ARG.findall(call.group(2))
         if len(args) >= 2 and args[0] == args[1]:
             return True
     return False
@@ -1840,14 +1863,17 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
         return removed > 0
     # Each removed assertion needs its own added equivalent on the same subject.
     pool = [
-        (_norm_line(a, lang_key), _operands(a, lang_key))
+        (_norm_line(a, lang_key), _operands(a, lang_key), _assertion_shape(_raw_code(a, lang_key), True))
         for a in added_asserts
         if not _degenerate_added(a, lang_key)
     ]
     for gone in removed_asserts:
         norm, ops = _norm_line(gone, lang_key), _operands(gone, lang_key)
         match = None
-        for idx, (a_norm, a_ops) in enumerate(pool):
+        gone_shape = _assertion_shape(_raw_code(gone, lang_key), False)
+        for idx, (a_norm, a_ops, a_shape) in enumerate(pool):
+            if lang_key == "shell" and a_shape != gone_shape:
+                continue
             if a_norm == norm or (ops and ops <= a_ops):
                 match = idx
                 break

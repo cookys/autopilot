@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0286 -->
+<!-- next-id: BL-0290 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -699,19 +699,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
 - **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
 
-### Managed rail: a reviewer that withdraws a MUST-FIX and reuses the finding id is no_verdict
-- **Id**: BL-0226
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: self
-- **Problem**: 審查者撤回必須修復並沿用同一編號時，現在只有發現文字以固定前綴開頭才算撤回。沒有任何審查者提示教這個前綴，原案例的寫法仍被判為沒有裁決。
-- **Impact**: 審查者照舊寫法撤回時，活動仍停在等待，修復被拖延。
-- **Trigger**: next guidance eval allowed to edit the in-rail reviewer prompt, or a rail review that withdraws a finding without the prefix parks as no_verdict
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-16 MiniMax r1; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-revoked-finding-reused-id.md
-- **Context**: Code half merged (reusedid c965c6d98): REVOKED: prefix drops the claim before the duplicate-id check. Prefix is taught nowhere; see sidecar.
 
 ### Roster qualification: Explorer formal suite
 - **Id**: BL-0228
@@ -872,14 +859,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: 畫面上可見派工計畫只剩兩件事。一是 P2 hook 延遲已量完，依預先登記的規則要開 guard-port 計畫，計畫還沒寫。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
+- **Problem**: 畫面上可見派工計畫只剩兩件事。一是 P2 hook 延遲已量完，guard-port 計畫已寫好，下一步是計畫審查，再實作。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
 - **Impact**: 不寫 guard-port 計畫，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
-- **Trigger**: P2: the guard-port plan is written (next step); P4 progress.json and work-round projection: radar asks for it
+- **Trigger**: P2: plan review of docs/plans/2026-10-23-guard-port.md, then implementation (next step); P4 progress.json and work-round projection: radar asks for it
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131): open_guard_port_plan, 7 PostToolUse spawns per call, call p95 197 ms; host load about 40. Evidence: docs/plans/evidence/2026-10-23-hook-latency-p2/.
+- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131), evidence docs/plans/evidence/2026-10-23-hook-latency-p2/. Next: plan review of docs/plans/2026-10-23-guard-port.md (merge guardport 5749e8cfd), then implement; P4 stays parked.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242
@@ -986,7 +973,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PEER-REPORTED codepower 2026-10-20
 - **Pointer**: docs/backlog/agy-142-headless-envelope-no-exit.md
-- **Context**: Probably affects the agy review seat, which waits for process exit. Suggested forced_exit after a closed SUCCESS envelope. Detail is in the Pointer.
+- **Context**: Probably affects the agy review seat. 2026-10-23: agy-served claude-sonnet-5-5-low hands parked on their own background tasks until the dispatch wall timeout; see sidecar.
 
 ### t14 batch driver does not re-run infra failures and cannot see mid-run OAuth expiry
 - **Id**: BL-0254
@@ -1078,14 +1065,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-21
 - **Origin**: self
-- **Problem**: 當天審查留下的小修已大半修完。剩下已知邊界：以補丁編號判斷整合時不分辨空白、被刪的挑選提交仍算已整合；另有可等待的幾組小項，和凍結在評測檔裡的三項成本欄位問題。
-- **Impact**: 只改縮排的分支會被當成已整合，凍結檔內的成本欄位問題要等下一個新評測列才能修。
+- **Problem**: 當天審查留下的小修已大半修完。剩下已知邊界：已知邊界之外另有可等待的幾組小項，和凍結在評測檔裡的三項成本欄位問題。
+- **Impact**: 凍結檔內的成本欄位問題要等下一個新評測列才能修。
 - **Trigger**: the deferred review items from 2026-10-21 can be picked up now
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Fixed by fixa, bl273, runnerk, fixb, fixc, bl276r (see sidecar). Left: patch-id boundaries, tokmech, dnone, deval, three dcard-v3 frozen items.
+- **Context**: Fixed by fixa, bl273, runnerk, fixb, fixc, bl276r, pidbound. Left: tokmech (fix in review, unit tokrace), dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277
@@ -1099,21 +1086,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: 2026-10-21 discoverability audit
 - **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
-- **Context**: Detail in remaining-discoverability-entry-gaps.md. Roundtable stays on BL-0216 and task-card on BL-0243. 2026-10-23 owner decision d-7a800dcb: the harness report warning stays off SessionStart.
+- **Context**: Detail in remaining-discoverability-entry-gaps.md. Dispatch-tree sentence withdrawn 2026-10-23: neither pilot arm opened depth0-control-loop.md; needs a SKILL.md-level change with its own eval.
 
-### Two text defects in the shipped decision-card guidance are frozen by eval parity
-- **Id**: BL-0278
-- **Status**: open
-- **Since**: 2026-10-22
-- **Origin**: self
-- **Problem**: 剛出貨的決策卡指引發現兩處用詞缺陷：一處把表格切開，一處標題與內文互相矛盾。
-- **Impact**: 這段文字在與新評測一起修訂之前，會一直是錯的或有誤導。
-- **Trigger**: the next revision of level-front-door.md or multi-agent-portability.md, which needs its own eval row
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: dship review 2026-10-22
-- **Pointer**: docs/backlog/decision-card-text-defects-frozen-by-eval.md
-- **Context**: (a) level-front-door.md: card paragraph splits the Sugar table between /l3 and /l4 rows. (b) multi-agent-portability.md: heading says no conflict, body says owner-question-guard returns a Stop block. Any edit needs a new pack, arm and eval.
 
 ### Uncalled-script follow-ups that touch guidance need eval
 - **Id**: BL-0279
@@ -1129,3 +1103,44 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
 - **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
 
+### dispatch-review.sh prints a printf option error on the cc-shim path
+- **Id**: BL-0287
+- **Status**: open
+- **Since**: 2026-10-23
+- **Origin**: self
+- **Problem**: The review script prints a harmless option error on stderr on one shim path, around line 504.
+- **Impact**: Cosmetic; the review completes.
+- **Trigger**: the stderr noise is worth removing
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: bldone7 review follow-up, 2026-10-23
+- **Pointer**: docs/backlog/dispatch-review-printf-option-error.md
+- **Context**: Message "printf: --: invalid option" on the cc-shim path; cosmetic, the review completes. Likely a printf format starting with dashes.
+
+### skill-onoff README bpack section omits that --dry-run needs --results
+- **Id**: BL-0288
+- **Status**: open
+- **Since**: 2026-10-23
+- **Origin**: self
+- **Problem**: The bpack section of the eval README does not say that a dry run also needs a results file argument.
+- **Impact**: A reader following the README hits an argument error on a dry run.
+- **Trigger**: the README can be edited
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: review finding 6bdaed45 (deferred), 2026-10-23
+- **Pointer**: docs/backlog/skill-onoff-readme-dry-run-results.md
+- **Context**: run-bpack-campaign.js --dry-run also needs --results <file> (review finding 6bdaed45, deferred). Docs-only fix.
+
+### dispatch-hetero test suites leave detached child processes behind
+- **Id**: BL-0289
+- **Status**: open
+- **Since**: 2026-10-23
+- **Origin**: self
+- **Problem**: Two detached helper processes from a dispatch-hetero test run were still running nine days later on this host.
+- **Impact**: A suite leaves detached children behind and wastes host resources.
+- **Trigger**: next time the dispatch-hetero suites are touched
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: observed on this host, 2026-10-23
+- **Pointer**: docs/backlog/dispatch-hetero-suite-detached-children.md
+- **Context**: Processes were bash -c IN_DETACHED_CHILD=1 ... detached_main from /tmp/autopilot-test-dispatch-hetero-*. Add cleanup in the suite.

@@ -927,7 +927,9 @@ nv_stderr_tail() {
   local raw; raw="$(tail -n 20 -- "$f" 2>/dev/null)"
   if [ "${#raw}" -gt 8000 ]; then
     raw="${raw: -8000}"
-    case "$raw" in *$'\n'*) raw="${raw#*$'\n'}" ;; *) raw="" ;; esac
+    # Drop the partial first line; with no newline the window is inside ONE long line, so keep it
+    # and strip only the leading run a cut could have left of a key (never blank the tail).
+    case "$raw" in *$'\n'*) raw="${raw#*$'\n'}" ;; *) raw="$(printf '%s' "$raw" | LC_ALL=C sed -E 's/^[A-Za-z0-9+\/_-]*//')" ;; esac
   fi
   printf '%s' "$raw" | LC_ALL=C sed -E \
     -e 's/(sk-|sk_|ghp_|gho_|xox[abprs]-|AIza|AKIA)[A-Za-z0-9_-]{8,}/[REDACTED]/g' \

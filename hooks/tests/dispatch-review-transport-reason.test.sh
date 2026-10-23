@@ -2,6 +2,7 @@
 # BL-0246: a codex seat whose transport fails (runner or cleanroom) must leave its reason in the
 # no_verdict emission (exit_code, stage, secret-masked stderr_tail), and the final-panel seat
 # store must persist it. Non-failing / non-transport no_verdict shapes stay unchanged.
+# RED at 18a4ca621 (g2): 3 FAIL of 22 - a final stderr line over 8000 bytes blanks stderr_tail.
 # RED at 2f4157c7c (cut before mask): 4 FAIL of 18 - key fragment survives the 2000-byte cut (x2), token=x expansion gives len 4240 > 2000, schema rejects.
 # RED at f1749e8a6: 8 FAIL (5 passed) - exit_code/stage/stderr_tail absent from runner and cleanroom no_verdict (expected "<undef>", got "3"/"5"),
 #   and store.recordFailure is not a function.
@@ -90,6 +91,41 @@ assert_eq "ok" "$([ "${#TAIL}" -le 2000 ] && echo ok || echo "len ${#TAIL}")" "e
 printf '%s\n' "$OUT" > "$TEST_TMP/long-result.json"
 node "$REPO_ROOT/scripts/validate-json-schema.js" --schema "$REPO_ROOT/schemas/review-result.schema.json" --document "$TEST_TMP/long-result.json" >/dev/null 2>&1
 assert_exit_code "$?" "0" "expanded-mask result validates against review-result schema"
+
+# BL-0246 g2: a final stderr line longer than the 8000-byte work cap must not blank the tail.
+# (a) one 10000-byte line ending in recognisable text keeps that text, <= 2000.
+# (b) when the 8000-byte window starts inside a key, the stranded fragment does not survive.
+STUB4="$TEST_TMP/stub-codex-longline"
+cat > "$STUB4" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+for i in $(seq 1 3330); do printf 'ab ' >&2; done
+printf 'ENDMARK-long-line' >&2
+exit 3
+EOS
+chmod +x "$STUB4"
+OUT="$(AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB4" 2>/dev/null)"
+TAIL="$(field "$OUT" stderr_tail)"
+assert_contains "$TAIL" "ENDMARK-long-line" "single line over 8000 bytes still leaves its ending in stderr_tail"
+assert_eq "ok" "$([ -n "$TAIL" ] && [ "${#TAIL}" -le 2000 ] && echo ok || echo "len ${#TAIL}")" "long-line tail is non-empty and <= 2000"
+KEY='sk-TESTONLYQrstuvwxyzMNOPQRSTUVWXYZ01234'
+STUB5="$TEST_TMP/stub-codex-window-key"
+cat > "$STUB5" <<EOS
+#!/usr/bin/env bash
+cat >/dev/null
+# 1980 filler + 40-char key + 7980 filler = 10000 bytes: the 8000-byte window starts 20 chars into the key.
+for i in \$(seq 1 660); do printf 'ab ' >&2; done
+printf '%s' '$KEY' >&2
+for i in \$(seq 1 2660); do printf 'ab ' >&2; done
+exit 3
+EOS
+chmod +x "$STUB5"
+OUT="$(AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB5" 2>/dev/null)"
+TAIL="$(field "$OUT" stderr_tail)"
+FRAG="${KEY:20}"; LEAK=none
+for ((i=0; i+8<=${#FRAG}; i++)); do case "$TAIL" in *"${FRAG:i:8}"*) LEAK="${FRAG:i:8}";; esac; done
+assert_eq "none" "$LEAK" "no 8-char piece of a window-cut key survives"
+assert_eq "ok" "$([ -n "$TAIL" ] && echo ok || echo empty)" "window-cut key case still leaves a tail"
 
 # store persists the reason, bounded, and keeps result null (never reusable)
 SOUT="$(node - "$REPO_ROOT" "$TEST_TMP/seats" "$SECRET" <<'NODE'

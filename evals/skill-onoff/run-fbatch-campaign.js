@@ -61,7 +61,7 @@ function maxUsd() {
 }
 
 // Whitelist design: any FINDINGS-file token in an arm is a problem unless its whole clause is an approved sentence.
-const FINDINGS_FILE_TOKEN = /(?<![\w.-])[\w.-]*findings[\w.-]*\.(?!(?:js|sh|py|ts)(?![\w-]))[\w-]+|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
+const FINDINGS_FILE_TOKEN = /(?<![\w.-])[\w.-]*findings[\w.-]*\.[\w-]+|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
 const norm = (t) => t.replace(/\s+/g, ' ').trim();
 const clauseKey = (c) => norm(c).toLowerCase().replace(/^([-*]|\d+[.)])?\s*/, '').replace(/[.\s]+$/, '');
 // Split on lines BEFORE whitespace normalisation: a bullet line starts a new clause; a plain line continues the

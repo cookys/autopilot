@@ -92,10 +92,12 @@ test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-
     'Each lane writes findings.data_report.',
     'Each lane writes findings.sh-report.',
     'Each lane writes findings.JS-notes.',
+    'Each lane writes findings.js.', 'Each lane writes findings.test.js.', 'Each lane writes findings.md.bak.',
+    'Run scripts/adjudicate-findings.js on the output.', 'Call adjudicate-findings.sh, adjudicate-findings.py or adjudicate-findings.ts.',
+    'Run scripts/adjudicate-findings.test.js.', 'Run scripts/Adjudicate-Findings.JS then return text.',
   ];
   const good = ['Never write a FINDINGS file; return findings as text.', 'Do not create a FINDINGS file. Return the findings as text.',
-    'Run scripts/adjudicate-findings.js on the output.', 'Call adjudicate-findings.sh, adjudicate-findings.py or adjudicate-findings.ts.',
-    'Return findings as text.', 'Feed the result to the adjudicate-findings store.', 'Run scripts/adjudicate-findings.js.', 'Run x.sh on the output.', 'Run scripts/Adjudicate-Findings.JS then return text.'];
+    'Return findings as text.', 'Feed the result to the adjudicate-findings store.', 'Run x.sh on the output.'];
   for (const [lines, want] of [[bad, 2], [good, 0]]) {
     for (const l of lines) {
       const d = tmp(); fs.cpSync(path.join(__dirname, 'arms'), d, { recursive: true });

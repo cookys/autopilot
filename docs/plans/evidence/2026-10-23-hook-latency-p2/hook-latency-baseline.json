@@ -1,0 +1,125 @@
+{
+  "commit": "54e9ff131cf4ddea6bcf3e65e57b22a4b46470f3",
+  "workload_sha": "b3b116fdf158f226048d719126f3980d63747b4d6f1d149361623167a16f9417",
+  "samples": 30,
+  "model": "haiku",
+  "spent_usd": 0.689258,
+  "max_usd": 1.5,
+  "stopped": null,
+  "cost_unknown": 0,
+  "arms": {
+    "enabled": {
+      "runs": 30,
+      "per_event": {
+        "SessionStart": {
+          "p50_ms": 150,
+          "p95_ms": 257,
+          "hook_count": 120,
+          "spawns": 4,
+          "calls": 30,
+          "call_p95_ms": 320,
+          "spawns_per_call": 4
+        },
+        "UserPromptSubmit": {
+          "p50_ms": 75,
+          "p95_ms": 118,
+          "hook_count": 30,
+          "spawns": 1,
+          "calls": 30,
+          "call_p95_ms": 118,
+          "spawns_per_call": 1
+        },
+        "PreToolUse": {
+          "p50_ms": 64,
+          "p95_ms": 122,
+          "hook_count": 1200,
+          "spawns": 40,
+          "calls": 600,
+          "call_p95_ms": 142,
+          "spawns_per_call": 2
+        },
+        "PostToolUse": {
+          "p50_ms": 64,
+          "p95_ms": 124,
+          "hook_count": 4200,
+          "spawns": 140,
+          "calls": 600,
+          "call_p95_ms": 197,
+          "spawns_per_call": 7
+        },
+        "Stop": {
+          "p50_ms": 58,
+          "p95_ms": 105,
+          "hook_count": 150,
+          "spawns": 5,
+          "calls": 30,
+          "call_p95_ms": 124,
+          "spawns_per_call": 5
+        }
+      }
+    },
+    "positive_control": {
+      "runs": 30,
+      "per_event": {
+        "SessionStart": {
+          "p50_ms": 152,
+          "p95_ms": 306,
+          "hook_count": 120,
+          "spawns": 4,
+          "calls": 30,
+          "call_p95_ms": 388,
+          "spawns_per_call": 4
+        },
+        "UserPromptSubmit": {
+          "p50_ms": 75,
+          "p95_ms": 125,
+          "hook_count": 30,
+          "spawns": 1,
+          "calls": 30,
+          "call_p95_ms": 125,
+          "spawns_per_call": 1
+        },
+        "PreToolUse": {
+          "p50_ms": 62,
+          "p95_ms": 116,
+          "hook_count": 1200,
+          "spawns": 40,
+          "calls": 600,
+          "call_p95_ms": 137,
+          "spawns_per_call": 2
+        },
+        "PostToolUse": {
+          "p50_ms": 69,
+          "p95_ms": 231,
+          "hook_count": 4800,
+          "spawns": 160,
+          "calls": 600,
+          "call_p95_ms": 250,
+          "spawns_per_call": 8
+        },
+        "Stop": {
+          "p50_ms": 60,
+          "p95_ms": 100,
+          "hook_count": 150,
+          "spawns": 5,
+          "calls": 30,
+          "call_p95_ms": 119,
+          "spawns_per_call": 5
+        }
+      }
+    },
+    "zero": {
+      "runs": 30,
+      "per_event": {}
+    }
+  },
+  "conclusion": {
+    "refused": false,
+    "reason": null,
+    "instrument_valid": true,
+    "marker_p95_ms": 247,
+    "enabled_minus_zero_p95_ms": 197,
+    "max_spawns_per_call": 7,
+    "verdict": "open_guard_port_plan"
+  }
+}

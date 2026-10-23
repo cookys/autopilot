@@ -1266,10 +1266,10 @@
       },
       "fixture-scripts-bpack": {
         "kind": "dir",
-        "source": "hand-authored fixture stub (dispatch-tree.js), byte-frozen in packs/fixture-scripts-bpack",
-        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "source": "hand-authored fixture stub (dispatch-tree.js, rev 2: data-bearing tree), byte-frozen in packs/fixture-scripts-bpack",
+        "ref": "09ca1458c",
         "files": 1,
-        "digest_sha256": "9d060ff7fe7e1fecdad88f4443052bf7c3efee269f3c3c539a7ecc974df84896"
+        "digest_sha256": "e7f8456041a8fb20775ea486cb5cb664faa469821f47587ed5c92fa9c3d12d75"
       },
       "fixture-prompt-bpack-base": {
         "kind": "dir",
@@ -1289,9 +1289,9 @@
     "files": {
       "arms/bpack/base.json": "fd69e68fa0fef9b88f23b4d7c5842281be7ab0388881a861795a809b02547609",
       "arms/bpack/change.json": "d21850792c110cc2160da9bffe06345fa6b431dc8b8c504d6f8f7c8b96135f88",
-      "lib-bpack/bpack-markers.sh": "3c5619d972f55607945a5a9cd2183c38934a6b2e00ffaeaa0fd4fc7caf3da129",
+      "lib-bpack/bpack-markers.sh": "6b33f48145470c8606459de4e349c7a6c6bd7e65a40735bfad5fde57702dc1d0",
       "lib-bpack/dcard-markers.sh": "e935a6dcb774ea906b3e19a04fad759a474cc001af1344ca5d9f90d63b6807e8",
-      "prereg/bpack.json": "9c6ad50e94efa1262fee8b346d7953eca0da95915efdbdad31b1709c198e30df",
+      "prereg/bpack.json": "29b9ba61e4e1d432defb066d404294e9bf2837a9a928fd793bad05276b59bc65",
       "run-bpack-campaign.js": "38ea64777b8f8d43462d72347bbd39b55b172b6772bcfd38ab1003bb0f5fbda6",
       "run-skill-onoff-eval-bpack.sh": "a7bae955c50f1057ea9a7bb396deaa3e617aaff3469d7ffe21b92f75956fab7d",
       "run-skill-onoff-matrix-bpack.sh": "7f79b523ba4c3cc6a17f74c429577d6a8894008d877773a3bb34a28092d78304",
@@ -1306,7 +1306,7 @@
       "tasks/bpack-tree/init-repo.sh": "e2976fccdf27887158af6f6f0cf7de55747652697d68a3218137465d5a94d14f",
       "tasks/bpack-tree/markers.sh": "ba4019733af233ad50a8cc3db210593e582038715aa64f79c618229280a44acd",
       "tasks/bpack-tree/repo/README.md": "cf4ac2bb43941639195d771e93204bcac08cac83eecbb25ae4a7eafdb9bd1cc0",
-      "tasks/bpack-tree/task.md": "a5578acc14e6572fbb6326b9ee909a9b6cd0320e2ac72b68038fb1f6e5f44268",
+      "tasks/bpack-tree/task.md": "dae662fdea8dcf923674b57b8f802a8ea1fcb3ea3c0e6e4802388438f4bb5eb4",
       "tasks/dcard-owner-decision/init-repo.sh": "853a2c4487ed8a681e12072a4fe889c6799a7fec9691b6e920743c15f9ff5135",
       "tasks/dcard-owner-decision/markers.sh": "1d414a674a03efd1df85ea63ac044e27d4993ba6219589c38e9776c1b5e392cf",
       "tasks/dcard-owner-decision/repo/README.md": "9ec154bc2dca5b60992f727e1f245d493dff1ebe2d0eb78aae914f00846c282b",

@@ -4581,7 +4581,7 @@
       "bpack-files-change/references/tree-contracts.md": "d2aba6c0a2bd4432013db1d5742bd677059105de87fc39640cdeef9e1d2341b9"
     },
     "fixture-scripts-bpack": {
-      "fixture-scripts-bpack/scripts/dispatch-tree.js": "918dd3930bc90ce5b69657e827cfb9eb1c34054e6c962489026cd2275a09428f"
+      "fixture-scripts-bpack/scripts/dispatch-tree.js": "9988fa75a6d105ca69ea17c37b312887ba0373b53af4d08ff524f6b4946995d8"
     },
     "fixture-prompt-bpack-base": {
       "fixture-prompt-bpack-base/REVIEW_PROMPT.md": "7fa55b78124ee1687aaafb03642986269490aaeec9562d330240ef0342a40c54"
@@ -10750,8 +10750,8 @@
     },
     "fixture-scripts-bpack": {
       "kind": "dir",
-      "source": "hand-authored fixture stub (dispatch-tree.js), byte-frozen in packs/fixture-scripts-bpack",
-      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+      "source": "hand-authored fixture stub (dispatch-tree.js, rev 2: data-bearing tree), byte-frozen in packs/fixture-scripts-bpack",
+      "ref": "09ca1458c"
     },
     "fixture-prompt-bpack-base": {
       "kind": "dir",

@@ -1,0 +1,145 @@
+# Per-trial excerpts (de-identified: ids -> <id>, scratch root -> <scratch>)
+
+Sources: <scratch>/run/trials/<trial>/{stream.jsonl,hook.log,debug.log,files.after,cost.txt}; sha256 and absolute paths in sums.txt.
+
+P0 start marker (date -u after the expected-readings commit): 15:56:08Z on 2026-10-23
+expected-readings commit: 25bbc3c9934c197d249cd2daed0eb50e3c082e26 2026-10-23T23:56:07+08:00
+
+## step0-iso
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:56:08.900Z last=2026-10-23T15:56:12.532Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.016668000000000002 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (34ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-09-945Z.jsonl
+
+## step0-ctl
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:56:22.582Z last=2026-10-23T15:56:28.843Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.049728 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: SessionStart:startup [node <scratch>/clone/hooks/version-drift-check.js] (plugin autopilot@inline) finished with status 0 (91ms)
+  Hooks: SessionStart:startup [node <scratch>/clone/hooks/residue-auto-reap.js] (plugin autopilot@inline) finished with status 0 (95ms)
+  Hooks: SessionStart:startup [node <scratch>/clone/hooks/runs-watch-autostart.js] (plugin autopilot@inline) finished with status 0 (96ms)
+  Hooks: SessionStart:startup [node <scratch>/clone/hooks/session-start.js] (plugin autopilot@inline) finished with status 0 (118ms)
+  Hooks: UserPromptSubmit [node <scratch>/clone/hooks/advisory-relay.js] (plugin autopilot@inline) finished with status 0 (76ms)
+  Hooks: Stop [node <scratch>/clone/hooks/cost-tracker.js] (plugin autopilot@inline) finished with status 0 (42ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (64ms)
+  Hooks: Stop [node <scratch>/clone/hooks/dirty-protected-paths.js] (plugin autopilot@inline) finished with status 0 (64ms)
+  Hooks: Stop [node <scratch>/clone/hooks/opt-in-multiplexer.js Stop] (plugin autopilot@inline) finished with status 0 (65ms)
+  Hooks: Stop [node <scratch>/clone/hooks/owner-question-guard.js] (plugin autopilot@inline) finished with status 0 (66ms)
+  Hooks: Stop [node <scratch>/clone/hooks/awaiting-owner.js] (plugin autopilot@inline) finished with status 0 (67ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: SessionStart exit_code=0 outcome=success stdout="{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"\"\n  }\n}\n"; SessionStart exit_code=0 outcome=success; SessionStart exit_code=0 outcome=success; SessionStart exit_code=0 outcome=success stdout="{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"You have **Autopilot** lifecycle skills. Before starting any task, check if one applies:\\n\\n| Trigger | Skill |\\n|---------|-------|\\n| Starting code work, \\\"I'm working on X\\\", quick fix, hotfix, continuing from yesterday | `autopilot:dev-flow` |\\n| Research options, \\\"what do others use\\\", compare X vs Y, 業界怎麼做 | `autopilot:survey` |\\n| Strategic decision, need perspectives, tradeoff analysis, 要辯論一下 | `autopilot:think-tank` |\\n| Irreversible decision, genuine stalemate, Hegelian dialectic, 不可逆決策, 兩邊都有道理, 辯證一下 | `autopilot:think-tank-dialectic` |\\n| Full delegation, \\\"get it done\\\", CEO mode, 搞定, 全權處理 | `autopilot:ceo-agent` |\\n| Pre-commit/merge quality checks, \\\"is this ready?\\\" | `autopilot:quality-pipeline` |\\n| Archive project, bootstrap from plan, set up tracking | `autopilot:project-lifecycle` |\\n| Onboard a repo to autopilot, scaffold .claude config | `autopilot:onboard` |\\n| Save a lesson, \\\"record this\\\", knowledge audit | `autopilot:learn` |\\n| Retrospective, commit history analysis, 回顧 | `autopilot:retro` |\\n| What to work on next, /next, highest priority | `autopilot:next` |\\n| Compare two implementations, feature parity check | `autopilot:audit` |\\n\\nIf uncertain, invoke the skill — it will guide you. Autopilot sets the rules and runs them standalone.\\n\\nAnything that needs the owner's decision or answer: open a card with node <scratch>/clone/scripts/open-decision.js open --question ... and write the card id (d- + 8 hex) in the reply.\\nWhen the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.\\nTo show the owner a file or a diff, use the show tool; do not paste the content.\\nCross-harness token discipline (advisory only): read <scratch>/clone/docs/token-discipline.md.\\nAgent brief first three lines: Engine: <model> | Role: <role> | Lane: <slug>\"\n  }\n}\n"; UserPromptSubmit exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success
+files under scratch HOME after: .autopilot/last-seen-version, .autopilot/qualification-prices/current.json, .autopilot/qualification-prices/e1a2dcddebbe0bff811612169a9191c4930dbd53d3b2fd7dbb19a8fa3ed5bbce/prices.json, .autopilot/qualification-prices/last-attempt, .autopilot/.session-handoff.log, .cache/claude-cli-nodejs/<proj>/mcp-logs-autopilot/2026-10-23T15-56-23-638Z.jsonl, .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-23-638Z.jsonl
+
+## A0
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:56:55.435Z last=2026-10-23T15:56:58.529Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0191361 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (48ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-55-996Z.jsonl
+
+## A1
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:56:59.327Z last=2026-10-23T15:57:03.808Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.005452199999999999 num_turns=2
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (39ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (40ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","call":2,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"ALPHA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}"; Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-00-049Z.jsonl
+
+## A2
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:57:04.614Z last=2026-10-23T15:57:11.082Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0085551 num_turns=3
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (49ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (52ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (47ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","call":2,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-TWO: before stopping, reply with the single word BETA.\"}","stdin":{"hook_event_name":"Stop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"ALPHA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","call":3,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"BETA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}"; Stop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-TWO: before stopping, reply with the single word BETA.\"}"; Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-05-201Z.jsonl
+
+## B0
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:57:19.810Z last=2026-10-23T15:57:22.860Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0025900999999999997 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (36ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-20-346Z.jsonl
+
+## B1
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:57:23.688Z last=2026-10-23T15:57:32.671Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0088201 num_turns=3
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (49ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (45ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (35ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"Stop","call":1,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"OK","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","call":2,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-TWO: before stopping, reply with the single word BETA.\"}","stdin":{"hook_event_name":"Stop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"ALPHA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","call":3,"decision":"allow","stdout":"","stdin":{"hook_event_name":"Stop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"BETA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: Stop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}"; Stop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-TWO: before stopping, reply with the single word BETA.\"}"; Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-24-253Z.jsonl
+
+## C0
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:57:39.407Z last=2026-10-23T15:57:47.666Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0321342 num_turns=2 | is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.036182200000000005 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: SubagentStop [node <scratch>/run/bin/hook.js SubagentStop] finished with status 0 (59ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (37ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (43ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"SubagentStop","call":1,"decision":"allow","stdout":"","stdin":{"hook_event_name":"SubagentStop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"DONE","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","agent_id","agent_type","hook_event_name","stop_hook_active","agent_transcript_path","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","decision":"allow(ignored)","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"The agent is now running in the background. I'll be notified automatically when ","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","decision":"allow(ignored)","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"The subagent replied: **DONE**","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: SubagentStop exit_code=0 outcome=success; Stop exit_code=0 outcome=success; Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-39-978Z.jsonl
+
+## C1
+claude_code_version=2.1.309 model=claude-haiku-4-5 apiKeySource=none (credentials-only config dir, OAuth)
+first debug timestamp=2026-10-23T15:57:48.493Z last=2026-10-23T15:57:57.434Z
+results: is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0148939 num_turns=2 | is_error=false subtype=success stop_reason=end_turn total_cost_usd=0.0148939 num_turns=1
+exit of claude process: rc=0
+hook executions (debug.log lines "Hooks: <event> [<command>] ... finished with status N"):
+  Hooks: SubagentStop [node <scratch>/run/bin/hook.js SubagentStop] finished with status 0 (45ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (44ms)
+  Hooks: SubagentStop [node <scratch>/run/bin/hook.js SubagentStop] finished with status 0 (37ms)
+  Hooks: Stop [node <scratch>/run/bin/hook.js Stop] finished with status 0 (42ms)
+throwaway hook log (per call: exact stdout, stdin fields):
+  {"event":"SubagentStop","call":1,"decision":"block","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}","stdin":{"hook_event_name":"SubagentStop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"DONE","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","agent_id","agent_type","hook_event_name","stop_hook_active","agent_transcript_path","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","decision":"allow(ignored)","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"Agent launched. Waiting for completion notification.","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"SubagentStop","call":2,"decision":"allow","stdout":"","stdin":{"hook_event_name":"SubagentStop","stop_hook_active":true,"permission_mode":"default","last_assistant_message":"ALPHA","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","agent_id","agent_type","hook_event_name","stop_hook_active","agent_transcript_path","last_assistant_message","background_tasks","session_crons"]}}
+  {"event":"Stop","decision":"allow(ignored)","stdin":{"hook_event_name":"Stop","stop_hook_active":false,"permission_mode":"default","last_assistant_message":"The subagent replied with: **ALPHA**\n\n(It did not follow the instruction to repl","keys":["sid","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}}
+stream hook_response events: SubagentStop exit_code=0 outcome=success stdout="{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}"; Stop exit_code=0 outcome=success; SubagentStop exit_code=0 outcome=success; Stop exit_code=0 outcome=success
+files under scratch HOME after: .cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-49-177Z.jsonl
+

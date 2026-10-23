@@ -100,6 +100,9 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
+#   opencode quota fail-fast: opencode has no retry-disable flag, so non-text NDJSON events + stderr are watched;
+#   a quota/rate-limit signal kills the child group and yields no_verdict with error `engine_quota_exhausted: ...`
+#   (not a bare rc=124). Review prose ("type":"text" events) is never scanned.
 #   opencode runner: drives the OpenCode CLI (`opencode run`). Containment is a real
 #   deny-all (live adversarial probe 2026-10-16, opencode 1.19.2, docs
 #   https://opencode.ai/docs/permissions/): inline OPENCODE_CONFIG_CONTENT sets global
@@ -501,17 +504,17 @@ if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" || -n "$CHECKLISTS" ]]; then
   _SUP_ERR="$(mktemp -t dispatch-review-suppression-err-XXXXXX)"
   {
     if [[ -n "$SPEC_FILE" ]]; then
-      printf '--- spec ---\n'
+      printf -- '--- spec ---\n'
       cat "$SPEC_FILE"
       printf '\n'
     fi
     if [[ -n "$PACK_FILE" ]]; then
-      printf '--- pack ---\n'
+      printf -- '--- pack ---\n'
       cat "$PACK_FILE"
       printf '\n'
     fi
     if [[ -n "$CHECKLISTS" ]]; then
-      printf '--- checklists ---\n'
+      printf -- '--- checklists ---\n'
       IFS=',' read -r -a _sup_items <<< "$CHECKLISTS"
       for _item in "${_sup_items[@]}"; do
         _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -1706,15 +1709,39 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   mapfile -d '' -t OC_ENV < "$OC_PLAN_DIR/env.nul"
   OC_ADAPTOR="$(cat "$OC_PLAN_DIR/adaptor")"
   OPENCODE_CWD="$(cat "$OC_PLAN_DIR/cwd")"
-  timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+  # Quota fail-fast: opencode has NO flag to disable provider retries (`opencode run --help`,
+  # 1.19.x), so on a quota / rate-limit error it retries until the wall cap (rc=124, empty
+  # output). Run the child in its own process group and watch its NON-text events + stderr;
+  # on a quota signal kill the group and report engine_quota_exhausted. Review prose
+  # (`"type":"text"` events) is never scanned, so the word "quota" in a review is inert.
+  OPENCODE_QUOTA=0
+  setsid timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
-      env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+      env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR" &
+  OC_PID=$!
+  while kill -0 "$OC_PID" 2>/dev/null; do
+    if { grep -v '"type" *: *"text"' "$OPENCODE_OUT" 2>/dev/null; cat "$OPENCODE_ERR" 2>/dev/null; } \
+        | grep -qiE 'insufficient_quota|quota|rate.?limit|usage limit|too many requests|\b429\b'; then
+      OPENCODE_QUOTA=1
+      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+      break
+    fi
+    sleep 0.2
+  done
+  wait "$OC_PID" 2>/dev/null
   OPENCODE_RC=$?
-  wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  if [ "$OPENCODE_QUOTA" -eq 0 ]; then
+    wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  fi
   rm -rf "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # one root holds work/ + home/ + plan/; clear so the EXIT trap doesn't rm it a 2nd time
   cat "$OPENCODE_OUT" > "$RAW_LOG"
   printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  if [ "$OPENCODE_QUOTA" -eq 1 ]; then
+    printf '\n[dispatch-review: opencode quota/rate-limit error detected — child killed, engine_quota_exhausted]\n' >> "$RAW_LOG"
+    SALVAGE_CAPTURE=/dev/null
+    emit_no_verdict "engine_quota_exhausted: opencode hit a provider quota / rate-limit error — child killed early (not a timeout); see raw_log"
+  fi
   # Containment audit BEFORE normalising: a clean exit proves nothing, so ANY tool event in the
   # NDJSON voids the seat (never salvage an answer from a run that touched a tool).
   if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" "$OC_ADAPTOR" 2>&1)"; then

@@ -1,0 +1,151 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "guard-port-2026-10-24",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "5a238da49b7a7cc0277bdbb05450cab04bd77f8dc71aed14fd6cf0bbe0626431",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: hooks/hooks.json PostToolUse .* places opt-in-multiplexer between failure-escalation and context-budget. Design A now chains only the five contiguous observers before it; 7 to 3 spawns."
+  },
+  {
+   "fingerprint": "06a9fe1b7f191f3e1a67d659d849e9e287ace390b3cabd77efa093f99be98022",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: Phase 1 had only a passing baseline. It now needs a baseline-vs-candidate interface and a negative control shown red."
+  },
+  {
+   "fingerprint": "dbe2b1bcea69818dc5e3c180c4e7936e1e46196fa741921eed0671a70dbf742d",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: intent-capture and context-budget mutate state with no output. Phase 1 now compares state, locks and multi-call sequences on isolated fixtures."
+  },
+  {
+   "fingerprint": "91cf40802f725db3c6f1ee351af6fa8317bdf639ecd08c9ef2d460ce8c4798d6",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: result-selection, load sampling and same-host re-baseline are now pre-registered in section 2."
+  },
+  {
+   "fingerprint": "7cb4956937a3d9d82f0ee6a36fcbb2afb0560a236e573737bd64e2ce9ec6dabe",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: ADR-0001 and the version hold are now stated in sections 2.5 and 2.6."
+  },
+  {
+   "fingerprint": "7251010bc6fca109e4b0aa2560c0ac9e12653b631c7e0c97ec9e0873ba4dfb73",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: hooks of one event run concurrently and call latency is their max (benchmark-hook-latency.js:15-16, 91-92). Section 0 and 1 rewritten so the thesis is a hypothesis sized by Phase 0."
+  },
+  {
+   "fingerprint": "19efe76fc94faaef98fd0faa6aef570a11f2cedc7d65572f196741092c2be3ed",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: call latency is the max of concurrent hooks (benchmark-hook-latency.js:15-16, 91-92; baseline single-hook p95 124 ms). Section 1 rewritten; KR2 keeps its threshold but gets a Phase 0 feasibility gate and owner decision, KR1 is the hard gate."
+  },
+  {
+   "fingerprint": "36f7d900dbd5b1281fdd0f008f1c037f4c95dee64de493469e55e739c43f373e",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: catch at hooks/context-budget.js:483-486, exitCode = 2 at :409 and :473. Table retargeted."
+  },
+  {
+   "fingerprint": "6dc00e2c8bf0d5d0492c5bf63f708396c9b6eaf7d5cadd4656002f86fa10bb73",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: all five observers read fd 0 at top level and process.exit (cited file:line in Design A). Adapter is now a named Phase 2 deliverable with Phase 0 predicates."
+  },
+  {
+   "fingerprint": "584545b91d03f6b0d0b6a5414526b087d8699eb158b033362e78395f770e68bf",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Duplicate of the Phase 1 negative-control finding; folded the same way."
+  },
+  {
+   "fingerprint": "0e0be318c7f59d8bb1fce2fdbeba408f628ef78b901a782e4d66a65e6ff92f6d",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: scripts/check-hook-inventory.js:46-50,67-82,91-96 expands only the multiplexer; a chain script would orphan five stems. Added to file map and Phase 2."
+  },
+  {
+   "fingerprint": "fda4cef169d79cf19756786b11cc426a522a4af04ad750f659f545c93a635a0f",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: duplicate of the ADR-0001/version-hold gap; stated in sections 2.5 and 2.6."
+  },
+  {
+   "fingerprint": "e9474aee87c2d31dc283e7f5dd93bcfdc66694aedd8c718de28cb3f0cc9995a5",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same root as the process.exit/stdin finding; adapter or export refactor now explicit in Design A."
+  },
+  {
+   "fingerprint": "8820f674982490359b2bca207b3f31f4b3a33220740274959887f19321a5446b",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same root as the chain-order finding; topology fixed."
+  },
+  {
+   "fingerprint": "b6a584cc894953c528d39e4e84fc4c32773d98f802b0be88683603220d525208",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: KR2 feasibility gate added to Phase 0 with a 47 ms bar."
+  },
+  {
+   "fingerprint": "53477d4c31d2bd2560329a122e88b114a4df1df578a198d8b0058deb69861406",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: result-selection rule added."
+  },
+  {
+   "fingerprint": "b10bca6ac2f1278af04a85b6a31e8fd699a1b899bea970aed9dafb5094c48b4a",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid in part: dispatch-model-guard evidence now cites :133, :140, :147; section 2.5.1 is declared a summary and Phase 0 must expand each row into a behavioural tuple."
+  },
+  {
+   "fingerprint": "bcc535cf2de95a32eb64152b9a2b36f8af5d0e52fc7d0f938f59a51c825202d0",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: ADR-0001 and version hold stated, and work units named in section 2.6."
+  },
+  {
+   "fingerprint": "2cc80af2adaea729171358eb37fefacfd69ad53a76f8ff5980d2095a63e340d7",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: duplicate of the Phase 1 negative-control finding."
+  },
+  {
+   "fingerprint": "e8f324ae24581dcfd1c5e9313470b49c3b3b024bb89ce9410efa792b7b181354",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: Phase 0 selection predicates and Phase 3 risk test defined."
+  },
+  {
+   "fingerprint": "cf800565b1e47a8a9e163ef4bee150de33404f149953fb208774fcfbc541d941",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: D6 table labels corrected; the Processes column header now says how D6 counts them."
+  },
+  {
+   "fingerprint": "5a8ec9d98c8deb1cd44254807d2c6b448f11387f9f09336d166f2e6cef4959b1",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: duplicate of the Phase 1 negative-control finding."
+  },
+  {
+   "fingerprint": "bf3ecca188c08a78e57795ab0854f479c4f493fe4d3374793aea02c865410610",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: covered by the Phase 0 KR2 feasibility gate."
+  },
+  {
+   "fingerprint": "6ff0a92d35d8107f9f2c7b91680b09453c09c81c16bce092ae5e23935416a80b",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: duplicate of the ADR-0001/version-hold gap."
+  }
+ ]
+}

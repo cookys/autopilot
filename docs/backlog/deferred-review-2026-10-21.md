@@ -39,3 +39,7 @@ Fixed 2026-10-23 by pricesdiag (d81f4160a): parsePrices now recognises the prefl
 ## BL-0268 status
 
 Fixed 2026-10-23 by 7ca204075 (idguardjs): test-identity-guard now flags a node test that runs git commit without its own identity, and a crashing scanner fails the guard. Row removed from docs/BACKLOG.md.
+
+## BL-0265 status
+
+Fixed 2026-10-23 by 0af58eeaa (implhard): `engine-qualify.js` HELP now states which source wins when a `--seat-file` run fills an identity field. Row removed from docs/BACKLOG.md. BL-0037 Stage-0 is a separate item and remains NEEDS-EVAL.

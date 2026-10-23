@@ -7,3 +7,7 @@ Source: docs/BACKLOG.md as of 061cc11c7^, migrated 2026-09-14. Old id BL-0026. A
 - **Source**: owner 2026-09-07 during the dirty-tree hook ship; `references/evidence-discipline.md` (script existing ≠ running).
 
 Restored 2026-10-19 from 061cc11c7^; see docs/plans/evidence/2026-10-19-backlog-deletion-audit/REPORT.md
+
+## Status 2026-10-23
+
+The 60-day staleness check is now surfaced as a non-blocking advisory in `scripts/preflight-release.sh`, fixed by 2cdefb419 (hookmatrix). Left, needs an owner decision: grok/agy native-event evidence rows. `scripts/hook-harness-matrix.js` only accepts rows for registered stems/events of our own hooks.json wiring (kinds fired/packaged/doc), so native-event probe evidence does not fit.

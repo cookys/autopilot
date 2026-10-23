@@ -785,14 +785,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-07
 - **Origin**: owner
-- **Problem**: 每個掛鉤在各執行環境是否支援，只做了一半。腳本已出貨，但每一格都還沒驗證，六十天過期檢查也沒進上線前檢查或持續整合。
-- **Impact**: 表上看得到掛鉤，卻不知道各環境是否真的跑過，過期也不會被擋下。
-- **Trigger**: the next second-harness hook registration, or a harness-maintenance run finding a hook-event claim older than 60 days
+- **Problem**: 掛鉤與執行環境支援表的六十天過期提醒已進上線前檢查（只提醒、不擋）。還沒做的是 grok 與 agy 的原生事件證據列：這張表只收我們自己註冊的掛鉤與事件，原生事件的探測證據放不進去，需 owner 決定是否擴充範圍。
+- **Impact**: 原生事件層沒有證據列，grok 與 agy 的掛鉤支援仍只能靠散文記載。
+- **Trigger**: owner decides whether the matrix should accept native-event (grok/agy) evidence rows
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
-- **Context**: Old id BL-0026. Owner decides whether to finish it. Script shipped; cells unverified; 60-day check not in preflight or CI.
+- **Context**: Old id BL-0026. Merge 2cdefb419 (hookmatrix) wired the 60-day staleness advisory into preflight-release.sh. Left: grok/agy native-event rows, which hook-harness-matrix.js does not accept (kinds fired/packaged/doc only). See sidecar.
 
 ### Engine-routing axis: evidence bar for any model-to-worktype default
 - **Id**: BL-0232
@@ -1027,23 +1027,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
 - **Context**: See BL-0220: no_verdict leaves the phase in REVIEWING and resume refuses.
 
-### The no-qualified-scorecard-row refusal does not name the seat or host
-- **Id**: BL-0249
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: codepower twgs-revival
-- **Report**: 01M59ZPRRAH8CGMG59HHD8816N
-- **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
-- **Problem**: 受管軌道的「沒有合格成績單列」拒絕訊息沒有說是哪個席位或哪台主機，操作者無法判斷該為哪一格補資格。登入失效提示、released grant 的處置說明與 readiness 失敗訊息已補上。
-- **Impact**: 操作者看到這則拒絕時，不知道要替哪個席位或哪台主機補考。
-- **Trigger**: owner decides to change the dispatch-contract.js refusal text, which several pin tests assert verbatim
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
-- **Pointer**: docs/backlog/managed-rail-failure-messages-not-actionable.md
-- **Context**: Merge bf611fd7b fixed the rest. Left: scripts/dispatch-contract.js refusal text, pinned verbatim by four hooks/tests suites. See sidecar.
-
 ### One command that writes the autocompact window and the context budget
 - **Id**: BL-0250
 - **Status**: open
@@ -1078,20 +1061,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/fleet-child-lifetime-parent-contract.md
 - **Context**: Explicit FLEET_LIFETIME wins; a child is never promoted to durable. On 2026-10-19 fleet 650f649 took effect on aimax395: FLEET_* children and non-TUI Claude sessions become ephemeral and drop ~10s after disconnect. Verify when starting.
 
-### roundtable follow-up: three-process lock race
-- **Id**: BL-0252
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: 圓桌後續只剩一件：三行程同時競爭鎖時，回收與釋放之間仍有幾微秒的空窗。
-- **Impact**: 高競爭下三個行程仍可能互搶鎖。
-- **Trigger**: next time room-log.js or roundtable-window.js is touched
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: the second-generation review of the roundtable work
-- **Pointer**: docs/backlog/roundtable-follow-ups.md
-- **Context**: Merge cb6e7c305 fixed (b) leftovers, (c) duplicate rows, (d) USAGE. Left: (a), the reclaim/release window in acquireLock and releaseLock; needs flock, fcntl or mkdir. See sidecar.
-
 ### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
 - **Id**: BL-0253
 - **Status**: open
@@ -1122,20 +1091,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: t14 second experiment batch, 2026-10-20
 - **Pointer**: docs/backlog/t14-batch-driver-infra-rerun-oauth.md
 - **Context**: G-15 runner_timeout and C-16 runner_error were left at attempt 1. Depth-0 did not supplement this batch. Detail is in the Pointer.
-
-### Rename campaignControl.initial_state (persisted wire field, needs a design decision)
-- **Id**: BL-0255
-- **Status**: open
-- **Since**: 2026-10-20
-- **Origin**: self
-- **Problem**: 活動控制有一個已寫入線路的初始狀態欄位，名稱與用意不符。改名要遷移或乾淨的大版本切割，這次修正批次刻意留下。
-- **Impact**: 名稱繼續留在持久資料裡，以後改名成本更高。
-- **Trigger**: the owner decides whether to migrate the persisted field or cut it in a clean major
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: bluefix merge d0d87b1c4, owner d-15632582
-- **Pointer**: docs/backlog/campaign-control-initial-state-rename.md
-- **Context**: Left out of the bluefix batch as a design decision. No compatibility shim. Detail is in the Pointer.
 
 ### RUN_LEDGER_MAX_ROTATIONS reads the sweep environment with unclear intent
 - **Id**: BL-0256
@@ -1176,19 +1131,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hderive g2 review 38be393a
-- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
-
-### seat-derive HELP omits the deterministic fallback order
-- **Id**: BL-0265
-- **Status**: open
-- **Since**: 2026-10-21
-- **Origin**: self
-- **Problem**: 席次預覽與無頭說明列出執行器版本、家族與釘選欄位從哪來，卻沒寫旗標、席次檔、推導值與釘選檔之間誰先誰後，呼叫端無法預測哪一個會贏。
-- **Impact**: 說明沒寫優先順序前，呼叫端無法事先知道哪個來源會蓋過哪個。
-- **Trigger**: next change to that file
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: hderive g2 44a00373
 - **Pointer**: docs/backlog/deferred-review-2026-10-21.md
 
 ### qualification-sweep does not read the headless pins file

@@ -1469,6 +1469,10 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     SALVAGE_CAPTURE="$QODER_OUT"
+    # BL-0229: carry the runner stderr (masked, <=2000 bytes) in the result JSON and on this
+    # wrapper's stderr; a rejected model name otherwise looks like a silent dead runner.
+    NV_RC="$QODER_RC"; NV_STAGE="runner"; NV_STDERR_FILE="$QODER_ERR"
+    printf 'dispatch-review: qoder stderr (rc=%s): %s\n' "$QODER_RC" "$(nv_stderr_tail "$QODER_ERR")" >&2
     emit_no_verdict "qoder exited non-zero (rc=$QODER_RC) — fail-closed, partial output not parsed"
   fi
   # MODEL SUBSTITUTION guard (2026-10-16): qoder prints `Model "X" is not available right

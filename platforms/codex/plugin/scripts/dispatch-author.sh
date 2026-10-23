@@ -556,6 +556,10 @@ die_runner_failed() {
     msg="$msg: $excerpt"
     # Keep the same redacted excerpt in the raw log so the cause survives the JSON.
     printf '\n--- runner stderr (redacted, last 2048 bytes) ---\n%s\n' "$excerpt" >> "$RAW_LOG" 2>/dev/null || true
+    # BL-0229: also surface it on the wrapper's own stderr (masked above, re-cut to <=2000 bytes on a
+    # UTF-8 boundary), so a caller that reads only stderr sees why the runner failed, not a silent exit 3.
+    printf 'dispatch-author: runner stderr (%s/%s, rc=%s): %s\n' "$RUNNER" "$MODEL" "$runner_exit_code" \
+      "$(printf '%s' "$excerpt" | LC_ALL=C tail -c 2000 | LC_ALL=C sed -E '1s/^[\x80-\xBF]+//')" >&2 || true
   fi
   rm -f "${RUNNER_ERR_FILE:-}" 2>/dev/null || true
   emit_result "runner_failed" "$RAW_LOG" "$msg" 3 ", \"transport_status\": \"$status\""

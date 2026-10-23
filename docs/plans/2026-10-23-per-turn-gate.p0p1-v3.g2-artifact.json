@@ -1,0 +1,591 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "p0p1v3-g1",
+  "logical_plan_id": "per-turn-gate-2026-10-23-p0p1-v3",
+  "session_id": "p0p1v3-s2",
+  "session_key": "013d42226e8316603a1888852e466b190c342ad4cf11d1b423bf63296fb5f4e3",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "da358877e58e771419f7ffde1ca12b599d6f27c03e114f67dd74fc88e08df074",
+  "manifest_sha256": "443f30270d968a766481f62ba516d364deac7642e0487a24f227141e3673555c",
+  "plan_sha256": "d5c0e92184d98298fd1fb0cdc8957ddff9420b08b10917581b2000216804081f",
+  "growth_ratio": {
+    "numerator": 20733,
+    "denominator": 16775
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "07658d0d95c39c820d8d66a23127fd93e48d2db9d614bacded46fbbac63cffce"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5bc2e8f83f28a6312eb5d61e9831f15f40b19ce11c270a4020a572d978672d6f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-S42016/stdout",
+          "digest": "5bc2e8f83f28a6312eb5d61e9831f15f40b19ce11c270a4020a572d978672d6f"
+        },
+        "receipt_digest": "09c81d3850ba03d2ff7333726062dca12f4cd95911c01adbbd77bfc7dba3d371"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "88a45d32220686b78cb4c265411425dda92107e1ea2f867766f2243799ed7be3"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "81036eb3fd1c0024389665fa35d8d3604af990e964d2e1d50b72ce40f2392925",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-qzo7s8",
+          "digest": "81036eb3fd1c0024389665fa35d8d3604af990e964d2e1d50b72ce40f2392925"
+        },
+        "receipt_digest": "35e5258b5c56e2f576743301ba04f0f6cd2e9d66030b7ac80e51ed05365bd2fe"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "6392139b7964ce28e385dcd1269161e32f1460e1008ce8c8a6d85cbf46e51e97"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5e6e7e19ed5b5cf2ffa30df28ac84276afc020e911dad27373464b842cc793bd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rVst4v",
+          "digest": "5e6e7e19ed5b5cf2ffa30df28ac84276afc020e911dad27373464b842cc793bd"
+        },
+        "receipt_digest": "58c04499b9a3d2cce39f1ce2044002209976723beef17c97d132ea796b75e098"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "fcedfee0915292bb232ac28fdc35deba71521a741f95ae38305317fa3c2b7875"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "fe3bb9bb80a44d1787677f8a0b37891153d5eb70b52b8729bc88678603f669bb",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-QZduzy",
+          "digest": "fe3bb9bb80a44d1787677f8a0b37891153d5eb70b52b8729bc88678603f669bb"
+        },
+        "receipt_digest": "ec984002a1a2442ebd2558da7e46925c9cb58f10f9ad61b65571d5138881aa04"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 3.2 and 3.3: incomplete-run scoring and batch validity",
+      "claim": "The validity rule permits a batch whose M2 numerator cannot be computed, because it does not require a recoverable oracle score for every launched run.",
+      "evidence": "All 30 launches and 27 completed runs can satisfy the checklist while another run exits before producing oracle.log. The harness uses fail-fast setup, deletes its temporary repository on exit, and explicitly supports oracle infrastructure failures. Section 3.2 requires scoring the repository as left, but provides no rule when that repository and its score are unavailable. Dropping the row, assigning failure, or declaring U would produce different outcomes.",
+      "evidence_reference": "Plan sections 3.2 and 3.3; evals/orchestration/run-orchestration-eval.sh: setup and cleanup around lines 278–307, oracle handling at lines 562–638.",
+      "repair": "Preregister that any missing or uninterpretable required oracle score makes the batch U, retaining every launched row without replacement. Alternatively, specify a complete scoring convention before collection.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "db7ee660e0ebccc947618b8d1c4d774bfed812048facf09dcbdbc9fa602f99c0"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Section 2: P0 isolation step 0",
+      "claim": "Absence of plugin hook log lines does not establish that those hooks were not invoked.",
+      "evidence": "The proposed isolation proof observes only the throwaway hook's logging. Existing hooks can execute silently: owner-question-guard returns without output when opted out and emits stdout only when its decision is nonempty. Its execution would therefore be compatible with the stated isolation observation.",
+      "evidence_reference": "Plan section 2, isolation step 0; hooks/owner-question-guard.js:131–136.",
+      "repair": "During P0, capture runtime hook invocation tracing that identifies the executed hook commands. Require that evidence to establish isolation; otherwise report BLOCKED.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "912a194c0fcff066ccea05199ce429f51f6f96f60e8acd7695a2274c9449a47a"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 0: historical wall-time figures",
+      "claim": "The stated historical wall-time range does not match the two experiment reports.",
+      "evidence": "Section 0 gives 6.5 to 7.5 hours for 30 pairs. Experiment 1 reports approximately 6 hours 42 minutes, while experiment 2 reports approximately 5 hours 40 minutes, outside that range.",
+      "evidence_reference": "Plan section 0; docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md, S5; report-r2.md:36.",
+      "repair": "Replace the range with the separately attributed reported durations, approximately 6 hours 42 minutes and 5 hours 40 minutes.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77e52a8c17b4693b59bac3f4ba3ea905f83aed5551fcd7e011f3075019b0292f"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 2 P0 Step 0 isolation negative control",
+      "claim": "P0 Step 0 treats silence in the throwaway hook log as proof that the five plugin Stop hooks did not run.",
+      "evidence": "Section 2 says the throwaway hook appends its own stdin JSON, exit status, and stdout to a scratch log, and that isolation is shown when that run 'shows only that hook's log lines and none of the five plugin Stop hooks.' hooks/hooks.json wires those five Stop commands to opt-in-multiplexer.js, cost-tracker.js, dirty-protected-paths.js, owner-question-guard.js, and awaiting-owner.js, which emit to their own destinations. Absence of those names in the throwaway log is guaranteed whether or not the plugin loaded. R2 requires a real negative control and forbids resting the answer on hooks.json alone; a vacuous log check fails both. Isolation failure confounds A0-A2, B0-B1, and C0-C1.",
+      "evidence_reference": "plan section 2, isolation paragraph and throwaway-hook paragraph; hooks/hooks.json Stop array (five command entries) and SubagentStop array",
+      "repair": "Commit isolation success criteria in the P0 note header before the first run. Step 0 succeeds only when a 2.1.303 session started in the scratch project (cwd outside this repo, dedicated config) has an executed-hook record from the session transcript, CLI hook debug listing, or another official surface that names the throwaway command and does not name the five plugin Stop scripts. If that surface cannot be obtained, label isolation unproduced and BLOCK P0. Silence in the throwaway log is not isolation evidence.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1436a1bb071965b72b25ba8e09a65cee7a84d15ec74fae2324ad6f78638a1810"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 1 runtime identity; section 3.3 labels A-D; section 3.5 GO",
+      "claim": "Labels A-D and the GO rule treat the new dedicated-config C batch as reproduction evidence against 23/30 and 11/29 from driver C arms that used a different runtime identity.",
+      "evidence": "Section 1 requires every P1 run to use a dedicated config directory seeded only with a credentials copy, never the live ~/.claude. In evals/orchestration/run-t14-gate-batch.js, runOne() passes env as a copy of process.env with no HOME override; only authProbe() uses a temp HOME. Historical C counts 23/30 and 11/29 therefore come from the real user config surface. Section 0 already files loaded settings and invocation flags as P1 evidence, not facts. Section 3.3 still Fisher-tests M2_3/30 against those counts, calls the batch 'reproduction evidence only', and section 3.5 requires label A, B, or C for GO. A credentials-only seed can move M2 enough to mint A, B, C, or D for a reason the candidate table does not list.",
+      "evidence_reference": "plan section 0 open-anomaly paragraph; section 1 Runtime identity; section 3.3 validity and A-D rules; section 3.5 GO conjunction; evals/orchestration/run-t14-gate-batch.js runOne() env versus authProbe() HOME",
+      "repair": "Keep the dedicated config directory so the live ~/.claude is not reset. Describe the new batch as a fresh baseline on that declared seed, not as reproduction of the driver C arms. Report A-D as numeric compatibility with the published 23/30 and 11/29 counts. Make GO depend on P0 A1 and B1 affirmative on 2.1.303, a valid batch (label U still HOLDs), and the measured M2_3; do not require A, B, or C. Size later work from M2_3 and the P0 trial labels. If a later author wants a like-for-like rerun, that is a separate plan once historical settings can be re-derived.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b5c74396586d370ff5af862ce60e3e57a15e3ca87d2b78bd2f88b08ff1fa537b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 3.2 C-only wrapper argv versus run-t14-gate-batch.js runOne()",
+      "claim": "Section 3.2 lists five turns and scoring flags as arguments the driver's C run uses, but runOne() does not pass those flags to run-orchestration-eval.sh.",
+      "evidence": "runOne() builds args --task t14-constraint-horizon, --arm off, --runner OPT.runner, --model claude-haiku-4-5, --out outDir, --gate observe, and adds --gate-retry-feedback only when the id is G. Turn count and scoring flags are absent from that argv. A hand that copies the parenthetical will add flags the historical C arms did not receive, which confounds M2_3 against 23/30 and 11/29 and can change observe-mode behaviour. The later clause that the command is reconstructed from the pinned driver and harness does not delete the inaccurate list.",
+      "evidence_reference": "plan section 3.2 Sample, procedure, window, C-run parenthetical; evals/orchestration/run-t14-gate-batch.js runOne() args array",
+      "repair": "Replace the parenthetical with the runOne() C argv above, including --runner cc unless the preregistration records a different runner. State that five turns and scoring come from harness defaults discovered by reading run-orchestration-eval.sh. Every C id omits --gate-retry-feedback. The preregistration quotes the exact command per id with no extra flags. If the harness cannot be invoked that way without a repo edit, report BLOCKED.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "683555fe4e85ee57720cd9d963c6317e5f53fb1a7982f83bb823fee5c4ced5e2"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 0 durations; section 2 P0 trials; section 3.2 eight-hour window; section 1 no-renewal rule",
+      "claim": "P0 trials have no wall-time cap, and P1 validity assumes an eight-hour sequential window with no authentication expiry after this host already recorded an OAuth expiry at 335 s.",
+      "evidence": "Section 0 records C-16 attempt 1 runner_error at 335 s with OAuth session expired, and C-arm mean durations 292 s and 269 s. Section 1 makes a mid-window expiry label the whole batch U with no renewal. Section 3.2 caps the window at 8 hours and requires at least 27 five-turn completions. Thirty times 292 s is about 2.5 hours of serial C time, which fits 8 hours, but a single C-16-class expiry still yields U. P0 A2/B1/C1 can hang if a block is ignored, and no trial timeout is stated. Cost is correctly deferred to Step 2 plus owner acknowledgement, so this finding is wall-time and auth only.",
+      "evidence_reference": "plan section 0 Experiment 2 infra failures and C-arm mean durations; section 1 authentication expiry rule; section 3.2 window and completeness rule",
+      "repair": "State expected P1 serial wall time from the 269-292 s means under the 8 hour cap. Preregister a between-run auth probe that on failure stops launching further ids and labels U, with no replacement of ids already launched. Cap each P0 trial at a stated timeout and assign unproduced on timeout. No current change to mid-id replacement; follow-up only on token refresh policy.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c68789bfbf4ea29c57fe7bb8833d34d1da592ad11d1293cffa6fb6cf03308ed3"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 3.3 Fisher labels A-D; incomplete-row scoring; section 3.4 eighth candidate",
+      "claim": "A-D regions are closed in prose, but the Fisher call, incomplete oracle failure, and the dropped eighth candidate are still loose enough to flip a boundary label or to leave R3's eight-candidate count unmapped.",
+      "evidence": "Section 3.3 assigns exactly one of A-D from two-sided Fisher tests of M2_3/30 versus 23/30 and 11/29 with rejected meaning p at or below 0.05, which has no overlap. It does not name the library, two-sided convention, or 2x2 orientation, and it does not say what M2 is when oracle.log is missing on an incomplete row. Those choices move p across 0.05 at the edge. Historical 11/29 dropped an infra fail; the new rule keeps incompletes in n=30, which is stated and is acceptable if scored. Section 3.4 drops the earlier eighth candidate (export and footer co-movement) as a symptom; frozen R3 still asks for eight candidates handled as consistent, excludes, or unresolved.",
+      "evidence_reference": "plan section 3.3 Exactly one label A-D and U; section 3.2 incomplete-row rule; section 3.4 closing paragraph on the eighth candidate; frozen rubric R3",
+      "repair": "In section 3.3 and in the preregistration note, pin the Fisher implementation, table shape [[M2_true_new, M2_false_new],[hist_true, hist_false]], and the rule that a missing oracle on an incomplete row scores M2 false. Keep the 11/29 comparator as published. Add an eighth row that assigns the export/footer co-movement observation no causal label and points at the 3.1 supplementary columns, so the eight items are handled and no cause is named early.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3ba6db7e5bade9921b5bbbe9395dcb4f2f2edebca14479a6aa6d83b2f42eb39f"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 0 versus section 3 Step 1 invocation-line sentence",
+      "claim": "Section 3 Step 1 states as fact that original run.log files carry no invocation line, after section 0 filed invocation flags as P1 evidence still to be copied.",
+      "evidence": "Section 0 says the model id actually served, the settings actually loaded, and the invocation flags were not recorded, and that those items are P1 evidence, not facts. Step 1 then says the original run.log files carry no invocation line, so historical invocation and loaded-settings evidence is unavailable. Candidate 6 already allows unavailable unless the copied logs carry the fields. The categorical Step 1 sentence outruns the copy step. Other section 0 counts (1/30, 23/30, 5/29, 11/29, 0/29, Fisher p 1.99e-10, G-04/G-26/G-28/G-30, n=29 from two unre-run infra fails) are internally consistent and stay inside the two t14 haiku batches.",
+      "evidence_reference": "plan section 0 paragraph on unrecorded model id/settings/invocation; section 3 Step 1 last sentence; section 3.4 candidate 6",
+      "repair": "Rewrite Step 1 to say prior reports did not quote an invocation line; after copy, record whether each run.log contains invocation or loaded-settings fields; if absent, mark candidate 6 unavailable.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "504f414f3dcd1ee5907785ef03e3a67c4b032d47ed8a228509c0a03c0a74f668"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "section 5 review history leftover; section 3.1 half-schedule",
+      "claim": "Section 5 still carries a dispatch-hetero.sh / check-repair-scope.js call-site correction that no P0 or P1 step uses, and section 3.1 names half-schedule tabulations without a definition in this document.",
+      "evidence": "Section 5 says scripts/check-repair-scope.js is called from src/engine/ and scripts/dispatch-hetero.sh calls scripts/check-hands-commit.js around line 4328. Those paths are marked as folded facts from earlier larger-plan rounds. Status, review log R0-R7, history-only artifact paths at ed02e7f3a and 91023e419, and 'generation 2 is final' agree with each other. Section 3.1 lists half-schedule tabulations beside per-feature and constraint columns with no definition here. The leftover call-site sentence is reviewable noise rather than a contradictory status line.",
+      "evidence_reference": "plan section 5 last sentence; Review log R0-R7; section 3.1 Metrics",
+      "repair": "No current change required to execute P0 or P1. On the next plan edit, delete or footnote the call-site sentence and define or delete half-schedule. Follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "aa791889c6a7fef5c4641bc9921ad4687130d6e3dd072b82ba23bd621d4f4aa2"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 section 3.4 candidate-cause preregistration table",
+      "claim": "The preregistered candidate table does not cover all eight candidates required by R3: it contains seven rows and expressly removes the earlier eighth item.",
+      "evidence": "Section 3.4 numbers candidates 1 through 7 and then states that the earlier eighth candidate, described as the joint rise in export and footer failures, is a symptom and is dropped. Consequently, that eighth item has no preregistered observation-to-label function and cannot receive one of the required candidate labels after collection.",
+      "evidence_reference": "Plan section 3.4, candidate rows 1-7 and the paragraph immediately following candidate 7; frozen rubric R3.",
+      "repair": "Restore the eighth item to the preregistered table and define its exact observations, exhaustive branches, and one-label rule before collection. If it cannot discriminate causes, require the corresponding unresolved or unavailable label rather than deleting it, and do not treat the co-movement itself as evidence of a cause.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c746a1ca4759cd429031429d92601952b820cb170f0510b98d50c7544b8a1455"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 steps 2-3 and the preregistration ordering",
+      "claim": "The plan permits a measured run before the preregistration commit while simultaneously prohibiting any new outcome from being read before that commit.",
+      "evidence": "Step 2 allows establishment of cumulative cost using the CLI documentation or one measured run and says the estimate is written into the preregistration. Step 3 then says the preregistration must be committed before any new outcome is read. A measured run selected under the Step 2 fallback is therefore read before the Step 3 commit exists, contradicting the stated preregistration boundary.",
+      "evidence_reference": "Plan section 3, Steps 2-3, especially the phrases 'or one measured run', 'write it into the preregistration', and 'New outcomes are not read until that commit exists'; frozen rubric R3.",
+      "repair": "Split the commitment into two explicit stages. First commit the metrics, sample, window, decision rules, validity checklist, candidate functions, and cost-estimation procedure. Only then run the isolated cost probe and record its estimate in a pre-batch amendment without changing any outcome rule. Alternatively, prohibit the measured-run fallback before the sole preregistration commit and require the estimate to be derived from copied historical logs or official documentation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "208648065bbe81283392bc8a054801ee3d7011f8d42b03766c15323486b85b5a"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 section 3.2 task pinning and section 3.3 batch validity check",
+      "claim": "The prescribed task-hash procedure is not executable as written and does not unambiguously reproduce the historical driver's file-set and comparison rules.",
+      "evidence": "Section 3.2 calls for git hash-object on oracle.sh, CONSTRAINTS.md, turns/, task.md, and repo/. Git hash-object accepts files, not directory operands. The supplied driver instead walks TASK_DIR recursively, applies git hash-object to every file, and compares the union of the recorded and current path-to-hash maps. The plan gives neither that recursive file manifest rule nor an equivalent deterministic directory procedure, so the preregistered task-hash equality required by section 3.3 cannot be executed or reproduced unambiguously.",
+      "evidence_reference": "Plan section 3.2 task-hash sentence and section 3.3 task-hash validity condition; evals/orchestration/run-t14-gate-batch.js functions frozenHashes and hashesMatch.",
+      "repair": "Specify the recursive task manifest in the preregistration: enumerate every file under the task directory using the same exclusion rule as the historical driver, record each file's path and git blob OID, obtain the historical experiment-2 map from its results header, and compare the union of both maps exactly before and after collection. Replace the directory operands with that explicit file-level procedure.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2c6b07adce25a4fa6412bb1efe1b430a63f020360854c8983509e1472351be5b"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 3.4, candidate-cause table",
+      "claim": "The rubric expects eight candidates to be handled as consistent, excludes, or unresolved, but the plan lists only seven and explicitly drops the eighth (export and footer failures both rose) as 'a symptom, not a cause,' without assigning it one of the three labels.",
+      "evidence": "Section 3.4 final paragraph: 'The earlier eighth candidate (export and footer failures both rose) is a symptom, not a cause, and is dropped from the table; the per-feature columns are in the supplementary observations (3.1).' The rubric text reads: 'the eight candidates are handled honestly as consistent, excludes or unresolved, with no cause named early.' The plan transparently justifies the drop and relocates the data to supplementary observations, but the candidate does not receive a consistent/excludes/unresolved label.",
+      "evidence_reference": "Plan section 3.4, last paragraph; frozen rubric R3",
+      "repair": "No current change required; the plan's justification is principled and the underlying data is still collected in the per-feature supplementary observations. If the owner prefers strict eight-candidate coverage, the eighth row can be restored with label 'unresolved' and a note that it is a downstream observation rather than an independent cause. Follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "975a085e2fc7677f6a0503d7c27e9db27abc9a7546c1a8ace54d81e9fb2c8495"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "912a194c0fcff066ccea05199ce429f51f6f96f60e8acd7695a2274c9449a47a",
+      "rubric_id": "R2",
+      "affected_surface": "Section 2: P0 isolation step 0",
+      "claim": "Absence of plugin hook log lines does not establish that those hooks were not invoked.",
+      "evidence_reference": "Plan section 2, isolation step 0; hooks/owner-question-guard.js:131–136.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "77e52a8c17b4693b59bac3f4ba3ea905f83aed5551fcd7e011f3075019b0292f",
+      "rubric_id": "R1",
+      "affected_surface": "Section 0: historical wall-time figures",
+      "claim": "The stated historical wall-time range does not match the two experiment reports.",
+      "evidence_reference": "Plan section 0; docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md, S5; report-r2.md:36.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c68789bfbf4ea29c57fe7bb8833d34d1da592ad11d1293cffa6fb6cf03308ed3",
+      "rubric_id": "R6",
+      "affected_surface": "section 0 durations; section 2 P0 trials; section 3.2 eight-hour window; section 1 no-renewal rule",
+      "claim": "P0 trials have no wall-time cap, and P1 validity assumes an eight-hour sequential window with no authentication expiry after this host already recorded an OAuth expiry at 335 s.",
+      "evidence_reference": "plan section 0 Experiment 2 infra failures and C-arm mean durations; section 1 authentication expiry rule; section 3.2 window and completeness rule",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3ba6db7e5bade9921b5bbbe9395dcb4f2f2edebca14479a6aa6d83b2f42eb39f",
+      "rubric_id": "R3",
+      "affected_surface": "section 3.3 Fisher labels A-D; incomplete-row scoring; section 3.4 eighth candidate",
+      "claim": "A-D regions are closed in prose, but the Fisher call, incomplete oracle failure, and the dropped eighth candidate are still loose enough to flip a boundary label or to leave R3's eight-candidate count unmapped.",
+      "evidence_reference": "plan section 3.3 Exactly one label A-D and U; section 3.2 incomplete-row rule; section 3.4 closing paragraph on the eighth candidate; frozen rubric R3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "504f414f3dcd1ee5907785ef03e3a67c4b032d47ed8a228509c0a03c0a74f668",
+      "rubric_id": "R1",
+      "affected_surface": "section 0 versus section 3 Step 1 invocation-line sentence",
+      "claim": "Section 3 Step 1 states as fact that original run.log files carry no invocation line, after section 0 filed invocation flags as P1 evidence still to be copied.",
+      "evidence_reference": "plan section 0 paragraph on unrecorded model id/settings/invocation; section 3 Step 1 last sentence; section 3.4 candidate 6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "aa791889c6a7fef5c4641bc9921ad4687130d6e3dd072b82ba23bd621d4f4aa2",
+      "rubric_id": "R7",
+      "affected_surface": "section 5 review history leftover; section 3.1 half-schedule",
+      "claim": "Section 5 still carries a dispatch-hetero.sh / check-repair-scope.js call-site correction that no P0 or P1 step uses, and section 3.1 names half-schedule tabulations without a definition in this document.",
+      "evidence_reference": "plan section 5 last sentence; Review log R0-R7; section 3.1 Metrics",
+      "disposition": null
+    },
+    {
+      "fingerprint": "975a085e2fc7677f6a0503d7c27e9db27abc9a7546c1a8ace54d81e9fb2c8495",
+      "rubric_id": "R3",
+      "affected_surface": "Section 3.4, candidate-cause table",
+      "claim": "The rubric expects eight candidates to be handled as consistent, excludes, or unresolved, but the plan lists only seven and explicitly drops the eighth (export and footer failures both rose) as 'a symptom, not a cause,' without assigning it one of the three labels.",
+      "evidence_reference": "Plan section 3.4, last paragraph; frozen rubric R3",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-23T14:25:15.902Z"
+}

@@ -1,0 +1,157 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "per-turn-gate-2026-10-23-p0p1-v3",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "556217cb6dc3298d7d706b73c14e2c95793a56e3c3c36f603516ce5fc1754109",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the figures are driver first-response costs. Section 0 relabels them and states no estimate from them; P1 Step 2 derives full-run cost from copied logs and needs owner acknowledgement before launch."
+  },
+  {
+   "fingerprint": "f81251d18c60e1e1f3e9b1e4b77885e4e3a72db1cafd2e4db6534a2802082869",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: an opposite reading is a prediction, not a control. Section 2 now pairs every trial with a matched baseline that changes only the hook decision (A0, B0, C0)."
+  },
+  {
+   "fingerprint": "cf1b9599d605af8a0cff4dc71499d4d67bb920e5421662ec0d3c3a22e1369f02",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: labels C and D over-interpreted two Fisher tests. Section 3.3 now describes them as not rejected against either and rejected against both, with no diagnosis."
+  },
+  {
+   "fingerprint": "3e1167e8bd2dbac8ed56366b038b5d0bf413cf80a11c738688c50ab53aa5ea5d",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: old-harness runs had no stopping rule. They are removed from the plan; candidate 4 is a diff read only."
+  },
+  {
+   "fingerprint": "4b01b24db9419e153b7be66f691ae6ab59ea6c93da597b525150975a22ce9fe0",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: result.json was not copied. Step 1 and section 3.1 now copy and hash it and name the source of record per metric."
+  },
+  {
+   "fingerprint": "b27f9b1acb125dfc3018c5e1b1f4537fe133413205eb132bd088dd068b822a14",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: historical run.log files carry no invocation line. Section 3.2 reconstructs the C-only command from the pinned driver and harness, states that provenance, and marks historical invocation evidence unavailable."
+  },
+  {
+   "fingerprint": "1140c3cd05080a46461f32bdffb765deb4af95d2c9b00b5a795ec4808f6d8331",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: the generation count was inconsistent. Sections 0, 5 and the review log now say six generations in three rounds."
+  },
+  {
+   "fingerprint": "7afcc51fa8809eba225916c05104bf72b600cd6dda337f5ef2a01ad4ebad6f8c",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: run-t14-gate-batch.js always schedules G enforce runs. Section 3.2 forbids using it and specifies 30 direct harness invocations from a scratch wrapper, BLOCKED if that needs a harness edit."
+  },
+  {
+   "fingerprint": "0c4e653ea59f56ee9783cd26507e0267616ee9e5318930a108c153deb86a7ef8",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: n and incomplete handling were open. Section 3.3 freezes n=30 with every launched run counted and incompletes scored on the repo as left."
+  },
+  {
+   "fingerprint": "12f865c8461f7debbaa8423e838c12a6f1c6a6a16c19a0ada7f492dfeeb18e08",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: several candidate rows lacked a closed mapping. Section 3.4 now gives an observation-to-label function per candidate over four labels, drops the old-harness runs, and drops the symptom row."
+  },
+  {
+   "fingerprint": "f229a36d915ec5c6989fec1e9ec950fee1a64ece544cb923049d1ae93153171b",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: isolation and the second-block trial were missing. Section 2 now requires proven isolation from plugin hooks, trials A1 and A2, and per-trial labels, with expected readings committed before any run."
+  },
+  {
+   "fingerprint": "100c2032374ed3983d52320941d689df90eb18d864ccc2ddd80544109185d2a2",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: same as 7."
+  },
+  {
+   "fingerprint": "1d3106b9bda80613f9a175b7e18f302c47b78cfb76e3951696407140fa430a95",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: the closed number list contradicted section 3.4. Section 0 now says other historical numbers are P1 outputs, and section 3.4 no longer states them."
+  },
+  {
+   "fingerprint": "a4a996fb5dd278e4a392e04b3dbbfb734578013ea0666b5b1f264a3bad27f534",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: GO fired with unproduced hook answers. Section 3.5 now requires A1 and B1 affirmative."
+  },
+  {
+   "fingerprint": "36d8b23743db8c9746f704af7f103d2014260ff1a1f5c582667417b11235114b",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: missing preconditions. Section 1 adds BLOCKED on a wrong CLI version or failed authentication probe, and Step 2 requires a cost estimate acknowledged before launch; extra candidate-4 runs are removed."
+  },
+  {
+   "fingerprint": "d3a5004bdc36fc76ebfc6b03cab7bb828d770f015bdc0c9d2044cd4ce2db3523",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same family as 2 and 11. Closed by the trials A0, A1, A2, B0, B1, C0, C1 with matched baselines and per-trial labels."
+  },
+  {
+   "fingerprint": "564285ba6179c01a412a65c7929b25ffae5e375714d1420a22a5d98912e75fc3",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the driver cannot run C-only without replacement. Closed by the driver-free procedure with a committed manifest, single invocation per id, existing-output refusal, and logged invocations."
+  },
+  {
+   "fingerprint": "1b5aa7ddb8e4db0aa9407cdee85c0d51eb9d243eaa9601f17c1e5d86e3c5f4c8",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same as 10. Closed by the closed mapping function; candidate 8 moved to supplementary observations."
+  },
+  {
+   "fingerprint": "64be2a440c9ec96b0fd678e90ee481a942fe097e223e0b76e937518c49c5793a",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: validity was not conjunctive. Section 3.3 now lists every condition, makes any failure label U, and states how resolved model ids are handled."
+  },
+  {
+   "fingerprint": "d1451e58b74226a50f43fb9e63fc7d9175775b004bf0bd978929a12090f09f61",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: same as 14. Closed by the GO rule in section 3.5."
+  },
+  {
+   "fingerprint": "01ed61eec773de535a33d93a5c2e0f59aead6bee1a428a9c5d8beb5ba51dfda3",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: raw artifacts conflicted with the policy. Section 1 now has one artifact policy: raw logs and hook output stay in scratch, the repo gets derived notes, redacted excerpts and a sums file."
+  },
+  {
+   "fingerprint": "8cf437d3989d968f2aed8a4b5ac90c50bbb67d06e27f9c5793eadad40623850c",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: runtime identity was open. Section 1 preregisters the CLI path and version 2.1.303, dedicated config directory seeded only with credentials, version and authentication preflight, BLOCKED on failure, and U on mid-window expiry."
+  },
+  {
+   "fingerprint": "813401373c7b8f28372372ed3ade31d16d4a853999dd83a34cb981c62c1ba1dc",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: same as 7."
+  },
+  {
+   "fingerprint": "a20ce5c8f0b67ac4210387591b7281a5c6c2dade21347c78b19045e61c41cc1d",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: same as 13."
+  },
+  {
+   "fingerprint": "1e09cf7daa49bd7cdb58e0029d9cde2e2b4d057978c351d9294533e6b122c170",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: same as 7."
+  }
+ ]
+}

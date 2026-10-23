@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "arm": "change",
+  "skills": {
+    "ceo-agent": "ceo-agent-gdorm-gtext",
+    "distill": "distill-gdorm-gtext",
+    "hetero-review": "hetero-review-gdorm-gtext",
+    "quality-pipeline": "quality-pipeline-gdorm-gtext",
+    "retro": "retro-gdorm-gtext"
+  },
+  "files": [
+    "gdorm-files-gtext"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-gdorm"
+  ]
+}

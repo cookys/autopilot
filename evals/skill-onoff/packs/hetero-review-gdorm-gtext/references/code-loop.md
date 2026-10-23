@@ -1,0 +1,42 @@
+# Code Review Loop — Adjudication and Freeze Discipline
+
+This document specifies the judgment rules and freeze discipline for heterogeneous code reviews.
+
+## Core Principle: Claims vs Gates (ADR-0001)
+
+A hetero implementer's green or reviewer green verdict is a claim that depth-0 must independently re-derive, never a gate that stands on its own. Depth-0 re-derives the verdict from the reviewer's structured JSON artifact and the exact `base..head` commit range it reviewed.
+
+No trust machinery (no hash chains, event ledgers, witness receipts, attestation, or trust roots) is used. The integrity is established by snapshot shas, reviewer artifacts, and verifiable execution receipts.
+
+## Quality of Disposition Rationales
+
+Depth-0 evaluates all candidate findings emitted by the heterogeneous review panel. Each finding receives a disposition:
+- `verified`: finding is confirmed and valid.
+- `refuted`: finding is rejected with a concrete rationale.
+- `deferred`: non-blocker deferred with explicit justification.
+
+A good disposition rationale for code-review findings:
+- Ties the refutation to concrete code evidence, tests, runtime semantics, or existing invariants rather than bare assertion.
+- Demonstrates why the reported issue cannot occur, is already mitigated by an invariant upstream, or is an intentional design trade-off documented in ADRs.
+
+Closing an earlier finding is explicit. A verified finding from an earlier generation stays open until a later generation's dispositions file lists it under `"resolutions": [{"id": "<finding id>", "rationale": "<what you re-read or re-ran to confirm the fix>"}]`; a later generation that simply stops reporting it closes nothing, and re-raising the same problem under a new id leaves the old id open until it is explicitly resolved. `finalize` and `check-phase-review-receipt.js` refuse a resolution that names no open verified finding. A chain whose `closed_findings` stamps are stale is repaired with `node scripts/hetero-review-loop.js refinalize --ledger <dir> --phase <id> --generation <last>` (re-derives from the on-disk evidence; refuses if any findings/dispositions sha256 changed).
+
+## Freeze Predicate
+
+The code review loop freezes when either:
+1. A `SHIP-AS-IS` verdict is finalized with a contiguous, head-matching generation chain verified by `node scripts/check-phase-review-receipt.js` in receipt mode; OR
+2. A valid opt-out receipt is written via `node scripts/hetero-review-loop.js opt-out --knob hetero_review` when the `hetero_review` knob resolves to `off`.
+
+Receipt verdict tokens are strictly `SHIP-AS-IS` and `FIX-THEN-SHIP`. Severities use only existing vocabulary (`Critical`, `Major`, `Minor`, `Suggestion`).
+
+A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
+
+Packet set rule on heads: every packet pins the same range h1 (the earliest first reviewed head), and the exact cover is checked at h1. One exception: a packet may be first reviewed at a later head h2 when none of that packet's own paths changed between h1 and h2. A packet whose own paths changed in h1..h2 is refused ("first reviewed at a different head"); a change to another packet's file does not matter to it, but that other packet must be re-reviewed at the new tip (generation 2).
+
+## The Growth Rail
+
+Code reviews enforce incremental delta verification to prevent unbounded loops and scope creep:
+- Each new generation reviews only the delta since the previous generation's head.
+- A new generation never re-reviews the entire phase range from scratch.
+- Verified findings from prior generations are tracked until closed by subsequent reviewer artifacts over the delta.
+- The generation chain must remain strictly contiguous from phase base to head.

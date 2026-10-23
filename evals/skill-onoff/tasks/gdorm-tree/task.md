@@ -1,0 +1,1 @@
+You are in CEO mode. Open this project and plan only. The goal is L-size: add a greeting helper at src/greet.js plus a test that checks its return value. Stop before any implementation. Do not edit product code, do not commit, and do not open a pull request.

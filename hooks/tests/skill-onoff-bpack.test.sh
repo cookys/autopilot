@@ -320,11 +320,43 @@ PY
   clean ONOFF_PACKS_DIR="$PACKS" node "$BASE/run-bpack-campaign.js" --check-arms < /dev/null >/dev/null 2>&1 \
     && fail "a mutated pack should make --check-arms non-zero"
   d30=$(clean node "$BASE/run-bpack-campaign.js" --results "$TEST_TMP/real30.jsonl" --dry-run < /dev/null) || fail "real-prereg dry-run exit $?"
-  python3 -c 'import json,sys; j=json.loads([l for l in sys.argv[1].splitlines() if l.startswith("{")][-1]); assert j["cells_total"]==30 and abs(j["cost_estimate_usd"]-6.80)<1e-9, j' "$d30" || fail "real dry-run: $d30"
+  python3 -c 'import json,sys; j=json.loads([l for l in sys.argv[1].splitlines() if l.startswith("{")][-1]); assert j["cells_total"]==10 and abs(j["cost_estimate_usd"]-1.90)<1e-9, j' "$d30" || fail "real dry-run (T1-only formal grid): $d30"
   rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$BASE/prereg/bpack.json" --results "$TEST_TMP/pass.jsonl" 2>&1 < /dev/null) || rc=$?
   [ "$rc" = 0 ] || fail "real prereg thresholds reject the passing stub grid: rc=$rc $out"
   rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$BASE/prereg/bpack.json" --results "$TEST_TMP/t1-base-high.jsonl" 2>&1 < /dev/null) || rc=$?
   [ "$rc" = 3 ] || fail "real prereg accepts a T1 base of 2/5: rc=$rc $out"
+  # Amendment 1: the real prereg scores T1 only (scored_tasks). T2 and T3 rows are ignored; T1 thresholds are unchanged.
+  python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); assert j["scored_tasks"]==["bpack-revoked"] and j["thresholds"]["b_revoked_prefix"]=={"base_max":1,"change_min":4}, j' "$BASE/prereg/bpack.json" || fail "prereg scored_tasks / T1 thresholds"
+  real_score() { # $1 grid $2 want-rc
+    rc=0; out=$(clean node "$BASE/score-bpack.js" --prereg "$BASE/prereg/bpack.json" --results "$TEST_TMP/$1.jsonl" 2>&1 < /dev/null) || rc=$?
+    [ "$rc" = "$2" ] || fail "real prereg, grid $1: rc=$rc want $2: $out"
+  }
+  real_score t2-change-low 0        # T2 would fail under the old three-column rule
+  real_score t3-drop-2 0            # T3 would fail
+  real_score t3-vacuous 0
+  real_score t3-marker-absent 0
+  real_score t1-change-low 3        # T1 stays binding: change 3/5
+  real_score t1-base-high 3         # T1 stays binding: base 2/5
+  real_score t1-edge-ok 0
+  python3 - "$TEST_TMP" << 'PY'
+import json, os, sys
+tmp = sys.argv[1]
+rows = [json.loads(l) for l in open(os.path.join(tmp, "pass.jsonl")) if l.strip()]
+t1 = [r for r in rows if r["task_id"] == "bpack-revoked"]
+open(os.path.join(tmp, "t1only.jsonl"), "w").write("".join(json.dumps(r) + "\n" for r in t1))
+open(os.path.join(tmp, "t1only-missing.jsonl"), "w").write("".join(json.dumps(r) + "\n" for r in t1[:-1]))
+bad = [dict(r) for r in t1]
+for r in bad:
+    if r["arm"] == "base" and r["rep"] <= 2: r["markers"] = {"b_revoked_prefix": True}
+open(os.path.join(tmp, "t1only-base2.jsonl"), "w").write("".join(json.dumps(r) + "\n" for r in bad))
+PY
+  real_score t1only 0
+  real_score t1only-missing 3       # a missing T1 cell is still an infra failure
+  real_score t1only-base2 3         # negative control: T1 base 2/5 on a T1-only grid
+  d10=$(clean node "$BASE/run-bpack-campaign.js" --results "$TEST_TMP/real10.jsonl" --dry-run --tasks bpack-revoked < /dev/null) || fail "dry-run --tasks bpack-revoked exit $?"
+  python3 -c 'import json,sys; j=json.loads([l for l in sys.argv[1].splitlines() if l.startswith("{")][-1]); assert j["cells_total"]==10, j' "$d10" || fail "--tasks bpack-revoked: $d10"
+  rc=0; clean node "$BASE/run-bpack-campaign.js" --results "$TEST_TMP/real10.jsonl" --dry-run --tasks nope < /dev/null >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || fail "--tasks with an unknown task must be a usage error, rc=$rc"
   clean node "$BASE/stamp-prereg.js" --row bpack --check >/dev/null 2>&1 || echo "note: stamp --check not ok yet (stamping is depth-0's step)"
 else skip "prereg/arms/lib-bpack/tasks (real-prereg checks)"; fi
 

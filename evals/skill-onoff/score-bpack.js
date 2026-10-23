@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // score-bpack.js — bpack row scorer (prereg/bpack.json).
-// Three columns, PASS only when all hold and every formal cell is present with
+// Three columns (prereg scored_tasks may narrow this to T1 only, amendment 1), PASS only when all scored columns hold and every formal cell is present with
 // failure_class null:
 //   T1 bpack-revoked        b_revoked_prefix: base <= 1/5 and change >= 4/5
 //   T2 bpack-tree           t_tree_run:       change >= 4/5 and change - base >= 3
@@ -44,11 +44,16 @@ const T = P.thresholds || {};
 const OFF = P.arms.off;
 const ON = P.arms.on;
 const REPS = T.reps || P.reps || 5;
-const COLS = [
+const ALL_COLS = [
   { task: 'bpack-revoked', marker: 'b_revoked_prefix' },
   { task: 'bpack-tree', marker: 't_tree_run' },
   { task: 'dcard-owner-decision', marker: 'a_decision_file' },
 ];
+// Amendment 1: a prereg with scored_tasks scores only those columns (T1 only for the formal bpack run). The
+// thresholds of a scored column are never relaxed; an unscored column is not read at all.
+const SCORED = Array.isArray(P.scored_tasks) && P.scored_tasks.length ? P.scored_tasks : ALL_COLS.map((c) => c.task);
+const COLS = ALL_COLS.filter((c) => SCORED.includes(c.task));
+const scoredCol = (task) => SCORED.includes(task);
 
 const done = (code, verdict, counts) => {
   console.log(`${P.row || 'bpack'}: ${verdict}\n${JSON.stringify(counts || {})}`);
@@ -108,22 +113,36 @@ if (typeof needRatio === 'number') {
   if (!need(vOff) || !need(vOn)) done(5, 'INSTRUMENT-INVALID (V1: target skill not invoked in enough cells — no content judgement)', counts);
 }
 
-const r1 = counts.b_revoked_prefix;
-const r2 = counts.t_tree_run;
-const r3 = counts.a_decision_file;
 const t1 = { base_max: 1, change_min: 4, ...(T.b_revoked_prefix || {}) };
 const t2 = { change_min: 4, min_diff: 3, ...(T.t_tree_run || {}) };
 const t3 = { max_drop: 1, ...(T.a_decision_file || {}) };
-const t1Ok = r1.base <= t1.base_max && r1.change >= t1.change_min;
-const t2Ok = r2.change >= t2.change_min && (r2.change - r2.base) >= t2.min_diff;
-const t3Unmeasured = unmeasured('dcard-owner-decision', 'a_decision_file');
-const t3Vacuous = r3.base === 0 && r3.change === 0;
-const t3Ok = t3Unmeasured === 0 && !t3Vacuous && r3.change >= r3.base - t3.max_drop;
-counts.rules = { b_revoked_prefix: t1Ok, t_tree_run: t2Ok, a_decision_file: t3Ok };
-if (t3Unmeasured) counts.t3_unmeasured_cells = t3Unmeasured;
-if (t3Vacuous) counts.t3_vacuous = true;
-const pass = t1Ok && t2Ok && t3Ok;
-let verdict = pass ? 'PASS' : 'FAIL';
-if (!pass && t3Unmeasured) verdict = `FAIL (T3 marker a_decision_file missing in ${t3Unmeasured} cell(s): marker lib not loaded, regression column unmeasured)`;
-else if (!pass && t3Vacuous) verdict = 'FAIL (T3 marker a_decision_file never true in either arm: regression column is vacuous)';
+counts.rules = {};
+let pass = true;
+let verdict = '';
+if (scoredCol('bpack-revoked')) {
+  const r1 = counts.b_revoked_prefix;
+  const ok = r1.base <= t1.base_max && r1.change >= t1.change_min;
+  counts.rules.b_revoked_prefix = ok;
+  pass = pass && ok;
+}
+if (scoredCol('bpack-tree')) {
+  const r2 = counts.t_tree_run;
+  const ok = r2.change >= t2.change_min && (r2.change - r2.base) >= t2.min_diff;
+  counts.rules.t_tree_run = ok;
+  pass = pass && ok;
+}
+if (scoredCol('dcard-owner-decision')) {
+  const r3 = counts.a_decision_file;
+  const t3Unmeasured = unmeasured('dcard-owner-decision', 'a_decision_file');
+  const t3Vacuous = r3.base === 0 && r3.change === 0;
+  const ok = t3Unmeasured === 0 && !t3Vacuous && r3.change >= r3.base - t3.max_drop;
+  counts.rules.a_decision_file = ok;
+  if (t3Unmeasured) counts.t3_unmeasured_cells = t3Unmeasured;
+  if (t3Vacuous) counts.t3_vacuous = true;
+  pass = pass && ok;
+  if (!ok && t3Unmeasured) verdict = `FAIL (T3 marker a_decision_file missing in ${t3Unmeasured} cell(s): marker lib not loaded, regression column unmeasured)`;
+  else if (!ok && t3Vacuous) verdict = 'FAIL (T3 marker a_decision_file never true in either arm: regression column is vacuous)';
+}
+if (!verdict) verdict = pass ? 'PASS' : 'FAIL';
+if (SCORED.length < ALL_COLS.length) counts.scored_tasks = SCORED;
 done(pass ? 0 : 3, verdict, counts);

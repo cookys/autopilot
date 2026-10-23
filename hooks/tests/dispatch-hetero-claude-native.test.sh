@@ -29,6 +29,8 @@ export HOME="$TEST_TMP/home"; mkdir -p "$HOME"   # canonical config <HOME>/.auto
 unset AUTOPILOT_CONFIG_FILE
 CANON_CFG="$HOME/.autopilot/config.json"
 
+# Alternate provider / auth selectors the claude-native child must not inherit (names from the claude 2.1.309 binary).
+SCRUB_VARS="CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS"
 ARGV_LOG="$TEST_TMP/claude-argv.log"
 SEEN_LOG="$TEST_TMP/claude-seen.log"
 BIN_DIR="$TEST_TMP/bin"; mkdir -p "$BIN_DIR"
@@ -38,6 +40,7 @@ printf '%s\n' "\$*" > "$ARGV_LOG"
 cat >/dev/null
 {
   echo "CFG=\$CLAUDE_CONFIG_DIR"
+  for v in $SCRUB_VARS; do [ -n "\${!v+x}" ] && echo "LEAK=\$v"; done
   echo "DIRMODE=\$(stat -c %a "\$CLAUDE_CONFIG_DIR")"
   for f in "\$CLAUDE_CONFIG_DIR"/* "\$CLAUDE_CONFIG_DIR"/.[!.]*; do
     [ -e "\$f" ] && echo "ENTRY=\$(basename "\$f") MODE=\$(stat -c %a "\$f")"
@@ -105,7 +108,8 @@ assert_contains "$OUT" '"status": "precondition_failed"' "(c) missing credential
 assert_file_absent "$ARGV_LOG" "(c) missing credentials: stub never invoked"
 mv "$REAL_CLAUDE/.credentials.json.off" "$REAL_CLAUDE/.credentials.json"
 
-# (b) confirmed -> runs
+# (b) confirmed -> runs (outer env carries every scrubbed variable; the stub must see none)
+for v in $SCRUB_VARS; do export "$v=outer-$v"; done
 OUT="$(run --branch feat/cn-ok)"; RC=$?
 assert_eq "0" "$RC" "(b) confirmed claude-native exits 0"
 assert_contains "$OUT" '"status": "committed"' "(b) committed"
@@ -127,6 +131,8 @@ assert_contains "$SEEN" 'ENTRY=.credentials.json MODE=600' "(c) credentials copy
 assert_eq "1" "$(printf '%s\n' "$SEEN" | grep -c '^ENTRY=')" "(c) exactly one entry in the child config dir"
 assert_not_contains "$SEEN" 'settings.json' "(c) no settings.json"
 assert_not_contains "$SEEN" 'projects' "(c) no projects/"
+assert_not_contains "$SEEN" 'LEAK=' "(f) no provider/auth selector variable reaches the child: $(printf '%s' "$SEEN" | grep '^LEAK=' | tr '\n' ' ')"
+for v in $SCRUB_VARS; do unset "$v"; done
 CFG="$(printf '%s\n' "$SEEN" | sed -n 's/^CFG=//p')"
 assert_neq "$REAL_CLAUDE" "$CFG" "(c) child config dir is not the real one"
 [ ! -e "$CFG" ] && assert_eq "gone" "gone" "(c) seeded config dir removed after dispatch" || assert_eq "gone" "present" "(c) seeded config dir removed after dispatch"

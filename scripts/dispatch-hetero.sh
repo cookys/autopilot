@@ -3804,7 +3804,15 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # Fresh 0700 dir with only a 0600 .credentials.json; removed right after the worker (success AND
     # failure), and by cleanup/abort_dispatch if the dispatcher dies first. A seeding failure never spawns.
     if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
-      run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
+      # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
+      # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
+      # switches (BEDROCK/VERTEX/FOUNDRY/MANTLE/ANTHROPIC_AWS/ANTHROPIC_GOOGLE_CLOUD/GATEWAY), alternate keys and
+      # tokens (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
+      # ANTHROPIC_FOUNDRY_AUTH_TOKEN, AWS_BEARER_TOKEN_BEDROCK), every endpoint override (ANTHROPIC_BASE_URL and the
+      # BEDROCK/BEDROCK_MANTLE/VERTEX/FOUNDRY base URLs, ANTHROPIC_FOUNDRY_RESOURCE) and ANTHROPIC_CUSTOM_HEADERS (can
+      # inject auth). NOT cleared: CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
+      # region/project tuning vars (inert without a selector).
+      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
           --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
           _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR"
     else

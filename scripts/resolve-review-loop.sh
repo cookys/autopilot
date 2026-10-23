@@ -759,6 +759,9 @@ family_of() {
     *gpt*|*codex*|*o1*|*o3*|*o4*)            echo openai ;;
     *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
     *qwen*|*qwq*)                            echo alibaba ;;
+    *deepseek*)                              echo deepseek ;;
+    *longcat*)                               echo meituan ;;
+    *beam*)                                  echo reflection ;;
     *gemini*|*flash*|*bison*)                echo google ;;
     *)                                       echo unknown ;;
   esac

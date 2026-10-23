@@ -17,11 +17,11 @@
  "properties": {
   "engine": {
    "type": "string",
-   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+   "pattern": "^[A-Za-z0-9._:()/-](?:[A-Za-z0-9 ._:()/-]{0,126}[A-Za-z0-9._:()/-])?$"
   },
   "model": {
    "type": "string",
-   "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+   "pattern": "^[A-Za-z0-9._:()/-](?:[A-Za-z0-9 ._:()/-]{0,126}[A-Za-z0-9._:()/-])?$"
   },
   "model_version": {
    "type": "string",

@@ -385,4 +385,23 @@ check("unknown-key", extra, (dir) => {
 ' "$REPO_ROOT/scripts/lib/headless-seat-derive.js"
 assert_eq "$?" "0" "unreadable, malformed, and unknown-key pins errors name the pins file"
 
+# --- (h) opencode provider/model ids pass the seat schema; malformed ids stay refused ---
+mkseat() {  # mkseat <file> <engine-json-string> ; model mirrors engine
+  sed -e "s|\"engine\": \"MiniMax-M3.1-Flash\"|\"engine\": $2|" \
+      -e "s|\"model\": \"MiniMax-M3.1-Flash\"|\"model\": $2|" "$SEAT" >"$1"
+}
+OC_SEAT="$TEST_TMP/seat-oc.json"
+mkseat "$OC_SEAT" '"opencode-go/deepseek-v4.1-flash"'
+run_q "$TEST_TMP/oc.out" seat-preview --seat-file "$OC_SEAT"
+assert_exit_code "$RUN_RC" "0" "seat-preview accepts opencode-go/deepseek-v4.1-flash via --seat-file"
+BAD_LEAD="$TEST_TMP/seat-lead.json"
+mkseat "$BAD_LEAD" '" opencode-go/deepseek-v4.1-flash"'
+run_q "$TEST_TMP/lead.out" seat-preview --seat-file "$BAD_LEAD"
+assert_exit_code "$RUN_RC" "4" "a model id with a leading space is still refused"
+LONG_ID="$(printf 'a%.0s' $(seq 1 129))"
+BAD_LONG="$TEST_TMP/seat-long.json"
+mkseat "$BAD_LONG" "\"$LONG_ID\""
+run_q "$TEST_TMP/long.out" seat-preview --seat-file "$BAD_LONG"
+assert_exit_code "$RUN_RC" "4" "a 129-char model id is still refused"
+
 finalize_test

@@ -3338,6 +3338,9 @@ assert_contains "$OUT" "verify_red_rework_repair_verify=exit1:" "AutopilotEngine
 assert_contains "$OUT" "verify_red_max_status=non_converged" "AutopilotEngine verify-red through maxRounds is non_converged"
 assert_contains "$OUT" "verify_red_max_rounds=3" "AutopilotEngine verify-red runs all rounds"
 assert_contains "$OUT" "verify_red_max_result_reason=verify_red" "AutopilotEngine verify-red max-rounds reason is verify_red not max_rounds"
+# RED at 76d332963: FAIL AutopilotEngine verify-red through maxRounds does not leave a reviewer convergence_reason: verify_red_max_reason=null not found (verify_red_max_reason=reviewer)
+assert_contains "$OUT" "verify_red_max_reason=null" "AutopilotEngine verify-red through maxRounds does not leave a reviewer convergence_reason"
+assert_contains "$OUT" "verify_red_ship_reason=null" "AutopilotEngine verify-red non_converged result carries no reviewer convergence_reason"
 assert_contains "$OUT" "verify_green_ship_status=converged" "AutopilotEngine verify-green + reviewer SHIP still converges"
 assert_contains "$OUT" "verify_green_ship_reason=reviewer" "AutopilotEngine verify-green SHIP keeps reviewer reason"
 assert_contains "$OUT" "verify_green_ship_repair_calls=0" "AutopilotEngine verify-green SHIP dispatches no repair"

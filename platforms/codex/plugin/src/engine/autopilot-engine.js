@@ -12198,10 +12198,11 @@ class AutopilotEngine {
       }
 
       if (review.verdict === convergenceVerdict) {
-        if (verifyCmdProvided) verifyState.convergenceReason = 'reviewer';
         // BL-0238: a red verify round outranks the reviewer verdict. The
-        // reviewer SHIP does not converge; fall through to rework / max rounds.
+        // reviewer SHIP does not converge; fall through to rework / max rounds,
+        // and must not leave a reviewer convergence_reason behind.
         if (!(verifyCmdProvided && currentVerifyPass === false)) {
+        if (verifyCmdProvided) verifyState.convergenceReason = 'reviewer';
         return finish({
           status: 'converged',
           phase: 'converged',

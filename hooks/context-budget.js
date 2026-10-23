@@ -291,6 +291,7 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
 
 (function main() {
   let exitCode = 0;
+  let releaseLock = () => {};
   try {
     // default-on since v2.35.15 (was opt-in); opt out with context_budget.mode=off or
     // AUTOPILOT_CONTEXT_BUDGET_MODE=off (loadConfig).
@@ -315,8 +316,11 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
     const stateFile = path.join(stDir, `${sid}.json`);
     // Serialise the load-modify-save of the state file with the PostCompact arm (state-checkpoint.js).
     // No lock inside ~1s ⇒ carry on unlocked (advisory hook, fail open). Released on every exit path.
-    const releaseLock = lockStateFile(stateFile);
-    if (releaseLock) process.on('exit', releaseLock);
+    const rawRelease = lockStateFile(stateFile);
+    let lockHeld = !!rawRelease;
+    // Release exactly once (a second release could drop another process's lock): right after the save, or on exit.
+    releaseLock = () => { if (lockHeld) { lockHeld = false; try { rawRelease(); } catch { /* ignore */ } } };
+    process.on('exit', releaseLock);
     const st = loadState(stateFile);
     st.calls += 1;
     for (const w of cfg.warnings || []) warnOnce(st, w);
@@ -474,8 +478,9 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
     if (cfg.liveWrite) {
       try { maybeWriteLive(live.base, sid, tpath, st, liveRaw); } catch { /* the writer never breaks the hook */ }
     }
-    saveState(stateFile, st);
+    try { saveState(stateFile, st); } finally { releaseLock(); }
   } catch (e) {
+    releaseLock();
     try { process.stderr.write(`context-budget error (fail-open): ${e.message}\n`); } catch { /* ignore */ }
     exitCode = 0;
   }

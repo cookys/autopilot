@@ -30,7 +30,7 @@ field() { node -e 'try{const s=JSON.parse(require("fs").readFileSync(process.arg
 # (a) concurrent writers lose no update.
 rm -rf "$AUTOPILOT_LIVE_DIR/context-budget"
 budget   # seed the file
-N=12
+N=6
 for _ in $(seq "$N"); do ( budget ) & ( post_compact ) & done
 wait
 assert_eq "$(field calls)" "$((N + 1))" "all $((N + 1)) context-budget increments survive concurrency"

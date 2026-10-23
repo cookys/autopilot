@@ -917,3 +917,101 @@ test('budget: a direct reference runs before an indirect one even when the selec
     assert.deepStrictEqual(sel.suites, ['scripts/a-indirect.test.js', 'scripts/z-direct.test.js']);
   } finally { r.cleanup(); }
 });
+
+// ---- --entry-timeout / --attribute ----
+function runSel(r, args, opts = {}) {
+  return spawnSync('node', [SEL, '--root', r.dir, ...args], { encoding: 'utf8', ...opts });
+}
+function worktreeLeft(r) {
+  return execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: r.dir }).toString().split('\n').filter((l) => l.startsWith('worktree ')).length;
+}
+const GREEN = '#!/usr/bin/env bash\nexit 0\n';
+const RED = '#!/usr/bin/env bash\nexit 1\n';
+const TLAYOUT = (a, b) => ({ 'scripts/tool.js': 'x\n', 'hooks/tests/a.test.sh': a, 'hooks/tests/b.test.sh': b });
+function touch(r) {
+  return r.change({ 'scripts/tool.js': 'y\n', 'hooks/tests/a.test.sh': fs.readFileSync(path.join(r.dir, 'hooks/tests/a.test.sh'), 'utf8') + 'echo scripts/tool.js\n', 'hooks/tests/b.test.sh': fs.readFileSync(path.join(r.dir, 'hooks/tests/b.test.sh'), 'utf8') + 'echo scripts/tool.js\n' });
+}
+
+test('--entry-timeout kills a sleeping suite, rc 124, marked timeout', () => {
+  const r = makeRepo(TLAYOUT('#!/usr/bin/env bash\nsleep 1000\n', GREEN));
+  try {
+    const head = touch(r);
+    const t0 = Date.now();
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--entry-timeout', '1']);
+    assert.ok(Date.now() - t0 < 20000);
+    assert.match(p.stdout, /rc=124 hooks\/tests\/a\.test\.sh/);
+    assert.match(p.stdout, /\(timeout: hooks\/tests\/a\.test\.sh\)/);
+    assert.strictEqual(p.status, 1);
+  } finally { r.cleanup(); }
+});
+
+test('--attribute: red at head and base is preexisting, exit 0, worktree gone, base_rc recorded', () => {
+  const r = makeRepo(TLAYOUT(RED, GREEN));
+  try {
+    const head = touch(r);
+    const rec = path.join(r.dir, 'rec.json');
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--attribute', '--record', rec]);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stdout, /attribution: preexisting 1: hooks\/tests\/a\.test\.sh/);
+    assert.match(p.stdout, /attribution: new 0/);
+    assert.strictEqual(worktreeLeft(r), 1);
+    const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    assert.deepStrictEqual(Object.keys(j), ['schema', 'head', 'base', 'mode', 'suites']);
+    const sa = j.suites.find((s) => s.path === 'hooks/tests/a.test.sh');
+    assert.deepStrictEqual(Object.keys(sa), ['path', 'rc', 'base_rc']);
+    assert.strictEqual(sa.base_rc, 1);
+    assert.deepStrictEqual(Object.keys(j.suites.find((s) => s.path === 'hooks/tests/b.test.sh')), ['path', 'rc']);
+  } finally { r.cleanup(); }
+});
+
+test('--attribute: red only at head is new, exit non-zero', () => {
+  const r = makeRepo(TLAYOUT(GREEN, GREEN));
+  try {
+    const head = r.change({ 'scripts/tool.js': 'y\n', 'hooks/tests/a.test.sh': '#!/usr/bin/env bash\necho scripts/tool.js\nexit 1\n', 'hooks/tests/b.test.sh': GREEN + 'echo scripts/tool.js\n' });
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--attribute']);
+    assert.strictEqual(p.status, 1);
+    assert.match(p.stdout, /attribution: new 1: hooks\/tests\/a\.test\.sh/);
+    assert.strictEqual(worktreeLeft(r), 1);
+  } finally { r.cleanup(); }
+});
+
+test('--attribute: usage errors without --run / --base', () => {
+  const r = makeRepo(TLAYOUT(GREEN, GREEN));
+  try {
+    assert.strictEqual(runSel(r, ['--base', r.base, '--attribute']).status, 2);
+    assert.strictEqual(runSel(r, ['--files', 'scripts/tool.js', '--run', '--attribute']).status, 2);
+  } finally { r.cleanup(); }
+});
+
+test('--attribute: TERM during the base re-run removes the base worktree', async () => {
+  const r = makeRepo(TLAYOUT(RED, GREEN));
+  try {
+    // sleeps at base only when the marker exists: first run (head) red fast, base re-run hangs
+    const slow = '#!/usr/bin/env bash\nif [ -e "$(dirname "$0")/../../.git" ] && [ -f "$(dirname "$0")/../../.git" ]; then sleep 1000; fi\nexit 1\n';
+    const base2 = r.change({ 'hooks/tests/a.test.sh': slow }); // new base
+    const head = r.change({ 'scripts/tool.js': 'y\n', 'hooks/tests/b.test.sh': GREEN + 'echo scripts/tool.js\n', 'hooks/tests/a.test.sh': slow + 'echo scripts/tool.js\n' });
+    const { spawn } = require('child_process');
+    const c = spawn('node', [SEL, '--root', r.dir, '--base', base2, '--head', head, '--run', '--attribute'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    c.stdout.on('data', (d) => { out += d; });
+    const deadline = Date.now() + 20000;
+    while (worktreeLeft(r) < 2 && Date.now() < deadline) await new Promise((x) => setTimeout(x, 100));
+    assert.strictEqual(worktreeLeft(r), 2, 'worktree should exist mid-run: ' + out);
+    c.kill('SIGTERM');
+    await new Promise((x) => c.on('close', x));
+    assert.strictEqual(worktreeLeft(r), 1);
+  } finally { r.cleanup(); }
+});
+
+test('negative control: without the new flags no attribution output, no base_rc, usual record keys', () => {
+  const r = makeRepo(TLAYOUT(RED, GREEN));
+  try {
+    const head = touch(r);
+    const rec = path.join(r.dir, 'rec.json');
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--record', rec]);
+    assert.strictEqual(p.status, 1);
+    assert.doesNotMatch(p.stdout, /attribution|timeout/);
+    assert.match(p.stdout, /summary: 2 run, 1 failed\n/);
+    assert.strictEqual(fs.readFileSync(rec, 'utf8').includes('base_rc'), false);
+  } finally { r.cleanup(); }
+});

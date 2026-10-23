@@ -4,6 +4,7 @@
 //
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
+//     [--entry-timeout <secs>] [--attribute]
 //   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
@@ -29,6 +30,18 @@
 //   suites:[{path, rc}, ...]} — one object per entry actually executed, in execution order
 //   (suites then extra_runners when selective; always_run then extra_runners when full). rc is
 //   the integer already printed as rc=N.
+//
+// --entry-timeout <secs> (only with --run; default none): each executed entry runs in its own process
+// group and is killed after that many seconds (TERM, KILL 2s later); its rc is 124 and the summary
+// line ends with `(timeout: <paths>)`.
+// --attribute (needs --run and --base; not --files): after the run, re-run ONLY the non-zero entries at
+// the base commit in a temporary detached git worktree under the OS temp dir (always removed, also
+// on failure or TERM/INT), same command, env and entry timeout. An entry non-zero at base is
+// `preexisting`; zero at base, or absent at base, is `new`. Prints `attribution: preexisting N: ...`
+// and `attribution: new N: ...`. Exit code with --attribute: non-zero (1) only if any entry is `new`
+// (or an empty selection is not a pass); 3 is kept for a budget stop; preexisting-only failures exit 0.
+// Without --attribute the exit code is unchanged. --record adds, per re-run suite, an additive
+// `base_rc` after the existing keys (schema 1 keys and order unchanged; consumers read path/rc only).
 //
 // --budget-seconds N (only with --run; N a positive number) changes the ORDER and the STOP point of
 // the run, never which entries are selected. Order: a changed suite itself, then suites that name a
@@ -97,7 +110,8 @@
 //      Shell and other non-JS files still drop full-line # and // comments only.
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
-const { execFileSync, spawnSync } = require('child_process');
+const { execFileSync, spawnSync, spawn } = require('child_process');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
@@ -498,19 +512,46 @@ function entryCommand(rel) {
   return null;
 }
 
-function runEntry(root, rel) {
+// Process groups of entries currently running with an --entry-timeout (killed on TERM/INT too).
+const ACTIVE = new Set();
+function killGroup(pid, sig) { try { process.kill(-pid, sig); } catch { try { process.kill(pid, sig); } catch { /* gone */ } } }
+
+// Resolves {rc, timedOut}. With timeoutSecs the entry runs in its own process group; on expiry the
+// group gets TERM, then KILL 2s later, and rc is 124. Without it the spawn is the plain inherit run.
+function runEntry(root, rel, timeoutSecs, group) {
   const spec = entryCommand(rel);
   if (!spec) {
     process.stderr.write(`affected-suites: no runner for ${rel} (run.sh runs .sh with bash and .test.js with node --test)\n`);
     process.stdout.write(`rc=1 ${rel}\n`);
-    return 1;
+    return Promise.resolve({ rc: 1, timedOut: false });
   }
   const argv = spec.argv.slice();
   argv[argv.length - 1] = path.join(root, rel);
-  const r = spawnSync(spec.cmd, argv, { cwd: root, stdio: 'inherit' });
-  const rc = r.status == null ? 1 : r.status;
-  process.stdout.write(`rc=${rc} ${rel}\n`);
-  return rc;
+  return new Promise((resolve) => {
+    const child = spawn(spec.cmd, argv, { cwd: root, stdio: 'inherit', detached: group || timeoutSecs != null });
+    let timedOut = false, killTimer = null, termTimer = null, done = false;
+    const grouped = group || timeoutSecs != null;
+    if (grouped) ACTIVE.add(child.pid);
+    if (timeoutSecs != null) {
+      termTimer = setTimeout(() => {
+        timedOut = true;
+        killGroup(child.pid, 'SIGTERM');
+        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 2000);
+      }, timeoutSecs * 1000);
+    }
+    const finish = (code) => {
+      if (done) return;
+      done = true;
+      clearTimeout(termTimer);
+      if (child.pid && grouped) { killGroup(child.pid, 'SIGKILL'); ACTIVE.delete(child.pid); }
+      clearTimeout(killTimer);
+      const rc = timedOut ? 124 : (code == null ? 1 : code);
+      process.stdout.write(`rc=${rc} ${rel}\n`);
+      resolve({ rc, timedOut });
+    };
+    child.on('error', () => finish(1));
+    child.on('close', (code) => finish(code));
+  });
 }
 
 // Distance of a suite from the change: 0 = the changed suite itself, n = hops in its chain, Infinity = unknown.
@@ -550,7 +591,7 @@ function orderForBudget(root, doc, suites) {
   }).map((x) => x.rel);
 }
 
-function runSelected(root, doc, alwaysRun, budget) {
+async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
   if (doc.mode === 'full') {
     for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
@@ -564,19 +605,23 @@ function runSelected(root, doc, alwaysRun, budget) {
   const results = [];
   const skipped = [];
   let failed = 0;
+  const timedOut = [];
+  let emptyFail = false;
   const started = Date.now();
   for (const rel of entries) {
     if (budgeted && (Date.now() - started) / 1000 >= budget) { skipped.push(rel); continue; }
     const t0 = Date.now();
-    const rc = runEntry(root, rel);
+    const { rc, timedOut: to } = await runEntry(root, rel, entryTimeout);
+    if (to) timedOut.push(rel);
     results.push(budgeted ? { path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 } : { path: rel, rc });
     if (rc !== 0) failed++;
   }
   if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
     process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
     failed++;
+    emptyFail = true;
   }
-  process.stdout.write(`summary: ${results.length} run, ${failed} failed\n`);
+  process.stdout.write(`summary: ${results.length} run, ${failed} failed${timedOut.length ? ` (timeout: ${timedOut.join(' ')})` : ''}\n`);
   let code = failed === 0 ? 0 : 1;
   let budgetDoc = null;
   if (budgeted) {
@@ -585,7 +630,45 @@ function runSelected(root, doc, alwaysRun, budget) {
     if (code === 0 && skipped.length > 0) code = 3;
     budgetDoc = { budget, executed: results.map((x) => x.path), skipped_for_budget: skipped };
   }
-  return { code, results, budgetDoc };
+  return { code, results, budgetDoc, emptyFail };
+}
+
+// --attribute: re-run only the non-zero entries at the base commit in a temporary detached worktree
+// (always removed, also on TERM/INT), then label each preexisting (non-zero at base) or new.
+function removeWorktree(root, tmp, wt) {
+  try { execFileSync('git', ['worktree', 'remove', '--force', wt], { cwd: root, stdio: 'ignore' }); } catch { /* fall through to rm */ }
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
+  try { execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'ignore' }); } catch { /* best effort */ }
+}
+
+async function attribute(root, baseSha, results, entryTimeout) {
+  const failing = results.filter((r) => r.rc !== 0);
+  const groups = { preexisting: [], new: [] };
+  if (failing.length === 0) return groups;
+  let tmp = null;
+  let wt = null;
+  const onSig = (sig) => () => {
+    for (const pid of ACTIVE) killGroup(pid, 'SIGKILL');
+    if (tmp) removeWorktree(root, tmp, wt);
+    process.exit(sig === 'SIGINT' ? 130 : 143);
+  };
+  const handlers = ['SIGTERM', 'SIGINT'].map((sig) => [sig, onSig(sig)]);
+  for (const [sig, h] of handlers) process.on(sig, h);
+  try {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-base-'));
+    wt = path.join(tmp, 'base');
+    execFileSync('git', ['worktree', 'add', '--detach', wt, baseSha], { cwd: root, stdio: 'pipe' });
+    for (const r of failing) {
+      if (!fs.existsSync(path.join(wt, r.path))) { groups.new.push(r.path); continue; } // absent at base: cannot be preexisting
+      const { rc } = await runEntry(wt, r.path, entryTimeout, true);
+      r.base_rc = rc;
+      (rc !== 0 ? groups.preexisting : groups.new).push(r.path);
+    }
+  } finally {
+    for (const [sig, h] of handlers) process.removeListener(sig, h);
+    if (tmp) removeWorktree(root, tmp, wt);
+  }
+  return groups;
 }
 
 // The document main prints for `--base <base> [--head <head>]` (head defaults to HEAD).
@@ -639,6 +722,12 @@ function parseArgs(argv) {
       a.budget = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
       if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error(`--budget-seconds needs a positive number, got ${JSON.stringify(v)}`);
     }
+    else if (x === '--attribute') a.attribute = true;
+    else if (x === '--entry-timeout') {
+      const v = argv[++i];
+      a.entryTimeout = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
+      if (!(a.entryTimeout > 0) || !Number.isFinite(a.entryTimeout)) throw new Error(`--entry-timeout needs a positive number, got ${JSON.stringify(v)}`);
+    }
     else if (x === '--record') {
       a.record = true;
       if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
@@ -650,7 +739,7 @@ function parseArgs(argv) {
   return a;
 }
 
-function main(argv) {
+async function main(argv) {
   let a;
   try { a = parseArgs(argv); } catch (e) { process.stderr.write(e.message + '\n'); return 2; }
   if (a.help) {
@@ -661,6 +750,14 @@ function main(argv) {
   }
   if (a.budget != null && !a.run) {
     process.stderr.write('affected-suites: --budget-seconds requires --run\n');
+    return 2;
+  }
+  if (a.attribute && (!a.run || !a.base || a.useFiles)) {
+    process.stderr.write('affected-suites: --attribute requires --run and --base\n');
+    return 2;
+  }
+  if (a.entryTimeout != null && !a.run) {
+    process.stderr.write('affected-suites: --entry-timeout requires --run\n');
     return 2;
   }
   if (a.record && !a.run) {
@@ -716,7 +813,15 @@ function main(argv) {
       runAlways = r.alwaysRun;
     }
     if (a.run) {
-      const ran = runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget);
+      const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout);
+      let attrCode = null;
+      if (a.attribute) {
+        const baseSha = fullRef(root, baseRef);
+        const g = await attribute(root, baseSha, ran.results, a.entryTimeout);
+        process.stdout.write(`attribution: preexisting ${g.preexisting.length}${g.preexisting.length ? ': ' + g.preexisting.join(' ') : ''}\n`);
+        process.stdout.write(`attribution: new ${g.new.length}${g.new.length ? ': ' + g.new.join(' ') : ''}\n`);
+        attrCode = g.new.length > 0 || ran.emptyFail ? 1 : (ran.code === 3 ? 3 : 0);
+      }
       if (a.json && ran.budgetDoc) process.stdout.write(JSON.stringify(ran.budgetDoc, null, 2) + '\n');
       if (a.record) {
         try {
@@ -730,7 +835,7 @@ function main(argv) {
           return 2;
         }
       }
-      return ran.code;
+      return attrCode != null ? attrCode : ran.code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');
     const full = doc.mode === 'full';
@@ -743,4 +848,4 @@ function main(argv) {
 }
 
 module.exports = { extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
-if (require.main === module) process.exitCode = main(process.argv.slice(2));
+if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

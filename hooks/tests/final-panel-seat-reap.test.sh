@@ -89,7 +89,8 @@ assert_contains "$OUT" "traversal_refused=true" "store: traversal refused"
 assert_contains "$OUT" "terminal_removed_parked_kept=true" "store: terminal removed, parked kept"
 
 # ---------------------------------------------------------------- reader follows the REAL ledger writer's rotation
-OUT="$(RUN_LEDGER_MAX_BYTES=1200 RUN_LEDGER_MAX_ROTATIONS=6 node - "$REPO_ROOT" "$TEST_TMP/rot" <<'NODE'
+printf '{"run_ledger":{"max_rotations":6}}\n' > "$TEST_TMP/rot6-config.json"
+OUT="$(AUTOPILOT_CONFIG_FILE="$TEST_TMP/rot6-config.json" RUN_LEDGER_MAX_BYTES=1200 node - "$REPO_ROOT" "$TEST_TMP/rot" <<'NODE'
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -117,8 +118,8 @@ const lifecycle = (id, events) => {
 lifecycle('rot-old', ['implementation_started', 'terminal_ready']);
 // filler campaigns push rot-old's rows out of the live file, through several rotations
 for (let i = 0; i < 40 && !fs.existsSync(`${ledger}.5`); i += 1) lifecycle(`rot-fill-${i}`, ['implementation_started', 'review_completed']);
-assert.ok(fs.existsSync(`${ledger}.5`), 'writer rotated past .4 under RUN_LEDGER_MAX_ROTATIONS=6');
-assert.ok(!fs.existsSync(`${ledger}.7`), 'writer never exceeds RUN_LEDGER_MAX_ROTATIONS');
+assert.ok(fs.existsSync(`${ledger}.5`), 'writer rotated past .4 under run_ledger.max_rotations=6');
+assert.ok(!fs.existsSync(`${ledger}.7`), 'writer never exceeds run_ledger.max_rotations');
 const gens = [ledger, ...[1, 2, 3, 4, 5, 6].map((k) => `${ledger}.${k}`)].filter((f) => fs.existsSync(f));
 const holders = gens.filter((f) => fs.readFileSync(f, 'utf8').includes('rot-old'));
 assert.ok(holders.length > 0 && !holders.includes(ledger), `rot-old lives only in rotated files: ${holders}`);

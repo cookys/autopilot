@@ -7408,10 +7408,7 @@ class AutopilotEngine {
         && controllerWorkOrder.paths
         && controllerWorkOrder.paths.ledger;
       if (isStr(priorLedgerPath)) {
-        let maxRotations = Number(process.env.RUN_LEDGER_MAX_ROTATIONS || 4);
-        if (!Number.isSafeInteger(maxRotations) || maxRotations < 1 || maxRotations > 64) {
-          maxRotations = 4;
-        }
+        const maxRotations = require('../../scripts/lib/run-ledger-config').maxRotations();
         for (let index = maxRotations; index >= 1; index -= 1) {
           const segment = `${priorLedgerPath}.${index}`;
           if (fs.existsSync(segment)) priorLedgerBytes += fs.readFileSync(segment, 'utf8');

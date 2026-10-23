@@ -1004,6 +1004,21 @@
       "type": "array"
     },
     {
+      "name": "run_ledger.max_rotations",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": 4,
+      "readers": [
+        "scripts/lib/run-ledger-config.js",
+        "scripts/run-ledger.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "How many rotated run-ledger segments are kept (default 4). Readers follow segments .N down to .1 then the live ledger. At 0 the campaign CLI and run-ledger.sh read only the live ledger, but the seat-store, work-order and engine readers fall back to 4; the writer still moves the live ledger to .1 on rotation even at 0. Each reader keeps its own rule for odd values: work-order and engine accept only integers 1 to 64 (else 4); seat-store and the campaign CLI cut 1.5 down to 1, use 4 for negatives and keep values above 64; the shell script uses the number as given. Config only: the RUN_LEDGER_MAX_ROTATIONS environment variable is not read.",
+      "type": "number"
+    },
+    {
       "name": "residue.lease_hours",
       "kind": "config_key",
       "audience": "user",

@@ -7,7 +7,9 @@ RL="$REPO_ROOT/scripts/run-ledger.sh"
 LR="$TEST_TMP/rot-dead.jsonl"
 
 export RUN_LEDGER_MAX_BYTES=600
-export RUN_LEDGER_MAX_ROTATIONS=8
+# Rotation cap comes from the operator config only (BL-0256); the env var is no longer read.
+printf '{"run_ledger":{"max_rotations":8}}\n' > "$TEST_TMP/ledger-rot-config.json"
+export AUTOPILOT_CONFIG_FILE="$TEST_TMP/ledger-rot-config.json"
 unset AUTOPILOT_SESSION_ID
 unset CLAUDE_CODE_SESSION_ID
 

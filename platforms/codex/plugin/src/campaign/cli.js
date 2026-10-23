@@ -165,10 +165,9 @@ function ledgerScanFiles(ledger) {
   if (typeof ledger !== 'string' || ledger.length === 0) {
     throw new Error('campaign ledger path is required');
   }
-  const maxRotRaw = process.env.RUN_LEDGER_MAX_ROTATIONS;
-  const maxRot = maxRotRaw === undefined || maxRotRaw === ''
-    ? 4
-    : Number(maxRotRaw);
+  // Read window: any finite config number >= 0 (0 = live ledger only), floored; else 4 (as before BL-0256).
+  const maxRotRaw = require('../../scripts/lib/run-ledger-config').configuredValue();
+  const maxRot = maxRotRaw === undefined || maxRotRaw === '' ? 4 : Number(maxRotRaw);
   const limit = Number.isFinite(maxRot) && maxRot >= 0 ? Math.floor(maxRot) : 4;
   const files = [];
   for (let idx = limit; idx >= 1; idx -= 1) {

@@ -270,10 +270,7 @@ function computeArtifactDigests(paths = {}, fields = {}) { const d = {};
   return d;}
 function controllerLedgerFiles(ledgerPath) {
   if (!isStr(ledgerPath)) return [];
-  let maxRotations = Number(process.env.RUN_LEDGER_MAX_ROTATIONS || 4);
-  if (!Number.isSafeInteger(maxRotations) || maxRotations < 1 || maxRotations > 64) {
-    maxRotations = 4;
-  }
+  const maxRotations = require('../../scripts/lib/run-ledger-config').maxRotations();
   const files = [];
   for (let index = maxRotations; index >= 1; index -= 1) {
     const segment = `${ledgerPath}.${index}`;

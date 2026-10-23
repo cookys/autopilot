@@ -41,7 +41,8 @@ git -C "$SCRATCH" add README
 git -C "$SCRATCH" commit -q -m "candidate"
 
 # Rotation OFF while building (RUN_LEDGER_MAX_BYTES=0).
-RUN_LEDGER_MAX_BYTES=0 RUN_LEDGER_MAX_ROTATIONS=8 \
+printf '{"run_ledger":{"max_rotations":8}}\n' > "$TEST_TMP/rot8-config.json"
+AUTOPILOT_CONFIG_FILE="$TEST_TMP/rot8-config.json" RUN_LEDGER_MAX_BYTES=0 \
 node - "$REPO_ROOT" "$TEST_TMP" "$LR" "$SCRATCH" "$META" <<'NODE'
 'use strict';
 const fs = require('fs');
@@ -98,7 +99,7 @@ function repairLineageFor({ icc, campaignId, branch, worktree, worktreeInstanceI
   };
 }
 
-const env = { RUN_LEDGER_MAX_BYTES: '0', RUN_LEDGER_MAX_ROTATIONS: '8' };
+const env = { RUN_LEDGER_MAX_BYTES: '0', AUTOPILOT_CONFIG_FILE: path.join(tmp, 'rot8-config.json') };
 const base = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const branch = 'campaign/rot-order';
 const tree = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
@@ -262,7 +263,8 @@ assert_unique_roots() {
 
 # T1: two real heartbeats with bytes=1 rotations=1 → two rotations, GC originals.
 export RUN_LEDGER_MAX_BYTES=1
-export RUN_LEDGER_MAX_ROTATIONS=1
+printf '{"run_ledger":{"max_rotations":1}}\n' > "$TEST_TMP/rot1-config.json"
+export AUTOPILOT_CONFIG_FILE="$TEST_TMP/rot1-config.json"
 HB1="$(bash "$RL" stage-heartbeat --ledger "$LR" --run-id "$CAMPAIGN_ID" --stage campaign \
   --generation "$GEN" --nonce "$NONCE" --pid $$)"
 assert_eq "$(jq -r .kind <<<"$HB1")" "heartbeat" "first heartbeat after bytes=1"

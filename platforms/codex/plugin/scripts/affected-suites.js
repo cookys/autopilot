@@ -30,13 +30,24 @@
 //   (suites then extra_runners when selective; always_run then extra_runners when full). rc is
 //   the integer already printed as rc=N.
 //
+// --budget-seconds N (only with --run; N a positive number) changes the ORDER and the STOP point of
+// the run, never which entries are selected. Order: a changed suite itself, then suites that name a
+// changed file (distance 1), then by chain distance (nearest first); within one distance the shorter
+// recorded time first (seconds from earlier --budget-seconds records in
+// <git-common-dir>/autopilot/qc-runs/*.json, newest wins), then by name; extra_runners last.
+// Once N seconds have passed no new entry starts (a running one finishes); the rest print as
+// `not run (budget): <path>` plus `skipped_for_budget: <count>`. Exit 3 = budget ran out and every
+// executed entry is green; a red executed entry still exits 1. With --json the run ends with a JSON
+// document {budget, executed, skipped_for_budget}; --record adds the same three keys and a per-suite
+// `seconds`. Without the flag nothing changes: name order, no budget keys.
+//
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
 //   always_run:[], extra_runners:[], full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
 //   extra_runners = entry points outside run.sh that the diff needs (mods/live/**, mods/viewer/**, mods/register.ts => mods/live/run-tests.sh + mods/viewer/run-tests.sh);
 //   present in both modes. Text output prints them as extra lines after the suites (or after FULL).
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
-// Exit: 0 ok (selective or full), 2 usage/git error.
+// Exit: 0 ok (selective or full), 2 usage/git error, 3 --budget-seconds ran out (executed entries green).
 //
 // How it selects (static, conservative = over-select rather than miss):
 //   1. Index every code file (js/mjs/cjs/sh/bash/zsh/py/ps1) in the head tree by the file names it
@@ -426,6 +437,23 @@ function walkParents(seeds, graph, maxWeak) {
   return parent;
 }
 
+// Fewest referrer hops from any changed file, ignoring the weak-cost bound. Used only to order a
+// budgeted run; the selector's own chain optimises weak-edge cost and may hide a direct reference.
+function shortestHops(seeds, graph) {
+  const hops = new Map(seeds.map((c) => [c, 0]));
+  const q = seeds.slice();
+  while (q.length) {
+    const cur = q.shift();
+    if (!isCode(cur) && hops.get(cur) !== 0) continue; // same rule as walkParents: only code propagates
+    for (const [r] of referrersOf(graph, cur)) {
+      if (hops.has(r)) continue;
+      hops.set(r, hops.get(cur) + 1);
+      q.push(r);
+    }
+  }
+  return hops;
+}
+
 function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
   const graph = buildGraph(headTree);
@@ -456,6 +484,7 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
   const all = [...new Set([...suites, ...alwaysRun])].sort();
+  Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }
 
@@ -484,25 +513,79 @@ function runEntry(root, rel) {
   return rc;
 }
 
-function runSelected(root, doc, alwaysRun) {
+// Distance of a suite from the change: 0 = the changed suite itself, n = hops in its chain, Infinity = unknown.
+function suiteDistance(doc, rel) {
+  if (doc.changed.includes(rel)) return 0;
+  const hops = doc.chains && doc.chains.__hops;
+  if (hops && hops.has(rel)) return hops.get(rel);
+  const chain = doc.chains && doc.chains[rel];
+  if (!chain || chain.length < 2) return Infinity;
+  return chain.length - 1;
+}
+
+// seconds recorded by earlier budgeted runs: Map(path -> seconds), newest record wins.
+function loadHistory(root) {
+  const m = new Map();
+  try {
+    let common = git(root, ['rev-parse', '--git-common-dir']).toString('utf8').trim();
+    if (!path.isAbsolute(common)) common = path.resolve(root, common);
+    const dir = path.join(common, 'autopilot', 'qc-runs');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs })).sort((x, y) => x.t - y.t);
+    for (const { f } of files) {
+      try {
+        const rec = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        for (const s of rec.suites || []) if (s && typeof s.path === 'string' && typeof s.seconds === 'number') m.set(s.path, s.seconds);
+      } catch { /* an unreadable record is no history */ }
+    }
+  } catch { /* no git or no records */ }
+  return m;
+}
+
+function orderForBudget(root, doc, suites) {
+  const hist = loadHistory(root);
+  const key = (rel) => [suiteDistance(doc, rel), hist.has(rel) ? hist.get(rel) : Infinity];
+  return suites.map((rel, i) => ({ rel, i, k: key(rel) })).sort((a, b) => {
+    for (let n = 0; n < 2; n++) if (a.k[n] !== b.k[n]) return a.k[n] < b.k[n] ? -1 : 1;
+    return a.i - b.i; // incoming order is already by name
+  }).map((x) => x.rel);
+}
+
+function runSelected(root, doc, alwaysRun, budget) {
   if (doc.mode === 'full') {
     for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
   }
-  const entries = doc.mode === 'full' ? [...alwaysRun, ...doc.extra_runners] : [...doc.suites, ...doc.extra_runners];
+  let entries = doc.mode === 'full' ? [...alwaysRun, ...doc.extra_runners] : [...doc.suites, ...doc.extra_runners];
+  const budgeted = budget != null;
+  if (budgeted) {
+    const first = doc.mode === 'full' ? alwaysRun : doc.suites;
+    entries = [...orderForBudget(root, doc, first), ...doc.extra_runners];
+  }
   const results = [];
+  const skipped = [];
   let failed = 0;
+  const started = Date.now();
   for (const rel of entries) {
+    if (budgeted && (Date.now() - started) / 1000 >= budget) { skipped.push(rel); continue; }
+    const t0 = Date.now();
     const rc = runEntry(root, rel);
-    results.push({ path: rel, rc });
+    results.push(budgeted ? { path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 } : { path: rel, rc });
     if (rc !== 0) failed++;
   }
   if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
     process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
     failed++;
   }
-  process.stdout.write(`summary: ${entries.length} run, ${failed} failed\n`);
-  return { code: failed === 0 ? 0 : 1, results };
+  process.stdout.write(`summary: ${results.length} run, ${failed} failed\n`);
+  let code = failed === 0 ? 0 : 1;
+  let budgetDoc = null;
+  if (budgeted) {
+    for (const rel of skipped) process.stdout.write(`not run (budget): ${rel}\n`);
+    process.stdout.write(`skipped_for_budget: ${skipped.length}\n`);
+    if (code === 0 && skipped.length > 0) code = 3;
+    budgetDoc = { budget, executed: results.map((x) => x.path), skipped_for_budget: skipped };
+  }
+  return { code, results, budgetDoc };
 }
 
 // The document main prints for `--base <base> [--head <head>]` (head defaults to HEAD).
@@ -551,6 +634,11 @@ function parseArgs(argv) {
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
     else if (x === '--run') a.run = true;
+    else if (x === '--budget-seconds') {
+      const v = argv[++i];
+      a.budget = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
+      if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error(`--budget-seconds needs a positive number, got ${JSON.stringify(v)}`);
+    }
     else if (x === '--record') {
       a.record = true;
       if (argv[i + 1] && !argv[i + 1].startsWith('--')) a.recordPath = argv[++i];
@@ -570,6 +658,10 @@ function main(argv) {
     const end = lines.findIndex((l, i) => i > 2 && l.startsWith('// Exit:'));
     process.stdout.write(lines.slice(2, end + 1).map((l) => l.replace(/^\/\/ ?/, '')).join('\n') + '\n');
     return 0;
+  }
+  if (a.budget != null && !a.run) {
+    process.stderr.write('affected-suites: --budget-seconds requires --run\n');
+    return 2;
   }
   if (a.record && !a.run) {
     process.stderr.write('affected-suites: --record requires --run\n');
@@ -624,13 +716,14 @@ function main(argv) {
       runAlways = r.alwaysRun;
     }
     if (a.run) {
-      const ran = runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run);
+      const ran = runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget);
+      if (a.json && ran.budgetDoc) process.stdout.write(JSON.stringify(ran.budgetDoc, null, 2) + '\n');
       if (a.record) {
         try {
           const headSha = fullRef(root, headRef);
           const baseSha = fullRef(root, baseRef);
           const file = recordPathFor(root, a.recordPath, headSha);
-          writeRecord(file, { schema: 1, head: headSha, base: baseSha, mode: doc.mode, suites: ran.results });
+          writeRecord(file, { schema: 1, head: headSha, base: baseSha, mode: doc.mode, suites: ran.results, ...(ran.budgetDoc || {}) });
           process.stdout.write(`record: ${file}\n`);
         } catch (e) {
           process.stderr.write(`affected-suites: record write failed: ${e.message}\n`);

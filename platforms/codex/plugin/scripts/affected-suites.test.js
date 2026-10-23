@@ -771,3 +771,149 @@ test('BL-0213 a name mentioned only inside a line-leading JSDoc block creates no
     assert.ok(!out.suites.includes('hooks/tests/documented.test.sh'));
   } finally { r.cleanup(); }
 });
+
+// RED at e6fa3b6d7: --budget-seconds unknown (exit 2, stderr "unknown argument: --budget-seconds"), so every budget case below fails.
+// BL-0213 time budget: --budget-seconds changes only the run order and when to stop, never which suites are selected.
+const BUDGET_LAYOUT = {
+  'scripts/lib/a.js': 'module.exports = 1;\n',
+  'scripts/b.js': "require('./lib/a.js');\n",
+  // Name order is the reverse of distance order: the near suite sorts last.
+  'hooks/tests/a-far.test.sh': '#!/usr/bin/env bash\nprintf far1 >> order\nsleep 1\necho scripts/b.js >/dev/null\n',
+  'hooks/tests/c-far.test.sh': '#!/usr/bin/env bash\nprintf far2 >> order\nsleep 1\necho scripts/b.js >/dev/null\n',
+  'hooks/tests/z-near.test.sh': '#!/usr/bin/env bash\nprintf near >> order\nsleep 1\necho scripts/lib/a.js >/dev/null\n',
+};
+const BUDGET_ARGS = ['--run', '--files', 'scripts/lib/a.js'];
+const readOrder = (dir) => { try { return fs.readFileSync(path.join(dir, 'order'), 'utf8'); } catch { return ''; } };
+
+test('budget: the suite that names the changed file runs first, then farther ones', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const ran = runCli(r.dir, [...BUDGET_ARGS, '--budget-seconds', '600']);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    assert.strictEqual(readOrder(r.dir), 'nearfar1far2');
+  } finally { r.cleanup(); }
+});
+
+test('budget: after the budget runs out no new suite starts and the skipped ones are listed; exit 3', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const ran = runCli(r.dir, [...BUDGET_ARGS, '--budget-seconds', '1']);
+    assert.strictEqual(ran.status, 3, ran.stdout + ran.stderr);
+    assert.strictEqual(readOrder(r.dir), 'near');
+    assert.match(ran.stdout, /rc=0 hooks\/tests\/z-near\.test\.sh/);
+    assert.doesNotMatch(ran.stdout, /rc=\d+ hooks\/tests\/a-far/);
+    assert.match(ran.stdout, /skipped_for_budget: 2/);
+    assert.match(ran.stdout, /not run \(budget\): hooks\/tests\/a-far\.test\.sh/);
+    assert.match(ran.stdout, /not run \(budget\): hooks\/tests\/c-far\.test\.sh/);
+  } finally { r.cleanup(); }
+});
+
+test('budget: a red suite among the executed ones still exits 1, not 3', () => {
+  const r = makeRepo({ ...BUDGET_LAYOUT, 'hooks/tests/z-near.test.sh': '#!/usr/bin/env bash\necho scripts/lib/a.js >/dev/null\nsleep 1\nexit 4\n' });
+  try {
+    const ran = runCli(r.dir, [...BUDGET_ARGS, '--budget-seconds', '1']);
+    assert.strictEqual(ran.status, 1, ran.stdout + ran.stderr);
+    assert.match(ran.stdout, /skipped_for_budget: 2/);
+  } finally { r.cleanup(); }
+});
+
+test('budget: when everything finishes inside the budget the exit code is the ordinary 0', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const ran = runCli(r.dir, [...BUDGET_ARGS, '--budget-seconds', '600']);
+    assert.strictEqual(ran.status, 0);
+    assert.match(ran.stdout, /skipped_for_budget: 0/);
+  } finally { r.cleanup(); }
+});
+
+test('budget: without --budget-seconds the run is the base behaviour (name order, no budget lines)', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const ran = runCli(r.dir, BUDGET_ARGS);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    assert.strictEqual(readOrder(r.dir), 'far1far2near');
+    assert.doesNotMatch(ran.stdout, /budget/);
+    assert.match(ran.stdout, /summary: 3 run, 0 failed/);
+  } finally { r.cleanup(); }
+});
+
+test('budget: selection is unchanged and --budget-seconds without --run or with a bad value is a usage error', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const plain = runCli(r.dir, ['--files', 'scripts/lib/a.js', '--json']);
+    assert.deepStrictEqual(JSON.parse(plain.stdout).suites, ['hooks/tests/a-far.test.sh', 'hooks/tests/c-far.test.sh', 'hooks/tests/z-near.test.sh']);
+    const noRun = runCli(r.dir, ['--files', 'scripts/lib/a.js', '--budget-seconds', '5']);
+    assert.strictEqual(noRun.status, 2);
+    assert.match(noRun.stderr, /--run/);
+    for (const bad of ['0', '-3', 'abc', '']) {
+      const x = runCli(r.dir, [...BUDGET_ARGS, '--budget-seconds', bad]);
+      assert.strictEqual(x.status, 2, `value ${JSON.stringify(bad)}: ${x.stdout}${x.stderr}`);
+    }
+  } finally { r.cleanup(); }
+});
+
+test('budget: --json prints budget, executed and skipped_for_budget; --record stores the same', () => {
+  const r = makeRepo(BUDGET_LAYOUT);
+  try {
+    const head = r.change({ 'scripts/lib/a.js': 'module.exports = 2;\n' });
+    const rec = path.join(r.dir, 'qc-record.json');
+    const ran = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--json', '--record', rec, '--budget-seconds', '1']);
+    assert.strictEqual(ran.status, 3, ran.stdout + ran.stderr);
+    const jsonStart = ran.stdout.lastIndexOf('\n{');
+    const out = JSON.parse(ran.stdout.slice(jsonStart + 1, ran.stdout.indexOf('\nrecord: ')));
+    assert.strictEqual(out.budget, 1);
+    assert.deepStrictEqual(out.executed, ['hooks/tests/z-near.test.sh']);
+    assert.deepStrictEqual(out.skipped_for_budget, ['hooks/tests/a-far.test.sh', 'hooks/tests/c-far.test.sh']);
+    const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    assert.strictEqual(doc.budget, 1);
+    assert.deepStrictEqual(doc.executed, ['hooks/tests/z-near.test.sh']);
+    assert.deepStrictEqual(doc.skipped_for_budget, ['hooks/tests/a-far.test.sh', 'hooks/tests/c-far.test.sh']);
+    assert.deepStrictEqual(doc.suites.map((s) => [s.path, s.rc]), [['hooks/tests/z-near.test.sh', 0]]);
+    // Without a budget the record keeps the schema-1 shape: no budget keys.
+    const rec2 = path.join(r.dir, 'qc-record2.json');
+    runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record', rec2]);
+    const plain = JSON.parse(fs.readFileSync(rec2, 'utf8'));
+    assert.deepStrictEqual(Object.keys(plain), ['schema', 'head', 'base', 'mode', 'suites']);
+  } finally { r.cleanup(); }
+});
+
+test('budget: at equal distance a suite with a shorter recorded time runs first', () => {
+  const r = makeRepo({
+    'scripts/lib/a.js': 'module.exports = 1;\n',
+    'hooks/tests/a-slow.test.sh': '#!/usr/bin/env bash\nprintf slow >> order\necho scripts/lib/a.js >/dev/null\n',
+    'hooks/tests/b-fast.test.sh': '#!/usr/bin/env bash\nprintf fast >> order\necho scripts/lib/a.js >/dev/null\n',
+  });
+  try {
+    const head = r.change({ 'scripts/lib/a.js': 'module.exports = 2;\n' });
+    const hist = path.join(r.dir, '.git', 'autopilot', 'qc-runs');
+    fs.mkdirSync(hist, { recursive: true });
+    fs.writeFileSync(path.join(hist, 'old.json'), JSON.stringify({ schema: 1, head: 'x', base: 'y', mode: 'selective', suites: [{ path: 'hooks/tests/a-slow.test.sh', rc: 0, seconds: 90 }, { path: 'hooks/tests/b-fast.test.sh', rc: 0, seconds: 2 }] }));
+    const ran = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--budget-seconds', '600']);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    assert.strictEqual(readOrder(r.dir), 'fastslow');
+  } finally { r.cleanup(); }
+});
+
+// RED at 6ef5351df: AssertionError "direct reference must run first" (a-indirect ran before z-direct; both were ranked distance 2 from the selector chain).
+test('budget: a direct reference runs before an indirect one even when the selector chain for the direct suite is longer', () => {
+  // z-direct names seed.js in text (weak) and also requires bridge.js -> seed.js; the selector keeps the
+  // cheaper-cost chain through bridge (2 hops), hiding the direct reference. a-indirect only reaches seed via other.js.
+  const r = makeRepo({
+    'scripts/seed.js': 'module.exports = 1;\n',
+    'scripts/bridge.js': "require('./seed.js');\n",
+    'scripts/other.js': "require('./seed.js');\n",
+    'scripts/z-direct.test.js': 'console.log("scripts/seed.js"); require("./bridge.js");\n',
+    'scripts/a-indirect.test.js': 'require("./other.js");\n',
+  });
+  try {
+    const ran = runCli(r.dir, ['--run', '--files', 'scripts/seed.js', '--budget-seconds', '600']);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    const z = ran.stdout.indexOf('rc=0 scripts/z-direct.test.js');
+    const a = ran.stdout.indexOf('rc=0 scripts/a-indirect.test.js');
+    assert.ok(z >= 0 && a >= 0, ran.stdout);
+    assert.ok(z < a, 'direct reference must run first:\n' + ran.stdout);
+    // The selected set is unchanged by the ordering.
+    const sel = JSON.parse(runCli(r.dir, ['--files', 'scripts/seed.js', '--json']).stdout);
+    assert.deepStrictEqual(sel.suites, ['scripts/a-indirect.test.js', 'scripts/z-direct.test.js']);
+  } finally { r.cleanup(); }
+});

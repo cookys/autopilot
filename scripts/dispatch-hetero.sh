@@ -2018,7 +2018,7 @@ set_runner_flags() {
     codex)   IS_CODEX=1 ;;
     agy)     ;;
     grok)    IS_GROK=1 ;;
-    cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
+    cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
     cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
@@ -3777,7 +3777,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # LOG so classify-error and other log consumers still see the old plain text.
   CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
   run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
-      --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
+      --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
       _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE"
   if [ -f "$CCSHIM_ENVELOPE" ]; then
     # One JSON object → result text (is_error with an empty result uses the

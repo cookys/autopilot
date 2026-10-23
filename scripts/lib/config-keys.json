@@ -5260,6 +5260,45 @@
       "note": "Parent of per-room directories. Unset means $HOME/.autopilot/rooms. Read by scripts/lib/room-log.js."
     },
     {
+      "name": "FLEET_LIFETIME",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/repo-identity.sh"
+      ],
+      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "relates": [],
+      "note": "Exported by child_session_mint to every claude child a rail launches. Always ephemeral; an inherited value is overridden, a child is never promoted to durable."
+    },
+    {
+      "name": "FLEET_PARENT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/repo-identity.sh"
+      ],
+      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "relates": [],
+      "note": "Exported by child_session_mint. An inherited FLEET_PARENT is kept, else the launching Claude Code session id."
+    },
+    {
+      "name": "FLEET_ROLE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/repo-identity.sh"
+      ],
+      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "relates": [],
+      "note": "Exported by child_session_mint, display only for fleet. review-seat for dispatch-review, hand for dispatch-author and dispatch-hetero, child when the caller gives none."
+    },
+    {
       "name": "ROUNDTABLE_FLEET_BIN",
       "kind": "env",
       "audience": "internal",

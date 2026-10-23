@@ -588,6 +588,11 @@ function invokeClaude(binary, args, input, cwd, timeoutMs) {
   // session binding (session-mode.js getSessionId() prefers AUTOPILOT_SESSION_ID).
   const runnerEnv = { ...process.env, AUTOPILOT_PROFILE_RUNTIME: '1' };
   delete runnerEnv.AUTOPILOT_SESSION_ID;
+  // BL-0251 fleet contract (shell rails get it from child_session_mint): the runner is a short-lived profile run.
+  runnerEnv.FLEET_LIFETIME = 'ephemeral';
+  runnerEnv.FLEET_ROLE = 'profile-run';
+  const fleetParent = process.env.FLEET_PARENT || process.env.CLAUDE_CODE_SESSION_ID || '';
+  if (fleetParent) runnerEnv.FLEET_PARENT = fleetParent; else delete runnerEnv.FLEET_PARENT;
   const result = spawnSync(binary, args, {
     cwd,
     input,

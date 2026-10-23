@@ -71,8 +71,33 @@ export ANTHROPIC_API_KEY="$TOKEN"
 # Monkey-patch improve_description to force Haiku for the SDK call.
 export IMPROVE_MODEL_OVERRIDE="claude-haiku-4-5-20251001"
 
+# BL-0251 fleet contract. run_loop.py lives in the external skill-creator plugin (outside this repo). Its run_eval.py
+# starts each child as a bare `claude` found on PATH (subprocess.Popen(["claude", "-p", ...], env=os.environ);
+# scripts/run_eval.py:~75), so the argv is reachable through a PATH wrapper that appends --strict-mcp-config
+# (same technique as run-eval-batch.sh).
+# shellcheck source=lib/repo-identity.sh
+[ -r "$AUTOPILOT_DIR/scripts/lib/repo-identity.sh" ] && . "$AUTOPILOT_DIR/scripts/lib/repo-identity.sh" || true
+declare -F child_session_mint >/dev/null 2>&1 && child_session_mint eval-run
+
+WRAPPER_DIR="${TMPDIR:-/tmp}/autopilot-eval-wrapper-$$"
+trap 'rm -rf "$WRAPPER_DIR"' EXIT
+mkdir -p "$WRAPPER_DIR"
+cat > "$WRAPPER_DIR/claude" <<'EOF'
+#!/usr/bin/env bash
+WRAPPER_DIR=$(cd "$(dirname "$0")" && pwd)
+REAL_CLAUDE=""
+IFS=':' read -ra ADDR <<< "$PATH"
+for dir in "${ADDR[@]}"; do
+  if [[ "$dir" != "$WRAPPER_DIR" && -x "$dir/claude" ]]; then REAL_CLAUDE="$dir/claude"; break; fi
+done
+if [[ -z "$REAL_CLAUDE" ]]; then echo "[wrapper] claude not found on PATH (excluding wrapper)" >&2; exit 127; fi
+exec "$REAL_CLAUDE" "$@" --strict-mcp-config
+EOF
+chmod +x "$WRAPPER_DIR/claude"
+export PATH="$WRAPPER_DIR:$PATH"
+
 cd "$SKILL_CREATOR_DIR"
-exec python3 -c "
+python3 -c "
 import sys, os, json
 # Monkey-patch: force Haiku + refresh token before each SDK call
 import scripts.improve_description as imp

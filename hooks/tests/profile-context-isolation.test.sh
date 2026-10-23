@@ -891,6 +891,7 @@ if (args.includes('--version')) {
 }
 if (process.env.FAKE_CLAUDE_ENV_DUMP) {
   fs.appendFileSync(process.env.FAKE_CLAUDE_ENV_DUMP, JSON.stringify(process.env) + '\\n');
+  fs.appendFileSync(process.env.FAKE_CLAUDE_ENV_DUMP, 'ARGV ' + JSON.stringify(args) + '\\n');
 }
 const value = (flag) => {
   const index = args.indexOf(flag);
@@ -1011,7 +1012,7 @@ assert_contains "$MEASURE_CWD_OUT" "unsupported option --cwd" \
   "workspace override rejection is explicit"
 
 MEASURE_ENV_DUMP="$TEST_TMP/measure-child-env.jsonl"
-MEASURE_OUT="$(AUTOPILOT_SESSION_ID=parent-x FAKE_CLAUDE_ENV_DUMP="$MEASURE_ENV_DUMP" AUTOPILOT_PROFILE_TEST_RUNNER=1 node "$PROFILE_SESSION_CLI" measure \
+MEASURE_OUT="$(AUTOPILOT_SESSION_ID=parent-x CLAUDE_CODE_SESSION_ID=profile-parent-1 FAKE_CLAUDE_ENV_DUMP="$MEASURE_ENV_DUMP" AUTOPILOT_PROFILE_TEST_RUNNER=1 node "$PROFILE_SESSION_CLI" measure \
   --runtime "$GUIDED_RUNTIME" \
   --binary "$FAKE_CLAUDE" \
   --model p2-runtime-model \
@@ -1023,6 +1024,13 @@ assert_contains "$(cat "$MEASURE_ENV_DUMP" 2>/dev/null)" "AUTOPILOT_PROFILE_RUNT
 assert_not_contains "$(cat "$MEASURE_ENV_DUMP" 2>/dev/null)" "AUTOPILOT_SESSION_ID" \
   "measure: child claude does NOT inherit the parent's AUTOPILOT_SESSION_ID"
 assert_exit_code "$MEASURE_EXIT" 0 "guided runtime obtains harness-reported token delta"
+# BL-0251 fleet contract for the profile runner child (RED at 3b7d283b0: the child env carried no FLEET_*)
+MEASURE_FLEET="$(node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").split("\n")[0]);process.stdout.write([e.FLEET_LIFETIME,e.FLEET_PARENT,e.FLEET_ROLE].join("|"))' "$MEASURE_ENV_DUMP" 2>/dev/null)"
+assert_eq "$MEASURE_FLEET" "ephemeral|profile-parent-1|profile-run" "measure: child claude declares FLEET_LIFETIME/FLEET_PARENT/FLEET_ROLE to fleet"
+
+# coverage (green at base too): the profile runner's claude argv carries --strict-mcp-config (src/engine/profile-runtime.js claudeArgs)
+assert_contains "$(grep '^ARGV ' "$MEASURE_ENV_DUMP" 2>/dev/null | head -1)" "--strict-mcp-config" "measure: profile runner claude argv carries --strict-mcp-config"
+
 assert_contains "$MEASURE_OUT" '"control_tokens": 180' "measured delta binds the declared token count"
 
 ARBITRARY_PROMPT_OUT="$(AUTOPILOT_PROFILE_TEST_RUNNER=1 node "$PROFILE_SESSION_CLI" run \

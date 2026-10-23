@@ -106,7 +106,17 @@ manifest_session_id_json() {
 # CHILD_SESSION_ID (idempotent: a second call keeps the first id). The rail also hands the child
 # AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID (only when set) on the claude command line itself;
 # hooks/runs-watch-autostart.js turns that into the child marker's parent_session_id.
+#
+# BL-0251 fleet contract: the same junction exports FLEET_LIFETIME=ephemeral (always; an inherited value is overridden,
+# a child is never promoted to durable), FLEET_PARENT (an inherited FLEET_PARENT, else the launching CC session id --
+# fleet exposes no session address to a child env) and FLEET_ROLE (display only; optional $1, else an inherited
+# FLEET_ROLE, else "child"), so fleet registers the claude child as a short-lived worker, not an interactive session.
+# Contract source: docs/backlog/fleet-child-lifetime-parent-contract.md (not verified against fleet source here).
 child_session_mint() {
+  export FLEET_LIFETIME=ephemeral
+  local _fp="${FLEET_PARENT:-${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}}"
+  if [ -n "$_fp" ]; then export FLEET_PARENT="$_fp"; else unset FLEET_PARENT; fi
+  export FLEET_ROLE="${1:-${FLEET_ROLE:-child}}"
   [ -n "${CHILD_SESSION_ID:-}" ] && return 0
   local u=""
   u="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || true)"

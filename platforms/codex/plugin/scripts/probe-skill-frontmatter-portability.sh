@@ -366,17 +366,24 @@ run_capture() {
   printf '%s\n' "$rc" > "$ROOT/$name.rc"
 }
 
+# BL-0251 fleet contract: the claude exec below is a short-lived probe child. --bare skips hooks/settings but NOT MCP
+# (claude --help: "add --strict-mcp-config to skip MCP servers too"), hence the explicit flag on the exec.
+_PSF_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/repo-identity.sh
+[ -r "$_PSF_SELF_DIR/lib/repo-identity.sh" ] && . "$_PSF_SELF_DIR/lib/repo-identity.sh" || true
+declare -F child_session_mint >/dev/null 2>&1 && child_session_mint probe
+
 CLAUDE_BEFORE="$(inventory "$ROOT/claude-home")"
 CODEX_BEFORE="$(inventory "$ROOT/codex-home")"
 
 if command -v claude >/dev/null 2>&1; then
   CLAUDE_VERSION="$(HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" claude --version 2>&1 || true)"
   run_capture claude_probe env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" claude plugin validate "$PLUGIN"
-  run_capture claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
+  run_capture claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --strict-mcp-config --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
 else
   CLAUDE_VERSION=""
   record_launch claude_probe env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" claude plugin validate "$PLUGIN"
-  record_launch claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
+  record_launch claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --strict-mcp-config --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
   printf '%s\n' "claude executable not found" > "$ROOT/claude_probe.stderr" "$ROOT/claude_exec.stderr"
   printf '%s\n' "127" > "$ROOT/claude_probe.rc" "$ROOT/claude_exec.rc"
 fi

@@ -1699,6 +1699,12 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     }
     childEnv = opencodeContainment.applyEnv(childEnv, plan.env);
   }
+  if (kind === 'claude') {
+    // BL-0251 fleet contract (the shell rails get it from child_session_mint): a claude exam child is a short-lived eval run.
+    const parent = childEnv.FLEET_PARENT || process.env.CLAUDE_CODE_SESSION_ID || '';
+    childEnv = { ...childEnv, FLEET_LIFETIME: 'ephemeral', FLEET_ROLE: 'eval-run' };
+    if (parent) childEnv.FLEET_PARENT = parent; else delete childEnv.FLEET_PARENT;
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv,

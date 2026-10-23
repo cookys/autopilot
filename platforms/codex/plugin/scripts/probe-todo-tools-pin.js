@@ -42,9 +42,16 @@ if (!Number.isSafeInteger(opts.timeoutSeconds) || opts.timeoutSeconds < 1) {
   console.error('--timeout-seconds must be a positive integer'); process.exit(2);
 }
 
+// BL-0251 fleet contract (shell rails get it from child_session_mint): this claude child is a short-lived probe.
+// The environment is otherwise inherited ON PURPOSE -- the probe measures whether CLAUDE_CODE_ENABLE_TODO_TOOLS and
+// the settings of THIS environment reach a headless session. --strict-mcp-config drops only MCP servers; TaskCreate is a
+// built-in tool, so it does not change the measured signal (and an MCP server must not be able to answer for the pin).
+const childEnv = { ...process.env, FLEET_LIFETIME: 'ephemeral', FLEET_ROLE: 'probe' };
+const fleetParent = process.env.FLEET_PARENT || process.env.CLAUDE_CODE_SESSION_ID || '';
+if (fleetParent) childEnv.FLEET_PARENT = fleetParent; else delete childEnv.FLEET_PARENT;
 const run = spawnSync(opts.claudeBin, [
-  '-p', '--model', opts.model, '--output-format', 'stream-json', '--verbose', PROMPT,
-], { cwd: opts.cwd, encoding: 'utf8', timeout: opts.timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024 });
+  '-p', '--strict-mcp-config', '--model', opts.model, '--output-format', 'stream-json', '--verbose', PROMPT,
+], { cwd: opts.cwd, env: childEnv, encoding: 'utf8', timeout: opts.timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024 });
 
 if (run.error || run.signal) {
   console.error(`indeterminate: ${run.error ? run.error.message : `killed by ${run.signal}`}`);

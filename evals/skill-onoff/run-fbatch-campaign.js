@@ -60,8 +60,16 @@ function maxUsd() {
   return Number(raw);
 }
 
-const FINDINGS_VERB = /\b(writ(e|es|ing)|wrote|written|creat(e|es|ing)|sav(e|es|ing)|produc(e|es|ing)|output(s|ting)?|emit(s|ting)?|dump(s|ing)?|put(s|ting)?|record(s|ing)?|deliver(s|ing)?|persist(s|ing)?|generat(e|es|ing)|stor(e|es|ing)|drop(s|ping)?|leav(e|es|ing)|append(s|ing)?)\b/i;
-const NEGATION = /\b(never|not|no|don't|dont|do not|without|avoid|must not|mustn't)\b/i;
+// Whitelist design: any FINDINGS-file token in an arm is a problem unless its whole clause is an approved sentence.
+const FINDINGS_FILE_TOKEN = /findings\.(md|txt|json)\b|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
+const norm = (t) => t.replace(/\s+/g, ' ').trim();
+const clauseKey = (c) => norm(c).toLowerCase().replace(/^[-*\s]+/, '').replace(/[.\s]+$/, '');
+const APPROVED_CLAUSES = new Set([
+  'Never write a FINDINGS file',
+  'Do not create a FINDINGS file',
+  'Never ask a Claude subagent to write a FINDINGS file',
+  'Depth 0 writes them to the registry (a name that is not a report-shaped FINDINGS file)',
+].map(clauseKey));
 
 function checkArms() {
   const problems = [];
@@ -75,13 +83,11 @@ function checkArms() {
   // The late-input rule: no arm may ask a Claude subagent to Write a FINDINGS file.
   for (const arm of ['base', 'change']) {
     for (const [f, txt] of Object.entries(a[arm])) {
-      for (const line of txt.split('\n')) {
-        // Negation scopes to its own clause only: split on ';' and on a sentence-ending '.' (not the dot in FINDINGS.md).
-        for (const clause of line.split(/;|\.(?=\s|$)/)) {
-          if (!(/\bFINDINGS\b/.test(clause) || /\bfindings(\.[a-z]+\b|\s+(file|report|doc|document)\b)/i.test(clause))) continue;
-          if (!FINDINGS_VERB.test(clause) || NEGATION.test(clause)) continue;
-          problems.push(`${arm}/${f}: instructs a FINDINGS file: ${clause.trim()}`);
-        }
+      // Collapse newlines/runs of spaces first, so a token or sentence split across lines cannot hide.
+      for (const clause of norm(txt).split(/;|\.(?=\s|$)|\s-\s(?=[A-Z])/)) {
+        if (!(FINDINGS_FILE_TOKEN.test(clause) || /\bFINDINGS\b/.test(clause))) continue;
+        if (APPROVED_CLAUSES.has(clauseKey(clause))) continue;
+        problems.push(`${arm}/${f}: mentions a FINDINGS file outside the approved sentences: ${clause.trim()}`);
       }
     }
   }

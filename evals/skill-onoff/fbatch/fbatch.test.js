@@ -44,7 +44,7 @@ test('--check-arms rejects a change arm that asks a subagent to write a FINDINGS
   fs.appendFileSync(path.join(d, 'change', 'code-review.md'), '\n- Each lane writes FINDINGS.md.\n');
   const r = run(['--check-arms', '--arms-dir', d]);
   assert.strictEqual(r.status, 2);
-  assert.match(r.stdout, /instructs a FINDINGS file/);
+  assert.match(r.stdout, /FINDINGS file/);
 });
 test('pilot rows are marked pilot+model and never count as done for the formal run', () => {
   const f = path.join(tmp(), 'r.jsonl');
@@ -77,6 +77,11 @@ test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-
     'Do not stall. Every lane should produce a FINDINGS file at the end.',
     'Each lane will dump FINDINGS into a report file.',
     'No excuses; put the FINDINGS in FINDINGS.md.',
+    'Do not delay and write FINDINGS.md before returning.',
+    'Each lane must write\nFINDINGS.md to disk.',
+    'Have each lane save its findings in findings.txt.',
+    'Write the findings report file when done.',
+    'Persist FINDINGS to disk before returning.',
   ];
   const good = ['Never write a FINDINGS file; return findings as text.', 'Do not create a FINDINGS file. Return the findings as text.'];
   for (const [lines, want] of [[bad, 2], [good, 0]]) {
@@ -85,7 +90,7 @@ test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-
       fs.appendFileSync(path.join(d, 'change', 'code-review.md'), `\n- ${l}\n`);
       const r = run(['--check-arms', '--arms-dir', d]);
       const out = JSON.parse(r.stdout);
-      const hit = out.problems.some((p) => /instructs a FINDINGS file/.test(p));
+      const hit = out.problems.some((p) => /FINDINGS file/.test(p));
       assert.strictEqual(hit, want === 2, `${l} -> ${r.stdout}`);
     }
   }

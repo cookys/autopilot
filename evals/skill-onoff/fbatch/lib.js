@@ -152,7 +152,7 @@ function verdict(rows, controls, reps = 5, row) {
   const g = (task, m, arm) => cnt(t, task, m, arm).true;
   const n = (task, m, arm) => cnt(t, task, m, arm).n;
   const out = { reasons: [] };
-  const complete = TASKS.every((task) => ['base', 'change'].every((a) => n(task, MARKERS[task][0], a) === reps));
+  const complete = TASKS.every((task) => ['base', 'change'].every((a) => MARKERS[task].every((m) => n(task, m, a) === reps)));
   if (!complete) return { verdict: 'INCOMPLETE', reasons: ['grid is not complete (a partial grid cannot PASS)'] };
   const ratio = (a) => (inv[a][1] ? inv[a][0] / inv[a][1] : 0);
   if (infra > 0) return { verdict: 'INVALID', reasons: [`${infra} infra failure rows`] };

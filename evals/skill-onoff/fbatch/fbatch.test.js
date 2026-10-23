@@ -149,6 +149,18 @@ test('verdict: V1 skill_invoked < 0.9, a red control, an infra row, or a partial
   assert.strictEqual(L.verdict(grid(eff).slice(0, 20), OK).verdict, 'INCOMPLETE');
 });
 
+test('verdict: missing scored marker m_waited in some T1 cells is INCOMPLETE, never PASS', () => {
+  const s = { ...eff, 'fb-mid-batch.m_waited.change': 4, 'fb-mid-batch.m_waited.base': 1, 'fb-pool.m_single_round.change': 4, 'fb-pool.m_single_round.base': 1 };
+  const rows = grid(s);
+  assert.strictEqual(L.verdict(rows, OK).verdict, 'PASS'); // control: full grid
+  const holed = rows.map((r) => {
+    if (r.task_id !== 'fb-mid-batch' || r.rep !== 5) return r;
+    const markers = { ...r.markers }; delete markers.m_waited; // m_early_repair still reaches reps
+    return { ...r, markers };
+  });
+  assert.strictEqual(L.verdict(holed, OK).verdict, 'INCOMPLETE');
+});
+
 test('end to end stub run: PASS with honest arms; pilot is not scored', () => {
   const d = tmp(); const res = path.join(d, 'r.jsonl');
   const r = run(['--results', res, '--runner', 'stub']);

@@ -5268,7 +5268,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "doc": "docs/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint to every claude child a rail launches. Always ephemeral; an inherited value is overridden, a child is never promoted to durable."
     },
@@ -5281,7 +5281,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "doc": "docs/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint. An inherited FLEET_PARENT is kept, else the launching Claude Code session id."
     },
@@ -5294,7 +5294,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/backlog/fleet-child-lifetime-parent-contract.md",
+      "doc": "docs/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint, display only for fleet. review-seat for dispatch-review, hand for dispatch-author and dispatch-hetero, child when the caller gives none."
     },

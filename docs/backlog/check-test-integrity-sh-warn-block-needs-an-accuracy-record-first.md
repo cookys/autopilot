@@ -18,3 +18,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 ## Status 2026-10-23
 
 Merge 86274b421 (tintegrity) added precision rules (pure-add surface edits, same-topic replacement with a real assertion, if-! guard form). The tintegrity unit reported 83% false positive after it (v2 was 93.8%); mode stays warn until a re-replay is under 5% (BL-0060).
+
+## Status 2026-10-24
+
+Re-replay merged 7b84a5520 (docs/plans/evidence/2026-10-23-test-integrity-accuracy/): 91.7% false positives by record (11/12), 83.3% by group (5/6) over the v2 60 merges; supersedes the unrecorded 83% above. Mode stays warn. Three rules proposed there; a follow-up unit is implementing rules 1-2.

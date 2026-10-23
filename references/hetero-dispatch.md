@@ -275,6 +275,10 @@ The no-commit case is **split by how the worker ended** so a legitimate no-op ta
 
 The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
 
+#### Commit-quiescence (`--commit-quiet-secs N`)
+
+On the implement stage (every runner), once the hands branch has advanced past base AND the worktree is clean AND the runner log has not grown for `N` seconds (default 120; `0` disables), the rail TERMs the worker's process group (KILL after a short grace) and reports `committed` with `"note": "ended_after_commit_quiet"` in the result JSON — never `timed_out` or `failure`. A dirty worktree or no new commit keeps the old wall-timeout behaviour exactly. Poll interval is 10 s (`HETERO_COMMIT_QUIET_POLL` overrides). Test: `hooks/tests/dispatch-hetero-commit-quiet.test.sh`.
+
 #### Wrapper commit subject
 
 When the worker leaves the worktree dirty at the base (edit-only workers), the rail captures the edits itself and the commit subject is exactly `dispatch-hetero(<runner label>): edits on <branch>`. A worker that commits its own work owns its subject — so the wrapper subject is present on SOME hands commits, not all. Either way the subject is an IDENTIFIER, never evidence of integration: landed vs not-landed is answered by `scripts/check-containment.js` and `scripts/check-inputs-landed.js`, not by grepping subjects. `check-hands-commit.js --expect-wrapper-subject` asserts that subject; the rail passes it only on the capture path (it made the commit), never for a worker's own commit.

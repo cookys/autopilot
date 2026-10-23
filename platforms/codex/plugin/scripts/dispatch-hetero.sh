@@ -62,6 +62,10 @@
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
+#       [--commit-quiet-secs 120]              # implement stage: stop the runner once the branch has
+#                                              #   advanced past base, the worktree is clean and the log
+#                                              #   has not grown for N s (0 disables); ledger note
+#                                              #   ended_after_commit_quiet, status committed
 #       [--agy-bin agy]                        # alternate binary (test seam)
 #       [--grok-bin grok]                      # alternate binary (test seam)
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
@@ -190,6 +194,8 @@ RUNNER_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 TIMEOUT_SOURCE=""
 WORKER_TIMED_OUT=0
+COMMIT_QUIET_SECS=120
+COMMIT_QUIET_ENDED=0
 AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
@@ -911,6 +917,7 @@ emit() { # status commit files ins del worktree error
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && timeout_enforced_json="false"
   emit_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   timeout_fields=", \"timed_out\": $timed_out_json, \"timeout_enforced\": $timeout_enforced_json"
+  [ "${COMMIT_QUIET_ENDED:-0}" -eq 1 ] && timeout_fields="$timeout_fields, \"note\": \"ended_after_commit_quiet\""
   if [ -n "${TIMEOUT_SOURCE:-}" ] && [ -n "$emit_timeout_secs" ]; then
     timeout_fields="$timeout_fields, \"timeout_seconds\": $emit_timeout_secs, \"timeout_source\": \"$(_flat_json_escape "$TIMEOUT_SOURCE")\""
   fi
@@ -1820,6 +1827,7 @@ while [ $# -gt 0 ]; do
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --commit-quiet-secs) COMMIT_QUIET_SECS="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; BIN_FLAG_AGY=1; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; BIN_FLAG_GROK=1; shift 2 ;;
     --pi-bin) PI_BIN="${2:-}"; BIN_FLAG_PI=1; shift 2 ;;
@@ -3632,6 +3640,33 @@ _arm_worker_watchdog() {
   WATCHDOG_PID=$!
 }
 
+# Commit-quiescence: while the runner lives, poll cheaply; once HEAD != base AND the
+# worktree is clean AND the log has not grown for COMMIT_QUIET_SECS, TERM the worker
+# group (KILL after a short grace). Returns when the worker is gone or was stopped.
+_supervise_commit_quiet() {
+  local rp="$1" poll="${HETERO_COMMIT_QUIET_POLL:-10}"
+  local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=0 head
+  [ "$poll" -gt "$quiet" ] && poll="$quiet"
+  [ "$poll" -ge 1 ] || poll=1
+  while kill -0 "$rp" 2>/dev/null; do
+    sleep "$poll"
+    kill -0 "$rp" 2>/dev/null || return 0
+    size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
+    if [ "$size" != "$last_size" ]; then last_size="$size"; since=0; continue; fi
+    since=$((since + poll))
+    [ "$since" -ge "$quiet" ] || continue
+    head="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
+    [ -n "$head" ] && [ "$head" != "$BASE_SHA" ] || continue
+    [ -z "$(git -C "$WT" status --porcelain 2>/dev/null)" ] || continue
+    COMMIT_QUIET_ENDED=1
+    _watchdog_signal_worker TERM || true
+    local i=0
+    while [ "$i" -lt 5 ] && kill -0 "$rp" 2>/dev/null; do sleep 1; i=$((i + 1)); done
+    if kill -0 "$rp" 2>/dev/null; then _watchdog_signal_worker KILL || true; fi
+    return 0
+  done
+}
+
 _wait_worker_with_watchdog() {
   local rp="$1"
   local secs=""
@@ -3642,8 +3677,14 @@ _wait_worker_with_watchdog() {
       _arm_worker_watchdog "$secs"
     fi
   fi
+  COMMIT_QUIET_ENDED=0
+  if [[ "${COMMIT_QUIET_SECS:-0}" =~ ^[0-9]+$ ]] && [ "${COMMIT_QUIET_SECS:-0}" -gt 0 ] \
+     && [ -n "${WT:-}" ] && [ -n "${BASE_SHA:-}" ] && [ -n "${LOG:-}" ]; then
+    _supervise_commit_quiet "$rp"
+  fi
   wait "$rp"
   AGENT_EXIT=$?
+  [ "$COMMIT_QUIET_ENDED" -eq 1 ] && AGENT_EXIT=0
   if [ -n "${WATCHDOG_TOKEN_FILE:-}" ] && [ -f "${WATCHDOG_TOKEN_FILE}.fired" ]; then
     # Fired means TERM was sent and the watchdog is inside its grace window.
     # Do not cancel it: the grace loop exits on the cancel marker and would
@@ -5255,7 +5296,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
-      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true

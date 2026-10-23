@@ -153,6 +153,13 @@ if [ ! -f "$d" ]; then fail "run-skill-opt: run_loop stub never ran: $(tail -c 3
   assert_contains "$(cat "$d.cargv" 2>/dev/null)" "--model" "run-skill-opt: the original claude argv is preserved"
 fi
 
+# run-skill-opt wrapper self-exclusion: a TMPDIR with a trailing slash must not make the wrapper find itself (infinite exec; timeout 10 turns that into red)
+# RED at cb1f9dbd9: 56 passed, 1 failed -- trailing-slash TMPDIR: the wrapper exec'd itself until the timeout
+d="$DUMPS/skill-opt-slash.env"; rm -f "$d" "$d.cargv"
+mkdir -p "$TEST_TMP/slash-tmp"
+( cd "$SBX" && HOME="$hopt/home" STUB_DUMP="$d" PATH="$hopt/bin:$PATH" CLAUDE_CODE_SESSION_ID="$P" TMPDIR="$TEST_TMP/slash-tmp/" timeout 10 bash "$hopt/ap/scripts/run-skill-opt.sh" xs >"$d.out" 2>&1 < /dev/null ) || true
+assert_contains "$(cat "$d.cargv" 2>/dev/null)" "--strict-mcp-config" "run-skill-opt: trailing-slash TMPDIR still reaches the real claude (no self-exec)"
+
 # an inherited durable lifetime never survives: a child is never promoted to durable
 run_rail review-durable FLEET_LIFETIME=durable "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review with inherited FLEET_LIFETIME=durable" review-seat "$E_DUMP"

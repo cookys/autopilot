@@ -46,7 +46,7 @@ Rule reading, unchanged: GO needs P0 A1 and B1 affirmative on 2.1.309 (met, docs
 
 Owner decision (d-baf11c30, 2026-10-24, Taipei time): the owner explicitly accepted the deviation of the unmeasured post-run task-hash comparison and adopted this batch's result on the substitute evidence. The substitute evidence is limited to: the listing recomputed after the batch equals the preregistered one, no file in the task directory has a modification time after 19:08Z on 2026-10-23, git shows no change since 2026-10-19 and a clean status. Its limit: it cannot exclude a change that was made and reverted inside the window. The adoption is the owner's acceptance of a deviation, not a rule judgement; the two are kept apart here.
 
-Conclusion after the accepted deviation: this batch is adopted, so the GO condition "measured M2_3" is treated as satisfied together with P0 A1 and B1 on 2.1.309. **Recommendation: GO to the next stage** (advice; the decision stays with the owner). Observed values adopted: M1 6, M2 13, M3 0, M2_3 13/30, Fisher p 0.0169 against 23/30 and 0.7925 against 11/29, label A ("+NOTE+").
+Conclusion after the accepted deviation: this batch is adopted, so the GO condition "measured M2_3" is treated as satisfied together with P0 A1 and B1 on 2.1.309. **Recommendation: GO to the next stage** (advice; the decision stays with the owner). Observed values adopted: M1 6, M2 13, M3 0, M2_3 13/30, Fisher p 0.0169 against 23/30 and 0.7925 against 11/29, label A (label A rests on the owner's acceptance of the deviation (d-baf11c30), not on a section 3.3 validity judgement).
 
 ## Cost
 

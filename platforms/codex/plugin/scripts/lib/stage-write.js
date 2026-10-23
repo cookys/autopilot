@@ -32,7 +32,8 @@ let failed = false;
 function familyOfEngine(engine) {
   const e = String(engine || '').toLowerCase();
   // Named vendors before the generic flash class. MiniMax-M3.1-Flash is minimax;
-  // gemini/bison/flash stay google. No deepseek arm: this table has none.
+  // gemini/bison/flash stay google. deepseek, longcat (Meituan) and beam (Reflection AI) are named
+  // before that arm too, so `deepseek-v4.1-flash` is not mistaken for google.
   if (/minimax|abab/.test(e)) return 'minimax';
   if (/kimi|moonshot/.test(e)) return 'moonshot';
   if (/glm|zhipu/.test(e)) return 'zhipu';
@@ -40,6 +41,9 @@ function familyOfEngine(engine) {
   if (/gpt|codex|o1|o3|o4/.test(e)) return 'openai';
   if (/claude|opus|sonnet|haiku/.test(e)) return 'anthropic';
   if (/qwen|qwq/.test(e)) return 'alibaba';
+  if (/deepseek/.test(e)) return 'deepseek';
+  if (/longcat/.test(e)) return 'meituan';
+  if (/beam/.test(e)) return 'reflection';
   if (/gemini|flash|bison/.test(e)) return 'google';
   return 'unknown';
 }

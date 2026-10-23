@@ -759,6 +759,9 @@ family_of() {
     *gpt*|*codex*|*o1*|*o3*|*o4*)            echo openai ;;
     *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
     *qwen*|*qwq*)                            echo alibaba ;;
+    *deepseek*)                              echo deepseek ;;
+    *longcat*)                               echo meituan ;;
+    *beam*)                                  echo reflection ;;
     *gemini*|*flash*|*bison*)                echo google ;;
     *)                                       echo unknown ;;
   esac
@@ -2021,9 +2024,12 @@ function familyOf(engineName) {
   if (e.includes("gpt") || e.includes("codex") || e.includes("o1") || e.includes("o3") || e.includes("o4")) return "openai";
   if (e.includes("claude") || e.includes("opus") || e.includes("sonnet") || e.includes("haiku")) return "anthropic";
   if (e.includes("qwen") || e.includes("qwq")) return "alibaba";
+  if (e.includes("minimax") || e.includes("abab")) return "minimax";
+  if (e.includes("deepseek")) return "deepseek";
+  if (e.includes("longcat")) return "meituan";
+  if (e.includes("beam")) return "reflection";
   if (e.includes("gemini") || e.includes("flash") || e.includes("bison")) return "google";
   if (e.includes("grok") || e.includes("composer")) return "xai";
-  if (e.includes("minimax") || e.includes("abab")) return "minimax";
   if (e.includes("glm") || e.includes("zhipu")) return "zhipu";
   return "unknown";
 }

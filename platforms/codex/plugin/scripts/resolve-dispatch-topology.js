@@ -154,6 +154,9 @@ function familyOf(engine) {
   if (e.includes('minimax') || e.includes('abab')) {
     return 'minimax';
   }
+  if (e.includes('deepseek')) return 'deepseek';
+  if (e.includes('longcat')) return 'meituan';
+  if (e.includes('beam')) return 'reflection';
   if (e.includes('gemini') || e.includes('flash') || e.includes('bison')) {
     return 'google';
   }

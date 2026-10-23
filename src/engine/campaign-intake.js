@@ -342,9 +342,12 @@ function modelFamilyOfEngine(engine) {
   if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
   if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
   if (/(qwen|qwq|qoder)/.test(normalized)) return 'alibaba';
+  if (/deepseek/.test(normalized)) return 'deepseek';
+  if (/longcat/.test(normalized)) return 'meituan';
+  if (/beam/.test(normalized)) return 'reflection';
+  if (/(minimax|abab)/.test(normalized)) return 'minimax';
   if (/(gemini|flash|bison)/.test(normalized)) return 'google';
   if (/(grok|composer)/.test(normalized)) return 'xai';
-  if (/(minimax|abab)/.test(normalized)) return 'minimax';
   if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
   return 'unknown';
 }

@@ -20,3 +20,7 @@ Bar of 5% is **not met**; the FP rate rose from round 1 because the loose exempt
 Negative controls N14–N18 (+N15b) in `hooks/tests/check-test-integrity-precision.test.sh` pin the round-2 behaviour; F9/F10 stay green.
 
 Files: `replay.json` (8 records), `merges60.txt`, `replay60.py`.
+
+## Round 3 (unit tirules-r3)
+
+Added added-line guards: a failure-masking tail (`|| true`, `|| ! false`, `|| :`, `; true`, `|| exit 0`) or a self-comparison of the first two assert arguments never counts as an equivalent; literal operands are unchanged. Replay re-run: 60 ranges, 0 errors, **8 records** (unchanged), FP 7/8 = 87.5%; TP `6fcfed4b` still fires. Controls N19 (masking tail), N20 (self-comparison), N21 (rename stays reported) added.

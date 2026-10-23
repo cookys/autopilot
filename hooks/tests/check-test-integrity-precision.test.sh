@@ -7,6 +7,7 @@
 # RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
 # RED at da158d42d: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
 # RED at 566272d61 (tirules round 1 head): N14 N15 N16 N17 N18 failed (rules 1-2 too loose: tautology rewrite, unrelated added assertion, comment-only/changed-line/message-token exemptions).
+# RED at 42482c4ca (tirules round 3): N19 N20 failed (masking tail, self-comparison counted as equivalent); N21 passed.
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 . "$(dirname "$0")/lib.sh"
 
@@ -398,5 +399,20 @@ printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
 commit_all "$repo" "drop comment and assertion"
 run_case "$repo"
 if has_kind deleted_line; then report N18 1; else report N18 0; fi
+
+# ── N19 rule 1: failure-masking tail appended to the assertion ─────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" || ! false')"
+run_case "$repo"
+if has_kind surface_touch; then report N19 1; else report N19 0; fi
+
+# ── N20 rule 1: self-comparison rewrite is a tautology ─────────────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$age"')"
+run_case "$repo"
+if has_kind surface_touch; then report N20 1; else report N20 0; fi
+
+# ── N21 rule 1: renamed subject stays reported ─────────────────────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$years" "0"')"
+run_case "$repo"
+if has_kind surface_touch; then report N21 1; else report N21 0; fi
 
 finalize_test

@@ -1772,6 +1772,29 @@ def _norm_line(content, lang_key):
     return re.sub(r"\s+", " ", _raw_code(content, lang_key))
 
 
+_MASK_TAIL = re.compile(
+    r"(?:\|\||;)\s*(?:true|:|! false|exit 0|return 0)\s*;?\s*$"
+)
+_ASSERT_CALL = re.compile(r"^\s*(?:assert\w*|expect\w*)\s+(.*)$", re.I)
+_ARG = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|]+')
+
+
+def _degenerate_added(content, lang_key):
+    """An added assertion that cannot fail: a failure-masking tail, or a
+    self-comparison of its first two arguments. Never an equivalent."""
+    raw = _raw_code(content, lang_key)
+    if lang_key != "shell" or not raw:
+        return False
+    if _MASK_TAIL.search(raw):
+        return True
+    call = _ASSERT_CALL.match(raw)
+    if call:
+        args = _ARG.findall(call.group(1))
+        if len(args) >= 2 and args[0] == args[1]:
+            return True
+    return False
+
+
 def _operands(content, lang_key):
     """Subject operands of an assertion line: identifiers/numbers minus the
     assertion vocabulary (function names such as assert_eq, test keywords)."""
@@ -1816,7 +1839,11 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
     if not lang_key:
         return removed > 0
     # Each removed assertion needs its own added equivalent on the same subject.
-    pool = [(_norm_line(a, lang_key), _operands(a, lang_key)) for a in added_asserts]
+    pool = [
+        (_norm_line(a, lang_key), _operands(a, lang_key))
+        for a in added_asserts
+        if not _degenerate_added(a, lang_key)
+    ]
     for gone in removed_asserts:
         norm, ops = _norm_line(gone, lang_key), _operands(gone, lang_key)
         match = None

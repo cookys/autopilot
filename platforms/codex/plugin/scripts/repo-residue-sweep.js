@@ -251,7 +251,7 @@ function isAncestor(repo, a, b) {
   return null;
 }
 
-// Stable patch-id → commit shas for one rev range. null when git could not run.
+// Whitespace-sensitive (verbatim) patch-id → commit shas for one rev range. null when git could not run.
 const patchIdCache = new Map();
 function patchIdMap(repo, range) {
   const key = `${repo}\0${range}`;
@@ -262,7 +262,7 @@ function patchIdMap(repo, range) {
   if (log.status !== 0) return null;
   const map = new Map();
   if (log.stdout && log.stdout.trim()) {
-    const pid = spawnSync('git', ['patch-id', '--stable'], { input: log.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const pid = spawnSync('git', ['patch-id', '--verbatim'], { input: log.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (pid.status !== 0) return null;
     for (const line of (pid.stdout || '').split('\n')) {
       if (!line) continue;
@@ -281,7 +281,7 @@ function stablePatchId(repo, sha) {
     encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' },
   });
   if (show.status !== 0 || !show.stdout) return null;
-  const pid = spawnSync('git', ['patch-id', '--stable'], { input: show.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const pid = spawnSync('git', ['patch-id', '--verbatim'], { input: show.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (pid.status !== 0 || !pid.stdout) return null;
   return pid.stdout.split(/\s+/)[0] || null;
 }
@@ -332,7 +332,28 @@ function isIntegrated(repo, ref, integrationSha) {
     if (!pool || pool.length === 0) return { integrated: false };
     matches.push({ branch: full.out.trim(), target: pool.shift() });
   }
+  const present = changePresentAtTip(repo, mb.out.trim(), ref, integrationSha);
+  if (present === null) return null;
+  if (!present) return { integrated: false };
   return { integrated: true, basis: 'patch_id', matches };
+}
+
+// True when the branch's net change (base..ref) is still in the integration tip, i.e. a
+// reverse-apply onto the tip tree succeeds; a later revert makes it fail. Uses a temp index.
+function changePresentAtTip(repo, base, ref, tipSha) {
+  const env = { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' };
+  const diff = spawnSync('git', ['-C', repo, 'diff', '--binary', '--full-index', base, ref], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env });
+  if (diff.status !== 0) return null;
+  if (!diff.stdout) return true;
+  let dir = null;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'residue-idx-'));
+    const e2 = { ...env, GIT_INDEX_FILE: path.join(dir, 'index') };
+    const rt = spawnSync('git', ['-C', repo, 'read-tree', tipSha], { encoding: 'utf8', env: e2 });
+    if (rt.status !== 0) return null;
+    const ap = spawnSync('git', ['-C', repo, 'apply', '--cached', '--check', '--reverse'], { input: diff.stdout, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: e2 });
+    return ap.status === 0;
+  } finally { if (dir) fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 function assignIntegrated(row, verdict) {

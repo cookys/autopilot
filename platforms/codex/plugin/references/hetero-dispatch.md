@@ -233,7 +233,7 @@ only where the installed runner exposes a verified enforceable surface:
 `claude-native` is also an **implementer** runner (`dispatch-hetero.sh --runner claude-native`: first-party
 Claude on the owner's native auth, same worktree, ledger, result JSON, wall timeout and kill-after as every other
 runner). It stays EXPLICIT-only and sits behind a **one-time owner confirmation**: without
-`implementer_claude_native.confirmed_at` in `~/.autopilot/config.json` the dispatch exits 2 with
+`implementer_claude_native.confirmed_at` in `<HOME>/.autopilot/config.json` (read only from there; `AUTOPILOT_CONFIG_FILE` and XDG overrides are ignored, so the confirmation is bound to HOME) the dispatch exits 2 with
 `status: precondition_failed` and depth 0 must ask the owner once, then run
 `node scripts/run-approval.js confirm-claude-native` (no flag on the dispatch command line grants it). The claude
 child gets a throwaway `CLAUDE_CONFIG_DIR` seeded by `scripts/lib/seed-claude-config.js` with ONLY a mode-0600

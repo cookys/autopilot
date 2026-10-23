@@ -37,9 +37,11 @@
 // --attribute (needs --run and --base; not --files): after the run, re-run ONLY the non-zero entries at
 // the base commit in a temporary detached git worktree under the OS temp dir (always removed, also
 // on failure or TERM/INT), same command, env and entry timeout. An entry non-zero at base is
-// `preexisting`; zero at base, or absent at base, is `new`. Prints `attribution: preexisting N: ...`
-// and `attribution: new N: ...`. Exit code with --attribute: non-zero (1) only if any entry is `new`
-// (or an empty selection is not a pass); 3 is kept for a budget stop; preexisting-only failures exit 0.
+// `preexisting`; zero at base, or absent at base, is `new`. A base re-run killed by the entry timeout (rc 124) proves nothing, so that entry is
+// `unattributed` (a failure, never preexisting). Prints `attribution: preexisting N: ...`,
+// `attribution: new N: ...` and `attribution: unattributed N: ...`. Exit code with --attribute:
+// non-zero (1) if any entry is `new` or `unattributed` (or an empty selection is not a pass); 3 is
+// kept for a budget stop; preexisting-only failures (base finished normally, non-zero) exit 0.
 // Without --attribute the exit code is unchanged. --record adds, per re-run suite, an additive
 // `base_rc` after the existing keys (schema 1 keys and order unchanged; consumers read path/rc only).
 //
@@ -634,7 +636,7 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
 }
 
 // --attribute: re-run only the non-zero entries at the base commit in a temporary detached worktree
-// (always removed, also on TERM/INT), then label each preexisting (non-zero at base) or new.
+// (always removed, also on TERM/INT), then label each preexisting (non-zero at base, finished normally), new, or unattributed (base timed out).
 function removeWorktree(root, tmp, wt) {
   try { execFileSync('git', ['worktree', 'remove', '--force', wt], { cwd: root, stdio: 'ignore' }); } catch { /* fall through to rm */ }
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ }
@@ -643,7 +645,7 @@ function removeWorktree(root, tmp, wt) {
 
 async function attribute(root, baseSha, results, entryTimeout) {
   const failing = results.filter((r) => r.rc !== 0);
-  const groups = { preexisting: [], new: [] };
+  const groups = { preexisting: [], new: [], unattributed: [] };
   if (failing.length === 0) return groups;
   let tmp = null;
   let wt = null;
@@ -660,9 +662,12 @@ async function attribute(root, baseSha, results, entryTimeout) {
     execFileSync('git', ['worktree', 'add', '--detach', wt, baseSha], { cwd: root, stdio: 'pipe' });
     for (const r of failing) {
       if (!fs.existsSync(path.join(wt, r.path))) { groups.new.push(r.path); continue; } // absent at base: cannot be preexisting
-      const { rc } = await runEntry(wt, r.path, entryTimeout, true);
+      const { rc, timedOut: to } = await runEntry(wt, r.path, entryTimeout, true);
       r.base_rc = rc;
-      (rc !== 0 ? groups.preexisting : groups.new).push(r.path);
+      // Only a base run that finished normally and was non-zero is evidence of a preexisting failure;
+      // a base run killed by the entry timeout proves nothing either way.
+      if (to || rc === 124) groups.unattributed.push(r.path);
+      else (rc !== 0 ? groups.preexisting : groups.new).push(r.path);
     }
   } finally {
     for (const [sig, h] of handlers) process.removeListener(sig, h);
@@ -820,7 +825,8 @@ async function main(argv) {
         const g = await attribute(root, baseSha, ran.results, a.entryTimeout);
         process.stdout.write(`attribution: preexisting ${g.preexisting.length}${g.preexisting.length ? ': ' + g.preexisting.join(' ') : ''}\n`);
         process.stdout.write(`attribution: new ${g.new.length}${g.new.length ? ': ' + g.new.join(' ') : ''}\n`);
-        attrCode = g.new.length > 0 || ran.emptyFail ? 1 : (ran.code === 3 ? 3 : 0);
+        process.stdout.write(`attribution: unattributed ${g.unattributed.length}${g.unattributed.length ? ': ' + g.unattributed.join(' ') : ''}\n`);
+        attrCode = g.new.length > 0 || g.unattributed.length > 0 || ran.emptyFail ? 1 : (ran.code === 3 ? 3 : 0);
       }
       if (a.json && ran.budgetDoc) process.stdout.write(JSON.stringify(ran.budgetDoc, null, 2) + '\n');
       if (a.record) {

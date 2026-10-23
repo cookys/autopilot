@@ -82,6 +82,9 @@ test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-
     'Have each lane save its findings in findings.txt.',
     'Write the findings report file when done.',
     'Persist FINDINGS to disk before returning.',
+    'Have each lane save its findings in findings.csv.',
+    'Have each lane save its findings in findings.yaml.',
+    'Have each lane save its findings in findings.log.',
   ];
   const good = ['Never write a FINDINGS file; return findings as text.', 'Do not create a FINDINGS file. Return the findings as text.'];
   for (const [lines, want] of [[bad, 2], [good, 0]]) {
@@ -94,6 +97,17 @@ test('--check-arms FINDINGS guard: negation is clause-scoped, verbs broad, case-
       assert.strictEqual(hit, want === 2, `${l} -> ${r.stdout}`);
     }
   }
+});
+test('--check-arms FINDINGS guard: lowercase bullets are separate clauses; wrapped sentences stay whole', () => {
+  const run1 = (body) => {
+    const d = tmp(); fs.cpSync(path.join(__dirname, 'arms'), d, { recursive: true });
+    fs.appendFileSync(path.join(d, 'change', 'code-review.md'), body);
+    return JSON.parse(run(['--check-arms', '--arms-dir', d]).stdout);
+  };
+  const ok = run1('\n- never write a FINDINGS file\n- do not create a FINDINGS file\n* never write a FINDINGS file\n1. do not create a FINDINGS file\n');
+  assert.ok(!ok.problems.some((p) => /FINDINGS file/.test(p)), JSON.stringify(ok.problems));
+  const bad = run1('\n- never write a FINDINGS file\n- Each lane must write\nFINDINGS.md to disk.\n');
+  assert.ok(bad.problems.some((p) => /FINDINGS file/.test(p)), JSON.stringify(bad.problems));
 });
 test('change arm says findings return as text and never asks for a FINDINGS write', () => {
   assert.match(arms.change['code-review.md'], /as text/);

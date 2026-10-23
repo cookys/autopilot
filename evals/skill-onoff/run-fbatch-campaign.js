@@ -61,9 +61,19 @@ function maxUsd() {
 }
 
 // Whitelist design: any FINDINGS-file token in an arm is a problem unless its whole clause is an approved sentence.
-const FINDINGS_FILE_TOKEN = /findings\.(md|txt|json)\b|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
+const FINDINGS_FILE_TOKEN = /findings\.[a-z0-9]+\b|findings\s+(report\s+)?(file|doc|document)s?\b|findings\s+report\b/i;
 const norm = (t) => t.replace(/\s+/g, ' ').trim();
-const clauseKey = (c) => norm(c).toLowerCase().replace(/^[-*\s]+/, '').replace(/[.\s]+$/, '');
+const clauseKey = (c) => norm(c).toLowerCase().replace(/^([-*]|\d+[.)])?\s*/, '').replace(/[.\s]+$/, '');
+// Split on lines BEFORE whitespace normalisation: a bullet line starts a new clause; a plain line continues the
+// previous one (so a sentence wrapped across lines stays whole); a blank line ends it.
+function lineClauses(txt) {
+  const out = []; let cur = null;
+  for (const line of txt.split(/\r?\n/)) {
+    if (!line.trim()) { cur = null; continue; }
+    if (/^\s*([-*]|\d+[.)])\s+/.test(line) || cur === null) { cur = [line]; out.push(cur); } else cur.push(line);
+  }
+  return out.map((c) => c.join(' '));
+}
 const APPROVED_CLAUSES = new Set([
   'Never write a FINDINGS file',
   'Do not create a FINDINGS file',
@@ -84,7 +94,7 @@ function checkArms() {
   for (const arm of ['base', 'change']) {
     for (const [f, txt] of Object.entries(a[arm])) {
       // Collapse newlines/runs of spaces first, so a token or sentence split across lines cannot hide.
-      for (const clause of norm(txt).split(/;|\.(?=\s|$)|\s-\s(?=[A-Z])/)) {
+      for (const clause of lineClauses(txt).flatMap((c) => norm(c).split(/;|\.(?=\s|$)/))) {
         if (!(FINDINGS_FILE_TOKEN.test(clause) || /\bFINDINGS\b/.test(clause))) continue;
         if (APPROVED_CLAUSES.has(clauseKey(clause))) continue;
         problems.push(`${arm}/${f}: mentions a FINDINGS file outside the approved sentences: ${clause.trim()}`);

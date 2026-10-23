@@ -1,0 +1,738 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "perturnreview-v2-g1",
+  "logical_plan_id": "per-turn-gate-2026-10-23-perturnreview-v2",
+  "session_id": "perturnreview-v2-s1",
+  "session_key": "f9f53263a04441162868e14b51e34000ecbb536297711596db1f2e320a683b06",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "18c50ad9453b35c064ac49f452577f85cfda226029c78c34ed26445bb83c2f73",
+  "manifest_sha256": "ac426621c9392ec930c79335b7f2f7ed27c568bfe9089b83fd6404da2d35c436",
+  "plan_sha256": "a1617ef0c1c15c696f6125f83328ced7adde96b933b97f56238bb2f9fbfd8d84",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "0bf4d82669611e3b5d6889102fd6540053f07ce87c727a4995cb2711a7a08f1c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1ea865ff727c8fe6c428db2d1ea7ea14a62b0507f232cadb904933a0203dc237",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-E0HBZJ/stdout",
+          "digest": "1ea865ff727c8fe6c428db2d1ea7ea14a62b0507f232cadb904933a0203dc237"
+        },
+        "receipt_digest": "a273c84be2cc6a2dba98646e79737dc3d0f1e3bb965f6dba0fac934bb3b5e3ef"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "40e2192fcf711d58c675747c61bdd411f93348a48fcff81191582d62d5e0ddc5"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "32fba165a10ac892a91db7ee5ddea9b7ec48758e7a7fdc0969da7e4bffdda2b7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sUDRKE",
+          "digest": "32fba165a10ac892a91db7ee5ddea9b7ec48758e7a7fdc0969da7e4bffdda2b7"
+        },
+        "receipt_digest": "0c19dc878f75c2e0aedcd380e4a5da9718033648335d6d0f5acd400b4e5ad679"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "4f75bf37112873426da3ceb2a9cd59d302c72d6b5480bec76401e7b638f86a7f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ade3b0d97e436201a8882954f48778d7f0e593f12c647b70338c1c5157bbcd58",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-84pN6p",
+          "digest": "ade3b0d97e436201a8882954f48778d7f0e593f12c647b70338c1c5157bbcd58"
+        },
+        "receipt_digest": "b40d7359f8ddd2b0416d206fa9dd80da510706c5e7539ffa7213b4bc0274b90d"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "893ecde69ad8478812c44b8bfb9abae9757b3ae7f7e031ca93392b4960c0d622"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "85ce940e064b2d7ef2e1ca2aa44ce74a66e6f5f6eabb2b853272f9c0312d5ae3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-XYtzf2",
+          "digest": "85ce940e064b2d7ef2e1ca2aa44ce74a66e6f5f6eabb2b853272f9c0312d5ae3"
+        },
+        "receipt_digest": "c6e531c9a2a133f9d2e4d1b3b2daeba5734a78ec2fd8b5c28ebf25a86d9c5a86"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "6a857d2c2f958a971923e83d25ef19fcd6a48b056a603f99eabe124a5b35278c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xRT7Ua",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "16cc6cdb557253256a158b83cde503095ead063925ec6f7078fe0446f49ab471"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 lineage allocation and work-item binding",
+      "claim": "The specified locking protocol does not prevent two concurrent first dispatches for one branch from allocating independent lineage budgets.",
+      "evidence": "Locks are named by lineage_id, while allocation scans for an existing work_item under that lineage's lock. Two fresh dispatches with different ids can acquire different locks, both observe no existing binding, and each create a lineage file for the same branch. Atomic rename does not serialize writes to different files. The plan explicitly excludes the fail-open branch ledger as the authoritative store.",
+      "evidence_reference": "Section 3.5, Storage and binding; section 3.5 negative controls",
+      "repair": "Serialize branch-to-lineage lookup and creation with a shared allocation lock or a stable branch binding lock. Specify lock ordering for subsequent counter updates and add a concurrent first-allocation control requiring exactly one lineage binding.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9fb011ba18778e5959ddae5e84d21bfe4f4206c8e46fb5127093c174f426d3f6"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 round exhaustion and depth-0 repair",
+      "claim": "The promised depth-0 recovery after round exhaustion is unreachable under the reservation rule.",
+      "evidence": "Every repair, explicitly including a depth-0 repair, must reserve while round_retries_used is below 2. Step (2) nevertheless permits depth-0 to dispatch a repair after that counter reaches 2. The counter resets when a new hand commit opens a round, but the repair process needed to produce that commit cannot reserve a slot, and repairs are defined as staying within their round.",
+      "evidence_reference": "Section 3.5, Reservation and Order of evaluation steps (2)-(3); section 3.9, Turn versus round; P3b turn-to-round mapping",
+      "repair": "Define an explicit transition for a depth-0 repair after round exhaustion. State whether it opens a new round before reservation, how that round is identified, and how it consumes the unchanged lineage budget. Test recovery from round exhaustion with lineage capacity remaining.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c966a73f93ade44793cf3d1108e9c15bcd719dd92b2b72c011ddaac386e31579"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 batch mode; KR4; P4-to-P6 promotion",
+      "claim": "P4 can promote an enforcement policy that its counted experiment does not measure.",
+      "evidence": "Normal operation stops repairs at a lineage budget of 6, while counted P4 attempts receive a budget of 10 specifically so that lineage exhaustion cannot bind. A G run can therefore obtain final oracle scores after retries 7-10 that the product would refuse. P5 observes only and cannot measure the resulting product enforcement behavior. The difference is disclosed, but SUCCESS still authorizes progression toward promotion of the normal adapter.",
+      "evidence_reference": "Section 3.5, normal lineage budget and Batch mode; KR4; P4, P5 and P6 phase rows",
+      "repair": "Use the normal lineage budget in the counted promotion experiment and score exhaustion as a terminal capability outcome. Alternatively, restrict the current batch to bridge evidence and require measurement of the normal enforcement policy before promotion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2388c27519ab58ef5c70cc5a1282be9ef93ad83bf35ba6bff0ded822388f50bc"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P4 validity clause and P3b event-to-class table",
+      "claim": "The timeout classification permits outcome-dependent replacement of model failures under the infra-rerun exception.",
+      "evidence": "Every firing of the driver's wall-clock timeout is classified as infra_fail without distinguishing infrastructure failure from a functioning model that loops or spends too long performing application work. Such an attempt receives another sample and can disappear from final scoring, although an ordinary early task-logic failure must remain in the denominator. G performs additional repair processes, so this censoring can differ by arm. The 10 percent ceiling limits its frequency but does not remove the selection.",
+      "evidence_reference": "Section 1, Validity clause definitions of runner_timeout, capability_fail and reruns; P3b acceptance",
+      "repair": "Freeze a distinction between independently evidenced infrastructure outages and expiration of the task or attempt execution budget. Score the latter on the repository as left without rerunning. Add controls for a live application loop and for timeout during a G repair.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f4d6d00239ad7f0de7e470b2444ccec974b846266bcc53a96f01af6d88459603"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 6 out-of-scope statement and P2 inventory exception",
+      "claim": "The document both authorizes and prohibits the P2 CLAUDE.md inventory edit.",
+      "evidence": "Section 2 explicitly permits one CLAUDE.md inventory edit, and the P2 allowed-file surface requires adding the script basename. Section 6 instead lists any edit to CLAUDE.md as out of scope without carrying that exception.",
+      "evidence_reference": "Section 2 first constraint; P2 phase row; section 6 opening out-of-scope paragraph",
+      "repair": "Carry the explicit P2 inventory exception into section 6 and keep other CLAUDE.md changes out of scope.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "364232e04ccd4c386575f46f071472ff83b7a847ca16138268acf98da34d7944"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 3.5 caps and exhaustion; KR1; P3 rail adapter; P3b turn-to-round mapping",
+      "claim": "Section 3.5 is not implementable in one pass: it never classifies which commits reset round_retries_used, so the per-round cap and the depth-0 repair path cannot both be true.",
+      "evidence": "Section 3.5 sets round_id to the round number of the hand commit being gated and says a new hand commit resets round_retries_used to 0. Reservation before any repair spawn, gate retry or depth-0 alike, requires round_retries_used below 2. Hook point A gates after every hand commit, and a gate-triggered repair is itself a commit that is then gated. If that repair commit is a new hand commit, the round counter resets and the per-round cap of 2 never binds. If it is not, then after step (2) (round_retries_used is 2, return to depth-0 without starting the next round) a depth-0 repair cannot reserve even when lineage budget remains, so the sentence that depth-0 may dispatch a repair is dead. P3b says a repair redispatch stays inside its round, but 3.5 never gives the product adapter that classifier; the negative control a new hand commit resets only the round counter uses the undefined term. KR1 makes 3.5 the only normative cap statement, so P3 cannot invent the rule.",
+      "evidence_reference": "section 3.5 storage/reservation/evaluation-order paragraphs; section 3.3 (A) hook point; section 3.9 turn versus round; P3b row 'a repair redispatch stays inside its round'; KR1",
+      "repair": "Close one classifier in 3.5: round_id is assigned at a non-gate dispatch (originating hand or depth-0 repair) and is unchanged for gate-triggered redispatches; reset round_retries_used only in that non-gate admission update, before the below-2 check. State that the gate itself never opens the next round; a later depth-0 dispatch is a new round and may reserve until the lineage budget is spent.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0773088bb44a80431d2734befa6067ffb1aa4321aaa663cadf79373f77cf03f0"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 1 P4 validity clause; P3b event-to-class table; P4 rate-based margins",
+      "claim": "The advertised 27-to-30 valid-count window is almost unreachable under the 10 percent infra-attempt rule, so the rate-based margins at 27 and 28 are dead letter.",
+      "evidence": "An infra loss is three infra_fail attempts. Two losses give at least 6 infra_fail attempts and 28 valid runs, 6/34 which is about 17.6 percent, which exceeds 10 percent and is INCONCLUSIVE. Three losses give 9/36=25 percent and 27 valid, also INCONCLUSIVE. The only reachable valid counts are 30 (at most 3 recovered infra_fail attempts, because 4/34 exceeds 10 percent) or 29 (exactly one three-attempt loss and zero recovered infra on the other 29). KR4 still says the validity clause allows 27 to 30 and that margins apply as rates at 27 to 29 so verdict regions are disjoint in that range.",
+      "evidence_reference": "section 1 validity clause (27-30 valid runs; infra_fail attempts exceed 10 percent of attempts; infra loss = three infra_fail attempts); KR4 paragraph on nC/nG and rate-based margins",
+      "repair": "Pick one denominator and write it once: either 10 percent of run ids (or of first attempts) so that 2-3 infra losses can still yield 27-29 valid runs, or drop the 27-28 rate language and state that validity is 29-30 plus the recovered-infra cap. Keep the frozen evaluation order after that choice.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9d8032c2e92741cb34e57c61e5c1c9300a04409614f61747ed767006dbc0c8d4"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 6 out of scope; section 2 constraints; P2 allowed files; section 3.9; section 5 P1/P4 parallel sentence",
+      "claim": "The document restates closed rules in ways that contradict more specific rows, so a dispatch that pastes section 6 or 3.9 can fight P2 and 3.5.",
+      "evidence": "Section 6 lists any edit to CLAUDE.md as out of scope, while section 2 and the P2 row require one basename line in the grouped script list of CLAUDE.md. Section 3.9 restates the lineage budget as six rounds of one retry each instead of citing 3.5 only. Section 5 says P4 research may run in parallel, as section 5 states, a self-citation; the normative parallel rule lives in KR3 and the section 4 order paragraph.",
+      "evidence_reference": "section 6 Out of scope list; section 2 CLAUDE.md inventory exception; section 4 P2 allowed files; section 3.9 Turn versus round; section 5 paragraph ending P4 research may run in parallel; KR3",
+      "repair": "Change section 6 to CLAUDE.md except the P2 inventory basename. In 3.9 drop the numeral six and point at 3.5. Replace as section 5 states with as KR3 states.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b9482fff0a22348c27fb726e445536a375f877ec3f647bac1244ca1911f7873c"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 4 order paragraph and P3b row",
+      "claim": "P3b is not ordered after P3 even though its acceptance needs the P3 adapter.",
+      "evidence": "The order paragraph says P0 and P1 together, P2 after the formatter contract, P3 after P2, and P3b is a prerequisite of P4, without saying P3b waits on P3. The P3b row says move the batch onto the P3 adapter and that one uncounted seeded five-turn run through the adapter is the preflight. That preflight cannot be green before P3 exists. A hand could start P3b in parallel with P3 and then rewrite the driver twice.",
+      "evidence_reference": "section 4 opening Order paragraph; section 4 P3b Deliverable/Acceptance cells",
+      "repair": "Add one clause: P3b starts only when P3 is green on the seeded rail. Leave P4's P3-and-P3b gate unchanged.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e8fae0b3bd2181a6e559d2a19b664656ce11025ca4836994f6976a100230ea2b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 3.5 lineage store binding and lifetime",
+      "claim": "Lineage files never unbind from a branch, so the one-budget-per-work-item rule has no close path.",
+      "evidence": "Storage is one file per lineage_id under git-common-dir with work_item equal to the branch name. Binding scans for that branch and refuses a different or missing id. Only a branch with no lineage file allocates a new one. No accept, owner-card, merge, or reap path deletes or unbinds the file; the plan contrasts this store with the dispatch-branch ledger that is compacted by reap. After exhaustion, a later dispatch on the same branch must reuse the spent id and hits step (1). After a clean gated task, a later work item on the same branch shares the remaining budget of 6 instead of getting a new work-item id as 3.5 also requires.",
+      "evidence_reference": "section 3.5 Storage and binding paragraph; section 3.5 A lineage is one work item / A new work item gets a new id; negative control dispatch for an existing branch with a fresh run id",
+      "repair": "Add a closed unbind: on accept, on owner-card exhaustion, or on an explicit reap, the lineage file is removed or marked closed so the next work item on that branch may allocate a new id. Until then, state that a branch has one lifetime budget and do not also say a new work item always gets a new id.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5bd8bba35be3a98b9267f3948670bd9ba294e54c94e9bb1a3a9f687c9653b3c9"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 1 P4 decision rule: SUCCESS conjunction and power note",
+      "claim": "The 30-pair design is not shown to have adequate power for the event that actually produces SUCCESS.",
+      "evidence": "SUCCESS is a conjunction of a 20-point lift, Fisher p at most 0.05, M2 non-trade, M3 non-regression, and at least three mechanism observations. The power note reports only marginal M1 detection rates of 86%, 61%, and 27%. It gives no rate for the minimum promoted 20-point effect and no rate for the full conjunction after attrition. Because the conjunction cannot be more probable than marginal M1 detection, the reported 27% to 61% figures do not establish adequate power.",
+      "evidence_reference": "Section 1, P4 decision rule, SUCCESS clause and Power note.",
+      "repair": "Before P3b or P4, freeze and report a reproducible full-rule power analysis using the one-sided Fisher cutoff, valid counts 27 through 30, the M2 and M3 constraints, mechanism-seen probability, and the stated infra attrition. Define the minimum worthwhile effect and either enlarge the fixed sample until detection is adequate or change the decision criterion through owner-approved plan revision; do not leave adequacy to the batch day.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bc5f450777c370d6ecea56629a164310e615ac0b371e4da29bee59f7bbfc2e70"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 1 P4 validity clause: infra_fail classification and same-run-id reruns",
+      "claim": "Outcome-dependent infra reruns can bias P4 and therefore do not close the decision rule against gaming through infra replacement.",
+      "evidence": "A runner_timeout is infra merely because the driver's timer fired, so a model hang, slow application, or treatment-induced delay can be replaced. A later non-infra attempt under the same run id becomes the sole scored row and the earlier attempts cease to contribute to the endpoint. Freezing the timeout and event table prevents post-result edits but does not make replacement non-selective. G has more repair activity than C and can consequently generate more timeout-eligible attempts, giving selective reruns an arm-dependent opportunity to discard unfavorable first attempts.",
+      "evidence_reference": "Section 1, P4 decision rule, Validity clause and infra_fail definitions.",
+      "repair": "Define an intention-to-treat endpoint that retains every first attempt according to a preassigned treatment policy, with reruns used only for missing-data sensitivity analysis, or preassign replacement run IDs before outcomes are known. Restrict replacement-eligible infra signals to causes demonstrably independent of model and application behavior, freeze quantitative thresholds, and add negative tests showing that timer tuning or treatment-correlated hangs cannot replace an unfavorable scored result.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2183d09a9589528bfc61e92a3cfa250c35aaf1c6dcf9b17afe4c14c8e91ad8d5"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 completion gate and candidates (3), (4), and (6)",
+      "claim": "P1's completion conditions require candidate dispositions that its prescribed evidence cannot honestly produce, which can deadlock P5 and P6.",
+      "evidence": "The P1 row says candidates (1), (2), and (5) may remain unresolved and refers to 'those three unresolved,' while candidates (3), (4), and (6) prescribe reproduction, old-harness, or settings observations explicitly characterized as consistent-with rather than excluding evidence. Candidate (3) says the third batch cannot exclude sampling variance without a controlled comparison, but no controlled comparison is scheduled. Thus an honest analyst can execute every required check and still fail the stated completion condition, leaving P5 and P6 blocked indefinitely.",
+      "evidence_reference": "Section 1 KR3; section 4 P1 row, completion text, and candidates (3), (4), and (6).",
+      "repair": "Choose one coherent rule before P1 dispatch. Either define completion as all preregistered checks executed with every candidate honestly labeled consistent, excluded, or unresolved regardless of which candidates remain open, or schedule genuinely controlled comparisons for the candidates the current gate requires to be resolved. Preserve the rule that the third C-only batch is reproduction evidence and P4 uses its own concurrent C arm.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "883c13ac536f951abc0af0e9ce94dd8152907add0e8217ff63dc841e2b975884"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 lineage allocation and branch binding",
+      "claim": "The stored-counter design permits two concurrent lineage budgets to be allocated for the same work item.",
+      "evidence": "The only stated lock is the sibling lock named for lineage_id. Two simultaneous first dispatches for one branch can arrive with different automatically allocated run ids and thus take different locks. Each can scan the directory, observe no existing file for that branch, and create a separate lineage file. The existing concurrency negative control covers two reservations at a remaining slot but not two first allocations, so the one-file-per-work-item invariant is not enforceable.",
+      "evidence_reference": "Section 3.5, Storage and binding, Reservation, and Negative controls.",
+      "repair": "Add an immutable stable work-item lock used before lineage selection, hold it while scanning and creating the branch-to-lineage binding, define lock ordering when the lineage lock is also needed, and reject any existing conflicting binding. Add a negative control in which two concurrent first dispatches with different run ids produce exactly one lineage id and one reservation budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c4f6bce62ab7e1e0dcd4e6fdccdcc4a1318f940eb39469cd90d9b880aa171d72"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.5 depth-0 reservation and exhaustion order",
+      "claim": "The plan gives depth-0 repair two incompatible cap semantics.",
+      "evidence": "Reservation says every depth-0 repair must satisfy both retries_used below budget and round_retries_used below 2, and increments both counters. Evaluation step (2) is reached when round_retries_used equals 2, then says depth-0 may dispatch a repair but that the reservation is refused and lands in step (1) when no lineage budget remains. If retries_used is less than 6, the reservation is instead refused because the round counter is 2, and reevaluation remains at step (2), not step (1).",
+      "evidence_reference": "Section 3.5, Reservation and Order of evaluation steps (1) through (3).",
+      "repair": "Choose and state one reservation kind explicitly. A coherent option is to count gate retries against both round and lineage counters while counting depth-0 repair only against lineage, allowing depth-0 after the gate-retry round cap when lineage remains and opening the owner card only at lineage exhaustion. Update the schema, evaluation order, normal-path text, and concurrency tests; alternatively, make every repair consume both counters and remove the claim that depth-0 can dispatch from step (2).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "96d34dd8a0c7f8f08a9fbdf643857325d7de3512136ca4f2b1b4e322dfe5ed6a"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Gate record schema and command-result representation",
+      "claim": "The record shape is not implementable as written because it alternately specifies per-check records and one aggregate gate record, while several outcomes lack the required exit representation.",
+      "evidence": "Section 3.1 says the product writes one JSON object per check but gives the object aggregate fields including one exit, all violations and feature gaps, one snapshot, gate_exhausted, and retries_used. Those fields describe a gate invocation, not an individual command. Later text says findings from other items remain in 'that record,' reinforcing an aggregate interpretation. In addition, not_verified is described as item ids with a command exit, but spawn failure and death by signal have no numeric exit code.",
+      "evidence_reference": "Section 3.1 Record shape; section 3.2 Execution and exit mapping; section 4 P2 and P3 deliverables.",
+      "repair": "Declare one append-only JSON record per gate invocation and put per-item checked, violation, gap, uncovered, and not_verified results in defined nested arrays or objects. Specify the reservation fields as a concrete object such as round and lineage counts, define append atomicity and ordering, and give spawn failure, timeout, and signal results explicit reason, status, and signal fields rather than requiring a nonexistent exit code. State exactly what a later clean pass does with earlier not_verified records.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "349583094ab0896e0d139415f6ecbac37be2ba3264e1e20722cfeaf3be1b83c3"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 inventory scope versus section 6 out-of-scope boundary",
+      "claim": "The plan simultaneously requires and forbids edits to CLAUDE.md and ambiguously grants a SKILL.md exception.",
+      "evidence": "Section 2 and the P2 row explicitly allow one CLAUDE.md inventory edit and its grouped-script basename. Section 6 then lists any edit to CLAUDE.md as out of scope. Section 2 also calls reference-doc and SKILL.md wiring a documented exception, but no phase row allows those files and section 6 says skill text is out of scope.",
+      "evidence_reference": "Section 2 Constraints; section 4 P2 allowed files; section 6 Out of scope.",
+      "repair": "Rewrite the boundary as: no skill-text or brief-template changes in this plan; the sole CLAUDE.md exception is the exact P2 inventory row and grouped-list basename; no SKILL.md or reference-doc wiring edit occurs in P0 through P6. If future reference-doc or SKILL wiring is intended, move it to a clearly labeled later plan requiring the guidance eval.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "389087cf85e9f7f84ae08d07eec5ee106cfff9d9394cd845d4673c6ae970b743"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 rail-adapter allowed-file surface",
+      "claim": "P3 does not provide a mechanically bounded edit list.",
+      "evidence": "P3 says its allowed files are 'the rail files named in section 3.3 (A),' but section 3.3 identifies those paths only as files to read when building. The phrase 'the opt-in call' does not identify a path or whether an import-only edit is allowed. Section 6 then calls the section 4 rows exact boundaries even though the P3 row resolves them through a read list and an unnamed call site.",
+      "evidence_reference": "Section 3.3(A) Files to read; section 4 P3 Allowed files; section 6 Dispatch boundary.",
+      "repair": "Enumerate every editable path directly in the P3 row, including the exact adapter entry point, lineage-state implementation file, any intended repair-ladder edit, and tests or fixtures. Mark paths listed only for investigation as read-only unless an edit is necessary, and remove the circular claim that the bounded row is exact until the paths are explicit.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bc41c16cda844f5679bb9e4068cdeb9168634a4dc9dd6d8a7887a874e13b13ec"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Document-wide repetition of caps, attempt rules, prerequisites, and review-state summaries",
+      "claim": "The plan's size and repeated restatements obscure which text is authoritative and have already coexisted with scope and cap contradictions.",
+      "evidence": "The document says section 3.5 is the sole normative cap statement, yet cap values appear in sections 0, 3.7, 3.8, 3.9, the phase table, risks, and the reading order. The three-attempt rule, P1 prerequisites, and batch-mode budget are likewise summarized in several sections. The final reading-order checklist repeats decision-rule and lineage details already stated at greater length, while section 6 conflicts with the CLAUDE.md scope.",
+      "evidence_reference": "Sections 0, 1, 2, 3.5, 3.7 through 3.9, 4, 5, 6, and Reading order for the reviewer.",
+      "repair": "After resolving the blocking contradictions, keep section 3.5 as the sole cap and lineage specification and section 1 as the sole P4 decision rule, replace repeated numbers with section references, and shorten the reviewer checklist to links or section identifiers. No current implementation change; perform this hygiene pass before dispatch.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "02e6a4a48fb4cded0a040406aef768cacd5dad639184ae2bd67e91cab2ca81b2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "364232e04ccd4c386575f46f071472ff83b7a847ca16138268acf98da34d7944",
+      "rubric_id": "R8",
+      "affected_surface": "Section 6 out-of-scope statement and P2 inventory exception",
+      "claim": "The document both authorizes and prohibits the P2 CLAUDE.md inventory edit.",
+      "evidence_reference": "Section 2 first constraint; P2 phase row; section 6 opening out-of-scope paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9d8032c2e92741cb34e57c61e5c1c9300a04409614f61747ed767006dbc0c8d4",
+      "rubric_id": "R2",
+      "affected_surface": "section 1 P4 validity clause; P3b event-to-class table; P4 rate-based margins",
+      "claim": "The advertised 27-to-30 valid-count window is almost unreachable under the 10 percent infra-attempt rule, so the rate-based margins at 27 and 28 are dead letter.",
+      "evidence_reference": "section 1 validity clause (27-30 valid runs; infra_fail attempts exceed 10 percent of attempts; infra loss = three infra_fail attempts); KR4 paragraph on nC/nG and rate-based margins",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b9482fff0a22348c27fb726e445536a375f877ec3f647bac1244ca1911f7873c",
+      "rubric_id": "R8",
+      "affected_surface": "section 6 out of scope; section 2 constraints; P2 allowed files; section 3.9; section 5 P1/P4 parallel sentence",
+      "claim": "The document restates closed rules in ways that contradict more specific rows, so a dispatch that pastes section 6 or 3.9 can fight P2 and 3.5.",
+      "evidence_reference": "section 6 Out of scope list; section 2 CLAUDE.md inventory exception; section 4 P2 allowed files; section 3.9 Turn versus round; section 5 paragraph ending P4 research may run in parallel; KR3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e8fae0b3bd2181a6e559d2a19b664656ce11025ca4836994f6976a100230ea2b",
+      "rubric_id": "R7",
+      "affected_surface": "section 4 order paragraph and P3b row",
+      "claim": "P3b is not ordered after P3 even though its acceptance needs the P3 adapter.",
+      "evidence_reference": "section 4 opening Order paragraph; section 4 P3b Deliverable/Acceptance cells",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5bd8bba35be3a98b9267f3948670bd9ba294e54c94e9bb1a3a9f687c9653b3c9",
+      "rubric_id": "R5",
+      "affected_surface": "section 3.5 lineage store binding and lifetime",
+      "claim": "Lineage files never unbind from a branch, so the one-budget-per-work-item rule has no close path.",
+      "evidence_reference": "section 3.5 Storage and binding paragraph; section 3.5 A lineage is one work item / A new work item gets a new id; negative control dispatch for an existing branch with a fresh run id",
+      "disposition": null
+    },
+    {
+      "fingerprint": "02e6a4a48fb4cded0a040406aef768cacd5dad639184ae2bd67e91cab2ca81b2",
+      "rubric_id": "R8",
+      "affected_surface": "Document-wide repetition of caps, attempt rules, prerequisites, and review-state summaries",
+      "claim": "The plan's size and repeated restatements obscure which text is authoritative and have already coexisted with scope and cap contradictions.",
+      "evidence_reference": "Sections 0, 1, 2, 3.5, 3.7 through 3.9, 4, 5, 6, and Reading order for the reviewer.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-23T10:49:27.360Z"
+}

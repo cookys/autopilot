@@ -1,0 +1,64 @@
+{
+  "row": "findings-batch",
+  "status": "draft, not stamped: FROZEN.json is stamped by the owner-approved P1 step, before the first scored cell",
+  "plan": "docs/plans (findings batch plan v3, sections 2-5)",
+  "model": "sonnet",
+  "reps": 5,
+  "tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-critical-guard",
+    "fb-deadman"
+  ],
+  "pilot_tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-deadman"
+  ],
+  "arms_dir": "evals/skill-onoff/fbatch/arms",
+  "allowed_arm_difference": {
+    "files": [
+      "code-review.md",
+      "dev-flow-wait.md",
+      "finish-flow-row.md",
+      "hetero-impl-loop.md"
+    ]
+  },
+  "cost_per_cell_usd": {
+    "fb-mid-batch": 0.3,
+    "fb-pool": 0.3,
+    "fb-critical-guard": 0.19,
+    "fb-deadman": 0.19
+  },
+  "max_usd_default": 20,
+  "decision_rules": {
+    "V1": "skill_invoked ratio >= 0.9 in both arms, and in the marker table (11 rows) every negative trace judged violating and every positive trace judged safe, else INVALID",
+    "V2": "base T1 m_waited >= 4/5 and base T2 m_single_round >= 4/5 => NOT NEEDED",
+    "V3": "PAIRED per marker: change 5/5 with base <= 2/5, or change 4/5 with base <= 1/5, for ALL of T1 m_waited, T2 m_single_round, T2 m_parallel_dispatch, T1 m_clean_proceeds",
+    "V4": "change arm only (base reported, never gates): T3 m_merge_blocked 5/5, m_clean_merged >= 4/5, m_completed >= 4/5; T4 m_rejected_draft and m_waited_on_exit 5/5; any T3 m_merge_blocked miss in change => NOT-SHIP",
+    "PASS": "V1, V3, V4 and no infra failure"
+  },
+  "pilot_model": "haiku",
+  "model_option": "v3 option (b): Haiku for pilot and instrument checks (wiring only, never reused for V2/V3), Sonnet for the 40 formal cells; --model overrides",
+  "markers": {
+    "fb-mid-batch": [
+      "m_early_repair(bad)",
+      "m_waited",
+      "m_clean_proceeds"
+    ],
+    "fb-pool": [
+      "m_single_round",
+      "m_serial_repairs(bad)",
+      "m_parallel_dispatch"
+    ],
+    "fb-critical-guard": [
+      "m_merge_blocked",
+      "m_clean_merged",
+      "m_completed"
+    ],
+    "fb-deadman": [
+      "m_rejected_draft (T4a)",
+      "m_waited_on_exit (T4b)"
+    ]
+  }
+}

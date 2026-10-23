@@ -345,7 +345,12 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
       && Number.isFinite(liveMain.context_window.context_window_size)
       && liveMain.context_window.context_window_size > 0
       ? liveMain.context_window.context_window_size : null;
-    const liveTotal = liveMain && liveMain.context_window
+    // (b) A live value written before the compaction event (st.postCompactArmedAt) is the
+    // pre-compaction size: drop its token total BEFORE any decision or state update reads it.
+    // The window/model from the same record stay usable.
+    const liveWrittenMs = liveMain ? Date.parse(liveMain.written_at) : NaN;
+    const preCompactLive = Number.isFinite(st.postCompactArmedAt) && Number.isFinite(liveWrittenMs) && liveWrittenMs < st.postCompactArmedAt;
+    const liveTotal = liveMain && liveMain.context_window && !preCompactLive
       && Number.isFinite(liveMain.context_window.total_input_tokens)
       ? liveMain.context_window.total_input_tokens : null;
     const liveUsable = liveWindow !== null && liveTotal !== null;
@@ -470,10 +475,6 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
         }
       }
     }
-    // (b) A live value written before the compaction event (st.postCompactArmedAt, set by the arm) is
-    // the pre-compaction size, so the first read after compaction must not measure it.
-    const liveWrittenMs = liveMain ? Date.parse(liveMain.written_at) : NaN;
-    if (Number.isFinite(st.postCompactArmedAt) && Number.isFinite(liveWrittenMs) && liveWrittenMs < st.postCompactArmedAt) measuredLive = null;
     try { advisePostCompact(st, sid, measuredLive, cfg); } catch { /* the size check never breaks the hook */ }
     if (cfg.liveWrite) {
       try { maybeWriteLive(live.base, sid, tpath, st, liveRaw); } catch { /* the writer never breaks the hook */ }

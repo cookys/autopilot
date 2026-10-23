@@ -70,4 +70,15 @@ write_live 60000
 budget
 assert_eq "$(field postCompactTokens)" "60000" "first post-compaction live value is measured"
 
+# (b) default thresholds, cached second call: a 160k pre-compaction live value drives no T2.
+unset AUTOPILOT_CONTEXT_BUDGET_T1 AUTOPILOT_CONTEXT_BUDGET_T2
+  rm -rf "$AUTOPILOT_LIVE_DIR/context-budget" "$AUTOPILOT_LIVE_DIR/context"
+  budget   # seed low usage (call 1)
+  write_live 160000
+  sleep 0.05
+  post_compact
+  budget   # call 2, fresh 1-token transcript
+  assert_exit_code "$CB_EXIT" 0 "pre-compaction 160k live value does not trigger T2 at default thresholds"
+  assert_eq "$(field lastContext)" "1" "stale live total does not feed lastContext"
+
 finalize_test

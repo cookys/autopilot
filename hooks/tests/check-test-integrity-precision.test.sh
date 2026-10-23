@@ -8,6 +8,7 @@
 # RED at da158d42d: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
 # RED at 566272d61 (tirules round 1 head): N14 N15 N16 N17 N18 failed (rules 1-2 too loose: tautology rewrite, unrelated added assertion, comment-only/changed-line/message-token exemptions).
 # RED at 42482c4ca (tirules round 3): N19 N20 failed (masking tail, self-comparison counted as equivalent); N21 passed.
+# RED at 96e05a96b: F12 N28 failed (N27 passed); N29 N30 failed (continuation / heredoc wrapper accepted as equivalent): [[ < ]] treated as redirect; assertion function name counted as subject identifier.
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 . "$(dirname "$0")/lib.sh"
 
@@ -439,5 +440,37 @@ if has_kind surface_touch; then report N25 1; else report N25 0; fi
 repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" > /dev/null || :')"
 run_case "$repo"
 if has_kind surface_touch; then report N26 1; else report N26 0; fi
+
+# ── F12 rule 1: [[ a < b ]] is a comparison operator, same-shape replacement is equivalent ──
+repo="$(mk_surface '[[ "$age" < "5" ]]' '[[ "$age" < "9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F12 0; else report F12 1; fi
+
+# ── N27 rule 1: single-bracket [ a < b ] is a redirect, never an equivalent ──
+repo="$(mk_surface '[ "$age" < "5" ]' '[ "$age" < "9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N27 1; else report N27 0; fi
+
+# ── N28 rule 2: product deletes a helper named assert_eq; the removed assertion must still be reported ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'assert_eq() { :; }\nkeep=2\n' > "$repo/scripts/helper.sh"
+printf 'assert_eq "$age" "0"\nassert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/helper.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "delete helper and assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N28 1; else report N28 0; fi
+
+# ── N29 rule 1: line continuation feeding || : swallows the failure ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'assert_eq "$age" "0" \\\n  || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N29 1; else report N29 0; fi
+
+# ── N30 rule 1: assertion wrapped in a heredoc is text, not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<\'EOF_BODY\'\nassert_eq "$age" "0"\nEOF_BODY')"
+run_case "$repo"
+if has_kind surface_touch; then report N30 1; else report N30 0; fi
 
 finalize_test

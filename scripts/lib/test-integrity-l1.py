@@ -1777,6 +1777,7 @@ _ARG = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|]+')
 _STRICT_ARGS = re.compile(
     r'(?:\s+(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|()<>!#"\'`]+))*'
 )
+_HEREDOC_OPEN = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 _BRACKET = re.compile(r"^\[\[?\s(.+)\s\]\]?$")
 _TEST_OP = re.compile(r"\s(-[a-z]{2}|==?|!=|=~|<|>)\s")
 _QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
@@ -1787,6 +1788,8 @@ def _assertion_shape(raw, strict):
     assertion function, or the test operator of a [ a OP b ] form. strict
     additionally demands NOTHING else on the line (no ||, &&, ;, |, !, if,
     subshell, redirection, trailing comment)."""
+    if strict and raw.rstrip().endswith("\\"):
+        return None  # line continuation: the real command continues on the next line
     call = _ASSERT_CALL.match(raw)
     if call:
         if strict and not _STRICT_ARGS.fullmatch(" " + call.group(2)):
@@ -1795,8 +1798,12 @@ def _assertion_shape(raw, strict):
     br = _BRACKET.match(raw)
     if br:
         inner = _QUOTED.sub("Q", br.group(1))
-        if strict and re.search(r"[|&;()<>!#`]", inner):
-            return None
+        if strict:
+            # In [[ ]] a spaced < or > is a comparison operator; in [ ] it
+            # is a redirection and stays rejected.
+            probe = re.sub(r"\s[<>]\s", " ", inner) if raw.startswith("[[") else inner
+            if re.search(r"[|&;()<>!#`]", probe):
+                return None
         op = _TEST_OP.search(" " + inner + " ")
         return ("op", op.group(1)) if op else None
     return None
@@ -1850,22 +1857,44 @@ def _surface_edit_removes_lines(status, info, lang_key=None):
     removed = 0
     removed_asserts = []
     added_asserts = []
+    inert_added = set()  # added assertion lines that never execute as written
     for hunk in hunks:
+        heredoc_end = None
+        heredoc_opened_added = False
+        prev_continues = False
         for line in hunk["lines"]:
             if line.startswith("-"):
                 removed += 1
                 if lang_key and _surface_assertion_like(line[1:], lang_key):
                     removed_asserts.append(line[1:])
-            elif line.startswith("+"):
-                if lang_key and _surface_assertion_like(line[1:], lang_key):
-                    added_asserts.append(line[1:])
+                continue
+            body = line[1:]
+            in_heredoc = heredoc_end is not None
+            if in_heredoc:
+                if body.strip() == heredoc_end:
+                    heredoc_end = None
+            elif lang_key == "shell":
+                hd = _HEREDOC_OPEN.search(body)
+                if hd:
+                    heredoc_end = hd.group(2)
+                    heredoc_opened_added = line.startswith("+")
+            if line.startswith("+"):
+                if lang_key and _surface_assertion_like(body, lang_key):
+                    if in_heredoc or prev_continues:
+                        inert_added.add(len(added_asserts))
+                    added_asserts.append(body)
+            prev_continues = lang_key == "shell" and body.rstrip().endswith("\\")
+        if heredoc_end is not None and heredoc_opened_added:
+            # -U0 hunk: an added heredoc opener still open at the hunk end wraps
+            # unchanged lines below it into text; the diff cannot show which.
+            return True
     if not lang_key:
         return removed > 0
     # Each removed assertion needs its own added equivalent on the same subject.
     pool = [
         (_norm_line(a, lang_key), _operands(a, lang_key), _assertion_shape(_raw_code(a, lang_key), True))
-        for a in added_asserts
-        if not _degenerate_added(a, lang_key)
+        for i, a in enumerate(added_asserts)
+        if i not in inert_added and not _degenerate_added(a, lang_key)
     ]
     for gone in removed_asserts:
         norm, ops = _norm_line(gone, lang_key), _operands(gone, lang_key)
@@ -1893,7 +1922,10 @@ def _subject_tokens(detail):
     quotes is ignored; variable references and $(...) bodies are kept."""
     text = _SQ_STRING.sub(" ", detail)
     text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
-    return set(_IDENT_TOKEN.findall(text))
+    return {
+        t for t in _IDENT_TOKEN.findall(text)
+        if not (t.lower().startswith(("assert", "expect")))
+    }
 
 
 # Identifier-like tokens (>= 4 chars) used by the rule-2 identifier exemption.

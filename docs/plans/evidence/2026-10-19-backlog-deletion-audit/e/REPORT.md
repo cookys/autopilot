@@ -29,7 +29,7 @@ C 類共 6 列、未確認 2 列,全部出在 5d0b29c1d。其餘 9 個 commit �
 ### 5d0b29c1d(2026-08-01 docs: reconcile backlog and archive completed projects)
 commit 訊息只說「reconcile backlog、archive completed projects」,沒有逐列依據;QC trailer 是 PASS-WITH-BASELINE。這個 commit 有一部分是改名而不是刪除:舊標題被改寫(例如 `CLAUDE.md 逼近 40k...餘裕 54 bytes` 變成 `...目前僅餘 6 bytes`),所以 `rows.js` 把它們算成刪除。我逐列對過,這種算 B。
 
-- A(49):自稱 DONE/SHIPPED/RESOLVED 的列,我都對上 CHANGELOG 版本標題(v2.14.0、2.17.x、2.25.x、2.26.x、2.28-2.32.x)並確認引用的 commit 存在。另外有幾條表面看不出狀態的,我自己找到出貨證據:[3] reviewer_endpoint 接線(v2.32.46)、[7] check-test-integrity-l1 固定 /tmp 路徑(aedce0057 已移除)、[22][24][25](v2.31.13/v2.31.18)、[47][49](fd-0 讀取修掉 ENXIO)、[39](agy bwrap 隔離,bc2d36464)、`dispatch-hetero strict postcheck emits empty status`(b496add8d 與其測試)。
+- A(49):自稱 DONE/SHIPPED/RESOLVED 的列,我都對上 CHANGELOG 版本標題(v2.14.0、2.17.x、2.25.x、2.26.x、2.28-2.32.x)並確認引用的 commit 存在。另外有幾條表面看不出狀態的,我自己找到出貨證據:[3] reviewer_endpoint 接線(v2.32.46)、[7] check-test-integrity-l1 固定 /tmp 路徑(aedce0057 已移除)、[22][24][25] (v2.31.13/v2.31.18)、[47][49](fd-0 讀取修掉 ENXIO)、[39](agy bwrap 隔離,bc2d36464)、`dispatch-hetero strict postcheck emits empty status`(b496add8d 與其測試)。
 - B(19):改名後留在新檔,之後在別處走完。細節見 rows.tsv。幾個值得知道的去向:`SHA-256`(0db64c610 修掉)、`context-budget T3 deny tier`(由 owner 卡片在 293cdaa8b 關閉 BL-0064)、`OpenCode debug skill truncation`(18b73df05 關閉)、`First local runner capability semantics` 與兩個 Codex payload 列仍在現行 BACKLOG。
 - D(2):[44] agent-skills 拒絕項(理由在 docs/plans/2026-06-24-agent-skills-learnings.md)、[61] M3 單輪任務死路(結論在 archive 專案 report.md)。
 - C(6)、U(2):見下表。

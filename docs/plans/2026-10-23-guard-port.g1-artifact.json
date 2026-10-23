@@ -1,0 +1,823 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "BL-0241",
+  "logical_plan_id": "guard-port-2026-10-24",
+  "session_id": "gpreview-g1",
+  "session_key": "e224a93821ed084aaf8639420f4649acef031f83c477fe0f4ac999b91099db19",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "e65626a195fcf11360a4d9d49c5a2744cc67406e04c32c939bfbd0d49a2e2238",
+  "manifest_sha256": "1bf73c5296bc4c2beeb23073d545824b0aae2a7d137ffd8789126f9128819580",
+  "plan_sha256": "3b220c23e2d33cd922ad55e65c2ccf0e5b47d3b2e59343614bb4e44fb0e0ff88",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "a14652f3fd273a06666e02b7a5b656b2c4400be0f2c3d723a9ccbc654f24f159"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "590360a7715272dbb531f1c2661f8f818f44e4f171d6e361dcbde12b38aad202",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-MuKuto/stdout",
+          "digest": "590360a7715272dbb531f1c2661f8f818f44e4f171d6e361dcbde12b38aad202"
+        },
+        "receipt_digest": "e51ff21b9e2d67a5bb5e2c08b25ecceee85a67246f859351ba1521ac9c8d6cc8"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "7158361bf6a6a381085020b967220d29961ee4ee49c9663430b4dd431ba55128"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0fa589f3db7a47a28ed4372f829cabb396241552e786197938f4ad8b548bee25",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-J72Qmi",
+          "digest": "0fa589f3db7a47a28ed4372f829cabb396241552e786197938f4ad8b548bee25"
+        },
+        "receipt_digest": "dd2da42a7178b2ef6d1100e5e15fd902971360b864ce9512a7ef852f0be515d6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "68de5f1aa7d0906d7f3b5b8d4ed81a6f1f77b419357287193a7eabaee1049c0b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6a49a2f0170c992ff50672601c161c31b4d0fcc32f8bba044ce2a1ac5ce3b6ba",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-BSrX8Q",
+          "digest": "6a49a2f0170c992ff50672601c161c31b4d0fcc32f8bba044ce2a1ac5ce3b6ba"
+        },
+        "receipt_digest": "bc1ae8efcfc846e9812bb51ddaa9fc42945d9a0f308c30cf511941070ed1af2a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "63a61142887cbf400d79e3bd4a1e59996e9d847da98439c8255b99f31037e7e8"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "51b1a67e9a73a7dea6f0a6ebacceb235696c8f6c42ba25935249cff11aa2bd72",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-2yfEq3",
+          "digest": "51b1a67e9a73a7dea6f0a6ebacceb235696c8f6c42ba25935249cff11aa2bd72"
+        },
+        "receipt_digest": "c0d78258f2163772ffc75b38c4023e6c82bd03cfbb0e8ceef1eb1e4cf09585ee"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Candidate Design A and Phase 0 design-selection gate",
+      "claim": "Design A cannot group its six listed observers into one contiguous chain while preserving the existing hook order.",
+      "evidence": "hooks.json places the opt-in multiplexer between failure-escalation and context-budget. Design A includes both surrounding observers but excludes the multiplexer. Registering that chain at either position moves context-budget or the preceding observers across the multiplexer. Phase 0 supplies no explicit order-preserving acceptance criterion or fallback rule.",
+      "evidence_reference": "hooks/hooks.json PostToolUse .* registration; plan §2.5, Candidate designs A and Phase 0",
+      "repair": "Specify an order-preserving topology, such as chaining only the five contiguous observers before the multiplexer and leaving context-budget separate, which still yields three registrations. Make preservation of the full ordered event sequence an explicit Phase 0 design gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a238da49b7a7cc0277bdbb05450cab04bd77f8dc71aed14fd6cf0bbe0626431"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 1 differential harness acceptance condition",
+      "claim": "The Phase 1 done-condition does not establish that the differential test can detect a behavior change.",
+      "evidence": "Phase 1 only records the current chain and passes on the unchanged tree. It requires neither a candidate comparison interface nor a deliberately changed implementation that makes the comparator fail. An inert comparator could satisfy the stated done-condition.",
+      "evidence_reference": "Plan §4 Phase 1 and Phase 2; frozen rubric R6",
+      "repair": "Require a baseline-versus-candidate comparison interface and a negative control that deliberately changes an exit status or output byte. Phase 1 must demonstrate unchanged behavior passing and the negative control failing before completion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "06a9fe1b7f191f3e1a67d659d849e9e287ace390b3cabd77efa093f99be98022"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR4 and differential-test behavioral contract",
+      "claim": "Exit status and output comparison alone cannot prove the stateful behavior that the plan promises to preserve.",
+      "evidence": "intent-capture updates intent records, tool counters, failure counters and disable flags while normally producing no output and exiting zero. context-budget updates call cadence and reminder state and registers an exit listener to release a lock. A candidate that skips these state changes can still match the proposed exit and output observations.",
+      "evidence_reference": "hooks/intent-capture.js main, getToolCount and failure-counter helpers; hooks/context-budget.js main, saveState and process.on('exit', releaseLock); plan KR4 and Phase 1",
+      "repair": "Define isolated equivalent initial filesystem and environment fixtures for both paths, controlled time and process-dependent normalization where necessary, and comparisons of persistent state, permissions, lock cleanup and multi-call sequences alongside per-hook output and status. Include these checks in Phase 1 acceptance.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dbe2b1bcea69818dc5e3c180c4e7936e1e46196fa741921eed0671a70dbf742d"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR measurement protocol and rerun rule",
+      "claim": "The authoritative run and quiet-host condition are not frozen sufficiently to prevent selecting a favorable result.",
+      "evidence": "The plan retains both runs but does not say which determines KR success when they disagree. It also does not define when load is sampled or what happens if the single permitted rerun remains above load 10. The quoted baseline was measured around load 40, while the replacement may be judged on a quiet host.",
+      "evidence_reference": "Plan §0, §2 rerun rule, KR2 and KR3",
+      "repair": "Pre-register the load sampling interval, authoritative-run selection and noisy-rerun disposition. Specify how the historical baseline and enabled-versus-zero measurements are used so that host-condition changes cannot be credited as port improvements.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "91cf40802f725db3c6f1ee351af6fa8317bdf639ecd08c9ef2d460ce8c4798d6"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Global constraints and later-phase authorization",
+      "claim": "The plan does not explicitly retain ADR-0001 or the version hold required by the frozen scope rubric.",
+      "evidence": "The plan expressly preserves docs-only scope and excludes Codex and OpenCode paths, but its constraints, change-policy decisions and phases contain no ADR-0001 requirement or version-hold statement.",
+      "evidence_reference": "Plan §2.5, §2.6, §4 and §7; frozen rubric R5",
+      "repair": "Add explicit constraints retaining ADR-0001 and the existing version hold throughout the later implementation phases.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7cb4956937a3d9d82f0ee6a36fcbb2afb0560a236e573737bd64e2ce9ec6dabe"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "plan section 1 thesis (sequential spawn-sum latency)",
+      "claim": "Section 1 claims hook spawns run in sequence so per-call latency grows with spawn count, which the cited P2 harness and numbers do not support.",
+      "evidence": "The P2 harness documents a call as consecutive hook lines of one event and sets call latency to the group's max because hooks of one event run concurrently (scripts/benchmark-hook-latency.js lines 15-16 and 91-92). Enabled PostToolUse in docs/plans/evidence/2026-10-23-hook-latency-p2/hook-latency-baseline.json has p50_ms 64, p95_ms 124, call_p95_ms 197, spawns_per_call 7. A sequential sum of seven p50 intervals would be about 448 ms; 197 ms matches a concurrent max, not a sum. Section 1 therefore claims more than the measurements support.",
+      "evidence_reference": "scripts/benchmark-hook-latency.js:15-16,91-92; docs/plans/evidence/2026-10-23-hook-latency-p2/hook-latency-baseline.json arms.enabled.per_event.PostToolUse; plan section 1",
+      "repair": "Rewrite section 1 to the harness definition: call latency is the max of concurrent hook intervals. State that KR1 (spawn count) is independent of that max, and that any latency bet is about the slowest hook's interval plus in-process work added to its critical path.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7251010bc6fca109e4b0aa2560c0ac9e12653b631c7e0c97ec9e0873ba4dfb73"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2, KR3, and the section 2 rerun rule",
+      "claim": "KR2 is not shown reachable with Design A, and the absolute millisecond thresholds plus quiet-host rerun can pass without the port.",
+      "evidence": "KR2 requires PostToolUse call p95 to fall from 197 ms to under 150 ms. Call p95 is max(hook intervals), so only shrinking the slowest hook by more than 47 ms moves it. Design A loads the six .* observers including context-budget.js in one process in order, which puts the other five observers' work onto that critical path after dropping one node start. The plan has no per-hook breakdown, and D6 explicitly gives no evidence for Designs A or B on KR2. Node start is only part of 197 ms (PostToolUse hook p50 64 ms / p95 124 ms). The baseline README records host load about 40. The rerun rule reruns once on a quiet host if load is above 10 and keeps both runs, but does not re-baseline the unchanged tree on that quiet host; KR3's ceiling is the loaded-host point estimate 142 ms with no noise slack. A quiet-host rerun of the current tree could already sit under 150 ms, which would meet KR2 without the port. KR1 (7 to <=3 spawns) is load-invariant and is measurable with the same harness.",
+      "evidence_reference": "plan section 2 KR2 KR3 rerun rule; Design A paragraph; docs/plans/evidence/2026-10-23-hook-latency-p2/README.md (load about 40); hook-latency-baseline.json PostToolUse call_p95_ms 197 and PreToolUse call_p95_ms 142; scripts/benchmark-hook-latency.js:91-92,153-160",
+      "repair": "Keep KR1 as the hard pre-registered gate (spawns per call <= 3 on the unmatched-tool Read workload). Demote KR2/KR3 to report-only unless a pre-code quiet-host re-baseline of the unchanged tree is archived and a critical-path budget shows Design A's slowest-hook node-start saving minus added in-process work exceeds 47 ms. Judge any remaining ms KRs against that quiet-host baseline, not the load-40 197/142 figures. A miss stays a miss.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "19efe76fc94faaef98fd0faa6aef570a11f2cedc7d65572f196741092c2be3ed"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 2.5.1 context-budget.js row",
+      "claim": "The fail-open table cites the wrong lines in context-budget.js for catch-all fail-open and for advisory exit 2.",
+      "evidence": "The table cites hooks/context-budget.js:466-469 as the catch and :393 and :457 as exit 2. On this branch the catch that resets exitCode to 0 is at 483-486; the two advisory exitCode = 2 assignments are at 409 and 473. Line 393 is a closing brace, line 457 is the autocompactWindow ternary, and lines 466-469 emit the T1/unknown-window T2 advisory. The behaviour claim (error exit 0, advisory exit 2) is present in the file, but the cited lines do not show it.",
+      "evidence_reference": "plan section 2.5.1 context-budget.js row; hooks/context-budget.js:409,473,483-486 vs cited :393,:457,:466-469",
+      "repair": "Retarget the row to hooks/context-budget.js:483-486 (catch, exitCode = 0) and :409 and :473 (exitCode = 2). Keep the invariant text.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "36f7d900dbd5b1281fdd0f008f1c037f4c95dee64de493469e55e739c43f373e"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Design A, Phase 0 flip rule, and the later-phase file map",
+      "claim": "Design A as specified cannot keep stdin, process.exit, or per-hook exit codes, and Phase 0 is not a real flip gate for that because every target hook already shows those patterns in the cited sources.",
+      "evidence": "Design A loads intent-capture, reload-watch, audit-log, log-error, failure-escalation, and context-budget in one process in order. All six are top-level IIFEs that read fd 0 and call process.exit, and none export a main: intent-capture.js:203 and :279, reload-watch.js:76 and :113-116, audit-log.js:32 and :68-71, log-error.js:24 and :61-64, failure-escalation.js:175 and :219-223, context-budget.js:304 with process.exit at :299, :308, :310, :488. The first load drains stdin and the first process.exit kills the chain, so later observers never run and context-budget exit 2 cannot be isolated. Section 3 and Phase 2 name a new chain entry and hooks.json rewiring only. The adapter is a section 6 risk, not a deliverable. Phase 0's flip text is that B is rejected unless Phase 0 shows A cannot reuse the selector; the selector is Design B's, and process.exit/stdin are already in the cited files, so Phase 0 would only rediscover known facts. The seven measured PostToolUse spawns do match the seven .* entries on the P2 Read workload (hooks.json PostToolUse .* has seven commands; Write|Edit, Task|Agent, and TaskCreate|TaskUpdate|TaskList do not match Read).",
+      "evidence_reference": "plan Design A, section 3, Phase 0, section 6; hooks/hooks.json PostToolUse matcher .*; the six observer files at the lines above; hooks/opt-in-multiplexer.js:164-180 (stdout merge prior art)",
+      "repair": "Name the in-process adapter as a Phase 2 deliverable now: snapshot stdin and replay it to each hook; intercept process.exit and map it to that hook's status without killing the chain; merge stdout as opt-in-multiplexer.js does for additionalContext; preserve context-budget advisory exit 2 as the chain status. Put the adapter and any observer export split in the file map. Change the Phase 0 flip rule to: confirm A only if that adapter keeps per-hook stdin, exit, and stdout contracts; otherwise flip to B or C.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6dc00e2c8bf0d5d0492c5bf63f708396c9b6eaf7d5cadd4656002f86fa10bb73"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 1 done-condition",
+      "claim": "Phase 1 cannot detect a behaviour change: its done-condition is only that the new differential harness passes on the unchanged tree, with no negative control shown red.",
+      "evidence": "Phase 1 says: a payload corpus run through the current chain, recording exit and output per hook; done when it passes on the unchanged tree. Section 5 lists that harness as script-gated. Nothing in sections 4-6 requires a committed mutation that the harness fails. A harness that always exits 0 would satisfy the written done-condition and then rubber-stamp Phase 2 byte-identical checks.",
+      "evidence_reference": "plan section 4 Phase 1; plan section 5",
+      "repair": "Add a Phase 1 done-condition: ship a negative control that the harness fails (for example force context-budget's catch to set exitCode = 2, or drop one observer from the old chain), keep that red run as a fixture, then restore the unchanged tree so the green path still passes. Phase 2 may complete only if the same harness still fails that negative control and still passes the real chain.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "584545b91d03f6b0d0b6a5414526b087d8699eb158b033362e78395f770e68bf"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 2 done-condition versus scripts/check-hook-inventory.js",
+      "claim": "Phase 2's inventory --check done-condition is not executable under Design A as specified: folding the six observers out of hooks.json makes them disabled orphans unless the inventory expander is updated, and that update is not in the file map.",
+      "evidence": "check-hook-inventory.js derives wired stems from hooks.json, treats opt-in-multiplexer.js as NON_HOOK infrastructure, and expands multiplexer members via MULTIPLEXER_EVENT_TABLE (lines 46-50, 67-82, 91-96, 146-153). Design A replaces six direct PostToolUse .* commands with one chain command. Those six files remain on disk, so without a chain expander they enter the disabled set and --check fails against docs that still list them as default-on. Adding the chain script without a NON_HOOK rule also adds a new wired stem. Section 3 lists a new chain entry, hooks.json rewiring, tests, and hook docs counts via scripts/check-hook-inventory.js but does not name an inventory expansion like the multiplexer table. Phase 2 therefore has no described path to a green inventory check.",
+      "evidence_reference": "scripts/check-hook-inventory.js:46-50,67-82,91-96,146-153; plan section 3; plan section 4 Phase 2; plan section 2.5 (hooks.json stays the single wiring source)",
+      "repair": "In the file map and Phase 2, require a check-hook-inventory.js change that (1) treats the chain script as infrastructure in NON_HOOK, like opt-in-multiplexer.js, and (2) expands the chain's six observer stems into the wired set so they stay default-on. Keep hooks.json as the wiring source, same shape as the multiplexer.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e0be318c7f59d8bb1fce2fdbeba408f628ef78b901a782e4d66a65e6ff92f6d"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 2.6 and section 7 scope",
+      "claim": "The plan never states that ADR-0001 and the version hold are kept, so later phases have no written ban on a version bump or new attestation machinery.",
+      "evidence": "Section 2.6 records compatibility and dependency only. Section 7 parks P4, withdrawn P3, Codex/OpenCode paths, and code in this unit. No sentence names ADR-0001 or the version hold. The unit is otherwise docs-only and does not add trust machinery, and Codex/OpenCode are out of scope.",
+      "evidence_reference": "plan sections 2.6, 3, 7",
+      "repair": "Add one sentence under 2.6: ADR-0001 holds (verification by re-derivation, no attestation) and the version line stays held through the later phases. No current code change.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fda4cef169d79cf19756786b11cc426a522a4af04ad750f659f545c93a635a0f"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Candidate design A, file-structure map, and Phase 2 implementation",
+      "claim": "Design A can be implemented using the planned file changes without changing any selected hook's stdin handling, process-exit semantics, exit code, or shared state.",
+      "evidence": "Design A proposes requiring each current hook module in order. The current files are executable IIFEs rather than callable modules: intent-capture.js reads fd 0 during module evaluation, has early process.exit(0) paths, and ends with process.exit(0); context-budget.js likewise reads fd 0 and ends with process.exit(exitCode). Requiring the first hook therefore consumes stdin and terminates the entire chain. A try/catch cannot intercept process.exit, and merely mocking it would leave later hooks with exhausted stdin. The file map adds only a chain entry, hooks.json rewiring, and tests; it does not include extracting callable hook functions or isolating their state. The generic adapter risk does not specify a transformation that preserves the current behavior.",
+      "evidence_reference": "hooks/intent-capture.js:main IIFE and stdin/process.exit calls; hooks/context-budget.js:main IIFE and final process.exit(exitCode); plan Candidate designs A and file-structure map",
+      "repair": "Replace the direct-require proposal with an explicit architecture before implementation. Either refactor every selected hook into an exported request function plus an unchanged CLI wrapper, capturing stdout, stderr, exit result, and state effects while adding those files to the file map, or choose a subprocess-based design. Specify that stdin is buffered once and replayed according to pre-registered semantics, process.exit is represented as a return value inside the chain, each hook has isolated state and its own error boundary, and Phase 0 has an objective go/no-go criterion for the selected architecture.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e9474aee87c2d31dc283e7f5dd93bcfdc66694aedd8c718de28cb3f0cc9995a5"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Candidate design A and the global hook-order invariant",
+      "claim": "The proposed six-hook chain preserves the current PostToolUse hook order.",
+      "evidence": "The current PostToolUse .* order is intent-capture, reload-watch, audit-log, log-error, failure-escalation, opt-in-multiplexer, then context-budget. Design A bundles the first five together with context-budget but leaves the multiplexer separate. Placing that chain at the first hook's position moves context-budget before the multiplexer; placing it at context-budget's position moves the first five after the multiplexer. No single chain invocation containing those six can preserve the multiplexer between them. This contradicts the explicit invariant that hook order is preserved, even if the total remains within KR1.",
+      "evidence_reference": "hooks/hooks.json:PostToolUse, matcher .* hook array; plan Candidate designs A and global constraints",
+      "repair": "Amend Design A so the chain covers only the contiguous first five observers and leaves opt-in-multiplexer and context-budget as separate registrations at their existing positions. That preserves order and produces three top-level PostToolUse processes, satisfying KR1. If all seven must be consolidated, define one wrapper that includes the multiplexer's behavior at the exact position between the first five and context-budget, including its enabled-child selection and output/exit semantics.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8820f674982490359b2bca207b3f31f4b3a33220740274959887f19321a5446b"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2, D6 evidence, Phase 0 feasibility gate, and Phase 4 measurement",
+      "claim": "KR2 is shown to be reachable for the proposed design before implementation begins.",
+      "evidence": "KR2 requires more than 47 ms of reduction from the 197 ms baseline, but the plan explicitly says D6 provides no evidence for Designs A or B on KR2. The D6 enabled-heavy row shown in the plan reduces p95 by only 46.3 ms while the note says enabled children are still spawned, so the reported process-count reduction cannot be multiplied directly into an expected saving. The plan gives no measured Node-start share of the 197 ms and no Phase 0 latency-feasibility gate; Phase 4 would discover an infeasible target only after the differential harness and implementation were completed.",
+      "evidence_reference": "plan sections 0, 2 KR2, Candidate designs D6 paragraph, Phase 0, and Phase 4",
+      "repair": "Add a pre-implementation feasibility gate to Phase 0. Derive the startup and workload contribution from the P2 breakdown or a read-only startup-cost measurement under the same harness, then state the minimum demonstrated saving required to make the target reachable. Proceed to implementation only if that evidence supports more than 47 ms of reduction for the actual proposed topology. If it does not, return to the owner with a design decision before implementation rather than discovering the KR2 miss in Phase 4.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b6a584cc894953c528d39e4e84fc4c32773d98f802b0be88683603220d525208"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1-KR3 rerun rule and Phase 4 result determination",
+      "claim": "The pre-registered rerun rule determines one unambiguous KR result and cannot be selected after observing the measurements.",
+      "evidence": "The plan says to rerun once on a quiet host when load is above 10 and to keep both runs, but it never states which run determines met or missed. If the initial and designated rerun disagree, or if the rerun is still above the load threshold, the plan provides no rule for choosing or invalidating a result. Keeping both artifacts prevents deletion but does not prevent cherry-picking the favorable run.",
+      "evidence_reference": "plan section 2 Rerun rule and Phase 4 done condition",
+      "repair": "Pre-register the result-selection rule. Designate the initial run as the result unless its load exceeds 10, in which case exactly one rerun below 10 is the result; retain both raw datasets and compute KRs only from the designated result. If the rerun is unavailable or remains above 10, mark the affected KR not evaluable or missed under the pre-registered rule, never as best-of or selected by outcome.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "53477d4c31d2bd2560329a122e88b114a4df1df578a198d8b0058deb69861406"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2.5.1 fail-open/fail-closed matrix and the KR4 differential oracle",
+      "claim": "The matrix is a complete, line-supported oracle for preserving every hook's byte-identical exit code, stdout, stderr, and fail-open or fail-closed behavior.",
+      "evidence": "Many invariant cells contain only 'Same' and do not identify the exact output channels, error branch, or side effect that must be preserved. The dispatch-model-guard row claims that garbage configuration fails closed but its Evidence cell cites only the payload and catch lines at 251-255 and 359-362, not the claimed fallback lines 133, 140, and 147, so that part of the row is not traceable at file and line. The surrounding summary also needs reconciliation with those fallback lines and the statement that only the multiplexer and context-budget use exit 2. The current matrix is also insufficient for exact output comparison: context-budget alone has mode-off, T1 stderr plus optional stdout injection, T2 stderr with exit 2, state mutation, and catch-to-exit-0 paths.",
+      "evidence_reference": "plan section 2.5.1; hooks/dispatch-model-guard.js:133,140,147,251-255,359-362; hooks/context-budget.js:393,457,466-469",
+      "repair": "Expand each matrix row into a line-supported behavioral tuple covering event and matcher, trigger or error condition, stdin handling, exit code, exact stdout, exact stderr, relevant state or file mutation, and hook-order position. Explicitly cite and describe the dispatch-model-guard configuration fallback lines, reconcile their exit behavior with the summary, and enumerate context-budget's distinct output branches. Make the Phase 1 corpus and differential assertions derive from this completed matrix rather than from generic fail-open labels.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b10bca6ac2f1278af04a85b6a31e8fd699a1b899bea970aed9dafb5094c48b4a"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 2.6, file-structure boundary, Phase 2, and out-of-scope controls",
+      "claim": "The plan keeps ADR-0001, the version hold, and the docs-only boundary of the current unit while making its later phase boundaries executable.",
+      "evidence": "No section names ADR-0001 or states the version hold. Section 2.6 covers only compatibility and dependency decisions, while section 7 does not list either constraint. The plan also describes the current unit as changing only the plan file, but Phase 0 commits another evidence file, Phase 1 adds a harness, and Phase 2 changes hooks.json. Section 3 only describes phases 0 through 4 parenthetically as later and does not name the separate work units that own them. The out-of-scope prohibition on adding or removing hooks is not reconciled with later rewiring, even if the intended distinction is functional hooks versus wiring entries.",
+      "evidence_reference": "plan sections 2.6, 3, 4, and 7",
+      "repair": "State explicitly that this unit ends after the approved plan document and that ADR-0001 and the version hold remain unchanged in the current unit and every later guard-port slice. Name the later slice that owns the Phase 0 evidence, Phase 1 harness, and Phase 2 implementation and its acceptance criteria. Clarify that later wiring consolidation may replace registrations without adding or removing guard functions, or remove the ambiguous out-of-scope wording if registrations themselves are intended to change.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bcc535cf2de95a32eb64152b9a2b36f8af5d0e52fc7d0f938f59a51c825202d0"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 1 differential test and Phase 2 done condition",
+      "claim": "The Phase 1 differential test can detect a behavior change before Phase 2 is accepted.",
+      "evidence": "Phase 1 only says to record the current chain's exit and output and is done when it passes on the unchanged tree. A baseline-only test has no candidate side to compare and cannot fail when the implementation changes behavior. The plan contains no deliberately altered fixture or other negative control shown red, even though a passing differential harness alone does not prove that its comparison is sensitive.",
+      "evidence_reference": "plan Phase 1 and Phase 2; frozen rubric R6 differential-test requirement",
+      "repair": "Redefine Phase 1 to produce immutable per-hook golden outputs and a candidate-side comparison contract. Include a deliberate negative control, such as changing a candidate exit code or stderr byte, and record it failing red before implementation. Phase 2 must then run the same corpus through the unchanged baseline and the candidate, comparing per-hook exit code, stdout, stderr, ordering, and specified state effects byte for byte. A mutation-based negative control must be green again only after the deliberate mutation is removed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2cc80af2adaea729171358eb37fefacfd69ad53a76f8ff5980d2095a63e340d7"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 0 and Phase 3 done conditions",
+      "claim": "Every phase has an executable and objective done condition.",
+      "evidence": "Phase 0 is done when the design is 'confirmed', but no pass/fail rule says what audit findings select or reject A, B, or C. Phase 3 applies only if KR3 is 'at risk', without defining the risk metric, and the applied branch has no separate done condition; only the no-change branch says to record no change. These are not commands or objective predicates that a later slice can execute consistently.",
+      "evidence_reference": "plan Phase 0 and Phase 3",
+      "repair": "Give Phase 0 explicit selection and rejection predicates based on the audited stdin, process-exit, exportability, shared-state, and ordering facts. Define Phase 3's risk test with a named threshold or command. For the no-change branch require an unchanged PreToolUse inventory plus the KR3 measurement; for an applied change require the same inventory check, differential test, and KR3 measurement as the implementation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e8f324ae24581dcfd1c5e9313470b49c3b3b024bb89ce9410efa792b7b181354"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D6 multiplexer benchmark table and process-reduction rationale",
+      "claim": "The D6 table unambiguously ties every displayed median, p95, and process figure to the cited benchmark artifact and metric.",
+      "evidence": "The prose identifies hooks/tests/fixtures/hook-multiplexer-benchmark.json as the fixture, but the table labels .autopilot/evidence/hook-multiplexer-benchmark.json as the Fixture. The table then calls the figures Processes while the same paragraph says the multiplexer still spawnSyncs enabled children. For an enabled run, a literal runtime OS-process count must include both the multiplexer and its child, so the displayed value of 1 needs an explicit different metric, such as registered top-level invocations. The plan also identifies no durable D6 report path or field references for each median and p95 number.",
+      "evidence_reference": "plan Candidate designs D6 paragraph and D6 table; hooks/tests/fixtures/hook-multiplexer-benchmark.json:42-49; .autopilot/evidence/hook-multiplexer-benchmark.json",
+      "repair": "Cite the exact durable D6 report and the field or line for every table value. Correct the fixture label to hooks/tests/fixtures/hook-multiplexer-benchmark.json and reserve .autopilot/evidence/hook-multiplexer-benchmark.json for generated evidence. Replace 'Processes' with the report's exact metric and explain separately the enabled-child runtime processes so the table cannot be read as overstating OS-process savings.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cf800565b1e47a8a9e163ef4bee150de33404f149953fb208774fcfbc541d941"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 1 done-condition and differential test design",
+      "claim": "Phase 1 done-condition ('Done when it passes on the unchanged tree') establishes only a positive baseline; the rubric requires an explicit negative control demonstrated red to prove the harness can detect a behaviour change.",
+      "evidence": "Phase 1 text reads: 'differential test harness: a payload corpus run through the current chain, recording exit and output per hook. Done when it passes on the unchanged tree.' No sentence in the plan commits to shipping a deliberate mutation (e.g. flipping one hook's exit code or stdout) and showing the harness reports red.",
+      "evidence_reference": "Plan section 4, Phase 1; rubric R6 phrase 'it ships a negative control shown red'",
+      "repair": "Add to Phase 1 done-condition: 'and a seeded mutation (one hook forced to exit 1 or emit altered stdout) produces a red diff, proving the harness detects change.' One sentence suffices.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a8ec9d98c8deb1cd44254807d2c6b448f11387f9f09336d166f2e6cef4959b1"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "KR2 threshold rationale in section 2",
+      "claim": "KR2 (<150 ms) is pre-registered and the rerun rule prevents gaming, but the plan does not quantify how much of the 197 ms p95 is node-start versus hook-logic, leaving reachability uncertain. D6 heavy-enabled data (4-to-1 processes, 197.3 to 151.5 ms) shows only ~23% reduction for a 75% spawn cut, suggesting 7-to-2 may land near the threshold rather than well under it.",
+      "evidence": "D6 table row heavy-enabled: base 197.3/227.4, candidate 151.5/181.1, processes 4 to 1. Plan thesis states 'Node start dominates a small guard's cost' but does not decompose the 197 ms into start vs logic.",
+      "evidence_reference": "Plan section 0, D6 multiplexer table row 4; KR2 text in section 2",
+      "repair": "No current change; follow-up only. Phase 0 audit can record per-hook wall time minus node-start to give the owner a reachability estimate before Phase 2 commits.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bf3ecca188c08a78e57795ab0854f479c4f493fe4d3374793aea02c865410610"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan header / constraints section",
+      "claim": "Rubric R5 requires the plan to keep ADR-0001 and the version hold. The plan never names either constraint; preservation is only implicit via the docs-only scope.",
+      "evidence": "Full-text search of the plan for 'ADR-0001' and 'version hold' yields zero hits. Section 2.6 (Change-policy decisions) lists compatibility and dependency decisions but omits these two constraints.",
+      "evidence_reference": "Plan sections 2.6 and 7; rubric R5 phrase 'keeps ADR-0001 and the version hold'",
+      "repair": "Add one bullet to section 2.6 or 2.5: 'ADR-0001 and the version hold remain in force; this unit is docs-only and does not modify code or version gates.' No structural change needed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6ff0a92d35d8107f9f2c7b91680b09453c09c81c16bce092ae5e23935416a80b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "7cb4956937a3d9d82f0ee6a36fcbb2afb0560a236e573737bd64e2ce9ec6dabe",
+      "rubric_id": "R5",
+      "affected_surface": "Global constraints and later-phase authorization",
+      "claim": "The plan does not explicitly retain ADR-0001 or the version hold required by the frozen scope rubric.",
+      "evidence_reference": "Plan §2.5, §2.6, §4 and §7; frozen rubric R5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fda4cef169d79cf19756786b11cc426a522a4af04ad750f659f545c93a635a0f",
+      "rubric_id": "R5",
+      "affected_surface": "section 2.6 and section 7 scope",
+      "claim": "The plan never states that ADR-0001 and the version hold are kept, so later phases have no written ban on a version bump or new attestation machinery.",
+      "evidence_reference": "plan sections 2.6, 3, 7",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e8f324ae24581dcfd1c5e9313470b49c3b3b024bb89ce9410efa792b7b181354",
+      "rubric_id": "R6",
+      "affected_surface": "Phase 0 and Phase 3 done conditions",
+      "claim": "Every phase has an executable and objective done condition.",
+      "evidence_reference": "plan Phase 0 and Phase 3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cf800565b1e47a8a9e163ef4bee150de33404f149953fb208774fcfbc541d941",
+      "rubric_id": "R1",
+      "affected_surface": "D6 multiplexer benchmark table and process-reduction rationale",
+      "claim": "The D6 table unambiguously ties every displayed median, p95, and process figure to the cited benchmark artifact and metric.",
+      "evidence_reference": "plan Candidate designs D6 paragraph and D6 table; hooks/tests/fixtures/hook-multiplexer-benchmark.json:42-49; .autopilot/evidence/hook-multiplexer-benchmark.json",
+      "disposition": null
+    },
+    {
+      "fingerprint": "bf3ecca188c08a78e57795ab0854f479c4f493fe4d3374793aea02c865410610",
+      "rubric_id": "R2",
+      "affected_surface": "KR2 threshold rationale in section 2",
+      "claim": "KR2 (<150 ms) is pre-registered and the rerun rule prevents gaming, but the plan does not quantify how much of the 197 ms p95 is node-start versus hook-logic, leaving reachability uncertain. D6 heavy-enabled data (4-to-1 processes, 197.3 to 151.5 ms) shows only ~23% reduction for a 75% spawn cut, suggesting 7-to-2 may land near the threshold rather than well under it.",
+      "evidence_reference": "Plan section 0, D6 multiplexer table row 4; KR2 text in section 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6ff0a92d35d8107f9f2c7b91680b09453c09c81c16bce092ae5e23935416a80b",
+      "rubric_id": "R5",
+      "affected_surface": "Plan header / constraints section",
+      "claim": "Rubric R5 requires the plan to keep ADR-0001 and the version hold. The plan never names either constraint; preservation is only implicit via the docs-only scope.",
+      "evidence_reference": "Plan sections 2.6 and 7; rubric R5 phrase 'keeps ADR-0001 and the version hold'",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-23T18:16:53.082Z"
+}

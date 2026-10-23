@@ -2693,12 +2693,6 @@ function resultWithVerificationFields(result, state) {
         || (typeof result.commit === 'string' ? result.commit : null),
     };
   }
-  if (state && state.verifyRedConvergence) {
-    output = {
-      ...output,
-      verify_red_convergence_warning: state.verifyRedConvergence,
-    };
-  }
   if (state && state.verifyFirstSignalUnused) {
     output = {
       ...output,
@@ -2706,6 +2700,14 @@ function resultWithVerificationFields(result, state) {
     };
   }
   return output;
+}
+
+// Last bytes of a verify run's combined output, so a red-verify rework prompt can
+// show the implementer what failed (BL-0238).
+function verifyOutputTail(verifyResult, maxChars = 4000) {
+  if (!verifyResult) return '';
+  const text = `${verifyResult.stdout || ''}${verifyResult.stderr || ''}`;
+  return text.length > maxChars ? text.slice(text.length - maxChars) : text;
 }
 
 function defaultRepairPromptWriter({
@@ -2722,6 +2724,7 @@ function defaultRepairPromptWriter({
       acceptedInvariantsSourceCommit = null,
       acceptedInvariantsDigest = null,
       repairScopeSeal = null,
+      verify = null,
 }, owned = null) {
   const original = fs.readFileSync(promptFile, 'utf8');
   const findings = review && review.review && typeof review.review.findings === 'string'
@@ -2744,6 +2747,13 @@ function defaultRepairPromptWriter({
     `repair_scope_seal: ${JSON.stringify(repairScopeSeal)}`,
     '---',
     '',
+    ...(verify && verify.verify_pass === false ? [
+      'Verification failed (verify_pass=false) for the failed commit; fix it before the reviewer verdict matters.',
+      `verify_exit_status: ${verify.exit_status === undefined || verify.exit_status === null ? 'unknown' : verify.exit_status}`,
+      'verify_output_tail:',
+      verify.output_tail || '(no verify output captured)',
+      '',
+    ] : []),
     'Reviewer findings:',
     findings || '(no findings text provided)',
     '',
@@ -10516,7 +10526,6 @@ class AutopilotEngine {
     const verifyState = {
       verifyCmdProvided,
       verifyFirstSignalUnused: false,
-      verifyRedConvergence: null,
       convergenceReason: null,
       ratchetRevertedRounds: 0,
       advisoryFindings: [],
@@ -11710,6 +11719,7 @@ class AutopilotEngine {
 
       const commit = implementation.implementation.commit;
       let currentVerifyPass = null;
+      let currentVerifyTail = '';
       let currentRatchetReverted = false;
       let nextBaseAfterRound = commit;
       if (verifyCmdProvided) {
@@ -11854,6 +11864,7 @@ class AutopilotEngine {
         currentVerifyPass = verifyResult.status === 0;
         implementation.verify_pass = currentVerifyPass;
         implementation.verify_exit_status = verifyResult.status;
+        currentVerifyTail = verifyOutputTail(verifyResult);
         const isWorseThanBest = bestRound > 0
           && verificationRank(currentVerifyPass) < verificationRank(bestVerifyPass);
         if (!isWorseThanBest) {
@@ -12188,20 +12199,9 @@ class AutopilotEngine {
 
       if (review.verdict === convergenceVerdict) {
         if (verifyCmdProvided) verifyState.convergenceReason = 'reviewer';
-        // Warning only: a red verify round that the reviewer SHIP outranks.
-        // The convergence condition is unchanged (BL-0238).
-        if (verifyCmdProvided && currentVerifyPass === false) {
-          verifyState.verifyRedConvergence = {
-            code: 'verify_red_converged',
-            round,
-            verify_pass: false,
-            verify_exit_status: implementation && implementation.verify_exit_status !== undefined
-              ? implementation.verify_exit_status
-              : null,
-            convergence_reason: 'reviewer',
-            message: `converged on reviewer verdict ${review.verdict} at round ${round} although verification failed (verify_pass=false)`,
-          };
-        }
+        // BL-0238: a red verify round outranks the reviewer verdict. The
+        // reviewer SHIP does not converge; fall through to rework / max rounds.
+        if (!(verifyCmdProvided && currentVerifyPass === false)) {
         return finish({
           status: 'converged',
           phase: 'converged',
@@ -12217,13 +12217,16 @@ class AutopilotEngine {
           reviewChain,
           ledger,
         });
+        }
       }
 
       if (round >= maxRounds) {
         return finish({
           status: 'non_converged',
           phase: 'max_rounds',
-          reason: `reached max rounds (${maxRounds}) without convergence`,
+          reason: verifyCmdProvided && currentVerifyPass === false
+            ? `verify_red: verification failed (verify_pass=false, exit ${implementation && implementation.verify_exit_status !== undefined ? implementation.verify_exit_status : 'unknown'}) at round ${round}; reached max rounds (${maxRounds}) without a green verification (reviewer verdict ${review.verdict})`
+            : `reached max rounds (${maxRounds}) without convergence`,
           rounds: round,
           verdict: review.verdict,
           roster,
@@ -12245,6 +12248,9 @@ class AutopilotEngine {
           previousCommit: nextBaseAfterRound,
           commit,
           review,
+          ...(verifyCmdProvided && currentVerifyPass === false
+            ? { verify: { verify_pass: false, exit_status: implementation.verify_exit_status, output_tail: currentVerifyTail } }
+            : {}),
         });
       } catch (error) {
         return finish({

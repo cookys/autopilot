@@ -277,7 +277,7 @@ The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question
 
 #### Commit-quiescence (`--commit-quiet-secs N`)
 
-On the implement stage (every runner), once the hands branch has advanced past base AND the worktree is clean AND the runner log has not grown for `N` seconds (default 120; `0` disables), the rail TERMs the worker's process group (KILL after a short grace) and reports `committed` with `"note": "ended_after_commit_quiet"` in the result JSON — never `timed_out` or `failure`. A dirty worktree or no new commit keeps the old wall-timeout behaviour exactly. Poll interval is 10 s (`HETERO_COMMIT_QUIET_POLL` overrides). Test: `hooks/tests/dispatch-hetero-commit-quiet.test.sh`.
+On the implement stage (every runner), once the hands branch has advanced past base AND the worktree is clean AND the runner log has not grown AND the agent CLI process has no live descendant (no running tool or test) for `N` seconds (a descendant resets the clock) (default 120; `0` disables), the rail TERMs the worker's process group (KILL after a short grace) and reports `committed` with `"note": "ended_after_commit_quiet"` in the result JSON — never `timed_out` or `failure`. A dirty worktree or no new commit keeps the old wall-timeout behaviour exactly. Poll interval is 10 s (`HETERO_COMMIT_QUIET_POLL` overrides). Test: `hooks/tests/dispatch-hetero-commit-quiet.test.sh`.
 
 #### Wrapper commit subject
 

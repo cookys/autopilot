@@ -37,7 +37,8 @@ last_json() {
   printf '%s\n' "$1" | grep '^{' | tail -n 1
 }
 
-# Stub grok: MODE=commit_sleep | commit_chatter | dirty_sleep. Sleeps in its own pgid child.
+# Stub grok: MODE=commit_sleep (idle, no child process) | commit_busy (a 12s foreground tool child, then a
+# second commit) | commit_chatter | dirty_sleep.
 install_stub() {
   local dest="$1"
   {
@@ -46,7 +47,8 @@ install_stub() {
     cat <<'BODY'
 echo "$$" > "$HETERO_TEST_PIDFILE"
 case "$HETERO_TEST_MODE" in
-  commit_sleep) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; sleep 120 ;;
+  commit_sleep) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; read -t 120 _ <> "$HETERO_TEST_PIDFILE.fifo" ;;
+  commit_busy) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; sleep 12; echo second > second.txt; git add second.txt; git -c user.email=t@t -c user.name=t commit -q -m second ;;
   commit_chatter) echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m c; while :; do echo tick; sleep 1; done ;;
   dirty_sleep) echo ok > ok.txt; sleep 120 ;;
 esac
@@ -59,7 +61,7 @@ BODY
 run_case() { # mode extra-args... ; sets OUT ELAPSED PIDF
   local mode="$1"; shift
   local stub="$TEST_TMP/stub-$mode" runs="$TEST_TMP/runs-$mode"
-  PIDF="$TEST_TMP/$mode.pid"; : > "$PIDF"; mkdir -p "$runs"
+  PIDF="$TEST_TMP/$mode.pid"; : > "$PIDF"; mkdir -p "$runs"; rm -f "$PIDF.fifo"; mkfifo "$PIDF.fifo"
   install_stub "$stub"
   local start; start="$(date +%s)"
   OUT="$(cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
@@ -76,6 +78,24 @@ J="$(last_json "$OUT")"
 assert_eq "$(json_get "$J" status)" committed "commit_sleep status"
 assert_eq "$(json_get "$J" note)" ended_after_commit_quiet "commit_sleep note"
 assert_eq "$(json_get "$J" timed_out)" false "commit_sleep timed_out"
+no_child commit_sleep
+
+# A running tool (descendant process) is not "done": 12s of silent child work, then a second
+# commit, must survive a 3s quiet window (regression: 134s kill of a 180s foreground test run).
+run_case commit_busy --commit-quiet-secs 3 --timeout 60s
+J="$(last_json "$OUT")"
+assert_eq "$(json_get "$J" note)" "" "busy tool no note"
+assert_eq "$(json_get "$J" timed_out)" false "busy tool not timed out"
+assert_eq "$(json_get "$J" files_changed)" 2 "busy tool second commit kept"
+
+# Detached path: the flag and the supervisor must cross the setsid re-exec boundary.
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$TEST_TMP/ledger" >/dev/null
+run_case commit_sleep --commit-quiet-secs 3 --timeout 40s --ledger "$TEST_TMP/ledger" --run-id detached --stage implement
+J="$(last_json "$OUT")"
+[ "$ELAPSED" -lt 35 ] || fail "detached commit_sleep took ${ELAPSED}s"
+assert_eq "$(json_get "$J" status)" committed "detached status"
+assert_eq "$(json_get "$J" note)" ended_after_commit_quiet "detached note"
+assert_eq "$(json_get "$J" timed_out)" false "detached timed_out"
 no_child commit_sleep
 
 run_case commit_chatter --commit-quiet-secs 3 --timeout 12s

@@ -64,7 +64,7 @@
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--commit-quiet-secs 120]              # implement stage: stop the runner once the branch has
 #                                              #   advanced past base, the worktree is clean and the log
-#                                              #   has not grown for N s (0 disables); ledger note
+#                                              #   has not grown and the agent has no child process for N s (0 disables); ledger note
 #                                              #   ended_after_commit_quiet, status committed
 #       [--agy-bin agy]                        # alternate binary (test seam)
 #       [--grok-bin grok]                      # alternate binary (test seam)
@@ -3640,19 +3640,41 @@ _arm_worker_watchdog() {
   WATCHDOG_PID=$!
 }
 
+# True (rc 0) when the agent CLI process has any live descendant (a running tool or test).
+# The agent CLI is rp, or rp's sole child when rp is a forking `setsid --wait` wrapper.
+# Unknown (ps failure) counts as busy: the fail-closed side never ends a worker early.
+_worker_has_busy_descendant() {
+  local rp="$1" out ps_rc=0
+  out="$(ps -e -o pid=,ppid=,stat=,comm= 2>/dev/null)" || ps_rc=$?
+  { [ "$ps_rc" -eq 0 ] && [ -n "$out" ]; } || return 0
+  printf '%s\n' "$out" | awk -v root="$rp" '
+    { pid=$1; ppid=$2; st=$3; comm=$4
+      if (st ~ /^Z/) next
+      kids[ppid]++; kid[ppid]=pid; name[pid]=comm }
+    END {
+      r=root
+      while (name[r]=="setsid" && kids[r]==1) r=kid[r]
+      exit (kids[r]>0 ? 0 : 1)
+    }'
+}
+
 # Commit-quiescence: while the runner lives, poll cheaply; once HEAD != base AND the
-# worktree is clean AND the log has not grown for COMMIT_QUIET_SECS, TERM the worker
-# group (KILL after a short grace). Returns when the worker is gone or was stopped.
+# worktree is clean AND the agent CLI has had no descendant process AND the log has not
+# grown, all for COMMIT_QUIET_SECS, TERM the worker group (KILL after a short grace).
+# A running tool or test (a descendant) resets the clock: quiet output alone is not done.
+# Sleeps in 0.2s steps so a worker that exits (or is timed out) returns at once.
 _supervise_commit_quiet() {
   local rp="$1" poll="${HETERO_COMMIT_QUIET_POLL:-10}"
-  local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=0 head
+  local quiet="$COMMIT_QUIET_SECS" size last_size=-1 since=0 head n
   [ "$poll" -gt "$quiet" ] && poll="$quiet"
   [ "$poll" -ge 1 ] || poll=1
   while kill -0 "$rp" 2>/dev/null; do
-    sleep "$poll"
+    n=0
+    while [ "$n" -lt $((poll * 5)) ] && kill -0 "$rp" 2>/dev/null; do sleep 0.2; n=$((n + 1)); done
     kill -0 "$rp" 2>/dev/null || return 0
     size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
     if [ "$size" != "$last_size" ]; then last_size="$size"; since=0; continue; fi
+    if _worker_has_busy_descendant "$rp"; then since=0; continue; fi
     since=$((since + poll))
     [ "$since" -ge "$quiet" ] || continue
     head="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
@@ -3661,7 +3683,7 @@ _supervise_commit_quiet() {
     COMMIT_QUIET_ENDED=1
     _watchdog_signal_worker TERM || true
     local i=0
-    while [ "$i" -lt 5 ] && kill -0 "$rp" 2>/dev/null; do sleep 1; i=$((i + 1)); done
+    while [ "$i" -lt 25 ] && kill -0 "$rp" 2>/dev/null; do sleep 0.2; i=$((i + 1)); done
     if kill -0 "$rp" 2>/dev/null; then _watchdog_signal_worker KILL || true; fi
     return 0
   done
@@ -5296,7 +5318,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
-      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
@@ -5313,7 +5335,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -1220,7 +1220,7 @@
         "source": "ceo-agent",
         "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
         "files": 7,
-        "digest_sha256": "4e427eb08d52c9cff344c2e299ac6a06887323bf2293cc5969f68c19393e35db"
+        "digest_sha256": "d75f64b7a24fa6171d7ea2ccbeee6fc60454aa886cb6d755c022d9a6457e2174"
       },
       "hetero-review-bpack-base": {
         "kind": "skill",
@@ -1291,7 +1291,7 @@
       "arms/bpack/change.json": "d21850792c110cc2160da9bffe06345fa6b431dc8b8c504d6f8f7c8b96135f88",
       "lib-bpack/bpack-markers.sh": "6b33f48145470c8606459de4e349c7a6c6bd7e65a40735bfad5fde57702dc1d0",
       "lib-bpack/dcard-markers.sh": "e935a6dcb774ea906b3e19a04fad759a474cc001af1344ca5d9f90d63b6807e8",
-      "prereg/bpack.json": "29b9ba61e4e1d432defb066d404294e9bf2837a9a928fd793bad05276b59bc65",
+      "prereg/bpack.json": "8b3d7818995f48a015781d9f8a54541b3ec64f6f55bbc8caacdba2b59b639642",
       "run-bpack-campaign.js": "38ea64777b8f8d43462d72347bbd39b55b172b6772bcfd38ab1003bb0f5fbda6",
       "run-skill-onoff-eval-bpack.sh": "a7bae955c50f1057ea9a7bb396deaa3e617aaff3469d7ffe21b92f75956fab7d",
       "run-skill-onoff-matrix-bpack.sh": "7f79b523ba4c3cc6a17f74c429577d6a8894008d877773a3bb34a28092d78304",

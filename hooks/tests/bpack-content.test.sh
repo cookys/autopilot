@@ -10,9 +10,8 @@ EV="$REPO_ROOT/evals/skill-onoff"
 PK="$EV/packs"
 SH="$REPO_ROOT/scripts/dispatch-review.sh"
 
-# The six guidance files the change arm edits; the same list is prereg allowed_arm_difference.files.
+# The five guidance files the change arm edits; the same list is prereg allowed_arm_difference.files.
 CHANGED=(
-  skills/ceo-agent/references/depth0-control-loop.md
   skills/ceo-agent/references/level-front-door.md
   skills/hetero-review/references/code-loop.md
   skills/harness-maintenance/SKILL.md
@@ -161,7 +160,7 @@ if (base && change && pre) {
   const files = new Set(pre.allowed_arm_difference.files);
   const gf = new Set(pre.guidance.files);
   for (const f of files) if (!gf.has(f)) bad('allowed_arm_difference file not in guidance.files: ' + f);
-  if (files.size !== 6) bad('allowed_arm_difference should list the six changed files, got ' + files.size);
+  if (files.size !== 5) bad('allowed_arm_difference should list the five changed files, got ' + files.size);
   for (const t of pre.tasks) if (!fs.existsSync(path.join(ev, 'tasks', t, 'task.md'))) bad('task missing: ' + t);
   for (const id of pre.freeze_packs || []) if (!fs.existsSync(path.join(ev, 'packs', id))) bad('freeze_packs names a missing pack: ' + id);
   for (const f of pre.freeze_files || []) {

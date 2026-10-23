@@ -548,8 +548,6 @@ CEO depth-0 loop (clock owner)
 └─ 9. telemetry t_review_done; GC all unit worktrees + branches (ONLY on `merged`)
 ```
 
-To see everything this session has dispatched so far (subagents and nested background rails) as one read-only tree, run `node scripts/dispatch-tree.js [--json]`; a branch it cannot connect is flagged `untracked`, not dropped.
-
 ### Outcome → action table (width layer)
 
 Each unit's `verify` status maps to a defined depth-0 action — extends the §2

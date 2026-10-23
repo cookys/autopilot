@@ -24,7 +24,6 @@
     "files": [
       "references/hetero-dispatch.md",
       "references/multi-agent-portability.md",
-      "skills/ceo-agent/references/depth0-control-loop.md",
       "skills/ceo-agent/references/level-front-door.md",
       "skills/harness-maintenance/SKILL.md",
       "skills/hetero-review/references/code-loop.md"

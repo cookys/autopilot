@@ -4,6 +4,7 @@
 # id when no FLEET_PARENT is inherited) and FLEET_ROLE (review-seat for dispatch-review, hand for author/hetero).
 # Seams: a stub claude that dumps its environment; no fleet binary is ever called and no fleet message is sent.
 # RED at 7d6c745be: 1 passed, 19 failed (stub claude env has FLEET_LIFETIME/FLEET_PARENT/FLEET_ROLE all empty for author, review, hetero; durable stays durable; mint unit prints "||").
+# RED at 322d0f3f8 (run-skill-opt addition): 55 passed, 1 failed -- the claude -p child argv under run-skill-opt had no --strict-mcp-config (no PATH wrapper).
 # RED (second commit, base 499b0ce4f): 26 passed, 12 failed (hetero cc-shim, probe cc-shim and claude-native lacked --strict-mcp-config; probe lacked FLEET_*; qualification-review-provider claude child had no FLEET_*).
 # RED (third pass, base 3b7d283b0): 39 passed, 15 failed (probe-todo-tools-pin, run-eval-batch, probe-skill-frontmatter-portability lacked --strict-mcp-config and FLEET_*; run-skill-opt run_loop env had no FLEET_*). profile-context-isolation.test.sh also red at 3b7d283b0: child claude env "||" instead of ephemeral|profile-parent-1|profile-run.
 . "$(dirname "$0")/lib.sh"
@@ -121,7 +122,7 @@ d="$DUMPS/psf.env"; rm -f "$d" "$d.argv"
     bash "$REPO_ROOT/scripts/probe-skill-frontmatter-portability.sh" --check --output "$TEST_TMP/psf-receipt.json" >"$d.out" 2>&1 ) || true
 assert_contains "$(cat "$d.argv" 2>/dev/null)" "--bare" "probe-skill-frontmatter: the dump is the claude --bare exec"
 check "probe-skill-frontmatter-portability" probe "$d"
-# run-skill-opt.sh: the external run_loop (not in this repo) starts the claude -p children; only env can be handed down
+# run-skill-opt.sh: the external run_loop (not in this repo) starts bare `claude -p` children from PATH; the script's PATH wrapper must append --strict-mcp-config
 hopt="$TEST_TMP/hopt"; mkdir -p "$hopt/ap/scripts/lib" "$hopt/ap/skills/xs" "$hopt/ap/skill-creator-workspace/evals" "$hopt/home/.claude" "$hopt/bin" \
   "$hopt/home/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
 cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$hopt/ap/scripts/lib/"
@@ -130,16 +131,26 @@ printf '{"claudeAiOauth":{"accessToken":"tok","expiresAt":99999999999999}}' > "$
 REAL_PY="$(command -v python3)"
 cat > "$hopt/bin/python3" <<EOS
 #!/usr/bin/env bash
-if [ "\${1:-}" = "-c" ] && case "\${2:-}" in *run_loop*) true;; *) false;; esac; then env | LC_ALL=C sort > "\${STUB_DUMP:?}"; exit 0; fi
+if [ "\${1:-}" = "-c" ] && case "\${2:-}" in *run_loop*) true;; *) false;; esac; then env | LC_ALL=C sort > "\${STUB_DUMP:?}"; claude -p q --model m >/dev/null 2>&1 || true; exit 0; fi
 exec "$REAL_PY" "\$@"
 EOS
 chmod +x "$hopt/bin/python3"
-d="$DUMPS/skill-opt.env"; rm -f "$d"
+# the claude that run_eval.py would find on PATH (behind the script's wrapper): records the argv it finally receives
+cat > "$hopt/bin/claude" <<'EOS'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "${STUB_DUMP:?}.cargv"
+exit 0
+EOS
+chmod +x "$hopt/bin/claude"
+d="$DUMPS/skill-opt.env"; rm -f "$d" "$d.cargv"
 ( cd "$SBX" && HOME="$hopt/home" STUB_DUMP="$d" PATH="$hopt/bin:$PATH" CLAUDE_CODE_SESSION_ID="$P" bash "$hopt/ap/scripts/run-skill-opt.sh" xs >"$d.out" 2>&1 ) || true
 if [ ! -f "$d" ]; then fail "run-skill-opt: run_loop stub never ran: $(tail -c 300 "$d.out" | tr '\n' ' ')"; else
   eq "ephemeral" "$(dv "$d" FLEET_LIFETIME)" "run-skill-opt: FLEET_LIFETIME == ephemeral"
   eq "$P" "$(dv "$d" FLEET_PARENT)" "run-skill-opt: FLEET_PARENT == the launching session"
   eq "eval-run" "$(dv "$d" FLEET_ROLE)" "run-skill-opt: FLEET_ROLE == eval-run"
+  # the claude -p that run_loop's run_eval.py spawns (stand-in: the stub python runs `claude -p q --model m`) gets strict MCP appended
+  assert_contains "$(cat "$d.cargv" 2>/dev/null)" "--strict-mcp-config" "run-skill-opt: the claude -p child argv carries --strict-mcp-config"
+  assert_contains "$(cat "$d.cargv" 2>/dev/null)" "--model" "run-skill-opt: the original claude argv is preserved"
 fi
 
 # an inherited durable lifetime never survives: a child is never promoted to durable

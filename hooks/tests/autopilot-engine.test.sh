@@ -3066,6 +3066,7 @@ function runScenario(name, options) {
   const implCalls = [];
   const reviewCalls = [];
   const repairCalls = [];
+  const repairVerify = [];
   const branchForceCalls = [];
   const engine = new AutopilotEngine({
     cwd: scenarioDir,
@@ -3124,8 +3125,9 @@ function runScenario(name, options) {
       fs.writeFileSync(file, `round ${round}`, 'utf8');
       return file;
     },
-    repairPromptWriter({ round }) {
+    repairPromptWriter({ round, verify }) {
       repairCalls.push(round);
+      repairVerify.push(verify ? `exit${verify.exit_status}:${String(verify.output_tail).trim()}` : 'none');
       const file = path.join(scenarioDir, `repair-${round}.txt`);
       fs.writeFileSync(file, `repair ${round}`, 'utf8');
       return file;
@@ -3177,8 +3179,9 @@ function runScenario(name, options) {
   console.log(`${name}_ratchet_entry_count=${ratchetEntries.length}`);
   console.log(`${name}_has_verify_field=${Object.prototype.hasOwnProperty.call(result, 'verify_cmd_provided')}`);
   console.log(`${name}_ledger_has_verify=${verifyEntries.length > 0}`);
-  const redWarn = result.verify_red_convergence_warning;
-  console.log(`${name}_red_warning=${redWarn ? `${redWarn.code}:round${redWarn.round}:exit${redWarn.verify_exit_status}:${redWarn.convergence_reason}` : 'absent'}`);
+  console.log(`${name}_red_warning=${result.verify_red_convergence_warning === undefined ? 'absent' : 'present'}`);
+  console.log(`${name}_result_reason=${result.reason === undefined || result.reason === null ? 'null' : String(result.reason).split(':')[0]}`);
+  console.log(`${name}_repair_verify=${repairVerify.join('|')}`);
 }
 
 function runTopLevelReviewFindingsScenario() {
@@ -3268,6 +3271,22 @@ runScenario('verify_red_ship', {
   reviewVerdicts: ['SHIP-AS-IS'],
   maxRounds: 1,
 });
+runScenario('verify_red_rework', {
+  verifySequence: ['fail', 'pass'],
+  reviewVerdicts: ['SHIP-AS-IS', 'SHIP-AS-IS'],
+  maxRounds: 3,
+});
+runScenario('verify_red_max', {
+  verifySequence: ['fail', 'fail', 'fail'],
+  reviewVerdicts: ['SHIP-AS-IS', 'SHIP-AS-IS', 'SHIP-AS-IS'],
+  maxRounds: 3,
+});
+runScenario('verify_green_ship', {
+  verifySequence: ['pass'],
+  reviewVerdicts: ['SHIP-AS-IS'],
+  noVerifyFirst: true,
+  maxRounds: 3,
+});
 runScenario('fail_tie_continues', {
   verifySequence: ['fail', 'fail', 'fail'],
   reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
@@ -3304,11 +3323,27 @@ assert_contains "$OUT" "repair_passes_status=converged" "AutopilotEngine converg
 assert_contains "$OUT" "repair_passes_reason=verification" "AutopilotEngine repair pass records verification convergence"
 assert_contains "$OUT" "repair_passes_rounds=2" "AutopilotEngine repair pass returns second round"
 assert_contains "$OUT" "repair_passes_verify_passes=false,true" "AutopilotEngine records failed then passing verification"
-# BL-0238 verify-red warning
-# RED at 1feaf0188: FAIL AutopilotEngine warns when converging with verify_pass=false: verify_red_ship_red_warning=verify_red_converged:round1:exit1:reviewer not found (587 passed, 1 failed)
-assert_contains "$OUT" "verify_red_ship_status=converged" "AutopilotEngine verify-red + reviewer SHIP still converges (convergence condition unchanged)"
-assert_contains "$OUT" "verify_red_ship_reason=reviewer" "AutopilotEngine verify-red convergence keeps reviewer reason"
-assert_contains "$OUT" "verify_red_ship_red_warning=verify_red_converged:round1:exit1:reviewer" "AutopilotEngine warns when converging with verify_pass=false"
+# BL-0238 verify red forces rework instead of converging on the reviewer verdict
+# RED at 87d940f30: FAIL AutopilotEngine verify-red + reviewer SHIP does not converge: verify_red_ship_status=non_converged not found (verify_red_ship_status=converged)
+assert_contains "$OUT" "verify_red_ship_status=non_converged" "AutopilotEngine verify-red + reviewer SHIP does not converge (maxRounds 1)"
+assert_contains "$OUT" "verify_red_ship_result_reason=verify_red" "AutopilotEngine verify-red non_converged reason is identifiable"
+assert_contains "$OUT" "verify_red_ship_red_warning=absent" "AutopilotEngine no longer emits the verify-red convergence warning"
+# RED at 87d940f30: FAIL AutopilotEngine verify-red + reviewer SHIP dispatches a repair round: verify_red_rework_repair_calls=1 not found (verify_red_rework_repair_calls=0)
+assert_contains "$OUT" "verify_red_rework_status=converged" "AutopilotEngine verify-red SHIP reworks then converges once verification passes"
+assert_contains "$OUT" "verify_red_rework_rounds=2" "AutopilotEngine verify-red SHIP proceeds to round two"
+assert_contains "$OUT" "verify_red_rework_reason=verification" "AutopilotEngine rework convergence is on verification"
+assert_contains "$OUT" "verify_red_rework_repair_calls=1" "AutopilotEngine verify-red SHIP dispatches a repair round"
+assert_contains "$OUT" "verify_red_rework_repair_verify=exit1:" "AutopilotEngine hands verify failure info to the repair prompt"
+# RED at 87d940f30: FAIL AutopilotEngine verify-red through maxRounds is non_converged with verify_red reason: verify_red_max_status=non_converged not found (verify_red_max_status=converged)
+assert_contains "$OUT" "verify_red_max_status=non_converged" "AutopilotEngine verify-red through maxRounds is non_converged"
+assert_contains "$OUT" "verify_red_max_rounds=3" "AutopilotEngine verify-red runs all rounds"
+assert_contains "$OUT" "verify_red_max_result_reason=verify_red" "AutopilotEngine verify-red max-rounds reason is verify_red not max_rounds"
+# RED at 76d332963: FAIL AutopilotEngine verify-red through maxRounds does not leave a reviewer convergence_reason: verify_red_max_reason=null not found (verify_red_max_reason=reviewer)
+assert_contains "$OUT" "verify_red_max_reason=null" "AutopilotEngine verify-red through maxRounds does not leave a reviewer convergence_reason"
+assert_contains "$OUT" "verify_red_ship_reason=null" "AutopilotEngine verify-red non_converged result carries no reviewer convergence_reason"
+assert_contains "$OUT" "verify_green_ship_status=converged" "AutopilotEngine verify-green + reviewer SHIP still converges"
+assert_contains "$OUT" "verify_green_ship_reason=reviewer" "AutopilotEngine verify-green SHIP keeps reviewer reason"
+assert_contains "$OUT" "verify_green_ship_repair_calls=0" "AutopilotEngine verify-green SHIP dispatches no repair"
 assert_contains "$OUT" "verify_first_advisory_red_warning=absent" "AutopilotEngine omits verify-red warning when verification passed"
 assert_contains "$OUT" "repair_passes_red_warning=absent" "AutopilotEngine omits verify-red warning after repair passes"
 assert_contains "$OUT" "no_verify_red_warning=absent" "AutopilotEngine omits verify-red warning without verify-cmd"

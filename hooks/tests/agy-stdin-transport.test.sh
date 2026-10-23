@@ -244,6 +244,12 @@ assert_eq "1" "$RC" "NEGATIVE CONTROL: a zero token-ceiling override falls back 
 OUT="$(node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
 assert_eq "0" "$RC" "helper: no usage field -> token check skipped, still succeeds"; assert_contains "$OUT" "token-ceiling check was skipped" "helper: missing usage field is noted on stderr"
 
+HUGE="$(printf '9%.0s' $(seq 1 400))"
+OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=$HUGE AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "NEGATIVE CONTROL: a 400-digit token-ceiling override (Infinity) falls back to the default, still refused"
+OUT="$(AUTOPILOT_AGY_STDIN_MAX_BYTES=$HUGE node "$HELPER" run --prompt-file "$OVER" -- "$(mk_stub hlp4 AGY_STUB_CAPTURE=1)" 2>&1)"; RC=$?
+assert_eq "3" "$RC" "NEGATIVE CONTROL: a 400-digit byte-cap override falls back to the default, still refused"
+
 assert_neq "0" "$(rc aemp)" "author empty response: non-zero exit"
 assert_contains "$(cat "$R/aemp.out")" '"status": "runner_failed"' "author empty response: typed runner_failed"
 assert_contains "$(rail_text aemp)" "$EMPTYMSG" "author empty response: reason surfaced"

@@ -59,12 +59,21 @@ const DEFAULT_INPUT_TOKEN_CEILING = 95000;
 
 function inputTokenCeiling(env = process.env) {
   const raw = String(env.AUTOPILOT_AGY_INPUT_TOKEN_CEILING == null ? '' : env.AUTOPILOT_AGY_INPUT_TOKEN_CEILING).trim();
-  return /^[1-9][0-9]*$/.test(raw) ? Number(raw) : DEFAULT_INPUT_TOKEN_CEILING;
+  return positiveSafeInt(raw, DEFAULT_INPUT_TOKEN_CEILING);
+}
+
+// A digit string that parses to a safe positive integer, else the default. A 400-digit override would
+// otherwise become Infinity and silently turn the fail-closed comparison off.
+function positiveSafeInt(raw, dflt) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (!/^[1-9][0-9]*$/.test(t)) return dflt;
+  const n = Number(t);
+  return Number.isSafeInteger(n) && n > 0 ? n : dflt;
 }
 
 function stdinMaxBytes(env = process.env) {
   const raw = env.AUTOPILOT_AGY_STDIN_MAX_BYTES;
-  return /^[1-9][0-9]*$/.test(String(raw == null ? '' : raw).trim()) ? Number(String(raw).trim()) : DEFAULT_STDIN_MAX_BYTES;
+  return positiveSafeInt(raw, DEFAULT_STDIN_MAX_BYTES);
 }
 
 function encodeUserLine(prompt) {

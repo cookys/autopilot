@@ -127,6 +127,30 @@ for ((i=0; i+8<=${#FRAG}; i++)); do case "$TAIL" in *"${FRAG:i:8}"*) LEAK="${FRA
 assert_eq "none" "$LEAK" "no 8-char piece of a window-cut key survives"
 assert_eq "ok" "$([ -n "$TAIL" ] && echo ok || echo empty)" "window-cut key case still leaves a tail"
 
+# BL-0246 g3: the byte cuts must land on UTF-8 character boundaries; stdout must stay strict UTF-8 JSON.
+# RED at 07cfaf639: utf8-8000 -> 'utf-8' codec can't decode byte 0xad ... invalid start byte; utf8-2000 likewise.
+for N in 10000 1000; do
+  STUBU="$TEST_TMP/stub-codex-utf8-$N"
+  cat > "$STUBU" <<EOS
+#!/usr/bin/env bash
+cat >/dev/null
+python3 -c "import sys; sys.stderr.buffer.write(('中'*$N+' END').encode())"
+exit 3
+EOS
+  chmod +x "$STUBU"
+  AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUBU" > "$TEST_TMP/utf8-$N.json" 2>/dev/null
+  UCHK="$(python3 -I - "$TEST_TMP/utf8-$N.json" <<'PY'
+import sys, json
+try:
+    t = json.loads(open(sys.argv[1], 'rb').read().decode('utf-8', errors='strict')).get('stderr_tail', '')
+    print('ok' if t.endswith(' END') and 0 < len(t.encode()) <= 2000 else 'bad-tail:%d' % len(t.encode()))
+except Exception as e:
+    print('invalid:%s' % e)
+PY
+)"
+  assert_eq "ok" "$UCHK" "multibyte stderr ($N chars) -> strict UTF-8 JSON, tail ends with END, <= 2000 bytes"
+done
+
 # store persists the reason, bounded, and keeps result null (never reusable)
 SOUT="$(node - "$REPO_ROOT" "$TEST_TMP/seats" "$SECRET" <<'NODE'
 const path = require('path'); const fs = require('fs');

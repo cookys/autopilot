@@ -936,7 +936,9 @@ nv_stderr_tail() {
     -e 's/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]*)?/[REDACTED]/g' \
     -e 's/([Bb]earer|[Bb]asic)[[:space:]]+[A-Za-z0-9._~+\/=-]{8,}/\1 [REDACTED]/g' \
     -e 's/((api[_-]?key|token|secret|password|passwd|authorization|credential|refresh_token|access_token)["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?)[^[:space:]"'"'"',}]+/\1[REDACTED]/gI' \
-    -e 's/[A-Za-z0-9+\/_-]{40,}/[REDACTED]/g' | tail -c 2000
+    -e 's/[A-Za-z0-9+\/_-]{40,}/[REDACTED]/g' | tail -c 2000 | LC_ALL=C sed -E '1s/^[\x80-\xBF]+//'
+  # The byte cuts (the 8000 window when bash counts bytes, and tail -c above) can land inside a
+  # multibyte character; the last sed drops the stranded continuation bytes so the JSON stays UTF-8.
 }
 
 emit_no_verdict() {

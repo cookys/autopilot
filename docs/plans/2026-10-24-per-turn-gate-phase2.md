@@ -107,18 +107,18 @@ The P1 rerun could not be called valid because no artifact was written when the 
 | Condition | Applies | Artifact written by the wrapper |
 |---|---|---|
 | Each id launched exactly once, in the preregistered order | per id | `START <id> <ts>` before the call, `END <id> <ts> rc=` after; `--audit` checks order, uniqueness |
-| Sequential, one window of at most 8 h | per id and end | `WINDOW_START`; elapsed in each `START`; `STOP_WINDOW` |
+| Sequential, one window of at most 8 h | per id and end | `WINDOW_START` once; elapsed in each `START`; `STOP_WINDOW` if exceeded |
 | Task hashes equal the preregistered listing | first call, last call, any early exit (trap) | `taskhash.pre.txt`, `taskhash.post.txt`, and a `TASKHASH_DIFF ok|fail` line |
-| CLI version 2.1.309 | per id | `VERSION <id> <value>`, compared with `result.json` |
-| Authentication probe passed, no expiry | per id | `PROBE_OK|PROBE_FAIL <id>`, `probes.tsv` row; `STOP_AUTH` |
+| CLI version 2.1.309 | per id | `VERSION <id> <value>` before the call; compared with `result.json` runner_version |
+| Authentication probe passed, no expiry | per id | `PROBE_OK|PROBE_FAIL <id>`, `probes.tsv` row; a run ending in an auth error writes `STOP_AUTH` |
 | No deviation from the preregistered command | per id | `CMD <id> <sha256 of argv>`, audited against the manifest |
 | Oracle score recoverable | per id, after the run | `SCORE <id> m1 m2 m3` or `SCORE_MISSING <id>` |
-| At least 27 of 30 completed five turns, in each arm separately | per id and end | `TURNS <id> arm n`; final tally lines `COMPLETE ON=x/30 C=y/30` (D1: ON only) |
+| At least 27 of 30 completed five turns, in each arm separately | per id and end | `TURNS <id> arm n` from `result.json`; final tally lines `COMPLETE ON=x/30 C=y/30` (D1: ON only) |
 | Single resolved model id | per id | `MODEL <id> <value>` |
 | Hook active only in ON runs, and only the gate hook | per id | hook trace (`--debug hooks --debug-file`, same flags in both arms), `HOOKCOUNT <id> gate_trace=<n> gate_log=<n> plugin=<n>`; ON: gate_trace = gate_log; C: gate_trace = 0 |
-| Blocks per turn never exceed N | per id | `BLOCKMAX <id> <value>` (max `block` records per turn in the log) |
-| Interleaving order as preregistered (D2) | per id | `ORDER <id> <arm>`, checked against the seeded list |
-| Cost within the cap | per id | `COST <id> run probe total projected`, per arm; `STOP_COST` |
+| Blocks per turn never exceed N | per id | `BLOCKMAX <id> <value>`, read by the wrapper from the hook log (max `block` records per turn in the log) |
+| Interleaving order as preregistered (D2) | per id | `ORDER <id> <arm>` before the call, checked against the seeded list |
+| Cost within the cap | per id | `COST <id> run probe running_total projected`, per arm; `STOP_COST` |
 | Preregistration committed earlier | before first call | `PREREG <hash> <time>`, `merge-base --is-ancestor` result |
 
 Also kept: no scratch path in logs; node timestamps (the host `date` is uutils and drops leading zeros of the fraction); auth-probe stop rules; the `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID` prefix.

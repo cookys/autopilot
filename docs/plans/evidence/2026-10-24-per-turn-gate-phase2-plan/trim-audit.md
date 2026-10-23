@@ -1,6 +1,6 @@
 # Trim audit of docs/plans/2026-10-24-per-turn-gate-phase2.md
 
-Method: for each consecutive commit pair from 9c0aa397d (first version) to this commit's parent state, every sentence or table cell of the older text that no longer appears verbatim in the newer text was listed (script: sentence split on `. ; :` and `|`, exact match after whitespace normalisation) and judged by hand. "Carries" means the sentence states a rule, condition, limit, commitment or approval gate. "Equivalent" means the current text still says the same thing. Splitter fragments (a sentence cut at a colon, or a cell that only changed because a neighbouring clause was edited) are marked frag. Result: 24 sentences were restored, all others are rationale, history, restated elsewhere, or superseded on purpose.
+Method: for each consecutive commit pair from 9c0aa397d (first version) to this commit's parent state, every sentence or table cell of the older text that no longer appears verbatim in the newer text was listed (script: sentence split on `. ; :` and `|`, exact match after whitespace normalisation) and judged by hand. "Carries" means the sentence states a rule, condition, limit, commitment or approval gate. "Equivalent" means the current text still says the same thing. Splitter fragments (a sentence cut at a colon, or a cell that only changed because a neighbouring clause was edited) are marked frag. Result: 24 sentences were restored in the first pass and the seven section 3.1 rows below in the round-6 re-audit (every row of the table was checked against 9c0aa397d for before/after/appended/at-exit/once/if-exceeded wording; START/END, task hashes, SCORE, PREREG, MODEL and CMD were already equivalent), all others are rationale, history, restated elsewhere, or superseded on purpose.
 
 Pairs: A = 9c0aa397d to d41aa8486, B = d41aa8486 to 408f8eeb5, C = 408f8eeb5 to b6ba3a39e, D = b6ba3a39e to f596528ee/b88b6d700.
 
@@ -32,6 +32,14 @@ Pairs: A = 9c0aa397d to d41aa8486, B = d41aa8486 to 408f8eeb5, C = 408f8eeb5 to 
 | A | "owner re-logs in, whole-batch rerun only by owner decision" (STOP_AUTH) | gate | restored |
 | A | "Cost: the stop rule and cap in section 3; the cap is never raised in place" | rule | restored |
 | B | "BLOCKED, not worked around" (hook disagreement / timeout) | rule | restored |
+| A | section 3.1 table timing wording, found by the round-6 re-audit (earlier judgement "timing is in the Applies column" was wrong: Applies gives frequency only) | timing | restored on seven rows, see below |
+| A | VERSION: "before the call" | timing | restored |
+| A | ORDER: "before the call" | timing | restored |
+| A | WINDOW_START "once" and STOP_WINDOW "if exceeded" | timing/condition | restored |
+| A | PROBE: "a run ending in an auth error writes STOP_AUTH" | condition | restored |
+| A | TURNS: "from result.json" | source | restored |
+| A | BLOCKMAX: "read by the wrapper" from the hook log | source | restored |
+| A | COST: "running_total" field name | field | restored |
 
 ## Judged not carrying, or equivalent present (no action)
 
@@ -56,7 +64,7 @@ Pairs: A = 9c0aa397d to d41aa8486, B = d41aa8486 to 408f8eeb5, C = 408f8eeb5 to 
 | A | old trade check (two-sided p <= 0.05) | superseded by the one-sided rule (B) |
 | A | old cost paragraph and table cells (16.1, 21.5, 38, 42.5, 59 ...) | wrong numbers, replaced by script output (D) |
 | A | "Proposed cap" wording | kept as "Caps" |
-| A | 3.1 intro (P1 rerun could not be called valid ...) and table cell wording (START appended before the call, STOP_WINDOW if exceeded, VERSION before the call, PROBE row, CMD manifest, SCORE parsed by wrapper, ORDER before the call, COST fields, PREREG kept) | each condition and artifact remains in the table, in shorter cells; timing is in the "Applies" column |
+| A | 3.1 intro (P1 rerun could not be called valid ...) | restated: the contemporaneous-artifact rule and "reconstruction afterwards does not count" remain |
 | A | "Also kept: ... uutils" | restored above |
 | A | NC1 to NC8 old wording ("Red: ...") | replaced by mutation/failing-assertion form (B); iteration ceiling kept in NC2 |
 | A | P2-0 done condition (frag; only NC6 clause changed) | rest unchanged in the current text |

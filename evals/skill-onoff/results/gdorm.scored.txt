@@ -1,0 +1,2 @@
+gdorm: PASS
+{"q_qcpanel_run":{"base":5,"change":0},"r_archive_import":{"base":5,"change":5},"t_tree_run":{"base":0,"change":0},"v1_off":{"inv":15,"eff":15},"v1_on":{"inv":15,"eff":15},"rules":{"q_qcpanel_run":true,"r_archive_import":true,"t_tree_run":true,"v2":true}}

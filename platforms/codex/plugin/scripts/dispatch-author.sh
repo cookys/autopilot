@@ -527,9 +527,25 @@ runner_stderr_excerpt() {
     const fs = require("fs"), path = require("path");
     let redact = (t) => String(t);
     try { redact = require(path.join(process.argv[2], "..", "hooks", "_shared", "secret-patterns")).redact; } catch (_e) {}
+    // Redact BEFORE the 2048-byte cut: cutting first can strand a key fragment with no
+    // recognisable prefix. Work on an 8000-byte tail window, drop continuation bytes a byte-cut may
+    // leave at its start, and strip a leading run of key-like characters the window start may have
+    // sliced off a token; then redact, collapse whitespace, and cut to <=2048 bytes on a UTF-8 boundary.
     const b = fs.readFileSync(process.argv[1]);
-    const tail = b.subarray(Math.max(0, b.length - 2048)).toString("utf8");
-    process.stdout.write(redact(tail).replace(/\s+/g, " ").trim());
+    const start = Math.max(0, b.length - 8000);
+    let s = 0;
+    while (start > 0 && start + s < b.length && (b[start + s] & 0xC0) === 0x80) s++;
+    let win = b.subarray(start + s).toString("utf8");
+    if (start > 0) win = win.replace(/^[A-Za-z0-9+\/_-]*/, "");
+    const red = redact(win).replace(/\s+/g, " ").trim();
+    let o = Buffer.from(red, "utf8");
+    if (o.length > 2048) {
+      o = o.subarray(o.length - 2048);
+      let k = 0;
+      while (k < o.length && (o[k] & 0xC0) === 0x80) k++;
+      o = o.subarray(k);
+    }
+    process.stdout.write(o.toString("utf8"));
   ' "$err_file" "$_AUTHOR_SELF_DIR" 2>/dev/null || true
 }
 

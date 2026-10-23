@@ -1,0 +1,110 @@
+# step0-iso
+call 1 Stop allow stop_hook_active= false last= "OK"
+hook_started events: 1
+assistant texts: ["OK"]
+result_objects=1 cost=0.0167
+hook_started names:
+      1 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-09-945Z.jsonl
+
+# step0-ctl
+call 1 Stop allow stop_hook_active= false last= "OK"
+hook_started events: 11
+assistant texts: ["OK"]
+result_objects=1 cost=0.0497
+hook_started names:
+      4 "hook_name":"SessionStart:startup"
+      6 "hook_name":"Stop"
+      1 "hook_name":"UserPromptSubmit"
+files created under scratch HOME (after):
+.autopilot/last-seen-version
+.autopilot/qualification-prices/current.json
+.autopilot/qualification-prices/e1a2dcddebbe0bff811612169a9191c4930dbd53d3b2fd7dbb19a8fa3ed5bbce/prices.json
+.autopilot/qualification-prices/last-attempt
+.autopilot/.session-handoff.log
+.cache/claude-cli-nodejs/<proj>/mcp-logs-autopilot/2026-10-23T15-56-23-638Z.jsonl
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-23-638Z.jsonl
+
+# A0
+call 1 Stop allow stop_hook_active= false last= "OK"
+hook_started events: 1
+assistant texts: ["OK"]
+result_objects=1 cost=0.0191
+hook_started names:
+      1 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-56-55-996Z.jsonl
+
+# A1
+call 1 Stop block stop_hook_active= false last= "OK"
+call 2 Stop allow stop_hook_active= true last= "ALPHA"
+hook_started events: 2
+assistant texts: ["OK","ALPHA"]
+result_objects=1 cost=0.0055
+hook_started names:
+      2 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-00-049Z.jsonl
+
+# A2
+call 1 Stop block stop_hook_active= false last= "OK"
+call 2 Stop block stop_hook_active= true last= "ALPHA"
+call 3 Stop allow stop_hook_active= true last= "BETA"
+hook_started events: 3
+assistant texts: ["OK","ALPHA","BETA"]
+result_objects=1 cost=0.0086
+hook_started names:
+      3 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-05-201Z.jsonl
+
+# B0
+call 1 Stop allow stop_hook_active= false last= "OK"
+hook_started events: 1
+assistant texts: ["OK"]
+result_objects=1 cost=0.0026
+hook_started names:
+      1 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-20-346Z.jsonl
+
+# B1
+call 1 Stop block stop_hook_active= false last= "OK"
+call 2 Stop block stop_hook_active= true last= "ALPHA"
+call 3 Stop allow stop_hook_active= true last= "BETA"
+hook_started events: 3
+assistant texts: ["OK","ALPHA","BETA"]
+result_objects=1 cost=0.0088
+hook_started names:
+      3 "hook_name":"Stop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-24-253Z.jsonl
+
+# C0
+call 1 SubagentStop allow stop_hook_active= false last= "DONE"
+call undefined Stop allow(ignored) stop_hook_active= false last= "The agent is now running in the background. I'll be notified"
+call undefined Stop allow(ignored) stop_hook_active= false last= "The subagent replied: **DONE**"
+hook_started events: 3
+assistant texts: ["DONE","The agent is now running in the background. I'll be notified automatically when it completes, and then I can tell you exactly what it replied.","The subagent replied: **DONE**"]
+result_objects=2 cost=0.0683
+hook_started names:
+      2 "hook_name":"Stop"
+      1 "hook_name":"SubagentStop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-39-978Z.jsonl
+
+# C1
+call 1 SubagentStop block stop_hook_active= false last= "DONE"
+call undefined Stop allow(ignored) stop_hook_active= false last= "Agent launched. Waiting for completion notification."
+call 2 SubagentStop allow stop_hook_active= true last= "ALPHA"
+call undefined Stop allow(ignored) stop_hook_active= false last= "The subagent replied with: **ALPHA**\n\n(It did not follow the"
+hook_started events: 4
+assistant texts: ["DONE","Agent launched. Waiting for completion notification.","ALPHA","The subagent replied with: **ALPHA**\n\n(It did not follow the instruction to reply with \"DONE\"—it replied with \"ALPHA\" instead.)"]
+result_objects=2 cost=0.0298
+hook_started names:
+      2 "hook_name":"Stop"
+      2 "hook_name":"SubagentStop"
+files created under scratch HOME (after):
+.cache/claude-cli-nodejs/<proj>/mcp-logs-claude-ai-Claude-Docs/2026-10-23T15-57-49-177Z.jsonl
+

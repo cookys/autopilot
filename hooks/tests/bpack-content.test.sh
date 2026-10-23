@@ -275,7 +275,7 @@ fi
 echo "=== bpack-tree: the answer lives only in the stub tree; status.txt marker ==="
 STUB_OUT="$(cd "$TEST_TMP" && env -u CLAUDE_CODE_SESSION_ID node "$STUB" 2>/dev/null)"
 for want in "agent agent-u1 unit 1: parser rewrite [done]" "agent agent-u2 unit 2: exporter [running]" "agent agent-u3 unit 3: docs sweep [running]" "rail run-r1 review via codex [done]" "rail run-r2 review via kimi [running]" "rail run-r3 review via grok [failed]" "rail run-r4 review via gemini [running] [untracked: parent_agent_not_found]"; do
-  if printf '%s\n' "$STUB_OUT" | grep -qF -- "$want"; then assert_eq ok ok "stub tree lists: $want"; else assert_eq missing ok "stub tree lists: $want"; fi
+  if grep -qF -- "$want" <<<"$STUB_OUT"; then assert_eq ok ok "stub tree lists: $want"; else assert_eq missing ok "stub tree lists: $want"; fi
 done
 if grep -rqi 'dispatch-tree\|dispatch tree' "$EV/tasks/bpack-tree/task.md" "$EV/tasks/bpack-tree/repo"; then assert_eq named unnamed "bpack-tree task and repo never name dispatch-tree"; else assert_eq unnamed unnamed "bpack-tree task and repo never name dispatch-tree"; fi
 ans_marker() { # $1 status.txt body -> true|false

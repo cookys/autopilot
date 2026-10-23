@@ -4106,13 +4106,15 @@ else
   # shape of the old `--output-format json` envelope, so dispatch-status.js --agy-envelope below is
   # unchanged. A `result` of status ERROR (or none at all) makes the helper exit 1 → the normal
   # non-zero-agent path (agent_log gets stderr, status from git artifacts).
-  run_worker bash -c 'cd "$1" && exec node "$9" run --prompt-file "${10}" --prefix "${11}" --emit envelope \
-      -- "$2" --new-project --model "$4" --effort "$8" \
-      --dangerously-skip-permissions --print-timeout "$5" \
-      >"$6" 2>"$7"' \
-      _ "$WT" "$AGY_BIN" "" "$MODEL" "$TIMEOUT" \
+  # NOTE: no positional parameter above $9 — systemd-run (the scope branch of run_worker) expands
+  # `${10}` in the command line, so the script `shift`s the worktree off instead.
+  run_worker bash -c 'cd "$1" && shift && exec node "$8" run --prompt-file "$9" --prefix "$2" --emit envelope \
+      -- "$1" --new-project --model "$3" --effort "$7" \
+      --dangerously-skip-permissions --print-timeout "$4" \
+      >"$5" 2>"$6"' \
+      _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$TIMEOUT" \
       "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
-      "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE" "$AGY_EDIT_ONLY"
+      "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE"
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \

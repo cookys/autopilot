@@ -115,6 +115,7 @@ else
 fi
 EOF
 chmod +x "$STUB_AGY_OK"
+make_agy_stdin_stub "$STUB_AGY_OK"
 
 OK_OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
   "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_AGY_OK" --timeout 3s 2>&1)"

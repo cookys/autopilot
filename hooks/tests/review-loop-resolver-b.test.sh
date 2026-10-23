@@ -692,10 +692,11 @@ STUB_EOF
     --repo-root "$SCRATCH" --ledger "$LEDGER" --phase p_r137 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
     --seats "m1/low@agy,m2/low@codex" --min-reviewed-seats 1 2>&1); RC=$?
-  assert_exit_code "$RC" "1" "r137: oversized agy estimate refuses collect before any seat dispatch"
-  assert_contains "$OUT" "single-argv ceiling" "r137: refusal names single-argv ceiling"
-  assert_contains "$OUT" "--exclude" "r137: refusal hints --exclude"
-  assert_file_absent "$CODEX_LOG" "r137: codex stub dispatch log does not exist (no seat dispatched)"
+  # agy now takes the prompt on stdin (stream-json): an oversized agy seat is no longer refused
+  # up-front — collect proceeds and dispatches every seat.
+  assert_exit_code "$RC" "0" "r137: oversized agy estimate no longer refuses collect (stdin transport)"
+  assert_not_contains "$OUT" "single-argv ceiling" "r137: no argv-ceiling refusal"
+  assert_file_exists "$CODEX_LOG" "r137: codex seat was dispatched alongside the agy seat"
 }
 
 assert_r137_agy_seat_payload_ove

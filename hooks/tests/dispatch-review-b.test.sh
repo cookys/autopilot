@@ -34,18 +34,8 @@ if command -v bwrap >/dev/null 2>&1; then
     assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy $AGY_MODE: the answer is not accepted"
   done
 
-  # agy argv-payload ceiling (v2.35.7): agy has no --prompt-file, so an oversized review prompt
-  # is rejected by execve BEFORE agy runs — a bare 126/127 with no vendor text, indistinguishable
-  # from a stalled seat. The rail must refuse first, by name, as no_verdict (the review was fully
-  # set up, and no_verdict already means "do not ship" to every caller).
-  BIG_DIFF="$TEST_TMP/big.diff"
-  node -e 'process.stdout.write("+y".repeat(100000))' > "$BIG_DIFF"
-  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash-high --diff-file "$BIG_DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
-  assert_eq "1" "$EXIT" "oversized agy review payload fails closed"
-  assert_contains "$OUT" '"status": "no_verdict"' "oversized agy payload emits no_verdict, not a stall"
-  assert_contains "$OUT" 'single-argv ceiling' "the no_verdict reason names the argv ceiling"
-  assert_contains "$OUT" 'has no --prompt-file' "the reason says why it cannot be streamed"
-  assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "an unexecable payload can never authorize shipping"
+  # (The old agy argv-payload ceiling refusal is gone: the prompt travels on stdin. Large-prompt
+  # delivery is covered by agy-stdin-transport.test.sh.)
 
   for ENVELOPE_MODE in malformed duplicate negative trailing; do
     OUT="$(AGY_ENVELOPE_MODE="$ENVELOPE_MODE" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?

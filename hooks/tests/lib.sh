@@ -241,6 +241,17 @@ fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
 NODE
 }
 
+# Put the stdin-transport adapter (lib/agy-stdin-adapter.js) in front of a legacy agy stub that
+# reads its prompt from a `-p <prompt>` argv. Use for stubs that do not go through
+# make_agy_stub_versioned (which already does this). Call after the stub body is complete.
+make_agy_stdin_stub() {
+  local stub="$1"
+  mv "$stub" "${stub}.agy-implementation"
+  printf '#!/usr/bin/env bash\nexec node %q %q "$@"\n' \
+    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agy-stdin-adapter.js" "${stub}.agy-implementation" > "$stub"
+  chmod +x "$stub"
+}
+
 # Promote an executable test double to the minimum agy CLI contract used by
 # production dispatch: an exact version probe plus transparent delegation for
 # every other invocation. Call this only after the fixture body is complete.
@@ -270,8 +281,10 @@ if [ "${1:-}" = "models" ]; then
   printf 'gemini-3.7-flash-low\tGemini 3.7 Flash (Low)\n'
   exit 0
 fi
-exec "${0}.agy-implementation" "$@"
+exec node "__AGY_ADAPTER__" "${0}.agy-implementation" "$@"
 STUB
+  # The rails send the prompt on stdin (stream-json); the adapter decodes it for legacy stubs.
+  sed -i "s#__AGY_ADAPTER__#$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agy-stdin-adapter.js#" "$stub"
   chmod +x "$stub"
 }
 

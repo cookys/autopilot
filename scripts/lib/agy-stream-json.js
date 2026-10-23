@@ -27,6 +27,7 @@
 //                1  `result.status` ERROR, or no `result` event at all — reason on stderr
 //                   (the rails already treat any non-zero runner exit as their engine failure)
 //                N  agy itself exited non-zero (N, passed through; stdout stays empty)
+//                127 the agy command could not be spawned (spawn error, stderr names it)
 //                2  usage error
 
 const fs = require('fs');

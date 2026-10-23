@@ -15,7 +15,9 @@
 # Negative controls run: audit calls disabled -> 73 FAILs; non-blind kimi argv + "--x" -> byte-compare FAILs.
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
-scrub_session_env   # a launching session's AUTOPILOT_PARENT_SESSION_ID etc. must not reach the rails under test
+# RED at c1fafbfba: AUTOPILOT_PARENT_SESSION_ID=x bash hooks/tests/dispatch-review-blind-kimi-agy.test.sh -> rc=1,
+#   "non-blind agy base run has no parent id ...: unexpected 'AUTOPILOT_PARENT_SESSION_ID=' in output"; green with the call below.
+scrub_session_env
 SCRIPTS_PORCELAIN_BEFORE="$(git -C "$REPO_ROOT" status --porcelain scripts/)"
 
 PKT="$TEST_TMP/pkt"; mkdir -p "$PKT/tree"; printf '{}\n' > "$PKT/MANIFEST.json"; printf 'x\n' > "$PKT/tree/README.md"

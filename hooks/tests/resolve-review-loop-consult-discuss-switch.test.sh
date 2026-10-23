@@ -7,7 +7,6 @@
 # directly against a fail-hard shadow dispatch-author.sh, now that both Wave-2
 # wrappers exist.
 . "$(dirname "$0")/lib.sh"
-scrub_session_env   # a launching session's AUTOPILOT_PARENT_SESSION_ID etc. must not reach the rails under test
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 JS_MODULE="$REPO_ROOT/src/engine/resolve-review-loop.js"

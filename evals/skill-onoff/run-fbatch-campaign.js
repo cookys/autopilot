@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // run-fbatch-campaign.js — findings-batch ON/OFF row (plan §4): fb-mid-batch (T1),
-// fb-pool (T2), fb-critical-guard (T3, regression), fb-deadman (T4) x {base,change} x 5.
+// fb-pool (T2), fb-critical-guard (T3, regression), fb-deadman (T4a invalid draft + T4b valid
+// completion, one cell, two markers) x {base,change} x 5 (plan v3 §3-4).
 //
 //   run-fbatch-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--pilot]
-//       [--runner stub|cc] [--arms base,change] [--reps N] [--prereg <json>] [--arms-dir <dir>]
+//       [--runner stub|cc] [--model haiku|sonnet] [--arms base,change] [--reps N] [--prereg <json>]
+//       [--arms-dir <dir>]
+//
+// --model: cell model. Default = prereg model (sonnet); --pilot defaults to prereg pilot_model
+// (haiku, v3 option (b): pilot rates check wiring only and are never reused for V2/V3).
 //
 // Same flag contract as run-bpack-campaign.js. --dry-run ALSO needs --results (usage error
 // otherwise, although it never spawns anything). --dry-run and --check-arms never spend.
@@ -22,7 +27,7 @@ const val = (n, d) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] :
 const flag = (n) => argv.includes(n);
 const die = (m, code = 2) => { console.error(`run-fbatch-campaign: ${m}`); process.exit(code); };
 const resultsPath = val('--results');
-const USAGE = 'usage: run-fbatch-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--pilot] [--runner stub|cc] [--arms base,change] [--reps N]';
+const USAGE = 'usage: run-fbatch-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--pilot] [--runner stub|cc] [--model haiku|sonnet] [--arms base,change] [--reps N]';
 if (!resultsPath && !flag('--check-arms')) die(USAGE);
 const preregPath = val('--prereg', path.join(HERE, 'prereg', 'findings-batch.json'));
 let P;
@@ -31,6 +36,8 @@ const armsDir = path.resolve(val('--arms-dir', path.join(HERE, 'fbatch', 'arms')
 const runner = val('--runner', 'stub');
 if (!['cc', 'stub'].includes(runner)) die('runner must be cc|stub');
 const PILOT = flag('--pilot');
+const MODEL = val('--model', PILOT ? (P.pilot_model || P.model) : P.model);
+if (!['haiku', 'sonnet'].includes(MODEL)) die('--model must be haiku|sonnet');
 if (PILOT && (val('--reps') !== undefined || val('--arms') !== undefined)) die('--pilot fixes its own reps and arms; do not pass --reps/--arms');
 
 function parseReps() {
@@ -106,7 +113,7 @@ if (flag('--dry-run')) {
   }
   const cost = Number(keys.reduce((s, k) => s + cellCost(k.split('|')[0]), 0).toFixed(2));
   console.log(JSON.stringify({
-    dry_run: true, pilot: PILOT, row: P.row, model: P.model, runner, cells_total: keys.length,
+    dry_run: true, pilot: PILOT, row: P.row, model: MODEL, runner, cells_total: keys.length,
     cells_todo: keys.filter((k) => !done.has(k)).length, cost_estimate_usd: cost,
     cost_basis: 'two-turn T1/T2 cells 0.30, single-turn T3/T4 cells 0.19 (plan §4); the pilot average replaces this',
     max_usd: CAP,

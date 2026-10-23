@@ -47,6 +47,17 @@
       "type": ["string", "null"],
       "enum": ["SHIP-AS-IS", "FIX-THEN-SHIP", null]
     },
+    "exit_code": {
+      "type": "integer"
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["cleanroom", "runner"]
+    },
+    "stderr_tail": {
+      "type": "string",
+      "maxLength": 2000
+    },
     "frame_closed_by": {
       "type": "string",
       "enum": ["end-marker", "begin-marker"]

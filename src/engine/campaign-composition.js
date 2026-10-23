@@ -477,7 +477,7 @@ const FINAL_PANEL_SEAT_KEYS = [
   'reason',
   'receipt_digest',
 ];
-const FINAL_PANEL_SEAT_OPTIONAL_KEYS = Object.freeze(['raw_log', 'packet_hash', 'load_bearing']);
+const FINAL_PANEL_SEAT_OPTIONAL_KEYS = Object.freeze(['raw_log', 'packet_hash', 'load_bearing', 'failure']);
 const FINAL_PANEL_FAILURE_STATUSES = new Set([
   'no_verdict',
   'transport_failed',
@@ -498,6 +498,16 @@ function hasFinalPanelSeatKeys(seat) {
   if (Object.prototype.hasOwnProperty.call(seat, 'raw_log')
       && (typeof seat.raw_log !== 'string' || seat.raw_log.length < 1)) {
     return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(seat, 'failure')) {
+    const f = seat.failure;
+    if (!f || typeof f !== 'object' || Array.isArray(f)
+        || Object.keys(f).some((k) => !['exit_code', 'stage', 'stderr_tail'].includes(k))
+        || ('exit_code' in f && !Number.isSafeInteger(f.exit_code))
+        || ('stage' in f && typeof f.stage !== 'string')
+        || ('stderr_tail' in f && typeof f.stderr_tail !== 'string')) {
+      return false;
+    }
   }
   if (Object.prototype.hasOwnProperty.call(seat, 'load_bearing')
       && typeof seat.load_bearing !== 'boolean') {

@@ -300,6 +300,40 @@ function recordVerdict(ctx, attempts, outcome) {
   return writeJson(file, baseBody(ctx, attempts, result));
 }
 
+// BL-0246: persist WHY a seat's transport failed. The attempt artifact keeps result:null (so
+// it is never reusable as a verdict) and gains a bounded `failure` block from the
+// dispatch-review no_verdict emission: exit_code, stage and a stderr_tail already
+// secret-masked by the emitter and re-capped here. Fails open like every store function.
+const FAILURE_TAIL_MAX = 2000;
+function failureFields(detail) {
+  const failure = {};
+  if (!detail || typeof detail !== 'object') return null;
+  if (Number.isSafeInteger(detail.exit_code)) failure.exit_code = detail.exit_code;
+  if (typeof detail.stage === 'string' && detail.stage.length > 0) {
+    failure.stage = detail.stage.slice(0, 64);
+  }
+  if (typeof detail.stderr_tail === 'string') {
+    failure.stderr_tail = detail.stderr_tail.slice(-FAILURE_TAIL_MAX);
+  }
+  return Object.keys(failure).length === 0 ? null : failure;
+}
+
+// The seat outcome the engine holds is the review wrapper; the parsed dispatch-review
+// no_verdict JSON sits at raw.reviewResult.result. Flat detail is also accepted.
+function failureFromOutcome(outcome) {
+  const parsed = outcome && outcome.raw && outcome.raw.reviewResult
+    ? outcome.raw.reviewResult.result : null;
+  return failureFields(parsed && parsed.status === 'no_verdict' ? parsed : outcome);
+}
+
+function recordFailure(ctx, attempts, outcome) {
+  const file = seatFile(ctx);
+  if (!file) return false;
+  const failure = failureFromOutcome(outcome);
+  if (!failure) return false;
+  return writeJson(file, { ...baseBody(ctx, attempts, null), failure });
+}
+
 // ---- Reaping -------------------------------------------------------------------------
 // A campaign's seat subtree is read only by a resume, so it is dead weight once the
 // campaign is terminal. Only the journal says which: a parked campaign (durable wait,
@@ -426,4 +460,6 @@ module.exports = {
   lookupSeat,
   recordAttempt,
   recordVerdict,
+  recordFailure,
+  failureFromOutcome,
 };

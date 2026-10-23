@@ -785,14 +785,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-07
 - **Origin**: owner
-- **Problem**: 掛鉤與執行環境支援表的六十天過期提醒已進上線前檢查（只提醒、不擋）。還沒做的是 grok 與 agy 的原生事件證據列：這張表只收我們自己註冊的掛鉤與事件，原生事件的探測證據放不進去，需 owner 決定是否擴充範圍。
-- **Impact**: 原生事件層沒有證據列，grok 與 agy 的掛鉤支援仍只能靠散文記載。
-- **Trigger**: owner decides whether the matrix should accept native-event (grok/agy) evidence rows
+- **Problem**: 掛鉤與執行環境支援表各格多數仍未以實際觸發驗證（證據檔只有一筆打包紀錄，沒有實際觸發）。另需 owner 決定：表只收我們自己註冊的掛鉤，grok 與 agy 的原生事件證據是否擴充進來。
+- **Impact**: 矩陣上的「支援」多數仍未被實際觸發證明；原生事件層也沒有證據列，grok 與 agy 的掛鉤支援只能靠散文記載。
+- **Trigger**: the next hook registered on a second harness, a harness-maintenance run that finds a hook-event claim older than 60 days, or the owner deciding whether the matrix should accept native-event (grok/agy) evidence rows
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
-- **Context**: Old id BL-0026. Merge 2cdefb419 (hookmatrix) wired the 60-day staleness advisory into preflight-release.sh. Left: grok/agy native-event rows, which hook-harness-matrix.js does not accept (kinds fired/packaged/doc only). See sidecar.
+- **Context**: Old id BL-0026. 2cdefb419 wired only the 60-day advisory into preflight. Left: most cells unverified (no fired evidence), plus owner call on grok/agy native rows. See sidecar.
 
 ### Engine-routing axis: evidence bar for any model-to-worktype default
 - **Id**: BL-0232

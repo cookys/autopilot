@@ -276,7 +276,7 @@ PY
 echo "=== campaign dry-run and check-arms ==="
 RES="$TEST_TMP/gdorm-results.jsonl"
 dry=$(node "$BASE/run-gdorm-campaign.js" --results "$RES" --dry-run) || fail "dry-run exit $?"
-printf '%s\n' "$dry" | grep -q 'cells_total' || fail "dry-run did not print a cell count: $dry"
+grep -q 'cells_total' <<<"$dry" || fail "dry-run did not print a cell count: $dry"
 python3 -c 'import json,sys
 text=sys.argv[1]
 line=[l for l in text.splitlines() if l.startswith("{")][-1]
@@ -370,10 +370,10 @@ score() { # $1 results $2 pass|fail
   rc=${rc:-0}
   if [ "$expect" = pass ]; then
     [ "$rc" = 0 ] || fail "expected PASS rc 0, got $rc: $out"
-    printf '%s\n' "$out" | grep -q 'PASS' || fail "expected PASS text: $out"
+    grep -q 'PASS' <<<"$out" || fail "expected PASS text: $out"
   else
     [ "$rc" != 0 ] || fail "expected non-PASS, got rc 0: $out"
-    printf '%s\n' "$out" | grep -q '^gdorm: PASS' && fail "verdict was PASS: $out"
+    grep -q '^gdorm: PASS' <<<"$out" && fail "verdict was PASS: $out"
   fi
 }
 score "$TEST_TMP/score-pass.jsonl" pass
@@ -429,13 +429,13 @@ with open(os.path.join(tmp, "score-retry-infra.jsonl"), "w") as f:
 PY
 rc=0
 out=$(node "$BASE/score-gdorm.js" --prereg "$BASE/prereg/gdorm.json" --results "$TEST_TMP/score-retry-ok.jsonl" 2>&1) || rc=$?
-printf '%s\n' "$out" | grep -q 'infra failure' && fail "retry success still judged infra: $out"
+grep -q 'infra failure' <<<"$out" && fail "retry success still judged infra: $out"
 [ "$rc" = 3 ] || fail "retry success should FAIL on the latest markers (base qc 3), rc=$rc: $out"
-printf '%s\n' "$out" | grep -q '"base":3' || fail "latest-row markers not used: $out"
+grep -q '"base":3' <<<"$out" || fail "latest-row markers not used: $out"
 rc=0
 out=$(node "$BASE/score-gdorm.js" --prereg "$BASE/prereg/gdorm.json" --results "$TEST_TMP/score-retry-infra.jsonl" 2>&1) || rc=$?
 [ "$rc" = 3 ] || fail "later infra row should stay infra, rc=$rc: $out"
-printf '%s\n' "$out" | grep -q 'infra failure' || fail "later infra row lost the infra verdict: $out"
+grep -q 'infra failure' <<<"$out" || fail "later infra row lost the infra verdict: $out"
 
 echo "=== stamp --check ==="
 node "$BASE/stamp-prereg.js" --row gdorm --check >/dev/null || fail "stamp --check exit $?"

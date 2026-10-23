@@ -893,3 +893,27 @@ test('budget: at equal distance a suite with a shorter recorded time runs first'
     assert.strictEqual(readOrder(r.dir), 'fastslow');
   } finally { r.cleanup(); }
 });
+
+// RED at 6ef5351df: AssertionError "direct reference must run first" (a-indirect ran before z-direct; both were ranked distance 2 from the selector chain).
+test('budget: a direct reference runs before an indirect one even when the selector chain for the direct suite is longer', () => {
+  // z-direct names seed.js in text (weak) and also requires bridge.js -> seed.js; the selector keeps the
+  // cheaper-cost chain through bridge (2 hops), hiding the direct reference. a-indirect only reaches seed via other.js.
+  const r = makeRepo({
+    'scripts/seed.js': 'module.exports = 1;\n',
+    'scripts/bridge.js': "require('./seed.js');\n",
+    'scripts/other.js': "require('./seed.js');\n",
+    'scripts/z-direct.test.js': 'console.log("scripts/seed.js"); require("./bridge.js");\n',
+    'scripts/a-indirect.test.js': 'require("./other.js");\n',
+  });
+  try {
+    const ran = runCli(r.dir, ['--run', '--files', 'scripts/seed.js', '--budget-seconds', '600']);
+    assert.strictEqual(ran.status, 0, ran.stdout + ran.stderr);
+    const z = ran.stdout.indexOf('rc=0 scripts/z-direct.test.js');
+    const a = ran.stdout.indexOf('rc=0 scripts/a-indirect.test.js');
+    assert.ok(z >= 0 && a >= 0, ran.stdout);
+    assert.ok(z < a, 'direct reference must run first:\n' + ran.stdout);
+    // The selected set is unchanged by the ordering.
+    const sel = JSON.parse(runCli(r.dir, ['--files', 'scripts/seed.js', '--json']).stdout);
+    assert.deepStrictEqual(sel.suites, ['scripts/a-indirect.test.js', 'scripts/z-direct.test.js']);
+  } finally { r.cleanup(); }
+});

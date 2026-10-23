@@ -437,6 +437,23 @@ function walkParents(seeds, graph, maxWeak) {
   return parent;
 }
 
+// Fewest referrer hops from any changed file, ignoring the weak-cost bound. Used only to order a
+// budgeted run; the selector's own chain optimises weak-edge cost and may hide a direct reference.
+function shortestHops(seeds, graph) {
+  const hops = new Map(seeds.map((c) => [c, 0]));
+  const q = seeds.slice();
+  while (q.length) {
+    const cur = q.shift();
+    if (!isCode(cur) && hops.get(cur) !== 0) continue; // same rule as walkParents: only code propagates
+    for (const [r] of referrersOf(graph, cur)) {
+      if (hops.has(r)) continue;
+      hops.set(r, hops.get(cur) + 1);
+      q.push(r);
+    }
+  }
+  return hops;
+}
+
 function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
   const graph = buildGraph(headTree);
@@ -467,6 +484,7 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
   const all = [...new Set([...suites, ...alwaysRun])].sort();
+  Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }
 
@@ -498,6 +516,8 @@ function runEntry(root, rel) {
 // Distance of a suite from the change: 0 = the changed suite itself, n = hops in its chain, Infinity = unknown.
 function suiteDistance(doc, rel) {
   if (doc.changed.includes(rel)) return 0;
+  const hops = doc.chains && doc.chains.__hops;
+  if (hops && hops.has(rel)) return hops.get(rel);
   const chain = doc.chains && doc.chains[rel];
   if (!chain || chain.length < 2) return Infinity;
   return chain.length - 1;

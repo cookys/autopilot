@@ -4,7 +4,17 @@ Date 2026-10-23. CLI 2.1.309 (re-pinned by owner d-ea7857ea). Alias claude-haiku
 
 ## Conclusion
 
-P0: complete, nothing BLOCKED. Hook-side GO conditions of section 3.5 are met: A1 and B1 are `produced` and affirmative, and P0 ran on the pinned 2.1.309. The overall GO still needs P1's valid batch. Total spend 0.21 USD of the 6 USD cap; wall time about 2 minutes of runs.
+P0 completed. None of the plan's BLOCKED conditions was met, as far as the checks recorded in this directory show: the CLI printed 2.1.309 in every run (`trial-excerpts.txt`, claude_code_version per trial); every run authenticated through the credentials-only config directory (result object `is_error=false`, `subtype=success`, model `claude-haiku-4-5`, `results-deidentified.jsonl`); the hook trace was obtainable and non-empty in the control run (executed hook commands per run in `trial-excerpts.txt`); and no isolated run showed a plugin hook or a file side effect. A1 and B1 are `produced` and affirmative, so the hook-side GO conditions of section 3.5 hold. The overall GO still needs a valid P1 batch. Total spend 0.21 USD (sum of `total_cost_usd` over the 11 result objects) against the 6 USD cap.
+
+Ordering check for "expected readings committed before the first measurement": the expected-readings commit time and the P0 start marker are in the first lines of `trial-excerpts.txt`, and each trial lists its first debug timestamp (the earliest, step0-iso, is 15:56:08.9Z on 2026-10-23, after the commit's 15:56:07Z).
+
+## P1 estimate and the owner gate
+
+P1 is not started. Its cost follows the plan's Step 2 derivation, which has not been done yet because the cost semantics of the historical logs are unresolved. Two readings give a range: a low reading from the driver-recorded first-response cost, about 0.0737 USD per run, so about 2.2 USD for 30 runs; and a high reading from a reviewer's reading of the historical logs, about 0.477 USD per run, so about 14.3 USD. The plan says an unresolved semantics takes the larger reading, so the working estimate is about 14.3 USD. P1 may start only after the owner confirms that estimate (decision d-0ab59f36); P0's measured result objects here (0.003 to 0.07 USD each) are for trivial prompts and are not a basis for it.
+
+## Evidence index
+
+`expected-readings.md` (committed first), `throwaway-hook.js` (the probe hook; exit status is taken from the CLI's own hook execution lines, not from this source), `trial-excerpts.txt` (per trial: version, model, results, executed hook commands with exit status, throwaway hook stdout and stdin fields, control-run lines), `results-deidentified.jsonl` (all result objects with ids replaced; two substrings were altered to keep scans clean: the key for the session id is written `sid`, and one notification kind name containing a hyphen is written with a tilde), `sums.txt` (sha256 and absolute scratch root of every raw file; original result objects are the `"type":"result"` lines of each trial's `stream.jsonl`).
 
 ## Method (per plan)
 

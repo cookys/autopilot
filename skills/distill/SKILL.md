@@ -97,7 +97,7 @@ Methodology reference (external — lives in YOUR pack, never in autopilot): ski
 
 ## Demotion drafting (quality-floor P4)
 
-Demotion drafting (quality-floor P4): from retro's escalation aggregate (or a direct `tree.js escalations` sweep), for each recurring escalation draft a CANDIDATE stub — a `references/probe-playbook.md` entry (4 mandatory fields per its schema) if the escalation was resolved by a novel probe, or a `references/acceptance-patterns.md` addition if it was an acceptance gap. Candidates are DRAFTS: they go through this skill's existing human-gated review before merging; never auto-append to the catalogs.
+Demotion drafting (quality-floor P4): the task-tree `tree.js escalations` sweep is dormant (docs/adr/0002-task-tree-and-qc-panel-dormant.md); from retro's escalation aggregate, for each recurring escalation draft a CANDIDATE stub — a `references/probe-playbook.md` entry (4 mandatory fields per its schema) if the escalation was resolved by a novel probe, or a `references/acceptance-patterns.md` addition if it was an acceptance gap. Candidates are DRAFTS: they go through this skill's existing human-gated review before merging; never auto-append to the catalogs.
 
 ## Step 3 — Review (human gate — the privacy backbone) — batch multi-select
 The gate stays, but the *friction* is collapsed: present the whole candidate list **once** and let the

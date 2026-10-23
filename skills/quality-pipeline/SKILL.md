@@ -55,36 +55,15 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/lifecycle-residue-receipt.js`](../../scripts/lifecycle-residue-receipt.js) | Issue or freshness-check exact worktree/branch residue evidence | Before handing lifecycle truth to LSM; a valid receipt does not itself compute `can_close` |
 | [`scripts/risk-counter.js`](../../scripts/risk-counter.js) | Cross-round WTF-Likelihood Cap state tracking | Self-Regulation section |
 | [`scripts/diff-since-last-round.sh`](../../scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint (dispatcher-only) | Re-review Loop short-circuit decision |
-| [`scripts/qc-panel.js`](../../scripts/qc-panel.js) | Cross-family interrogation panel (shadow mode, task-tree engine) | Shadow QC panel section below |
-| [`scripts/calibration.sh`](../../scripts/calibration.sh) | Panel verdict sample store + agreement report | Shadow QC panel section below |
+| [`scripts/review-ledger-archive.js`](../../scripts/review-ledger-archive.js) | Opt-in hetero-review ledger archive (`review_ledger_archive.dir`; unset means off) | When that dir is set, finalize archives automatically; `import --ledger <dir>` loads an old or hand-made ledger; `status` shows size and whether rotation is due; `rotate` and `prune` are manual housekeeping and `prune` is a dry run unless `--execute` |
+| [`scripts/calibration.sh`](../../scripts/calibration.sh) | Panel verdict sample store + agreement report | Dormant with the shadow QC panel (ADR-0002); do not run |
 | [`scripts/resolve-qc-gate.sh`](../../scripts/resolve-qc-gate.sh) | Per-project anti-skip gate strength (`block`/`warn`/`off`) for the `.githooks/pre-push` enforcer | On PASS, stamp the landing/merge commit with `QC-Verdict: PASS (reviewer <id>, <date>)` so the pre-push gate is satisfied |
 | [`scripts/dispatch-consult.sh`](../../scripts/dispatch-consult.sh) | Excluded from ever being called on a seat already in the resolved qc_panel roster (resolver enforces exclusion) | Consult hook |
 
 All scripts: `<script> --help` for usage; deterministic exit codes; JSON output where applicable. If a user project ships its own script with the same contract, prefer the project version.
 ### Shadow QC panel (task-tree engine)
 
-When `<projects_dir>/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.js` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). `projects_dir` comes from `scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)" --field projects_dir` — a literal `docs/projects/` is wrong in any project that keeps its documents elsewhere, and the failure is silent in exactly the way this shadow exists to prevent. Convention: `--proj` is the active project's directory name under that resolved directory (no auto-detection — an omitted `--proj` means the shadow silently doesn't run, so the dispatcher owns supplying it). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
-
-```
-IF <projects_dir>/<proj>/tree/ exists AND node report has verdict != null:
-  Run scripts/qc-panel.js --report <node-report.json> \
-      --artifacts <artifact-paths> --out <panel-out-dir> \
-      --proj <proj> --node <node-id>
-  Panel writes verdict artifact + appends a liveness (self-report-baseline)
-  calibration sample automatically (Amendment 4 liveness).
-  After the authoritative reviewer completes, add the graduation-bearing sample:
-    scripts/calibration.sh add-sample \
-      --panel-verdict <panel_verdict> \
-      --authoritative-verdict <reviewer_verdict> \
-      --baseline reviewer \
-      [--class <severity-class>]
-  (Baseline separation: the panel's internal sample is liveness-only and
-  excluded from graduation math; only the dispatcher's reviewer-baseline
-  sample counts toward graduation criteria.)
-ELSE: shadow path is a no-op; authoritative reviewer runs unchanged.
-```
-
-See [references/code-review.md](references/code-review.md) "Shadow QC panel" subsection for full wiring details and Amendment 4 liveness requirements.
+Dormant. Do not run `scripts/qc-panel.js`. See docs/adr/0002-task-tree-and-qc-panel-dormant.md.
 
 ## Route Table
 

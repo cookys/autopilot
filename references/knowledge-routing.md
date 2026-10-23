@@ -45,7 +45,7 @@ disqualified the identifier deny-list (§5).
 | Vendor and tool names (`z.ai`, Kimi Code CLI, MiniMax, Grok, Gemini, Codex, agy) | Host names, machine aliases, fleet handles |
 | Version numbers and version-bound behavior (`Kimi 0.28.0`, `CC 2.1.233`) | `/home/<user>/` paths and anything else naming a real account |
 | Incident narrative — what broke, how it was diagnosed, what fixed it | tmux pane addresses, session/pane coordinates |
-| In-repo paths (`src/runners/kimi.js`, `scripts/tree.js`) | Endpoint aliases and named-endpoint handles |
+| In-repo paths (`src/runners/kimi.js`, `scripts/stage-graph.js`) | Endpoint aliases and named-endpoint handles |
 | Error messages, exit codes, CLI flags, API shapes | Anything credential-shaped — tokens, keys, cookies, bearer strings |
 
 ### The one question

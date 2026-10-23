@@ -14,7 +14,7 @@ enforcer is prose, and prose is not governance (the owner-kernel lesson,
 | **Kernel** | evidence discipline: what "done" must prove, and the checks no narrative can steer | `references/evidence-contract.md`, blind-evidence gate, exec-boundary hook, holdout gate |
 | **Plumbing** | dispatch/worktree/endpoint/qualification mechanics | existing rails (`dispatch-*`, `run-ledger.sh`, worktree lifecycle, readiness) — unchanged |
 | **Policy** | how much scaffolding a dispatched engine gets, and when verification escalates | `references/scaffold-tiers.md` + `resolve-scaffold-tier.js`; cascade fields in `resolve-review-loop.sh` |
-| **Graph** | typed stage contracts + fan-out for INDEPENDENT work only | dispatch-unit contracts, qc-panel fan-out — no orchestration framework, no parallel implementer |
+| **Graph** | typed stage contracts + fan-out for INDEPENDENT work only | dispatch-unit contracts; qc-panel fan-out is dormant (ADR-0002) — no orchestration framework, no parallel implementer |
 
 ## Rules
 

@@ -294,16 +294,7 @@ parameter through which a self-report could reach the reviewer, and empty/unpars
 capture is fail-closed (never a silent pass). Any script that assembles verifier input
 MUST keep this property: pass artifacts, never the worker's account.
 
-**The one carve-out — the shadow interrogation panel.** [`scripts/qc-panel.js`](../scripts/qc-panel.js)
-deliberately feeds the node report (which *contains* the worker's verdict) to its judges,
-because its design is **interrogate-the-claim-against-artifacts**, not form-a-blind-first-impression,
-and it hardens against the cascade with a **refute pass** (`default-refuted-if-uncertain`).
-This is tolerated **only** because it is **SHADOW / non-authoritative** (calibration-bearing,
-never gating — see `skills/quality-pipeline/references/code-review.md` § "Shadow QC panel").
-🔴 **It MUST NOT be promoted to authoritative while it ingests the self-report** — graduation
-to a gating role first requires either (a) removing self-report ingestion (artifacts-only), or
-(b) calibration evidence (`scripts/calibration.sh run-known-bad`) that the refute pass does not
-false-suppress critical findings under self-report anchoring.
+**The shadow interrogation panel is dormant.** Do not run [`scripts/qc-panel.js`](../scripts/qc-panel.js). See [docs/adr/0002-task-tree-and-qc-panel-dormant.md](../docs/adr/0002-task-tree-and-qc-panel-dormant.md).
 
 **Pre-flight (add to the per-dispatch scan):** before dispatching **any** verifier, confirm
 the prompt/context contains **no** implementer self-report — no "here's what I did / changed /
@@ -550,7 +541,7 @@ Three clauses hold at **every nesting depth**:
 |------|-------------------------------|
 | `skills/quality-pipeline/references/code-review.md` (Re-review Loop) | Cites this doc; round 2+ reviewer dispatch follows the checklist above |
 | `skills/audit/SKILL.md` (Phase 2 + Phase 4) | Cites this doc; re-audit on the same segment after fix follows the checklist above |
-| `skills/ceo-agent/references/depth0-control-loop.md` (§3 qc@depth-0) | Cites clause 1 for the depth-0 qc-panel re-review after fixes |
+| `skills/ceo-agent/references/depth0-control-loop.md` (§3 qc@depth-0) | Cites clause 1; the depth-0 qc-panel re-review is dormant (ADR-0002) |
 
 > Maintenance: this table is hand-maintained. If you add a new consumer site
 > that re-dispatches a methodology agent after a fix, add a row here so the

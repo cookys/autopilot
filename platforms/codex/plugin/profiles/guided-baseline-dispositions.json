@@ -2066,11 +2066,8 @@
     },
     {
       "content_hash": "8b71a1a272f8b19127a8f9b1cb160de19f90526400f6a3f9e54c14fef175ecd0",
-      "disposition": "rewritten",
-      "successor_hashes": [
-        "56f82e988d3257c7ac48a15a73de4063b22ed71b585e966a11d4f112e18c5ae2"
-      ],
-      "rationale": "P0 skills/ceo-agent/SKILL.md:307 ('c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is', under step 3 'IF L-size'). Restated (reworded, not verbatim) at skills/ceo-agent/SKILL.md:305 as 'c2. (L/XL) `scripts/tree.js init <proj>` + emit root node …': only the (L/XL) scope tag was added; :306 now names 'CEO L/XL tasks' as the Board-directive default. 3.0.0 stage-graph G2: the 2026-06-12 Board directive covered L-size; tree init needs the project dir, which is L/XL-only."
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:307 ('c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is', under step 3 'IF L-size'). The 3.0.0 restatement at skills/ceo-agent/SKILL.md:309 (hash 56f82e988d3257c7ac48a15a73de4063b22ed71b585e966a11d4f112e18c5ae2) made that init the L/XL default. ADR-0002 (2026-10-22) makes the task tree dormant, so that default step is deleted and has no successor. Do not run scripts/tree.js init."
     },
     {
       "content_hash": "65db850bb9b5eadb6e3ba69b7e8645a17bf62a5669993c4474559e308542fc71",
@@ -2089,6 +2086,186 @@
         "c7e6cb2048c30dd199ba2f8691c49279a7fa7c0777c40c41a57e76d8033c55be"
       ],
       "rationale": "P0 skills/dev-flow/SKILL.md dispatch-chains fallback (HEAD line 25, segment dev.dispatch-chains). dcard-v3 pending-decision-card guidance appends the hetero-dispatch intent-table pointer to that same line; the fallback (autopilot skills primary, native Task for parallel, autopilot:reviewer for review, dispatch-config schema) is unchanged. Successor is the rewritten line at skills/dev-flow/SKILL.md:25."
+    },
+    {
+      "content_hash": "408816c3695302ccf6c03f96e6db6b23eb0f6fabf9936311651acf7deff41e60",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:309 ('calibration samples + audit trail; TaskCreate stays authoritative, zero'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "6aa2d941268d26238e98a3eeabc103bb12a06b2d6cd2d7ba9fb323d150a34ca1",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:310 ('authority change). Skip only if the Board says so for this task.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "f2d7c8712789a2b9f52984bf80aa9d03373b8bdaaaff53fa3a8c5ccf98c345df",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:427 ('> Full procedure: [references/tree-adapter.md](references/tree-adapter.md)'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "a06a28e65cc46a24bbacb623c0ab86bbb8c22ace038b7304dd047c72607cc54b",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:429 ('When `docs/projects/<proj>/tree/` exists, the task-tree engine is ACTIVE for'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "90b7c4f7c993b4a8a9e2e853d3728dfbf48b69c7c33120ddcd0093d36a44e841",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:430 ('this project. Check at startup and at each phase boundary.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "4090fc7ef9c4ffadb7feb5986f393aba2a93f4361cb61caca33bb0a2d496e45b",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:432 ('**Authority gate** — before routing any decisions through the tree, run:'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "a6d998e9075b1a4e241b00c168e2e39208f0f86501a11cc9841724fdffe51357",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:434 ('scripts/tree.js board-status <proj>'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "82ecb02a04a4fd0a5e2e99c24531684834cbb2396277672a02761c1ea38ad25c",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:436 ('- `null` output (or error) → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "60d0fb2aa3a82684b9b8ff571770f04510029649576fe17ce81c202c418bb394",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:437 ('- `.active == true` (present AND `decision == \"graduate\"`) → **post-signoff (active)**: decisions flow from `scripts/tree.js next-decision`.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "373c5971cd53fa8a669a3ad9d92fd1fa2a02ed361c1f3d4eb5267b7674705f1d",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:438 ('- `.present == true` but `.active == false` (e.g. decision was extend/abort) → stay in **dual-run**; the signoff is recorded but does not activate.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "e9faf5dfce6ebf521346a92d340a8a0bbe0e0cad85faac945905cfd46164265d",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:440 ('> Non-CC fallback: `jq \\'select(.type==\"board_signoff\" and .decision==\"graduate\")\\' docs/projects/<proj>/tree/events.jsonl` (empty = shadow).'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "407f054bf6834c65848a5fcc3e29304a8061d1ec865b61db9fd2073b60ae724e",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:442 ('**Post-signoff decision loop** (replaces TaskCreate-driven loop):'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "6427ed81f0ef1c930b956f2fdd862b89e29de03567412dbee04885ba2fa3575c",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:443 ('1. `scripts/tree.js next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager\\'s ONLY default input.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "57adc779369748422d3849cae645d42aa48c848390bd290acf7307899af8c165",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:444 ('2. Adjudicate via `scripts/resolve-doa.sh`. Emit `doa_decision` event.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "91b11143eff6a064a17398ea51ba85264c4d0e38239339c7f4add0b11667c565",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:445 ('3. Within DOA → emit `decision_resolved` with the `decision_id`. Beyond DOA → emit `escalation_opened`, pause for Board, emit `escalation_resolved`.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "09a805e90666c730d743f7603f17a52e86048038f5b09da471f1227525ea9ea4",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:446 ('4. Repeat until `next-decision` returns empty.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "323927d645e47aacecac1c7be344321105382f7cb11d87eb53a60eb9a729bd67",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:448 ('**KR1 rule**: never Read work products directly on the happy path. Every artifact'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "4ae8c79543985859e68d1082980fe01995188788e333bd6894ac06b1beb5ff4c",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:449 ('read MUST go through `scripts/tree.js fetch <proj> <node> --raw` — this emits'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "d1013cd95fdd245700f789b85ad61aaed1003c1522ec325fe3a3cb7a97d01f49",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:450 ('a `manager_raw_read` event (the logged escalation valve). KR1 is measured by'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "db621e412fa8f017897319d21bd83b28bf566a604e6a75b1ec792797674aa831",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:451 ('post-hoc transcript audit by the P6 reviewer (retro-style scan), not self-reported.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "d40c55027056f93888eed0b042c86f51d144abfef7404f104876219d1f946dc5",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:452 ('The P4 shadow period provides the before-baseline so P6 reports a delta.'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "a6c2144562da4e105787022cd754cdd7d7a1807dca3b82715b4d15ac7a3fd35a",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:454 ('**No tree dir → legacy path**: zero behavior change (KR5).'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "92de79233a3ebaccaa96302e2d464373c1fad19f149457b9e98f2eb4b9236dc5",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:456 ('**Model routing** (Amendment 11): manager at depth 0 is Fable-class. Fable is'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "e863a63f390b5d41465ad4dd0b3376f88ac0d66c558f917d81996243f5e5e7d3",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:457 ('NEVER dispatched as a delegate. Sub-orchestrators are opus/sonnet-class;'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "164e43eb656e78aa08ae1933bbe1ad43bb6d97e17ca32254b9d0362c94c69507",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:458 ('implementers are sonnet-class or hetero flash-class. Use'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "236209618a9e84d1789ae8df78791489ed993519aeece01ee0e425dce894716c",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:459 ('`scripts/resolve-dispatch.sh --role <role> --tree` (tree table; `manager` refuses'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "9e19bbaa04437e3e33255bb684df44a3b998723d916fcbb8834bed4fc6ac7e8d",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:460 ('with exit 3). See `references/model-routing.md` §\"Tree roles\".'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "b391686632fb2da13ca7cb7e56d2edf524206fff42ef7cda05b6bf04ec47f709",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:462 ('| References/scripts | Purpose |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "1a7c03f9c26182800c7fb2ec4342949054789958fe63f6bae6fdd8f68db40047",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:464 ('| [`references/tree-adapter.md`](references/tree-adapter.md) | Full adapter procedure: modes, event cheat-sheet, authority gate command, depth policy, initialization |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "fc0325340f185e3bfb09a7decd81d3d1fd518ba6a9c074bb58bba27cb5264073",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:465 ('| [`references/tree-contracts.md`](../../references/tree-contracts.md) | Event schemas, node report contract, invariants |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "5c5cc0af88f54356fe5c5e790284b4461b022c92a3c6545d91856c9f28b18ddf",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:466 ('| [`scripts/tree.js`](../../scripts/tree.js) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "a2e8cca63d738b25ba54ff73073a85f50642c9d0c5c7042246cbd09f51f8e7c2",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:467 ('| [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "7cfdf5604b8c8296665142c6a33fd73e2ee87538906dac0678a18a7a91868b05",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:468 ('| [`scripts/check-node-report.js`](../../scripts/check-node-report.js) | Validate a delegate\\'s node report before accepting it: schema + evidence-pointer resolution + artifact sha2'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "eafd5bbbe44ab58003537016defa593e6c5200202d8dec002fa6a1a6f431a9bc",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:469 ('| [`references/model-routing.md`](../../references/model-routing.md) §Tree roles | Model routing for TREE roles — resolve via `scripts/resolve-dispatch.sh --role <role> --tree` (v2'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "a9281196c5ee9043354c2e13b2b0d1d09122b0b136334251c562339d34bd49e4",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:500 ('| Route decisions through `tree.js next-decision` before `board_signoff` exists | Check the authority gate first — no `board_signoff` event = dual-run (shadow) mode; TaskCreate sta'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "31a5dea10773b1247b0c690ac12e00a8cd27ba7f03f2b251a445efdcf536d96b",
+      "disposition": "removed",
+      "rationale": "P0 skills/ceo-agent/SKILL.md:501 ('| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.js fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event;'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
     }
   ]
 }

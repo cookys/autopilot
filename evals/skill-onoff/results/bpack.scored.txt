@@ -1,0 +1,2 @@
+bpack: PASS
+{"b_revoked_prefix":{"base":0,"change":5},"v1_off":{"inv":5,"eff":5},"v1_on":{"inv":5,"eff":5},"rules":{"b_revoked_prefix":true},"scored_tasks":["bpack-revoked"]}

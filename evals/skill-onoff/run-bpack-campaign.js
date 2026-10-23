@@ -35,7 +35,7 @@ const resultsPath = val('--results');
 const preregPath = val('--prereg', path.join(HERE, 'prereg', 'bpack.json'));
 const armsDir = path.resolve(val('--arms-dir', path.join(HERE, 'arms', 'bpack')));
 const packsDir = process.env.ONOFF_PACKS_DIR || path.join(HERE, 'packs');
-if (!resultsPath && !flag('--check-arms')) die('usage: run-bpack-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--model sonnet] [--runner cc|stub] [--arms base,change] [--reps N] [--pilot]');
+if (!resultsPath && !flag('--check-arms')) die('usage: run-bpack-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--model sonnet] [--runner cc|stub] [--arms base,change] [--reps N] [--tasks a,b] [--pilot]');
 let P;
 try { P = JSON.parse(fs.readFileSync(preregPath, 'utf8')); } catch (e) { die(`cannot read prereg ${preregPath}: ${e.message} (prereg/bpack.json is built by the content hand)`); }
 const runner = val('--runner', 'cc');
@@ -46,7 +46,16 @@ if (typeof PREFIX !== 'string' || !PREFIX.trim()) die('prereg.invocation_prefix 
 const LIB = path.join(HERE, 'lib-bpack');
 const TIMEOUT = '10m';
 const DEFAULT_TASKS = ['bpack-revoked', 'bpack-tree', 'dcard-owner-decision'];
-const TASKS = Array.isArray(P.tasks) && P.tasks.length ? P.tasks : DEFAULT_TASKS;
+const DECLARED_TASKS = Array.isArray(P.tasks) && P.tasks.length ? P.tasks : DEFAULT_TASKS;
+// Amendment 1: the formal grid is the prereg's scored_tasks (T1 only); --tasks may narrow it further.
+const SCORED_TASKS = Array.isArray(P.scored_tasks) && P.scored_tasks.length ? P.scored_tasks : DECLARED_TASKS;
+const tasksArg = val('--tasks');
+let TASKS = SCORED_TASKS;
+if (tasksArg !== undefined) {
+  TASKS = String(tasksArg).split(',').map((t) => t.trim()).filter(Boolean);
+  const bad = TASKS.filter((t) => !DECLARED_TASKS.includes(t));
+  if (!TASKS.length || bad.length) die(`--tasks must name declared tasks (${DECLARED_TASKS.join(', ')}); got ${bad.join(', ') || '(empty)'}`);
+}
 const PILOT = flag('--pilot');
 if (PILOT && (val('--reps') !== undefined || val('--arms') !== undefined)) die('--pilot fixes its own reps and arms; do not pass --reps/--arms');
 // Per-cell USD estimate for the formal campaign (3 tasks × 2 arms × 5 reps
@@ -57,7 +66,7 @@ const COST_PER_CELL_USD = 0.19;
 // placeholder until the pilot measures it. 20 cells * 0.19 + 10 cells * 0.30 = 6.80 USD.
 const COST_BY_TASK = { 'dcard-owner-decision': 0.30 };
 const cellCost = (task) => (Object.hasOwn(COST_BY_TASK, task) ? COST_BY_TASK[task] : COST_PER_CELL_USD);
-const COST_BASIS = 'gdorm pilot of 6 real base cells averaged 0.183 USD, held at 0.19; 20 formal cells * 0.19 + 10 dcard-owner-decision cells (two turns) * 0.30 = 6.80 USD, pilot 4 * 0.19 + 0.30 = 1.06 USD, cap 7';
+const COST_BASIS = 'amendment 1 formal grid is T1 only: 10 cells * 0.19 = 1.90 USD. Full three-task grid for reference: gdorm pilot of 6 real base cells averaged 0.183 USD, held at 0.19; 20 formal cells * 0.19 + 10 dcard-owner-decision cells (two turns) * 0.30 = 6.80 USD, pilot 4 * 0.19 + 0.30 = 1.06 USD, cap 7';
 
 function maxUsd() {
   const raw = process.env.ONOFF_MAX_USD;

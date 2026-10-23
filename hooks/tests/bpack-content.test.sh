@@ -10,9 +10,8 @@ EV="$REPO_ROOT/evals/skill-onoff"
 PK="$EV/packs"
 SH="$REPO_ROOT/scripts/dispatch-review.sh"
 
-# The six guidance files the change arm edits; the same list is prereg allowed_arm_difference.files.
+# The five guidance files the change arm edits; the same list is prereg allowed_arm_difference.files.
 CHANGED=(
-  skills/ceo-agent/references/depth0-control-loop.md
   skills/ceo-agent/references/level-front-door.md
   skills/hetero-review/references/code-loop.md
   skills/harness-maintenance/SKILL.md
@@ -161,7 +160,7 @@ if (base && change && pre) {
   const files = new Set(pre.allowed_arm_difference.files);
   const gf = new Set(pre.guidance.files);
   for (const f of files) if (!gf.has(f)) bad('allowed_arm_difference file not in guidance.files: ' + f);
-  if (files.size !== 6) bad('allowed_arm_difference should list the six changed files, got ' + files.size);
+  if (files.size !== 5) bad('allowed_arm_difference should list the five changed files, got ' + files.size);
   for (const t of pre.tasks) if (!fs.existsSync(path.join(ev, 'tasks', t, 'task.md'))) bad('task missing: ' + t);
   for (const id of pre.freeze_packs || []) if (!fs.existsSync(path.join(ev, 'packs', id))) bad('freeze_packs names a missing pack: ' + id);
   for (const f of pre.freeze_files || []) {
@@ -272,5 +271,30 @@ if [ -f "$STUB" ] && ( cd "$TEST_TMP" && env -u CLAUDE_CODE_SESSION_ID node "$ST
 else
   assert_eq fails ok "stub dispatch-tree.js runs"
 fi
+
+echo "=== bpack-tree: the answer lives only in the stub tree; status.txt marker ==="
+STUB_OUT="$(cd "$TEST_TMP" && env -u CLAUDE_CODE_SESSION_ID node "$STUB" 2>/dev/null)"
+for want in "agent agent-u1 unit 1: parser rewrite [done]" "agent agent-u2 unit 2: exporter [running]" "agent agent-u3 unit 3: docs sweep [running]" "rail run-r1 review via codex [done]" "rail run-r2 review via kimi [running]" "rail run-r3 review via grok [failed]" "rail run-r4 review via gemini [running] [untracked: parent_agent_not_found]"; do
+  if grep -qF -- "$want" <<<"$STUB_OUT"; then assert_eq ok ok "stub tree lists: $want"; else assert_eq missing ok "stub tree lists: $want"; fi
+done
+if grep -rqi 'dispatch-tree\|dispatch tree' "$EV/tasks/bpack-tree/task.md" "$EV/tasks/bpack-tree/repo"; then assert_eq named unnamed "bpack-tree task and repo never name dispatch-tree"; else assert_eq unnamed unnamed "bpack-tree task and repo never name dispatch-tree"; fi
+ans_marker() { # $1 status.txt body -> true|false
+  local d="$TEST_TMP/ans-$RANDOM"; mkdir -p "$d"; printf '%s' "$1" > "$d/status.txt"
+  local t="$d/t.jsonl"; mk_transcript "$t" "ls"
+  ( cd "$d" && TRANSCRIPT="$t" QUERY="$QUERY_JS" ONOFF_LIB="$LIB" bash "$EV/tasks/bpack-tree/markers.sh" 2>/dev/null ) | sed -n 's/^marker_t_answer_matches=//p'
+}
+GOOD='agent-u1 done parent=none
+agent-u2 running parent=none
+agent-u3 running parent=none
+run-r1 done parent=agent-u1
+run-r2 running parent=agent-u2
+run-r3 failed parent=agent-u2
+run-r4 running parent=none
+'
+assert_eq "$(ans_marker "$GOOD")" "true" "t_answer_matches: the correct status.txt is a hit"
+assert_eq "$(ans_marker "${GOOD//run-r3 failed/run-r3 running}")" "false" "t_answer_matches negative control: wrong state"
+assert_eq "$(ans_marker "${GOOD//parent=agent-u2/parent=none}")" "false" "t_answer_matches negative control: wrong parent"
+assert_eq "$(ans_marker "$(printf '%s' "$GOOD" | grep -v run-r4)")" "false" "t_answer_matches negative control: missing rail"
+assert_eq "$(ans_marker "")" "false" "t_answer_matches negative control: empty file"
 
 finalize_test

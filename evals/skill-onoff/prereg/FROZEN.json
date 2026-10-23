@@ -1202,5 +1202,118 @@
       "tasks/gdorm-tree/repo/README.md": "527fa5e788f95092d21c51d1bddfc492b23297d20699014a81572fd76c5384b5",
       "tasks/gdorm-tree/task.md": "e3734e0c29dae6b245094df1371a8d85a0b0cafbe5cd78dd72b3590e75986a13"
     }
+  },
+  "bpack": {
+    "frozen_at": "2026-10-23",
+    "stamped": true,
+    "note": "sha256 of the bpack pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "ceo-agent-bpack-base": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "98f180274659e9dfee8c3b18314360a503ba848d",
+        "files": 7,
+        "digest_sha256": "5abaad76bbf6f992a404e7868b2af8a8bc79a96344dbdd09a7021ccf6d543fb8"
+      },
+      "ceo-agent-bpack-change": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "files": 7,
+        "digest_sha256": "d75f64b7a24fa6171d7ea2ccbeee6fc60454aa886cb6d755c022d9a6457e2174"
+      },
+      "hetero-review-bpack-base": {
+        "kind": "skill",
+        "source": "hetero-review",
+        "ref": "98f180274659e9dfee8c3b18314360a503ba848d",
+        "files": 3,
+        "digest_sha256": "79fec8157570f53ffef313245762b17b2672b9b43da3b96dfec410300836c00c"
+      },
+      "hetero-review-bpack-change": {
+        "kind": "skill",
+        "source": "hetero-review",
+        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "files": 3,
+        "digest_sha256": "ef12a6dd6eb80493e0f58c5d26de76956b7dd8f5908e066bfde951cb098825e7"
+      },
+      "harness-maintenance-bpack-base": {
+        "kind": "skill",
+        "source": "harness-maintenance",
+        "ref": "98f180274659e9dfee8c3b18314360a503ba848d",
+        "files": 1,
+        "digest_sha256": "a4f883eae8459d70a675f22d5d0e55c8e9940ef0aef61ec1b56becd8c4b9d4b9"
+      },
+      "harness-maintenance-bpack-change": {
+        "kind": "skill",
+        "source": "harness-maintenance",
+        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "files": 1,
+        "digest_sha256": "df7a1059bd6ac14fafdad866a1f3fe8320ee4ed445dc44dae05d56ab0b1b8e5a"
+      },
+      "bpack-files-base": {
+        "kind": "dir",
+        "source": "repo files at ref",
+        "ref": "98f180274659e9dfee8c3b18314360a503ba848d",
+        "files": 12,
+        "digest_sha256": "4ab0597146984ec102581b3e16da295196351cc752c2425d84151242060823f6"
+      },
+      "bpack-files-change": {
+        "kind": "dir",
+        "source": "repo files at ref",
+        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "files": 12,
+        "digest_sha256": "b5c2d29ffc4c239f725607adfd670e2c4e6b9deb06ab1e85a7284d30efff68f5"
+      },
+      "fixture-scripts-bpack": {
+        "kind": "dir",
+        "source": "hand-authored fixture stub (dispatch-tree.js, rev 2: data-bearing tree), byte-frozen in packs/fixture-scripts-bpack",
+        "ref": "09ca1458c",
+        "files": 1,
+        "digest_sha256": "e7f8456041a8fb20775ea486cb5cb664faa469821f47587ed5c92fa9c3d12d75"
+      },
+      "fixture-prompt-bpack-base": {
+        "kind": "dir",
+        "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+        "ref": "98f180274659e9dfee8c3b18314360a503ba848d",
+        "files": 1,
+        "digest_sha256": "3d590e83388104c8d3e7b4670b6cc0e8fe0c699df83a28284ec015b9e6d0e2f1"
+      },
+      "fixture-prompt-bpack-change": {
+        "kind": "dir",
+        "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+        "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a",
+        "files": 1,
+        "digest_sha256": "f0ca49e6b9b80ab9ddbe4b8a0fe92b1246facb322e28e0cb47071b2a26187de8"
+      }
+    },
+    "files": {
+      "arms/bpack/base.json": "fd69e68fa0fef9b88f23b4d7c5842281be7ab0388881a861795a809b02547609",
+      "arms/bpack/change.json": "d21850792c110cc2160da9bffe06345fa6b431dc8b8c504d6f8f7c8b96135f88",
+      "lib-bpack/bpack-markers.sh": "6b33f48145470c8606459de4e349c7a6c6bd7e65a40735bfad5fde57702dc1d0",
+      "lib-bpack/dcard-markers.sh": "e935a6dcb774ea906b3e19a04fad759a474cc001af1344ca5d9f90d63b6807e8",
+      "prereg/bpack.json": "1c48f658728d315c0dc511ad0591ffe0e8f96654454a599f99cb30c6ebd64d32",
+      "run-bpack-campaign.js": "c886ac093b91278635fe9b648a2c48b8aa5c36336c42da704af5b8afc32ae417",
+      "run-skill-onoff-eval-bpack.sh": "a7bae955c50f1057ea9a7bb396deaa3e617aaff3469d7ffe21b92f75956fab7d",
+      "run-skill-onoff-matrix-bpack.sh": "7f79b523ba4c3cc6a17f74c429577d6a8894008d877773a3bb34a28092d78304",
+      "score-bpack.js": "4a7f2619b9cbe0a0e77c303070500f7ebe99d73858d21653fda84a1fd69fa104",
+      "tasks/bpack-revoked/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/bpack-revoked/markers.sh": "1863b47ae088d1d54110e5869a7851f3142025792e65c697b0c8b3d0148f88fb",
+      "tasks/bpack-revoked/repo/README.md": "cbddb438720f8eb57d03a107af4a9af921ace1447fb7eb7a63a06b6e7fa96952",
+      "tasks/bpack-revoked/repo/lib/retry.js": "e50960d812cd9f09c82f2a384090d058d12ffb164a451157eed2bdd7746f6766",
+      "tasks/bpack-revoked/repo/round1.txt": "6b2ae9026713c50615cccdf81272dd70317474c3032fea2c57eecb05d72c1308",
+      "tasks/bpack-revoked/repo/run-tests.sh": "2e66ca0d6e28350f5bee9cbe4a88f5b7f50f161a264bbe638f4fb92ca865552a",
+      "tasks/bpack-revoked/task.md": "bd44a88ecfb1aacbe60cd863e7adbada51714f579592c5de1aa094d68749d8ff",
+      "tasks/bpack-tree/init-repo.sh": "e2976fccdf27887158af6f6f0cf7de55747652697d68a3218137465d5a94d14f",
+      "tasks/bpack-tree/markers.sh": "ba4019733af233ad50a8cc3db210593e582038715aa64f79c618229280a44acd",
+      "tasks/bpack-tree/repo/README.md": "cf4ac2bb43941639195d771e93204bcac08cac83eecbb25ae4a7eafdb9bd1cc0",
+      "tasks/bpack-tree/task.md": "dae662fdea8dcf923674b57b8f802a8ea1fcb3ea3c0e6e4802388438f4bb5eb4",
+      "tasks/dcard-owner-decision/init-repo.sh": "853a2c4487ed8a681e12072a4fe889c6799a7fec9691b6e920743c15f9ff5135",
+      "tasks/dcard-owner-decision/markers.sh": "1d414a674a03efd1df85ea63ac044e27d4993ba6219589c38e9776c1b5e392cf",
+      "tasks/dcard-owner-decision/repo/README.md": "9ec154bc2dca5b60992f727e1f245d493dff1ebe2d0eb78aae914f00846c282b",
+      "tasks/dcard-owner-decision/repo/lib/text.js": "3411a94d5b01bd0a00137123e83552ac9ca99f68a71cee1d7882a5751be30587",
+      "tasks/dcard-owner-decision/repo/run-tests.sh": "a14dd5c9af343e7844173f499c44d058695c8c1a93f31bed7f8a51223584a4b0",
+      "tasks/dcard-owner-decision/task.md": "01ae76544e2373e61c8147d2369e114338f551044d54a297165249297bb1c9d3",
+      "tasks/dcard-owner-decision/turn2.sh": "197af73e3922dcefb300293f30bde5f48a4f31f6487a3883cbb8556eefc39caf"
+    }
   }
 }

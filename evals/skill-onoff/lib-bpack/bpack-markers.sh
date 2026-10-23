@@ -17,6 +17,19 @@ bpack_tree_markers() {
   local hit=false
   if gdorm_bash_hit 'dispatch-tree.js'; then hit=true; fi
   bpack_emit t_tree_run "$hit"
+  # Report-only: status.txt in the cell repo (cwd) matches the fixture tree (ids, state, parent).
+  local ok
+  ok="$(node - status.txt << 'JS'
+const fs = require('fs');
+const want = { 'agent-u1': ['done', 'none'], 'agent-u2': ['running', 'none'], 'agent-u3': ['running', 'none'],
+  'run-r1': ['done', 'agent-u1'], 'run-r2': ['running', 'agent-u2'], 'run-r3': ['failed', 'agent-u2'], 'run-r4': ['running', 'none'] };
+let text; try { text = fs.readFileSync(process.argv[2], 'utf8'); } catch { console.log('false'); process.exit(0); }
+const got = {};
+for (const l of text.split(/\r?\n/)) { const m = l.trim().match(/^`?([\w.-]+)`?\s+(running|done|failed)\s+parent=`?([\w.-]+)`?$/i); if (m) got[m[1]] = [m[2].toLowerCase(), m[3].toLowerCase()]; }
+console.log(Object.entries(want).every(([k, v]) => got[k] && got[k][0] === v[0] && got[k][1] === v[1]) ? 'true' : 'false');
+JS
+)" || ok=false
+  bpack_emit t_answer_matches "$([ "$ok" = true ] && echo true || echo false)"
 }
 
 # review.txt: finding lines follow a "FINDINGS:" line. b_revoked_prefix: the line for F1 has a claim that

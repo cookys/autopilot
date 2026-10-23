@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_pack_manifest",
   "frozen_at": "P3",
-  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan §4)",
+  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan \u00a74)",
   "packs": {
     "dev-flow-card": {
       "dev-flow-card/SKILL.md": "cb5b0b48fc23ec03dfdd8f68a7b040a1780299cebc1c7c48110afb430f0332e8",
@@ -4530,7 +4530,7 @@
     "ceo-agent-bpack-change": {
       "ceo-agent-bpack-change/SKILL.md": "5af5650e66525e32925e71acd91104cabd232cdde084adbc850bbeb7affd894a",
       "ceo-agent-bpack-change/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
-      "ceo-agent-bpack-change/references/depth0-control-loop.md": "420d24b4ff5e52c179ccbe324e8740ab68fbb0c2ce1f4178b2564533c537778d",
+      "ceo-agent-bpack-change/references/depth0-control-loop.md": "62c3c7020693630d0082e577dc2b7365d8fde325a726e17d67e4ae8f3d0918ad",
       "ceo-agent-bpack-change/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
       "ceo-agent-bpack-change/references/level-front-door.md": "c05b8a4effc40e35f4bc8f12a47d5f41a596544ebef9fdf2a791d317f54e86a1",
       "ceo-agent-bpack-change/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
@@ -4581,7 +4581,7 @@
       "bpack-files-change/references/tree-contracts.md": "d2aba6c0a2bd4432013db1d5742bd677059105de87fc39640cdeef9e1d2341b9"
     },
     "fixture-scripts-bpack": {
-      "fixture-scripts-bpack/scripts/dispatch-tree.js": "918dd3930bc90ce5b69657e827cfb9eb1c34054e6c962489026cd2275a09428f"
+      "fixture-scripts-bpack/scripts/dispatch-tree.js": "9988fa75a6d105ca69ea17c37b312887ba0373b53af4d08ff524f6b4946995d8"
     },
     "fixture-prompt-bpack-base": {
       "fixture-prompt-bpack-base/REVIEW_PROMPT.md": "7fa55b78124ee1687aaafb03642986269490aaeec9562d330240ef0342a40c54"
@@ -10707,6 +10707,61 @@
       "kind": "dir",
       "source": "/tmp/tmp.btdz6vcfKF",
       "ref": "06e94ffd3f9bb12971fcebe5b4eff9c54d00fb08"
+    },
+    "ceo-agent-bpack-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "ceo-agent-bpack-change": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "hetero-review-bpack-base": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "hetero-review-bpack-change": {
+      "kind": "skill",
+      "source": "hetero-review",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "harness-maintenance-bpack-base": {
+      "kind": "skill",
+      "source": "harness-maintenance",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "harness-maintenance-bpack-change": {
+      "kind": "skill",
+      "source": "harness-maintenance",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "bpack-files-base": {
+      "kind": "dir",
+      "source": "repo files at ref",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "bpack-files-change": {
+      "kind": "dir",
+      "source": "repo files at ref",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "fixture-scripts-bpack": {
+      "kind": "dir",
+      "source": "hand-authored fixture stub (dispatch-tree.js, rev 2: data-bearing tree), byte-frozen in packs/fixture-scripts-bpack",
+      "ref": "09ca1458c"
+    },
+    "fixture-prompt-bpack-base": {
+      "kind": "dir",
+      "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+      "ref": "98f180274659e9dfee8c3b18314360a503ba848d"
+    },
+    "fixture-prompt-bpack-change": {
+      "kind": "dir",
+      "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
+      "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
     }
   }
 }

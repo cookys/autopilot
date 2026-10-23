@@ -470,7 +470,7 @@ for key, val in frozen.items():
     if not os.path.isfile(os.path.join(base, "prereg", key + ".json")):
         continue
     rows.append(key)
-expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm"}
+expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack"}
 env = os.environ.copy()
 env.pop("AUTOPILOT_SESSION_ID", None)
 env.pop("CLAUDE_CODE_SESSION_ID", None)

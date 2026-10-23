@@ -11,6 +11,8 @@
 #   src/engine/profile-runtime.js:588-590  deletes it from the runner env itself (the rail already scrubs it);
 #   src/engine/autopilot-engine.js:147-148 deletes it from the verification env;
 #   scripts/check-test-outcome.js: ENV_STRIP deletes it from the child env (scrub only, no read).
+#   scripts/benchmark-hook-latency.js: deletes it (with CLAUDE_CODE_SESSION_ID / AUTOPILOT_PARENT_SESSION_ID) from the
+#     env of every hook child it spawns, so the measurement starts from a clean session environment (scrub only).
 #   hooks (run-approval-gate, foreman-guard, cost-fuse) read payload.session_id / CLAUDE_CODE_SESSION_ID first and
 #   only fall back to it; campaign intake (scripts/open-decision.js, task-card.js) reads a chain that continues to
 #   CLAUDE_CODE_SESSION_ID. None needs the variable to exist; the rails already `unset`/`env -u` it (author, review,
@@ -251,6 +253,8 @@ eq "1" "$(grep -c 'delete verificationEnvironment.AUTOPILOT_SESSION_ID' "$REPO_R
 # RED at eeab54067b81ef0ceb813acfc5c72f61ef026a06: (i) no unreviewed reader ... got 'scripts/check-test-outcome.js '
 eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/check-test-outcome.js")" "(i) check-test-outcome.js names AUTOPILOT_SESSION_ID exactly once"
 eq "1" "$(sed -n '/const ENV_STRIP = \[/,/^];$/p' "$REPO_ROOT/scripts/check-test-outcome.js" | grep -c 'AUTOPILOT_SESSION_ID')" "(i) that single AUTOPILOT_SESSION_ID site sits inside ENV_STRIP (a later real read turns this red)"
+eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/benchmark-hook-latency.js")" "(i) benchmark-hook-latency.js names AUTOPILOT_SESSION_ID exactly once"
+eq "1" "$(grep -cE "for \(const k of \[.*\]\) delete env\[k\]" "$REPO_ROOT/scripts/benchmark-hook-latency.js")" "(i) that single site is the env scrub loop (a later real read turns the count red)"
 # every other reader must treat it as an optional fallback after payload / CLAUDE_CODE_SESSION_ID (or be a scrub)
 unknown="$(cd "$REPO_ROOT" && for f in $readers; do
   case "$f" in
@@ -258,6 +262,7 @@ unknown="$(cd "$REPO_ROOT" && for f in $readers; do
     scripts/session-mode.js|scripts/stage-advance.js) ;;                       # the resolver and its CLI
     scripts/dispatch-*.sh|scripts/run-grok-implementer-ab.sh|scripts/lib/*) ;;  # rails: they scrub it
     scripts/check-test-outcome.js) ;;  # scrub: ENV_STRIP deletes it from the child env
+    scripts/benchmark-hook-latency.js) ;;  # scrub: deletes it from the spawned hook env (pinned scrub-only above)
     scripts/scaffold-mission.js) ;;                                             # prose: "never AUTOPILOT_SESSION_ID"
     scripts/open-decision.js|scripts/task-card.js) ;;                           # campaign intake: chain continues to CLAUDE_CODE_SESSION_ID
     hooks/run-approval-gate.js|hooks/foreman-guard.js|hooks/cost-fuse.js) ;;    # payload.session_id first, fallback only

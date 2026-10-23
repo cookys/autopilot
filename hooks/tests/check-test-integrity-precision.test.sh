@@ -5,6 +5,7 @@
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
 # RED at c65144649: N7 N8 F5 failed on the unmodified base.
 # RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
+# RED at <base of tirules>: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
 . "$(dirname "$0")/lib.sh"
 
@@ -279,5 +280,49 @@ printf '# gc removed\nif ! true; then exit 1; fi\n' > "$repo/tests/tool-gc-remov
 commit_all "$repo" "delete test, add hollow same-stem file"
 run_case "$repo"
 if has_kind deleted_line && has_text 'tests/tool-gc.test.sh'; then report N11 1; else report N11 0; fi
+
+# ── F9 rule 1: surface helper edited, assertion kept (net 0) ────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'assert_eq "$a" "1" "x, with a longer message"\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "parametrise helper"
+run_case "$repo"
+if has_kind surface_touch; then report F9 0; else report F9 1; fi
+
+# ── N12 rule 1 control: surface helper loses an assertion, no replacement ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'export A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "drop helper assertion"
+run_case "$repo"
+if has_kind surface_touch && has_text 'tests/fixtures/helper.sh'; then report N12 1; else report N12 0; fi
+
+# ── F10 rule 2: assertion removed with the identifier it tested ────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep legacy_widget_key scripts/conf.sh)" "x" "key"\nassert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "remove key and its assertion"
+run_case "$repo"
+if has_kind deleted_line; then report F10 0; else report F10 1; fi
+
+# ── N13 rule 2 control: assertion removed, identifier still in product ─────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep legacy_widget_key scripts/conf.sh)" "x" "key"\nassert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=1\nkeep=3\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "drop assertion, key stays"
+run_case "$repo"
+if has_kind deleted_line; then report N13 1; else report N13 0; fi
 
 finalize_test

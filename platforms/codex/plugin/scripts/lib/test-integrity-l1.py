@@ -1736,20 +1736,40 @@ def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_path
     return False
 
 
-def _surface_edit_removes_lines(status, info):
-    """True when a changed surface file lost or rewrote a line (BL-0060 v3 rule b)."""
+def _surface_edit_removes_lines(status, info, lang_key=None):
+    """True when a changed surface file should be reported as a touch.
+
+    BL-0060 v3 rule b: a Modified file is a touch only when the diff deletes or
+    rewrites an existing line. Rule 1 (net-assertion, 2026-10-24): for a file
+    with a known language, a Modified surface file is a touch only when the
+    diff removes more assertion/exit-class lines than it adds (the predicate
+    deleted_line uses). Unknown-language files (json, yaml, ...) keep the
+    any-removed-line behaviour because assertions cannot be recognised there.
+    """
     if not status.startswith("M"):
         return True
     hunks = (info or {}).get("hunks") or []
     if not hunks:
         return True
+    removed = 0
+    removed_asserts = 0
+    added_asserts = 0
     for hunk in hunks:
         for line in hunk["lines"]:
             if line.startswith("-"):
-                return True
-    return False
+                removed += 1
+                if lang_key and is_assertion_class_line(line[1:], lang_key):
+                    removed_asserts += 1
+            elif line.startswith("+"):
+                if lang_key and is_assertion_class_line(line[1:], lang_key):
+                    added_asserts += 1
+    if not lang_key:
+        return removed > 0
+    return removed_asserts - added_asserts > 0
 
 
+# Identifier-like tokens (>= 4 chars) used by the rule-2 identifier exemption.
+_IDENT_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 _TEST_SUFFIX = re.compile(r"^(.+?)(?:\.test|_test|\.spec)?\.[^.]+$")
 
 
@@ -2177,7 +2197,7 @@ def main():
         if (
             matches_patterns(new_path, surface_path_regexes)
             and not status.startswith("A")
-            and _surface_edit_removes_lines(status, files_diff.get(new_path))
+            and _surface_edit_removes_lines(status, files_diff.get(new_path), get_lang_key(new_path))
         ):
             if new_path not in surface_touches:
                 surface_touches.append(new_path)
@@ -2225,6 +2245,69 @@ def main():
                 "detail": detail,
             }
         )
+
+    # Rule 2 (2026-10-24): identifiers removed from product (non-test) files.
+    product_removed_tokens = set()
+    for _p, _info in files_diff.items():
+        if matches_patterns(_p, test_path_regexes):
+            continue
+        for _hunk in _info.get("hunks", []):
+            for _ln in _hunk["lines"]:
+                if _ln.startswith("-"):
+                    product_removed_tokens.update(_IDENT_TOKEN.findall(_ln[1:]))
+    # Lines this range itself added to product files (e.g. a removed-key guard
+    # that names the deleted identifier) are tombstones, not live uses.
+    product_added_lines = {}
+    for _p, _info in files_diff.items():
+        if matches_patterns(_p, test_path_regexes):
+            continue
+        for _hunk in _info.get("hunks", []):
+            for _ln in _hunk["lines"]:
+                if _ln.startswith("+"):
+                    product_added_lines.setdefault(_p, set()).add(_ln[1:].strip())
+    _absent_cache = {}
+
+    def _absent_at_head(token):
+        if token not in _absent_cache:
+            # Absent from live code at the head: hits in test files (e.g. an
+            # assert_not_contains tombstone), prose (.md/.txt), docs/evals
+            # history and comment-only lines do not keep the identifier alive.
+            res = run_command(
+                ["git", "grep", "-nwF", "-e", token, head_ref, "--"], repo_dir, check=False
+            )
+            if res.returncode == 1:
+                _absent_cache[token] = True
+            elif res.returncode == 0:
+                live = False
+                prefix = head_ref + ":"
+                for ln in (res.stdout or "").splitlines():
+                    rest = ln[len(prefix):] if ln.startswith(prefix) else ln
+                    parts = rest.split(":", 2)
+                    if len(parts) < 3:
+                        live = True
+                        break
+                    hit_path, content = parts[0], parts[2]
+                    if matches_patterns(hit_path, test_path_regexes):
+                        continue
+                    if hit_path.endswith((".md", ".txt")) or hit_path.startswith(("docs/", "evals/")):
+                        continue
+                    if content.strip() in product_added_lines.get(hit_path, ()):
+                        continue
+                    hit_lang = get_lang_key(hit_path)
+                    if hit_lang and not _code_without_comment(content, hit_lang):
+                        continue
+                    live = True
+                    break
+                _absent_cache[token] = not live
+            else:
+                _absent_cache[token] = False
+        return _absent_cache[token]
+
+    def _subject_identifier_removed(detail):
+        for token in set(_IDENT_TOKEN.findall(detail)):
+            if token in product_removed_tokens and _absent_at_head(token):
+                return True
+        return False
 
     for file_path, info in files_diff.items():
         if not matches_patterns(file_path, test_path_regexes):
@@ -2276,6 +2359,10 @@ def main():
                         added_asserts += 1
         if len(deleted_asserts) - added_asserts > 0:
             for line_no, detail in deleted_asserts:
+                # Rule 2: the removed assertion's subject identifier was deleted
+                # from product files in this range and is gone at the head.
+                if _subject_identifier_removed(detail):
+                    continue
                 _append_deleted_line(file_path, line_no, detail)
 
     for file_path, info in files_diff.items():

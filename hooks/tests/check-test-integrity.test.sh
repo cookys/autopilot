@@ -542,10 +542,10 @@ git add .claude/test-integrity-config.md
 git commit -qm "config with custom test and surface paths"
 
 mkdir -p harness
-printf 'check() { [ "$1" = "$2" ]; }\n' > harness/lib.sh
+printf 'check() { assert_eq "$1" "$2"; }\n' > harness/lib.sh
 git add harness/lib.sh
 git commit -qm "seed harness surface"
-printf 'check() { [ "$1" = "$2" ] && true; }\n# touched\n' > harness/lib.sh
+printf 'check() { [ "$1" = "$2" ] && true; }\n# touched (assertion dropped: rule 1 net-assertion)\n' > harness/lib.sh
 printf 'check a a\ncheck b b\n' > custom.suite.sh
 git add harness/lib.sh custom.suite.sh
 git commit -qm "add custom-convention suite"

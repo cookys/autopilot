@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0290 -->
+<!-- next-id: BL-0293 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -322,14 +322,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法，但還沒做。 (draft)
+- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法；P0 hook 探測已完成，P1 基準實驗正在執行，整體還沒做完。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: Plan review of docs/plans/2026-10-20-per-turn-gate.md, then owner approval of the P0 spike. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced until a later change owns it.
+- **Trigger**: P1 baseline run result (owner approved, d-0ab59f36; cap raised to 18 USD by d-66374200) is committed and reviewed. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced until a later change owns it.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: Second experiment SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). Owner d-9f311d27 chose to write the plan. docs/plans/2026-10-20-per-turn-gate.md is drafted, awaiting review. C-arm M2 drop 23/30 to 11/29 is an open anomaly in phase P1.
+- **Context**: SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). P0 probe merged e726bc485 (evidence docs/plans/evidence/2026-10-23-per-turn-gate-p0/): hook-side GO met, pin 2.1.309 (d-ea7857ea). P1 approved (d-0ab59f36, cap 18 USD d-66374200), running.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -364,14 +364,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-23
 - **Origin**: self
-- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免。最新量測（tintegrity 單元報告，未重放）誤報率 83%；最近一次正式重放是 v2 的 93.8%。要降到 5% 以下才考慮翻成攔截。
+- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免。最新重放（同一批 v2 的 60 個 merge）誤報率 91.7%；三條降誤報規則已提出，前兩條實作中。要降到 5% 以下才考慮翻成攔截。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
 - **Trigger**: a re-replay of the same seed and 60 merges shows under 5% false positives, or someone proposes flipping mode to block
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
-- **Context**: v2 replay 93.8% false positive; after merge 86274b421 the unit reported 83% (not committed as evidence); bar is under 5%, so mode stays warn. See sidecar.
+- **Context**: Re-replay merged 7b84a5520 (docs/plans/evidence/2026-10-23-test-integrity-accuracy/): 91.7% FP by record, 83.3% by group, v2 60 merges. Bar under 5%, mode stays warn. Rules 1-2 being implemented by a follow-up unit; see sidecar.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -1065,14 +1065,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-21
 - **Origin**: self
-- **Problem**: 當天審查留下的小修已大半修完。剩下已知邊界：已知邊界之外另有可等待的幾組小項，和凍結在評測檔裡的三項成本欄位問題。
+- **Problem**: 當天審查留下的小項多已修完，剩下幾組可等待的小項，以及凍結在評測檔裡的三項成本欄位問題。
 - **Impact**: 凍結檔內的成本欄位問題要等下一個新評測列才能修。
 - **Trigger**: the deferred review items from 2026-10-21 can be picked up now
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
 - **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
-- **Context**: Fixed by fixa, bl273, runnerk, fixb, fixc, bl276r, pidbound. Left: tokmech (fix in review, unit tokrace), dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
+- **Context**: Fixed: fixa, bl273, runnerk, fixb, fixc, bl276r, tokrace (aa49e22e8, tokmech), pidbound (7e9b235e1). Left: dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
 - **Id**: BL-0277
@@ -1117,20 +1117,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-review-printf-option-error.md
 - **Context**: Message "printf: --: invalid option" on the cc-shim path; cosmetic, the review completes. Likely a printf format starting with dashes.
 
-### skill-onoff README bpack section omits that --dry-run needs --results
-- **Id**: BL-0288
-- **Status**: open
-- **Since**: 2026-10-23
-- **Origin**: self
-- **Problem**: The bpack section of the eval README does not say that a dry run also needs a results file argument.
-- **Impact**: A reader following the README hits an argument error on a dry run.
-- **Trigger**: the README can be edited
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: review finding 6bdaed45 (deferred), 2026-10-23
-- **Pointer**: docs/backlog/skill-onoff-readme-dry-run-results.md
-- **Context**: run-bpack-campaign.js --dry-run also needs --results <file> (review finding 6bdaed45, deferred). Docs-only fix.
-
 ### dispatch-hetero test suites leave detached child processes behind
 - **Id**: BL-0289
 - **Status**: open
@@ -1144,3 +1130,45 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: observed on this host, 2026-10-23
 - **Pointer**: docs/backlog/dispatch-hetero-suite-detached-children.md
 - **Context**: Processes were bash -c IN_DETACHED_CHILD=1 ... detached_main from /tmp/autopilot-test-dispatch-hetero-*. Add cleanup in the suite.
+
+### dispatch-review.sh and dispatch-author.sh launch claude children with the real ~/.claude
+- **Id**: BL-0290
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 派遣審查與派遣撰寫兩支腳本的 claude 原生路徑，用真實的使用者設定目錄啟動子行程，違反腳本自己註解寫的規則：子行程只該拿到只放憑證檔的專用目錄。
+- **Impact**: claude 子行程可能把真實 ~/.claude/.claude.json 重設，造成使用者設定遺失。
+- **Trigger**: after the claude-native implementer unit (cnimpl) merges, reuse its credentials-only config seeding helper (still being added by cnimpl, not yet merged)
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: 2026-10-24 bldone8 audit of dispatch-review.sh / dispatch-author.sh
+- **Pointer**: docs/backlog/dispatch-claude-children-real-claude-config.md
+- **Context**: Verified at develop: the claude-native branches set no config dir and keep the real HOME; the credentials-only config seeding helper is not on develop yet. Details in sidecar.
+
+### Seat schema admits / and . in engine and model; audit path-building consumers
+- **Id**: BL-0291
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 座位 schema 現在允許引擎與模型名稱含斜線和句點（oqseat 單元），所以含上層目錄的名稱也能通過檢查；所有用這些名稱組檔案路徑的使用端都需要逐一檢查。
+- **Impact**: 若某處直接把 id 拼進檔案路徑，可能寫到預期目錄之外。
+- **Trigger**: the audit can be picked up now; no merge needed
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: 2026-10-24 oqseat review (lane/oqseat, not yet on develop)
+- **Pointer**: docs/backlog/seat-schema-slash-dot-path-consumers.md
+- **Context**: The widening is on lane/oqseat, not yet on develop; develop's isSafeSeatId still rejects them. Details in sidecar.
+
+### resolve-review-loop.sh family_of case table has no direct test
+- **Id**: BL-0292
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 審查迴圈解析腳本裡的 bash 家族對照表沒有直接測試；新的家族測試只涵蓋內嵌的 JS 版本。
+- **Impact**: 對照表改錯或與 JS 版漂移時，沒有測試會發現，跨家族檢查可能誤判。
+- **Trigger**: the bash family table is edited or a new engine family is added
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: 2026-10-24 oqseat review
+- **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
+- **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.

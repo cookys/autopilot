@@ -10,7 +10,7 @@ Out of scope: default-on, larger-model rerun, shadow pilot, SubagentStop adapter
 
 ## 1. Inputs from P0 and P1 (the section 4 questions)
 
-Evidence: `docs/plans/evidence/2026-10-23-per-turn-gate-p0/README.md`, `.../2026-10-24-per-turn-gate-p1-rerun/README.md`.
+Evidence: `docs/plans/evidence/2026-10-23-per-turn-gate-p0/` and `.../2026-10-24-per-turn-gate-p1-rerun/` (READMEs).
 
 | Question (plan section 4) | Status | Answer |
 |---|---|---|
@@ -69,33 +69,35 @@ Design choice for the owner (O1):
 - D1, ON only: 30 ON runs against the adopted rerun control (13/30 M2, 6/30 M1, 0/30 M3). Cheaper; inherits the unexplained baseline drift and the rerun's accepted deviation.
 - D2, concurrent control (recommended): 30 ON and 30 C runs, interleaved in pairs, order randomised once with a seed written in the preregistration. The extra C runs are the price of not trusting a baseline that moved from 23 to 11 to 13 unexplained.
 
-Metrics: M1, M2, M3 as in P1 (two independent recomputations); per-feature results; blocks per turn and run; cap-exhausted runs; fail-open events; duration, turns, cost.
+Metrics: M1, M2, M3 as in P1 (two recomputations); per-feature results; blocks; cap-exhausted runs; fail-opens; duration, turns, cost.
 
-Sample size and power: 30 per arm detects the expected benefit (control M3 0/30, round-2 gate 26/29). For the trade check, exact power (two-sided Fisher, alpha 0.05, control true rate 13/30, ON lower; the one-sided rule below has more) is 15.24% at a 15-point drop, 66.37% at 30 points and 96.73% at 40 points (acceptance figures, recomputed). A non-significant trade check means "no drop detected", never "no loss"; claiming no loss needs a preregistered non-inferiority margin and sample size, which this plan lacks.
+Sample size and power: 30 per arm detects the expected benefit (control 0/30, round-2 26/29). For the trade check, exact power (control true rate 13/30, ON lower by 15/30/40 points, alpha 0.05; two-sided p = sum of all tables with probability <= the observed table's) counting rejections with ON below C is 15.24%/66.37%/96.73%; also counting ON above C it is 15.27% at 15 points (the acceptance 15.27%), same at 30 and 40. The one-sided rule below (ON < C): 23.56%/77.08%/98.45%. A non-significant trade check means "no drop detected", never "no loss"; that claim needs a preregistered non-inferiority margin and sample size, which this plan lacks.
 
 Planned thresholds (planned values, not evidence; the preregistration commit fixes them):
 
 - Primary: M3_ON >= 20/30 and one-sided Fisher p < 0.01 against the control M3 (concurrent in D2, 0/30 in D1).
 - Trade check, one rule used in the preregistration, the audit and the verdict: one-sided Fisher (ON lower than C) on M2, p <= 0.05 is FAIL-TRADE; otherwise "no drop detected", never non-inferiority. Also M1_ON >= 25/30.
 - Instrument health: hook errors (fail-open on verifier error) in at most 2 of 30 runs; no run with more than N blocks in one turn; every ON run's gate-hook log call count equals the trace count of the gate hook's own executions (matched by its command path); plugin Stop hook executions are counted and reported separately, never in the comparison.
-- Labels: PASS (all gating thresholds), FAIL-TRADE (primary met, trade check failed), FAIL (primary missed), U (not valid). PASS permits documenting an evaluated opt-in, not a default.
+- Labels: PASS (all gating thresholds), FAIL-TRADE (primary met, trade check failed), FAIL (primary missed), U (not valid). PASS is not a default.
 
-Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). An ON run adds model turns per block. Per-block cost, 0.105 (0.524 / 5) to 0.15 USD, is an unverified estimate. Round 2 averaged about 1.5 retries per run. Hard maximum: 5 turns x N=2 = 10 blocks per run.
+Cost, derived from the P1 rerun (0.524 USD per run mean, sample sd 0.1534; probe 0.0166). Per-block cost, 0.105 (0.524 / 5) to 0.15 USD, is an unverified estimate. Round 2 averaged about 1.5 retries per run. Hard maximum: 5 turns x N=2 = 10 blocks per run.
 
-| Scenario | ON per run | 30 ON runs (with probes) | D2 total (adds C 16.2) |
+| Scenario | ON per run | D1: 30 ON runs + probes | D2: D1 + C arm 16.23 |
 |---|---|---|---|
-| Lower (no block fires) | 0.52 | 16.1 | 32 |
-| Central (1.5 blocks, 0.105 each) | 0.70 | 21.5 | 38 |
-| Upper, plausible (6 blocks, 0.15) | 1.40 | 42.5 | 59 |
-| Hard maximum (10 blocks, 0.15) | 2.02 | 61.2 | 77.5 |
+| Lower (no block fires) | 0.52 | 16.23 | 32.46 |
+| Central (1.5 blocks x 0.105) | 0.68 | 20.95 | 37.18 |
+| Upper, plausible (6 x 0.15) | 1.42 | 43.23 | 59.46 |
+| Hard maximum (10 x 0.15) | 2.02 | 61.23 | 77.46 |
 
-Proposed caps, separate from earlier spend, never raised: D1 30 USD; D2 48 USD, split C arm 17 USD (30 runs at 0.524 plus probes) and ON arm 31 USD, each with its own running projection. Stop rule: after the first 5 ids of an arm, project mean plus 2 sample sd for its remaining ids; do not launch an id whose projection would pass that arm's cap (`STOP_COST`). Hitting a cap stops early and makes the batch U; the owner decides on a rerun. The caps bound loss; they do not promise completion. P2-0 adds at most 1 USD (P0 spent 0.162). Owner approval precedes launch.
+Reproduced by `docs/plans/evidence/2026-10-24-per-turn-gate-phase2-plan/cost-power.py` (stdlib; reads the rerun `costs.tsv`; output `cost-power.out`): per run = mean + blocks x per-block cost; D1 = 30 x per run + 30 probes x 0.0166; D2 = D1 + 15.73 + 0.50.
+
+Caps, separate from earlier spend, never raised: D1 30 USD; D2 48 USD, split C arm 17 USD and ON arm 31 USD, each with its own running projection. Stop rule: after the first 5 ids of an arm, project mean plus 2 sample sd for its remaining ids; do not launch an id whose projection would pass that arm's cap (`STOP_COST`). Hitting a cap stops early and makes the batch U; the owner decides on a rerun. P2-0 adds at most 1 USD (P0 spent 0.162). 
 
 Preregistration requirements, all of the P1 rerun's plus:
 
-1. The preregistration commit precedes the first call; the wrapper verifies tracked and unmodified, and records the commit hash and time (kept).
-2. The wrapper's own sha256, the hook's and the harness' sha256 go in the log header before the first call.
-3. The condition-to-artifact table below is in the preregistration and implemented by the wrapper.
+1. The preregistration commit precedes the first call (wrapper verifies, records hash and time).
+2. Wrapper, hook and harness sha256 go in the log header before the first call.
+3. The table below is in the preregistration and implemented by the wrapper.
 
 ### 3.1 Hard requirement: every validity condition has a contemporaneous artifact
 
@@ -118,7 +120,7 @@ The P1 rerun could not be called valid because no artifact was written when the 
 | Cost within the cap | per id | `COST <id> run probe total projected`, per arm; `STOP_COST` |
 | Preregistration committed earlier | before first call | `PREREG <hash> <time>`, `merge-base --is-ancestor` result |
 
-Also kept: no scratch path in logs; node timestamps; auth-probe stop rules; `env -u` prefix.
+Also kept: no scratch path in logs; node timestamps; auth-probe stop rules.
 
 ## 4. Negative controls (each shown red before green)
 
@@ -161,7 +163,7 @@ A U batch is rerun whole only by owner decision, with a fresh preregistration.
 
 - O1: D1 (ON only, cap 30 USD) or D2 (concurrent control, cap 48 USD, recommended).
 - O2: the cost table in section 3 (hard maximum 61.2 for D1, 77.5 for D2) and the caps, which bound loss and make a capped batch U.
-- O3: thresholds and n=30, given the power figures (15.24% at a 15-point M2 drop); or a preregistered non-inferiority margin with its own sample size.
+- O3: thresholds and n=30, given one-sided power (23.56% at a 15-point drop); or a preregistered non-inferiority margin with its own sample size.
 - O4: SubagentStop (C1) deferred.
 - O5: approve P2-0 (at most 1 USD).
 - O6: ship the hook opt-in, default off, at 3.0.0, no CHANGELOG entry until the owner's release call.

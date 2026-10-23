@@ -1,0 +1,12 @@
+n=30 mean=0.5243 sample_sd=0.1534 sum=15.73 sum_with_probes=16.23
+scenario  per_run  D1(30 ON + probes)  D2(D1 + C arm)
+lower     0.52  16.23  32.46
+central   0.68  20.95  37.18
+plausible 1.42  43.23  59.46
+max       2.02  61.23  77.46
+power two-sided p drop=15pt: drop-direction 15.24%  any-direction 15.27%
+power two-sided p drop=30pt: drop-direction 66.37%  any-direction 66.37%
+power two-sided p drop=40pt: drop-direction 96.73%  any-direction 96.73%
+power one-sided p (ON<C) drop=15pt: drop-direction 23.56%  any-direction 23.56%
+power one-sided p (ON<C) drop=30pt: drop-direction 77.08%  any-direction 77.08%
+power one-sided p (ON<C) drop=40pt: drop-direction 98.45%  any-direction 98.45%

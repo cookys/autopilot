@@ -41,7 +41,10 @@
 // `unattributed` (a failure, never preexisting). Prints `attribution: preexisting N: ...`,
 // `attribution: new N: ...` and `attribution: unattributed N: ...`. Exit code with --attribute:
 // non-zero (1) if any entry is `new` or `unattributed` (or an empty selection is not a pass); 3 is
-// kept for a budget stop; preexisting-only failures (base finished normally, non-zero) exit 0.
+// kept for a budget stop (any suite skipped for budget, even when the executed failures are all
+// preexisting); preexisting-only failures with nothing skipped (base finished normally, non-zero) exit 0.
+// Order: new/unattributed -> 1; else budget stop -> 3; else 0. With --entry-timeout, TERM/INT kills every
+// running entry's process group (they run detached) and exits 143/130, in the head phase as well.
 // Without --attribute the exit code is unchanged. --record adds, per re-run suite, an additive
 // `base_rc` after the existing keys (schema 1 keys and order unchanged; consumers read path/rc only).
 //
@@ -643,19 +646,29 @@ function removeWorktree(root, tmp, wt) {
   try { execFileSync('git', ['worktree', 'prune'], { cwd: root, stdio: 'ignore' }); } catch { /* best effort */ }
 }
 
+// Installed once per process (main, when --entry-timeout is set): entries run detached, so an outer
+// TERM/INT would otherwise leave their process groups behind. `cleanup` is the attribute worktree removal.
+let SIG_CLEANUP = null;
+let SIG_INSTALLED = false;
+function installSignalKill() {
+  SIG_INSTALLED = true;
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => {
+      for (const pid of ACTIVE) killGroup(pid, 'SIGKILL');
+      if (SIG_CLEANUP) { try { SIG_CLEANUP(); } catch { /* best effort */ } }
+      process.exit(sig === 'SIGINT' ? 130 : 143);
+    });
+  }
+}
+
 async function attribute(root, baseSha, results, entryTimeout) {
   const failing = results.filter((r) => r.rc !== 0);
   const groups = { preexisting: [], new: [], unattributed: [] };
   if (failing.length === 0) return groups;
   let tmp = null;
   let wt = null;
-  const onSig = (sig) => () => {
-    for (const pid of ACTIVE) killGroup(pid, 'SIGKILL');
-    if (tmp) removeWorktree(root, tmp, wt);
-    process.exit(sig === 'SIGINT' ? 130 : 143);
-  };
-  const handlers = ['SIGTERM', 'SIGINT'].map((sig) => [sig, onSig(sig)]);
-  for (const [sig, h] of handlers) process.on(sig, h);
+  if (!SIG_INSTALLED) installSignalKill();
+  SIG_CLEANUP = () => { if (tmp) removeWorktree(root, tmp, wt); };
   try {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-base-'));
     wt = path.join(tmp, 'base');
@@ -670,7 +683,7 @@ async function attribute(root, baseSha, results, entryTimeout) {
       else (rc !== 0 ? groups.preexisting : groups.new).push(r.path);
     }
   } finally {
-    for (const [sig, h] of handlers) process.removeListener(sig, h);
+    SIG_CLEANUP = null;
     if (tmp) removeWorktree(root, tmp, wt);
   }
   return groups;
@@ -818,6 +831,7 @@ async function main(argv) {
       runAlways = r.alwaysRun;
     }
     if (a.run) {
+      if (a.entryTimeout != null && !SIG_INSTALLED) installSignalKill();
       const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout);
       let attrCode = null;
       if (a.attribute) {
@@ -826,7 +840,8 @@ async function main(argv) {
         process.stdout.write(`attribution: preexisting ${g.preexisting.length}${g.preexisting.length ? ': ' + g.preexisting.join(' ') : ''}\n`);
         process.stdout.write(`attribution: new ${g.new.length}${g.new.length ? ': ' + g.new.join(' ') : ''}\n`);
         process.stdout.write(`attribution: unattributed ${g.unattributed.length}${g.unattributed.length ? ': ' + g.unattributed.join(' ') : ''}\n`);
-        attrCode = g.new.length > 0 || g.unattributed.length > 0 || ran.emptyFail ? 1 : (ran.code === 3 ? 3 : 0);
+        const budgetStop = ran.code === 3 || (ran.budgetDoc != null && ran.budgetDoc.skipped_for_budget.length > 0);
+        attrCode = g.new.length > 0 || g.unattributed.length > 0 || ran.emptyFail ? 1 : (budgetStop ? 3 : 0);
       }
       if (a.json && ran.budgetDoc) process.stdout.write(JSON.stringify(ran.budgetDoc, null, 2) + '\n');
       if (a.record) {

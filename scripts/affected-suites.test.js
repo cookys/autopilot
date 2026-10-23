@@ -1015,6 +1015,44 @@ test('--attribute: TERM during the base re-run removes the base worktree', async
   } finally { r.cleanup(); }
 });
 
+test('--attribute + --budget-seconds: preexisting-only failures with a suite skipped for budget exit 3, not 0', () => {
+  // a is red at head and base (preexisting) and outlasts the 1s budget, so b never starts.
+  const redSlow = '#!/usr/bin/env bash\nsleep 1\nexit 1\n';
+  const r = makeRepo(TLAYOUT(redSlow, GREEN));
+  try {
+    const head = r.change({ 'scripts/tool.js': 'y\n', 'hooks/tests/a.test.sh': redSlow + 'echo scripts/tool.js\n', 'hooks/tests/b.test.sh': GREEN + 'echo scripts/tool.js\n' });
+    const p = runSel(r, ['--base', r.base, '--head', head, '--run', '--attribute', '--budget-seconds', '1']);
+    assert.match(p.stdout, /skipped_for_budget: 1/, p.stdout + p.stderr);
+    assert.match(p.stdout, /attribution: preexisting 1/);
+    assert.match(p.stdout, /attribution: new 0/);
+    assert.strictEqual(p.status, 3, p.stdout + p.stderr);
+  } finally { r.cleanup(); }
+});
+
+test('--entry-timeout: TERM during the head phase kills the running suite process group', async () => {
+  const pidfile = (r) => path.join(r.dir, 'child.pid');
+  const hang = '#!/usr/bin/env bash\nsleep 1000 &\necho $! > "$(dirname "$0")/../../child.pid"\nwait\n';
+  const r = makeRepo(TLAYOUT(hang, GREEN));
+  try {
+    const head = touch(r);
+    const { spawn } = require('child_process');
+    const c = spawn('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head, '--run', '--entry-timeout', '1000'], { stdio: 'ignore' });
+    const deadline = Date.now() + 20000;
+    while (!fs.existsSync(pidfile(r)) && Date.now() < deadline) await new Promise((x) => setTimeout(x, 100));
+    await new Promise((x) => setTimeout(x, 200));
+    const pid = Number(fs.readFileSync(pidfile(r), 'utf8').trim());
+    assert.ok(pid > 0);
+    c.kill('SIGTERM');
+    const code = await new Promise((x) => c.on('exit', x));
+    assert.strictEqual(code, 143);
+    await new Promise((x) => setTimeout(x, 300));
+    let alive = true;
+    try { process.kill(pid, 0); } catch { alive = false; }
+    if (alive) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+    assert.strictEqual(alive, false, 'suite child must not outlive the TERM');
+  } finally { r.cleanup(); }
+});
+
 test('negative control: without the new flags no attribution output, no base_rc, usual record keys', () => {
   const r = makeRepo(TLAYOUT(RED, GREEN));
   try {

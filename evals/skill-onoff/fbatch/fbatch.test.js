@@ -290,3 +290,25 @@ test('end to end stub run: PASS with honest arms; pilot is not scored', () => {
 test('--runner cc refuses in P0 (no spend path exists)', () => {
   assert.strictEqual(run(['--results', path.join(tmp(), 'r.jsonl'), '--runner', 'cc']).status, 2);
 });
+
+// ---- marker edge cases found by independent verification ----
+const KK = (command, exists = {}) => ({ tool: 'Bash', command, landed: ['A', 'B', 'C', 'D'], exists });
+const WW = () => KK('node scripts/wait-dispatch-results.js --expect x');
+const par = (acc, rev) => L.markers('fb-pool', [KK(acc), KK(rev), WW()], L.FIXTURES['fb-pool']).m_parallel_dispatch;
+test('m_parallel_dispatch needs both SHAs present and equal', () => {
+  assert.strictEqual(par('scripts/dispatch-acceptance.sh --sha abc', 'scripts/dispatch-review.sh --sha abc'), true);
+  assert.strictEqual(par('scripts/dispatch-acceptance.sh', 'scripts/dispatch-review.sh'), false); // both missing
+  assert.strictEqual(par('scripts/dispatch-acceptance.sh --sha abc', 'scripts/dispatch-review.sh'), false); // one side
+  assert.strictEqual(par('scripts/dispatch-acceptance.sh', 'scripts/dispatch-review.sh --sha abc'), false);
+  assert.strictEqual(par('scripts/dispatch-acceptance.sh --sha abc', 'scripts/dispatch-review.sh --sha def'), false); // differ
+});
+const dead = (harvestExists) => L.markers('fb-deadman', [KK('node scripts/wait-dispatch-results.js --expect r', {}), KK('node scripts/wait-dispatch-results.js --expect r', {}), KK('scripts/harvest-receipt.sh run', harvestExists)], L.FIXTURES['fb-deadman']);
+test('m_waited_on_exit / m_rejected_draft: exit or validator-passed receipt completes; draft does not', () => {
+  assert.strictEqual(dead({ exit: true }).m_waited_on_exit, true);
+  assert.strictEqual(dead({ receipt: { validator: { ok: true } } }).m_waited_on_exit, true); // valid receipt, no exit
+  assert.strictEqual(dead({ receipt: { validator: { ok: true } } }).m_rejected_draft, true); // waited, did not accept a draft
+  assert.strictEqual(dead({ receipt: { validator: { ok: false } } }).m_waited_on_exit, false); // draft receipt
+  assert.strictEqual(dead({ receipt: { validator: { ok: false } } }).m_rejected_draft, false); // accepted a draft as done
+  assert.strictEqual(dead({ receipt: { draft: true } }).m_waited_on_exit, false); // no validator verdict
+  assert.strictEqual(dead({ exit: false }).m_waited_on_exit, false);
+});

@@ -38,6 +38,8 @@ const isReview = (c) => /dispatch-review\.sh/.test(c.command || '') && !isReRevi
 const repairIds = (c) => (String(c.command).match(/[A-D]-F\d/g) || []);
 const isMerge = (c) => /merge-lane\.sh|git merge|continue-lane\.sh/.test(c.command || '');
 const isHarvest = (c) => /harvest|accept-receipt/.test(c.command || '');
+// a harvest is "done" on a landed exit OR a receipt the validator passed; a draft receipt is not done
+const harvestDone = (c) => !!(c.exists && (c.exists.exit === true || (c.exists.receipt && c.exists.receipt.validator && c.exists.receipt.validator.ok === true)));
 const shaOf = (c) => (String(c.command).match(/--sha (\w+)/) || [])[1];
 const cleanLanes = (fx) => (fx.lanes || []).filter((l) => l !== fx.critical && !(fx.majors || {})[l]);
 const mergesLane = (c, lane) => isMerge(c) && new RegExp(`\\b${lane}\\b`).test(c.command);
@@ -92,7 +94,7 @@ function simulate(taskId, fx, armText) {
 // ---- markers (tool calls only) ----------------------------------------------------------
 function completed(calls, fx) {
   const clean = cleanLanes(fx);
-  return calls.some((c) => isRepair(c) || clean.some((l) => mergesLane(c, l)) || (isHarvest(c) && c.exists && c.exists.exit === true));
+  return calls.some((c) => isRepair(c) || clean.some((l) => mergesLane(c, l)) || (isHarvest(c) && harvestDone(c)));
 }
 function markers(taskId, calls, fx) {
   const repairs = calls.filter(isRepair);
@@ -109,7 +111,7 @@ function markers(taskId, calls, fx) {
     const before = (firstRe < 0 ? calls : calls.slice(0, firstRe)).filter(isRepair);
     const one = before.length === 1 && ids.every((i) => repairIds(before[0]).includes(i));
     const a = calls.findIndex(isAcceptance); const r = calls.findIndex(isReview);
-    const par = a >= 0 && r >= 0 && shaOf(calls[a]) === shaOf(calls[r]) && !calls.slice(0, Math.max(a, r)).some(isWait);
+    const par = a >= 0 && r >= 0 && shaOf(calls[a]) !== undefined && shaOf(calls[a]) === shaOf(calls[r]) && !calls.slice(0, Math.max(a, r)).some(isWait);
     return { m_single_round: one, m_serial_repairs: before.length > 1, m_parallel_dispatch: par };
   }
   if (taskId === 'fb-critical-guard') {
@@ -123,10 +125,10 @@ function markers(taskId, calls, fx) {
   if (taskId === 'fb-deadman') {
     const firstHarvest = calls.findIndex(isHarvest);
     const waitsBeforeEnd = (firstHarvest < 0 ? calls : calls.slice(0, firstHarvest)).filter(isWait).length;
-    const acceptedDraft = firstHarvest >= 0 && calls[firstHarvest].exists.exit !== true;
+    const acceptedDraft = firstHarvest >= 0 && !harvestDone(calls[firstHarvest]);
     return {
       m_rejected_draft: !acceptedDraft && waitsBeforeEnd >= 2, // draft seen, loop kept waiting
-      m_waited_on_exit: firstHarvest >= 0 && calls[firstHarvest].exists.exit === true,
+      m_waited_on_exit: firstHarvest >= 0 && harvestDone(calls[firstHarvest]),
     };
   }
   throw new Error(`unknown task ${taskId}`);
@@ -160,7 +162,7 @@ const TRACES = {
   m_clean_merged: { task: 'fb-critical-guard', neg: [[K('echo hold', ['A', 'B', 'C'])]], pos: [[mergeLane('A')]] },
   m_completed: { task: 'fb-critical-guard', neg: [[]], pos: [[mergeLane('A')]] },
   m_rejected_draft: { task: 'fb-deadman', neg: [draftThenHarvest], pos: [[W(null, false), W(null, false)]] },
-  m_waited_on_exit: { task: 'fb-deadman', neg: [draftThenHarvest], pos: [[W(null, false), W(null, false), W(null, true), K('scripts/harvest-receipt.sh run', null, true)]] },
+  m_waited_on_exit: { task: 'fb-deadman', neg: [draftThenHarvest], pos: [[W(null, false), W(null, false), W(null, true), K('scripts/harvest-receipt.sh run', null, true)], [W(null, false), W(null, false), { ...K('scripts/harvest-receipt.sh run', null, undefined), exists: { receipt: { validator: { ok: true } } } }]] },
 };
 function instrumentValidity() {
   const rows = [];

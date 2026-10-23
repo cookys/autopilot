@@ -254,7 +254,7 @@ eq "1" "$(grep -c 'delete verificationEnvironment.AUTOPILOT_SESSION_ID' "$REPO_R
 eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/check-test-outcome.js")" "(i) check-test-outcome.js names AUTOPILOT_SESSION_ID exactly once"
 eq "1" "$(sed -n '/const ENV_STRIP = \[/,/^];$/p' "$REPO_ROOT/scripts/check-test-outcome.js" | grep -c 'AUTOPILOT_SESSION_ID')" "(i) that single AUTOPILOT_SESSION_ID site sits inside ENV_STRIP (a later real read turns this red)"
 eq "1" "$(grep -c 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/benchmark-hook-latency.js")" "(i) benchmark-hook-latency.js names AUTOPILOT_SESSION_ID exactly once"
-eq "1" "$(grep -cE "for \(const k of \[.*\]\) delete env\[k\]" "$REPO_ROOT/scripts/benchmark-hook-latency.js")" "(i) that single site is the env scrub loop (a later real read turns the count red)"
+eq "1" "$(grep 'AUTOPILOT_SESSION_ID' "$REPO_ROOT/scripts/benchmark-hook-latency.js" | grep -cE "for \\(const k of \\[.*\\]\\) delete env\\[k\\]")" "(i) that single AUTOPILOT_SESSION_ID line is the env scrub loop line itself (a read elsewhere or a key dropped from the loop turns this red)"
 # every other reader must treat it as an optional fallback after payload / CLAUDE_CODE_SESSION_ID (or be a scrub)
 unknown="$(cd "$REPO_ROOT" && for f in $readers; do
   case "$f" in

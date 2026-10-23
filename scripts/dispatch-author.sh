@@ -121,10 +121,6 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/cursor-model.sh"
 # shellcheck source=lib/agy-model-alias.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-model-alias.sh"
-# shellcheck source=lib/agy-argv-ceiling.sh
-# The agy branch below hands the prompt to agy as ONE argv string (agy has no --prompt-file),
-# so this rail has the same MAX_ARG_STRLEN wall as dispatch-hetero.sh and dispatch-review.sh.
-. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-argv-ceiling.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -904,14 +900,6 @@ if [ "$RUNNER" = "agy" ]; then
     || die_precondition "$MODEL"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
-  # Refuse an unexec'able payload by name. The generated run.sh embeds `-p "$(cat <prompt>)"`,
-  # so the whole prompt becomes one argv string and execve rejects it over MAX_ARG_STRLEN before
-  # agy starts — a bare 126/127 with no vendor text, which reads as a stalled seat. `wc -c` on the
-  # file slightly over-counts (command substitution strips trailing newlines): the safe direction.
-  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$(wc -c < "$PROMPT_FILE")" "the authoring prompt" \
-      "narrow the authoring task, or use a runner that reads a prompt file (codex, grok, qoderclicn)")"; then
-    die_precondition "$AGY_CEILING_REASON"
-  fi
 fi
 
 if [ "$RUNNER" = "kimi" ]; then
@@ -1480,9 +1468,12 @@ else
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
+    # The prompt travels on STDIN as stream-json (lib/agy-stream-json.js appends the stream flags and
+    # unwraps the `result` event), so there is no argv-size ceiling; the helper prints result.response.
+    printf 'exec node %q run --prompt-file %q -- bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$_AUTHOR_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE" \
       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
-      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
+      "$AGY_CWD" "$AGY_BIN" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   # agy ignores SIGTERM. The shared kill-after (author_kill_grace /

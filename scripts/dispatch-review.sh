@@ -209,23 +209,6 @@ else
   _review_die_cursor_lib
 fi
 
-# agy_argv_ceiling_assert — the agy rail hands the whole prompt to agy as ONE argv string
-# (agy has no --prompt-file), so an oversized diff makes execve fail before agy runs and the
-# rail sees a bare shell status with no vendor text. FAIL-CLOSED for the same reason as the
-# lib above: a fail-open source would silently restore the silent-failure mode this guard
-# exists to remove.
-_REVIEW_AGY_CEILING_LIB="$_REVIEW_SELF_DIR/lib/agy-argv-ceiling.sh"
-_review_die_agy_ceiling_lib() {
-  echo "dispatch-review.sh: required lib unreadable: $_REVIEW_AGY_CEILING_LIB (cannot enforce the agy argv-payload ceiling)" >&2
-  exit 2
-}
-if [ -r "$_REVIEW_AGY_CEILING_LIB" ]; then
-  # shellcheck source=/dev/null
-  . "$_REVIEW_AGY_CEILING_LIB" || _review_die_agy_ceiling_lib
-else
-  _review_die_agy_ceiling_lib
-fi
-
 # agy_resolve_model_alias — single owner for `gemini-flash[-tier]` -> live model id (the three
 # dispatch rails used to carry three copies of the same broken matcher). FAIL-CLOSED like the two
 # libs above: without it a bare alias would be sent to the vendor as a literal model name.
@@ -1898,16 +1881,6 @@ else
   AGY_OUT="$(mktemp -t dispatch-review-agy-out-XXXXXX)"
   AGY_ERR="$(mktemp -t dispatch-review-agy-err-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-review-agy-parsed-XXXXXX)"
-  # Refuse an unexec'able payload with a NAMED reason instead of letting execve fail.
-  # This is the only rail that passes the prompt as an argv string; every other runner uses
-  # --prompt-file or stdin. Emitted as no_verdict (not die_precondition) because the review
-  # was fully set up and the caller's fail-closed contract already treats no_verdict as
-  # "do not ship" — a precondition exit would be indistinguishable from a bad invocation.
-  AGY_PROMPT_BYTES=$(wc -c < "$PROMPT_FILE")
-  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_PROMPT_BYTES" "the review prompt" \
-      "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)")"; then
-    emit_no_verdict "$AGY_CEILING_REASON"
-  fi
   AGY_BREACH=""
   if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
     # BLIND cleanroom rail (final-panel isolation phase 3): bwrap seat with no repo, no real HOME
@@ -1974,11 +1947,14 @@ else
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
       "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
   fi
-  bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
+  # The prompt goes on STDIN as stream-json (lib/agy-stream-json.js appends the stream flags and
+  # re-emits agy's `result` object as the legacy json envelope), so there is no argv-size ceiling.
+  node "$_REVIEW_SELF_DIR/lib/agy-stream-json.js" run --prompt-file "$PROMPT_FILE" --emit envelope -- \
+    bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
-    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$AGY_EFFORT" \
+    "$AGY_BIN" --model "$MODEL" --effort "$AGY_EFFORT" \
     --dangerously-skip-permissions --agent "$AGY_AGENT_NAME" \
-    --output-format json --print-timeout "$TIMEOUT" \
+    --print-timeout "$TIMEOUT" \
     > "$AGY_OUT" 2> "$AGY_ERR"
   AGY_RC=$?
   AGY_BREACH=""

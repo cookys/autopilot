@@ -498,11 +498,6 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
 . "$SELF_DIR/lib/cursor-model.sh"
-# shellcheck source=lib/agy-argv-ceiling.sh
-# agy has no --prompt-file: the agy branch below passes the whole prompt as ONE argv string,
-# which execve refuses over MAX_ARG_STRLEN before agy ever starts. Unconditional source (same
-# hard-fail posture as the libs above) so the guard can never be silently absent.
-. "$SELF_DIR/lib/agy-argv-ceiling.sh"
 # shellcheck source=lib/agy-model-alias.sh
 . "$SELF_DIR/lib/agy-model-alias.sh"
 
@@ -3065,28 +3060,6 @@ _wt_lock_fail() {
   die_precondition "$1"
 }
 
-# agy argv-payload ceiling — refuse BEFORE anything is created, so the `precondition_failed`
-# contract ("nothing was created") holds. agy has no --prompt-file, so the directive plus the task
-# prompt travel as ONE argv string and execve rejects it over MAX_ARG_STRLEN, before agy starts and
-# with no vendor error to report. Measured against the same directive the dispatch will send (the
-# WT path is already resolved here; only the worktree itself does not exist yet). `wc -c` on the
-# prompt file slightly OVER-counts, which errs toward refusing a payload that would just barely
-# have fit — the safe direction. Only the agy rail has this wall (below); kimi has its OWN
-# argv-only wall right after it (same shape, different runner) — every OTHER runner reads a
-# file or STDIN.
-if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
-  # `wc -c` on a PIPE, not ${#var}: ${#} counts CHARACTERS, and the directive contains a
-  # multibyte em-dash (and $WT may add more), so a character count UNDER-reports the argv size —
-  # the unsafe direction, and exactly the payload band (131072-131073 bytes) the guard exists to
-  # catch. The pipe also preserves the directive's trailing blank line, so no manual +2.
-  AGY_ARGV_BYTES=$(( $(agy_edit_only_directive "$WT" | wc -c) + $(wc -c < "$PROMPT_FILE") ))
-  if ! AGY_CEILING_REASON="$(agy_argv_ceiling_assert "$AGY_ARGV_BYTES" "the agy task prompt" \
-      "split the task into smaller units, or dispatch it to a runner that reads a prompt file (codex, grok, qoderclicn, opencode)")"; then
-    die_precondition "$AGY_CEILING_REASON"
-  fi
-fi
-
 # kimi argv-payload ceiling — refuse BEFORE anything is created, so the `precondition_failed`
 # contract ("nothing was created") holds. Copied in shape from dispatch-review.sh's kimi gate
 # (~line 1136-1146): kimi 0.41.0 takes the prompt ONLY as the -p argv string — no --prompt-file,
@@ -4128,11 +4101,18 @@ else
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
       "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
   fi
-  run_worker bash -c 'cd "$1" && exec "$2" --new-project -p "$3" --model "$4" --effort "$8" \
-      --dangerously-skip-permissions --output-format json --print-timeout "$5" \
+  # The prompt (directive + task) goes on STDIN as stream-json via lib/agy-stream-json.js, so there
+  # is no argv-size ceiling. `--emit envelope` re-emits agy's `result` object, which has exactly the
+  # shape of the old `--output-format json` envelope, so dispatch-status.js --agy-envelope below is
+  # unchanged. A `result` of status ERROR (or none at all) makes the helper exit 1 → the normal
+  # non-zero-agent path (agent_log gets stderr, status from git artifacts).
+  run_worker bash -c 'cd "$1" && exec node "$9" run --prompt-file "${10}" --prefix "${11}" --emit envelope \
+      -- "$2" --new-project --model "$4" --effort "$8" \
+      --dangerously-skip-permissions --print-timeout "$5" \
       >"$6" 2>"$7"' \
-      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
-      "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT"
+      _ "$WT" "$AGY_BIN" "" "$MODEL" "$TIMEOUT" \
+      "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
+      "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE" "$AGY_EDIT_ONLY"
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \

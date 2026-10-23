@@ -621,11 +621,17 @@ run_runner_bwrap() {
         --agent-file /home/review/agent.md \
         9< "$SEAT_ROOT/bwrap.args" > "$OUT_FILE" 2> "$ERR_FILE"
     else
-      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh -c 'p=$(cat /home/review/prompt); exec "$@" -p "$p"' \
-        _ /opt/agybin --model "$MODEL" --effort "$EFFORT" \
+      # agy takes the prompt on STDIN as stream-json (lib/agy-stream-json.js appends the stream flags
+      # and re-emits the `result` object as the legacy json envelope), so there is no argv-size
+      # ceiling. The helper runs on the host, outside the seat; bwrap's args fd 9 is opened by the
+      # inner sh because the helper only passes stdio 0-2 to its child.
+      node "$_SELF/agy-stream-json.js" run --prompt-file "$SEAT_ROOT/prompt" --emit envelope -- \
+        /bin/sh -c 't=$1; b=$2; a=$3; shift 3; exec timeout "$t" "$b" --args 9 -- /opt/agybin "$@" 9< "$a"' \
+        _ "$TIMEOUT" "$BWRAP_BIN" "$SEAT_ROOT/bwrap.args" \
+        --model "$MODEL" --effort "$EFFORT" \
         --dangerously-skip-permissions --agent "$AGY_AGENT_NAME_FIXED" \
-        --output-format json --print-timeout "$TIMEOUT" \
-        9< "$SEAT_ROOT/bwrap.args" > "$OUT_FILE" 2> "$ERR_FILE"
+        --print-timeout "$TIMEOUT" \
+        > "$OUT_FILE" 2> "$ERR_FILE"
     fi
   )
   rc=$?

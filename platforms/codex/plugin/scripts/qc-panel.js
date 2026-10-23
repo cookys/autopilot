@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+const agyStream = require('./lib/agy-stream-json.js');
 
 const SCOPE_RULE = "Scope rule: judge ONLY the node whose report appears in the context — the deliverables implied by its 'node'/'question' fields and the claims the report itself makes. Project-level lifecycle steps (merging branches, release/quality gates, archiving, project status updates, and work belonging to OTHER nodes) are OUT OF SCOPE: do not list them as goals, extras, or misses.";
 const Q1 = "What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'.";
@@ -60,29 +61,6 @@ function resolveAgyAlias(requested) {
   agyAliasCache.set(requested, ids[0]);
   return ids[0];
 }
-// agy has no --prompt-file: judge-B's prompt travels as ONE argv string, and Linux caps a single
-// argv string at MAX_ARG_STRLEN = 32 x PAGE_SIZE. Past that, spawn fails before agy starts. Node
-// surfaces that as an errored child rather than a silent stall, so this is a clarity guard, not a
-// correctness one — but every agy caller in the repo should name the same wall the same way
-// (scripts/lib/agy-argv-ceiling.sh is the shell owner of this constant).
-function agyArgvCeilingBytes() {
-  let page = 4096;
-  try {
-    const out = spawnSync('getconf', ['PAGESIZE'], { encoding: 'utf8', timeout: 5000 });
-    const parsed = Number(String(out.stdout || '').trim());
-    if (Number.isInteger(parsed) && parsed > 0) page = parsed;
-  } catch (_e) { /* keep the 4K default */ }
-  return 32 * page - 1;   // -1 for the NUL execve appends
-}
-
-function assertAgyArgvFits(prompt, what) {
-  const bytes = Buffer.byteLength(prompt, 'utf8');
-  const ceiling = agyArgvCeilingBytes();
-  if (bytes > ceiling) {
-    throw new Error(`${what} is ${bytes} bytes, over the ${ceiling}-byte single-argv ceiling agy can be exec'd with (Linux MAX_ARG_STRLEN); agy has no --prompt-file, so this cannot be streamed — shrink the node report or artifact set`);
-  }
-}
-
 const synthModel = process.env.QC_SYNTH_MODEL || 'claude-haiku-4-5';
 
 const scriptDir = __dirname;
@@ -406,12 +384,12 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
-        assertAgyArgvFits(prompt, 'the judge-B prompt');
+        // The prompt travels on STDIN as stream-json (no argv-size ceiling); see lib/agy-stream-json.js.
         childArgs = [
-          '-p', prompt,
           '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
-          '--print-timeout', '8m'
+          '--print-timeout', '8m',
+          ...agyStream.STREAM_FLAGS
         ];
       }
 
@@ -420,17 +398,23 @@ async function main() {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 
-      let agyOut = '';
+      let agyRaw = '';
       child.stdout.on('data', (data) => {
-        agyOut += data.toString();
+        agyRaw += data.toString();
       });
+      // codex: plain stdout. agy: the `result` event's response (ERROR / no result → empty).
+      const judgeText = () => {
+        if (isCodex) return agyRaw;
+        const parsed = agyStream.parseStream(agyRaw);
+        return parsed.ok ? parsed.result.response : '';
+      };
       child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       if (isCodex) {
         child.stdin.write(prompt);
         child.stdin.end();
       } else {
-        child.stdin.end();
+        child.stdin.end(agyStream.encodeUserLine(prompt));
       }
 
       child.on('error', (err) => {
@@ -448,8 +432,8 @@ async function main() {
           fs.copyFileSync(verdictTarget, outfile);
           success = true;
         } else {
-          if (agyOut.trim().length > 0) {
-            fs.writeFileSync(outfile, agyOut);
+          if (judgeText().trim().length > 0) {
+            fs.writeFileSync(outfile, judgeText());
             success = true;
           }
         }
@@ -559,12 +543,12 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
-        assertAgyArgvFits(prompt, 'the judge-B prompt');
+        // The prompt travels on STDIN as stream-json (no argv-size ceiling); see lib/agy-stream-json.js.
         childArgs = [
-          '-p', prompt,
           '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
-          '--print-timeout', '8m'
+          '--print-timeout', '8m',
+          ...agyStream.STREAM_FLAGS
         ];
       }
 
@@ -573,17 +557,23 @@ async function main() {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 
-      let agyOut = '';
+      let agyRaw = '';
       child.stdout.on('data', (data) => {
-        agyOut += data.toString();
+        agyRaw += data.toString();
       });
+      // codex: plain stdout. agy: the `result` event's response (ERROR / no result → empty).
+      const judgeText = () => {
+        if (isCodex) return agyRaw;
+        const parsed = agyStream.parseStream(agyRaw);
+        return parsed.ok ? parsed.result.response : '';
+      };
       child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       if (isCodex) {
         child.stdin.write(prompt);
         child.stdin.end();
       } else {
-        child.stdin.end();
+        child.stdin.end(agyStream.encodeUserLine(prompt));
       }
 
       child.on('error', () => {
@@ -598,7 +588,7 @@ async function main() {
         if (fs.existsSync(verdictTarget) && fs.statSync(verdictTarget).size > 0) {
           out = fs.readFileSync(verdictTarget, 'utf8');
         } else {
-          out = agyOut;
+          out = judgeText();
         }
 
         try { fs.rmSync(judgeDir, { recursive: true, force: true }); } catch (_) {}

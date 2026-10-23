@@ -97,49 +97,35 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
-### agy argv-payload ceiling — a second, harder wall
+### agy prompt transport — stdin stream-json, no argv ceiling
 
-The context-window gate is about what the *model* can hold. `agy` has a lower wall the *kernel*
-enforces, and it is reached first.
+`agy -p <prompt>` puts the whole prompt in ONE argv string, and Linux caps a single argv string at
+`MAX_ARG_STRLEN` = 32 × PAGE_SIZE (131071 usable bytes) — a per-string limit unrelated to the far
+larger `ARG_MAX`. Over it, `execve` failed before agy started and the seat looked stalled. The old
+`agy-argv-ceiling.sh` guard refused such prompts by name.
 
-`agy` has **no `--prompt-file`** (checked against `agy --help`, agy 1.1.x, 2026-09-02: only
-`-p`/`--print`/`--prompt`, which take the prompt as one argv string, plus `--input-format
-stream-json` on stdin — that one requires `--output-format stream-json` and a different parser, so
-no rail uses it). Every other runner here feeds the prompt through `--prompt-file` (codex, grok) or
-STDIN (cc-shim, qoderclicn, cursor) and is unaffected.
+Since agy 1.2 the prompt travels on **STDIN** instead, so there is no ceiling any more (a 212901-byte
+prompt was verified on agy 1.4.6) and the guard is gone. Every agy prompt rail — `dispatch-review.sh`
+(including the blind cleanroom launcher), `dispatch-hetero.sh`, `dispatch-author.sh`,
+`dispatch-explore.sh`, and `hetero-review-loop.js` through `dispatch-review.sh` — goes through
+[`scripts/lib/agy-stream-json.js`](../scripts/lib/agy-stream-json.js) (`qc-panel.js` uses its
+encoder/parser in-process):
 
-Linux caps a **single argv string** at `MAX_ARG_STRLEN` = 32 × PAGE_SIZE — **131072 bytes including
-the NUL**, so 131071 is the largest string that execs. This is per-string and has nothing to do with
-the far larger total `ARG_MAX` (2097152 on this host), which is why `getconf ARG_MAX` looks like
-plenty of headroom right up until the dispatch dies. Measured 2026-09-02 (Linux 7.0.0, PAGE_SIZE
-4096): 131071 → exec ok, 131072 → fail, 131073 → fail.
+- argv gets `--input-format stream-json --output-format stream-json --print=` — `--print=` NEEDS the
+  `=`; a bare `--print` swallows the next flag as its prompt and exits 2. stream-json input requires
+  stream-json output.
+- stdin gets one NDJSON line `{"event":"user","message":{"content":"<prompt>"}}`, built with a JSON
+  encoder (`message.text` and other event names are silently wrong).
+- the `{"event":"result","result":{...}}` event decides: `status:"SUCCESS"` → `result.response` is
+  what the rail used to read from stdout (hetero/review/cleanroom use `--emit envelope`, which
+  re-emits the `result` object in the legacy `--output-format json` envelope shape so
+  `dispatch-status.js --agy-envelope` is unchanged); `status:"ERROR"` or no `result` event → the
+  helper exits 1 with the reason on stderr, which each rail already treats as its runner failure.
+  An agy that itself exits non-zero is passed through.
 
-The failure is **silent by construction**: `execve` fails before agy starts, so there is no vendor
-error, no partial output, and nothing for the verdict parser to read — the caller sees only a bare
-shell status (126 and 127 have both been observed in the field). A reviewer seat that "returned
-nothing" looks the same as a stalled one.
-
-[`scripts/lib/agy-argv-ceiling.sh`](../scripts/lib/agy-argv-ceiling.sh) derives the ceiling from the
-live PAGE_SIZE (a 64K-page host has a 2 MB limit — never hardcode 131071) and **all three** agy
-rails refuse over it with a named reason instead of letting the exec fail:
-
-- `dispatch-review.sh` → `no_verdict` carrying the byte count, the ceiling, and the remedy. The
-  review was fully set up, and the caller's fail-closed contract already treats `no_verdict` as "do
-  not ship", so this is not a `precondition_failed`.
-- `dispatch-hetero.sh` → `precondition_failed`, raised **before** the worktree and branch exist, so
-  that status's "nothing was created" claim stays true.
-- `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the
-  same single-argv shape).
-
-`scripts/qc-panel.js` is dormant (ADR-0002) and is not a dispatch path; it carries the same check in JS for its judge-B agy seats, and
-`scripts/hetero-review-loop.js` carries it too — it prechecks the estimated diff+spec bytes before
-dispatching any `agy`-runner seat and exits before spend when the estimate exceeds the ceiling.
-Measure **bytes**, never `${#var}`: that counts characters, and one multibyte character in the
-prompt makes the guard under-report — the unsafe direction.
-
-Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the unit, or send that
-seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
-silently reviews half a diff and reports a verdict for the whole thing.
+Other runners are unaffected (codex/grok take `--prompt-file`; cc-shim, qoderclicn, cursor take STDIN).
+`kimi` still has its own argv-only wall (`MAX_ARG_STRLEN`), as does the qualification-review provider's
+agy/kimi transport — see their own sections.
 
 ### Transport fallback for a frozen plan-review seat
 

@@ -1,0 +1,120 @@
+{
+  "count_requested": 60,
+  "ranges_scanned": 60,
+  "ranges_with_violations": 6,
+  "counts_by_kind": {
+    "surface_touch": 5,
+    "deleted_line": 7
+  },
+  "records": [
+    {
+      "range": "0be6405da288e3d8e9695311b042e53e15be99c6^1..0be6405da288e3d8e9695311b042e53e15be99c6",
+      "merge_sha": "0be6405da288e3d8e9695311b042e53e15be99c6",
+      "merge_subject": "Merge tsiguard: task-status-input stops before touching a repo outside TEST_TMP",
+      "kind": "surface_touch",
+      "file": "hooks/tests/lib/task-status-input-fixture.js",
+      "line": null,
+      "detail": "hooks/tests/lib/task-status-input-fixture.js"
+    },
+    {
+      "range": "a8dac5e62b8fe54b31e94c0aec50495a2ab563b3^1..a8dac5e62b8fe54b31e94c0aec50495a2ab563b3",
+      "merge_sha": "a8dac5e62b8fe54b31e94c0aec50495a2ab563b3",
+      "merge_subject": "Merge bl0122: t7 example test writes its config to a temp dir, not the committed fixture (BL-0122)",
+      "kind": "surface_touch",
+      "file": "evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js",
+      "line": null,
+      "detail": "evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js"
+    },
+    {
+      "range": "6fcfed4b19dc9d9fe955665d42d669ff112e8670^1..6fcfed4b19dc9d9fe955665d42d669ff112e8670",
+      "merge_sha": "6fcfed4b19dc9d9fe955665d42d669ff112e8670",
+      "merge_subject": "Merge noci: remove GitHub CI and the L1 cache-key parity gate (BL-0094)",
+      "kind": "surface_touch",
+      "file": ".github/workflows/test.yml",
+      "line": null,
+      "detail": ".github/workflows/test.yml"
+    },
+    {
+      "range": "f682db55073fb513dc8a163b63426499e65647d5^1..f682db55073fb513dc8a163b63426499e65647d5",
+      "merge_sha": "f682db55073fb513dc8a163b63426499e65647d5",
+      "merge_subject": "Merge fix/bl0209-nested: subagent-budget counts nested dispatch and gates its test clock (BL-0209)",
+      "kind": "surface_touch",
+      "file": "hooks/tests/lib/subagent-budget-fixture.js",
+      "line": null,
+      "detail": "hooks/tests/lib/subagent-budget-fixture.js"
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 39,
+      "detail": "assert_contains \"$output\" '\"stale_reaper_age_days\": 0' \"default age should be 0\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 40,
+      "detail": "assert_contains \"$output\" '\"reaper_scope\": \"marker-only\"' \"default scope should be marker-only\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 52,
+      "detail": "assert_eq \"$age\" \"0\" \"default age should be 0\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 73,
+      "detail": "assert_contains \"$output\" '\"stale_reaper_age_days\": 3' \"should override age\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 85,
+      "detail": "assert_contains \"$output\" '\"stale_reaper_age_days\": 0' \"garbage age should fall back to 0\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 95,
+      "detail": "assert_eq \"5\" \"$age\" \"overridden age should be 5\""
+    },
+    {
+      "range": "16dd391effed1251d2f01055d024a7fbb2d6bdd7^1..16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_sha": "16dd391effed1251d2f01055d024a7fbb2d6bdd7",
+      "merge_subject": "Merge bl0115: remove dispatch-hetero.sh --gc and stale_reaper_age_days for 3.0.0 (BL-0115)",
+      "kind": "deleted_line",
+      "file": "hooks/tests/resolve-worktree-teardown.test.sh",
+      "line": 105,
+      "detail": "assert_eq \"$parsed\" \"0\" \"node should parse JSON and extract age\""
+    },
+    {
+      "range": "2210b4706565a425fbfc22be2e1bae7f98bb1e7f^1..2210b4706565a425fbfc22be2e1bae7f98bb1e7f",
+      "merge_sha": "2210b4706565a425fbfc22be2e1bae7f98bb1e7f",
+      "merge_subject": "Merge inc4: wire the incremental return review behind adoption.return_review (BL-0146 D4)",
+      "kind": "surface_touch",
+      "file": "hooks/tests/lib/review-candidate-driver.js",
+      "line": null,
+      "detail": "hooks/tests/lib/review-candidate-driver.js"
+    }
+  ],
+  "errors": []
+}

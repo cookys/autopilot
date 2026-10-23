@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-24 | [BL-0055 phase 2: per-turn gate as an opt-in Stop-hook adapter, ON/OFF evaluation design (draft, awaiting plan review)](../plans/2026-10-24-per-turn-gate-phase2.md) | active | — | [plan](../plans/2026-10-24-per-turn-gate-phase2.md) |
 | 2026-10-24 | [findings batch: a Major blocks the merge, not the lane (plan, ON/OFF eval design)](../plans/2026-10-24-findings-batch.md) | active | — | [plan](../plans/2026-10-24-findings-batch.md) |
 | 2026-10-23 | [guard port](../plans/2026-10-23-guard-port.md) | active | — | [plan](../plans/2026-10-23-guard-port.md) |
 | 2026-10-22 | [review ledger retention](../plans/2026-10-22-review-ledger-retention.md) | active | — | [plan](../plans/2026-10-22-review-ledger-retention.md) |

@@ -1,0 +1,655 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "BL-0241",
+  "logical_plan_id": "guard-port-2026-10-24",
+  "session_id": "gpreview-g1",
+  "session_key": "e224a93821ed084aaf8639420f4649acef031f83c477fe0f4ac999b91099db19",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "e65626a195fcf11360a4d9d49c5a2744cc67406e04c32c939bfbd0d49a2e2238",
+  "manifest_sha256": "1bf73c5296bc4c2beeb23073d545824b0aae2a7d137ffd8789126f9128819580",
+  "plan_sha256": "52e9df91b14dd0abb80e4df3e8302dce6a507ee198c93ed31a1e5dbf1ee325ba",
+  "growth_ratio": {
+    "numerator": 18071,
+    "denominator": 12056
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "cb9520ac593cbceca03f86a498ebc2c82d13921213f979bedb1626536a7046e4"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f10268f93c431767fb3a57c211a5b9c121b757e3a7834d363e4dd4246bd428ca",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-f1Ufaj/stdout",
+          "digest": "f10268f93c431767fb3a57c211a5b9c121b757e3a7834d363e4dd4246bd428ca"
+        },
+        "receipt_digest": "421500785f2af7d4994553895dbd228c56c7b8141bbd55177dbea601099c1d98"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "4f17b2a6a0862f39c8aa819c873b6ed82659924189deff5c26f64c8a7ec34a1d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "400c4935d4c6c7d7571b6864ac728113feec50bcd1c3292f6c096a42b995b4b0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-FSmV9f",
+          "digest": "400c4935d4c6c7d7571b6864ac728113feec50bcd1c3292f6c096a42b995b4b0"
+        },
+        "receipt_digest": "154c75ee5825d993ec0ebeb31e1d4a451895d1c139ddec96b73bc10395b2e14b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "cf95920f58108c88407f75a27f88c4525a0646b83a184e50e8464d0104917ce2"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "446c0b472baab4d4813d0f8096bed7c7b991db5bbdf79da9aad7e6da0fe92a05",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-UGMyjV",
+          "digest": "446c0b472baab4d4813d0f8096bed7c7b991db5bbdf79da9aad7e6da0fe92a05"
+        },
+        "receipt_digest": "a9c7661e7bb674b6b3c47660f411ae5ecf45546962598e2908c7e6187e009fce"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "b592734530ce9c1ccfa978e5574881f686192cf77f5ce9eba94f8534e770c02e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-kGnb07",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "02c3ce58597be38abece7876cf9aa4795050ad2a06a145cd136bb7565c12bf10"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 0 and 1; KR2 feasibility gate",
+      "claim": "The plan treats pooled hook latency percentiles as measurements of each individual hook and of a single-spawn call.",
+      "evidence": "The baseline records p95_ms 124 and p50_ms 64 across 4200 PostToolUse hook intervals. summarize pools intervals by event, without separating commands. This does not establish that every hook has those percentiles or that a single-spawn call has p95 124 ms.",
+      "evidence_reference": "docs/plans/evidence/2026-10-23-hook-latency-p2/hook-latency-baseline.json: arms.enabled.per_event.PostToolUse; scripts/benchmark-hook-latency.js: summarize; plan sections 0 and 1",
+      "repair": "Describe 124 ms and 64 ms as pooled interval percentiles. Remove the measured single-spawn claim and require a separately specified single-spawn experiment in Phase 0 before using it for feasibility.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "682f544b362c500f28afa6407a75d9348b0aaedcdcda02142d42b86418c743f3"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2, KR3, baseline rule, feasibility gate and Phase 3",
+      "claim": "The pre-registered latency acceptance rule is internally inconsistent after introducing a new baseline.",
+      "evidence": "KR2 requires an absolute result below 150 ms and KR3 caps latency at 142 ms, but the baseline rule says both are judged against a same-host re-baseline. No comparison formula is provided. The feasibility gate still requires saving more than 47 ms from the historical 197 ms, and Phase 3 still uses the historical 142 ms cap. A quieter baseline below 150 ms would therefore have contradictory success and feasibility criteria.",
+      "evidence_reference": "Plan section 2: KR2, KR3, Baseline rule and KR2 feasibility gate; section 4: Phase 3",
+      "repair": "Freeze explicit formulas distinguishing absolute thresholds from improvement or regression against the new baseline. Apply those formulas consistently to feasibility, Phase 3 and final scoring, including the case where the unchanged baseline already meets the absolute target.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "172083a7d108323a20112329aae6b9f6ac34fc51ca4400c00c601d1a907ffd5f"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Design A stdout adapter and byte-identical behavior constraint",
+      "claim": "Merging output as the opt-in multiplexer does would discard an existing observer's output.",
+      "evidence": "failure-escalation writes escalation messages directly to stdout as plain text. The multiplexer attempts JSON.parse on each child's stdout and skips output when parsing fails. Design A explicitly prescribes that merger while the global constraint requires byte-identical stdout.",
+      "evidence_reference": "hooks/failure-escalation.js:203-209; hooks/opt-in-multiplexer.js: stdout parsing and merge loop; plan Candidate designs A and section 2.5",
+      "repair": "Replace the multiplexer-merger prescription with an output contract that preserves plain-text escalation messages and reload-watch JSON output. State how separate hook outputs remain equivalent through one registration, and require differential fixtures exercising both output paths before implementation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4d1cedcb03f923139e670b297808fda3259a945b10c30f1bae7615037e777526"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan section 2 KR2/KR3, baseline rule, KR2 feasibility gate, and Phase 0 done-condition",
+      "claim": "KR2 and KR3 are not a single pre-registered measurement: historical 197/142/47 ms, a same-host re-baseline, and a one-spawn floor that the unchanged-tree harness does not emit can still be mixed after the fact.",
+      "evidence": "KR2 is 'drops from 197 ms to < 150 ms' and KR3 is 'does not regress above 142 ms', while the baseline rule says KR2 and KR3 are judged against a Phase 0 same-host re-baseline of the unchanged tree so a quieter host cannot be credited. The feasibility gate then hard-codes a 47 ms saving (197 to under 150) and asks Phase 0 to derive a floor from 'the p95 of one single-spawn call'. docs/plans/evidence/2026-10-23-hook-latency-p2/hook-latency-baseline.json reports PostToolUse call_p95_ms 197, interval p95_ms 124, PreToolUse call_p95_ms 142, and has no one-spawn-call field. scripts/benchmark-hook-latency.js summarize() only emits pooled-interval p95_ms and max-of-concurrent call_p95_ms, and settingsFor() always loads the full hooks.json, so a re-baseline of the unchanged tree cannot produce the named floor. On a quieter host, B.call_p95 already under 150 would make absolute KR2 true with no port; on a noisier host the 47 ms figure is the wrong gap. That is post-hoc re-scoping.",
+      "evidence_reference": "Plan section 2 KR2, KR3, Result-selection rule, Baseline rule, KR2 feasibility gate; Phase 0 done-condition; hook-latency-baseline.json arms.enabled.per_event.PostToolUse/PreToolUse and conclusion.enabled_minus_zero_p95_ms; scripts/benchmark-hook-latency.js summarize(), settingsFor(), conclude()",
+      "repair": "Write KR2/KR3 as formulas over two harness JSON files selected by the load rule: B = Phase 0 re-baseline of the unchanged tree, R = Phase 4 designated result. KR2 met iff R.PostToolUse.call_p95_ms < 150 AND B.PostToolUse.call_p95_ms >= 150 AND R.PostToolUse.call_p95_ms < B.PostToolUse.call_p95_ms; if B.PostToolUse.call_p95_ms < 150, report KR2 as already under 150 on the unchanged tree, not met by the port. KR3 met iff R.PreToolUse.spawns_per_call <= 2 AND R.PreToolUse.call_p95_ms <= B.PreToolUse.call_p95_ms. Define the Phase 0 floor as B.PostToolUse.p95_ms (pooled interval p95) plus a named in-process cost measurement, or as a documented one-hook settings overlay; replace 47 ms with (B.call_p95_ms - 150) when B.call_p95_ms > 150. Unreachable means report KR2 unreachable and stop Phase 2 until the owner picks KR1-only.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d751c06f761fc29a539cf422e088ecf00d715ddf9adaeb68d724c62254520e54"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan Candidate designs A adapter (stdout/stderr merge) versus section 2.5 byte-identical stdout and KR4",
+      "claim": "Design A tells Phase 2 to merge the five observers' stdout/stderr the way opt-in-multiplexer.js merges children, which drops non-JSON stdout and cannot keep byte-identical host-visible output.",
+      "evidence": "Design A names a Phase 2 adapter that must 'capture each hook's stdout and stderr and merge them as opt-in-multiplexer.js does'. hooks/opt-in-multiplexer.js:136-180 JSON.parse's each child's stdout, continues on parse failure, and emits one joined additionalContext object. Of the five observers, hooks/reload-watch.js:98-103 writes hookSpecificOutput JSON, while hooks/failure-escalation.js:208-210 writes a plain-text escalation message with process.stdout.write(msg + '\\n') and would be discarded by that merge. Section 2.5 requires each guard's stdout/stderr for the same input to be byte-identical. Separate processes today give the host one stdout stream per hook; one chain process gives a single stream, so the emission rule has to be stated, and multiplexer JSON merge is the wrong rule for this set.",
+      "evidence_reference": "Plan Candidate designs A adapter paragraph; Plan section 2.5 byte-identical stdout/stderr; hooks/opt-in-multiplexer.js:136-180; hooks/reload-watch.js:98-103; hooks/failure-escalation.js:208-210",
+      "repair": "Delete the multiplexer-merge instruction. Specify per-hook raw stdout/stderr capture for the Phase 1 diff, plus a host-visible emission rule that keeps reload-watch additionalContext delivered and does not drop failure-escalation plain text. If the host can parse only one JSON object from the chain process, state that rule and add it to the Phase 0 tuples; do not reuse opt-in-multiplexer.js merge for these five.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4481474164e3e9ad2b1a1268f7c318686e4fc27f56c239d10144f72c03d4c2f0"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 0 interval p95 wording versus section 1 and the P2 JSON",
+      "claim": "Section 0 states every single PostToolUse hook interval has p95 124 ms and p50 64 ms, which is more than the pooled measurement supports.",
+      "evidence": "hook-latency-baseline.json arms.enabled.per_event.PostToolUse has p50_ms 64, p95_ms 124, hook_count 4200, calls 600, call_p95_ms 197, spawns_per_call 7. Those 64/124 figures are percentiles of all 4200 PostToolUse intervals mixed together. Section 1 says the baseline has no per-hook breakdown, so the document cannot treat 124 ms as each of the seven hooks' p95. The call p95 of 197 ms is still the p95 of the per-call max, which the harness definition supports.",
+      "evidence_reference": "Plan section 0 last sentence; Plan section 1 'no per-hook breakdown'; hook-latency-baseline.json arms.enabled.per_event.PostToolUse; scripts/benchmark-hook-latency.js:91-92 and summarize()",
+      "repair": "Rewrite the sentence to: pooled PostToolUse interval p50/p95 are 64/124 ms across 4200 intervals with no per-hook split; call p95 197 ms is the p95 of the per-call max of seven concurrent intervals.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "caa737824e4f55f24c51c07e3519f9a3cd8402b4b2547ac72f74fe28c4557333"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan Candidate designs A alternative refactor of audit-log.js hosted legs",
+      "claim": "Design A cites audit-log.js:44-46 as the export pattern and omits the awaiting-owner hosted leg that already runs in-process on every PostToolUse payload.",
+      "evidence": "hooks/audit-log.js:40 calls require('./awaiting-owner.js').handle(p) for any PostToolUse payload before the AskUserQuestion/Bash branches at :44-46 that Design A names. A whole-script adapter keeps that leg automatically. The alternative 'exported function plus CLI wrapper' path, if copied only from :44-46, would drop awaiting-owner.handle and change live-state behaviour. Phase 0 tuples list shared state files but do not name hosted in-process modules.",
+      "evidence_reference": "Plan Candidate designs A alternative-refactor sentence (audit-log.js:44-46); hooks/audit-log.js:38-46",
+      "repair": "In Design A and the Phase 0 tuple list, record audit-log's hosted legs as awaiting-owner.handle, ask-decision.onPostToolUse, and merge-task-status-lib.onPostToolUse, and require the export-refactor alternative to keep all three.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c16228bec9d2d6bcaa9eb70ebc35abd0a80393bce1d74c09ead98e30cb7c810a"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan Candidate designs chosen-provisionally sentence versus the Phase 0 predicates that follow",
+      "claim": "The leftover clause that B is rejected unless Phase 0 shows A cannot reuse the selector contradicts Design A and the explicit adapter predicates.",
+      "evidence": "Design A is one chain for the five contiguous PostToolUse .* observers; those registrations have matcher .* and no opt-in selector. The next sentence then confirms A iff stdin replay, process.exit interception, and per-hook state paths keep identity. A does not use hooks/opt-in-multiplexer.js EVENT_TABLE, so 'A cannot reuse the selector' is vacuously true and could un-reject B even when the adapter predicates pass.",
+      "evidence_reference": "Plan Candidate designs chosen-provisionally paragraph and Phase 0 predicates; hooks/hooks.json PostToolUse .* list; hooks/opt-in-multiplexer.js EVENT_TABLE",
+      "repair": "Delete 'B rejected unless Phase 0 shows A cannot reuse the selector'. Keep only the adapter and topology predicates, with B or C as the named fallback when those fail.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b05bb6a891055b4717b431be6e3154d71c8c05dd474c27cfee967b127fb015e7"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan Phase 1 candidate side versus section 2.6 second work unit (harness, no hook change)",
+      "claim": "Phase 1 describes a candidate side that is the new path, but that path is Phase 2 work and the Phase 1 unit is not allowed to change hooks.",
+      "evidence": "Section 2.6 says Phases 0 and 1 are a second unit of evidence and test harness with no hook change. Phase 1 then says 'a candidate side (the new path)'. The done-condition only requires (a) baseline run against itself and (b) a negative control shown red. That done-condition is executable without the new path. The intro sentence would send Phase 1 into Phase 2 implementation.",
+      "evidence_reference": "Plan section 2.6 Work units; Plan Phase 1 opening sentence and Done when (a)(b)",
+      "repair": "State that Phase 1 ships the harness with candidate equal to the current separate-process baseline for the identity check, keeps the red negative-control fixture, and that Phase 2 is the first time the candidate side is the new chain.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ecc7a723425e7dc28ff6018d02b325a5527ff1867ab08065a1348a9d1611e1e2"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 0 baseline interpretation, Section 1 problem statement, and the KR2 feasibility input",
+      "claim": "The plan makes incompatible claims about the granularity of the P2 baseline and therefore overstates what the cited evidence supports.",
+      "evidence": "Section 0 says that every single PostToolUse hook interval has p95 124 ms and p50 64 ms in the baseline. Section 1 instead says that the baseline has no per-hook breakdown and supports only the statement that a single spawn sits at p95 124 ms. These descriptions cannot both apply to the same artifact, while the 124 ms value is used to motivate the latency opportunity.",
+      "evidence_reference": "Plan sections 0, 1, and 2 KR2 feasibility gate; docs/plans/evidence/2026-10-23-hook-latency-p2/hook-latency-baseline.json and the README in the cited evidence directory",
+      "repair": "Re-read the baseline JSON and README, cite the exact field supporting each reported statistic, and either replace section 0's per-interval p95/p50 claim with the artifact's actual aggregate or selected-statistic claim or remove the contradictory no-breakdown statement in section 1.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "48d77e83034a3e7802e1e37d701b53a4da97f241b6a33baa002d018b251bb814"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2, KR3, the baseline rule, the KR2 feasibility gate, and Phases 0, 3, and 4",
+      "claim": "KR2 and KR3 do not have one uniquely computable pass condition because the plan mixes historical absolute thresholds with a same-host re-baseline.",
+      "evidence": "KR2 is written as a drop from 197 ms to less than 150 ms, KR3 names 142 ms, and the feasibility gate calls 47 ms the required saving. The baseline rule then says KR2 and KR3 are judged against a same-host re-baseline. If that re-baseline differs from 197 ms or 142 ms, the plan does not state whether passing requires an absolute limit, a fixed improvement from the re-baseline, or both. The historical values and the designated comparator consequently can yield different verdicts.",
+      "evidence_reference": "Plan section 2 KR2, KR3, Result-selection rule, Baseline rule, and KR2 feasibility gate; Phase 3 and Phase 4 done-conditions",
+      "repair": "Pre-register one formula for each latency KR and use it unchanged in the feasibility gate and all phases. For example, state explicitly whether KR2 requires candidate p95 below 150 ms, at least the pre-registered improvement below the same-host re-baseline, or both, and derive any required improvement from the designated re-baseline rather than mixing it with the historical 197 ms and 142 ms values.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0384abab11dc4bb8294f3a8c9a228234cfea3597151bc1ff412087efe673923"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Global Constraints, the byte-identical invariant, Design A's output adapter, and the Phase 1 differential oracle",
+      "claim": "Design A's multiplexer-style output merge is incompatible with the plan's byte-identical stdout and stderr invariant.",
+      "evidence": "The global constraint requires each guard's stdout and stderr to remain byte-identical. The existing opt-in multiplexer does not preserve those bytes: it forwards child stderr, parses child stdout as JSON, retains only selected hookSpecificOutput fields, discards other stdout, and emits one merged JSON object. Design A explicitly proposes to capture and merge stdout and stderr as that multiplexer does. The Phase 1 comparison also checks per-hook captured channels rather than the host-visible single command output, so it could pass even when consolidation changes the output seen by the hook host.",
+      "evidence_reference": "Plan sections 2 and 2.5, Candidate designs Design A, and Phase 1; hooks/opt-in-multiplexer.js:111-175",
+      "repair": "Before Phase 1, define the host-visible contract for the consolidated command: the exact aggregate stdout bytes, exact stderr bytes and ordering, and aggregate exit-status rule. Require the differential harness to compare that host-visible output as well as per-hook captures. If the multiplexer-style semantic merge cannot preserve those bytes, select a design that retains the required hook boundaries instead.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "659f1e52dc16bd616455977392928f0f5d3185f3d85f41919118cadaece8996a"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Design A, the Phase 0 selection predicate, and the guarantee of identical exit codes, stdin handling, process.exit use, and shared state",
+      "claim": "Design A does not specify the isolation needed to preserve the current separate-process and concurrent execution semantics.",
+      "evidence": "Each current observer is a separate Node process, and the plan states that hooks of one event run concurrently. Design A instead runs five top-level scripts in one process and sequentially. The plan requires per-hook try/catch and a file-state audit but does not define how module caches, process-wide globals, patched process.exit, environment mutations, or overlapping calls are isolated. Its predicate that state paths can remain identical does not test module or process-global state and does not compare the result of concurrent baseline calls with a sequential chain.",
+      "evidence_reference": "Plan sections 2.5 and 2.5.1, Candidate designs Design A, Phase 0 audit, and Phase 1 corpus description; hooks/intent-capture.js:196-279",
+      "repair": "Specify and pre-register an isolation mechanism for each observer, such as isolated workers or a demonstrably fresh module and process-global scope, with process.exit restoration in a finally path. Extend the Phase 0 tuple and predicate to include module state, global and environment mutations, and state effects under overlapping calls. Require the differential harness to exercise concurrent or interleaved calls, not only sequential multi-call sequences.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2fb73058cd0e20eb7a08e4d099254e4368369a09330f717395d4722eb5b35d0c"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 7 out-of-scope list versus the Phase 2 hooks.json rewiring",
+      "claim": "The out-of-scope wording does not distinguish logical guard coverage from physical hook registrations.",
+      "evidence": "Section 7 lists adding or removing hooks as out of scope, while Phase 2 explicitly removes five separate command registrations and adds a chain entry in hooks/hooks.json. The intended restriction appears to be that no logical guard coverage or decision behavior changes, but the literal wording also excludes the planned registration consolidation.",
+      "evidence_reference": "Plan section 7 Out of scope; File-structure map; Phase 2",
+      "repair": "Clarify that the restriction covers logical guard coverage and decisions, while later units may consolidate physical command registrations. If physical registrations must also remain unchanged, move the hooks.json rewiring out of the proposed scope.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ce686eac030b6ed99ebb406207afd807b89c71bdf3bc6fb58b623df2328069c9"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 1 differential harness, Phase 2 implementation, and the 0 to 1 to 2 dependency chain",
+      "claim": "The phase order requires the differential harness to exercise a candidate path before any phase has implemented that path.",
+      "evidence": "Phase 1 defines a baseline side using the current separate processes and a candidate side using the new path, and says the corpus is fed to both sides. Phase 2 is the phase that implements the chosen design, including the adapter, while the declared dependency is 0 to 1 to 2. Phase 1's done-condition only requires baseline self-comparison and a red negative control, so it also does not establish that a real candidate exists. The plan must either supply the candidate in Phase 1 or defer the real differential comparison until after implementation.",
+      "evidence_reference": "Plan Phase 1, Phase 2, and Dependencies",
+      "repair": "Split the test work explicitly: Phase 1 may build the oracle, corpus, harness, and negative control against the baseline, with a clearly labeled test double if necessary; Phase 2 must then introduce the real candidate and run the full baseline-versus-candidate comparison before rewiring or completing. Alternatively, move candidate implementation before the differential phase and update the dependency list.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9a57e350dec463ffeb65b6941b561f9710002199f9e5260ecbb528be3c65368d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 1 comparison semantics and negative-control fixture lifecycle",
+      "claim": "The differential oracle does not define how exact byte comparison coexists with normalization, and its negative-control lifecycle is contradictory.",
+      "evidence": "Phase 1 promises exact stdout and stderr comparison but also says it will normalize process-dependent values. A normalized result cannot prove byte identity unless the plan identifies exactly which values are normalized and which byte-exact channels remain untouched. The done-condition also says a negative control is kept as a fixture and then removed, without distinguishing removal from the active harness from retention of the fixture.",
+      "evidence_reference": "Plan Phase 1 opening and done-condition (a) and (b); Global Constraints",
+      "repair": "Define a per-channel comparison matrix: raw exit codes and raw bytes on channels required to remain byte-identical, with a narrowly enumerated normalization allowlist only for explicitly volatile semantic fields on other channels. Define the negative control as an inert retained fixture whose deliberate mutation is removed or disabled after the red proof.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7437086c1ff6600525cf77e7b6eb866250505edd369c605986ac7ca93a40fba2"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Candidate designs, the Phase 0 design-selection gate, and the open owner question",
+      "claim": "The claimed Phase 0 gate is not deterministic and contains a stale selector statement that does not match Designs A and B.",
+      "evidence": "Design A creates a separate chain and does not use the opt-in selector, whereas Design B is the design that reuses the existing selector. The text nevertheless says B is rejected unless Phase 0 shows that A cannot reuse the selector. The A predicate then says that if an observer fails, it may stay separate or the design may flip to B or C, without a predicate for B or C. C is already known not to meet KR1, but no owner waiver condition is specified for selecting it. Therefore Phase 0 cannot deterministically satisfy its done-condition that the predicates select A, B, or C.",
+      "evidence_reference": "Plan Candidate designs, Phase 0 done-condition, and section 8 Open questions",
+      "repair": "Replace the prose gate with a decision table. Give A explicit pass and fail predicates, B explicit eligibility predicates including inventory and output-isolation requirements, and C an explicit owner-approved fallback with the expected KR1 miss recorded in advance. Correct the selector sentence to refer to the design that actually uses the selector and remove the stale wording.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5d29e1286efe7956531a5ccb4fb5ba97219e4e69c56dbcd1be95c707db062088"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "caa737824e4f55f24c51c07e3519f9a3cd8402b4b2547ac72f74fe28c4557333",
+      "rubric_id": "R1",
+      "affected_surface": "Plan section 0 interval p95 wording versus section 1 and the P2 JSON",
+      "claim": "Section 0 states every single PostToolUse hook interval has p95 124 ms and p50 64 ms, which is more than the pooled measurement supports.",
+      "evidence_reference": "Plan section 0 last sentence; Plan section 1 'no per-hook breakdown'; hook-latency-baseline.json arms.enabled.per_event.PostToolUse; scripts/benchmark-hook-latency.js:91-92 and summarize()",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c16228bec9d2d6bcaa9eb70ebc35abd0a80393bce1d74c09ead98e30cb7c810a",
+      "rubric_id": "R4",
+      "affected_surface": "Plan Candidate designs A alternative refactor of audit-log.js hosted legs",
+      "claim": "Design A cites audit-log.js:44-46 as the export pattern and omits the awaiting-owner hosted leg that already runs in-process on every PostToolUse payload.",
+      "evidence_reference": "Plan Candidate designs A alternative-refactor sentence (audit-log.js:44-46); hooks/audit-log.js:38-46",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b05bb6a891055b4717b431be6e3154d71c8c05dd474c27cfee967b127fb015e7",
+      "rubric_id": "R7",
+      "affected_surface": "Plan Candidate designs chosen-provisionally sentence versus the Phase 0 predicates that follow",
+      "claim": "The leftover clause that B is rejected unless Phase 0 shows A cannot reuse the selector contradicts Design A and the explicit adapter predicates.",
+      "evidence_reference": "Plan Candidate designs chosen-provisionally paragraph and Phase 0 predicates; hooks/hooks.json PostToolUse .* list; hooks/opt-in-multiplexer.js EVENT_TABLE",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ecc7a723425e7dc28ff6018d02b325a5527ff1867ab08065a1348a9d1611e1e2",
+      "rubric_id": "R6",
+      "affected_surface": "Plan Phase 1 candidate side versus section 2.6 second work unit (harness, no hook change)",
+      "claim": "Phase 1 describes a candidate side that is the new path, but that path is Phase 2 work and the Phase 1 unit is not allowed to change hooks.",
+      "evidence_reference": "Plan section 2.6 Work units; Plan Phase 1 opening sentence and Done when (a)(b)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ce686eac030b6ed99ebb406207afd807b89c71bdf3bc6fb58b623df2328069c9",
+      "rubric_id": "R5",
+      "affected_surface": "Section 7 out-of-scope list versus the Phase 2 hooks.json rewiring",
+      "claim": "The out-of-scope wording does not distinguish logical guard coverage from physical hook registrations.",
+      "evidence_reference": "Plan section 7 Out of scope; File-structure map; Phase 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7437086c1ff6600525cf77e7b6eb866250505edd369c605986ac7ca93a40fba2",
+      "rubric_id": "R6",
+      "affected_surface": "Phase 1 comparison semantics and negative-control fixture lifecycle",
+      "claim": "The differential oracle does not define how exact byte comparison coexists with normalization, and its negative-control lifecycle is contradictory.",
+      "evidence_reference": "Plan Phase 1 opening and done-condition (a) and (b); Global Constraints",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-23T18:59:29.441Z"
+}

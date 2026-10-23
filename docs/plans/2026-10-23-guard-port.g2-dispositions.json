@@ -1,0 +1,109 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "guard-port-2026-10-24",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "682f544b362c500f28afa6407a75d9348b0aaedcdcda02142d42b86418c743f3",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the 64/124 ms figures are pooled over 4200 PostToolUse intervals with no per-hook split. Sections 0 and 1 now say so and agree."
+  },
+  {
+   "fingerprint": "172083a7d108323a20112329aae6b9f6ac34fc51ca4400c00c601d1a907ffd5f",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: KR2/KR3 now use one basis, formulas over the Phase 0 re-baseline B and the Phase 4 result R (ratio 0.76 and 1.10); historical values are background only."
+  },
+  {
+   "fingerprint": "4d1cedcb03f923139e670b297808fda3259a945b10c30f1bae7615037e777526",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: hooks/opt-in-multiplexer.js:136-180 JSON.parses child stdout and skips non-JSON; failure-escalation.js:208-210 writes plain text. Design A now forwards bytes in order with no merge, plus a host-concatenation predicate."
+  },
+  {
+   "fingerprint": "d751c06f761fc29a539cf422e088ecf00d715ddf9adaeb68d724c62254520e54",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: KR2/KR3 now use one basis, formulas over the Phase 0 re-baseline B and the Phase 4 result R (ratio 0.76 and 1.10); historical values are background only."
+  },
+  {
+   "fingerprint": "4481474164e3e9ad2b1a1268f7c318686e4fc27f56c239d10144f72c03d4c2f0",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: hooks/opt-in-multiplexer.js:136-180 JSON.parses child stdout and skips non-JSON; failure-escalation.js:208-210 writes plain text. Design A now forwards bytes in order with no merge, plus a host-concatenation predicate."
+  },
+  {
+   "fingerprint": "caa737824e4f55f24c51c07e3519f9a3cd8402b4b2547ac72f74fe28c4557333",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: the 64/124 ms figures are pooled over 4200 PostToolUse intervals with no per-hook split. Sections 0 and 1 now say so and agree."
+  },
+  {
+   "fingerprint": "c16228bec9d2d6bcaa9eb70ebc35abd0a80393bce1d74c09ead98e30cb7c810a",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid, verified: audit-log.js:40 calls awaiting-owner handle before the :44-46 legs. Design A records the order and keeps all three."
+  },
+  {
+   "fingerprint": "b05bb6a891055b4717b431be6e3154d71c8c05dd474c27cfee967b127fb015e7",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: the stale sentence is deleted and replaced by the decision table."
+  },
+  {
+   "fingerprint": "ecc7a723425e7dc28ff6018d02b325a5527ff1867ab08065a1348a9d1611e1e2",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: resolved by the Phase 1 and Phase 2 split; the chain is built unregistered in Phase 1."
+  },
+  {
+   "fingerprint": "48d77e83034a3e7802e1e37d701b53a4da97f241b6a33baa002d018b251bb814",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the 64/124 ms figures are pooled over 4200 PostToolUse intervals with no per-hook split. Sections 0 and 1 now say so and agree."
+  },
+  {
+   "fingerprint": "c0384abab11dc4bb8294f3a8c9a228234cfea3597151bc1ff412087efe673923",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: KR2/KR3 now use one basis, formulas over the Phase 0 re-baseline B and the Phase 4 result R (ratio 0.76 and 1.10); historical values are background only."
+  },
+  {
+   "fingerprint": "659f1e52dc16bd616455977392928f0f5d3185f3d85f41919118cadaece8996a",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: hooks/opt-in-multiplexer.js:136-180 JSON.parses child stdout and skips non-JSON; failure-escalation.js:208-210 writes plain text. Design A now forwards bytes in order with no merge, plus a host-concatenation predicate."
+  },
+  {
+   "fingerprint": "2fb73058cd0e20eb7a08e4d099254e4368369a09330f717395d4722eb5b35d0c",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: the plan named only per-hook try/catch. reload-watch.js:114-116 and audit-log.js:69-71 have top-level catches that write stderr, so an exit sentinel would change bytes; the five assign no process.env, chdir or process.on (grep). Design A now has an isolation list (fd 0 once, require.cache, wrapper restore in finally, export form, concurrency to sequence)."
+  },
+  {
+   "fingerprint": "ce686eac030b6ed99ebb406207afd807b89c71bdf3bc6fb58b623df2328069c9",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: section 7 now restricts logical guard coverage and decisions, and allows physical registration consolidation in later units."
+  },
+  {
+   "fingerprint": "9a57e350dec463ffeb65b6941b561f9710002199f9e5260ecbb528be3c65368d",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified from plan text: Phase 1 compared a candidate that only Phase 2 built. Phase 1 now builds the chain unregistered and tests it; Phase 2 only registers it."
+  },
+  {
+   "fingerprint": "7437086c1ff6600525cf77e7b6eb866250505edd369c605986ac7ca93a40fba2",
+   "candidate_blocker": false,
+   "disposition": "accepted_nonblocking",
+   "rationale": "Valid: Phase 1 now has a per-channel matrix (raw exit, stdout, stderr; allowlisted normalisation on state only) and a permanent mutant test."
+  },
+  {
+   "fingerprint": "5d29e1286efe7956531a5ccb4fb5ba97219e4e69c56dbcd1be95c707db062088",
+   "candidate_blocker": true,
+   "disposition": "accepted_blocker",
+   "rationale": "Valid, verified: Design A uses no opt-in selector, so the B-rejected-unless sentence was vacuous. Replaced by a decision table with predicates for A, B and C."
+  }
+ ]
+}

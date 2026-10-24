@@ -19,6 +19,7 @@
 # RED at 185ca0591 (acceptance round 8): N47 N48 failed (multi-operand [ ... -o/-a ... ] paired with a three-token test); N46 N49 N50 passed on the base (case-fold and ! / || were already caught by other checks) and stay as controls.
 # RED at 25e18b71b (acceptance round 9): N51-N54 failed (unquoted glob / regex operand paired with a quoted literal).
 # RED at 51b0575f4 (acceptance round 10): see N55-N57 (locale string $".." / $'..' / mixed quoting paired with a pure quoted literal).
+# RED at 8b659d432 (acceptance round 11): N58-N62 failed (arithmetic comparison against a name / expression paired with an integer literal); C7 ([ ] with a name on the arithmetic side) also failed.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -673,5 +674,32 @@ if has_kind surface_touch; then report N56 1; else report N56 0; fi
 repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "$a"$"x" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report N57 1; else report N57 0; fi
+
+# ── N58-N62 [[ ]] arithmetic operands are evaluated recursively: a name or expression is a self-comparison ──
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "a" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N58 1; else report N58 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq a ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N59 1; else report N59 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "a+0" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N60 1; else report N60 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq $a+0 ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N61 1; else report N61 0; fi
+repo="$(mk_surface '[[ "$a" -lt "5" ]]' '[[ "$a" -lt a ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N62 1; else report N62 0; fi
+
+# ── F22 integer literal swap in an arithmetic comparison stays a legitimate pair ──
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "-5" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F22 0; else report F22 1; fi
+
+# ── C7 [ ] with a name on the arithmetic side is reported too (same rule for simplicity, accepted precision cost, depth-0 2026-10-24) ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq b ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C7 1; else report C7 0; fi
 
 finalize_test

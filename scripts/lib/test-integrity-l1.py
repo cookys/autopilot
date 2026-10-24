@@ -1895,6 +1895,8 @@ def _norm_operand(tok):
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", tok)
 
 
+_ARITH_LITERAL = re.compile(r'"?-?[0-9]+"?')
+_ARITH_VAR = re.compile(r'"?\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*|[0-9])"?')
 _TEST_JOINERS = frozenset(("-o", "-a", "!", "||", "&&", "(", ")"))
 
 
@@ -1935,6 +1937,16 @@ def _assertion_shape(raw, strict):
         # A pattern (unquoted * ? [) or any regex (=~) can match everything.
         if toks[1] == "=~" or any(re.search(r"[*?\[]", t) for t in (toks[0], toks[2])):
             return None
+        if toks[1] in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
+            # [[ ]] evaluates arithmetic operands recursively, so a bare name or
+            # expression resolves to a variable. Each operand must be a decimal
+            # integer literal or a plain $variable reference.
+            raw_toks = br.group(1).split()
+            if len(raw_toks) != 3 or not all(
+                _ARITH_LITERAL.fullmatch(raw_toks[i]) or _ARITH_VAR.fullmatch(raw_toks[i])
+                for i in (0, 2)
+            ):
+                return None
         op = _TEST_OP.search(" " + inner + " ")
         return ("op", op.group(1)) if op and op.group(1) == toks[1] else None
     return None

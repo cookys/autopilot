@@ -18,6 +18,7 @@ require('fs').appendFileSync(process.env.PTG_V_CALLS, `${a.join(' ')}\n`);
 const v = [{ constraint: 2, rule: 'timestamps are UTC', evidence: 'local time seen' }];
 if (m === 'violate') { console.log(JSON.stringify({ turn: 1, ok: false, violations: v, feature_gaps: [] })); process.exit(1); }
 if (m === 'gaps') { console.log(JSON.stringify({ turn: 1, ok: true, violations: [], feature_gaps: ['export did not write a file'] })); process.exit(0); }
+if (m === 'both') { console.log(JSON.stringify({ turn: 1, ok: false, violations: v, feature_gaps: ['export did not write a file'] })); process.exit(1); }
 if (m === 'crash') { process.exit(2); }
 if (m === 'garbage') { console.log('not json {'); process.exit(1); }
 if (m === 'slow') { setTimeout(() => {}, 30000); return; }
@@ -27,8 +28,9 @@ JS
 # mutant <name> <sed-expr> : copy of the hook with requires made absolute and one deliberate break.
 mutant() {
   local out="$TEST_TMP/mut-$1.js"
-  sed -e "s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\.\./#require('$REPO_ROOT/#" -e "$2" "$REAL_HOOK" >"$out"
-  cmp -s "$out" "$REAL_HOOK" && { echo "mutant $1 is identical" >&2; return 1; }
+  local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\.\./#require('$REPO_ROOT/#"
+  sed -e "$abs" -e "$2" "$REAL_HOOK" >"$out"
+  sed -e "$abs" "$REAL_HOOK" | cmp -s - "$out" && { echo "mutant $1 changes nothing" >&2; return 1; }
   echo "$out"
 }
 
@@ -95,6 +97,25 @@ nc9v() {
   [ "$(blocks)" = 0 ] && [ "$(log_has '"reason":"clean"')" = 1 ]
 }
 
+# NC9 (violations+features half): the same gaps fixture blocks once, with the gap text, in that mode.
+nc9f() {
+  fresh nc9f '{"mode":"violations+features"}'; export PTG_V_MODE=gaps
+  stop "$1" false
+  [ "$(blocks)" = 1 ] && [ "$(log_has '"reason":"block"')" = 1 ] || return 1
+  case "$STOP_OUT" in *"export did not write a file"*"Keep the parts that already work"*) ;; *) return 1 ;; esac
+}
+# W4 text: with a violation AND a gap, mode violations lists only the violation; violations+features lists
+# the violation first, then the gap, then the keep line.
+nc9t() {
+  fresh nc9t; export PTG_V_MODE=both
+  stop "$1" false
+  case "$STOP_OUT" in *"timestamps are UTC"*) ;; *) return 1 ;; esac
+  case "$STOP_OUT" in *"Keep the parts"*|*"export did not write"*) return 1 ;; esac
+  fresh nc9t2 '{"mode":"violations+features"}'; export PTG_V_MODE=both
+  stop "$1" false
+  node -e 'const r=JSON.parse(process.argv[1]).reason;const a=r.indexOf("timestamps are UTC"),b=r.indexOf("export did not write"),c=r.indexOf("Keep the parts");process.exit(a>=0&&b>a&&c>b?0:1)' "$STOP_OUT"
+}
+
 run_nc() { # <label> <fn> <mutant-name> <sed-expr>
   if "$2" "$REAL_HOOK"; then assert_eq 0 0 "$1 holds on the real hook"; else fail "$1 broken on the real hook"; fi
   local m; m="$(mutant "$3" "$4")" || { fail "$1 mutant not built"; return; }
@@ -105,7 +126,10 @@ run_nc NC1 nc1 allowall "s#^  const next = counter + 1;#  return;\n  const next 
 run_nc NC2 nc2 nocap "s#if (counter >= maxBlocks) {#if (false) {#"
 run_nc NC3 nc3 blockonerr "s#log(turn, 'allow', 'error', counter);\n##; s#if (result.kind === 'error') {#if (false) {#; s#return { kind: 'error' };#return { kind: 'violations', json: {} };#g"
 run_nc NC4 nc4 noreset "s#startsNewTurn(payload) ? prevTurn + 1 : prevTurn#prevTurn#"
-run_nc NC9v nc9v gapsblock "s#return result.kind === 'violations';#return result.kind === 'violations' || (result.json \&\& Array.isArray(result.json.feature_gaps) \&\& result.json.feature_gaps.length > 0);#"
+run_nc NC9v nc9v gapsblock "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return gapsOf(result.json).length > 0;#"
+
+run_nc NC9f nc9f gapsnever "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return false;#"
+run_nc NC9t nc9t nogate "s#const withGaps = mode === 'violations+features' \&\& gaps.length > 0;#const withGaps = gaps.length > 0;#"
 
 # Knob off / nothing configured / prompt_id.
 fresh off; export PTG_V_MODE=violate

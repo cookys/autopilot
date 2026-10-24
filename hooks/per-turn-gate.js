@@ -15,6 +15,10 @@
  *                              1 violations, anything else is an error). It is exec'd through
  *                              `sh -c`, so give a simple command, not a pipeline.
  *   per_turn_gate.mode        "violations" (default): only exit 1 can block.
+ *                             "violations+features" (W4, guidance): exit 0 with a non-empty
+ *                             feature_gaps list blocks too, and the retry text lists the violations,
+ *                             then the gaps, then a keep-what-works line. UNEVALUATED: the W4 trigger
+ *                             and text have no ON/OFF evaluation until plan P2-4 returns PASS.
  *   per_turn_gate.max_blocks  blocks allowed per (session, turn); default 2 (the historical cap).
  *   per_turn_gate.timeout_ms  hard timeout for the verifier; default 30000.
  *
@@ -44,7 +48,7 @@ const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state
 const HOOK_STEM = 'per-turn-gate';
 const DEFAULT_MAX_BLOCKS = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
-const MODES = ['violations'];
+const MODES = ['violations', 'violations+features'];
 
 /**
  * TURN BOUNDARY RULE (single function so it can be replaced).
@@ -123,19 +127,35 @@ function runVerifier(command, turn, repo, timeoutMs) {
 }
 
 /** Is this verifier result one the current mode may block on? */
-function isReportable(result) {
-  return result.kind === 'violations';
+function isReportable(result, mode) {
+  if (result.kind === 'violations') return true;
+  return mode === 'violations+features' && gapsOf(result.json).length > 0;
 }
 
-/** Retry text, the same wording as gate_write_retry in evals/orchestration/run-orchestration-eval.sh. */
-function renderRetry(json) {
+function gapsOf(json) {
+  return json && Array.isArray(json.feature_gaps) ? json.feature_gaps : [];
+}
+
+/**
+ * Retry text, the wording of gate_write_retry in evals/orchestration/run-orchestration-eval.sh.
+ * Mode "violations+features" appends the feature gaps and the keep-what-works line (W4, unevaluated).
+ */
+function renderRetry(json, mode) {
   const real = Array.isArray(json.violations) ? json.violations : [];
+  const gaps = gapsOf(json);
+  const withGaps = mode === 'violations+features' && gaps.length > 0;
   const violations = real.length
     ? real
-    : [{ constraint: '?', rule: 'unspecified', evidence: 'verifier reported a violation' }];
+    : (withGaps ? [] : [{ constraint: '?', rule: 'unspecified', evidence: 'verifier reported a violation' }]);
   const lines = violations.map((v) =>
     `The change you just made breaks project rule ${v.constraint}: \`${v.rule}\`. Observed: \`${v.evidence}\`. Fix this without removing any feature you were asked for, and keep every other rule.`);
-  return `${lines.join('\n\n')}\n`;
+  let text = lines.length ? `${lines.join('\n\n')}\n` : '';
+  if (withGaps) {
+    const extra = gaps.map((g) => `A feature you were asked for so far is not working yet: \`${g}\`.`);
+    extra.push('Keep the parts that already work; do not delete or break any existing feature.');
+    text += `${extra.join('\n')}\n`;
+  }
+  return text;
 }
 
 // One record per invocation: `done` flips on the first write; `write` lets the outer catch log an error.
@@ -192,6 +212,7 @@ function main() {
   const countFile = path.join(dir, `${session}.t${turn}.count`);
   const counter = readInt(countFile);
   const maxBlocks = intKnob(gate.max_blocks, DEFAULT_MAX_BLOCKS, 0);
+  const mode = MODES.includes(gate.mode) ? gate.mode : MODES[0];
 
   if (!payloadOk || !hasVerifier) {
     log(turn, 'allow', 'error', counter);
@@ -208,7 +229,7 @@ function main() {
     log(turn, 'allow', 'error', counter);
     return;
   }
-  if (!isReportable(result)) {
+  if (!isReportable(result, mode)) {
     log(turn, 'allow', 'clean', counter);
     return;
   }
@@ -219,7 +240,7 @@ function main() {
     return;
   }
   log(turn, 'block', 'block', next);
-  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: renderRetry(result.json) })}\n`);
+  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: renderRetry(result.json, mode) })}\n`);
 }
 
 try {

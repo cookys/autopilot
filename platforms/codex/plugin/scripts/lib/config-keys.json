@@ -634,10 +634,11 @@
       "relates": [
         "hooks.<stem>"
       ],
-      "summary": "What per-turn-gate may block on: \"violations\" (verifier exit 1 only).",
+      "summary": "What per-turn-gate may block on: \"violations\" (verifier exit 1 only) or \"violations+features\" (also exit 0 with a non-empty feature_gaps list; the trigger and retry text are unevaluated until the BL-0055 phase 2 evaluation passes).",
       "type": "enum",
       "allowed": [
-        "violations"
+        "violations",
+        "violations+features"
       ],
       "invalid_effect": "an unknown mode is treated as \"violations\""
     },

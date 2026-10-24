@@ -1,0 +1,19 @@
+## t1
+{"call":1,"decision":"block","session_id":"<sid1>","prompt_id":"<pid2>","stop_hook_active":false,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+{"call":2,"decision":"allow","session_id":"<sid1>","prompt_id":"<pid2>","stop_hook_active":true,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+{"call":3,"decision":"block","session_id":"<sid1>","prompt_id":"<pid3>","stop_hook_active":false,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+{"call":4,"decision":"allow","session_id":"<sid1>","prompt_id":"<pid3>","stop_hook_active":true,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+init session=<sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<sid1> is_error=false subtype=success cost=0.0195218 text="ALPHA"
+init session=<sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<sid1> is_error=false subtype=success cost=0.025133399999999997 text="GAMMA"
+## t2
+(no hook.log: hook never ran)
+init session=<sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<sid1> is_error=false subtype=success cost=0.016572 text="OK"
+## t3
+{"call":1,"decision":"block","session_id":"<sid1>","prompt_id":"<pid2>","stop_hook_active":false,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+{"call":2,"decision":"allow","session_id":"<sid1>","prompt_id":"<pid2>","stop_hook_active":true,"keys":["session_id","transcript_path","cwd","prompt_id","permission_mode","hook_event_name","stop_hook_active","last_assistant_message","background_tasks","session_crons"]}
+init session=<sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<sid1> is_error=false subtype=success cost=0.0525764 text="ALPHA"
+costs (each result object): 0.0195218, 0.025133399999999997, 0.016572, 0.0525764 sum=0.1138036

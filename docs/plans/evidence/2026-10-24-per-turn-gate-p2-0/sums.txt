@@ -1,0 +1,19 @@
+# sha256 of raw files (stay in scratch: /tmp/claude-1000/-home-cookys-projects-autopilot/92ec79e7-0033-4c98-bb31-9597cc878979/scratchpad/p20run/trials)
+  84d70f182b8648709d8e005ea3fa9c6a644de4d3de72c629c826c73641ccfe56  t1/hook.log
+  31f8f4e6aaf01ebfc7c1a8046df824099dc0d099bda1d6cd5b344799f97f853f  t3/hook.log
+  ed0864cc90b9de92b7949312ae90f1b413e522d48b4fb4907703c26f7c44e46a  t1/stream-e9d37f23-8af3-4068-8e32-148befcaaf5c.jsonl
+  e320a45a9d62f4d69efe27bf74f874c4a8dbf48bc2f7478f33cd9013b80904c6  t1/stream--.jsonl
+  2f06094a91832b0df7b4c0eca6dbe29d3490476eb6583b6ca2b222e7a78598d2  t2/stream--.jsonl
+  f33c9648973eb2c5ba74c1966c8795bc67a4df337362e800c364e7ea4629a3d7  t3/stream--.jsonl
+  5d77b54add7f1f6ccf40af6958711a0254c2cc63093aca47d5a3deae91c4f0eb  t1/debug-e9d37f23-8af3-4068-8e32-148befcaaf5c.log
+  04a3cc9f0af74c810e55f8fc9e5575234a5bcffece62cbbc77a5643ad39e83ed  t1/debug--.log
+  a6171bbc8f13453f5930aa1ca4760acc07c7fd2d2807aff493f48e00bbb0a34d  t2/debug--.log
+  44b0bec552cbbb3d77853e6a678b77d07e156e803f93498ac18404fcbb108e8e  t3/debug--.log
+# committed files
+8c18cb49c5b03c92a3630f92ca9c7c4dfe05672ad3692724d3d30d71dbae33a7  probe-hook.js
+39d066d5f0b9b85616184b9efc1b1fa4277c11b8abd606249ece300c64b28acd  trial.sh
+281ac74093a211559fbb401475061aee0f4c141a3f683c297787be4abf788059  verifier-wall.txt
+1ce9d0ce28b99f8f05b67e4debb343442742a429919a8b375137b666e46fe506  readings.txt
+24ed0f3aaaef8d3fe2a3d83e56f142f0b40b0daa3a44e3a3d0a67cce1e12e32d  block-in-stream.txt
+def9caab50e0679fc1a17c4dcede4d697e446a360fa6701992dd76efe7cb0353  expected.md
+a3eaf632690873b1be5979c798115ad2ba277e9a75080b7ade40ad20a779b81b  README.md

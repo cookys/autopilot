@@ -1,0 +1,3 @@
+# Superseded: NC6 live against hook 8c725cde4
+
+This set (expected 2b205d83a, result 5d809534d) tested `hooks/per-turn-gate.js` at 8c725cde4 (blob c0d9380efb3d0fcfdddf09d5bfc5aa849d5be9ac). The hook was changed again afterwards (state writes fenced by token and time before writing, lock release made atomic; commit a46a6b118), so these readings do not describe the shipped hook and are kept only as history. The current NC6 live result is in the parent directory. `run.sh` and `stub-verifier.js` stay in the parent directory, unchanged; the hashes of those two files in the `sums.txt` here refer to files no longer in this directory. The older set is in `../superseded-c23012aac/`.

@@ -73,3 +73,7 @@ PREREG Appendix A is generated from the code (`--schema-table`) and a test check
 ## Round 11 (acceptance of 43bff86e3, review generation 10, real-CLI trial)
 
 COSTCHK spent is recomputed exactly; run.log lines starting with `{` must parse; each HASH kind once per invocation and every row checked; gate.jsonl lines may not be arrays; `trace/<id>/latest` handled (symlink to the highest trace-turn file, never counted); VERSION once per id between COSTCHK and the first PROBE; TASKHASH_DIFF shape closed. Appendix A test column is now a `T:KIND.field` label per field, each checked to exist in `hooks/tests/p2-batch-wrapper.test.sh`.
+
+## Round 12 (acceptance of 51f8c73ec, review generation 11)
+
+The audit validates the log as a grammar (appendix A, last section). Field tests prove the untouched copy audits clean first and check that the failure text names the edited field (`LABRE`). Trace files count only on a successful read. The real-CLI trial artifacts (n=1 manifest, clone at 51f8c73ec) audit as `AUDIT OK` with the new audit logic and the old wrapper file.

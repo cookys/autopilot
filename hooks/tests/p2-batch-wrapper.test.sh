@@ -79,7 +79,7 @@ mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 
 mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r))," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
 mk_mut errfmt "if (he) need(" "if (false) need(" "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
 mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true," "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
-mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&" "need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(true || g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(w0 && Number.isFinite(wsv) &&" "need(true || w0 && Number.isFinite(wsv) &&" "for (const k of Object.keys(actual)) {" "for (const k of []) {"
+mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&" "need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === prr.rest.split(' ')[1]," "need(true || g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === prr.rest.split(' ')[1]," "need(w0 && Number.isFinite(wsv) &&" "need(true || w0 && Number.isFinite(wsv) &&" "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok'," "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
@@ -225,12 +225,77 @@ assert_eq "$(grep -c 'TASKHASH_DIFF post fail' "$TEST_TMP/run-nc8-mut/invocation
 assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
 
 echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
-fixm() { local f tg; for f in "$1"/trace/*/latest; do [ -L "$f" ] || continue; tg=$(readlink "$f"); case "$tg" in "$R1"/*) ln -sfn "$1/${tg#"$R1"/}" "$f" ;; esac; done; if [ -z "${NOFIXM:-}" ]; then for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$R1#$1#g" "$f"; done; fi; }
+fixm() { local b="${FB:-$R1}" f tg; for f in "$1"/trace/*/latest; do [ -L "$f" ] || continue; tg=$(readlink "$f"); case "$tg" in "$b"/*) ln -sfn "$1/${tg#"$b"/}" "$f" ;; esac; done; if [ -z "${NOFIXM:-}" ]; then for f in "$b"/runs/*/run.log "$b"/runs/*/result.json; do touch -r "$f" "$1/${f#"$b"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$b#$1#g" "$f"; done; fi; }
 audit_rc() { [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?; }
-tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
+# aud <dir> [wrapper]: audit a copy, leaving the status in AUD_RC and the whole output in AUD_OUT.
+aud() { [ "$1" != "$R1" ] && [ -d "$1/runs" ] && fixm "$1"; AUD_OUT=$(node "${2:-$WRAP}" --audit --manifest "$MAN" --run-dir "$1" --clone "$CLONE" --wrapper-file "$WRAP" 2>&1); AUD_RC=$?; }
+# tamper <name> [base]: a fresh copy of the base batch (default R1). Test isolation: the untouched copy must audit clean first,
+# so a later failure can only come from the edit made to it.
+tamper() { local b="${2:-$R1}"; rm -rf "$TEST_TMP/t-$1"; cp -a "$b" "$TEST_TMP/t-$1"; FB="$b" aud "$TEST_TMP/t-$1"; assert_eq "$AUD_RC" 0 "isolation: the untouched copy t-$1 audits clean before it is edited (${AUD_OUT:0:120})"; }
+# afail <dir> <message>: the edited copy must fail the audit; when the message carries a T:KIND.field label, the failure text must
+# also point at that field (LABRE below), so a different rule catching the edit does not count.
+declare -A LABRE
+LABRE=(
+  ["WRAPPER_START.first"]='WRAPPER_START range'
+  ["WRAPPER_START.last"]='WRAPPER_START range'
+  ["WRAPPER_DONE.last"]='final WRAPPER_DONE'
+  ["WRAPPER_EXIT.rc"]='final WRAPPER_EXIT'
+  ["HASH.name"]='HASH: row does not match its shape'
+  ["HASH.count"]='log grammar: .*HASH'
+  ["HASH.second_row_wrong"]='log grammar: .*HASH'
+  ["HASH.sha256"]='HASH hook: a row differs from the actual file'
+  ["PREREG.commit"]='logged PREREG commit is not the commit'
+  ["PREREG.time"]='logged PREREG time differs'
+  ["PREREG.ancestor"]='PREREG missing or not an ancestor'
+  ["WINDOW_START.row"]='window.start does not agree with the WINDOW_START row'
+  ["TASKHASH_DIFF.phase"]='TASKHASH_DIFF: row does not match its shape: mid'
+  ["TASKHASH_DIFF.tail"]='TASKHASH_DIFF: row does not match its shape: pre ok trailing'
+  ["TASKHASH_DIFF.verdict"]='TASKHASH_DIFF fail line'
+  ["ORDER.arm"]='ORDER ON-01: arm'
+  ["ORDER.pos"]='ORDER line missing or not as seeded'
+  ["ORDER.position"]='log grammar: .*ORDER'
+  ["VERSION.value"]='VERSION missing or not'
+  ["VERSION.position"]='log grammar: .*(VERSION|PROBE_OK)'
+  ["PROBE_OK.cost"]='PROBE_OK/PROBE_FAIL cost'
+  ["PROBE_FAIL.rc"]='PROBE_(OK/PROBE_)?FAIL.* rc|PROBE.*rc'
+  ["PROBE_FAIL.cost"]='PROBE_OK/PROBE_FAIL cost'
+  ["PAUSE.row"]='PAUSE'
+  ["CMD.sha256"]='CMD missing or differs'
+  ["START.elapsed"]='START elapsed .* disagrees'
+  ["END.rc"]='END: row does not match its shape'
+  ["COSTCHK.spent"]='COSTCHK spent .* differs from the raw files'
+  ["COSTCHK.arm"]='COSTCHK ON-01: arm'
+  ["COSTCHK.stage"]='COSTCHK stage/cap'
+  ["COSTCHK.cap"]='COSTCHK stage/cap'
+  ["COSTCHK.projected"]='COSTCHK projection'
+  ["COSTCHK.verdict"]='COSTCHK projection'
+  ["COST.arm"]='COST ON-01: arm'
+  ["COST.run"]='COST (run|projected)'
+  ["COST.probe"]='COST probe .* differs from the sum of the saved probe'
+  ["COST.running"]='COST running'
+  ["COST.projected"]='COST projected'
+  ["SCORE.m1"]='SCORE differs from the oracle'
+  ["SCORE.m2"]='SCORE differs from the oracle'
+  ["SCORE.m3"]='SCORE m3 must be'
+  ["SCORE_MISSING.row"]='need one SCORE'
+  ["TURNS.arm"]='TURNS ON-01: arm'
+  ["TURNS.n"]='TURNS n=5 differs from result.json'
+  ["RUNVERSION.flag"]='RUNVERSION missing or not ok'
+  ["RUNVERSION.value"]='RUNVERSION (flag disagrees|value)'
+  ["MODEL.value"]='MODEL row differs'
+  ["HOOKCOUNT.gate_trace"]='HOOKCOUNT gate_trace/plugin'
+  ["HOOKCOUNT.gate_log"]='gate_trace .* != gate_log'
+  ["HOOKCOUNT.plugin"]='HOOKCOUNT gate_trace/plugin'
+  ["HOOKERR.n"]='HOOKERR differs'
+  ["BLOCKMAX.value"]='BLOCKMAX missing'
+  ["COMPLETE.counts"]='COMPLETE line does not match'
+  ["COMPLETE.n"]='COMPLETE line does not match'
+)
+for k in ORDER VERSION PROBE_OK PROBE_FAIL CMD START END COSTCHK COST SCORE SCORE_MISSING TURNS RUNVERSION MODEL HOOKCOUNT HOOKERR BLOCKMAX; do LABRE["$k.id"]="$k: id ZZ-99 is not in the expected set"; done
+afail() { FB="${FB:-$R1}" aud "$1"; assert_neq "$AUD_RC" 0 "$2"; local lab; lab=$(grep -oE 'T:[A-Za-z_]+\.[A-Za-z0-9_]+' <<<"$2" | head -1); if [ -n "$lab" ]; then local re="${LABRE[${lab#T:}]:-}"; if [ -z "$re" ]; then fail "$lab has no expected failure text in LABRE"; else grep -Eq -- "$re" <<<"$AUD_OUT"; assert_eq "$?" 0 "$lab: the failure text points at the field (/$re/; got: $(grep -m1 'AUDIT FAIL' <<<"$AUD_OUT" | cut -c1-140))"; fi; fi; if [ -n "${3:-}" ]; then grep -Eq -- "$3" <<<"$AUD_OUT"; assert_eq "$?" 0 "$2: failure text matches /$3/ (got: $(grep -m1 'AUDIT FAIL' <<<"$AUD_OUT" | cut -c1-140))"; fi; [ -n "${SHOWMSG:-}" ] && { printf 'LAB %s :: %s\n' "${lab:-none}" "$(grep -m1 'AUDIT FAIL' <<<"$AUD_OUT" | cut -c1-200)" >>"${SHOWMSG}"; }; }
 # 1 several models in every MODEL row
 tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-model")" 0 "T:MODEL.value multi-model rows: real audit non-zero"
+afail "$TEST_TMP/t-model" "T:MODEL.value multi-model rows: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-model/run-p2-batch.js" "$TEST_TMP/t-model")" 0 "RED multi-model: audit without the per-row check says OK"
 # 2 last COST row inflated
 tamper cost; python3 - "$TEST_TMP/t-cost/invocation.log" <<'PY'
@@ -238,7 +303,7 @@ import sys, re
 p = sys.argv[1]; L = open(p).read().split('\n')
 i = max(k for k, l in enumerate(L) if ' COST ' in l); L[i] = re.sub(r'run=\S+', 'run=999.000000', L[i]); open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cost")" 0 "T:COST.run last COST row 999: real audit non-zero"
+afail "$TEST_TMP/t-cost" "T:COST.run last COST row 999: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-cost/run-p2-batch.js" "$TEST_TMP/t-cost")" 0 "RED last COST row: audit without the spend recomputation says OK"
 # 3 preregistration modified / removed from the index afterwards
 echo "edited after the batch" >>"$CLONE/prereg/PREREG.md"
@@ -398,7 +463,7 @@ PY
   assert_eq "$(audit_rc "$TEST_TMP/mut-scoreval/run-p2-batch.js" "$TEST_TMP/t-sc")" 0 "RED SCORE '$sv': mutant says OK"
 done
 tamper bm; sed -i -E "0,/( BLOCKMAX \S+ )[0-9]+$/s//\1-1/" "$TEST_TMP/t-bm/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm")" 0 "T:BLOCKMAX.value BLOCKMAX -1: real audit non-zero"
+afail "$TEST_TMP/t-bm" "T:BLOCKMAX.value BLOCKMAX -1: real audit non-zero"
 tamper bm2; ONID=$(grep -oE ' BLOCKMAX ON-[0-9]+' "$TEST_TMP/t-bm2/invocation.log" | head -1 | awk '{print $2}')
 HL=$(ls "$TEST_TMP/t-bm2/runs/$ONID/hook/live/per-turn-gate/"*.jsonl | head -1)
 printf '%s\n%s\n' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":2}' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":3}' >>"$HL"
@@ -415,7 +480,7 @@ assert_neq "$(tmo_order "$PRE_MUT")" "1:before" "RED timeout: a second computati
 
 echo "--- acceptance round 5: RUNVERSION value, END rc semantics"
 tamper rv; sed -i -E "0,/( RUNVERSION \S+ ok ).*/s//\1wrong-version/" "$TEST_TMP/t-rv/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv")" 0 "T:RUNVERSION.value RUNVERSION wrong-version behind an ok marker: real audit non-zero"
+afail "$TEST_TMP/t-rv" "T:RUNVERSION.value RUNVERSION wrong-version behind an ok marker: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-runver/run-p2-batch.js" "$TEST_TMP/t-rv")" 0 "RED RUNVERSION: mutant says OK"
 tamper rv2; RJ=$(ls "$TEST_TMP"/t-rv2/runs/*/result.json | head -1); sed -i 's/"runner_version":"[^"]*"/"runner_version":"2.0.0 (Claude Code)"/' "$RJ"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv2")" 0 "result.json runner_version differs from the log: real audit non-zero"
@@ -435,24 +500,24 @@ open(p, 'w').write('\n'.join(L))
 PY
 }
 endrc_case e124a 124 keep keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124a")" 0 "T:COMPLETE.counts rc=124 run still counted in COMPLETE: real audit non-zero"
+afail "$TEST_TMP/t-e124a" "T:COMPLETE.counts rc=124 run still counted in COMPLETE: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-endrc/run-p2-batch.js" "$TEST_TMP/t-e124a")" 0 "RED rc=124 counted as complete: mutant says OK"
 endrc_case e124b 124 missing lower
 assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124b")" 0 "one rc=124 run, SCORE_MISSING, COMPLETE lowered: still a valid batch (27-of-30 tolerance)"
 endrc_case e124c 124 keep lower
 assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124c")" 0 "rc=124 run with its (oracle-consistent) SCORE and COMPLETE lowered: valid"
 endrc_case ebad abc keep keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ebad")" 0 "T:END.rc END rc=abc: real audit non-zero"
+afail "$TEST_TMP/t-ebad" "T:END.rc END rc=abc: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-rcint/run-p2-batch.js" "$TEST_TMP/t-ebad")" 0 "RED END rc=abc: mutant says OK"
 endrc_case emiss 0 missing keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-emiss")" 0 "T:SCORE_MISSING.row SCORE_MISSING after a successful call (rc=0): real audit non-zero"
+afail "$TEST_TMP/t-emiss" "T:SCORE_MISSING.row SCORE_MISSING after a successful call (rc=0): real audit non-zero"
 tamper orc; OL=$(ls "$TEST_TMP"/t-orc/runs/*/oracle.log | head -1); sed -i 's/"constraints_pass": *true/"constraints_pass": false/; s/"constraints_pass":true/"constraints_pass":false/' "$OL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-orc")" 0 "oracle.log disagrees with the SCORE row: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-scoreor/run-p2-batch.js" "$TEST_TMP/t-orc")" 0 "RED oracle recomputation: mutant says OK"
 
 echo "--- round 6: TURNS from result.json, oracle booleans"
 tamper tz; for f in "$TEST_TMP"/t-tz/runs/*/result.json; do sed -i -E 's/"turns_completed":[0-9]+/"turns_completed":0/' "$f"; done
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tz")" 0 "T:TURNS.n all result.json turns_completed 0, log says 5 and COMPLETE 3/3: real audit non-zero"
+afail "$TEST_TMP/t-tz" "T:TURNS.n all result.json turns_completed 0, log says 5 and COMPLETE 3/3: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-turnsraw/run-p2-batch.js" "$TEST_TMP/t-tz")" 0 "RED TURNS summary only: mutant says OK"
 for variant in missing string null; do
   tamper ob; python3 - "$TEST_TMP/t-ob" "$variant" <<'PY'
@@ -479,7 +544,7 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-mraw")" 0 "run.log model differs fro
 assert_eq "$(audit_rc "$TEST_TMP/mut-modelraw/run-p2-batch.js" "$TEST_TMP/t-mraw")" 0 "RED MODEL from summary only: mutant says OK"
 tamper traw; TF=$(ls "$TEST_TMP"/t-traw/trace/ON-*/trace-turn1.log | head -1)
 echo 'Hooks: Stop [node x/hooks/per-turn-gate.js] finished with status 0 (3ms)' >>"$TF"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-traw")" 0 "T:HOOKCOUNT.gate_trace trace has one more gate execution than the HOOKCOUNT row says: real audit non-zero"
+afail "$TEST_TMP/t-traw" "T:HOOKCOUNT.gate_trace trace has one more gate execution than the HOOKCOUNT row says: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-traceraw/run-p2-batch.js" "$TEST_TMP/t-traw")" 0 "RED trace counts from summary only: mutant says OK"
 tamper craw; RL=$(ls "$TEST_TMP"/t-craw/runs/*/run.log | head -1); sed -i -E 's/"total_cost_usd":[0-9.]+/"total_cost_usd":0.01/' "$RL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-craw")" 0 "run.log cost differs from the COST row: real audit non-zero"
@@ -556,7 +621,7 @@ tamper pu; cp "$(ls "$TEST_TMP"/t-pu/probes/*-1.json | head -1)" "$TEST_TMP/t-pu
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pu")" 0 "probe response file with an unknown id: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-probeset/run-p2-batch.js" "$TEST_TMP/t-pu")" 0 "RED unknown probe file: mutant says OK"
 tamper pf; sed -i -E '0,/( COST \S+ arm=\S+ run=\S+ )probe=\S+/s//\1probe=999.000000/' "$TEST_TMP/t-pf/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pf")" 0 "T:COST.probe COST probe=999: real audit non-zero"
+afail "$TEST_TMP/t-pf" "T:COST.probe COST probe=999: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-probefield/run-p2-batch.js" "$TEST_TMP/t-pf")" 0 "RED COST probe field: mutant says OK"
 tamper se; rm -f "$TEST_TMP"/t-se/runs/*.stderr
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-se")" 0 "stderr files deleted: real audit non-zero"
@@ -591,7 +656,7 @@ def sub(i, pat, rep): L[i] = re.sub(pat, rep, L[i], count=1)
 exec(code); open(p, 'w').write('\n'.join(L))
 PY
 }
-chk_real() { assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$1")" 0 "$2"; }
+chk_real() { afail "$TEST_TMP/t-$1" "$2"; }
 chk_red() { assert_eq "$(audit_rc "$TEST_TMP/mut-nostrict/run-p2-batch.js" "$TEST_TMP/t-$1")" 0 "RED $2"; }
 logedit ws "i = next(k for k, l in enumerate(L) if ' WRAPPER_START ' in l); L[i] = re.sub(r'first=\S+ last=\S+', 'first=5 last=2', L[i])"; chk_real ws "WRAPPER_START range first>last: real audit non-zero"
 logedit wd "i = max(k for k, l in enumerate(L) if ' WRAPPER_DONE ' in l); L[i] = re.sub(r'last=\S+', 'last=5', L[i])"; chk_real wd "final WRAPPER_DONE not last=2n: real audit non-zero"
@@ -601,17 +666,16 @@ logedit ob "i = next(k for k, l in enumerate(L) if ' ORDER ' in l); o = L[i]; fi
 chk_real ob "T:ORDER.position ORDER before START violated (ORDER row after START): real audit non-zero"; chk_red ob "ORDER position: audit without the strict layers says OK"
 logedit vv "i = next(k for k, l in enumerate(L) if ' VERSION ' in l); L[i] = re.sub(r'VERSION (\S+) .*', r'VERSION \1 2.1.0 (Claude Code)', L[i])"; chk_real vv "T:VERSION.value VERSION value is not the pin: real audit non-zero"
 logedit pok "i = next(k for k, l in enumerate(L) if ' PROBE_OK ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.500000', L[i])"; chk_real pok "T:PROBE_OK.cost PROBE_OK cost differs from the saved response: real audit non-zero"
-rm -rf "$TEST_TMP/t-rfa"; cp -a "$RF" "$TEST_TMP/t-rfa"; sed -i "s#$RF#$TEST_TMP/t-rfa#g" "$TEST_TMP"/t-rfa/cmd/*.json
-python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
+rfedit() { tamper "$1" "$RF"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" <<'PY'
 import sys, re
-p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'rc=\S+', 'rc=9', L[i]); open(p, 'w').write('\n'.join(L))
+p, code = sys.argv[1:3]; L = open(p).read().split('\n')
+exec(code); open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.rc PROBE_FAIL rc differs from the saved response: real audit non-zero"
-python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
-import sys, re
-p = sys.argv[1]; L = open(p).read().split('\n'); L = [l for l in L if ' PAUSE ' not in l]; open(p, 'w').write('\n'.join(L))
-PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PAUSE.row PAUSE count differs from the PROBE_FAIL count: real audit non-zero"
+}
+rfedit pfrc "i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'rc=\S+', 'rc=9', L[i])"
+FB="$RF" afail "$TEST_TMP/t-pfrc" "T:PROBE_FAIL.rc PROBE_FAIL rc differs from the saved response: real audit non-zero"
+rfedit paus "L[:] = [l for l in L if ' PAUSE ' not in l]"
+FB="$RF" afail "$TEST_TMP/t-paus" "T:PAUSE.row PAUSE row removed (count differs from the PROBE_FAIL count): real audit non-zero"
 logedit ccm "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'stage=\S+', 'stage=post5', L[i])"; chk_real ccm "T:COSTCHK.stage COSTCHK metadata (stage) differs from the recomputed value: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-costchkmeta/run-p2-batch.js" "$TEST_TMP/t-ccm")" 0 "RED COSTCHK metadata: mutant says OK"
 logedit ccc "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'cap=\S+', 'cap=99', L[i])"; chk_real ccc "T:COSTCHK.cap COSTCHK metadata (cap) differs from the manifest: real audit non-zero"
@@ -627,7 +691,7 @@ tamper hjc; HJ=$(ls "$TEST_TMP"/t-hjc/runs/ON-*/hook/live/per-turn-gate/*.jsonl 
 tamper cx; rm -f "$TEST_TMP/t-cx/cmd/$(ls "$TEST_TMP/t-cx/cmd" | head -1)"; chk_real cx "cmd/ file set is not exactly the expected ids: real audit non-zero"
 node "$WRAP" --audit --manifest "$MAN" --run-dir "$R1" >/dev/null 2>&1; assert_neq "$?" 0 "audit without --clone: non-zero"
 echo "--- round 11: one tamper per table field"
-tt() { local lab="$1" nm="tt_${1//./_}"; logedit "$nm" "$2"; assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$nm")" 0 "T:$lab real audit non-zero"; }
+tt() { local lab="$1" nm="tt_${1//./_}"; logedit "$nm" "$2"; afail "$TEST_TMP/t-$nm" "T:$lab real audit non-zero"; }
 tt WRAPPER_START.first "sub(first('WRAPPER_START'), r'first=\S+', 'first=0')"
 tt WRAPPER_START.last "sub(first('WRAPPER_START'), r'last=\S+', 'last=99')"
 tt WRAPPER_DONE.last "sub(lastidx('WRAPPER_DONE'), r'last=\S+', 'last=5')"
@@ -644,6 +708,7 @@ tt ORDER.arm "i = first('ORDER'); L[i] = L[i].replace(' ON pos', ' C pos') if ' 
 tt ORDER.pos "sub(first('ORDER'), r'pos=\d+', 'pos=99')"
 tt CMD.sha256 "sub(first('CMD'), r'[0-9a-f]{64}$', 'c' * 64)"
 tt START.elapsed "sub(first('START'), r'elapsed=\d+', 'elapsed=9999')"
+tt COSTCHK.arm "i = first('COSTCHK'); L[i] = L[i].replace('arm=ON', 'arm=C', 1) if 'arm=ON' in L[i] else L[i].replace('arm=C', 'arm=ON', 1)"
 tt COSTCHK.projected "sub(first('COSTCHK'), r'projected=\S+', 'projected=0.0001')"
 tt COSTCHK.verdict "sub(first('COSTCHK'), r' ok$', ' stop')"
 tt COST.running "sub(first('COST'), r'running=\S+', 'running=0.1')"
@@ -656,27 +721,19 @@ tt HOOKCOUNT.gate_log "sub(first('HOOKCOUNT', 'ON-'), r'gate_log=(\d+)', lambda 
 tt HOOKERR.n "sub(first('HOOKERR', 'ON-'), r' 0$', ' 1')"
 tt COMPLETE.n "sub(lastidx('COMPLETE'), r'ON=(\d+)/\d+', lambda m: 'ON=%s/9' % m.group(1))"
 tamper hcp; echo 'Hooks: Stop [node x/other-plugin.js] finished with status 0 (3ms)' >>"$(ls "$TEST_TMP"/t-hcp/trace/ON-*/trace-turn1.log | head -1)"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-hcp")" 0 "T:HOOKCOUNT.plugin real audit non-zero"
+afail "$TEST_TMP/t-hcp" "T:HOOKCOUNT.plugin real audit non-zero"
 # PROBE_FAIL.cost and SCORE_MISSING.id need a batch that has those rows
-rm -rf "$TEST_TMP/t-pfc"; cp -a "$RF" "$TEST_TMP/t-pfc"; sed -i "s#$RF#$TEST_TMP/t-pfc#g" "$TEST_TMP"/t-pfc/cmd/*.json
-python3 - "$TEST_TMP/t-pfc/invocation.log" <<'PY'
-import sys, re
-p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.700000', L[i]); open(p, 'w').write('\n'.join(L))
-PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-pfc" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.cost real audit non-zero"
-rm -rf "$TEST_TMP/t-pfi"; cp -a "$RF" "$TEST_TMP/t-pfi"; sed -i "s#$RF#$TEST_TMP/t-pfi#g" "$TEST_TMP"/t-pfi/cmd/*.json
-python3 - "$TEST_TMP/t-pfi/invocation.log" <<'PY'
-import sys
-p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t); open(p, 'w').write('\n'.join(L))
-PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-pfi" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.id real audit non-zero"
+rfedit pfco "i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.700000', L[i])"
+FB="$RF" afail "$TEST_TMP/t-pfco" "T:PROBE_FAIL.cost PROBE_FAIL cost differs from the saved response: real audit non-zero"
+rfedit pfid "i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t)"
+FB="$RF" afail "$TEST_TMP/t-pfid" "T:PROBE_FAIL.id PROBE_FAIL names an id outside the expected set: real audit non-zero"
 endrc_case smi 124 missing lower; python3 - "$TEST_TMP/t-smi/invocation.log" <<'PY'
 import sys
 p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' SCORE_MISSING ' in l); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t); open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-smi")" 0 "T:SCORE_MISSING.id real audit non-zero"
+afail "$TEST_TMP/t-smi" "T:SCORE_MISSING.id real audit non-zero"
 # id fields: the first row of each kind gets an id outside the expected set
-idtest() { local k="$1" nm="idt_$1"; logedit "$nm" "i = first('$k'); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t)"; assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$nm")" 0 "T:$k.id real audit non-zero"; }
+idtest() { local k="$1" nm="idt_$1"; logedit "$nm" "i = first('$k'); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t)"; afail "$TEST_TMP/t-$nm" "T:$k.id real audit non-zero"; }
 for k in ORDER VERSION PROBE_OK CMD START END COSTCHK COST SCORE TURNS RUNVERSION MODEL HOOKCOUNT HOOKERR BLOCKMAX; do idtest $k; done
 # the three new file-level cases of this round
 tamper rt; RL=$(ls "$TEST_TMP"/t-rt/runs/*/run.log | head -1); echo '{"type":"result","total_cost_usd":999, BROKEN' >>"$RL"
@@ -687,9 +744,9 @@ tamper gja; GJ=$(ls "$TEST_TMP"/t-gja/runs/*/gate.jsonl | head -1); echo '[]' >>
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-gja")" 0 "gate.jsonl corrupt line: a JSON array line is rejected"
 # COSTCHK spent: first spent 0 -> 1 with projected raised to match (the claimed value must not be trusted)
 logedit csp "i = first('COSTCHK'); sub(i, r'spent=\S+', 'spent=1.0000'); sub(i, r'projected=\S+', 'projected=1.0166')"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-csp")" 0 "T:COSTCHK.spent real audit non-zero (claimed spent and projected raised together)"
+afail "$TEST_TMP/t-csp" "T:COSTCHK.spent real audit non-zero (claimed spent and projected raised together)"
 logedit csp2 "i = [k for k, l in enumerate(L) if ' COSTCHK ' in l][1]; sub(i, r'spent=(\S+)', lambda m: 'spent=%.4f' % (float(m.group(1)) + 0.02)); sub(i, r'projected=(\S+)', lambda m: 'projected=%.4f' % (float(m.group(1)) + 0.02))"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-csp2")" 0 "T:COSTCHK.spent real audit non-zero (later row off by 0.02)"
+afail "$TEST_TMP/t-csp2" "T:COSTCHK.spent real audit non-zero (later row off by 0.02)"
 SPM="$TEST_TMP/mut-costchkspent/run-p2-batch.js"
 assert_eq "$(audit_rc "$TEST_TMP/mut-costraw/run-p2-batch.js" "$TEST_TMP/t-csp")" 0 "RED COSTCHK spent from the claimed value: mutant says OK"
 # HASH rows: a second row of one kind with the actual value is fine only with a second invocation
@@ -712,20 +769,54 @@ echo "--- round 11c: VERSION position and count, TASKHASH_DIFF tail"
 mk_mut verpos "cc < vr && vr < Math.min(...pr) &&" "cc < vr &&" "const cc = one('COSTCHK'), vr = one('VERSION')," "const cc = one('COSTCHK'), vr = (of('VERSION')[0]),"
 mk_mut tdtail "re: /^(pre|post) (ok|fail)\$/" "re: /^(pre|post) (ok|fail)(?: .*)?\$/"
 logedit vmove "i = first('VERSION', 'ON-01' if any(' VERSION ON-01 ' in l for l in L) else ''); j = first('PROBE_OK'); row = L.pop(i); j = first('PROBE_OK') + 1; row = L[j - 1].split(' ')[0] + ' ' + ' '.join(row.split(' ')[1:]); L.insert(j, row)"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-vmove")" 0 "T:VERSION.position VERSION moved after the first PROBE: real audit non-zero"
+afail "$TEST_TMP/t-vmove" "T:VERSION.position VERSION moved after the first PROBE: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-verpos/run-p2-batch.js" "$TEST_TMP/t-vmove")" 0 "RED VERSION after PROBE: mutant without the position check says OK"
 logedit vdup "i = first('VERSION'); L.insert(i + 1, L[i])"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-vdup")" 0 "T:VERSION.position a second VERSION row for one id: real audit non-zero"
+afail "$TEST_TMP/t-vdup" "T:VERSION.position a second VERSION row for one id: real audit non-zero"
 logedit tdtail "i = first('TASKHASH_DIFF', 'pre'); L[i] = L[i] + ' trailing words'"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tdtail")" 0 "T:TASKHASH_DIFF.tail text after ok: real audit non-zero"
+afail "$TEST_TMP/t-tdtail" "T:TASKHASH_DIFF.tail text after ok: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-tdtail/run-p2-batch.js" "$TEST_TMP/t-tdtail")" 0 "RED TASKHASH_DIFF tail: mutant with the open regex says OK"
+
+echo "--- round 12: the log as a grammar, trace readability"
+mkdir -p "$TEST_TMP/mut-prev"; git -C "$REPO_ROOT" show 51f8c73eca73232cdb37c77717bc1fbaf62dc784:evals/orchestration/run-p2-batch.js >"$TEST_TMP/mut-prev/run-p2-batch.js" || fail "previous wrapper unavailable"
+gedit() { tamper "$1" "${3:-$R1}"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" <<'PY'
+import sys, re
+p, code = sys.argv[1:3]; L = open(p).read().split('\n')
+def idx(k, pref=''): return [j for j, l in enumerate(L) if ' %s %s' % (k, pref) in l]
+def retime(row, ref): return ref.split(' ')[0] + ' ' + ' '.join(row.split(' ')[1:])
+exec(code); open(p, 'w').write('\n'.join(L))
+PY
+}
+# A: the second invocation's PREREG row is forged (the first one is genuine)
+gedit gA "i = idx('PREREG')[-1]; L[i] = re.sub(r'PREREG [0-9a-f]{40}', 'PREREG ' + 'e' * 40, L[i])" "$RF"
+FB="$RF" afail "$TEST_TMP/t-gA" "T:PREREG.commit the PREREG row of the second invocation is forged: real audit non-zero"
+FB="$RF" aud "$TEST_TMP/t-gA" "$TEST_TMP/mut-prev/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED forged second PREREG: the previous wrapper (first PREREG row only) says OK (got: $(grep -m1 "AUDIT FAIL" <<<"$AUD_OUT" | cut -c1-120))" 
+# B: every HASH row moved to the end of the log (just before the footer)
+gedit gB "h = [L[j] for j in idx('HASH')]; L[:] = [l for l in L if ' HASH ' not in l]; e = idx('TASKHASH_DIFF', 'post')[-1]; h = [retime(r, L[e - 1]) for r in h]; L[e:e] = h"
+afail "$TEST_TMP/t-gB" "T:HASH.count all HASH rows moved after the last END: real audit non-zero" 'log grammar'
+# C: TASKHASH_DIFF post moved before the first call (right after pre)
+gedit gC "pp = idx('TASKHASH_DIFF', 'post')[-1]; row = L.pop(pp); q = idx('TASKHASH_DIFF', 'pre')[0]; L.insert(q + 1, retime(row, L[q]))"
+afail "$TEST_TMP/t-gC" "TASKHASH_DIFF post moved before the first call: real audit non-zero" 'log grammar'
+# D (review): a HASH row re-assigned between two invocations keeps the global count but breaks each header
+gedit gD "h = idx('HASH', 'hook'); j = h[-1]; row = L[h[0]]; del L[j]; L.insert(h[0] + 1, row)" "$RF"
+FB="$RF" afail "$TEST_TMP/t-gD" "T:HASH.count a HASH row moved from the second invocation to the first: real audit non-zero" 'log grammar'
+FB="$RF" aud "$TEST_TMP/t-gD" "$TEST_TMP/mut-prev/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED HASH re-assignment: the previous wrapper (positional rules only) says OK (got: $(grep -m1 "AUDIT FAIL" <<<"$AUD_OUT" | cut -c1-120))"
+FB="$R1" aud "$TEST_TMP/t-gC" "$TEST_TMP/mut-prev/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED TASKHASH_DIFF post moved: the previous wrapper (positional rules only) says OK (got: $(grep -m1 "AUDIT FAIL" <<<"$AUD_OUT" | cut -c1-120))"
+FB="$R1" aud "$TEST_TMP/t-gB" "$TEST_TMP/mut-prev/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED HASH rows at the end: the previous wrapper (positional rules only) says OK (got: $(grep -m1 "AUDIT FAIL" <<<"$AUD_OUT" | cut -c1-120))"
+# unreadable trace file (chmod 000): not counted, and the audit fails
+tamper tu; TU=$(ls "$TEST_TMP"/t-tu/trace/ON-*/trace-turn*.log | head -1); chmod 000 "$TU"
+afail "$TEST_TMP/t-tu" "a trace file that cannot be read: real audit non-zero" 'unreadable'
+chmod 600 "$TU"
+tamper tu2; for f in "$TEST_TMP"/t-tu2/trace/C-01/trace-turn*.log; do chmod 000 "$f"; done
+afail "$TEST_TMP/t-tu2" "every trace file of one id unreadable: real audit non-zero" 'unreadable|no readable'
+for f in "$TEST_TMP"/t-tu2/trace/C-01/trace-turn*.log; do chmod 600 "$f"; done
 
 # every label named in the schema table exists in this file (T:KIND.field, or `idtest KIND` for id fields), every file test text
 # exists, every row kind the wrapper writes is listed, and PREREG carries the generated table verbatim
 node -e '
 const w=require(process.argv[1]),fs=require("fs");const t=fs.readFileSync(process.argv[2],"utf8");
 const table=w.schemaTable();let bad=0;
-for(const m of table.matchAll(/`(T:([A-Z_]+)\.([^`]+))`/g)){const [,label,kind,field]=m;if(label==="T:TRACE.latest")continue;if(!(t.includes(label)||t.includes("tt "+kind+"."+field)||(field==="id"&&new RegExp("for k in [^;]*\\b"+kind+"\\b[^;]*; do idtest").test(t))||label==="T:COSTCHK.arm")){console.error("test missing:",label);bad++}}
+for(const m of table.matchAll(/`(T:([A-Z_]+)\.([^`]+))`/g)){const [,label,kind,field]=m;if(!(t.includes(label)||t.includes("tt "+kind+"."+field)||(field==="id"&&new RegExp("for k in [^;]*\\b"+kind+"\\b[^;]*; do idtest").test(t)))){console.error("test missing:",label);bad++}}
 for(const m of table.matchAll(/^\| `[^`]+`(?: \| [^|]*){1} \| `([^`T][^`]*)` \|$/gm)){if(!t.includes(m[1])){console.error("file test text missing:",m[1]);bad++}}
 for(const n of ["unknown row kind","terminal row"]){if(!t.includes(n)){console.error("test missing:",n);bad++}}
 const kinds=[...fs.readFileSync(process.argv[1],"utf8").matchAll(/ctx\.log\(\x27([A-Z_]+)\x27/g)].map(m=>m[1]);

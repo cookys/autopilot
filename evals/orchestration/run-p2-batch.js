@@ -322,13 +322,15 @@ const W = {
  * only as a symlink that resolves to that very file. Any other name is unexpected.
  */
 function traceFiles(traceDir) {
-  const out = { regular: [], other: [], latest: null, latestOk: true };
+  const out = { regular: [], unreadable: [], other: [], latest: null, latestOk: true };
   let names = [];
   try { names = fs.readdirSync(traceDir).sort(); } catch (_e) { return out; }
   for (const f of names) {
     let st = null; try { st = fs.lstatSync(path.join(traceDir, f)); } catch (_e) { st = null; }
     if (f === 'latest') { out.latest = st; continue; }
-    if (st && st.isFile() && /^trace-turn\d+\.log$/.test(f)) out.regular.push(f); else out.other.push(f);
+    if (st && st.isFile() && /^trace-turn\d+\.log$/.test(f)) {
+      try { fs.readFileSync(path.join(traceDir, f)); out.regular.push(f); } catch (_e) { out.unreadable.push(f); }
+    } else out.other.push(f);
   }
   if (out.latest) {
     const top = [...out.regular].sort((x, y) => Number(/\d+/.exec(y)[0]) - Number(/\d+/.exec(x)[0]))[0];
@@ -340,9 +342,9 @@ function traceFiles(traceDir) {
 function traceCounts(traceDir) {
   const lines = [];
   const tf = traceFiles(traceDir);
-  for (const f of tf.regular) { try { lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* unreadable */ } }
+  let files = 0; // only files whose read succeeded count
+  for (const f of tf.regular) { try { lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); files++; } catch (_e) { /* unreadable: not counted */ } }
   let gate = 0, plugin = 0;
-  const files = tf.regular.length;
   for (const l of lines) {
     const m = /Hooks: Stop \[([^\]]*)\].*finished with status/.exec(l);
     if (!m) continue;
@@ -542,8 +544,18 @@ const FILE_SCHEMA = [
   ['runs/<id>/oracle.log', 'exists when the call ended with rc 0; first JSON object parses', 'oracle.log disagrees'],
   ['runs/<id>/gate.jsonl', 'exists when the call ended with rc 0; every line is a JSON object', 'gate.jsonl corrupt line'],
   ['runs/<id>/hook/live/per-turn-gate/*.jsonl', 'ON: at least one file; C: no hook directory; every record line parses with its fields', 'corrupt hook log line'],
-  ['trace/<id>/trace-turn<n>.log', 'the set is exactly the expected ids; at least one regular file each; only a `latest` symlink to the highest-numbered file may be extra (never counted)', 'all C-arm traces deleted'],
+  ['trace/<id>/trace-turn<n>.log', 'the set is exactly the expected ids; at least one readable regular file each, none unreadable; only a `latest` symlink to the highest-numbered file may be extra (never counted)', 'all C-arm traces deleted'],
   ['trace/<id>/latest', 'absent, or a symlink resolving to the highest-numbered trace-turn file', 'trace latest symlink to the wrong file'],
+];
+
+const GRAMMAR_TEXT = [
+  'log := invocation+ ; the last invocation ends with WRAPPER_DONE (last=2n), and every id has been through its block',
+  'invocation := WRAPPER_START header block* footer',
+  'header := HASH manifest, HASH prereg, HASH taskhash_expected, PREREG, HASH wrapper, HASH hook, HASH harness, [WINDOW_START in the first invocation only], TASKHASH_DIFF pre (each exactly once, in this order, in every invocation)',
+  'block := COSTCHK, VERSION, PROBE_OK, ORDER, CMD, START, END, COST, SCORE or SCORE_MISSING, TURNS, RUNVERSION, MODEL, HOOKCOUNT, HOOKERR, BLOCKMAX (all for the next id in the seeded order, in this order)',
+  'a failed probe is COSTCHK, VERSION, PROBE_FAIL, PAUSE, then the footer; the next invocation continues that id at its probe (no second COSTCHK or VERSION)',
+  'footer := [WRAPPER_DONE], TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT ; WRAPPER_DONE only between blocks, and TASKHASH_DIFF post therefore always follows the last END of its invocation',
+  'every PREREG row is checked against git (commit, time, ancestry) and every HASH row against the real file',
 ];
 
 function schemaTable() {
@@ -553,12 +565,75 @@ function schemaTable() {
   out.push(`| ${[...FAIL_KINDS].map((k) => `\`${k}\``).join(', ')} | all | presence fails the audit | \`terminal row\` |`);
   out.push('', '| Raw file or set | Must | Test (assertion text) |', '|---|---|---|');
   for (const [f, must, test] of FILE_SCHEMA) out.push(`| \`${f}\` | ${must} | \`${test}\` |`);
+  out.push('', '**Log grammar** (checked before every other row rule; any row off its place fails)', '', ...GRAMMAR_TEXT.map((l) => `- ${l}`));
   return `${out.join('\n')}\n`;
 }
 
 const POST_KINDS = ['COST', 'SCORE', 'SCORE_MISSING', 'TURNS', 'RUNVERSION', 'MODEL', 'HOOKCOUNT', 'HOOKERR', 'BLOCKMAX'];
 
 /** Row shapes, ids, positions and the per-id sequence. Returns the failures (the caller stops here when there are any). */
+/** Token a row stands for in the log grammar. */
+function logToken(r) {
+  if (r.kind === 'HASH') return `HASH:${r.rest.split(' ')[0]}`;
+  if (r.kind === 'TASKHASH_DIFF') return `TD:${r.rest.split(' ')[0]}`;
+  if (r.kind === 'SCORE_MISSING') return 'SCORE';
+  return r.kind;
+}
+
+/**
+ * The log as a grammar. One wrapper invocation is: WRAPPER_START, a fixed header (HASH manifest, HASH prereg, HASH taskhash_expected,
+ * PREREG, HASH wrapper, HASH hook, HASH harness, WINDOW_START in the first invocation only, TASKHASH_DIFF pre), then id blocks, then
+ * a footer ([WRAPPER_DONE], TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT). An id block is COSTCHK, VERSION, then PROBE_OK followed by
+ * ORDER, CMD, START, END, COST, SCORE or SCORE_MISSING, TURNS, RUNVERSION, MODEL, HOOKCOUNT, HOOKERR, BLOCKMAX; a probe that fails
+ * is PROBE_FAIL, PAUSE and the footer, and the next invocation continues that id at its probe (no second COSTCHK or VERSION).
+ * Ids come in the seeded order. The last invocation ends with WRAPPER_DONE after the last id. Any row off its place fails.
+ */
+function auditGrammar(rows, ids) {
+  const BODY = ['ORDER', 'CMD', 'START', 'END', 'COST', 'SCORE', 'TURNS', 'RUNVERSION', 'MODEL', 'HOOKCOUNT', 'HOOKERR', 'BLOCKMAX'];
+  const idOf2 = (r) => r.rest.split(' ')[0];
+  let i = 0, inv = 0, cur = 0, stage = 'new', k = 0, done = false;
+  const bad = (msg) => [`log grammar: ${msg}`];
+  while (i < rows.length) {
+    inv++;
+    const hdr = ['WRAPPER_START', 'HASH:manifest', 'HASH:prereg', 'HASH:taskhash_expected', 'PREREG', 'HASH:wrapper', 'HASH:hook', 'HASH:harness', ...(inv === 1 ? ['WINDOW_START'] : []), 'TD:pre'];
+    for (const want of hdr) {
+      if (i >= rows.length || logToken(rows[i]) !== want) return bad(`row ${i + 1}: expected ${want} in the header of invocation ${inv}, found ${i < rows.length ? logToken(rows[i]) : 'the end of the log'}`);
+      i++;
+    }
+    let paused = false;
+    for (;;) {
+      const r = rows[i];
+      if (!r) return bad(`invocation ${inv} has no footer`);
+      const t = logToken(r);
+      if (t === 'WRAPPER_DONE' || t === 'TD:post') break;
+      if (paused) return bad(`row ${i + 1}: ${t} after PAUSE, only the footer may follow`);
+      const wantId = ids[cur];
+      if (stage === 'run') {
+        if (t !== BODY[k]) return bad(`row ${i + 1}: expected ${BODY[k]} for ${wantId}, found ${t}`);
+        if (idOf2(r) !== wantId) return bad(`row ${i + 1}: ${t} names ${idOf2(r)}, expected ${wantId}`);
+        k++; if (k === BODY.length) { cur++; stage = 'new'; }
+      } else if (t === 'COSTCHK' && stage === 'new' && cur < ids.length && idOf2(r) === wantId) stage = 'costchk';
+      else if (t === 'VERSION' && stage === 'costchk' && idOf2(r) === wantId) stage = 'version';
+      else if (t === 'PROBE_OK' && stage === 'version' && idOf2(r) === wantId) { stage = 'run'; k = 0; }
+      else if (t === 'PROBE_FAIL' && stage === 'version' && idOf2(r) === wantId) {
+        if (!rows[i + 1] || rows[i + 1].kind !== 'PAUSE') return bad(`row ${i + 1}: PROBE_FAIL is not followed by PAUSE`);
+        i++; paused = true;
+      } else return bad(`row ${i + 1}: ${t} is not allowed here (id ${wantId}, stage ${stage})`);
+      i++;
+    }
+    if (logToken(rows[i]) === 'WRAPPER_DONE') {
+      if (paused || stage !== 'new') return bad(`row ${i + 1}: WRAPPER_DONE in the middle of an id block`);
+      done = true; i++;
+    } else if (!paused) return bad(`row ${i + 1}: invocation ${inv} ends without WRAPPER_DONE or PAUSE`);
+    for (const want of ['TD:post', 'COMPLETE', 'WRAPPER_EXIT']) {
+      if (i >= rows.length || logToken(rows[i]) !== want) return bad(`row ${i + 1}: expected ${want} in the footer of invocation ${inv}, found ${i < rows.length ? logToken(rows[i]) : 'the end of the log'}`);
+      i++;
+    }
+  }
+  if (!done || cur !== ids.length) return bad(`the log ends after ${cur} of ${ids.length} ids or without WRAPPER_DONE`);
+  return [];
+}
+
 function auditRows(rows, ids, order, m) {
   const f = [];
   const n2 = ids.length;
@@ -576,6 +651,8 @@ function auditRows(rows, ids, order, m) {
     if (r.kind === 'WRAPPER_START' && !(Number(mm[1]) >= 1 && Number(mm[1]) <= Number(mm[2]) && Number(mm[2]) <= n2)) f.push(`WRAPPER_START range: ${r.rest}`);
   });
   if (f.length) return f;
+  const gr = auditGrammar(rows, ids);
+  if (gr.length) return gr;
   const kinds = (k) => rows.filter((r) => r.kind === k);
   const done = kinds('WRAPPER_DONE'), exits = kinds('WRAPPER_EXIT');
   if (!(done.length && Number(/last=(\d+)/.exec(done[done.length - 1].rest)[1]) === n2)) f.push('final WRAPPER_DONE is missing or not last=2n');
@@ -638,7 +715,7 @@ function auditFiles(runDir, ids, order, m, rcOf) {
       });
     }
     const tf = traceFiles(path.join(runDir, 'trace', id));
-    if (!tf.regular.length || tf.other.length) f.push(`${id}: trace/${id} has no trace-turn files or unexpected names`);
+    if (!tf.regular.length || tf.other.length || tf.unreadable.length) f.push(`${id}: trace/${id} has no readable trace-turn file, an unreadable one, or unexpected names`);
     if (tf.latest && !tf.latestOk) f.push(`${id}: trace/${id}/latest is not a symlink to the highest trace-turn file`);
     const cmdv = parseJson(path.join('cmd', `${id}.json`));
     if (!Array.isArray(cmdv)) f.push(`${id}: cmd/${id}.json is not a JSON array`);
@@ -941,15 +1018,17 @@ function audit(runDir, m, clone, opts) {
       let now = null; try { now = sha256(fs.readFileSync(path.join(clone, rel))); } catch (_e) { /* below */ }
       need(now !== null && now === logged(key), `${what} content hash differs from the value logged at the start`);
     }
-    const prCommit = pr[0].rest.split(' ')[0];
-    need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit, 'the logged PREREG commit is not the commit of the PREREG note');
-    need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1], 'the logged PREREG time differs from the commit time in git');
-    need(g(['merge-base', '--is-ancestor', prCommit, 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
-    // The note as committed at the recorded commit is the one hashed at the start, and nothing was committed over it since.
-    const atCommit = g(['show', `${prCommit}:${m.prereg}`]);
-    need(atCommit.status === 0 && sha256(atCommit.stdout) === logged('prereg'), 'the PREREG note at the recorded commit does not hash to the value logged at the start');
-    const since = g(['log', '--format=%H', `${prCommit}..HEAD`, '--', m.prereg, mrel, m.taskhash_expected]);
-    need(since.status === 0 && since.stdout.trim() === '', 'PREREG note, manifest or task hash baseline was committed again after the recorded preregistration commit');
+    for (const prr of pr) { // every invocation's PREREG row is checked against git, not only the first
+      const prCommit = prr.rest.split(' ')[0];
+      need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit, 'the logged PREREG commit is not the commit of the PREREG note');
+      need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === prr.rest.split(' ')[1], 'the logged PREREG time differs from the commit time in git');
+      need(g(['merge-base', '--is-ancestor', prCommit, 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
+      // The note as committed at the recorded commit is the one hashed at the start, and nothing was committed over it since.
+      const atCommit = g(['show', `${prCommit}:${m.prereg}`]);
+      need(atCommit.status === 0 && sha256(atCommit.stdout) === logged('prereg'), 'the PREREG note at the recorded commit does not hash to the value logged at the start');
+      const since = g(['log', '--format=%H', `${prCommit}..HEAD`, '--', m.prereg, mrel, m.taskhash_expected]);
+      need(since.status === 0 && since.stdout.trim() === '', 'PREREG note, manifest or task hash baseline was committed again after the recorded preregistration commit');
+    }
   }
   const win = by('WINDOW_START')[0], firstStart = by('START')[0];
   if (pr.length && win && firstStart) {

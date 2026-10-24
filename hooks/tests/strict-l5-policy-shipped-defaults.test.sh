@@ -58,7 +58,7 @@ assert_contains "$OUT" "CONSISTENT" "strict /l5 policy models equal the shipped 
 
 for old in "GLM-5.3:GLM-5.2" "gpt-6.1-sol:gpt-5.6-sol" "grok-4.7:grok-4.5"; do
   new_name="${old%%:*}"; old_name="${old##*:}"
-  sed "0,/model: '${new_name}'/s//model: '${old_name}'/" "$REPO_ROOT/src/readiness/provider-bootstrap.js" > "$TEST_TMP/reverted.js"
+  sed_mutant "$REPO_ROOT/src/readiness/provider-bootstrap.js" "$TEST_TMP/reverted.js" "0,/model: '${new_name}'/s//model: '${old_name}'/"
   NEG="$(node "$TEST_TMP/check.js" "$REPO_ROOT" "$TEST_TMP/reverted.js" 2>&1)"
   assert_contains "$NEG" "DRIFT" "negative control: ${old_name} in the policy is flagged"
 done
@@ -84,7 +84,11 @@ for (const x of d4) {
 console.log(bad.length ? "BINDING-DRIFT " + bad.join(",") : "BINDING-OK");' "$TEST_TMP/gen-out.json" ) 2>&1
 }
 assert_contains "$(gen_check "$TEST_TMP/gen.js")" "BINDING-OK" "D2 keeps agy locator, D4 binds to canonical-roster"
-sed 's/AGY_HELP_SHA, assertion/D4_ROSTER_SHA, assertion/; s#`agy://cli-help/${env.AGY_VERSION}\#output-format-json`, env.AGY_HELP_SHA#d4RosterLocator, env.D4_ROSTER_SHA#' "$TEST_TMP/gen.js" > "$TEST_TMP/gen-shared.js"
+sed_mutant "$TEST_TMP/gen.js" "$TEST_TMP/gen-shared.js" 's#`agy://cli-help/${env.AGY_VERSION}\#output-format-json`, env.AGY_HELP_SHA#d4RosterLocator, env.D4_ROSTER_SHA#'
 assert_contains "$(gen_check "$TEST_TMP/gen-shared.js")" "BINDING-DRIFT" "negative control: D2 sharing the D4 locator and sha is flagged"
+# SHA-only control: the locator stays agy's, only the document sha is swapped for the D4 one. The locator+sha control
+# above is also caught by the locator comparison, so it cannot tell whether the D2 sha comparison still exists.
+sed_mutant "$TEST_TMP/gen.js" "$TEST_TMP/gen-sha-only.js" 's/AGY_HELP_SHA, assertion/D4_ROSTER_SHA, assertion/'
+assert_contains "$(gen_check "$TEST_TMP/gen-sha-only.js")" "BINDING-DRIFT" "negative control: D2 carrying only the D4 sha is flagged"
 
 finalize_test

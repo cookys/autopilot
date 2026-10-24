@@ -436,6 +436,96 @@ NODE
   fi
 }
 
+# Mutation helpers for negative controls. A mutation whose anchor no longer matches the product text
+# leaves the "mutant" identical to the original, and the control built on it silently passes for the
+# wrong reason. These fail loudly instead. A miss is also appended to $TEST_TMP/.mutation-miss, which
+# finalize_test turns into a failure, so a miss inside $( ) (where fail() only reaches the subshell's
+# own list) still fails the suite.
+__mutation_miss() {
+  fail "$1"
+  [ -n "${TEST_TMP:-}" ] && printf '%s\n' "$1" >> "$TEST_TMP/.mutation-miss"
+  return 1
+}
+# One sed command per call. The helpers apply the expression with the real sed, once, so sed's own semantics
+# decide what it does; they only refuse anything that is not recognisably ONE command, because a mutation
+# made of several commands can hide a missed anchor behind a hit (whole-file comparison). To mutate with
+# several commands, call the helper once per command (sed_mutant for the first, sed_mutate on the result for
+# the rest). Refused: -f, more than one -e / script argument, a newline in the expression, and any shape other
+# than   [ADDR]s<d>RE<d>REPL<d>[flags]   |   ADDR d   |   ADDR p   |   [ADDR]{i|a|c} text
+# where ADDR is N, $, /re/, N,M, N,$, 0,/re/ or /re/,/re/ and the s command has exactly three unescaped
+# delimiters (so `s/a/b/s/b/c/`, `s/a/b/;d` and `/x/{...}` are all refused rather than guessed).
+__sed_one_command() { # <expr>: 0 if it is a single recognisable command
+  local e="$1" rest had_addr=0 p
+  local RE='/([^/\\]|\\.)*/'
+  [[ "$e" != *$'\n'* ]] || return 1
+  rest="$e"
+  # address: the first of these prefixes that matches (checked in this order, longest forms first)
+  for p in "^(0|[0-9]+),${RE}" "^${RE},${RE}" "^[0-9]+,([0-9]+|\\\$)" "^${RE}" "^[0-9]+" '^\$'; do
+    if [[ "$e" =~ $p ]]; then rest="${e:${#BASH_REMATCH[0]}}"; had_addr=1; break; fi
+  done
+  rest="${rest#"${rest%%[![:space:]]*}"}"
+  case "$rest" in
+    d|p) [ "$had_addr" = 1 ]; return $? ;;
+    [iac]\\*|[iac]\ *|[iac]) return 0 ;;
+    s?*)
+      local d="${rest:1:1}" i n=0 ch last=-1 body="${rest:2}"
+      case "$d" in '\'|' ') return 1 ;; esac
+      for (( i = 0; i < ${#body}; i++ )); do
+        ch="${body:i:1}"
+        if [ "$ch" = '\' ]; then i=$((i + 1)); continue; fi
+        if [ "$ch" = "$d" ]; then n=$((n + 1)); last=$i; fi
+      done
+      [ "$n" -eq 2 ] || return 1
+      [[ "${body:last+1}" =~ ^[gpIiMm0-9]*$ ]] ;;
+    *) return 1 ;;
+  esac
+}
+# __sed_apply <work-file> <label> <sed args...>: validate that the args are ONE command, apply it to the
+# work file in place with the real sed, and require sed to succeed and the file to change.
+__sed_apply() {
+  local f="$1" label="$2" a expr="" nexpr=0 before after rc; shift 2
+  local -a opts=()
+  while [ "$#" -gt 0 ]; do
+    a="$1"; shift
+    case "$a" in
+      -e) expr="${1-}"; nexpr=$((nexpr + 1)); shift ;;
+      -E|-r|-s|--posix|--regexp-extended) opts+=("$a") ;;
+      -f|--file) __mutation_miss "$label: sed -f is not supported (one sed command per call)"; return 1 ;;
+      -*) __mutation_miss "$label: unsupported sed option '$a'"; return 1 ;;
+      *) expr="$a"; nexpr=$((nexpr + 1)) ;;
+    esac
+  done
+  [ "$nexpr" -eq 1 ] || { __mutation_miss "$label: exactly one sed command per call, got $nexpr: split it into separate calls"; return 1; }
+  __sed_one_command "$expr" || { __mutation_miss "$label: not a single recognisable sed command (one command per call, split it): $expr"; return 1; }
+  before="$(cksum < "$f")"
+  sed -i "${opts[@]}" -e "$expr" "$f"; rc=$?
+  [ "$rc" -eq 0 ] || { __mutation_miss "$label: sed exited $rc on '$expr'"; return 1; }
+  after="$(cksum < "$f")"
+  if [ "$before" = "$after" ]; then __mutation_miss "$label: mutation did not hit (anchor drifted): sed -e '$expr'"; return 1; fi
+}
+# sed_mutate <file> <one sed command>: in-place; fails when the file is missing, the args are not one command,
+# sed fails, or the file does not change.
+sed_mutate() {
+  local f="$1"; shift
+  [ -f "$f" ] || { __mutation_miss "mutation target file missing: $f"; return 1; }
+  __sed_apply "$f" "sed_mutate $f" "$@"
+}
+# sed_mutant <src> <dest> <one sed command>: dest = src with the command applied. Refuses (before any rm or
+# write) when src is missing or src and dest resolve to the same path; dest must end as a regular file that
+# differs from src.
+sed_mutant() {
+  local src="$1" dest="$2" rs rd; shift 2
+  [ -f "$src" ] || { __mutation_miss "mutation source file missing: $src"; return 1; }
+  rs="$(realpath -- "$src" 2>/dev/null)" && rd="$(realpath -m -- "$dest" 2>/dev/null)" \
+    || { __mutation_miss "sed_mutant: cannot resolve $src / $dest to compare them"; return 1; }
+  [ "$rs" != "$rd" ] || { __mutation_miss "sed_mutant: source and destination are the same file ($src)"; return 1; }
+  rm -f "$dest"
+  cp "$src" "$dest" || { __mutation_miss "sed_mutant: cannot copy $src to $dest"; return 1; }
+  __sed_apply "$dest" "sed_mutant $src" "$@" || return 1
+  if [ ! -f "$dest" ]; then __mutation_miss "sed_mutant: $dest is not a regular file"; return 1; fi
+  if cmp -s "$src" "$dest"; then __mutation_miss "sed_mutant: result identical to $src"; return 1; fi
+}
+
 # Assertion bookkeeping for the run.sh summary.
 __TEST_PASS_COUNT=0
 __TEST_FAIL_MSGS=()
@@ -736,6 +826,9 @@ JSON
 # case parked below it is invisible rather than failing. Insert new cases ABOVE
 # the call, and confirm each one can actually go red before trusting it.
 finalize_test() {
+  if [ -s "${TEST_TMP:-/nonexistent}/.mutation-miss" ]; then
+    fail "mutation anchor missed (recorded by sed_mutate/sed_mutant): $(head -c 300 "$TEST_TMP/.mutation-miss" | tr '\n' ' ')"
+  fi
   if [ "${#__TEST_FAIL_MSGS[@]}" -eq 0 ]; then
     echo "PASS [$TEST_NAME] $__TEST_PASS_COUNT assertions"
     exit 0

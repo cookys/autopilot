@@ -242,7 +242,7 @@ assert_eq "$rc" "0" "--self-test exits 0"
 mkdir -p "$TEST_TMP/mutroot/scripts" "$TEST_TMP/mutroot/references"
 cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mutroot/references/"
 mut="$TEST_TMP/mutroot/scripts/check-mut.js"
-sed "s/Status: 'pending'/Status: 'open'/" "$GATE" > "$mut"
+sed_mutant "$GATE" "$mut" "s/Status: 'pending'/Status: 'open'/"
 set +e
 node "$mut" --self-test >/dev/null 2>/dev/null
 rc=$?

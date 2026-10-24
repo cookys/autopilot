@@ -1091,6 +1091,7 @@ C15R1_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-
 assert_exit_code "$C15R1_RC" "1" "case 15r: stale top-level closed_findings (aborted-generation stamp) is refused before repair"
 # negative control: refinalize minus the closed_findings rewrite -> checker still refuses
 sed 's/^  if (receipt.closed_findings !== undefined) receipt.closed_findings = derived.closed_findings;$//' "$REPO_ROOT/scripts/hetero-review-loop.js" > "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js"
+cmp -s "$REPO_ROOT/scripts/hetero-review-loop.js" "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js" && fail "neg15r mutation did not apply (anchor drifted)"
 node "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js" refinalize --ledger "$LEDGER" --phase pab --generation 2 >/dev/null 2>&1
 rm -f "$REPO_ROOT/scripts/hetero-review-loop.neg15r.js"
 C15R2_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15R2_RC=$?

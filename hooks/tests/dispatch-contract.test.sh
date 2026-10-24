@@ -826,22 +826,19 @@ fi
 # unit is guaranteed boundary_rejected AFTER the runner has already been paid for.
 # The checker can prove that before any spend.
 echo "--- Case 9.1: directory in output.paths (kind=commit) is NO-GO ---"
-sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src"]}|' \
-  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outdir.json"
+sed_mutant "$CONTRACT_DIR/valid.json" "$CONTRACT_DIR/outdir.json" 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src"]}|'
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outdir.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "output"
 
 echo "--- Case 9.2: trailing-slash directory (kind=commit) is NO-GO ---"
-sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/"]}|' \
-  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outslash.json"
+sed_mutant "$CONTRACT_DIR/valid.json" "$CONTRACT_DIR/outslash.json" 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/"]}|'
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outslash.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "output"
 
 echo "--- Case 9.3: negative control — file paths (kind=commit) still GO ---"
-sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/main.go"]}|' \
-  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outfile.json"
+sed_mutant "$CONTRACT_DIR/valid.json" "$CONTRACT_DIR/outfile.json" 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/main.go"]}|'
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outfile.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "0"
 

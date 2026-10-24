@@ -136,6 +136,12 @@ OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributo
 assert_eq "0" "$EXIT" "opencode --effort max reviewed exit 0"
 assert_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant xhigh' "opencode clamps 'max' effort to '--variant xhigh'"
 
+# opencode: --effort default is accepted and sends no --variant (models with no effort tier)
+rm -f "$OPENCODE_ARGV_FILE"
+OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_JSON" --effort default 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "opencode --effort default reviewed exit 0 (not precondition_failed)"
+assert_not_contains "$(paste -sd ' ' "$OPENCODE_ARGV_FILE")" '--variant' "opencode --effort default sends no --variant"
+
 # opencode v2 (2.x removed --dir/--pure/--variant): the same stub reporting v2.0.32 gets the --standalone
 # shape and still yields a parsed verdict end to end.
 rm -f "$OPENCODE_ARGV_FILE"

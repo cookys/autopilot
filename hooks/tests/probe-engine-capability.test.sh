@@ -211,6 +211,26 @@ else
   bad "6: cc_status=$cc_status runner_called=$([ -e "$CC_CAPTURE" ] && echo yes || echo no)"
 fi
 
+# 7. kimi effort: the probe sends the seat's tier like every other rail (KIMI_MODEL_THINKING_EFFORT),
+# scrubs a parent-env value for default/unspecified, and refuses a value kimi does not offer before spending.
+KIMI_CAPTURE="$TESTDIR/kimi-effort.txt"
+cat > "$DUMMY_BIN_DIR/kimi" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo 'kimi 2.3.0'; exit 0; fi
+printf '%s' "${KIMI_MODEL_THINKING_EFFORT-UNSET}" >"$PROBE_KIMI_CAPTURE"
+echo OK
+EOF
+chmod +x "$DUMMY_BIN_DIR/kimi"
+for ke in low high max default unspecified xhigh; do
+  reset; rm -f "$KIMI_CAPTURE"
+  kargs=(); [ "$ke" = unspecified ] || kargs=(--effort "$ke")
+  KIMI_MODEL_THINKING_EFFORT=ambient PROBE_KIMI_CAPTURE="$KIMI_CAPTURE" AUTOPILOT_STRIKE_WRITER=off \
+    bash "$PROBE_CLI" quota --runner kimi --model fixture --live-spend --store "$TESTDIR" "${kargs[@]}" >/dev/null 2>&1
+  seen="$(cat "$KIMI_CAPTURE" 2>/dev/null || echo NOT_SPAWNED)"
+  case "$ke" in default|unspecified) want=UNSET ;; xhigh) want=NOT_SPAWNED ;; *) want="$ke" ;; esac
+  if [ "$seen" = "$want" ]; then ok "7: kimi probe effort=$ke -> $want"; else bad "7: kimi probe effort=$ke expected=$want observed=$seen"; fi
+done
+
 # Restore PATH
 export PATH="$OLD_PATH"
 

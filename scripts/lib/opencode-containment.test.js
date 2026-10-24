@@ -389,9 +389,19 @@ const OCJS = path.join(__dirname, 'opencode-containment.js');
   const i1 = path.join(root, 'impl1');
   cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'high', '--profile', 'implement', '--cwd', '/wt', '--version-string', '1.19.2', '--out', i1]);
   eq(nul(i1, 'argv.nul'), ['run', '--dir', '/wt', '--pure', '-m', 'p/m', '--variant', 'high', '--format', 'json'], 'implement v1 argv unchanged');
+  // effort `default` = send no variant at all (providers with no effort tier); never `#default` / `--variant default`
+  const d2 = path.join(root, 'impl-default2');
+  cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'default', '--profile', 'implement', '--cwd', '/wt', '--version-string', 'v2.0.32', '--out', d2]);
+  eq(nul(d2, 'argv.nul'), ['run', '--standalone', '-m', 'p/m', '--format', 'json'], 'implement v2 default effort: bare model, no #variant');
+  const d1 = path.join(root, 'impl-default1');
+  cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'default', '--profile', 'implement', '--cwd', '/wt', '--version-string', '1.19.2', '--out', d1]);
+  eq(nul(d1, 'argv.nul'), ['run', '--dir', '/wt', '--pure', '-m', 'p/m', '--format', 'json'], 'implement v1 default effort: no --variant');
   const p1 = path.join(root, 'probe1');
   cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'max', '--profile', 'probe', '--cwd', '/pc', '--version-string', '1.19.2', '--out', p1]);
   eq(nul(p1, 'argv.nul'), ['run', '--dir', '/pc', '--pure', '-m', 'p/m', '--agent', 'plan', '--variant', 'xhigh'], 'probe v1 argv unchanged');
+  const pd = path.join(root, 'probe1-default');
+  cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'default', '--profile', 'probe', '--cwd', '/pc', '--version-string', '1.19.2', '--out', pd]);
+  eq(nul(pd, 'argv.nul'), ['run', '--dir', '/pc', '--pure', '-m', 'p/m', '--agent', 'plan'], 'probe v1 default effort: no --variant (and never an empty one)');
 }
 
 // ── provider end-to-end, v2 adaptor ──

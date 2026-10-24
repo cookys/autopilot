@@ -317,11 +317,11 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # cc-shim/anthropic-compatible transport; exporting ANTHROPIC_* around
   # Codex/Grok/Qoder does not observe their endpoint tuple.
   #
-  # Effort: only codex / grok / qoderclicn / opencode consume it — verified by
+  # Effort: only codex / grok / qoderclicn / opencode / kimi consume it — verified by
   # reading the dispatcher, not by assumption (dispatch-review.sh: codex `-c
   # model_reasoning_effort`, grok `--reasoning-effort`, qoderclicn
-  # `--reasoning-effort`, opencode `--variant` with max→xhigh;
-  # agy/cc-shim/anthropic-compatible/claude-native/kimi/cursor never receive it,
+  # `--reasoning-effort`, opencode `--variant` with max→xhigh,
+  # kimi KIMI_MODEL_THINKING_EFFORT low|high|max; agy/cc-shim/anthropic-compatible/claude-native/cursor never receive it,
   # and dispatch-anthropic-review.js has no effort parameter at all).  An
   # effort-bearing tuple on a non-consuming runner is unobserved, so it must
   # stay non-authorizing rather than be stamped available.
@@ -330,7 +330,7 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     *)                            _ENDPOINT_CONSUMER=0 ;;
   esac
   case "$RUNNER" in
-    codex|grok|qoderclicn|opencode) _EFFORT_CONSUMER=1 ;;
+    codex|grok|qoderclicn|opencode|kimi) _EFFORT_CONSUMER=1 ;;
     *)                              _EFFORT_CONSUMER=0 ;;
   esac
   if [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] \
@@ -343,6 +343,14 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     PROBE_EXIT=1
     SKIP_LIVE_CMD=1
     echo "runner $RUNNER has no verified exact effort control" >"$PROBE_ERR_FILE"
+  fi
+  # kimi offers low|high|max only (`default` = send nothing); anything else is refused before any spend.
+  if [ "$RUNNER" = "kimi" ] && [ -n "$EFFORT" ]; then
+    case "$EFFORT" in
+      low|high|max|default) ;;
+      *) PROBE_EXIT=1; SKIP_LIVE_CMD=1
+         echo "kimi does not offer effort $EFFORT (low|high|max or default)" >"$PROBE_ERR_FILE" ;;
+    esac
   fi
   # shellcheck source=lib/grok-effort.sh
   . "$SELF_DIR/lib/grok-effort.sh" 2>/dev/null || true
@@ -478,7 +486,10 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     kimi)
       # $KIMI_BIN resolved in the binary-presence case above (same order as the dispatcher).
       # -p is the non-interactive path; no --auto/--plan (they cannot combine with -p).
-      ( cd "$PROBE_CWD" && "$KIMI_BIN" -m "$MODEL" -p "Respond only with OK" ) \
+      # Effort rides KIMI_MODEL_THINKING_EFFORT (no flag exists); a parent-env value is always scrubbed first.
+      _kimi_eff=""; case "$EFFORT" in low|high|max) _kimi_eff="$EFFORT" ;; esac
+      ( cd "$PROBE_CWD" && env -u KIMI_MODEL_THINKING_EFFORT ${_kimi_eff:+KIMI_MODEL_THINKING_EFFORT="$_kimi_eff"} \
+          "$KIMI_BIN" -m "$MODEL" -p "Respond only with OK" ) \
         >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     opencode)

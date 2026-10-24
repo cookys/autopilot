@@ -109,6 +109,39 @@ assert_eq "" "$(git -C "$SBX" branch --list feat/kimi-big)" "kimi: oversized pro
 # The stub (which would have written the argv log) was never invoked — refused pre-spend.
 assert_file_absent "$ARGV_LOG" "kimi: argv log absent — the stub never ran (refused before spawn)"
 
+# 4b) effort reaches kimi as KIMI_MODEL_THINKING_EFFORT (the CLI has no effort flag; without
+# the variable it runs config.toml's default_effort, so a "high" seat silently ran "max").
+ENV_LOG="$TEST_TMP/kimi-env.log"
+STUB_ENV="$TEST_TMP/kimi-env"
+cat > "$STUB_ENV" <<__EOFE
+#!/usr/bin/env bash
+printf '%s\n' "\$*" > "$ARGV_LOG"
+if [ "\${KIMI_MODEL_THINKING_EFFORT+set}" = set ]; then printf 'SET:%s\n' "\$KIMI_MODEL_THINKING_EFFORT" > "$ENV_LOG"; else printf 'UNSET\n' > "$ENV_LOG"; fi
+echo kimi-edited > ki_out.txt
+__EOFE
+chmod +x "$STUB_ENV"
+for e in low high max; do
+  rm -f "$ENV_LOG"
+  OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+  assert_eq "SET:$e" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi --effort $e reaches the CLI as KIMI_MODEL_THINKING_EFFORT=$e"
+  assert_not_contains "$(cat "$ARGV_LOG")" "--effort" "kimi effort travels in the env, not argv"
+done
+rm -f "$ENV_LOG"
+OUT="$(cd "$SBX" && KIMI_MODEL_THINKING_EFFORT=max "$SCRIPT" --runner kimi --model kimi-code/k3 --effort default --branch feat/kimi-eff-default --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+assert_eq "UNSET" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi --effort default sends no effort variable (an ambient one is scrubbed)"
+rm -f "$ENV_LOG"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-eff-unset --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+assert_eq "UNSET" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi without an explicit --effort sends no effort variable (the xhigh script default is not a seat decision)"
+for e in medium xhigh; do
+  rm -f "$ENV_LOG"
+  OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-bad-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+  RC=$?
+  assert_eq "2" "$RC" "kimi --effort $e fails closed (kimi supports low|high|max only)"
+  assert_contains "$OUT" '"status": "precondition_failed"' "kimi --effort $e reports precondition_failed"
+  assert_contains "$OUT" 'low|high|max' "kimi --effort $e refusal names the accepted values"
+  assert_file_absent "$ENV_LOG" "kimi --effort $e: the CLI was never spawned"
+done
+
 # 5) preconditions: missing binary; auto never selects kimi; --model required; runner enum names kimi
 OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/x --branch feat/kimi-nobin --prompt-file "$PROMPT" --kimi-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing kimi binary fails closed"

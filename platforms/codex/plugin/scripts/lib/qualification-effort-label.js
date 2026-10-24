@@ -13,9 +13,10 @@
 const { grokEffortClamp } = require('./grok-effort');
 
 const EFFORT_CHECK_STATUSES = Object.freeze(['match', 'mismatch', 'unverifiable']);
-// CLI kinds whose provider branch never sends an effort flag (effort lives in the model name /
-// a boolean config); the scorecard vocabulary labels that dimension `none`.
-const NO_EFFORT_CLI_KINDS = Object.freeze(['agy', 'kimi']);
+// CLI kinds whose provider branch never sends an effort (effort lives in the model name); the
+// scorecard vocabulary labels that dimension `none`. kimi is NOT one: it takes
+// KIMI_MODEL_THINKING_EFFORT, so its label is compared with the value actually sent.
+const NO_EFFORT_CLI_KINDS = Object.freeze(['agy']);
 
 function normalizeSent(value) {
   const v = String(value === undefined || value === null ? '' : value).trim();

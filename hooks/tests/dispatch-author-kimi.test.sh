@@ -26,6 +26,7 @@ if [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 printf '%s\n' "$PWD" >"$KIMI_CAPTURE_DIR/cwd"
+printf '%s' "${KIMI_MODEL_THINKING_EFFORT-UNSET}" >"$KIMI_CAPTURE_DIR/effort"
 node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))' \
   "$KIMI_CAPTURE_DIR/argv.json" "$@"
 has_prompt=0
@@ -294,5 +295,22 @@ assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AU
   "dispatch-author.sh --timeout 10m reaches the kimi adapter as 595000 ms"
 assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT")" "295000" \
   "dispatch-author.sh default 5m timeout reaches the kimi adapter as 295000 ms"
+
+# effort: dispatch-author.sh forwards an explicit low|high|max as KIMI_MODEL_THINKING_EFFORT (kimi has no
+# effort flag; unset, the CLI runs config.toml's default_effort), sends nothing for default/unspecified,
+# and fails closed on a value kimi does not offer.
+kimi_effort_seen() { # args: dispatch-author args; prints the effort env the fake kimi saw, or NONE
+  rm -f "$CAPTURE_DIR/effort"
+  tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 KIMI_MODEL_THINKING_EFFORT=ambient bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" "$@" >/dev/null 2>&1
+  cat "$CAPTURE_DIR/effort" 2>/dev/null || printf NONE
+}
+for E in low high max; do
+  assert_eq "$(kimi_effort_seen --effort "$E")" "$E" "dispatch-author.sh kimi --effort $E reaches the CLI as KIMI_MODEL_THINKING_EFFORT"
+done
+assert_eq "$(kimi_effort_seen --effort default)" "UNSET" "dispatch-author.sh kimi --effort default sends no effort variable (ambient one scrubbed)"
+assert_eq "$(kimi_effort_seen)" "UNSET" "dispatch-author.sh kimi without --effort sends no effort variable"
+assert_eq "$(kimi_effort_seen --effort medium)" "NONE" "dispatch-author.sh kimi --effort medium fails closed before spawning the CLI"
+OUT="$(tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --effort xhigh 2>&1)"
+assert_contains "$OUT" 'low|high|max' "dispatch-author.sh kimi --effort xhigh refusal names the accepted values"
 
 finalize_test

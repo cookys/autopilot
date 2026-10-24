@@ -2112,8 +2112,8 @@ esac
 # a runner that consumes --effort would be handed the literal word "default".
 if [ "$EFFORT" = "default" ]; then
   case "$RUNNER" in
-    anthropic-compatible|cc-shim|claude-native|kimi) ;;
-    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+    anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
 # claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
@@ -2123,6 +2123,21 @@ fi
 # is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
 if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+# kimi has no effort flag: kimi-code reads KIMI_MODEL_THINKING_EFFORT (low|high|max), and without it runs
+# config.toml's default_effort (max) whatever tier the seat declares (peer report 2026-10-24: 21 exam requests
+# for a `high` seat all went out as max). Sent only for an EXPLICIT --effort (the xhigh script default is not a
+# seat decision); `default` sends nothing; a value kimi does not offer fails closed rather than being remapped.
+# The variable is unset first so an ambient value can never stand in for the seat's tier.
+if [ "$RUNNER" = "kimi" ]; then
+  unset KIMI_MODEL_THINKING_EFFORT
+  KIMI_EFFORT_SEND=""
+  if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then
+    case "$EFFORT" in
+      low|high|max) KIMI_EFFORT_SEND="$EFFORT"; export KIMI_MODEL_THINKING_EFFORT="$EFFORT" ;;
+      *) die_precondition "--effort $EFFORT is not offered by kimi (low|high|max only); use one of those or --effort default" ;;
+    esac
+  fi
+fi
 
 case "$SKILL_MODE" in
   off|prompt|native|auto) ;;
@@ -4027,7 +4042,8 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   #   edits; prompt travels ONLY as one -p argv string (no --prompt-file, no STDIN — `-p ''` is
   #   rejected, `-p -` is taken literally) — guarded pre-spend above (KIMI_EDIT_ONLY /
   #   KIMI_ARGV_LIMIT, same shape as dispatch-review.sh's kimi gate); no effort flag exists on
-  #   this route — EFFORT is a seat label only, same as opencode (cc-shim forwards an explicit effort as claude --effort); --output-format text
+  #   this route — an explicit low|high|max travels as KIMI_MODEL_THINKING_EFFORT (exported at the effort gate; kimi
+  #   2.3.0 wire.jsonl probe 2026-10-24: low vs unset), run_worker inherits it; --output-format text
   #   for a clean parseable capture. KIMI_EDIT_ONLY was computed once at the pre-spend gate
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"

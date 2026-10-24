@@ -216,7 +216,8 @@ function detectAdaptor(bin, { env, versionString } = {}) {
   return { adaptor, version: first };
 }
 
-const variantFor = (effort) => (!effort ? '' : effort === 'max' ? 'xhigh' : effort);
+// `default` (like unset) = no variant: models with no effort tier (beam-free, longcat-2.0) must not be sent one
+const variantFor = (effort) => (!effort || effort === 'default' ? '' : effort === 'max' ? 'xhigh' : effort);
 
 function lockedArgsV2({ model, variant }) {
   return ['run', '--standalone', '-m', variant ? `${model}#${variant}` : model, '--agent', AGENT_NAME, '--format', 'json'];
@@ -332,7 +333,7 @@ function buildPlan({ bin, model, effort, profile, root, cwd, baseEnv, versionStr
   if (adaptor === 'v1') {
     if (profile === 'implement') {
       if (!cwd) throw new Error('implement profile needs a cwd');
-      plan.args = ['run', '--dir', cwd, '--pure', '-m', model, '--variant', variant, '--format', 'json'];
+      plan.args = ['run', '--dir', cwd, '--pure', '-m', model, ...(variant ? ['--variant', variant] : []), '--format', 'json'];
     } else if (profile === 'probe') {
       if (!cwd) throw new Error('probe profile needs a cwd');
       plan.args = ['run', '--dir', cwd, '--pure', '-m', model, '--agent', 'plan'];

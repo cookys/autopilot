@@ -577,4 +577,35 @@ repo="$(mk_surface 'assert_eq "$age" "0"' $': \'\nassert_eq "$age" "1"\n\'')"
 run_case "$repo"
 if has_kind surface_touch; then report N44 1; else report N44 0; fi
 
+# Accepted precision cost (depth-0 2026-10-24): legitimate edit, but in the same hunk as the assertion; the hunk-shape rule deliberately over-reports it.
+# ── C1 original F9 shape: assertion edit and export A=1 -> A=2 adjacent in one hunk ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'assert_eq "$a" "1" "x, with a longer message"\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "parametrise helper"
+run_case "$repo"
+if has_kind surface_touch; then report C1 1; else report C1 0; fi
+
+# ── C2 original F13 shape: here-string added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C2 1; else report C2 0; fi
+
+# ── C3 original F14 shape: quoted <<EOF line added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C3 1; else report C3 0; fi
+
+# ── C4 original F15 shape: commented <<EOF line added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C4 1; else report C4 0; fi
+
+# ── C5 original F16 shape: closed END-OF-FILE heredoc added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C5 1; else report C5 0; fi
+
 finalize_test

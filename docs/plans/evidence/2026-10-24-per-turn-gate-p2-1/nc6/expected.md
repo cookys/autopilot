@@ -1,7 +1,7 @@
-# NC6 live: expected readings (written and committed before any real call)
+# NC6 live, rerun against the final hook: expected readings (written and committed before any real call)
 
-Hook under test: `hooks/per-turn-gate.js` at HEAD c23012aac. CLI 2.1.309, alias claude-haiku-4-5, credentials-only config dir, stub verifier (`stub-verifier.js`, always exit 1 with one violation asking for the word PINEAPPLE), `max_blocks` 1 in both runs so that "block once" is deterministic. Cost cap 0.5 USD.
+Hook under test: `hooks/per-turn-gate.js` of commit 8c725cde4, git blob c0d9380efb3d0fcfdddf09d5bfc5aa849d5be9ac (checked equal to the blob in the worktree HEAD). Same `run.sh` and `stub-verifier.js` as the superseded run (unchanged), CLI 2.1.309, alias claude-haiku-4-5, credentials-only config dir, mktemp root outside the repo, `max_blocks` 1 in both runs. Cost cap 0.2 USD.
 
-- Knob OFF (`hooks.per-turn-gate` not enabled, verifier configured), the red case: the stream shows no block and no retry text; the hook log has exactly one record `{decision: allow, reason: off, turn: null, counter: 0}`; the model answers once.
-- Knob ON, the green case: the first Stop produces `decision: block, reason: block, turn 1, counter 1`; the transcript carries the retry text (STUB-RULE ... PINEAPPLE) and the model replies PINEAPPLE or similar; the re-entry Stop (`stop_hook_active` true) is logged `allow, reason: cap, counter 1`. So 2 records, exactly 1 block, the session ends.
-- Mutation shown red: the OFF configuration is the mutation of the ON configuration (same hook, same verifier, knob removed); it must produce zero blocks while ON produces one.
+- Knob OFF: no block, no retry text; hook log exactly one record `{turn: null, decision: allow, reason: off, counter: 0}`; the model answers `done`.
+- Knob ON: exactly two records, `turn 1, block, block, counter 1` then `turn 1, allow, cap, counter 1`; the transcript carries the retry text (STUB-RULE ... PINEAPPLE) and the model replies PINEAPPLE; the session ends. Zero blocks for OFF and one for ON is the red-then-green contrast.
+- Expected unchanged from the superseded run; any difference (extra record, lock file side effect visible in the log, a second block) is reported as found.

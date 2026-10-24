@@ -4739,6 +4739,44 @@
       "summary": "Most review seats that run at once in a review fan-out (qc panel, final panel); the rest queue in order and each seat's timeout starts when it actually starts. Unset, 0 or not a whole number means all seats at once."
     },
     {
+      "name": "AUTOPILOT_REVIEW_IDLE_TIMEOUT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "unset (off)",
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [],
+      "summary": "Idle cap for a review seat: no growth of its output files for this long (seconds, or Ns / Nm) kills the seat and reports no_verdict seat_idle_timeout so the seat can be swapped. Same as dispatch-review --idle-timeout, which wins. Unset or 0 means off."
+    },
+    {
+      "name": "AUTOPILOT_IDLE_WATCH_SCRIPT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_IDLE_ROOT_PGID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-review.sh",
+        "scripts/lib/idle-watch.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_RUN_APPROVAL_MODE",
       "kind": "env",
       "audience": "user",

@@ -152,6 +152,14 @@ assert_file_exists "$LEDGER/review-p5/g1/seat-s1.json" "case 5: seat-s1.json wri
 assert_contains "$(cat "$LEDGER/review-p5/chain.json")" '"reason": "seat_gap"' "case 5: gap recorded as an aborted chain entry (was: no chain.json, generation stranded)"
 assert_file_absent "$LEDGER/review-p5/g1/findings.json" "case 5: findings.json not written"
 
+# Case 5i (BL-0293): an idle-killed seat (dispatch-review: no_verdict, error seat_idle_timeout) is an ordinary
+# seat gap: generation aborted as seat_gap, the swap-the-seat re-collect path, and the code survives in the artifact.
+export STUB_RESPONSE_s1='{"status": "no_verdict", "verdict": null, "findings": "", "error": "seat_idle_timeout: no output growth for 600s — seat killed, partial output not parsed"}'
+C5I_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5i --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5I_RC=$?
+assert_exit_code "$C5I_RC" "1" "case 5i: idle-killed seat fails the generation without --allow-seat-gap"
+assert_contains "$(cat "$LEDGER/review-p5i/chain.json")" '"reason": "seat_gap"' "case 5i: recorded as seat_gap"
+assert_contains "$(cat "$LEDGER/review-p5i/g1/seat-s1.json")" 'seat_idle_timeout' "case 5i: idle reason kept in the seat artifact"
+
 # Case 6: same as (5) but with --allow-seat-gap AND a receipt floor the surviving seat count
 # satisfies (AUTOPILOT_MIN_REVIEWED_SEATS=1, the same knob the checker honours) exits 0 and
 # chain.json has pending-with-gap; the WARN names the floor for the checker.

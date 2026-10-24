@@ -975,6 +975,11 @@ const BARE_LS_DENY = [
   'echo `ls`',
   'FOO=1 ls',
   'time ls',
+  'time -p ls',
+  'time -- ls',
+  'time -p -- ls',
+  '! ls',
+  'time ! ls',
   'if ls; then echo y; fi',
   'ls -la | head',
 ];
@@ -990,6 +995,14 @@ for (const cmd of BARE_LS_DENY) {
 const BARE_LS_ALLOW = [
   'command ls',
   'command ls -la',
+  'exec ls', // builtins/commands take ls as an argument: bash expands aliases only in command position
+  'nice ls',
+  'env ls',
+  'sudo ls',
+  'nohup ls',
+  'builtin ls',
+  'xargs ls',
+  'time -p command ls',
   '\\ls',
   '/bin/ls',
   '/usr/bin/ls -la',

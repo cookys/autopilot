@@ -864,6 +864,8 @@ function detectZshExpansion(cmd, cwd) {
 }
 
 // Rule 4 (BL-0300). Returns { rule, why } or null.
+// Prefixes: reserved words (`!`, `if`, `time [-p] [--]`) are followed by an alias-expanded command word, so they are skipped;
+// commands/builtins (`command`, `builtin`, `exec`, `env`, `nice`, `sudo`, `nohup`, `xargs`) take `ls` as an argument, never expanded, so they pass.
 // An interactive shell may alias/wrap `ls` (eza, a function); the Bash tool sources that setup, and the
 // wrapper hangs the call. Alias expansion happens on the first word of a command only, so a hit is a segment
 // whose first real word (after VAR=val, `time`, and flow keywords) is literally the unquoted word `ls`.
@@ -874,8 +876,11 @@ function detectBareLs(cmd) {
   if (!/\bls\b/.test(text)) return null;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
+    let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
     for (const { raw } of tokens(seg.text)) {
-      if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw) || raw === 'time') continue;
+      if (afterTime && (raw === '-p' || raw === '--')) continue;
+      if (raw === 'time') { afterTime = true; continue; }
+      if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw)) continue;
       if (raw === 'ls') {
         return {
           rule: 'bare-ls',

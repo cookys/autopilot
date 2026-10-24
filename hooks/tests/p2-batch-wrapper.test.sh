@@ -126,6 +126,10 @@ mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL
 mk_mut noexpiry "const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;" "const expiring = false;"
 MAN_NOEXP="$CLONE/prereg/manifest-noexpiry-mutant.json"; make_manifest "$TEST_TMP/mut-noexpiry/run-p2-batch.js" "$MAN_NOEXP"
 MAN_M55="$CLONE/prereg/manifest-haiku55.json"; MAN_MODEL=claude-haiku-5-5 make_manifest "$WRAP" "$MAN_M55"
+mk_mut nocfgunset "'-u', 'CLAUDE_CODE_SESSION_ID', '-u', 'CLAUDE_CONFIG_DIR'];" "'-u', 'CLAUDE_CODE_SESSION_ID'];"
+MAN_NOCFG="$CLONE/prereg/manifest-nocfg-mutant.json"; make_manifest "$TEST_TMP/mut-nocfgunset/run-p2-batch.js" "$MAN_NOCFG"
+mk_mut nopar "const orphan = ctx.parentPid ?" "const orphan = false && ctx.parentPid ?"
+MAN_NOPAR="$CLONE/prereg/manifest-nopar-mutant.json"; make_manifest "$TEST_TMP/mut-nopar/run-p2-batch.js" "$MAN_NOPAR"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
 export MAN_WINDOW=3
 MAN_W3="$CLONE/prereg/manifest-w3.json"; make_manifest "$WRAP" "$MAN_W3"
@@ -474,7 +478,7 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm2")" 0 "raw hook log with 3 blocks
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm2")" 0 "RED raw hook log: mutant says OK"
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm")" 0 "RED BLOCKMAX -1: mutant says OK"
 # 4: the final timeout is computed once, before the first START artifact, and is what the harness call gets
-tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("W.writeProbe(ctx, id, home, expiring);");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
+tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("W.writeProbe(ctx, id, home, pauseReason);");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
 assert_eq "$(tmo_order "$WRAP")" "1:before" "one timeout computation, before ORDER/CMD/START"
 PRE_MUT="$TEST_TMP/mut-tmo2/run-p2-batch.js"; mkdir -p "$(dirname "$PRE_MUT")"; cp "$WRAP_SRC" "$PRE_MUT"
 mutate "$PRE_MUT" "    W.writeStartEnd(ctx, 'START', id, " "    const tmo2 = harnessTimeoutMs(ctx.elapsed(), m.window_s); void tmo2;
@@ -871,7 +875,8 @@ node "$WRAP" --audit --manifest "$MAN" --run-dir "$RL1" --clone "$CLONE" --wrapp
 RL2="$TEST_TMP/run-loop2"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop2.json"
 loop_run "$RL2" "$TEST_TMP/cred-loop2.json" --min-window-s 999999; assert_eq "$?" 9 "launcher: window left below the minimum: stops with exit 9"
 assert_contains "$(cat "$RL2/loop.status")" "window_exhausted" "launcher: status says the window is exhausted"
-assert_eq "$(grep -c ' WRAPPER_START ' "$RL2/invocation.log")" 1 "launcher: no restart when the window is short"
+assert_file_absent "$RL2/invocation.log"
+assert_contains "$(cat "$RL2/loop.status")" "left_s=" "launcher: the window check runs before the first start too (no wrapper was started)"
 # a wrapper exit other than 7 is final
 RL3="$TEST_TMP/run-loop3"; mkdir -p "$RL3/runs/$(echo "$O1" | sed -n 1p | cut -d' ' -f2)"
 loop_run "$RL3" "$TEST_TMP/cred-fresh.json"; LRC=$?
@@ -884,10 +889,7 @@ loop_run "$RL4" "$TEST_TMP/cred-loop4.json" --fresh-min 0 --max-restarts 1; asse
 assert_contains "$(cat "$RL4/loop.status")" "restart_limit" "launcher: status says the restart limit"
 # negative controls for the launcher: a copy that ignores the window, and one that restarts after any exit code
 mkdir -p "$TEST_TMP/mut-loopwin" "$TEST_TMP/mut-loopany"; cp "$LOOP" "$TEST_TMP/mut-loopwin/l.js"; cp "$LOOP" "$TEST_TMP/mut-loopany/l.js"
-mutate "$TEST_TMP/mut-loopwin/l.js" "if (windowLeftS() < Number(o['min-window-s'])) { status(\`stopped window_exhausted left_s=\${Math.floor(windowLeftS())}\`); return 9; }
-      const exp" "const exp" || fail "loopwin mutant"
-mutate "$TEST_TMP/mut-loopwin/l.js" "    if (windowLeftS() < Number(o['min-window-s'])) { status(\`stopped window_exhausted left_s=\${Math.floor(windowLeftS())}\`); return 9; }
-    restarts++;" "    restarts++;" || fail "loopwin mutant 2"
+sed -i '/windowLeftS() < Number/d' "$TEST_TMP/mut-loopwin/l.js"
 mutate "$TEST_TMP/mut-loopany/l.js" "if (rc !== 7) {" "if (rc === 0) {" || fail "loopany mutant"
 RL5="$TEST_TMP/run-loop5"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop5.json"
 LOOP="$TEST_TMP/mut-loopwin/l.js" loop_run "$RL5" "$TEST_TMP/cred-loop5.json" --min-window-s 999999 --fresh-min 0 --max-restarts 1 >/dev/null 2>&1
@@ -895,6 +897,58 @@ assert_eq "$(grep -c ' WRAPPER_START ' "$RL5/invocation.log")" 2 "RED window: th
 RL6="$TEST_TMP/run-loop6"; mkdir -p "$RL6/runs/$(echo "$O1" | sed -n 1p | cut -d' ' -f2)"
 LOOP="$TEST_TMP/mut-loopany/l.js" loop_run "$RL6" "$TEST_TMP/cred-fresh.json" --fresh-min 0 --max-restarts 1 >/dev/null 2>&1
 assert_eq "$(grep -c ' WRAPPER_START ' "$RL6/invocation.log")" 2 "RED exit code: the launcher that restarts after any exit code runs the wrapper twice"
+# window short before the very first start
+winstart() { node -e 'require("fs").writeFileSync(process.argv[1], String(Date.now() - (28800 - Number(process.argv[2])) * 1000) + "\n")' "$1" "$2"; }
+RW="$TEST_TMP/run-loopw"; mkdir -p "$RW"; winstart "$RW/window.start" 599
+loop_run "$RW" "$TEST_TMP/cred-fresh.json"; assert_eq "$?" 9 "launcher: 599 s of window left before the first start: exit 9"
+assert_file_absent "$RW/invocation.log"
+RW2="$TEST_TMP/run-loopw-mut"; mkdir -p "$RW2"; winstart "$RW2/window.start" 599
+LOOP="$TEST_TMP/mut-loopwin/l.js" loop_run "$RW2" "$TEST_TMP/cred-fresh.json" --max-restarts 0 >/dev/null 2>&1
+assert_eq "$([ -f "$RW2/invocation.log" ] && echo y)" y "RED: the launcher without the pre-start window check starts the wrapper anyway"
+# lifecycle: TERM / SIGKILL of the launcher must not leave a wrapper that keeps starting ids
+life() { # <name> <TERM|KILL> <loop script> <loop manifest> <loop wrapper>: loop started in the background, a slow probe keeps the first id busy
+  local n="$1" sig="$2" l="$3" m="$4" w="$5" d="$TEST_TMP/run-life-$1"; rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR" "$d"
+  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 ORCH_TIMEOUT=1m FAKE_PROBE_SLEEP=3 \
+    node "$l" --manifest "$m" --run-dir "$d" --clone "$CLONE" --credentials-source "$TEST_TMP/cred-fresh.json" --wrapper "$w" --poll-s 0.2 >"$d.out" 2>&1 </dev/null &
+  local lp=$!; local i=0; while [ ! -s "$d/loop.wrapper.pid" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+  sleep 1; LWPID=$(cat "$d/loop.wrapper.pid"); kill -"$sig" "$lp"; wait "$lp" 2>/dev/null; LIFE_RC=$?
+  LIFE_ALIVE_AFTER_LOOP=$(kill -0 "$LWPID" 2>/dev/null && echo alive || echo gone)
+  i=0; while kill -0 "$LWPID" 2>/dev/null && [ $i -lt 600 ]; do sleep 0.2; i=$((i + 1)); done
+  LIFE_FINAL=$(kill -0 "$LWPID" 2>/dev/null && echo alive || echo gone); LIFE_DIR="$d"
+}
+life term TERM "$LOOP" "$MAN" "$WRAP"
+assert_eq "$LIFE_ALIVE_AFTER_LOOP" gone "TERM to the launcher: the wrapper is already gone when the launcher exits"
+assert_eq "$LIFE_RC" 143 "TERM to the launcher: exit 128+15"
+assert_contains "$(cat "$LIFE_DIR/loop.status")" "interrupted" "TERM to the launcher: status says interrupted"
+assert_eq "$(grep -c ' START ' "$LIFE_DIR/invocation.log")" 0 "TERM to the launcher: no id was started"
+mkdir -p "$TEST_TMP/mut-loopterm"; cp "$LOOP" "$TEST_TMP/mut-loopterm/l.js"; mutate "$TEST_TMP/mut-loopterm/l.js" "signalled = num; if (child) { try { process.kill(-child.pid, name); } catch (_e) { /* already gone */ } }" "process.exit(143);" || fail "loopterm mutant"
+life termmut TERM "$TEST_TMP/mut-loopterm/l.js" "$MAN" "$WRAP"
+assert_eq "$LIFE_ALIVE_AFTER_LOOP" alive "RED: a launcher that does not forward TERM leaves the wrapper running"
+life kill KILL "$LOOP" "$MAN" "$WRAP"
+assert_eq "$LIFE_FINAL" gone "SIGKILL to the launcher: the orphaned wrapper ends by itself"
+assert_eq "$(grep -c ' START ' "$LIFE_DIR/invocation.log")" 1 "SIGKILL to the launcher: the running id finished and no further id was started"
+assert_contains "$(cat "$LIFE_DIR"/probes/*.json | tr '\n' ' ')" "parent_gone" "SIGKILL to the launcher: the next id paused with reason parent_gone"
+assert_eq "$(grep -c ' PAUSE ' "$LIFE_DIR/invocation.log")" 1 "SIGKILL to the launcher: the pause is an ordinary PROBE_FAIL / PAUSE"
+life killmut KILL "$LOOP" "$MAN_NOPAR" "$TEST_TMP/mut-nopar/run-p2-batch.js"
+assert_eq "$([ "$(grep -c ' START ' "$LIFE_DIR/invocation.log")" -gt 1 ] && echo y)" y "RED: a wrapper without the parent check keeps starting ids after the launcher was killed"
+# CLAUDE_CONFIG_DIR exported outside must not reach any claude child (probe, harness turns)
+mkdir -p "$TEST_TMP/extcfg"; echo '{"hooks":{}}' >"$TEST_TMP/extcfg/settings.json"
+RC1="$TEST_TMP/run-cfg"; CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" run_batch "$WRAP" "$MAN" "$RC1"; assert_eq "$?" 0 "batch with CLAUDE_CONFIG_DIR exported outside completes"
+assert_eq "$(sort -u "$FAKE_STATE_DIR/cfgdir.seen" | tr '\n' ' ')" "unset " "claude children (probe and turns) never see the outside CLAUDE_CONFIG_DIR"
+assert_eq "$([ "$(wc -l <"$FAKE_STATE_DIR/cfgdir.seen")" -gt 6 ] && echo y)" y "the fake recorded every claude call"
+RC2="$TEST_TMP/run-cfg-mut"; CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" run_batch "$TEST_TMP/mut-nocfgunset/run-p2-batch.js" "$MAN_NOCFG" "$RC2"
+assert_contains "$(cat "$FAKE_STATE_DIR/cfgdir.seen")" "extcfg" "RED: the wrapper without the unset hands the outside CLAUDE_CONFIG_DIR to claude"
+# the launcher drops it too (stub wrapper records what it was started with)
+mkdir -p "$TEST_TMP/stubw"; cat >"$TEST_TMP/stubw/w.js" <<'JS'
+const fs = require('fs'); module.exports = { makeOrder: () => [{ id: 'X-01' }], credExpiresAt: () => null };
+if (require.main === module) fs.writeFileSync(process.env.STUB_OUT, process.env.CLAUDE_CONFIG_DIR || 'unset');
+JS
+mkdir -p "$TEST_TMP/mut-loopcfg"; cp "$LOOP" "$TEST_TMP/mut-loopcfg/l.js"; mutate "$TEST_TMP/mut-loopcfg/l.js" "delete env.CLAUDE_CONFIG_DIR;" "" || fail "loopcfg mutant"
+for pair in "real:$LOOP" "mut:$TEST_TMP/mut-loopcfg/l.js"; do
+  STUB_OUT="$TEST_TMP/stub.out.${pair%%:*}" CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" node "${pair#*:}" --manifest "$MAN" --run-dir "$TEST_TMP/run-stub-${pair%%:*}" --clone "$CLONE" --wrapper "$TEST_TMP/stubw/w.js" </dev/null >/dev/null 2>&1
+done
+assert_eq "$(cat "$TEST_TMP/stub.out.real")" "unset" "launcher starts the wrapper without CLAUDE_CONFIG_DIR"
+assert_contains "$(cat "$TEST_TMP/stub.out.mut")" "extcfg" "RED: the launcher without the delete passes CLAUDE_CONFIG_DIR on"
 # a model other than haiku-4-5 follows the manifest everywhere
 R55="$TEST_TMP/run-m55"; FAKE_MODEL=claude-haiku-5-5 run_batch "$WRAP" "$MAN_M55" "$R55"; assert_eq "$?" 0 "manifest model claude-haiku-5-5: the batch completes"
 assert_contains "$(cat "$R55"/cmd/ON-*.json | head -1)" "claude-haiku-5-5" "harness argv carries the manifest model"

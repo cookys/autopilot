@@ -9,6 +9,7 @@ while [ $# -gt 0 ]; do
   case "$1" in --resume) resume="$2"; shift 2 ;; --debug-file) dbg="$2"; shift 2 ;; *) shift ;; esac
 done
 prompt=$(cat)
+mkdir -p "$FAKE_STATE"; echo "${CLAUDE_CONFIG_DIR-unset}" >> "$FAKE_STATE/cfgdir.seen"
 cost=${FAKE_COST:-0.1}
 case "$prompt" in
   *AUTH_OK*) if [ -n "${FAKE_PROBE_FAIL_ONCE:-}" ] && [ ! -e "$FAKE_STATE/probefailed" ]; then mkdir -p "$FAKE_STATE"; : > "$FAKE_STATE/probefailed"; echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; fi; [ -n "${FAKE_PROBE_NOCOST:-}" ] && { echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; }; [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;

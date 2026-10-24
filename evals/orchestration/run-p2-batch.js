@@ -9,7 +9,7 @@
 //
 //   node run-p2-batch.js --selfcheck                       print the 3.1 table, run a synthetic batch, assert a writer per row
 //   node run-p2-batch.js --order --manifest M              print the seeded order
-//   node run-p2-batch.js --run --run-dir D --clone C --manifest M [--first i] [--last j] [--credentials-source F]
+//   node run-p2-batch.js --run --run-dir D --clone C --manifest M [--first i] [--last j] [--credentials-source F] [--parent-pid P]
 //   node run-p2-batch.js --audit --run-dir D --manifest M  exit 0 only when every artifact is present and every condition holds
 //
 // Credentials: every id copies ONE file (mode 0600) from the credential source into its own per-run home before its probe; the
@@ -18,7 +18,9 @@
 // (access token expired, refresh token rotated by the main CLI) and every later id would copy that stale file. When the source's
 // claudeAiOauth.expiresAt is less than 10 minutes away the id is neither copied nor probed: it pauses (PROBE_FAIL, PAUSE, exit 7)
 // with a saved response that says auth_ok false, reason source_token_expiring, cost 0. A source without expiresAt is not judged.
-// Resume after a pause with --first <position of the paused id>; run-p2-batch-loop.js does that.
+// --parent-pid P (set by run-p2-batch-loop.js): when that process is gone (the wrapper was re-parented or P no longer exists) the next
+// id pauses before its probe (PROBE_FAIL, PAUSE, exit 7, reason parent_gone), so a killed launcher leaves no wrapper starting new ids.
+// The id already running finishes. Resume after a pause with --first <position of the paused id>; run-p2-batch-loop.js does that.
 //
 // Manifest (JSON; the preregistration commits it and states its sha256): task, model, cli, seed, n_per_arm,
 // arms {ON:{gate,cap,prior_run}, C:{gate,cap,prior_run}}, probe_cost, window_s, min_complete, max_blocks, prereg,
@@ -35,7 +37,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
-const ENV_PREFIX = ['env', '-u', 'AUTOPILOT_SESSION_ID', '-u', 'CLAUDE_CODE_SESSION_ID'];
+// CLAUDE_CONFIG_DIR is unset for every child: with it set, claude would read that directory (possibly the real ~/.claude) instead of the per-run home.
+const ENV_PREFIX = ['env', '-u', 'AUTOPILOT_SESSION_ID', '-u', 'CLAUDE_CODE_SESSION_ID', '-u', 'CLAUDE_CONFIG_DIR'];
 const AUTH_RE = /failed to authenticate|oauth session expired|authentication_failed/i;
 const PROJECTION_AFTER = 5;
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -265,8 +268,8 @@ const W = {
   },
   writeStartEnd(ctx, kind, id, extra) { ctx.log(kind, `${id} ${extra}`); },
   /**
-   * forced: the credential source is about to expire, so no call is made. The saved response says so (auth_ok false, reason
-   * source_token_expiring, cost 0) and the id pauses through the ordinary PROBE_FAIL / PAUSE path.
+   * forced: a reason string (source_token_expiring, parent_gone): no call is made. The saved response says so (auth_ok false,
+   * that reason, cost 0) and the id pauses through the ordinary PROBE_FAIL / PAUSE path.
    */
   writeProbe(ctx, id, home, forced) {
     const dir = path.join(ctx.runDir, 'probe-work');
@@ -275,7 +278,7 @@ const W = {
       '--strict-mcp-config', '--dangerously-skip-permissions', '--output-format', 'json'], { cwd: dir, input: 'Reply with exactly AUTH_OK\n' });
     let cost = 0, err = 1, ok = 0;
     const rec = { rc: r.status, parse_ok: false };
-    if (forced) Object.assign(rec, { auth_ok: false, reason: 'source_token_expiring' });
+    if (forced) Object.assign(rec, { auth_ok: false, reason: String(forced) });
     try {
       const o = JSON.parse(r.stdout);
       // Only status, model and cost fields are kept (no credential material is ever in the probe response).
@@ -411,6 +414,7 @@ const finishedIds = (ctx) => new Set(readLog(ctx).filter((r) => r.kind === 'END'
 
 /** A credential source this close to its expiry is not copied and not probed: the id pauses (see writeProbe). */
 const CRED_MIN_AHEAD_MS = 10 * 60 * 1000;
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 /** claudeAiOauth.expiresAt (epoch ms) of a credential file, or null when it carries none (nothing to judge). */
 function credExpiresAt(file) {
   try { const e = JSON.parse(fs.readFileSync(file, 'utf8')).claudeAiOauth.expiresAt; return Number.isFinite(e) ? e : null; } catch (_e) { return null; }
@@ -448,12 +452,15 @@ function runBatch(ctx, first, last) {
     if (!fs.existsSync(cred)) throw new Exit(3, 'ABORT no credential file');
     const exp = credExpiresAt(cred);
     const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;
-    if (!expiring) {
+    // A launcher that is gone (killed, even with SIGKILL) must not leave a wrapper that keeps starting ids: pause instead.
+    const orphan = ctx.parentPid ? (process.ppid !== ctx.parentPid || !pidAlive(ctx.parentPid)) : false;
+    const pauseReason = expiring ? 'source_token_expiring' : (orphan ? 'parent_gone' : '');
+    if (!pauseReason) {
       fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
       fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
     }
     fs.writeFileSync(path.join(home, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
-    W.writeProbe(ctx, id, home, expiring);
+    W.writeProbe(ctx, id, home, pauseReason);
     const probeCost = probeTotal(ctx.runDir, id);
     // The probe takes seconds. Decide the window BEFORE any START artifact (ORDER, CMD, START) exists, and take the
     // elapsed value written to START right before it is written, so it agrees with its own timestamp.
@@ -1128,7 +1135,7 @@ function selfcheck(wrapperPath) {
     };
     const fakeOut = (argv) => argv[argv.indexOf('--out') + 1];
     const exec = (argv) => {
-      const a = argv.slice(5); // drop env -u .. -u ..
+      const a = argv.slice(ENV_PREFIX.length); // drop the env -u .. prefix
       const home = a[0] && a[0].startsWith('HOME=') ? a.shift() : null;
       void home;
       if (a[0] === 'git') {
@@ -1193,7 +1200,7 @@ function main(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (['--selfcheck', '--audit', '--run', '--order', '--schema-table'].includes(a)) flags.add(a);
-    else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file', '--credentials-source'].includes(a)) opt[a] = argv[++i];
+    else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file', '--credentials-source', '--parent-pid'].includes(a)) opt[a] = argv[++i];
     else { process.stderr.write(`unknown argument ${a}\n`); return 2; }
   }
   if (flags.has('--selfcheck')) return selfcheck(__filename);
@@ -1213,9 +1220,9 @@ function main(argv) {
   if (flags.has('--run')) {
     const clone = path.resolve(opt['--clone'] || process.cwd());
     fs.mkdirSync(runDir, { recursive: true });
-    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
-    const onSig = () => { finish(ctx, 130); process.exit(130); };
-    process.on('SIGINT', onSig); process.on('SIGTERM', onSig);
+    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
+    // No signal handlers: the batch is synchronous, so a handler could not run before it ended and would only turn TERM into a no-op.
+    // TERM or INT therefore stops the wrapper at once; the log then has no footer, which is an interrupted batch (it does not audit).
     let code = 0;
     try { runBatch(ctx, Number(opt['--first']) || 0, Number(opt['--last']) || 0); } catch (e) {
       if (!(e instanceof Exit)) { ctx.log('ABORT', `unexpected ${String(e && e.message).slice(0, 120)}`); code = 3; } else {

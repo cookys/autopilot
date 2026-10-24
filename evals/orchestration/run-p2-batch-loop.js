@@ -8,13 +8,17 @@
 // Runs the wrapper. Exit 7 (an id paused at its probe) writes a line to <run-dir>/loop.status, then every --poll-s seconds reads
 // claudeAiOauth.expiresAt of the credential source and, once it is at least --fresh-min minutes ahead (the main CLI refreshed
 // it), runs the wrapper again from the paused id (--first). It stops when the window (window.start + window_s) has less than
-// --min-window-s left, after --max-restarts restarts, or on any exit code other than 0 or 7. It never refreshes a token and
-// never touches a credential file: it only reads the expiry. Start it with the real HOME (see run-p2-batch.js).
-// Exit code: the last wrapper exit code, or 9 when it stopped for the window or the restart limit.
+// --min-window-s left (checked before the first start too; a fresh batch has no window.start yet, so its window is whole), after
+// --max-restarts restarts, or on any exit code other than 0 or 7. It never refreshes a token and never touches a credential
+// file: it only reads the expiry. Start it with the real HOME (see run-p2-batch.js).
+// Lifecycle: TERM and INT are forwarded to the running wrapper and the launcher waits for it to end (status `interrupted`); the
+// wrapper gets --parent-pid, so after a SIGKILL of the launcher the wrapper pauses before its next id (PROBE_FAIL, PAUSE).
+// The running wrapper's pid is in <run-dir>/loop.wrapper.pid.
+// Exit code: the last wrapper exit code, 9 when it stopped for the window or the restart limit, 128+n after a signal.
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 
 function parseArgs(argv) {
   const o = { 'poll-s': 60, 'fresh-min': 30, 'min-window-s': 600, 'max-restarts': 20 };
@@ -27,9 +31,9 @@ function parseArgs(argv) {
   return o;
 }
 
-const sleep = (s) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, Math.round(s * 1000))); };
+const wait = (s) => new Promise((r) => setTimeout(r, Math.max(1, Math.round(s * 1000))));
 
-function main(argv) {
+async function main(argv) {
   const o = parseArgs(argv);
   const wrapper = path.resolve(o.wrapper || path.join(__dirname, 'run-p2-batch.js'));
   const w = require(wrapper);
@@ -42,32 +46,40 @@ function main(argv) {
     try { return manifest.window_s - (Date.now() - Number(fs.readFileSync(path.join(runDir, 'window.start'), 'utf8'))) / 1000; } catch (_e) { return manifest.window_s; }
   };
   const credFile = o['credentials-source'] ? path.resolve(o['credentials-source']) : path.join(process.env.HOME || '', '.claude', '.credentials.json');
+  let child = null, signalled = 0;
+  for (const [name, num] of [['SIGTERM', 15], ['SIGINT', 2]]) process.on(name, () => { signalled = num; if (child) { try { process.kill(-child.pid, name); } catch (_e) { /* already gone */ } } });
   let restarts = 0;
   for (;;) {
+    if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
     // The paused id is the first one with no run output yet.
     const next = order.findIndex((x) => !fs.existsSync(path.join(runDir, 'runs', x.id))) + 1;
-    const args = [wrapper, '--run', '--manifest', o.manifest, '--run-dir', runDir, '--clone', o.clone];
+    const args = [wrapper, '--run', '--manifest', o.manifest, '--run-dir', runDir, '--clone', o.clone, '--parent-pid', String(process.pid)];
     if (next > 1) args.push('--first', String(next));
     if (o['credentials-source']) args.push('--credentials-source', credFile);
     status(`running restarts=${restarts} first=${next || 1}`);
-    const r = spawnSync(process.execPath, args, { stdio: 'inherit', env: process.env });
-    const rc = r.status === null ? 130 : r.status;
+    const env = { ...process.env }; delete env.CLAUDE_CONFIG_DIR; // the wrapper's claude children must use the per-run home only
+    child = spawn(process.execPath, args, { stdio: 'inherit', env, detached: true }); // own process group: a forwarded signal reaches the wrapper's children too
+    fs.writeFileSync(path.join(runDir, 'loop.wrapper.pid'), `${child.pid}\n`);
+    const rc = await new Promise((res) => child.on('exit', (code, sig) => res(code === null ? 128 + (sig === 'SIGTERM' ? 15 : 9) : code)));
+    child = null;
+    if (signalled) { status(`interrupted signal=${signalled} wrapper_rc=${rc} restarts=${restarts}`); return 128 + signalled; }
     if (rc !== 7) { status(`ended rc=${rc} restarts=${restarts}`); return rc; }
     status(`paused rc=7 restarts=${restarts} waiting for a fresh credential source`);
     if (restarts >= Number(o['max-restarts'])) { status(`stopped restart_limit restarts=${restarts}`); return 9; }
     for (;;) {
+      if (signalled) { status(`interrupted signal=${signalled} restarts=${restarts}`); return 128 + signalled; }
       if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
       const exp = w.credExpiresAt(credFile);
       if (exp === null || exp - Date.now() >= Number(o['fresh-min']) * 60000) break;
-      sleep(Number(o['poll-s']));
+      await wait(Number(o['poll-s']));
     }
     // At least one poll interval passes between a pause and its restart, even when the source is already fresh.
-    sleep(Number(o['poll-s']));
-    if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
+    await wait(Number(o['poll-s']));
+    if (signalled) { status(`interrupted signal=${signalled} restarts=${restarts}`); return 128 + signalled; }
     restarts++;
   }
 }
 
 if (require.main === module) {
-  try { process.exitCode = main(process.argv.slice(2)); } catch (e) { process.stderr.write(`${e.message}\n`); process.exitCode = 2; }
+  main(process.argv.slice(2)).then((c) => { process.exitCode = c; }, (e) => { process.stderr.write(`${e.message}\n`); process.exitCode = 2; });
 }

@@ -68,19 +68,28 @@ Design + calibration harness: `docs/projects/_archive/2026/07/2026-07-09-m3-band
 
 Stopping a batch: one Ctrl-C (TERM, INT or HUP, to the launcher or straight to the wrapper) is a safe pause. The id that is running finishes, the next id pauses before its probe (PROBE_FAIL, PAUSE, reason `operator_stop`, exit 7), the launcher writes `stopped_by_operator` to `loop.status` and exits 0, and the batch resumes later (starting the launcher or the wrapper again clears `<run-dir>/stop.request`) and still audits. A second TERM or INT in a row gives up the batch: the launcher kills the wrapper's process group at once (status `aborted`), the log has no footer and the batch cannot be audited. After a SIGKILL of the launcher the wrapper (started with `--parent-pid`) lets the running id finish and pauses the next one with reason `parent_gone`, also a legal log. The launcher checks the remaining window before the first start too (a fresh batch has no `window.start` yet, so its window is whole). Every `CLAUDE*` and `ANTHROPIC*` variable and the XDG config, data, state and cache homes are removed from every child of the wrapper and the launcher, and `claude --version` runs in a throwaway home that holds no credentials.
 
-Sweep table (what each call site and path does), kept with the tests in `hooks/tests/p2-batch-wrapper.test.sh`:
+Sweep table (every call site and path, with the test that holds it). Suites: `p2-batch-wrapper.test.sh` (audit and schema), `p2-batch-loop.test.sh` (credential source, launcher, model, preregistrations), `p2-batch-env.test.sh` (environment, time values, ranges, worker entry), `p2-batch-lifecycle.test.sh` (signals and resume); shared setup in `lib-p2.sh`.
 
 | Class | Instance | Handling |
 |---|---|---|
-| claude child environment | `claude --version` (writeVersion) | throwaway `homes/_version` (onboarding file only), scrubbed env |
-| | auth probe (writeProbe) | per-run home, scrubbed env |
-| | harness call, and the claude it starts | per-run home, scrubbed env |
-| | git calls of the wrapper | same `env -u` prefix (no claude) |
+| claude child environment | wrapper `claude --version` (writeVersion) | throwaway `homes/_version` (onboarding file only, no credentials), scrubbed env |
+| | auth probe (writeProbe) | per-run home with the credential copy, scrubbed env |
+| | harness call and the claude it starts | per-run home, scrubbed env. Inside the harness: its own `--version` runs in the per-run HOME (which holds the credential copy), turns and retries use a copy in `SCRATCH_HOME`; the harness never sees the real HOME |
+| | wrapper git calls (`sh`) | same `env -u` prefix (every CLAUDE*, ANTHROPIC*, XDG home variable) |
+| | audit git calls | same scrub (`env: scrubEnv(process.env)` on both `spawnSync` calls) |
 | | launcher to wrapper | `scrubEnv` of the launcher's environment |
 | termination | first TERM, INT or HUP to the launcher or the wrapper | safe pause: running id finishes, next id PAUSE `operator_stop`, legal log, resumable |
 | | second signal | hard stop, no footer, not auditable |
 | | SIGKILL of the launcher | wrapper pauses the next id (`parent_gone`), legal log, resumable |
-| | SIGKILL of the wrapper, harness killed with the wrapper, reboot | torn log, not auditable (label U) |
-| | harness or claude child dies by itself | END rc not 0, counted by the completion rule, legal |
-| time and window | `window.start`, `elapsed`, `expiresAt` | all epoch milliseconds from the local clock; seconds-valued `expiresAt` is normalised; window and margins in seconds or minutes by option name |
+| | SIGKILL of the wrapper, reboot | torn log, not auditable (label U) |
+| | claude or the harness fails on its own | depends on what the harness reports: a non-zero harness rc gives END rc != 0 (counted by the completion rule, legal); a claude that exits non-zero but leaves a harness rc of 0 and no usable cost gives END rc=0 with `COST_INVALID`, which fails the audit (the batch is U; observed with a fake claude exiting 42, same in the base wrapper) |
+| time and window | `window.start` | epoch milliseconds from the local clock, written once; must be a positive number or the wrapper aborts and the launcher stops |
+| | `elapsed` (START rows, `ctx.elapsed`) | whole seconds since `window.start`, not an epoch value |
+| | `window_s` | seconds; a manifest value that is not a positive number aborts the wrapper and the launcher |
+| | `claudeAiOauth.expiresAt` | epoch milliseconds; seconds-valued numbers are normalised; present but 0, negative, non-numeric, null or an unreadable file counts as expired; only an absent field is not judged |
+| | harness timeout | `harnessTimeoutMs(elapsed seconds, window_s)` in milliseconds, computed once after the probe and before ORDER/CMD/START; no window left after the probe pauses nothing but stops (`STOP_WINDOW`) |
+| | check after the probe | the window is decided before any START artifact exists |
+| | audit time cross-checks | log timestamps (ISO, UTC) against `window.start` and START `elapsed` (3 s slack), run file mtimes between START and END (strict), PREREG commit time from git before the window start |
 | resume position | launcher `--first` | first id with no `runs/<id>`; the wrapper refuses a skip (previous id unfinished) and writes COSTCHK and VERSION once per id |
+| | wrapper `--first`/`--last` | must be integers from 1 to 2n with first not after last, otherwise exit 2 before anything is written; absent means 1 and 2n |
+| | pause, `parent_gone`, `operator_stop`, repeated resumes | each id starts once, in the seeded order (multi-pause test; a launcher that resumes one position late is refused) |

@@ -44,8 +44,13 @@ async function main(argv) {
   fs.mkdirSync(runDir, { recursive: true });
   const order = w.makeOrder(manifest.seed, manifest.n_per_arm);
   const status = (text) => fs.writeFileSync(path.join(runDir, 'loop.status'), `${new Date().toISOString()} ${text}\n`);
+  if (!(typeof manifest.window_s === 'number' && Number.isFinite(manifest.window_s) && manifest.window_s > 0)) throw new Error('window_s of the manifest is not a positive number');
+  // Seconds left of the window. No window.start yet (a fresh batch) -> the whole window; a window.start that is not a positive number -> 0 (stop).
   const windowLeftS = () => {
-    try { return manifest.window_s - (Date.now() - Number(fs.readFileSync(path.join(runDir, 'window.start'), 'utf8'))) / 1000; } catch (_e) { return manifest.window_s; }
+    let raw; try { raw = fs.readFileSync(path.join(runDir, 'window.start'), 'utf8'); } catch (_e) { return manifest.window_s; }
+    const w0 = Number(raw);
+    if (!Number.isFinite(w0) || w0 <= 0) return 0;
+    return manifest.window_s - (Date.now() - w0) / 1000;
   };
   const credFile = o['credentials-source'] ? path.resolve(o['credentials-source']) : path.join(process.env.HOME || '', '.claude', '.credentials.json');
   const stopFile = path.join(runDir, 'stop.request');

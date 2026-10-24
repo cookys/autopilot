@@ -252,6 +252,8 @@ const W = {
   writeWindow(ctx) {
     const f = path.join(ctx.runDir, 'window.start');
     if (!fs.existsSync(f)) { fs.writeFileSync(f, `${ctx.now()}\n`); ctx.log('WINDOW_START', ''); }
+    const w0 = Number(fs.readFileSync(f, 'utf8'));
+    if (!Number.isFinite(w0) || w0 <= 0) throw new Exit(3, 'ABORT window.start is not a positive number');
     ctx.elapsed = () => Math.floor((ctx.now() - Number(fs.readFileSync(f, 'utf8'))) / 1000);
   },
   writeTaskHash(ctx, phase) {
@@ -430,19 +432,26 @@ const finishedIds = (ctx) => new Set(readLog(ctx).filter((r) => r.kind === 'END'
 /** A credential source this close to its expiry is not copied and not probed: the id pauses (see writeProbe). */
 const CRED_MIN_AHEAD_MS = 10 * 60 * 1000;
 const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
-/** claudeAiOauth.expiresAt (epoch ms) of a credential file, or null when it carries none (nothing to judge). */
+/**
+ * claudeAiOauth.expiresAt of a credential file as epoch milliseconds. Absent field -> null (nothing to judge). Anything else that is
+ * not a positive finite number (zero, negative, a string, null, an unreadable or unparsable file) -> 0, which counts as expired.
+ * Values below 1e11 are epoch seconds and are normalised to milliseconds (the CLI writes milliseconds).
+ */
 function credExpiresAt(file) {
-  try {
-    const e = JSON.parse(fs.readFileSync(file, 'utf8')).claudeAiOauth.expiresAt;
-    if (!Number.isFinite(e) || e <= 0) return null;
-    return e < 1e11 ? e * 1000 : e; // epoch seconds (about 1.7e9) are read as seconds; the CLI writes milliseconds (about 1.7e12)
-  } catch (_e) { return null; }
+  let j;
+  try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_e) { return 0; }
+  const o = j && j.claudeAiOauth;
+  if (!o || typeof o !== 'object' || !('expiresAt' in o)) return null;
+  const e = o.expiresAt;
+  if (typeof e !== 'number' || !Number.isFinite(e) || e <= 0) return 0;
+  return e < 1e11 ? e * 1000 : e;
 }
 
 function runBatch(ctx, first, last) {
   const m = ctx.manifest;
   const order = makeOrder(m.seed, m.n_per_arm);
   const lo = first || 1, hi = last || order.length;
+  if (!(typeof m.window_s === 'number' && Number.isFinite(m.window_s) && m.window_s > 0)) throw new Exit(3, 'ABORT window_s of the manifest is not a positive number');
   fs.rmSync(path.join(ctx.runDir, 'stop.request'), { force: true }); // a resume clears an earlier stop request
   ctx.log('WRAPPER_START', `first=${lo} last=${hi}`);
   ctx.started = true;
@@ -1065,7 +1074,7 @@ function audit(runDir, m, clone, opts) {
   // Re-check the preregistration now, not from what the wrapper logged at the start.
   if (!clone) fails.push('audit needs --clone to re-check the preregistration');
   else if (pr.length) {
-    const ex = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+    const ex = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8', env: scrubEnv(process.env) }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
     const g = (a) => ex(['git', '-C', clone, ...a]);
     const mrel = path.relative(clone, (opts && opts.manifestPath) || '');
     const logged = (k) => { const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `)); return h.length ? h[0].rest.split(' ')[1] : null; };
@@ -1092,7 +1101,7 @@ function audit(runDir, m, clone, opts) {
     // The commit time comes from git now, not from the time string the wrapper logged.
     let prTime = NaN;
     if (clone) {
-      const ex2 = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+      const ex2 = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8', env: scrubEnv(process.env) }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
       prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());
     }
     need(Number.isFinite(prTime) && prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit (time read from git) is not earlier than the window start and the first START');
@@ -1240,11 +1249,15 @@ function main(argv) {
     return fails.length ? 1 : 0;
   }
   if (flags.has('--run')) {
+    const nIds = 2 * manifest.n_per_arm;
+    const rangeArg = (name) => { if (opt[name] === undefined) return 0; const v = Number(opt[name]); return Number.isInteger(v) && v >= 1 && v <= nIds ? v : -1; };
+    const first = rangeArg('--first'), last = rangeArg('--last');
+    if (first < 0 || last < 0 || (first && last && first > last)) { process.stderr.write(`usage: --first and --last must be integers from 1 to ${nIds}, first not after last\n`); return 2; }
     const clone = path.resolve(opt['--clone'] || process.cwd());
     fs.mkdirSync(runDir, { recursive: true });
     const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
     let code = 0;
-    try { runBatch(ctx, Number(opt['--first']) || 0, Number(opt['--last']) || 0); } catch (e) {
+    try { runBatch(ctx, first, last); } catch (e) {
       if (!(e instanceof Exit)) { ctx.log('ABORT', `unexpected ${String(e && e.message).slice(0, 120)}`); code = 3; } else {
         const [kind, ...rest] = e.line.split(' ');
         ctx.log(kind, rest.join(' '));
@@ -1268,15 +1281,18 @@ function runInWorker() {
   const flag = new Int32Array(sab);
   let code = 3, n = 0;
   for (const [name, c] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) process.on(name, () => { n++; if (n === 1) Atomics.store(flag, 0, 1); else process.exit(c); });
-  const w = new Worker(__filename, { argv: process.argv.slice(2), workerData: { sab } });
+  const w = new Worker(__filename, { argv: process.argv.slice(2), workerData: { sab, p2batchWorker: true } });
   w.on('message', (m) => { code = m.code; });
   w.on('error', (e) => { process.stderr.write(`${e && e.stack}\n`); code = 3; });
   w.on('exit', () => { process.exitCode = code; });
 }
 
-if (require.main === module) {
-  if (isMainThread && process.argv.includes('--run')) runInWorker();
-  else if (!isMainThread) { STOP = new Int32Array(workerData.sab); parentPort.postMessage({ code: main(process.argv.slice(2)) }); } else process.exitCode = main(process.argv.slice(2));
+if (!isMainThread && workerData && workerData.p2batchWorker) {
+  // The batch worker started by runInWorker: decided by the thread and its data, not by require.main.
+  STOP = new Int32Array(workerData.sab);
+  parentPort.postMessage({ code: main(process.argv.slice(2)) });
+} else if (require.main === module) {
+  if (process.argv.includes('--run')) runInWorker(); else process.exitCode = main(process.argv.slice(2));
 }
 
 module.exports = { schemaTable, credExpiresAt, scrubEnv, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

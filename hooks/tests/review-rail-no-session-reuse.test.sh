@@ -95,7 +95,7 @@ assert_eq "" "$SRC_HITS" "review dispatch sources contain no resume/continue fla
 # (the effort probe alone, if it ran, would otherwise make the guard look satisfied).
 MUTG="$TEST_TMP/mutg"; mkdir -p "$MUTG"; cp -r "$REPO_ROOT/scripts" "$MUTG/scripts"
 for d in src schemas references .claude-plugin; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUTG/$d"; done
-sed -i 's|timeout "\$TIMEOUT" "\$GROK_BIN" --prompt-file|timeout "$TIMEOUT" /nonexistent/grok --prompt-file|' "$MUTG/scripts/dispatch-review.sh"
+sed_mutate "$MUTG/scripts/dispatch-review.sh" 's|"\$GROK_BIN" --prompt-file|/nonexistent/grok --prompt-file|'
 LOGG="$TEST_TMP/argv-mutg.log"; : > "$LOGG"
 AUTOPILOT_GROK_EFFORT_PROBE=1 run_runner "$MUTG/scripts/dispatch-review.sh" grok grok-4.5 "$LOGG"
 if launched "$LOGG" grok; then fail "negative control: a grok launch to /nonexistent/grok still counted as observed"; else pass_msg=1; assert_eq "no" "no" "negative control: grok launch to a nonexistent binary is not counted as observed"; fi
@@ -103,7 +103,7 @@ if launched "$LOGG" grok; then fail "negative control: a grok launch to /nonexis
 # NEGATIVE CONTROL 2: a copy of the rail whose claude argv gains --resume must turn the guard red.
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$MUT/scripts"
 for d in src schemas references .claude-plugin; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUT/$d"; done
-sed -i 's|exec "\$2" -p \${5:+--session-id "\$5"}|exec "$2" -p --resume 00000000-0000-4000-8000-000000000000 ${5:+--session-id "$5"}|' "$MUT/scripts/dispatch-review.sh"
+sed_mutate "$MUT/scripts/dispatch-review.sh" 's|exec "\$2" -p \${5:+--session-id "\$5"}|exec "$2" -p --resume 00000000-0000-4000-8000-000000000000 ${5:+--session-id "$5"}|'
 LOGM="$TEST_TMP/argv-mut.log"; : > "$LOGM"
 run_runner "$MUT/scripts/dispatch-review.sh" claude-native claude-haiku "$LOGM"
 assert_contains "$(resume_hits "$LOGM" claude-native)" "--resume" "negative control: a --resume added to the claude argv is caught by the guard"

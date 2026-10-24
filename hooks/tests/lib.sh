@@ -436,6 +436,17 @@ NODE
   fi
 }
 
+# sed_mutate <file> <sed expr...>: an in-place mutation that MUST change the file. A mutation whose
+# anchor no longer matches the product text leaves the "mutant" identical to the original, and the
+# negative control built on it silently passes for the wrong reason; this fails the test instead.
+sed_mutate() {
+  local f="$1" before after; shift
+  before="$(cksum < "$f")"
+  sed -i "$@" "$f"
+  after="$(cksum < "$f")"
+  if [ "$before" = "$after" ]; then fail "mutation did not hit (anchor drifted): sed $* in $f"; return 1; fi
+}
+
 # Assertion bookkeeping for the run.sh summary.
 __TEST_PASS_COUNT=0
 __TEST_FAIL_MSGS=()

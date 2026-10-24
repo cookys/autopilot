@@ -42,7 +42,7 @@ assert_contains "$OUT" "T2 400k + gap 50k" "live file model.id big-2[1m]: per_mo
 # negative controls
 mk_mut() { # <name> <sed-expr>
   local m="$TEST_TMP/$1/hooks"; mkdir -p "$m/../scripts"; cp -r "$HOOKS_DIR/." "$m/"; cp -r "$REPO_ROOT/scripts/." "$m/../scripts/"; cp -r "$REPO_ROOT/src" "$m/../src"
-  sed -i "$2" "$m/session-start.js"; printf '%s' "$m"
+  sed_mutate "$m/session-start.js" "$2"; printf '%s' "$m"
 }
 M1="$(mk_mut m1 '/models: knownModelIds(payload),/d')"
 grep -q 'models: knownModelIds' "$M1/session-start.js" && fail "mutant 1: line not removed"

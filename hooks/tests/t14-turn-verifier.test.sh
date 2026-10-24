@@ -61,7 +61,7 @@ stage_mutant() {
   cp "$VERIFIER" "$dest/gate/verify-turn.js"
   cp -a "$FIXTURES/." "$dest/gate/fixtures/"
   cp "$TASK/repo/CONSTRAINTS.md" "$dest/repo/CONSTRAINTS.md"
-  sed -i "$expr" "$dest/gate/verify-turn.js"
+  sed_mutate "$dest/gate/verify-turn.js" "$expr"
   printf '%s\n' "$dest/gate/verify-turn.js"
 }
 

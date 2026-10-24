@@ -34,6 +34,10 @@ GATE_RETRIES_BY_TURN=""
 GATE_VIOLATIONS_BY_TURN=""
 GATE_TURN_FAILED=0
 GATE_TURN_EXIT=0
+# --hook-trace-dir DIR (cc runner): every claude call gets `--debug hooks --debug-file DIR/trace-turn<N>.log`.
+# Independent of --gate, so a control arm can carry the very same flags as the hook arm (plan 3.1).
+HOOK_TRACE_DIR=""
+CC_TRACE=()
 
 # Parse arguments
 while [ $# -gt 0 ]; do
@@ -45,6 +49,7 @@ while [ $# -gt 0 ]; do
     --out) OUT_DIR="$2"; shift 2 ;;
     --reinject) REINJECT_FILE="$2"; shift 2 ;;
     --gate) GATE_MODE="$2"; shift 2 ;;
+    --hook-trace-dir) HOOK_TRACE_DIR="$2"; shift 2 ;;
     --gate-max-retries) GATE_MAX_RETRIES="$2"; shift 2 ;;
     --gate-retry-feedback) GATE_RETRY_FEEDBACK="$2"; GATE_RETRY_FEEDBACK_SET=1; shift 2 ;;
     --pack) PACK_FILE="$2"; shift 2 ;;
@@ -54,7 +59,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce|hook] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off] [--hook-trace-dir <dir>]" >&2
   exit 2
 fi
 # Default the two overrides to the arm-derived values so an unflagged run is unchanged.
@@ -64,6 +69,9 @@ if [ -n "$PACK_FILE" ] && [ ! -r "$PACK_FILE" ]; then
   exit 2
 fi
 case "$CONTRACT_MODE" in on|off) ;; *) echo "ERROR: --contract must be on|off (got: $CONTRACT_MODE)" >&2; exit 2 ;; esac
+
+# The claude calls run inside the temp repo, so a relative trace dir must be pinned now.
+case "$HOOK_TRACE_DIR" in ""|/*) ;; *) HOOK_TRACE_DIR="$(pwd)/$HOOK_TRACE_DIR" ;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TASK_DIR="$REPO_ROOT/evals/orchestration/tasks/$TASK_ID"
@@ -101,8 +109,8 @@ if ! [[ "$GATE_MAX_RETRIES" =~ ^[0-9]+$ ]]; then
 fi
 if [ -n "$GATE_MODE" ]; then
   case "$GATE_MODE" in
-    off|observe|enforce) ;;
-    *) echo "ERROR: --gate must be off|observe|enforce (got: $GATE_MODE)" >&2; exit 2 ;;
+    off|observe|enforce|hook) ;;
+    *) echo "ERROR: --gate must be off|observe|enforce|hook (got: $GATE_MODE)" >&2; exit 2 ;;
   esac
   if [ "$HAS_TURNS" != "true" ]; then
     echo "ERROR: --gate requires a multi-turn task" >&2
@@ -112,13 +120,13 @@ fi
 case "$GATE_RETRY_FEEDBACK" in
   violations|violations+features) ;;
   *)
-    echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
+    echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce|hook] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off] [--hook-trace-dir <dir>]" >&2
     echo "ERROR: --gate-retry-feedback must be violations|violations+features (got: $GATE_RETRY_FEEDBACK)" >&2
     exit 2
     ;;
 esac
 if [ "$GATE_RETRY_FEEDBACK_SET" -eq 1 ] && [ -z "$GATE_MODE" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>] [--gate off|observe|enforce|hook] [--gate-max-retries N] [--gate-retry-feedback violations|violations+features] [--pack <file>] [--contract on|off] [--hook-trace-dir <dir>]" >&2
   echo "ERROR: --gate-retry-feedback requires --gate" >&2
   exit 2
 fi
@@ -126,6 +134,26 @@ fi
 # Verifier lives beside the task, derived from this script's repo root. It is
 # never copied into TEMP_REPO.
 GATE_VERIFIER="$TASK_DIR/gate/verify-turn.js"
+if [ "$GATE_MODE" = "hook" ] && [ ! -f "$GATE_VERIFIER" ]; then
+  echo "ERROR: --gate hook needs the task verifier: $GATE_VERIFIER" >&2
+  exit 2
+fi
+
+# observe, enforce and hook all record the per-turn verifier verdict (gate.jsonl) and resume with
+# --output-format json. Only enforce sends text back; hook leaves that to the installed Stop hook.
+gate_records() {
+  case "$GATE_MODE" in observe|enforce|hook) return 0 ;; esac
+  return 1
+}
+
+# Fill CC_TRACE for claude call number $1 (empty when --hook-trace-dir is not given).
+set_cc_trace() {
+  CC_TRACE=()
+  if [ -n "$HOOK_TRACE_DIR" ]; then
+    mkdir -p "$HOOK_TRACE_DIR"
+    CC_TRACE=(--debug hooks --debug-file "$HOOK_TRACE_DIR/trace-turn$1.log")
+  fi
+}
 
 gate_gaps_nonempty() {
   GATE_JSON_PAYLOAD="$1" node -e 'const j=JSON.parse(process.env.GATE_JSON_PAYLOAD||"{}"); process.stdout.write(Array.isArray(j.feature_gaps)&&j.feature_gaps.length?"1":"0");'
@@ -194,7 +222,7 @@ gate_invoke_cc() {
   (
     cd "$TEMP_REPO"
     export HOME="$SCRATCH_HOME"
-    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json --resume "$SESSION_ID" < "$prompt"
+    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json ${CC_TRACE[@]+"${CC_TRACE[@]}"} --resume "$SESSION_ID" < "$prompt"
   ) >> "$RAW_LOG" 2>&1
 }
 
@@ -303,6 +331,30 @@ cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-fi
 )
 FROZEN_BASE_SHA="$(git -C "$TEMP_REPO" rev-parse HEAD)"
 
+# --gate hook: install the opt-in per-turn-gate Stop hook into the temp repo's PROJECT settings (the
+# task directory is never touched). It lands after the frozen base commit and is git-excluded, so the
+# base and the run-effect check do not see it. The hook reads its knobs from a config file under OUT_DIR
+# (enabled, cap 2, mode violations+features, verifier = the task's verify-turn.js) and logs to a live
+# directory under OUT_DIR. --gate off / observe / enforce install nothing.
+if [ "$GATE_MODE" = "hook" ]; then
+  HOOK_STATE="$(cd "$OUT_DIR" && pwd)/hook"
+  mkdir -p "$HOOK_STATE/live" "$TEMP_REPO/.claude"
+  chmod 700 "$HOOK_STATE/live"
+  GATE_VERIFIER="$GATE_VERIFIER" HOOK_CFG="$HOOK_STATE/config.json" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.env.HOOK_CFG, JSON.stringify({
+  hooks: { "per-turn-gate": true },
+  per_turn_gate: { verifier: "node " + process.env.GATE_VERIFIER, mode: "violations+features", max_blocks: 2 },
+}) + "\n");
+'
+  HOOK_CMD="AUTOPILOT_CONFIG_FILE='$HOOK_STATE/config.json' AUTOPILOT_LIVE_DIR='$HOOK_STATE/live' node '$REPO_ROOT/hooks/per-turn-gate.js'"
+  HOOK_CMD="$HOOK_CMD" node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({ hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: process.env.HOOK_CMD, timeout: 60 }] }] } }, null, 2) + "\n");
+' "$TEMP_REPO/.claude/settings.json"
+  printf '.claude/\n' >> "$TEMP_REPO/.git/info/exclude"
+fi
+
 # Compose prompt
 PROMPT_FILE="$OUT_DIR/prompt.md"
 
@@ -389,10 +441,11 @@ if [ "$RUNNER" = "cc" ]; then
         cat "$PROMPT_FILE" > "$TURN_PROMPT"
         emit_reinject_block "$TURN_PROMPT"
         cat "$turn_file" >> "$TURN_PROMPT"
+        set_cc_trace 1
         OUT_JSON=$(
           cd "$TEMP_REPO"
           export HOME="$SCRATCH_HOME"
-          timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$TURN_PROMPT" 2>>"$RAW_LOG"
+          timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json ${CC_TRACE[@]+"${CC_TRACE[@]}"} < "$TURN_PROMPT" 2>>"$RAW_LOG"
         )
         TURN_EXIT=$?
         echo "$OUT_JSON" >> "$RAW_LOG"
@@ -405,13 +458,14 @@ if [ "$RUNNER" = "cc" ]; then
         : > "$TURN_PROMPT"
         emit_reinject_block "$TURN_PROMPT"
         cat "$turn_file" >> "$TURN_PROMPT"
+        set_cc_trace "$((TURNS_COMPLETED + 1))"
         (
           cd "$TEMP_REPO"
           export HOME="$SCRATCH_HOME"
-          if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
-            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json --resume "$SESSION_ID" < "$TURN_PROMPT"
+          if gate_records; then
+            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json ${CC_TRACE[@]+"${CC_TRACE[@]}"} --resume "$SESSION_ID" < "$TURN_PROMPT"
           else
-            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --resume "$SESSION_ID" < "$TURN_PROMPT"
+            timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions ${CC_TRACE[@]+"${CC_TRACE[@]}"} --resume "$SESSION_ID" < "$TURN_PROMPT"
           fi
         ) >> "$RAW_LOG" 2>&1
         TURN_EXIT=$?
@@ -420,7 +474,7 @@ if [ "$RUNNER" = "cc" ]; then
           break
         fi
       fi
-      if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+      if gate_records; then
         apply_gate "$((TURNS_COMPLETED + 1))" cc
         if [ "$GATE_TURN_FAILED" -eq 1 ]; then
           RUN_EXIT=$GATE_TURN_EXIT
@@ -521,6 +575,8 @@ elif [ "$RUNNER" = "stub" ]; then
         cat "$turn_file" >> "$TURN_PROMPT"
       fi
       LAST_PROMPT="$TURN_PROMPT"
+      # A stub that emulates the Stop hooks appends its "Hooks: Stop [...]" lines here (stub runner only).
+      if [ -n "$HOOK_TRACE_DIR" ]; then mkdir -p "$HOOK_TRACE_DIR"; export ORCH_STUB_TRACE_FILE="$HOOK_TRACE_DIR/trace-turn$((TURNS_COMPLETED + 1)).log"; fi
       (
         cd "$TEMP_REPO"
         timeout "$TIMEOUT_LIMIT" "$ORCH_STUB_BIN" "$TURN_PROMPT" < "$TURN_PROMPT"
@@ -530,7 +586,7 @@ elif [ "$RUNNER" = "stub" ]; then
         RUN_EXIT=$TURN_EXIT
         break
       fi
-      if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+      if gate_records; then
         apply_gate "$((TURNS_COMPLETED + 1))" stub
         if [ "$GATE_TURN_FAILED" -eq 1 ]; then
           RUN_EXIT=$GATE_TURN_EXIT
@@ -693,7 +749,7 @@ if [ -n "${REINJECT_SRC:-}" ]; then
   REINJECT_JSON_FRAGMENT=',"reinject":"'"$(printf '%s' "$REINJECT_FILE" | tr -d '"\\')"'"'
 fi
 GATE_JSON_FRAGMENT=""
-if [ "$GATE_MODE" = "observe" ] || [ "$GATE_MODE" = "enforce" ]; then
+if gate_records; then
   GATE_JSON_FRAGMENT=$(printf ',"gate":"%s","gate_retries":%s,"gate_retries_by_turn":[%s],"gate_violations_by_turn":[%s],"gate_exhausted":%s,"gate_error":%s,"gate_retry_feedback":"%s"' \
     "$GATE_MODE" "$GATE_RETRIES" "$GATE_RETRIES_BY_TURN" "$GATE_VIOLATIONS_BY_TURN" "$GATE_EXHAUSTED" "$GATE_ERROR" "$GATE_RETRY_FEEDBACK")
 fi

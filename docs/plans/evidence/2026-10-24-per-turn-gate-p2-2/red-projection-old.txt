@@ -1,0 +1,3 @@
+FAIL P1 first five costs, cap 18: no STOP_COST (20.30): true vs false
+FAIL [p2-batch-wrapper] projectCost checks
+nc8: post-fail lines=1 audit rc=1

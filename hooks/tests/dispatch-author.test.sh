@@ -339,6 +339,7 @@ else
 fi
 EOF
   chmod +x "$STUB_AGY_OK"
+  make_agy_stdin_stub "$STUB_AGY_OK"
   STUB_BIN_DIR="$TEST_TMP/fake-bin"
   mkdir -p "$STUB_BIN_DIR"
   ln -sf "$STUB_AGY_OK" "$STUB_BIN_DIR/agy"
@@ -362,16 +363,8 @@ EOF
   AGY_ALIAS_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
   assert_contains "$(cat "$AGY_ALIAS_LOG_PATH")" 'ARG=gemini-3.6-flash-high' "agy runner receives the resolved canonical model"
 
-  # agy argv-payload ceiling (v2.35.7): this rail's generated run.sh embeds `-p "$(cat <prompt>)"`,
-  # so an oversized authoring prompt dies at execve with a bare 126/127 and no vendor text. It must
-  # be refused by name, before dispatch.
-  BIG_AUTHOR_PROMPT="$TEST_TMP/big-author-prompt.txt"
-  node -e 'process.stdout.write("z".repeat(200000))' > "$BIG_AUTHOR_PROMPT"
-  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash-high --prompt-file "$BIG_AUTHOR_PROMPT" --bin "$STUB_AGY_OK" 2>&1)"; EXIT=$?
-  assert_eq "2" "$EXIT" "oversized agy authoring payload is a precondition failure"
-  assert_contains "$OUT" 'single-argv ceiling' "the authoring refusal names the argv ceiling"
-  assert_contains "$OUT" 'has no --prompt-file' "the authoring refusal says why it cannot be streamed"
-  assert_not_contains "$OUT" '"status": "authored"' "an unexecable payload never reports authored"
+  # (The old agy argv-payload ceiling refusal is gone: the prompt travels on stdin. Large-prompt
+  # delivery is covered by agy-stdin-transport.test.sh.)
 
   STUB_AGY_FAIL="$TEST_TMP/runner-agy-fail"
   cat > "$STUB_AGY_FAIL" <<'EOF'
@@ -380,6 +373,7 @@ echo "partial from agy"
 exit 7
 EOF
   chmod +x "$STUB_AGY_FAIL"
+  make_agy_stdin_stub "$STUB_AGY_FAIL"
   ln -sf "$STUB_AGY_FAIL" "$STUB_BIN_DIR/agy"
   PATH="$STUB_BIN_DIR:$PATH"
   OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
@@ -387,18 +381,22 @@ EOF
   assert_contains "$OUT" '"status": "runner_failed"' "agy non-zero maps to runner_failed"
   assert_contains "$OUT" '"error": "runner exited 7"' "agy runner_failed includes exit code"
 
-  # --- 7.2: agy empty-output path should fail-closed (exit 1) ---
+  # --- 7.2: agy empty-output path should fail-closed. Since the BL-0021 response-side check the stdin
+  # helper itself refuses a SUCCESS with an empty response (agy_empty_response), so the rail reports
+  # runner_failed (exit 3) rather than the post-settle empty_output (exit 1) ---
   STUB_AGY_EMPTY="$TEST_TMP/runner-agy-empty"
   cat > "$STUB_AGY_EMPTY" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
   chmod +x "$STUB_AGY_EMPTY"
+  make_agy_stdin_stub "$STUB_AGY_EMPTY"
   ln -sf "$STUB_AGY_EMPTY" "$STUB_BIN_DIR/agy"
   PATH="$STUB_BIN_DIR:$PATH"
   OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
-  assert_eq "1" "$EXIT" "agy empty-output exit 1"
-  assert_contains "$OUT" '"status": "empty_output"' "agy empty-output maps to empty_output"
+  assert_eq "3" "$EXIT" "agy empty-output exit 3 (runner_failed)"
+  assert_contains "$OUT" '"status": "runner_failed"' "agy empty-output maps to runner_failed"
+  assert_contains "$(cat "$(printf '%s' "$OUT" | grep -o '"raw_log": "[^"]*"' | head -1 | cut -d'"' -f4)" 2>/dev/null)$OUT" "agy_empty_response" "agy empty-output: agy_empty_response reason surfaced"
   assert_not_contains "$OUT" '"status": "authored"' "agy empty-output is not authored"
 fi
 
@@ -682,6 +680,7 @@ else
 fi
 EOF
   chmod +x "$STUB_AGY_EFFORT"
+  make_agy_stdin_stub "$STUB_AGY_EFFORT"
   author_agy_effort() {
     python3 -c '
 import json,sys,re

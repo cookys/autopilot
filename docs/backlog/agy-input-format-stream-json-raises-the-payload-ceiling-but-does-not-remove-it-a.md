@@ -96,6 +96,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Honest bound**: this probe still does not distinguish transport truncation from model-side
   context/skim behaviour — only that the tail stops being answerable in that band, on this host. The
   operational consequence is the same either way.
+- **Update 2026-10-24 (agy stdin transport landed; this entry stays OPEN)**: every agy prompt rail now sends the prompt on stdin as stream-json (`scripts/lib/agy-stream-json.js`), so the argv 131072-byte wall and `agy-argv-ceiling.sh` are gone. The silent ~175-200 KB wall measured above is NOT gone on this host, and it is a deployment property, so removing the argv ceiling alone would have turned "oversized prompt refused" into "empty review recorded as a pass" (fail-open). The helper therefore fails closed: an encoded stdin line over `AUTOPILOT_AGY_STDIN_MAX_BYTES` (default 170000, below the measured-safe 175,145) is refused with typed reason `agy_stdin_ceiling` (helper exit 3) and agy is never spawned; it covers dispatch-author, dispatch-hetero, dispatch-review (agy seat) and hetero-review-loop. Tests: `hooks/tests/agy-stdin-transport.test.sh`. **Remaining work is what this entry always said**: either measure the wall per machine, or have the rail carry its own tail-nonce self-check (the `INTEGRITY: <nonce>` line in the real payload, missing nonce = `no_verdict`) so the 170000 conservative cap can be lifted safely. Do not close until one of those ships.
 - **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
 - **Reproducer kept in-repo**: [`hooks/fixtures/agy-payload-probe/`](../../hooks/fixtures/agy-payload-probe/)
   — the deterministic generator, the runner, the expected payload digests, and the two methodology
@@ -103,5 +104,14 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   exactly where both hosts went wrong, so it is version-controlled next to the row it supports.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is S each.
-- **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; `scripts/lib/agy-argv-ceiling.sh`, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
+- **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
 
+- **Update 2026-10-24 (later; agy 1.4.6 re-measured: the wall is in tokens, and a response-side check now backs the byte cap)**: tail-nonce probe through stdin stream-json, binary sha256 `128780f5776959ba6a991bde1f0a8b699eee37a59ed30deb9926147fedfa56c4`, model gemini-3.8-flash-high:
+
+  | line bytes | status | response | `result.usage.input_tokens` |
+  |---|---|---|---|
+  | 170000 | SUCCESS | tail nonce (correct) | 87,366 |
+  | 200000 | SUCCESS | `""` | 97,652 |
+  | 250000 | SUCCESS | `""` | 97,653 |
+
+  Conclusions: the wall still exists in 1.4.6; it sits at about 97.6k input tokens, not at a byte count (this padding ran about 0.51 token per byte, and base64 or some CJK is denser, so it can cross the wall inside the 170000-byte cap). `scripts/lib/agy-stream-json.js` therefore has two layers: the byte cap (`agy_stdin_ceiling`, kept) and response-side detection of a SUCCESS with an empty response (`agy_empty_response`) or `usage.input_tokens` >= `AUTOPILOT_AGY_INPUT_TOKEN_CEILING` (default 95000, `agy_input_truncated`, even when the response is non-empty). A result without the usage field skips the token check with a stderr note. Tests: `hooks/tests/agy-stdin-transport.test.sh`. This entry stays OPEN: the 170000-byte cap is still conservative, lifting it safely still needs the tail-nonce self-check or a per-host measurement.

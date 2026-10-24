@@ -97,49 +97,50 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
-### agy argv-payload ceiling — a second, harder wall
+### agy prompt transport — stdin stream-json, argv wall removed, stdin wall fail-closed
 
-The context-window gate is about what the *model* can hold. `agy` has a lower wall the *kernel*
-enforces, and it is reached first.
+`agy -p <prompt>` puts the whole prompt in ONE argv string, and Linux caps a single argv string at
+`MAX_ARG_STRLEN` = 32 × PAGE_SIZE (131071 usable bytes) — a per-string limit unrelated to the far
+larger `ARG_MAX`. Over it, `execve` failed before agy started and the seat looked stalled. The old
+`agy-argv-ceiling.sh` guard refused such prompts by name.
 
-`agy` has **no `--prompt-file`** (checked against `agy --help`, agy 1.1.x, 2026-09-02: only
-`-p`/`--print`/`--prompt`, which take the prompt as one argv string, plus `--input-format
-stream-json` on stdin — that one requires `--output-format stream-json` and a different parser, so
-no rail uses it). Every other runner here feeds the prompt through `--prompt-file` (codex, grok) or
-STDIN (cc-shim, qoderclicn, cursor) and is unaffected.
+Since agy 1.2 the prompt travels on **STDIN** instead, so the argv wall is gone and that guard with
+it. **The stdin path has its own, silent wall** ([BL-0021](../docs/BACKLOG.md), kept open): a
+tail-nonce probe on this host got the nonce back at 175,145 B and not at 200,344 B, and above the
+wall agy still returns `status: SUCCESS` with `response: ""` — an empty "review" that reads as a clean
+pass. The same binary, model and bytes pass on another host, so the wall is a **deployment property**
+no constant can predict. The helper therefore **fails closed**: an encoded stdin line over
+`AUTOPILOT_AGY_STDIN_MAX_BYTES` (default **170000** bytes, deliberately below the measured-safe
+175,145; a positive integer, anything else falls back to the default) is refused with the typed reason
+`agy_stdin_ceiling` on stderr and helper exit **3**, and agy is never spawned. The rails surface it as
+their ordinary runner failure (author `runner_failed`, review `no_verdict`, hetero not `committed`,
+loop seat unreviewed). The wall is really in **tokens** (agy 1.4.6, 2026-10-24: 87,366 input tokens answered,
+97,652 and 97,653 returned `SUCCESS` with `response: ""`), so the byte cap alone cannot fail closed for
+token-dense content; the helper also refuses, with the same rail failure types, a `SUCCESS` whose response
+is empty (`agy_empty_response`) or whose `result.usage.input_tokens` is at or over
+`AUTOPILOT_AGY_INPUT_TOKEN_CEILING` (default **95000**; `agy_input_truncated`). Raise the variable only on a host where you measured it; lifting the cap for
+good needs the per-machine measurement or a rail tail-nonce self-check BL-0021 describes. Every agy
+prompt rail — `dispatch-review.sh`
+(including the blind cleanroom launcher), `dispatch-hetero.sh`, `dispatch-author.sh`,
+`dispatch-explore.sh`, and `hetero-review-loop.js` through `dispatch-review.sh` — goes through
+[`scripts/lib/agy-stream-json.js`](../scripts/lib/agy-stream-json.js) (the dormant `qc-panel.js`
+— ADR-0002 — keeps its own in-process argv path and ceiling):
 
-Linux caps a **single argv string** at `MAX_ARG_STRLEN` = 32 × PAGE_SIZE — **131072 bytes including
-the NUL**, so 131071 is the largest string that execs. This is per-string and has nothing to do with
-the far larger total `ARG_MAX` (2097152 on this host), which is why `getconf ARG_MAX` looks like
-plenty of headroom right up until the dispatch dies. Measured 2026-09-02 (Linux 7.0.0, PAGE_SIZE
-4096): 131071 → exec ok, 131072 → fail, 131073 → fail.
+- argv gets `--input-format stream-json --output-format stream-json --print=` — `--print=` NEEDS the
+  `=`; a bare `--print` swallows the next flag as its prompt and exits 2. stream-json input requires
+  stream-json output.
+- stdin gets one NDJSON line `{"event":"user","message":{"content":"<prompt>"}}`, built with a JSON
+  encoder (`message.text` and other event names are silently wrong).
+- the `{"event":"result","result":{...}}` event decides: `status:"SUCCESS"` → `result.response` is
+  what the rail used to read from stdout (hetero/review/cleanroom use `--emit envelope`, which
+  re-emits the `result` object in the legacy `--output-format json` envelope shape so
+  `dispatch-status.js --agy-envelope` is unchanged); `status:"ERROR"` or no `result` event → the
+  helper exits 1 with the reason on stderr, which each rail already treats as its runner failure.
+  An agy that itself exits non-zero is passed through.
 
-The failure is **silent by construction**: `execve` fails before agy starts, so there is no vendor
-error, no partial output, and nothing for the verdict parser to read — the caller sees only a bare
-shell status (126 and 127 have both been observed in the field). A reviewer seat that "returned
-nothing" looks the same as a stalled one.
-
-[`scripts/lib/agy-argv-ceiling.sh`](../scripts/lib/agy-argv-ceiling.sh) derives the ceiling from the
-live PAGE_SIZE (a 64K-page host has a 2 MB limit — never hardcode 131071) and **all three** agy
-rails refuse over it with a named reason instead of letting the exec fail:
-
-- `dispatch-review.sh` → `no_verdict` carrying the byte count, the ceiling, and the remedy. The
-  review was fully set up, and the caller's fail-closed contract already treats `no_verdict` as "do
-  not ship", so this is not a `precondition_failed`.
-- `dispatch-hetero.sh` → `precondition_failed`, raised **before** the worktree and branch exist, so
-  that status's "nothing was created" claim stays true.
-- `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the
-  same single-argv shape).
-
-`scripts/qc-panel.js` is dormant (ADR-0002) and is not a dispatch path; it carries the same check in JS for its judge-B agy seats, and
-`scripts/hetero-review-loop.js` carries it too — it prechecks the estimated diff+spec bytes before
-dispatching any `agy`-runner seat and exits before spend when the estimate exceeds the ceiling.
-Measure **bytes**, never `${#var}`: that counts characters, and one multibyte character in the
-prompt makes the guard under-report — the unsafe direction.
-
-Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the unit, or send that
-seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
-silently reviews half a diff and reports a verdict for the whole thing.
+Other runners are unaffected (codex/grok take `--prompt-file`; cc-shim, qoderclicn, cursor take STDIN).
+`kimi` still has its own argv-only wall (`MAX_ARG_STRLEN`), as does the qualification-review provider's
+agy/kimi transport — see their own sections.
 
 ### Transport fallback for a frozen plan-review seat
 
@@ -719,7 +720,7 @@ The engine records the dispatched tuple plus `implementer_ladder_rung` on the
 | Runner | Engine / models | Implementer | Reviewer | How to invoke / notes |
 |--------|-----------------|:-:|:-:|------|
 | `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
-| `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. **No `--prompt-file`** — the prompt goes as one argv string, so a payload over ~131 KB is refused by the rails before exec (see § agy argv-payload ceiling); every other runner here reads a file or STDIN and has no such wall. |
+| `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. **No `--prompt-file`** — the rails send the prompt on stdin as stream-json, so there is no argv size ceiling (see § agy prompt transport); every other runner here reads a file or STDIN and has no such wall. |
 | `grok` | xAI `grok-4.5` (upstream renamed from `grok-build`, verified 2026-07-14), `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
 | `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. **Local models** (SGLang/vLLM/llama.cpp `/v1/messages`): same rail; define a named endpoint (`autopilot endpoints set`) — `https://` or loopback `http://` by default, or `--transport plaintext-private` for a private-range IP literal (disclosed, notice on every dispatch); qualify with `engine-qualify.sh implementer --endpoint <name>` so exam and routing share one definition (engine-onboarding § "Serving a local model for a team"). |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer family coverage (task-tree qc-panel is dormant, ADR-0002)) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |

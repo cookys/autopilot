@@ -50,6 +50,7 @@ fi
 [ "$1" = "--" ] && shift
 : > "$cap/inner.txt"
 for a in "$@"; do printf '%s\n' "$a" >> "$cap/inner.txt"; done
+[ -n "${FAKE_BWRAP_AGY_RESULT:-}" ] && printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"stub"}}'
 exit "${FAKE_BWRAP_RC:-0}"
 EOF
 chmod +x "$STUBS/fakebwrap"
@@ -211,7 +212,7 @@ assert_contains "$(cat "$TEST_TMP/l-kimi.json")" '"seat_root_removed": false' "k
 rm -rf "$TEST_TMP/seat-l-kimi"
 
 set +e
-run_fake "$TEST_TMP/l-agy" 0 "$LAUNCHER" --profile agy --prompt-file "$STUBS/prompt.txt" \
+FAKE_BWRAP_AGY_RESULT=1 run_fake "$TEST_TMP/l-agy" 0 "$LAUNCHER" --profile agy --prompt-file "$STUBS/prompt.txt" \
   --out "$TEST_TMP/l-agy.out" --err "$TEST_TMP/l-agy.err" --timeout 20s --model gemini-x --effort low \
   --bin "$STUBS/agy" --cred-dir "$STUBS/credagy" --seat-root "$TEST_TMP/seat-l-agy" --keep-seat \
   > "$TEST_TMP/l-agy.json"
@@ -224,6 +225,8 @@ assert_not_contains "$A" "$STUBS/credagy" "agy launch argv never names the crede
 I="$(cat "$TEST_TMP/l-agy/inner.txt")"
 assert_contains "$I" "autopilot-toolless-reviewer" "agy inner argv selects the tool-less agent"
 assert_contains "$I" "--dangerously-skip-permissions" "agy inner argv keeps the existing flag set"
+assert_contains "$I" "--print=" "agy inner argv carries the stdin stream-json flag (--print= with the =)"
+assert_not_contains "$I" $'--output-format\njson' "agy inner argv no longer asks for the legacy json output"
 assert_not_contains "$I" "PROMPT-BODY" "agy prompt text is not in host-visible argv"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/antigravity-oauth-token" "agy token copied on launch path"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/agents/autopilot-toolless-reviewer/agent.md" \

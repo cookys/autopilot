@@ -256,6 +256,13 @@ BASE_DIR="$TEST_TMP/base-scripts"; mkdir -p "$BASE_DIR"
 for _f in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
   [ -e "$_f" ] && [ "$(basename "$_f")" != dispatch-review.sh ] && ln -s "$_f" "$BASE_DIR/$(basename "$_f")"
 done
+# The historical base script sources lib/agy-argv-ceiling.sh, which the stdin transport removed from the
+# tree: give the base copy its own real lib/ (symlinks to the live files + the old ceiling lib from history).
+if [ -L "$BASE_DIR/lib" ]; then
+  rm -f "$BASE_DIR/lib"; mkdir -p "$BASE_DIR/lib"
+  for _f in "$REPO_ROOT"/scripts/lib/* "$REPO_ROOT"/scripts/lib/.[!.]*; do [ -e "$_f" ] && ln -s "$_f" "$BASE_DIR/lib/$(basename "$_f")"; done
+  git -C "$REPO_ROOT" show "$BASE_SHA:scripts/lib/agy-argv-ceiling.sh" > "$BASE_DIR/lib/agy-argv-ceiling.sh" 2>/dev/null || true
+fi
 BASE_COPY="$BASE_DIR/dispatch-review.sh"
 BASE_OK=1; [ -n "$BASE_SHA" ] && git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null || BASE_OK=0
 assert_eq "1" "$BASE_OK" "base script (parent of the commit introducing blind_runner_preflight) is derivable from history and reachable for the non-blind byte-compare (a skip would make the proof vacuous)"

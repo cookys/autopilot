@@ -198,8 +198,9 @@ else
     printf '#!/usr/bin/env bash\n'
     # --new-project: without it agy resumes a conversation keyed by an ancestor path and reads
     # THAT conversation's repository, not this one (measured 2026-09-13; see dispatch-hetero.sh).
-    printf 'exec %q --new-project -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_BIN" "$PROMPT_BUILT" "$MODEL" "$TIMEOUT"
+    # Prompt on STDIN as stream-json (lib/agy-stream-json.js appends the stream flags, unwraps `result`).
+    printf 'exec node %q run --prompt-file %q -- %q --new-project --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$_EXPLORE_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_BUILT" "$AGY_BIN" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   child_session_env_setup "$_EXPLORE_SELF_DIR" 2>/dev/null || true   # dispatch-tree 3b rule 3

@@ -1342,6 +1342,34 @@
       "note": "Hours of recent on-disk activity that keep a clean worktree out of every removal path (default 24); 0 turns it off for fixtures that age nothing."
     },
     {
+      "name": "AUTOPILOT_AGY_STDIN_MAX_BYTES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/agy-stream-json.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [],
+      "note": "Fail-closed ceiling on the encoded agy stdin line (default 170000 bytes, BL-0021: agy's silent stdin wall is a deployment property). Raise only on a host where the tail-nonce probe was measured."
+    },
+    {
+      "name": "AUTOPILOT_AGY_INPUT_TOKEN_CEILING",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/agy-stream-json.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_AGY_STDIN_MAX_BYTES"
+      ],
+      "note": "Response-side fail-closed ceiling on result.usage.input_tokens (default 95000; a non-positive-integer value falls back to the default). agy 1.4.6 silently drops the prompt tail near 97.6k input tokens (BL-0021), so a SUCCESS at or over it is refused as agy_input_truncated."
+    },
+    {
       "name": "AUTOPILOT_AUTHOR_CHROME_MAX_BYTES",
       "kind": "env",
       "audience": "internal",

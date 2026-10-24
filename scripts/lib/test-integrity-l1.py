@@ -1928,6 +1928,10 @@ def _assertion_shape(raw, strict):
         toks = inner.split()
         if len(toks) != 3 or toks[0] in _TEST_JOINERS or toks[2] in _TEST_JOINERS:
             return None
+        # Operands must be a pure quoted string ("..." or '...') or a pure
+        # unquoted word. $"..", $'..' and mixed forms can hide an expansion.
+        if any(t != "Q" and ("Q" in t or "'" in t or '"' in t) for t in toks):
+            return None
         # A pattern (unquoted * ? [) or any regex (=~) can match everything.
         if toks[1] == "=~" or any(re.search(r"[*?\[]", t) for t in (toks[0], toks[2])):
             return None

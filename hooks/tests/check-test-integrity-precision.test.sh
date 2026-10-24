@@ -18,6 +18,7 @@
 # RED at e0e6bbf0b (review 2bb2da5e): N45 failed (one space and one tab compared equal by character count).
 # RED at 185ca0591 (acceptance round 8): N47 N48 failed (multi-operand [ ... -o/-a ... ] paired with a three-token test); N46 N49 N50 passed on the base (case-fold and ! / || were already caught by other checks) and stay as controls.
 # RED at 25e18b71b (acceptance round 9): N51-N54 failed (unquoted glob / regex operand paired with a quoted literal).
+# RED at 51b0575f4 (acceptance round 10): see N55-N57 (locale string $".." / $'..' / mixed quoting paired with a pure quoted literal).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -661,5 +662,16 @@ if has_kind surface_touch; then report F21 0; else report F21 1; fi
 repo="$(mk_surface '[[ "$x" == a\*b ]]' '[[ "$x" == a\*c ]]')"
 run_case "$repo"
 if has_kind surface_touch; then report C6 1; else report C6 0; fi
+
+# ── N55-N57 locale / ANSI-C / mixed quoting is not a pure quote form: never the same shape ──
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = $"$a" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N55 1; else report N55 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' "[ \"\$a\" = \$'0' ]")"
+run_case "$repo"
+if has_kind surface_touch; then report N56 1; else report N56 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "$a"$"x" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N57 1; else report N57 0; fi
 
 finalize_test

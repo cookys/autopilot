@@ -1081,7 +1081,7 @@ assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 compat: a backlog t
 MUTC="$TEST_TMP/r7-mut-cfg"
 mkdir -p "$MUTC"
 cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUTC/"
-sed -i "s/  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));/  const entries = gate.collectEntries(text, 'heading');/" "$MUTC/scripts/check-plan-graduation.js"
+sed_mutate "$MUTC/scripts/check-plan-graduation.js" "s/  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));/  const entries = gate.collectEntries(text, 'heading');/"
 if cmp -s "$GATE" "$MUTC/scripts/check-plan-graduation.js"; then fail "R7 config mutation did not apply"; fi
 out="$(node "$MUTC/scripts/check-plan-graduation.js" --repo-root "$R7_CFG_DIR" --json)"
 assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 config mutation: ignoring the backlog config loses the peer rows (the suite can tell)"
@@ -1090,9 +1090,8 @@ assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 config mutation: ig
 MUT="$TEST_TMP/r7-mut"
 mkdir -p "$MUT"
 cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
-sed -i -e 's/if (violations.length > rowStart \&\& peerRowUnanswered(row)) {/if (false) {/' \
-  -e "s/for (const v of violations) if (v.code === 'peer_row_unanswered') doomedTitles.delete(v.title);//" \
-  "$MUT/scripts/check-plan-graduation.js"
+sed_mutate "$MUT/scripts/check-plan-graduation.js" 's/if (violations.length > rowStart \&\& peerRowUnanswered(row)) {/if (false) {/'
+# (a second command once removed a doomedTitles.delete line; it no longer exists in the gate, so only the guard mutation remains)
 if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "R7 mutation did not apply"; fi
 d="$(r7_fixture r7-mut-fix)"
 node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null 2>&1 || true
@@ -1172,7 +1171,7 @@ assert_not_contains "$(cat "$d/docs/projects/INDEX.md")" "| shipped |" "BL-0171:
 # Negative controls: break the pair parsing / the relative-link pass; the new cells must go red.
 MUT="$TEST_TMP/bl0171-mut-pairs"
 mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
-sed -i "s|^  const pairs = parsedShippedIn.pairs;|  const pairs = null;|" "$MUT/scripts/check-plan-graduation.js"
+sed_mutate "$MUT/scripts/check-plan-graduation.js" "s|^  const pairs = parsedShippedIn.pairs;|  const pairs = null;|"
 if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "BL-0171 pair mutation did not apply"; fi
 d="$(bl0171_fixture bl0171-mut-pairs-fx)"
 node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \
@@ -1182,7 +1181,8 @@ assert_not_contains "$(cat "$d/docs/projects/INDEX.md")" "| alpha | aaa1111 |" \
 
 MUT="$TEST_TMP/bl0171-mut-link"
 mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
-sed -i "/^    { re: relPlanPathRegExp(stem)/d; /^    { re: relEvidencePathRegExp(stem)/d" "$MUT/scripts/check-plan-graduation.js"
+sed_mutate "$MUT/scripts/check-plan-graduation.js" "/^    { re: relPlanPathRegExp(stem)/d"
+sed_mutate "$MUT/scripts/check-plan-graduation.js" "/^    { re: relEvidencePathRegExp(stem)/d"
 if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "BL-0171 link mutation did not apply"; fi
 d="$(bl0171_fixture bl0171-mut-link-fx)"
 node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --archive 2026-07-01-alpha --archive 2026-07-02-beta \

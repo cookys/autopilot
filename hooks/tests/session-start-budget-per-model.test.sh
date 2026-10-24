@@ -40,15 +40,15 @@ OUT="$(run_at "$HOOKS_DIR" "")"
 assert_contains "$OUT" "T2 400k + gap 50k" "live file model.id big-2[1m]: per_model t2 drives the warning"
 
 # negative controls
-mk_mut() { # <name> <sed-expr>
+mk_mut() { # <name> <one sed command>...
   local m="$TEST_TMP/$1/hooks"; mkdir -p "$m/../scripts"; cp -r "$HOOKS_DIR/." "$m/"; cp -r "$REPO_ROOT/scripts/." "$m/../scripts/"; cp -r "$REPO_ROOT/src" "$m/../src"
-  sed_mutate "$m/session-start.js" "$2"; printf '%s' "$m"
+  local x; for x in "${@:2}"; do sed_mutate "$m/session-start.js" "$x"; done; printf '%s' "$m"
 }
 M1="$(mk_mut m1 '/models: knownModelIds(payload),/d')"
 grep -q 'models: knownModelIds' "$M1/session-start.js" && fail "mutant 1: line not removed"
 OUT="$(run_at "$M1" "")"
 assert_not_contains "$OUT" "T2 400k" "negative control: without the models hand-off the live-file case is red"
-M2="$(mk_mut m2 "/models: knownModelIds(payload),/d;/budgetWarning({/,/}) || ''/ s/model: typeof payload.model === 'string' ? payload.model : undefined,//")"
+M2="$(mk_mut m2 "/models: knownModelIds(payload),/d" "/budgetWarning({/,/}) || ''/ s/model: typeof payload.model === 'string' ? payload.model : undefined,//")"
 OUT="$(run_at "$M2" big-1)"
 assert_not_contains "$OUT" "T2 400k" "negative control: without any model hand-off the payload case is red"
 finalize_test

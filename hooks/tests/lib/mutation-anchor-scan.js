@@ -15,11 +15,12 @@
 //   node    a `node -e` / `node - <<` body doing .replace( on a file it writes back (writeFileSync) must
 //           contain `process.exit(` with a non-zero code, throw, or an assert.
 // Remaining blind spots (deliberate, not hidden):
-//   - the sed COMMAND form does not matter to the scanner (s, d, i, a, c are all file edits); what matters is
-//     that the edit goes through sed_mutate / sed_mutant, which now check EVERY command of a multi-command
-//     script individually (see hooks/tests/lib.sh). A bare multi-command sed with one trailing cmp/grep is
-//     accepted by the scanner and checks only the whole file.
-//   - a destination or source named by a variable outside PRODUCT_VARS (or built from `$1`) is not recognised
+//   - the sed command form does not matter here (s, d, i, a, c are all file edits). What matters is that the
+//     edit goes through sed_mutate / sed_mutant (hooks/tests/lib.sh), which accept exactly ONE sed command per
+//     call and fail when it does not change the file. A bare sed with several -e is flagged even when a cmp
+//     follows. A bare sed that chains commands inside ONE expression with ';' is not detected here; the helpers
+//     refuse it, the scanner only sees it if no check follows.
+//   - a source or destination named by a variable outside PRODUCT_VARS (or built from `$1`) is not recognised
 //     as a product file; the helper's own sed line is judged instead.
 //   - sed fed from a pipe, `sed -n`, and files under fixtures/ are out of scope.
 //   - python/node bodies are judged by pattern (a .replace on read text with no failure exit), not executed.
@@ -54,8 +55,11 @@ function shellFindings(file, lines) {
     if (/\|\s*sed\b/.test(text)) continue; // sed filtering a stream, not editing a file
     if (!PRODUCT.test(text)) continue;
     const window = lines.slice(j, j + 7).join('\n');
-    if (CHECK.test(window)) continue;
-    out.push({ file, line: i + 1, kind: 'sed/perl', text: lines[i].trim().slice(0, 140) });
+    // A bare multi-command sed is judged on the whole file: one hit hides the others missing. Even with a
+    // cmp/grep right after it, it has to be split into one sed_mutate / sed_mutant call per command.
+    const multi = (text.match(/\s-e\s/g) || []).length >= 2;
+    if (CHECK.test(window) && !multi) continue;
+    out.push({ file, line: i + 1, kind: multi ? 'sed/perl multi-command' : 'sed/perl', text: lines[i].trim().slice(0, 140) });
     i = j;
   }
   return out;

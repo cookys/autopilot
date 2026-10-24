@@ -1267,9 +1267,8 @@ AF_RED=0
 for f in "${AF_WORD_FILES[@]}"; do
   af_base=$(basename "$f")
   cp "$f" "$AF_MUT/$af_base"
-  sed_mutate "$AF_MUT/$af_base" \
-    -e "s/${AF_KEEP_A}/${AF_STALE_A}/g" \
-    -e "s/${AF_KEEP_B}/${AF_STALE_B}/g"
+  sed_mutate "$AF_MUT/$af_base" "s/${AF_KEEP_A}/${AF_STALE_A}/g"
+  sed_mutate "$AF_MUT/$af_base" "s/${AF_KEEP_B}/${AF_STALE_B}/g"
   af_one=$(af_wording_hits "$AF_MUT/$af_base")
   AF_RED=$((AF_RED + af_one))
 done

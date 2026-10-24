@@ -83,6 +83,10 @@ EOF
 flagged "an i-command mutation is flagged" 1 <<'EOF'
 sed -i '3i injected' "${GATE}"
 EOF
+flagged "a bare sed with several -e is flagged even when a cmp follows" 1 <<'EOF'
+sed -i -e 's/a/b/' -e 's/c/d/' "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
 flagged "a continued sed followed by an assert_neq content comparison is accepted" 0 <<'EOF'
 sed 's/a/b/' \
   "$SCRIPT" > "$STALE"
@@ -107,40 +111,66 @@ finalize_test
 EOS
 bash "$SUB" >/dev/null 2>&1
 assert_neq "0" "$?" "a miss inside \$( ) still fails the suite via finalize_test"
-# 4) helpers check EVERY command, report sed failures and bad destinations.
+# 4) helpers: ONE sed command per call, applied by the real sed. Anything that is not recognisably one command is
+# refused (never guessed), a single command that does not change the file fails, sed failures fail.
 H="$TEST_TMP/h2"; mkdir -p "$H"
 printf 'alpha\nbeta\ngamma\n' > "$H/src"
 runh() { ( . "$REPO_ROOT/hooks/tests/lib.sh"; "$@" ) >"$H/out" 2>&1; }
-runh sed_mutant "$H/src" "$H/d1" -e 's/alpha/A/' -e 's/beta/B/'
-assert_eq "0" "$?" "sed_mutant: two -e that both hit pass"
-runh sed_mutant "$H/src" "$H/d2" -e 's/alpha/A/' -e 's/nothere/B/'
-assert_neq "0" "$?" "sed_mutant: a second -e that misses fails even though the first hit"
-assert_contains "$(cat "$H/out")" "nothere" "sed_mutant: the failure names the expression that missed"
-runh sed_mutant "$H/src" "$H/d3" 's/alpha/A/; s/nothere/B/'
-assert_neq "0" "$?" "sed_mutant: a ';'-joined second command that misses fails"
-runh sed_mutant "$H/src" "$H/d4" 's/alpha/A/
-s/nothere/B/'
-assert_neq "0" "$?" "sed_mutant: a newline-separated second command that misses fails"
-runh sed_mutant "$H/src" "$H/d5" -e '/beta/d' -e '/nomatch/d'
-assert_neq "0" "$?" "sed_mutant: a /re/d command that matches nothing fails"
-runh sed_mutant "$H/src" "$H/d6" -e '/beta/d' -e '2i inserted'
-assert_eq "0" "$?" "sed_mutant: d and i commands that both change the file pass"
-runh sed_mutant "$H/src" "$H/d7" -E 's/(/x/'
-assert_neq "0" "$?" "sed_mutant: a sed that exits non-zero fails (not read as 'changed')"
-runh sed_mutant "$H/nope" "$H/d8" 's/a/b/'
-assert_neq "0" "$?" "sed_mutant: a missing source fails"
-runh sed_mutant "$H/src" "$H/d9" -e 's/alpha/X/' -e 's/X/alpha/'
-assert_neq "0" "$?" "sed_mutant: commands that cancel out (dest identical to src) fail"
-cp "$H/src" "$H/m1"
-runh sed_mutate "$H/m1" -e 's/alpha/A/' -e 's/zzz/B/'
-assert_neq "0" "$?" "sed_mutate: a later -e that misses fails"
-cp "$H/src" "$H/m2"
-runh sed_mutate "$H/m2" -E 's/(/x/'
-assert_neq "0" "$?" "sed_mutate: a sed that exits non-zero fails"
-cp "$H/src" "$H/m3"
-runh sed_mutate "$H/m3" -e 's/alpha/A/;s/beta/B/' -e '$d'
-assert_eq "0" "$?" "sed_mutate: all commands hit, including \$d"
+runh sed_mutant "$H/src" "$H/d1" 's/alpha/A/'
+assert_eq "0" "$?" "sed_mutant: a single hitting command passes"
 assert_eq "A
-B" "$(cat "$H/m3")" "sed_mutate: commands were applied in order"
+beta
+gamma" "$(cat "$H/d1")" "sed_mutant: the real sed produced the destination"
+runh sed_mutant "$H/src" "$H/d2" 's/nothere/B/'
+assert_neq "0" "$?" "sed_mutant: a single command that misses fails"
+runh sed_mutant "$H/src" "$H/d3" -e 's/alpha/A/' -e 's/beta/B/'
+assert_neq "0" "$?" "sed_mutant: more than one -e is refused"
+assert_contains "$(cat "$H/out")" "one sed command per call" "sed_mutant: the refusal says to split into separate calls"
+runh sed_mutant "$H/src" "$H/d4" 's/alpha/A/; s/beta/B/'
+assert_neq "0" "$?" "sed_mutant: ';'-chained commands are refused"
+runh sed_mutant "$H/src" "$H/d5" 's/alpha/A/
+s/beta/B/'
+assert_neq "0" "$?" "sed_mutant: a newline-separated script is refused"
+runh sed_mutant "$H/src" "$H/d6" '/beta/{s/beta/B/}'
+assert_neq "0" "$?" "sed_mutant: a {...} block is refused"
+runh sed_mutant "$H/src" "$H/d7" 's/a/b/s/b/c/'
+assert_neq "0" "$?" "sed_mutant: an illegal s/a/b/s/b/c/ is refused, not read as two substitutions"
+runh sed_mutant "$H/src" "$H/d8" '/beta/d;2i inserted'
+assert_neq "0" "$?" "sed_mutant: '/beta/d;2i inserted' is refused (chained commands change meaning when split)"
+runh sed_mutant "$H/src" "$H/d9" -f "$H/src"
+assert_neq "0" "$?" "sed_mutant: -f is refused"
+runh sed_mutant "$H/src" "$H/d10" '/beta/d'
+assert_eq "0" "$?" "sed_mutant: a hitting /re/d passes"
+runh sed_mutant "$H/src" "$H/d11" '/nomatch/d'
+assert_neq "0" "$?" "sed_mutant: a /re/d that matches nothing fails"
+runh sed_mutant "$H/src" "$H/d12" '2i inserted'
+assert_eq "0" "$?" "sed_mutant: an i command passes"
+runh sed_mutant "$H/src" "$H/d13" -E 's/(/x/'
+assert_neq "0" "$?" "sed_mutant: a sed that exits non-zero fails"
+runh sed_mutant "$H/nope" "$H/d14" 's/a/b/'
+assert_neq "0" "$?" "sed_mutant: a missing source fails"
+cp "$H/src" "$H/same"
+runh sed_mutant "$H/same" "$H/same" 's/alpha/A/'
+assert_neq "0" "$?" "sed_mutant: source and destination are the same path -> fails"
+assert_eq "alpha
+beta
+gamma" "$(cat "$H/same")" "sed_mutant: the original file is intact after a same-path call"
+ln -s "$H/same" "$H/same.lnk"
+runh sed_mutant "$H/same" "$H/same.lnk" 's/alpha/A/'
+assert_neq "0" "$?" "sed_mutant: a destination that is a symlink to the source -> fails"
+assert_eq "alpha
+beta
+gamma" "$(cat "$H/same")" "sed_mutant: the original file is intact after a symlinked-destination call"
+cp "$H/src" "$H/m1"
+runh sed_mutate "$H/m1" 's/alpha/A/'
+assert_eq "0" "$?" "sed_mutate: a hit passes"
+runh sed_mutate "$H/m1" 's/zzz/y/'
+assert_neq "0" "$?" "sed_mutate: a miss fails"
+runh sed_mutate "$H/m1" -e 's/A/a/' -e 's/beta/B/'
+assert_neq "0" "$?" "sed_mutate: more than one -e is refused"
+runh sed_mutate "$H/m1" -E 's/(/x/'
+assert_neq "0" "$?" "sed_mutate: a sed that exits non-zero fails"
+runh sed_mutate "$H/m1" 's/a/b/s/b/c/'
+assert_neq "0" "$?" "sed_mutate: an illegal s/a/b/s/b/c/ is refused"
 
 finalize_test

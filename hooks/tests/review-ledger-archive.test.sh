@@ -312,7 +312,7 @@ unset AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY
 # (i) negative control: lock acquisition removed, delay makes the race lose a phase
 MUT="$TEST_TMP/mut/review-ledger-copy.js"
 mkdir -p "$(dirname "$MUT")"
-sed 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/' "$LIB" > "$MUT"
+sed_mutant "$LIB" "$MUT" 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/'
 export AUTOPILOT_REVIEW_LEDGER_REPO_ROOT="$REPO_ROOT"
 export AUTOPILOT_REVIEW_LEDGER_COPY_TEST_DELAY_MS=400
 export AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY=1
@@ -534,7 +534,7 @@ fi
 # (p) negative control: lock acquisition removed, concurrent finalize must lose a phase.
 MUT_P="$TEST_TMP/mut-p/review-ledger-copy.js"
 mkdir -p "$(dirname "$MUT_P")"
-sed 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/' "$LIB" > "$MUT_P"
+sed_mutant "$LIB" "$MUT_P" 's/const release = acquireLedgerLock(lockDir);/const release = function () {};/'
 LOOP_P="$TEST_TMP/hetero-review-loop-p.js"
 cp "$LOOP" "$LOOP_P"
 python3 - "$LOOP_P" "$MUT_P" <<'PY'
@@ -1267,10 +1267,9 @@ AF_RED=0
 for f in "${AF_WORD_FILES[@]}"; do
   af_base=$(basename "$f")
   cp "$f" "$AF_MUT/$af_base"
-  sed -i \
+  sed_mutate "$AF_MUT/$af_base" \
     -e "s/${AF_KEEP_A}/${AF_STALE_A}/g" \
-    -e "s/${AF_KEEP_B}/${AF_STALE_B}/g" \
-    "$AF_MUT/$af_base"
+    -e "s/${AF_KEEP_B}/${AF_STALE_B}/g"
   af_one=$(af_wording_hits "$AF_MUT/$af_base")
   AF_RED=$((AF_RED + af_one))
 done
@@ -1550,7 +1549,7 @@ t = p.read_text()
 old = "if (process.env.AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_COPY_DELAY !== '1') return 0;\n  "
 if old not in t:
     sys.stderr.write("case an: ALLOW gate missing; file already reads the delay unconditionally\n")
-    sys.exit(0)
+    sys.exit(3)
 p.write_text(t.replace(old, "", 1))
 PY
 assert_exit_code "$?" "0" "case an: ungated temp copy"
@@ -1640,7 +1639,7 @@ new = """function bucketNameFromIdentity(id, repoDir) {
 }"""
 if old not in t:
     sys.stderr.write("case aq: bucketNameFromIdentity missing; cannot force basename(repoDir)\n")
-    sys.exit(0)
+    sys.exit(3)
 p.write_text(t.replace(old, new, 1))
 PY
 assert_exit_code "$?" "0" "case aq: basename(repoDir) temp copy"

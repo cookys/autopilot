@@ -44,7 +44,7 @@ cp -r "$REPO_ROOT/scripts" "$MUTROOT/scripts"
 for d in src schemas project-config-template references .claude-plugin; do
   [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUTROOT/$d"
 done
-sed -i 's/^  on|off) ;;$/  on|off|maybe) ;;/' "$MUTROOT/scripts/resolve-review-loop.sh"
+sed_mutate "$MUTROOT/scripts/resolve-review-loop.sh" 's/^  on|off) ;;$/  on|off|maybe) ;;/'
 mutval=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$MUTROOT/scripts/resolve-review-loop.sh" --field review_fresh_context 2>/dev/null)
 assert_eq "maybe" "$mutval" "mutation: with the on|off check loosened the garbage value leaks (so test 4 catches a removed check)"
 

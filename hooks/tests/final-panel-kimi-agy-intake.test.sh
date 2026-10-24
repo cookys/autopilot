@@ -34,7 +34,7 @@ for R in $RUNNERS; do
 done
 # negative control: a drifted copy of the shell table must be detected by the same comparison
 DRIFT_J="$(tier_of_js grok)"
-sed 's/^    \*) printf .%s\\n. none ;;/    grok) printf "%s\\n" cleanroom ;;\n    *) printf "%s\\n" none ;;/' "$DISPATCH" > "$TEST_TMP/dispatch-drift3.sh"
+sed_mutant "$DISPATCH" "$TEST_TMP/dispatch-drift3.sh" 's/^    \*) printf .%s\\n. none ;;/    grok) printf "%s\\n" cleanroom ;;\n    *) printf "%s\\n" none ;;/'
 DRIFT_S="$(tier_of_shell "$TEST_TMP/dispatch-drift3.sh" grok)"
 assert_neq "$DRIFT_J" "$DRIFT_S" "negative control: drifted shell table disagrees with JS (parity comparison would fail)"
 

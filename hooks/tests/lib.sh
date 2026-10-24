@@ -436,15 +436,31 @@ NODE
   fi
 }
 
-# sed_mutate <file> <sed expr...>: an in-place mutation that MUST change the file. A mutation whose
-# anchor no longer matches the product text leaves the "mutant" identical to the original, and the
-# negative control built on it silently passes for the wrong reason; this fails the test instead.
+# Mutation helpers for negative controls. A mutation whose anchor no longer matches the product text
+# leaves the "mutant" identical to the original, and the control built on it silently passes for the
+# wrong reason. These fail loudly instead. A miss is also appended to $TEST_TMP/.mutation-miss, which
+# finalize_test turns into a failure, so a miss inside $( ) (where fail() only reaches the subshell's
+# own list) still fails the suite.
+__mutation_miss() {
+  fail "$1"
+  [ -n "${TEST_TMP:-}" ] && printf '%s\n' "$1" >> "$TEST_TMP/.mutation-miss"
+  return 1
+}
+# sed_mutate <file> <sed args...>: in-place `sed -i <args> <file>`; fails if the file is missing or unchanged.
 sed_mutate() {
   local f="$1" before after; shift
+  [ -f "$f" ] || { __mutation_miss "mutation target file missing: $f"; return 1; }
   before="$(cksum < "$f")"
   sed -i "$@" "$f"
   after="$(cksum < "$f")"
-  if [ "$before" = "$after" ]; then fail "mutation did not hit (anchor drifted): sed $* in $f"; return 1; fi
+  if [ "$before" = "$after" ]; then __mutation_miss "mutation did not hit (anchor drifted): sed $* in $f"; return 1; fi
+}
+# sed_mutant <src> <dest> <sed args...>: `sed <args> <src> > <dest>`; fails if src is missing or dest equals src.
+sed_mutant() {
+  local src="$1" dest="$2"; shift 2
+  [ -f "$src" ] || { __mutation_miss "mutation source file missing: $src"; return 1; }
+  sed "$@" "$src" > "$dest"
+  if cmp -s "$src" "$dest"; then __mutation_miss "mutation did not hit (anchor drifted): sed $* on $src"; return 1; fi
 }
 
 # Assertion bookkeeping for the run.sh summary.
@@ -747,6 +763,9 @@ JSON
 # case parked below it is invisible rather than failing. Insert new cases ABOVE
 # the call, and confirm each one can actually go red before trusting it.
 finalize_test() {
+  if [ -s "${TEST_TMP:-/nonexistent}/.mutation-miss" ]; then
+    fail "mutation anchor missed (recorded by sed_mutate/sed_mutant): $(head -c 300 "$TEST_TMP/.mutation-miss" | tr '\n' ' ')"
+  fi
   if [ "${#__TEST_FAIL_MSGS[@]}" -eq 0 ]; then
     echo "PASS [$TEST_NAME] $__TEST_PASS_COUNT assertions"
     exit 0

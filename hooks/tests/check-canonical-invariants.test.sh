@@ -102,7 +102,7 @@ for f in CLAUDE.md agents/reviewer.md references/blind-dispatch.md \
   sed -i "s|$SEVERITY|$NEWPHRASE|g" "$SBX/$f"
 done
 # update the inline seed in the sandbox script copy (the "same commit" seed edit)
-sed -i "s|$SEVERITY|$NEWPHRASE|g" "$SCRIPT"
+sed_mutate "$SCRIPT" "s|$SEVERITY|$NEWPHRASE|g"
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "reword+seed-update (same-commit ritual) exit code"
 assert_contains "$OUT" "all canonical invariants hold" "reword+seed-update passes"

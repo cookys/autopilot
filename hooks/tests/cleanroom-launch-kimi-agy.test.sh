@@ -316,7 +316,7 @@ assert_eq "3" "$(cat "$TEST_TMP/cx-new-pf-3/rc")" "codex preflight deny exits 3"
 # negative control: a mutated launcher (codex argv touched) must be caught by the same comparison
 MUT="$TEST_TMP/mut/lib"; mkdir -p "$MUT"
 cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$MUT/json-emit.sh"
-sed '0,/^  append review$/s//  append reviewX/' "$LAUNCHER" > "$MUT/cleanroom-launch.sh"
+sed_mutant "$LAUNCHER" "$MUT/cleanroom-launch.sh" '0,/^  append review$/s//  append reviewX/'
 chmod +x "$MUT/cleanroom-launch.sh"
 codex_capture "$MUT/cleanroom-launch.sh" "mut" 0 launch
 if cmp -s "$TEST_TMP/cx-base-launch-0/args.bin" "$TEST_TMP/cx-mut/args.bin"; then
@@ -326,8 +326,7 @@ fi
 # negative control: a credential bind injected into the preflight argv fails the assertion helper
 CRED_MUT="$TEST_TMP/credmut/lib"; mkdir -p "$CRED_MUT"
 cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$CRED_MUT/json-emit.sh"; cp "$REPO_ROOT/scripts/lib/agy-containment.js" "$CRED_MUT/"
-sed 's#^    write_runner_probe$#    write_runner_probe; CRED_DIR="'"$STUBS/credagy"'"; copy_runner_credentials#' \
-  "$LAUNCHER" > "$CRED_MUT/cleanroom-launch.sh"
+sed_mutant "$LAUNCHER" "$CRED_MUT/cleanroom-launch.sh" 's#^    write_runner_probe$#    write_runner_probe; CRED_DIR="'"$STUBS/credagy"'"; copy_runner_credentials#'
 chmod +x "$CRED_MUT/cleanroom-launch.sh"
 set +e
 run_fake "$TEST_TMP/credmut-cap" 0 "$CRED_MUT/cleanroom-launch.sh" --preflight --profile agy "${DENY_ARGS[@]}" \

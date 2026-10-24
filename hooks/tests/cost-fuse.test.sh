@@ -194,7 +194,7 @@ export AUTOPILOT_COSTS_FILE="$TEST_TMP/costs.jsonl"
 # Proves that case 1 (spend $50 with default $150 threshold) actually depends on default 150.
 # If default is corrupted to 25, spend $50 should DENY under block mode.
 TMP_HOOK="$HOOKS_DIR/cost-fuse-mutant.tmp.js"
-sed 's/const DEFAULT_DAILY_USD_BRAIN = 150;/const DEFAULT_DAILY_USD_BRAIN = 25;/' "$HOOKS_DIR/cost-fuse.js" > "$TMP_HOOK"
+sed_mutant "$HOOKS_DIR/cost-fuse.js" "$TMP_HOOK" 's/const DEFAULT_DAILY_USD_BRAIN = 150;/const DEFAULT_DAILY_USD_BRAIN = 25;/'
 write_costs "claude-fable-5-1" 50 "fuse-session-1"
 write_transcript "claude-fable-5-1"
 export AUTOPILOT_COST_FUSE_MODE=block

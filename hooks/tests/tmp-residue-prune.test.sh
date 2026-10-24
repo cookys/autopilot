@@ -120,7 +120,12 @@ mutant_deleted() { # <sed expr> → names the mutated CLI deletes from a fresh f
   local m="$TEST_TMP/mutfx"; rm -rf "$m"; mkdir -p "$m/autopilot-dispatch-runs" "$m/autopilot-review-loop-LIVEOWNER"
   printf '{"pid":%s,"start_time":%s}\n' "$SLEEPER" "$START" > "$m/autopilot-review-loop-LIVEOWNER/.autopilot-owner"
   age "$m/autopilot-dispatch-runs" "$OLD"; age "$m/autopilot-review-loop-LIVEOWNER" "$OLD"
-  cp "$CLI" "$MUT/tmp-residue.js"; sed -i "$1" "$MUT/tmp-residue.js"
+  cp "$CLI" "$MUT/tmp-residue.js"
+  if [ "$1" = 's/@@NO-SUCH-TEXT@@//' ]; then
+    sed -i "$1" "$MUT/tmp-residue.js"   # mutation-anchor: intentional-miss (baseline: the unmutated copy must keep both)
+  else
+    sed_mutate "$MUT/tmp-residue.js" "$1"
+  fi
   node "$MUT/tmp-residue.js" prune --tmpdir "$m" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).deleted.join(",")))'
 }
 assert_eq "$(mutant_deleted 's/@@NO-SUCH-TEXT@@//')" "" "case5: control baseline (unmutated copy) keeps both"

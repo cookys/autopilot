@@ -33,7 +33,7 @@ assert_contains "$RP" "apt.*" "case1: apt.* is lock-gated"
 
 # ── Case 2: negative control — a reaper copy with one extra pattern must NOT match ──
 MUT="$TEST_TMP/suite-residue-reap.mutated.sh"
-sed "s#^  'apt\.\*'\$#  'apt.*'\n  'zz-extra-*'#" "$REAPER" >"$MUT"
+sed_mutant "$REAPER" "$MUT" "s#^  'apt\.\*'\$#  'apt.*'\n  'zz-extra-*'#"
 RPM="$(reaper_patterns "$MUT")"
 assert_contains "$RPM" "zz-extra-*" "case2: mutation actually changed the reaper's list (non-vacuous)"
 if [ "$RPM" = "$GP" ]; then

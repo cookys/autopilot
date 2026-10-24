@@ -413,7 +413,7 @@ assert_eq "$c_small" "nocut" "budget: a small note is not marked cut"
 # negative control: the old fixed 2200 cap -> the budget assertions must go red
 # Mutants are required from TEST_TMP, so the shared buffer module must sit beside them.
 cp "$REPO_ROOT/scripts/lib/autocompact-window.js" "$TEST_TMP/autocompact-window.js"
-sed -e 's/model: 4000 }/model: 2200 }/' -e 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/' "$LIB" > "$TEST_TMP/mut-fixed.js"
+sed_mutant "$LIB" "$TEST_TMP/mut-fixed.js" -e 's/model: 4000 }/model: 2200 }/' -e 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/'
 read -r m_mut _ _ <<< "$(measure "$TEST_TMP/mut-fixed.js" 12000 full)"
 if [ "$m_mut" -lt 3500 ]; then assert_eq 1 1 "negative control: fixed 2200 cap carries only $m_mut bytes (budget test goes red)"; else assert_eq "$m_mut" "<3500" "negative control: fixed cap not red"; fi
 
@@ -436,7 +436,7 @@ console.log(h.modelNoteSection({sessionId:"s7",now:Date.now(),dirs:{handoff:proc
 assert_not_contains "$out" "possibly incomplete" "half-write: a just-written but quiet note is not flagged"
 assert_contains "$out" "quiet note" "half-write: quiet note content present"
 # negative control: reader without the stability check does not flag the growing note
-sed -e 's/if (st3.size !== st.size || st3.mtimeMs !== st.mtimeMs) unstable = true;//' -e 's/unstable = moved;//' "$LIB" > "$TEST_TMP/mut-nostable.js"
+sed_mutant "$LIB" "$TEST_TMP/mut-nostable.js" -e 's/if (st3.size !== st.size || st3.mtimeMs !== st.mtimeMs) unstable = true;//' -e 's/unstable = moved;//'
 printf 'start\n' > "$HD/s7.md"
 ( for i in $(seq 1 60); do printf 'more %s\n' "$i" >> "$HD/s7.md"; sleep 0.05; done ) &
 WPID=$!
@@ -458,7 +458,7 @@ const big="g".repeat(80);
 h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:dir,dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});
 console.log(opens)' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens.txt"
 assert_eq "$(cat "$TEST_TMP/opens.txt")" "1" "single read: the note is opened once per buildHandoff"
-sed -e 's/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: BODY_CAP })); safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap }));/' "$LIB" > "$TEST_TMP/mut-twice.js"
+sed_mutant "$LIB" "$TEST_TMP/mut-twice.js" -e 's/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));/const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: BODY_CAP })); safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap }));/'
 node -e '
 const fs=require("fs");const h=require(process.argv[1]);let opens=0;const o=fs.openSync;fs.openSync=function(f,...r){if(String(f).endsWith("s8.md"))opens++;return o.call(fs,f,...r)};
 h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{}}},machineState:"x",tail:null});console.log(opens)' "$TEST_TMP/mut-twice.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/opens2.txt"
@@ -471,7 +471,7 @@ const sec=(n)=>{const m=out.match(new RegExp("## "+n+"\\n([\\s\\S]*?)\\n\\n## ")
 console.log(sec("Project and Git State"),sec("Session Marker and Decision Ledger"))' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr.txt"
 read -r g_sz m_sz < "$TEST_TMP/shr.txt"
 if [ "$g_sz" -gt 1250 ] && [ "$m_sz" -lt 1500 ]; then assert_eq 1 1 "shrink: git ($g_sz) is not cut alone to its floor while marker ($m_sz) shrinks too"; else assert_eq "$g_sz/$m_sz" "git>1250,marker<1500" "shrink is shared"; fi
-sed -e 's/const give = slack > 0 ? .*$/const give = k === "git" ? deficit : 0;/' "$LIB" > "$TEST_TMP/mut-gitfirst.js"
+sed_mutant "$LIB" "$TEST_TMP/mut-gitfirst.js" -e 's/const give = slack > 0 ? .*$/const give = k === "git" ? deficit : 0;/'
 node -e '
 const h=require(process.argv[1]);const big="g".repeat(80);
 const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:process.argv[2],dispatchRuns:process.argv[4]},snapshot:{snapshot:{bySource:{marker:Array.from({length:60},(_,i)=>"marker line "+i+" "+big)}}},machineState:"## M\n",tail:null});

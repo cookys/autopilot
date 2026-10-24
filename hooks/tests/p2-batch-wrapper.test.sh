@@ -90,7 +90,7 @@ mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.sl
 mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
 mk_mut costraw "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut taskdir "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
-mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
+mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')" "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -"
 mk_mut cmdtpl "need(Array.isArray(av) &&" "need(true || Array.isArray(av) &&"
 mk_mut mtime "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
 mk_mut oldhead "o.auth_ok === true" "String(o.result_head).includes('AUTH_OK')"
@@ -100,6 +100,18 @@ mk_mut costnull "? o.total_cost_usd : null; return c; };" "? o.total_cost_usd : 
 mk_mut probecost "cost = costOk ? o.total_cost_usd : 0; err = (o.is_error || !costOk) ? 1 : 0;" "cost = 0; err = o.is_error ? 1 : 0;"
 mk_mut authscan "need(!AUTH_RE.test(raw)," "need(true || !AUTH_RE.test(raw),"
 mk_mut tracefiles "need(tc.files > 0," "need(true || tc.files > 0,"
+PYOLD="$TEST_TMP/pyold.txt"; PYNEW="$TEST_TMP/pynew.txt"
+cat >"$PYOLD" <<'TXT'
+const pfiles = nums.map((n) => path.join(runDir, 'probes', `${id}-${n}.json`));
+TXT
+cat >"$PYNEW" <<'TXT'
+const pfiles = []; for (let k = 1; fs.existsSync(path.join(runDir, 'probes', `${id}-${k}.json`)); k++) pfiles.push(path.join(runDir, 'probes', `${id}-${k}.json`));
+TXT
+mk_mut probeset "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(pfBad.length === 0," "need(true || pfBad.length === 0," "$(cat "$PYOLD" | tr -d '\n')" "$(cat "$PYNEW" | tr -d '\n')"
+mk_mut probefield "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -"
+mk_mut stderrfile "need(errText !== null," "need(true || errText !== null,"
+mk_mut filehash "need(fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(true || fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(true || fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper," "need(true || fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper,"
+mk_mut nan "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0);" "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : NaN);"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -108,6 +120,7 @@ MAN_W3="$CLONE/prereg/manifest-w3.json"; make_manifest "$WRAP" "$MAN_W3"
 MAN_W3M="$CLONE/prereg/manifest-w3-mutant.json"; make_manifest "$TEST_TMP/mut-nowindow/run-p2-batch.js" "$MAN_W3M"
 unset MAN_WINDOW
 MAN_PC="$CLONE/prereg/manifest-probecost-mutant.json"; make_manifest "$TEST_TMP/mut-probecost/run-p2-batch.js" "$MAN_PC"
+MAN_NAN="$CLONE/prereg/manifest-nan-mutant.json"; make_manifest "$TEST_TMP/mut-nan/run-p2-batch.js" "$MAN_NAN"
 MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
 # manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
@@ -119,8 +132,8 @@ TREE=$(git -C "$CLONE" write-tree); COMMIT=$(git -C "$CLONE" commit-tree "$TREE"
 
 FAKE_STATE_DIR="$TEST_TMP/fakestate"
 run_batch() { # <wrapper> <manifest> <rundir>; FAKE_TASK_EDIT optional
-  rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
-  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" FAKE_PROBE_SLEEP="${FAKE_PROBE_SLEEP:-}" ORCH_TIMEOUT=1m \
+  [ -n "${KEEP_STATE:-}" ] || rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
+  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" FAKE_PROBE_SLEEP="${FAKE_PROBE_SLEEP:-}" FAKE_PROBE_FAIL_ONCE="${FAKE_PROBE_FAIL_ONCE:-}" ORCH_TIMEOUT=1m \
     node "$1" --run --manifest "$2" --run-dir "$3" --clone "$CLONE" ${RUN_ARGS:-} >"$3.stdout" 2>"$3.stderr"
 }
 
@@ -204,7 +217,7 @@ assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
 
 echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
 fixm() { local f; if [ -z "${NOFIXM:-}" ]; then for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$R1#$1#g" "$f"; done; fi; }
-audit_rc() { [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
+audit_rc() { [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?; }
 tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
 # 1 several models in every MODEL row
 tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
@@ -238,7 +251,7 @@ for(const l of log){const m=/ COST (\S+) arm=(\S+) run=(\S+) probe=(\S+) running
  tot[m[2]]+=Number(m[3])+pr[m[1]];if(Math.abs(tot[m[2]]-Number(m[5]))>5e-4){bad++;console.error("running mismatch",m[1],m[5],tot[m[2]].toFixed(4))}}
 process.exit(n===6&&!bad?0:1)' "$R1"; assert_eq "$?" 0 "COST running equals the id-by-id sum of runs and probes"
 R2="$TEST_TMP/run-probe-mut"; run_batch "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE" "$R2"
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN_PROBE" --run-dir "$R2" --clone "$CLONE" >/dev/null 2>&1; echo $?)" 0 "RED probe double count: a batch written with the double-counting writer fails the audit"
+assert_neq "$(node "$TEST_TMP/mut-probe/run-p2-batch.js" --audit --manifest "$MAN_PROBE" --run-dir "$R2" --clone "$CLONE" >/dev/null 2>&1; echo $?)" 0 "RED probe double count: a batch written with the double-counting writer fails the audit"
 
 echo "--- audit round 1 review: baseline pin, COSTCHK, window, HOOKERR, MODEL per id"
 # 5 task hash baseline replaced AFTER the batch by a committed file, with pre and post listings rewritten to match it
@@ -330,7 +343,7 @@ elapsed_lines() { node "$1" --audit --manifest "$2" --run-dir "$3" --clone "$CLO
 RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$WRAP" "$MAN" "$TEST_TMP/run-slow"
 assert_eq "$(elapsed_lines "$WRAP" "$MAN" "$TEST_TMP/run-slow")" 0 "slow probe (5 s): START elapsed agrees with its timestamp"
 RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE" "$TEST_TMP/run-slow-mut"
-assert_neq "$(elapsed_lines "$WRAP" "$MAN_SE" "$TEST_TMP/run-slow-mut")" 0 "RED slow probe: the early-sampling mutant writes an elapsed that disagrees with its timestamp"
+assert_neq "$(elapsed_lines "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE" "$TEST_TMP/run-slow-mut")" 0 "RED slow probe: the early-sampling mutant writes an elapsed that disagrees with its timestamp"
 RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$WRAP" "$MAN_W3" "$TEST_TMP/run-w3"; w3rc=$?
 assert_eq "$w3rc" 8 "window gone during the probe: wrapper exits 8"
 assert_eq "$(grep -c ' STOP_WINDOW ' "$TEST_TMP/run-w3/invocation.log")" 1 "STOP_WINDOW written"
@@ -384,7 +397,7 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm2")" 0 "raw hook log with 3 blocks
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm2")" 0 "RED raw hook log: mutant says OK"
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm")" 0 "RED BLOCKMAX -1: mutant says OK"
 # 4: the final timeout is computed once, before the first START artifact, and is what the harness call gets
-tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("const probeCost = W.writeProbe");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
+tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("W.writeProbe(ctx, id, home);");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
 assert_eq "$(tmo_order "$WRAP")" "1:before" "one timeout computation, before ORDER/CMD/START"
 PRE_MUT="$TEST_TMP/mut-tmo2/run-p2-batch.js"; mkdir -p "$(dirname "$PRE_MUT")"; cp "$WRAP_SRC" "$PRE_MUT"
 mutate "$PRE_MUT" "    W.writeStartEnd(ctx, 'START', id, " "    const tmo2 = harnessTimeoutMs(ctx.elapsed(), m.window_s); void tmo2;
@@ -525,5 +538,37 @@ assert_eq "$(audit_rc "$TEST_TMP/mut-authscan/run-p2-batch.js" "$TEST_TMP/t-au")
 tamper tr; rm -rf "$TEST_TMP"/t-tr/trace/C-*
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tr")" 0 "all C-arm traces deleted: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-tracefiles/run-p2-batch.js" "$TEST_TMP/t-tr")" 0 "RED missing traces: mutant says OK"
+
+echo "--- round 9: probe file set, COST probe field, stderr file, real file hashes"
+tamper pg; PF=$(ls "$TEST_TMP"/t-pg/probes/*-1.json | head -1); cp "$PF" "${PF%-1.json}-3.json"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pg")" 0 "extra probe response with a gap (n=1,3): real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-probeset/run-p2-batch.js" "$TEST_TMP/t-pg")" 0 "RED probe file gap: sequential-read mutant says OK"
+tamper pu; cp "$(ls "$TEST_TMP"/t-pu/probes/*-1.json | head -1)" "$TEST_TMP/t-pu/probes/ZZ-01-1.json"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pu")" 0 "probe response file with an unknown id: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-probeset/run-p2-batch.js" "$TEST_TMP/t-pu")" 0 "RED unknown probe file: mutant says OK"
+tamper pf; sed -i -E '0,/( COST \S+ arm=\S+ run=\S+ )probe=\S+/s//\1probe=999.000000/' "$TEST_TMP/t-pf/invocation.log"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pf")" 0 "COST probe=999: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-probefield/run-p2-batch.js" "$TEST_TMP/t-pf")" 0 "RED COST probe field: mutant says OK"
+tamper se; rm -f "$TEST_TMP"/t-se/runs/*.stderr
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-se")" 0 "stderr files deleted: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-stderrfile/run-p2-batch.js" "$TEST_TMP/t-se")" 0 "RED missing stderr: mutant says OK"
+for what in hooks/per-turn-gate.js evals/orchestration/run-orchestration-eval.sh; do
+  echo "// edited after the batch" >>"$CLONE/$what"
+  assert_neq "$(audit_rc "$WRAP" "$R1")" 0 "$what edited after the batch: real audit non-zero"
+  assert_eq "$(audit_rc "$TEST_TMP/mut-filehash/run-p2-batch.js" "$R1")" 0 "RED $what: audit comparing only the HASH rows says OK"
+  git -C "$CLONE" checkout -q -- "$what"
+done
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$R1" --clone "$CLONE" --wrapper-file "$TEST_TMP/mut-hookerr/run-p2-batch.js" >/dev/null 2>&1; assert_neq "$?" 0 "another wrapper file than the preregistered one: audit non-zero"
+node "$TEST_TMP/mut-filehash/run-p2-batch.js" --audit --manifest "$MAN" --run-dir "$R1" --clone "$CLONE" --wrapper-file "$TEST_TMP/mut-hookerr/run-p2-batch.js" >/dev/null 2>&1; assert_eq "$?" 0 "RED wrapper file: the mutant without the file hashes says OK"
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "files restored: real audit OK"
+
+echo "--- round 9 E: a probe fails (no cost), the owner re-logs in, the batch resumes and must audit OK"
+RF="$TEST_TMP/run-resume"
+FAKE_PROBE_FAIL_ONCE=1 run_batch "$WRAP" "$MAN" "$RF"; assert_eq "$?" 7 "first probe fails: wrapper pauses with exit 7"
+KEEP_STATE=1 FAKE_PROBE_FAIL_ONCE=1 run_batch "$WRAP" "$MAN" "$RF"; assert_eq "$?" 0 "resumed batch completes"
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$RF" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/resume-audit.out" 2>&1; assert_eq "$?" 0 "batch with a failed-then-recovered probe: real audit OK ($(head -3 "$TEST_TMP/resume-audit.out" | tr "\n" ";"))"
+assert_eq "$(grep -c ' PROBE_FAIL ' "$RF/invocation.log")" 1 "the failed probe is in the log"
+NANMUT="$TEST_TMP/mut-nan/run-p2-batch.js"
+assert_neq "$(node "$NANMUT" --audit --manifest "$MAN_NAN" --run-dir "$RF" --clone "$CLONE" --wrapper-file "$NANMUT" >/dev/null 2>&1; echo $?)" 0 "RED probe without cost: the NaN mutant fails a valid resumed batch"
 
 finalize_test

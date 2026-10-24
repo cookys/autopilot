@@ -61,3 +61,7 @@ Red before green in `p2-batch-wrapper.test.sh`: the task directory is re-hashed 
 ## Round 8 fixes
 
 Red before green in `p2-batch-wrapper.test.sh`: probe status uses a saved `auth_ok` from the full response (a reply with AUTH_OK after 200 characters passes; the head-based mutant misjudges it); argv paths must be the canonical run paths (`/tmp/other/runs/<id>` fails); mtime check is strict (a file 2 s after END fails; the slack mutant passes it; measured worst file-clock lag was 1 ms, and the synthetic harness in `--selfcheck` waits 25 ms like a real one would); missing, non-numeric or negative costs are invalid on both the probe (exit 7) and the run side; raw run.log/stderr are re-scanned for the authentication pattern; deleted C-arm traces fail. The fake `claude` now always creates its debug file, like the real CLI.
+
+## Round 9 fixes
+
+Red before green in `p2-batch-wrapper.test.sh`: probe files are enumerated as a set (a gap, an unknown id; the sequential-read mutant misses them); COST `probe=999`; missing stderr file; hook and harness edited after the batch, and another wrapper file than the preregistered one (the audit that only compares HASH rows passes them); a batch whose first probe failed (no cost) and was redone after the pause audits OK (the NaN mutant fails it). The upper-bound `Math.floor` on file mtimes is kept on purpose and now carries a comment.

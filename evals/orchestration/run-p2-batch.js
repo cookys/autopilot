@@ -338,6 +338,13 @@ function modelsOf(runLog) {
 /** Cost of the last result object, or null when there is none or the field is missing, non-numeric or negative. */
 const lastResultCost = (runLog) => { let c = null; for (const o of jsonObjects(runLog)) if (o.type === 'result') c = (typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0) ? o.total_cost_usd : null; return c; };
 
+/** Sum of the costs in every saved probe response of an id (failed attempts included). */
+function probeTotal(runDir, id) {
+  let t = 0;
+  try { for (const f of fs.readdirSync(path.join(runDir, 'probes')).filter((x) => x.startsWith(`${id}-`))) { const o = JSON.parse(fs.readFileSync(path.join(runDir, 'probes', f), 'utf8')); if (typeof o.total_cost_usd === 'number') t += o.total_cost_usd; } } catch (_e) { /* partial */ }
+  return t;
+}
+
 function hookRecords(out) {
   const dir = path.join(out, 'hook', 'live', 'per-turn-gate');
   const recs = [];
@@ -397,7 +404,8 @@ function runBatch(ctx, first, last) {
     fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
     fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
     fs.writeFileSync(path.join(home, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
-    const probeCost = W.writeProbe(ctx, id, home);
+    W.writeProbe(ctx, id, home);
+    const probeCost = probeTotal(ctx.runDir, id);
     // The probe takes seconds. Decide the window BEFORE any START artifact (ORDER, CMD, START) exists, and take the
     // elapsed value written to START right before it is written, so it agrees with its own timestamp.
     // (The first check at the top of the loop keeps the early value: it only decides whether to begin an id at all.)
@@ -486,6 +494,8 @@ function audit(runDir, m, clone, opts) {
     const st = byId('START', id)[0], en = byId('END', id)[0];
     if (!st || !en) continue;
     for (const f of ['run.log', 'result.json']) {
+      // Math.floor on the upper bound is deliberate: log timestamps have millisecond precision (Date.now) while a file mtime has a
+      // fraction, so a file written in the same millisecond just before the END row would otherwise look later than END.
       let mt = NaN; try { mt = fs.statSync(path.join(runDir, 'runs', id, f)).mtimeMs; } catch (_e) { /* below */ }
       need(Number.isFinite(mt) && Math.floor(mt) >= Date.parse(st.ts) && Math.floor(mt) <= Date.parse(en.ts), `${id}: runs/${id}/${f} was last written outside its START..END window`);
     }
@@ -526,13 +536,21 @@ function audit(runDir, m, clone, opts) {
     need(rj === rvVal, `${id}: result.json runner_version "${rj}" differs from the logged RUNVERSION`);
   }
   // 5 probe
+  // The complete set of saved probe responses: every file name must be a known id and a sequence number, numbers run 1..n
+  // per id with no gap, and (below) the count matches probes.tsv and the PROBE rows.
+  const pfm = {}; const pfBad = [];
+  try { for (const f of fs.readdirSync(path.join(runDir, 'probes'))) { const mm = /^((?:ON|C)-\d\d)-(\d+)\.json$/.exec(f); if (!mm || !ids.includes(mm[1])) pfBad.push(f); else (pfm[mm[1]] = pfm[mm[1]] || []).push(Number(mm[2])); } } catch (_e) { pfBad.push('(probes directory unreadable)'); }
+  need(pfBad.length === 0, `unexpected or unreadable entries in probes/: ${pfBad.join(', ')}`);
   // A PROBE_FAIL pauses the batch; the id is then launched once after a fresh login, so only an id without PROBE_OK fails.
   need(by('STOP_AUTH').length === 0, 'STOP_AUTH is present');
   // Re-scan the raw logs with the wrapper's own pattern: a session that expired inside a run invalidates the batch.
   for (const id of ids) {
-    const raw = `${read(path.join('runs', id, 'run.log')) || ''}\n${read(path.join('runs', `${id}.stderr`)) || ''}`;
+    const errText = read(path.join('runs', `${id}.stderr`));
+    need(errText !== null, `${id}: runs/${id}.stderr is missing or unreadable (an empty file is fine)`);
+    const raw = `${read(path.join('runs', id, 'run.log')) || ''}\n${errText || ''}`;
     need(!AUTH_RE.test(raw), `${id}: the raw run.log/stderr shows an authentication failure`);
   }
+  const probeRaw = {};
   const probeTsvRows = (read('probes.tsv') || '').split('\n').filter(Boolean).map((l) => l.split('\t'));
   for (const id of ids) {
     // probes.tsv statuses and the PROBE_OK/PROBE_FAIL rows of this id must be the same sequence, ending in a success
@@ -542,12 +560,15 @@ function audit(runDir, m, clone, opts) {
     const logSeq = logRows.map((r) => (r.kind === 'PROBE_OK' ? 'ok' : 'fail'));
     need(tsvSeq.length > 0 && tsvSeq.join(',') === logSeq.join(','), `${id}: probes.tsv statuses (${tsvSeq.join(',')}) differ from the PROBE rows in the log (${logSeq.join(',')})`);
     // The probe's own saved response decides ok/fail and the cost; tsv and log must agree with it.
-    const pfiles = []; for (let k = 1; fs.existsSync(path.join(runDir, 'probes', `${id}-${k}.json`)); k++) pfiles.push(path.join(runDir, 'probes', `${id}-${k}.json`));
+    const nums = (pfm[id] || []).sort((a, b) => a - b);
+    need(nums.length > 0 && nums.every((n, k) => n === k + 1), `${id}: probe response files are not numbered 1..n without a gap (${nums.join(',')})`);
+    const pfiles = nums.map((n) => path.join(runDir, 'probes', `${id}-${n}.json`));
     const rawSeq = [], rawCost = [];
     for (const f of pfiles) { let o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_e) { /* fail */ }
-      rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && o.auth_ok === true && typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0 ? 'ok' : 'fail'); rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : NaN); }
+      rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && o.auth_ok === true && typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0 ? 'ok' : 'fail'); rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0); } // a failed probe without a usable cost is recorded as 0 on both sides (probes.tsv and the saved response)
     const tsvCost = probeTsvRows.filter((q) => q[0] === id).map((q) => Number(q[2]));
     need(rawSeq.join(',') === tsvSeq.join(',') && rawCost.length === tsvCost.length && rawCost.every((c, k) => Math.abs(c - tsvCost[k]) < 5e-7), `${id}: probes/${id}-n.json (${rawSeq.join(',')}) differ from probes.tsv / the PROBE rows in status or cost`);
+    probeRaw[id] = rawCost.reduce((x, y) => x + (Number.isFinite(y) ? y : 0), 0);
     need(tsvSeq[tsvSeq.length - 1] === 'ok', `${id}: the last probe did not succeed`);
     const okRows = logRows.filter((r) => r.kind === 'PROBE_OK'), st0 = byId('START', id)[0];
     need(okRows.length >= 1 && st0 && rows.indexOf(okRows[okRows.length - 1]) < rows.indexOf(st0) && Date.parse(okRows[okRows.length - 1].ts) <= Date.parse(st0.ts), `${id}: no successful probe before the START`);
@@ -680,6 +701,7 @@ function audit(runDir, m, clone, opts) {
       const c = byId('COST', id)[0];
       if (!c) continue;
       runSum += Number(kvOf(c.rest).run);
+      need(Math.abs(Number(kvOf(c.rest).probe) - (probeRaw[id] || 0)) < 5e-6, `${id}: COST probe ${kvOf(c.rest).probe} differs from the sum of the saved probe responses (${(probeRaw[id] || 0).toFixed(6)})`);
       const probeSum = probeRows.filter(([pid]) => armIds.indexOf(pid) >= 0 && armIds.indexOf(pid) <= armIds.indexOf(id)).reduce((x, q) => x + Number(q[2]), 0);
       need(Math.abs(Number(kvOf(c.rest).running) - (runSum + probeSum)) < 5e-4, `${id}: COST running ${kvOf(c.rest).running} differs from the sum of runs and probes ${(runSum + probeSum).toFixed(4)}`);
     }
@@ -730,6 +752,13 @@ function audit(runDir, m, clone, opts) {
   for (const k of ['wrapper', 'hook', 'harness', 'taskhash_expected']) {
     const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `));
     need(h.length >= 1 && h.every((r) => r.rest === `${k} ${m.hashes[k]}`), `HASH ${k} missing or differs from the preregistered value`);
+  }
+  // The files themselves, hashed now: hook, harness, this wrapper (the file that is running, or --wrapper-file) and the manifest values.
+  if (clone) {
+    const fh = (f) => { try { return sha256(fs.readFileSync(f)); } catch (_e) { return null; } };
+    need(fh(path.join(clone, m.hook_path)) === m.hashes.hook, 'the hook file now differs from the preregistered sha256');
+    need(fh(path.join(clone, m.harness_path)) === m.hashes.harness, 'the harness file now differs from the preregistered sha256');
+    need(fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper, 'the wrapper file differs from the preregistered sha256');
   }
   // no scratch path in the log
   need(!/(^|[\s=(\[])\/[^\s]+/m.test(logText.split('\n').map((l) => l.replace(/^\S+ /, '')).join('\n')), 'invocation.log contains an absolute path');
@@ -833,7 +862,7 @@ function main(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (['--selfcheck', '--audit', '--run', '--order'].includes(a)) flags.add(a);
-    else if (['--run-dir', '--clone', '--manifest', '--first', '--last'].includes(a)) opt[a] = argv[++i];
+    else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file'].includes(a)) opt[a] = argv[++i];
     else { process.stderr.write(`unknown argument ${a}\n`); return 2; }
   }
   if (flags.has('--selfcheck')) return selfcheck(__filename);
@@ -844,7 +873,7 @@ function main(argv) {
   const runDir = path.resolve(opt['--run-dir']);
   if (flags.has('--audit')) {
     const clone = opt['--clone'] ? path.resolve(opt['--clone']) : null;
-    const fails = audit(runDir, manifest, clone, { manifestPath: path.resolve(opt['--manifest']) });
+    const fails = audit(runDir, manifest, clone, { manifestPath: path.resolve(opt['--manifest']), wrapperPath: opt['--wrapper-file'] ? path.resolve(opt['--wrapper-file']) : undefined });
     for (const f of fails) process.stdout.write(`AUDIT FAIL: ${f}\n`);
     process.stdout.write(fails.length ? `AUDIT FAILED (${fails.length})\n` : 'AUDIT OK\n');
     return fails.length ? 1 : 0;

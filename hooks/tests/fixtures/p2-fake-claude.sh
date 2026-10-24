@@ -11,7 +11,7 @@ done
 prompt=$(cat)
 cost=${FAKE_COST:-0.1}
 case "$prompt" in
-  *AUTH_OK*) [ -n "${FAKE_PROBE_NOCOST:-}" ] && { echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; }; [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;
+  *AUTH_OK*) if [ -n "${FAKE_PROBE_FAIL_ONCE:-}" ] && [ ! -e "$FAKE_STATE/probefailed" ]; then mkdir -p "$FAKE_STATE"; : > "$FAKE_STATE/probefailed"; echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; fi; [ -n "${FAKE_PROBE_NOCOST:-}" ] && { echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; }; [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;
 esac
 mkdir -p "$FAKE_STATE"
 [ -n "$dbg" ] && : >> "$dbg"

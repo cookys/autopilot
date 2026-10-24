@@ -17,6 +17,7 @@
 # RED at edc664987 (acceptance round 7): N42 N43 N44 failed (assertion replaced by a block - function, if false, : ' ' - accepted as equivalent). F9 F13-F16 had to move their extra line into unchanged context: a hunk with any non-assertion-pair line no longer earns the equivalent exemption.
 # RED at e0e6bbf0b (review 2bb2da5e): N45 failed (one space and one tab compared equal by character count).
 # RED at 185ca0591 (acceptance round 8): N47 N48 failed (multi-operand [ ... -o/-a ... ] paired with a three-token test); N46 N49 N50 passed on the base (case-fold and ! / || were already caught by other checks) and stay as controls.
+# RED at 25e18b71b (acceptance round 9): N51-N54 failed (unquoted glob / regex operand paired with a quoted literal).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -633,5 +634,19 @@ if has_kind surface_touch; then report N49 1; else report N49 0; fi
 repo="$(mk_surface '[[ "$age" = "0" ]]' '[[ "$age" = "1" || x ]]')"
 run_case "$repo"
 if has_kind surface_touch; then report N50 1; else report N50 0; fi
+
+# ── N51-N54 a pattern or regex operand makes the comparison always true: never the same shape as a literal ──
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == * ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N51 1; else report N51 0; fi
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == ?* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N52 1; else report N52 0; fi
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == [0-9]* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N53 1; else report N53 0; fi
+repo="$(mk_surface '[[ "$age" =~ "0" ]]' '[[ "$age" =~ .* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N54 1; else report N54 0; fi
 
 finalize_test

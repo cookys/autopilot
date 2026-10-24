@@ -1955,11 +1955,16 @@ def _assertion_shape(raw, strict):
         raw_toks = br.group(1).split()
         if len(raw_toks) != 3:
             return None
+        single = not raw.startswith("[[")
         rep = []
         for t in (raw_toks[0], raw_toks[2]):
             if _eq_literal(t, toks[1] == "-eq"):
+                if single and (t.strip("\"'").startswith("-") or t.strip("\"'") in ("!", "(", ")")):
+                    return None  # [ ] may parse it as an operator
                 rep.append("#")  # the changing side: any such literal pairs
             elif _ARITH_VAR.fullmatch(t):
+                if single and not t.startswith('"'):
+                    return None  # [ ] word-splits an unquoted subject
                 rep.append(t)  # the subject: must be verbatim identical
             else:
                 return None

@@ -24,6 +24,7 @@
 # RED at 21eadee16 (review 54a42840): see N65 N66 (braced ${a} normalised to $a and paired).
 # RED at a3e740553 (acceptance round 12): N67 N68 N69 failed (bound moved to INT_MAX/INT_MIN, string ordering against ${a}x accepted); C8-C11 failed (relational literal changes were paired).
 # F12 and F18 (relational < with a literal swap, spaced and unspaced) were retired by the closed rule: C10 and C11 pin the same shapes as accepted precision cost.
+# RED at 6899fca8b (acceptance round 13): N70-N74 failed (unquoted \$a / \$1 / \$9 subject in [ ] vanishes when empty); C12 C13 failed (paired before).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -746,5 +747,35 @@ if has_kind surface_touch; then report C11 1; else report C11 0; fi
 repo="$(mk_surface '[ "$a" = "foo" ]' '[ "$a" = "bar" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report F24 0; else report F24 1; fi
+
+# ── N70-N74 [ ] word-splits an unquoted subject: when it is empty the operand vanishes and the test turns unary ──
+repo="$(mk_surface '[ "-z" = $a ]' '[ "-n" = $a ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N70 1; else report N70 0; fi
+repo="$(mk_surface '[ "-z" == $a ]' '[ "-n" == $a ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N71 1; else report N71 0; fi
+repo="$(mk_surface '[ "-z" = $1 ]' '[ "-n" = $1 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N72 1; else report N72 0; fi
+repo="$(mk_surface '[ "-z" == $1 ]' '[ "-n" == $1 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N73 1; else report N73 0; fi
+repo="$(mk_surface '[ "-z" = $9 ]' '[ "-n" = $9 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N74 1; else report N74 0; fi
+
+# ── C12 / C13 accepted precision cost (depth-0 2026-10-24): in [ ] a quoted literal starting with - or an unquoted subject is never paired ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq "-5" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C12 1; else report C12 0; fi
+repo="$(mk_surface '[ $a = "0" ]' '[ $a = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C13 1; else report C13 0; fi
+
+# ── F25 single bracket with a quoted subject and plain literals stays a legitimate pair ──
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report F25 0; else report F25 1; fi
 
 finalize_test

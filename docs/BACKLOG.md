@@ -321,14 +321,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。因此改做每回合驗證。P0 探測與 P2-0 證據、P2-1 選用 hook 已出貨；P2-2 審查中，P2-3 付費批次待跑。 (draft)
+- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。因此改做每回合驗證。P0 探測、P1 基準、P2-0 證據與 P2-1 選用 hook 已出貨；P2-2 審查中，之後跑 P2-3 付費批次。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: P1 baseline run result (owner approved, d-0ab59f36; cap raised to 18 USD by d-66374200) is committed and reviewed. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced until a later change owns it.
-- **Trigger-Type**: owner
+- **Trigger**: P2-2 instrument passes review and merges; then the P2-3 paid batch can run. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: P0 e726bc485; P2-0 evidence 2c4e5ccb8; P2-1 opt-in Stop hook e68371406 (default off). P2-2 (instrument + preregistration) in review; P2-3 paid batch waits on owner cost approval.
+- **Context**: P1 rerun e13ff469e: M1 6/30, M2 13/30, M3 0/30, deviation accepted (d-baf11c30). P2 cost approved (d-15c0364c): C arm 18, ON arm 30 USD. P0 e726bc485; P2-0 2c4e5ccb8; P2-1 e68371406.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056

@@ -980,6 +980,14 @@ const BARE_LS_DENY = [
   'time -p -- ls',
   '! ls',
   'time ! ls',
+  'cat <(ls)',
+  'cat <(ls) <(command ls)',
+  'tee >(ls)',
+  'coproc ls',
+  'coproc NAME { ls; }',
+  'a=( $(ls) )',
+  'a=( `ls` )',
+  'a=( x <(ls) )',
   '> /tmp/x ls',
   '2>/dev/null ls',
   '<f ls',
@@ -1014,6 +1022,10 @@ const BARE_LS_ALLOW = [
   'builtin ls',
   'xargs ls',
   'time -p command ls',
+  'cat <(command ls)',
+  'coproc command ls',
+  'coproc NAME { command ls; }',
+  'a=( $(command ls) )',
   'commands=( ls -la )', // array assignment: words, not a command
   'commands=(\nls\n)',
   'declare -a c=( ls x )',
@@ -1056,3 +1068,16 @@ test('rule4 knob: env warn advises without denying, off is silent, garbage denie
   assert.doesNotMatch(o.ctx, /bare-ls/);
   assert.strictEqual(run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
 });
+
+// Cost bound: the hook runs on every Bash call, so crafted unclosed `[a` / `a=(` runs must stay linear.
+for (const [name, unit] of [['[a', '[a'], ['a=(', 'a=(']]) {
+  test(`rule4 stays fast on 25000 x ${name}`, () => {
+    const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+    for (const cmd of [`echo ${unit.repeat(25000)}`, `echo ls ${unit.repeat(25000)}`]) {
+      const t0 = process.hrtime.bigint();
+      detectBareLs(cmd);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      assert.ok(ms < 50, `${ms} ms for ${cmd.slice(0, 12)}`);
+    }
+  });
+}

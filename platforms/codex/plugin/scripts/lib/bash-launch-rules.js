@@ -871,29 +871,64 @@ function detectZshExpansion(cmd, cwd) {
 // whose first real word (after VAR=val, `time`, and flow keywords) is literally the unquoted word `ls`.
 // `command ls`, `\\ls`, `/bin/ls`, `'ls'` and `env ls` are not that word and pass. Heredoc bodies and
 // quoted text never reach here (executableText); `bash -c` bodies are non-interactive and skipped.
-// Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out.
+// Is text[i] (an `=` followed by `(`) the end of an array target `NAME=` / `NAME+=` / `NAME[sub]=`? Bounded backward look.
+function arrayTargetEnds(text, i) {
+  let k = i - 1;
+  if (text[k] === '+') k -= 1;
+  if (text[k] === ']') {
+    const lo = Math.max(0, k - 200);
+    while (k > lo && text[k] !== '[') k -= 1;
+    if (text[k] !== '[') return false;
+    k -= 1;
+  }
+  const end = k;
+  while (k >= 0 && /\w/.test(text[k])) k -= 1;
+  return k < end && !/\d/.test(text[k + 1]);
+}
+
+// Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out, but keep the
+// command substitutions inside (`a=( $(ls) )`, backticks, `<(…)` already rewritten to `$(`). One linear pass, no regex backtracking.
 function stripArrayAssigns(text) {
-  const re = /[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=\(/g;
+  if (text.indexOf('=(') < 0) return text;
   let out = '';
   let last = 0;
-  let m;
-  while ((m = re.exec(text)) !== null) {
+  for (let i = text.indexOf('=('); i >= 0 && i < text.length; i = text.indexOf('=(', i + 1)) {
+    if (i < last || !arrayTargetEnds(text, i)) continue;
+    out += `${text.slice(last, i)}= `;
     let depth = 1;
-    let i = m.index + m[0].length;
-    for (; i < text.length && depth > 0; i += 1) {
-      if (text[i] === '(') depth += 1;
-      else if (text[i] === ')') depth -= 1;
+    let j = i + 2;
+    while (j < text.length && depth > 0) {
+      const c = text[j];
+      if ((c === '$' || c === '<' || c === '>') && text[j + 1] === '(') {
+        const e = closeParen(text, j + 2);
+        if (e < 0) { j = text.length; break; }
+        out += ` ${text.slice(j, e + 1)} `;
+        j = e + 1;
+        continue;
+      }
+      if (c === '`') {
+        const e = text.indexOf('`', j + 1);
+        if (e < 0) { j = text.length; break; }
+        out += ` ${text.slice(j, e + 1)} `;
+        j = e + 1;
+        continue;
+      }
+      if (c === '(') depth += 1;
+      else if (c === ')') depth -= 1;
+      j += 1;
     }
-    out += `${text.slice(last, m.index)} `;
-    last = i;
-    re.lastIndex = i;
+    last = j;
+    i = j - 1;
   }
   return out + text.slice(last);
 }
 const REDIR_RE = /^(?:\d+|&)?(?:>>|>\||>&|&>|>|<&|<)(.*)$/;
 
 function detectBareLs(cmd) {
-  const text = stripArrayAssigns(executableText(typeof cmd === 'string' ? cmd : ''));
+  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
+  // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
+  const text = stripArrayAssigns(exec.replace(/[<>]\(/g, ' $('));
   if (!/\bls\b/.test(text)) return null;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
@@ -904,6 +939,8 @@ function detectBareLs(cmd) {
       if (afterTime && (raw === '-p' || raw === '--')) continue;
       if (raw === 'time') { afterTime = true; continue; }
       if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw)) continue;
+      // `coproc [NAME {] cmd`: coproc is a reserved word, the command after it is alias-expanded.
+      if (raw === 'coproc') { if (/^[A-Za-z_]\w*$/.test(toks[i + 1] || '') && toks[i + 2] === '{') i += 1; continue; }
       // A leading redirection (`> f ls`, `2>/dev/null ls`, `<f ls`) does not end command position; a bare operator takes the next word as its target.
       const rd = REDIR_RE.exec(raw);
       if (rd) { if (rd[1] === '') i += 1; continue; }

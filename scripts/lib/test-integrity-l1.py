@@ -2041,7 +2041,7 @@ def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None, bas
             if len(h_removed) != len(h_added) or not all(
                 _surface_assertion_like(r, lang_key)
                 and _surface_assertion_like(a, lang_key)
-                and (len(r) - len(r.lstrip())) == (len(a) - len(a.lstrip()))
+                and r[: len(r) - len(r.lstrip())] == a[: len(a) - len(a.lstrip())]
                 for r, a in zip(h_removed, h_added)
             ):
                 return True

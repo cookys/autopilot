@@ -15,6 +15,7 @@
 # RED at ae6cd0d61 (four-seat round 3): N36 F19 failed (double quote opened by $(cat <<'EOF' and closed lines later masked the heredoc opener; single-quoted '${x}' treated as self-comparison).
 # RED at ae6cd0d61 (acceptance round 6): N38 N39 N40 N41 failed (heredoc end word moved so a context assertion became text; ${age:-} / $((age)) / $(echo $age) accepted as equivalents).
 # RED at edc664987 (acceptance round 7): N42 N43 N44 failed (assertion replaced by a block - function, if false, : ' ' - accepted as equivalent). F9 F13-F16 had to move their extra line into unchanged context: a hunk with any non-assertion-pair line no longer earns the equivalent exemption.
+# RED at e0e6bbf0b (review 2bb2da5e): N45 failed (one space and one tab compared equal by character count).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -607,5 +608,10 @@ if has_kind surface_touch; then report C4 1; else report C4 0; fi
 repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report C5 1; else report C5 0; fi
+
+# ── N45 hunk shape: one space versus one tab of indentation is not the same indentation ──
+repo="$(mk_surface $' assert_eq "$age" "0"' $'\tassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report N45 1; else report N45 0; fi
 
 finalize_test

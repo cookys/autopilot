@@ -57,7 +57,8 @@ function shellFindings(file, lines) {
     const window = lines.slice(j, j + 7).join('\n');
     // A bare multi-command sed is judged on the whole file: one hit hides the others missing. Even with a
     // cmp/grep right after it, it has to be split into one sed_mutate / sed_mutant call per command.
-    const multi = (text.match(/\s-e\s/g) || []).length >= 2;
+    // every -e / --expression spelling: `-e X`, `-e'X'`, `-e"X"`, `-eX`, `-Ee X`, `--expression=X`, `--expression X`
+    const multi = (text.match(/(?:^|\s)(?:-[EnrszuiSl]*e(?=\S|\s)|--expression(?:=|\s))/g) || []).length >= 2;
     if (CHECK.test(window) && !multi) continue;
     out.push({ file, line: i + 1, kind: multi ? 'sed/perl multi-command' : 'sed/perl', text: lines[i].trim().slice(0, 140) });
     i = j;

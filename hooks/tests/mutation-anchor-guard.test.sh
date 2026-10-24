@@ -87,6 +87,26 @@ flagged "a bare sed with several -e is flagged even when a cmp follows" 1 <<'EOF
 sed -i -e 's/a/b/' -e 's/c/d/' "$MUT/scripts/x.sh"
 cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
 EOF
+flagged "stuck -e'...' -e'...' with a cmp after it is flagged" 1 <<'EOF'
+sed -i -e's/a/b/' -e's/c/d/' "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
+flagged "stuck -e"..." -e"..." with a cmp after it is flagged" 1 <<'EOF'
+sed -i -e"s/a/b/" -e"s/c/d/" "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
+flagged "--expression=... twice with a cmp after it is flagged" 1 <<'EOF'
+sed -i --expression='s/a/b/' --expression='s/c/d/' "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
+flagged "-Ee X -e Y with a cmp after it is flagged" 1 <<'EOF'
+sed -i -Ee 's/a/b/' -e 's/c/d/' "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
+flagged "a single stuck -e'...' with a cmp after it is accepted" 0 <<'EOF'
+sed -i -e's/a/b/' "$MUT/scripts/x.sh"
+cmp -s "$GATE" "$MUT/scripts/x.sh" && fail "mutation did not apply"
+EOF
 flagged "a continued sed followed by an assert_neq content comparison is accepted" 0 <<'EOF'
 sed 's/a/b/' \
   "$SCRIPT" > "$STALE"

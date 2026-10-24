@@ -994,6 +994,16 @@ const BARE_LS_DENY = [
   'opts=( -a ) F=1 ls',
   'a[1]=( x ) ls',
   'cat <(ls)',
+  '( ls )', // a subshell, even when nested with a space between the parentheses
+  '( (ls) )',
+  '(( ls = 1 )); ls',
+  'echo $(( $(ls) + 1 ))',
+  'echo $(( `ls` + 1 ))',
+  'for (( i=0; i<1; i++ )); do ls; done',
+  'echo "`echo \\`x\\`; ls`"', // an escaped backtick inside a backtick body is a nested substitution, not the end
+  'echo "`echo \\`ls\\``"',
+  'echo `echo \\`x\\`; ls`',
+  'a=( `echo \\`x\\`; ls` )',
   'echo "`cat <(ls)`"',
   'echo "$(ls)"',
   'echo "a $(cat <(ls)) b"',
@@ -1039,6 +1049,14 @@ const BARE_LS_ALLOW = [
   'xargs ls',
   'time -p command ls',
   'cat <(command ls)',
+  '(( ls = 1 )); printf "%s\\n" "$ls"', // arithmetic: ls is a variable
+  '(( ls > 0 ))',
+  '(( (ls) ))',
+  'x=$(( ls + 1 )); echo $x',
+  'for (( ls=0; ls<3; ls++ )); do :; done',
+  'echo $(( ls + 1 ))',
+  'echo "\\`ls\\`"', // escaped backticks in double quotes are literal text
+  'echo \\`ls\\`',
   'echo "`command ls`"',
   'a=( \\)\nls\n)', // `\)` is data, so the ls below is an array element
   "a=( ')'\nls\n)",

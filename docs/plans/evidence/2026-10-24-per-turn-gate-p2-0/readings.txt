@@ -1,0 +1,36 @@
+Labels are globally unique: <tN.sidK> / <tN.pidK> are numbered per trial and carry the trial name, so equal labels mean equal ids within one trial only.
+## t1
+hook log hook.log
+{"call":1,"decision":"block","session_id":"<t1.sid1>","prompt_id":"<t1.pid1>","stop_hook_active":false}
+{"call":2,"decision":"allow","session_id":"<t1.sid1>","prompt_id":"<t1.pid1>","stop_hook_active":true}
+{"call":3,"decision":"block","session_id":"<t1.sid1>","prompt_id":"<t1.pid2>","stop_hook_active":false}
+{"call":4,"decision":"allow","session_id":"<t1.sid1>","prompt_id":"<t1.pid2>","stop_hook_active":true}
+stream file stream--.jsonl
+init session=<t1.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<t1.sid1> is_error=false subtype=success cost=0.0195218 text="ALPHA"
+stream file stream-resume.jsonl
+init session=<t1.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<t1.sid1> is_error=false subtype=success cost=0.025133399999999997 text="GAMMA"
+## t2
+(no hook log: hook never ran)
+stream file stream--.jsonl
+init session=<t2.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<t2.sid1> is_error=false subtype=success cost=0.016572 text="OK"
+## t3
+hook log hook.log
+{"call":1,"decision":"block","session_id":"<t3.sid1>","prompt_id":"<t3.pid1>","stop_hook_active":false}
+{"call":2,"decision":"allow","session_id":"<t3.sid1>","prompt_id":"<t3.pid1>","stop_hook_active":true}
+stream file stream--.jsonl
+init session=<t3.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<t3.sid1> is_error=false subtype=success cost=0.0525764 text="ALPHA"
+## t4
+hook log gate.hook.log
+{"call":1,"decision":"allow","session_id":"<t4.sid1>","prompt_id":"<t4.pid1>","stop_hook_active":false}
+{"call":2,"decision":"allow","session_id":"<t4.sid1>","prompt_id":"<t4.pid1>","stop_hook_active":true}
+hook log plugsim.hook.log
+{"call":1,"decision":"block","session_id":"<t4.sid1>","prompt_id":"<t4.pid1>","stop_hook_active":false}
+{"call":2,"decision":"allow","session_id":"<t4.sid1>","prompt_id":"<t4.pid1>","stop_hook_active":true}
+stream file stream-fresh.jsonl
+init session=<t4.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
+result session=<t4.sid1> is_error=false subtype=success cost=0.0242565 text="ALPHA"
+costs per call, increments of total_cost_usd within a session (t1 resume total 0.0251334 minus its first turn 0.0195218 = 0.0056116), then the mishap call from mishap-call.txt: 0.0195218, 0.0056116, 0.016572, 0.0525764, 0.0242565, 0.032369 sum=0.1509073

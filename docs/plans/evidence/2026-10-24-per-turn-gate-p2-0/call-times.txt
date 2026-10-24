@@ -1,0 +1,7 @@
+expected.md commit time (UTC): 2026-10-24T00:38:59.000Z
+trial | stream file | first debug timestamp (UTC) | raw stream mtime (UTC) | before/after expected.md commit
+t1 | stream--.jsonl | 2026-10-24T00:39:12.455Z | 2026-10-24T00:39:16.303Z | after
+t1 | stream-resume.jsonl | 2026-10-24T00:39:20.998Z | 2026-10-24T00:39:23.993Z | after
+t2 | stream--.jsonl | 2026-10-24T00:39:32.738Z | 2026-10-24T00:39:34.871Z | after
+t3 | stream--.jsonl | 2026-10-24T00:39:35.912Z | 2026-10-24T00:39:40.960Z | after
+t4 | stream-fresh.jsonl | 2026-10-24T00:44:54.801Z | 2026-10-24T00:44:59.510Z | after

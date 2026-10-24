@@ -1,0 +1,5 @@
+run1 turn5 wall=0.16s
+run2 turn5 wall=0.09s
+run3 turn5 wall=0.11s
+run4 turn5 wall=0.15s
+run5 turn5 wall=0.16s

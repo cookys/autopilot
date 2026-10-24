@@ -1,0 +1,36 @@
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"SessionStart","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"SessionStart","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"SessionStart","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"SessionStart","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"SessionStart","exit_code":0,"outcome":"success","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"SessionStart","exit_code":0,"outcome":"success","stdout":"<len 99>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"SessionStart","exit_code":0,"outcome":"success","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"SessionStart","exit_code":0,"outcome":"success","stdout":"<len 2000>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"UserPromptSubmit","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"UserPromptSubmit","exit_code":0,"outcome":"success","stdout":"<len 0>","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"init","cwd":"<SCRATCH>/p20run/trials/t3/proj","session_id":"<t3.sid1>","model":"claude-haiku-4-5","permissionMode":"default","apiKeySource":"none","claude_code_version":"2.1.309","plugins":["autopilot","cc-plugin-agents-md","cc-plugin-telemetry","cc-plugin-plugin-authoring"]}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_started","hook_id":"<id>","hook_event":"Stop","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"type":"system","subtype":"hook_response","hook_id":"<id>","hook_event":"Stop","exit_code":0,"outcome":"success","stdout":"","session_id":"<t3.sid1>"}
+{"duration_api_ms":2992,"stop_reason":"end_turn","session_id":"<t3.sid1>","total_cost_usd":0.0525764,"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"safety_stops":0,"is_error":false,"num_turns":2,"subtype":"success","api_error_status":null,"result":"ALPHA","ttft_ms":1493,"type":"result","duration_ms":3299,"uuid":"<id>","ttft_stream_ms":1182,"time_to_request_ms":175,"first_content_frame_ms":1183,"queued_turn_count":0,"result_index":0,"model_usage_since_last_result":{"claude-haiku-4-5":{"inputTokens":20,"outputTokens":107,"cacheReadInputTokens":24614,"cacheCreationInputTokens":24780,"webSearchRequests":0,"costUSD":0.0525764,"contextWindow":200000,"maxOutputTokens":32000,"thinkingTokens":92,"canonicalModel":"claude-haiku-4-5","provider":"firstParty","costBasis":"list"}}}

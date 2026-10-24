@@ -1,0 +1,45 @@
+# committed evidence files (masked excerpts; verify with: git show HEAD:<path> | sha256sum)
+93891a9d8cc92d6b89887ea463e4995c602fe95f7f6d834b555e29bc9ec06676  raw-excerpts/t1/debug-stop-lines-resume.txt
+518389e22c7f0bc9658381d29a315de3f08ae8b0dc65515906121bdb4f2fa1f6  raw-excerpts/t1/debug-stop-lines--.txt
+efc0cfe70577f0216aa183394517923128f6b14380ac2be1130345ac8469f8f8  raw-excerpts/t1/hook.log
+4d299b95a1d06d846bd8adebe46edbb24d93d5bac0f435614433cbe4aa72b1e8  raw-excerpts/t1/stream-excerpt--.jsonl
+7886cd33df4f466f78894d2c4f25474baf50899dd8457b39cf8e6cf6c3826687  raw-excerpts/t1/stream-excerpt-resume.jsonl
+495e1ba49530cafe0164b27db6e4bf6321393b0949a7344543735f159a4e588a  raw-excerpts/t2/debug-stop-lines--.txt
+4a87e6edbdaa7e3e55c1137cf03068d05c2dd63b27e147796bb441703648f11a  raw-excerpts/t2/stream-excerpt--.jsonl
+92fc3397893cf3de0e30ac54b668e9405242eed50b8794e81169d4d7c195ecbf  raw-excerpts/t3/debug-stop-lines--.txt
+bceacd2db121c54545c2a32e9051dfbc2a9a0bba97989cd1d8b91949029c2b5e  raw-excerpts/t3/hook.log
+80a882848bde769c8ccbc09785c04675b444e875aef0936d12301af76911ec6c  raw-excerpts/t3/stream-excerpt--.jsonl
+d4095fe1bf849565fee96a07d0ab1aeba24e7b29a5a61f110dfa62bebfa7cebe  raw-excerpts/t4/debug-stop-lines-fresh.txt
+14cee6fa9ce36ae441372edd86f62636a47eb1cabbc16226cea9d9ea43537f30  raw-excerpts/t4/gate.hook.log
+f945dfa8acad677feb878f029985074a830c3b9469c9d90e82ecc57e13bdc32c  raw-excerpts/t4/plugsim.hook.log
+ee2faf300d8e0580a46634515ec512d9ecf16c35a560faff54bbbd880c5a27b8  raw-excerpts/t4/stream-excerpt-fresh.jsonl
+8c18cb49c5b03c92a3630f92ca9c7c4dfe05672ad3692724d3d30d71dbae33a7  probe-hook.js
+49f73e5e3914a29da3852275d5e490224bebf480d9e75ea71820b07f0114989e  trial.sh
+14db0a0ef48a3847d81ee49fa806e2274cd4961279518729261f12e4e26e8878  trial-v1.sh
+62282c3483e390ef2b4b8f14c8e45b6460591e65933399fe8e3e97a313bb5923  check-recompute.js
+281ac74093a211559fbb401475061aee0f4c141a3f683c297787be4abf788059  verifier-wall.txt
+a6ff92ad802f5154197138812d002e53b762c1cf0494f92b0cd77f9cc207c308  readings.txt
+fa5eeca01749fd01fc0e49c4ce5fbf901ed25da84c313cd265ab98053b797070  block-in-stream.txt
+6fc8c23ed36190603449e648b4ac7ffa4f79588be2b7fd174e242c91f25c60f2  call-times.txt
+7c27582a2de3239b795c8f85abde8d045c0a3891fc37a3dfe46e15e0e8b4df20  stop-events.txt
+def9caab50e0679fc1a17c4dcede4d697e446a360fa6701992dd76efe7cb0353  expected.md
+7a185654e88521ecbaac50100ec6bf35c5f05751a4378386a1eb0bcbdbd47074  README.md
+9b90b02015aef93dd133c7417afdabcb1fb6360811b329c625d872c0ee915be7  mishap-call.txt
+63e74c8dc6f45f022083a4ffd562291204fb887c1c351e7cbfe2dbde3470e387  test-check-recompute.js
+# hook program that ran in t1-t3 (p20run/bin/hook.js) is identical to probe-hook.js:
+8c18cb49c5b03c92a3630f92ca9c7c4dfe05672ad3692724d3d30d71dbae33a7  p20run/bin/hook.js (equals probe-hook.js above)
+# full raw files, kept in scratch, not committed; hashes are of the files BEFORE masking (t1-t3 under <SCRATCH>/p20run/trials, t4 under <MKTEMP>/trials; the resumed t1 files were named with the session id)
+t1-t3 raw: 84d70f182b8648709d8e005ea3fa9c6a644de4d3de72c629c826c73641ccfe56  t1/hook.log
+t1-t3 raw: 31f8f4e6aaf01ebfc7c1a8046df824099dc0d099bda1d6cd5b344799f97f853f  t3/hook.log
+t1-t3 raw: ed0864cc90b9de92b7949312ae90f1b413e522d48b4fb4907703c26f7c44e46a  t1/stream-resume.jsonl
+t1-t3 raw: e320a45a9d62f4d69efe27bf74f874c4a8dbf48bc2f7478f33cd9013b80904c6  t1/stream--.jsonl
+t1-t3 raw: 2f06094a91832b0df7b4c0eca6dbe29d3490476eb6583b6ca2b222e7a78598d2  t2/stream--.jsonl
+t1-t3 raw: f33c9648973eb2c5ba74c1966c8795bc67a4df337362e800c364e7ea4629a3d7  t3/stream--.jsonl
+t1-t3 raw: 5d77b54add7f1f6ccf40af6958711a0254c2cc63093aca47d5a3deae91c4f0eb  t1/debug-resume.log
+t1-t3 raw: 04a3cc9f0af74c810e55f8fc9e5575234a5bcffece62cbbc77a5643ad39e83ed  t1/debug--.log
+t1-t3 raw: a6171bbc8f13453f5930aa1ca4760acc07c7fd2d2807aff493f48e00bbb0a34d  t2/debug--.log
+t1-t3 raw: 44b0bec552cbbb3d77853e6a678b77d07e156e803f93498ac18404fcbb108e8e  t3/debug--.log
+t4 raw: 18616b0db5c6ffb62fc767947718bd26b21af1e6e8e67ee9bfe1e780b9095d7e  t4/gate.hook.log
+t4 raw: e2c2395056190f3c7c80feeff244d0e6be67bbf70ac1c4e01aaa7ff188524ba1  t4/plugsim.hook.log
+t4 raw: 9a0c849387728a5295d3e12bbc36965675dc1248bc51210f885413d5242f5084  t4/stream-fresh.jsonl
+t4 raw: 0eb30dddf9cb3c7db6ee4c844ad7bb79d1d3cc61f286a3b02b1bfcff34d4053e  t4/debug-fresh.log

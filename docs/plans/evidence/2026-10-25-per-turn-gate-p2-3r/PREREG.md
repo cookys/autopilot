@@ -25,8 +25,8 @@ Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decisi
 | W4 commit (mode `violations+features`) | `977027c999e52383ad354f35fa88ea16dec7476f` (hook blob `45f3c47845c30b00e1b0c7a742b40210becab5bd`) |
 | Treatment hook = develop final | `hooks/per-turn-gate.js` at develop `1ce92330d`: blob `f4fdf20152efcb7ecb15108fefc24bf10b8dfefc`, sha256 `10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0`. It differs from the W4 commit by the P2-1 review fixes (locking, state fencing, validation: fd63ae15c, 8c41e656b, e2302e5dc, 9aa650fc8); the W4 trigger and retry text are the ones evaluated. |
 | Harness `evals/orchestration/run-orchestration-eval.sh` | sha256 `eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149` |
-| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `7a2f0a5fedddadce0e410fa0145d1733e28c52e0310cc7da9123b7feb22de792` |
-| `manifest.json` (this directory) | sha256 `f852b3dd69493468295c952fe00dcdacf4b472fa2c4a6412c86b25a501963a21`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
+| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `773ecd3c3449d17e4d4cd2194b3934e66cd3f7e7e8e65f174a930d63debfd859` |
+| `manifest.json` (this directory) | sha256 `c11c25e7654d44b6a8af4e6e9623a6ae0a5c7296ad55013aa6fdfde1c3829ad4`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
 | `taskhash.expected.txt` | sha256 `2b1bcd033bd41093250649e1ed16bb28f7af9cd371771e864d1310f0c67756d4`, also in the manifest; the wrapper requires it tracked, unmodified and equal to that value, and the audit re-checks all three |
 | `order.txt` (this directory) | sha256 `8737d8111e56a94f2bda29b0c2295e3cc2d1985acdc585c7747114104274a506` |
 | `selfcheck.out` (this directory) | output of `node evals/orchestration/run-p2-batch.js --selfcheck` at the wrapper hash above |
@@ -101,9 +101,9 @@ Start with the **real HOME** (the wrapper copies one credential file per id from
 
 The launcher runs `run-p2-batch.js --run` and, when an id pauses at its probe (exit 7: expired or expiring credential source, `operator_stop`, `parent_gone`), waits until the credential source is at least 30 minutes from expiry and resumes from the paused id, at most 20 times and only while the 8 hour window has at least 10 minutes left. One Ctrl-C is a safe pause (resumable), two in a row give up the batch. Children of the wrapper run without any CLAUDE*, ANTHROPIC* or XDG home variable. Audit: `node evals/orchestration/run-p2-batch.js --audit --manifest docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r/manifest.json --run-dir <dir> --clone <clone>`.
 
-## 6. No outcome seen
+## 6. Outputs seen before this commit
 
-No call of the P2-3 batch precedes this commit. The numbers quoted above come from the P1 rerun (adopted baseline) and from the plan; no ON or concurrent-control run has been measured.
+The statement "no ON or control run has been measured" is not true of the whole lane, so the record is: (a) the first P2-3 batch of 2026-10-24 (label U, `docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/RESULT.md`) completed 31 runs (ON 15, C 16) and its logs hold SCORE rows; depth-0 looked only at the COST rows and the completion counts of that batch; (b) two 1+1 real trials, one on Haiku 4.5 and one on Haiku 5.5; this batch's trial is the 1+1 real trial on Haiku 4.5 (C-01 five turns, cost 0.597; ON-01 stopped by the harness timeout at turn 3, 767 s). The trial reports carried HOOKCOUNT, BLOCKMAX, cost and turn counts; no score (M1, M2, M3) was compared between arms. None of this changes the decision rules: the thresholds, the order seed, the caps and the model are fixed in this note, the trial and U-batch runs are not among the 60 ids of this batch (new seed, new run directory), and no outcome of either arm was used to choose any of them.
 
 Round 11: the audit recomputes COSTCHK spent exactly from run.log result costs and saved probe responses; every run.log line that starts with `{` must parse completely; each HASH kind appears once per wrapper invocation and every row equals the actual file; gate.jsonl lines must be non-array objects; `trace/<id>/latest` (made by the real CLI) is never counted and must be a symlink to the highest trace-turn file; VERSION is exactly one row per id, between COSTCHK and the first PROBE row (a resume does not write it again); TASKHASH_DIFF rows are exactly `pre|post ok|fail`. The test column of Appendix A is now one `T:KIND.field` label per field, and a test checks that each label exists.
 

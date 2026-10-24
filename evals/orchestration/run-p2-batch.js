@@ -549,12 +549,13 @@ const FILE_SCHEMA = [
 ];
 
 const GRAMMAR_TEXT = [
-  'log := invocation+ ; the last invocation ends with WRAPPER_DONE (last=2n), and every id has been through its block',
+  'log := invocation+ ; WRAPPER_DONE (last=2n) ends the batch: it appears only after every id has been through its block, the last invocation must have it, and no row follows that invocation',
+  'a non-last invocation ends with a failed probe (PROBE_FAIL, PAUSE) and nothing else; an invocation that ends with neither WRAPPER_DONE nor PAUSE (a STOP_*, ABORT or REFUSE row, or an interrupted run) is not allowed in an audited batch',
   'invocation := WRAPPER_START header block* footer',
   'header := HASH manifest, HASH prereg, HASH taskhash_expected, PREREG, HASH wrapper, HASH hook, HASH harness, [WINDOW_START in the first invocation only], TASKHASH_DIFF pre (each exactly once, in this order, in every invocation)',
   'block := COSTCHK, VERSION, PROBE_OK, ORDER, CMD, START, END, COST, SCORE or SCORE_MISSING, TURNS, RUNVERSION, MODEL, HOOKCOUNT, HOOKERR, BLOCKMAX (all for the next id in the seeded order, in this order)',
   'a failed probe is COSTCHK, VERSION, PROBE_FAIL, PAUSE, then the footer; the next invocation continues that id at its probe (no second COSTCHK or VERSION)',
-  'footer := [WRAPPER_DONE], TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT ; WRAPPER_DONE only between blocks, and TASKHASH_DIFF post therefore always follows the last END of its invocation',
+  'footer := (WRAPPER_DONE | PAUSE already written), TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT ; WRAPPER_DONE only between blocks, and TASKHASH_DIFF post therefore always follows the last END of its invocation',
   'every PREREG row is checked against git (commit, time, ancestry) and every HASH row against the real file',
 ];
 
@@ -623,12 +624,14 @@ function auditGrammar(rows, ids) {
     }
     if (logToken(rows[i]) === 'WRAPPER_DONE') {
       if (paused || stage !== 'new') return bad(`row ${i + 1}: WRAPPER_DONE in the middle of an id block`);
+      if (cur !== ids.length) return bad(`row ${i + 1}: WRAPPER_DONE after ${cur} of ${ids.length} ids (it ends the batch)`);
       done = true; i++;
     } else if (!paused) return bad(`row ${i + 1}: invocation ${inv} ends without WRAPPER_DONE or PAUSE`);
     for (const want of ['TD:post', 'COMPLETE', 'WRAPPER_EXIT']) {
       if (i >= rows.length || logToken(rows[i]) !== want) return bad(`row ${i + 1}: expected ${want} in the footer of invocation ${inv}, found ${i < rows.length ? logToken(rows[i]) : 'the end of the log'}`);
       i++;
     }
+    if (done && i < rows.length) return bad(`row ${i + 1}: rows after the invocation that ended with WRAPPER_DONE`);
   }
   if (!done || cur !== ids.length) return bad(`the log ends after ${cur} of ${ids.length} ids or without WRAPPER_DONE`);
   return [];

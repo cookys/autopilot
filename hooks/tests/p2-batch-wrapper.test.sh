@@ -778,6 +778,7 @@ afail "$TEST_TMP/t-tdtail" "T:TASKHASH_DIFF.tail text after ok: real audit non-z
 assert_eq "$(audit_rc "$TEST_TMP/mut-tdtail/run-p2-batch.js" "$TEST_TMP/t-tdtail")" 0 "RED TASKHASH_DIFF tail: mutant with the open regex says OK"
 
 echo "--- round 12: the log as a grammar, trace readability"
+mkdir -p "$TEST_TMP/mut-prev2"; git -C "$REPO_ROOT" show a30300a4ae22a3a7974ec4ec0a5ded48034faa5e:evals/orchestration/run-p2-batch.js >"$TEST_TMP/mut-prev2/run-p2-batch.js" || fail "round 12 wrapper unavailable"
 mkdir -p "$TEST_TMP/mut-prev"; git -C "$REPO_ROOT" show 51f8c73eca73232cdb37c77717bc1fbaf62dc784:evals/orchestration/run-p2-batch.js >"$TEST_TMP/mut-prev/run-p2-batch.js" || fail "previous wrapper unavailable"
 gedit() { tamper "$1" "${3:-$R1}"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" <<'PY'
 import sys, re
@@ -810,6 +811,19 @@ chmod 600 "$TU"
 tamper tu2; for f in "$TEST_TMP"/t-tu2/trace/C-01/trace-turn*.log; do chmod 000 "$f"; done
 afail "$TEST_TMP/t-tu2" "every trace file of one id unreadable: real audit non-zero" 'unreadable|no readable'
 for f in "$TEST_TMP"/t-tu2/trace/C-01/trace-turn*.log; do chmod 600 "$f"; done
+
+echo "--- round 13: WRAPPER_DONE ends the batch"
+HDRPY="s0 = idx('WRAPPER_START')[0]; pre = idx('TASKHASH_DIFF', 'pre')[0]; hdr = [l for l in L[s0:pre + 1] if ' WINDOW_START' not in l]"
+# 1 DONE after only some of the ids, then a second invocation finishes the rest
+gedit gE "$HDRPY; b = idx('BLOCKMAX')[0] + 1; ref = L[b - 1]; ins = [retime(r, ref) for r in ['x WRAPPER_DONE last=2', 'x TASKHASH_DIFF post ok', 'x COMPLETE ON=0/3 C=0/3', 'x WRAPPER_EXIT rc=0'] + hdr]; L[b:b] = ins"
+afail "$TEST_TMP/t-gE" "WRAPPER_DONE after only some of the ids: real audit non-zero" 'WRAPPER_DONE after'
+FB="$R1" aud "$TEST_TMP/t-gE" "$TEST_TMP/mut-prev2/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED WRAPPER_DONE after part of the ids: the previous grammar (done as a flag) says OK (got: $(grep -m1 'AUDIT FAIL' <<<"$AUD_OUT" | cut -c1-120))"
+# 2 a further complete invocation after the DONE invocation
+gedit gF "$HDRPY; e = len(L) - 1 if L[-1] == '' else len(L); ref = L[e - 1]; L[e:e] = [retime(r, ref) for r in hdr + ['x WRAPPER_DONE last=6', 'x TASKHASH_DIFF post ok', 'x COMPLETE ON=3/3 C=3/3', 'x WRAPPER_EXIT rc=0']]"
+afail "$TEST_TMP/t-gF" "an invocation after the one that ended with WRAPPER_DONE: real audit non-zero" 'after the invocation that ended with WRAPPER_DONE'
+FB="$R1" aud "$TEST_TMP/t-gF" "$TEST_TMP/mut-prev2/run-p2-batch.js"; assert_eq "$AUD_RC" 0 "RED invocation after DONE: the previous grammar says OK (got: $(grep -m1 'AUDIT FAIL' <<<"$AUD_OUT" | cut -c1-120))"
+# 3 a legal multi-part batch (failed probe, pause, resume) still audits clean
+FB="$RF" aud "$RF"; assert_eq "$AUD_RC" 0 "legal multi-part batch (PROBE_FAIL, PAUSE, resumed invocation, WRAPPER_DONE last): audit OK"
 
 # every label named in the schema table exists in this file (T:KIND.field, or `idtest KIND` for id fields), every file test text
 # exists, every row kind the wrapper writes is listed, and PREREG carries the generated table verbatim

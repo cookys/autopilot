@@ -22,8 +22,8 @@ Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decisi
 | W4 commit (mode `violations+features`) | `977027c999e52383ad354f35fa88ea16dec7476f` (hook blob `45f3c47845c30b00e1b0c7a742b40210becab5bd`) |
 | Treatment hook = develop final | `hooks/per-turn-gate.js` at develop `1ce92330d`: blob `f4fdf20152efcb7ecb15108fefc24bf10b8dfefc`, sha256 `10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0`. It differs from the W4 commit by the P2-1 review fixes (locking, state fencing, validation: fd63ae15c, 8c41e656b, e2302e5dc, 9aa650fc8); the W4 trigger and retry text are the ones evaluated. |
 | Harness `evals/orchestration/run-orchestration-eval.sh` | sha256 `eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149` |
-| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `70969942d566ff2f52bf39ce360ad3f0ae3160155223832776d88adb9544fdd3` |
-| `manifest.json` (this directory) | sha256 `045040c2948b4f0d395636fa2e8cdc037c2f2f582e7a626d2fca8b5946a592f8`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
+| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `bc00119b8be9380206fa4dc4b8c9c359667349af225f28b7f997c5b91b3b6458` |
+| `manifest.json` (this directory) | sha256 `8c1ce0488da37d54766d184a8f3d563c597649e0fcbf1fb83d7f9047c402e28c`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
 | `taskhash.expected.txt` | sha256 `2b1bcd033bd41093250649e1ed16bb28f7af9cd371771e864d1310f0c67756d4`, also in the manifest; the wrapper requires it tracked, unmodified and equal to that value, and the audit re-checks all three |
 | `order.txt` (this directory) | sha256 `080bf25ed67ca1ddf96bbdff68b46298ef99d968d84632360e87b37b0c1f67fc` |
 | `selfcheck.out` (this directory) | output of `node evals/orchestration/run-p2-batch.js --selfcheck` at the wrapper hash above |
@@ -200,10 +200,11 @@ Round 12: the log is validated as a grammar (see the end of Appendix A): one hea
 
 **Log grammar** (checked before every other row rule; any row off its place fails)
 
-- log := invocation+ ; the last invocation ends with WRAPPER_DONE (last=2n), and every id has been through its block
+- log := invocation+ ; WRAPPER_DONE (last=2n) ends the batch: it appears only after every id has been through its block, the last invocation must have it, and no row follows that invocation
+- a non-last invocation ends with a failed probe (PROBE_FAIL, PAUSE) and nothing else; an invocation that ends with neither WRAPPER_DONE nor PAUSE (a STOP_*, ABORT or REFUSE row, or an interrupted run) is not allowed in an audited batch
 - invocation := WRAPPER_START header block* footer
 - header := HASH manifest, HASH prereg, HASH taskhash_expected, PREREG, HASH wrapper, HASH hook, HASH harness, [WINDOW_START in the first invocation only], TASKHASH_DIFF pre (each exactly once, in this order, in every invocation)
 - block := COSTCHK, VERSION, PROBE_OK, ORDER, CMD, START, END, COST, SCORE or SCORE_MISSING, TURNS, RUNVERSION, MODEL, HOOKCOUNT, HOOKERR, BLOCKMAX (all for the next id in the seeded order, in this order)
 - a failed probe is COSTCHK, VERSION, PROBE_FAIL, PAUSE, then the footer; the next invocation continues that id at its probe (no second COSTCHK or VERSION)
-- footer := [WRAPPER_DONE], TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT ; WRAPPER_DONE only between blocks, and TASKHASH_DIFF post therefore always follows the last END of its invocation
+- footer := (WRAPPER_DONE | PAUSE already written), TASKHASH_DIFF post, COMPLETE, WRAPPER_EXIT ; WRAPPER_DONE only between blocks, and TASKHASH_DIFF post therefore always follows the last END of its invocation
 - every PREREG row is checked against git (commit, time, ancestry) and every HASH row against the real file

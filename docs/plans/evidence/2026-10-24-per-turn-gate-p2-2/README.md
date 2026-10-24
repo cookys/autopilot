@@ -77,3 +77,5 @@ COSTCHK spent is recomputed exactly; run.log lines starting with `{` must parse;
 ## Round 12 (acceptance of 51f8c73ec, review generation 11)
 
 The audit validates the log as a grammar (appendix A, last section). Field tests prove the untouched copy audits clean first and check that the failure text names the edited field (`LABRE`). Trace files count only on a successful read. The real-CLI trial artifacts (n=1 manifest, clone at 51f8c73ec) audit as `AUDIT OK` with the new audit logic and the old wrapper file.
+
+Round 13: WRAPPER_DONE ends the batch (only after every id, required in the last invocation, nothing after it); a non-last invocation must end with PAUSE. Grammar and Appendix A say the same.

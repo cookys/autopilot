@@ -446,21 +446,53 @@ __mutation_miss() {
   [ -n "${TEST_TMP:-}" ] && printf '%s\n' "$1" >> "$TEST_TMP/.mutation-miss"
   return 1
 }
-# sed_mutate <file> <sed args...>: in-place `sed -i <args> <file>`; fails if the file is missing or unchanged.
-sed_mutate() {
-  local f="$1" before after; shift
-  [ -f "$f" ] || { __mutation_miss "mutation target file missing: $f"; return 1; }
-  before="$(cksum < "$f")"
-  sed -i "$@" "$f"
-  after="$(cksum < "$f")"
-  if [ "$before" = "$after" ]; then __mutation_miss "mutation did not hit (anchor drifted): sed $* in $f"; return 1; fi
+# __sed_each <work-file> <label> <sed args...>: apply the sed args to <work-file> IN PLACE, one command at a
+# time (each -e, each ';'- or newline-separated command, s/y/d/i/a/c alike; split by lib/sed-split.js), and
+# require that EVERY command changed the file. A whole-file comparison alone would let one hit hide the
+# others missing. Options (-E, -r, -s, --posix) are passed through; -f is not supported.
+__sed_each() {
+  local f="$1" label="$2" a expr rc before after; shift 2
+  local -a opts=() exprs=() parts=()
+  while [ "$#" -gt 0 ]; do
+    a="$1"; shift
+    case "$a" in
+      -e) exprs+=("${1-}"); shift ;;
+      -E|-r|-s|--posix|--regexp-extended) opts+=("$a") ;;
+      -f|--file) __mutation_miss "$label: sed -f is not supported by the mutation helpers"; return 1 ;;
+      -*) __mutation_miss "$label: unsupported sed option '$a'"; return 1 ;;
+      *) exprs+=("$a") ;;
+    esac
+  done
+  [ "${#exprs[@]}" -gt 0 ] || { __mutation_miss "$label: no sed expression given"; return 1; }
+  for expr in "${exprs[@]}"; do
+    mapfile -d '' parts < <(node "$REPO_ROOT/hooks/tests/lib/sed-split.js" "$expr") || true
+    [ "${#parts[@]}" -gt 0 ] || { __mutation_miss "$label: cannot split sed script: $expr"; return 1; }
+    for a in "${parts[@]}"; do
+      before="$(cksum < "$f")"
+      sed -i "${opts[@]}" -e "$a" "$f"; rc=$?
+      [ "$rc" -eq 0 ] || { __mutation_miss "$label: sed exited $rc on '$a'"; return 1; }
+      after="$(cksum < "$f")"
+      if [ "$before" = "$after" ]; then __mutation_miss "$label: mutation did not hit (anchor drifted): sed -e '$a'"; return 1; fi
+    done
+  done
 }
-# sed_mutant <src> <dest> <sed args...>: `sed <args> <src> > <dest>`; fails if src is missing or dest equals src.
+# sed_mutate <file> <sed args...>: in-place mutation; fails when the file is missing, sed fails, or ANY
+# single command leaves the file unchanged.
+sed_mutate() {
+  local f="$1"; shift
+  [ -f "$f" ] || { __mutation_miss "mutation target file missing: $f"; return 1; }
+  __sed_each "$f" "sed_mutate $f" "$@"
+}
+# sed_mutant <src> <dest> <sed args...>: dest = src with the commands applied; same per-command rule, and
+# dest must be a regular file that differs from src. sed's own exit status is checked.
 sed_mutant() {
   local src="$1" dest="$2"; shift 2
   [ -f "$src" ] || { __mutation_miss "mutation source file missing: $src"; return 1; }
-  sed "$@" "$src" > "$dest"
-  if cmp -s "$src" "$dest"; then __mutation_miss "mutation did not hit (anchor drifted): sed $* on $src"; return 1; fi
+  rm -f "$dest"
+  cp "$src" "$dest" || { __mutation_miss "sed_mutant: cannot copy $src to $dest"; return 1; }
+  __sed_each "$dest" "sed_mutant $src" "$@" || return 1
+  if [ ! -f "$dest" ]; then __mutation_miss "sed_mutant: $dest is not a regular file"; return 1; fi
+  if cmp -s "$src" "$dest"; then __mutation_miss "sed_mutant: result identical to $src (mutations cancelled out)"; return 1; fi
 }
 
 # Assertion bookkeeping for the run.sh summary.

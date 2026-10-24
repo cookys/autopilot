@@ -46,8 +46,7 @@ assert_file_exists "$MD/ok-1.json" "success wrote marker"
 
 # Negative control: drop the child_is_parent skip line -> that cell must go red.
 NC="$TEST_TMP/nc"; mkdir -p "$NC"
-sed -e "s#require('\\.\\./#require('$REPO_ROOT/#g" -e "s#require('\\./#require('$REPO_ROOT/scripts/#g" \
-  -e "/result === 'refused_parent'/d" "$SM" > "$NC/session-mode.js"
+sed_mutant "$SM" "$NC/session-mode.js" -e "s#require('\\.\\./#require('$REPO_ROOT/#g" -e "s#require('\\./#require('$REPO_ROOT/scripts/#g"  -e "/result === 'refused_parent'/d"
 AUTOPILOT_PARENT_SESSION_ID="pp-1" cell "$NC/session-mode.js" '{"session_id":"pp-1","cwd":"/tmp"}'
 assert_eq "$RC" "0" "negative control: exit code still 0"
 assert_not_contains "$(cat "$ERR")" "skipped (child_is_parent)" "negative control: stderr line removed -> the child_is_parent cell would be red"

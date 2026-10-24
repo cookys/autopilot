@@ -61,8 +61,7 @@ run_cells "$SM" real
 
 # Negative control: the entry check back on getSessionId() (and the default path on markerPath()).
 NC="$TEST_TMP/nc"; mkdir -p "$NC"
-sed -e "s#require('\\.\\./#require('$REPO_ROOT/#g" -e "s#require('\\./#require('$REPO_ROOT/scripts/#g" \
-  -e "s#const target = resolveMarkerWriteTarget();#const target = { id: getSessionId() };#" "$SM" > "$NC/session-mode.js"
+sed_mutant "$SM" "$NC/session-mode.js" -e "s#require('\\.\\./#require('$REPO_ROOT/#g" -e "s#require('\\./#require('$REPO_ROOT/scripts/#g"  -e "s#const target = resolveMarkerWriteTarget();#const target = { id: getSessionId() };#"
 nc1="$(admit "$NC/session-mode.js" AUTOPILOT_PARENT_SESSION_ID=$P AUTOPILOT_SESSION_ID=$P CLAUDE_CODE_SESSION_ID=$C)"
 assert_not_contains "$nc1" "marker=l5" "negative control n1: getSessionId() reads the inherited id -> cell red ('$nc1')"
 nc3="$(admit "$NC/session-mode.js" AUTOPILOT_PARENT_SESSION_ID=$P CLAUDE_CODE_SESSION_ID=$P)"

@@ -14,15 +14,30 @@
 //           non-zero sys.exit( or an assert / raise, otherwise a missing anchor ends in success.
 //   node    a `node -e` / `node - <<` body doing .replace( on a file it writes back (writeFileSync) must
 //           contain `process.exit(` with a non-zero code, throw, or an assert.
-// It does NOT follow mutations built through variables it cannot see (an expr passed in as "$1"
-// to a helper is judged at the helper's own sed line) and does not execute anything.
+// Remaining blind spots (deliberate, not hidden):
+//   - the sed COMMAND form does not matter to the scanner (s, d, i, a, c are all file edits); what matters is
+//     that the edit goes through sed_mutate / sed_mutant, which now check EVERY command of a multi-command
+//     script individually (see hooks/tests/lib.sh). A bare multi-command sed with one trailing cmp/grep is
+//     accepted by the scanner and checks only the whole file.
+//   - a destination or source named by a variable outside PRODUCT_VARS (or built from `$1`) is not recognised
+//     as a product file; the helper's own sed line is judged instead.
+//   - sed fed from a pipe, `sed -n`, and files under fixtures/ are out of scope.
+//   - python/node bodies are judged by pattern (a .replace on read text with no failure exit), not executed.
+//   - only *.test.sh files are scanned; the scanner's own test file is excluded (its samples are bare on purpose).
+// It does not execute anything.
 
 const fs = require('fs');
 const path = require('path');
 
-const PRODUCT = /(\$REPO_ROOT|\$\{REPO_ROOT\}|\$\{?MUT(?:ROOT|_[A-Z0-9_]+|[A-Z0-9]{0,2})\b\}?|\$NC\b|\$LIB\b|\$GATE\b|\$SCRIPT\b|\$DISPATCH\b|\$LAUNCHER\b|\$HOOKS_DIR|\$CLI\b|\$VERIFIER\b|\$UNWIRED_SCRIPT|\$AF_MUT|\bscripts\/|\bsrc\/)/;
-const CHECK = /(cmp -s|grep -q|did not (apply|hit)|anchor drifted|not found in)/;
-const SED_RE = /(^|[\s;&|(])(sed\b[^\n]*(?:\s-i\b|\s-[A-Za-z]*i\b|\s--in-place)|perl\s+-[a-z]*p[a-z]*i|sed\b[^\n]*>\s*"?[$\w])/;
+// Product variables, with or without braces ($LIB and ${LIB}), plus MUT-family names and product paths.
+const PRODUCT_VARS = ['REPO_ROOT', 'NC', 'LIB', 'GATE', 'SCRIPT', 'DISPATCH', 'LAUNCHER', 'HOOKS_DIR', 'CLI', 'VERIFIER',
+  'UNWIRED_SCRIPT', 'AF_MUT', 'SM', 'LOOP', 'REAPER', 'HOOK', 'GATE_JS'];
+const PRODUCT = new RegExp('\\$\\{?(?:' + PRODUCT_VARS.join('|') + ')\\b\\}?'
+  + '|\\$\\{?MUT(?:ROOT|_[A-Z0-9_]+|[A-Z0-9]{0,2})\\b\\}?|\\bscripts/|\\bsrc/');
+const CHECK = /(cmp -s|grep -q|did not (apply|hit)|anchor drifted|not found in|assert_neq\b[^\n]*(\$\(cat|cksum|diff))/;
+// A file-editing sed/perl: in place (-i, -Ei, --in-place, perl -pi) or writing a file (redirect). Runs on the
+// command text AFTER backslash continuations are folded into one line.
+const SED_RE = /(^|[\s;&|(])(sed\b.*(?:\s-i\b|\s-[A-Za-z]*i\b|\s--in-place)|perl\s+-[a-z]*p[a-z]*i|sed\b.*>\s*"?[$\w])/;
 
 function shellFindings(file, lines) {
   const out = [];
@@ -32,8 +47,8 @@ function shellFindings(file, lines) {
     if (/\bsed_mutat(e|nt)\b/.test(text)) continue;
     if (!/(^|[\s;&|(`$])(sed|perl)\s/.test(text)) continue;
     if (/\bsed\s+(-[A-Za-z]*n[A-Za-z]*)\b/.test(text) || /\bsed\s+-n\b/.test(text)) continue;
-    let j = i; // join continuation lines
-    while (/\\\s*$/.test(lines[j]) && j + 1 < lines.length) { j++; text += '\n' + lines[j]; }
+    let j = i; // fold backslash continuation lines into ONE line before any regex runs
+    while (/\\\s*$/.test(lines[j]) && j + 1 < lines.length) { j++; text = text.replace(/\\\s*$/, ' ') + lines[j].trim(); }
     if (/mutation-anchor:\s*intentional-miss/.test(text)) continue;
     if (!SED_RE.test(text)) continue;
     if (/\|\s*sed\b/.test(text)) continue; // sed filtering a stream, not editing a file

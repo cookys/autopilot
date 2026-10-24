@@ -84,7 +84,7 @@ for (const x of d4) {
 console.log(bad.length ? "BINDING-DRIFT " + bad.join(",") : "BINDING-OK");' "$TEST_TMP/gen-out.json" ) 2>&1
 }
 assert_contains "$(gen_check "$TEST_TMP/gen.js")" "BINDING-OK" "D2 keeps agy locator, D4 binds to canonical-roster"
-sed_mutant "$TEST_TMP/gen.js" "$TEST_TMP/gen-shared.js" 's/AGY_HELP_SHA, assertion/D4_ROSTER_SHA, assertion/; s#`agy://cli-help/${env.AGY_VERSION}\#output-format-json`, env.AGY_HELP_SHA#d4RosterLocator, env.D4_ROSTER_SHA#'
+sed_mutant "$TEST_TMP/gen.js" "$TEST_TMP/gen-shared.js" 's#`agy://cli-help/${env.AGY_VERSION}\#output-format-json`, env.AGY_HELP_SHA#d4RosterLocator, env.D4_ROSTER_SHA#'
 assert_contains "$(gen_check "$TEST_TMP/gen-shared.js")" "BINDING-DRIFT" "negative control: D2 sharing the D4 locator and sha is flagged"
 
 finalize_test

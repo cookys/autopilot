@@ -219,6 +219,16 @@
       "reason": "Default parent only; the allocation uses the registered claude-config-* prefix and the caller (dispatch-hetero.sh) removes the directory on every exit path."
     },
     {
+      "file": "scripts/dispatch-review.sh",
+      "match": "seed-claude-config.js\" --parent",
+      "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed after the child and by the EXIT trap."
+    },
+    {
+      "file": "scripts/dispatch-author.sh",
+      "match": "seed-claude-config.js\" --parent",
+      "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed after the child and by the cleanup EXIT trap."
+    },
+    {
       "file": "scripts/dispatch-hetero.sh",
       "match": "seed-claude-config.js\" --parent",
       "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed right after the worker and in cleanup/abort_dispatch."

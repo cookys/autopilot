@@ -2,6 +2,7 @@
 # BL-0136: dispatch-author keeps a bounded, redacted runner stderr excerpt on runner_failed and
 # classifies quota exhaustion (transport_status vocabulary shared with dispatch-plan-review.js).
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT="$TEST_TMP/prompt.txt"

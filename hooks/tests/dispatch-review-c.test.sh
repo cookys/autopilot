@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-review.sh test, shard c (split from dispatch-review.test.sh for wall time).
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
 
 # --- cleanroom seat (portable stubs; RED at base ceb7c81d) ---

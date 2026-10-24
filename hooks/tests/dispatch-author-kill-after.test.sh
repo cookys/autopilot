@@ -4,6 +4,7 @@
 # must still be reaped by `timeout -k`, and only a deadline-elapsed 137 maps
 # back to transport_status timeout.
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 export HOME="$HOOK_HOME"
 export AUTOPILOT_STRIKE_WRITER=off

@@ -13,6 +13,7 @@ eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
 
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
+seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-fcc-XXXXXX)"
 trap 'rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CAPABILITY_DIR"

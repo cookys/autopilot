@@ -17,6 +17,7 @@
 #   7  dispatch-hetero run_worker: all six launch branches, each forced and asserted separately
 #      (cgroup, setsid --wait, plain+setsid, plain no-setsid, detached+setsid, detached no-setsid)
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 export AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1   # HETERO_TEST_* seams in dispatch-hetero.sh are inert without it
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \

@@ -11,6 +11,7 @@
 # A grep over the review-dispatch sources backs the runtime check for argv builders the fake-binary
 # runs cannot reach (the hetero-review-loop.js seat argv, review-fanout.js).
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 DR="$REPO_ROOT/scripts/dispatch-review.sh"
 

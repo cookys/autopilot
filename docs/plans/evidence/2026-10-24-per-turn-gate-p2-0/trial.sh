@@ -1,19 +1,31 @@
 #!/bin/bash
-# usage: trial.sh <name> <setting-sources> <plugin 0|1> <resume-session-or-"-"> <prompt>
+# P2-0 trial runner, v2. Usage:
+#   trial.sh <name> <setting-sources> <plugin 0|1> <resume-session-or-"-"> <prompt> <hookspec...>
+# hookspec = <label>:<remaining blocks>, one project Stop hook per spec (same probe-hook.js, own counter and log).
+# All state (config dir with a credentials copy, HOME, project dir, logs) lives under $P20_ROOT or a fresh mktemp -d,
+# and the script refuses to run when that directory is inside a git work tree.
 set -u
-R=$(dirname "$0"); name=$1; ss=$2; plug=$3; res=$4; prompt=$5
-T=$R/trials/$name; mkdir -p $T/home $T/proj/.claude $T/cfg
-[ -f $T/cfg/.credentials.json ] || cp ~/.claude/.credentials.json $T/cfg/.credentials.json
-cat > $T/proj/.claude/settings.json <<J
-{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"node $R/bin/hook.js Stop"}]}]}}
-J
-[ -f $T/counter.json ] || echo '{"remaining":1,"calls":0}' > $T/counter.json
-[ -n "${REMAIN:-}" ] && echo "{\"remaining\":$REMAIN,\"calls\":$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$T/counter.json','utf8')).calls)}catch(e){console.log(0)}")}" > $T/counter.json
-args=(-p --model claude-haiku-4-5 --output-format stream-json --verbose --include-hook-events --setting-sources "$ss" --debug hooks --debug-file $T/debug-$4.log)
+HERE=$(cd "$(dirname "$0")" && pwd)
+name=$1; ss=$2; plug=$3; res=$4; prompt=$5; shift 5
+ROOT=${P20_ROOT:-$(mktemp -d)}
+mkdir -p "$ROOT"
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "refusing: $ROOT is inside a git work tree" >&2; exit 3; fi
+T=$ROOT/trials/$name; mkdir -p "$T/home" "$T/proj/.claude" "$T/cfg"
+[ -f "$T/cfg/.credentials.json" ] || { cp ~/.claude/.credentials.json "$T/cfg/.credentials.json"; chmod 600 "$T/cfg/.credentials.json"; }
+cmds=""
+for spec in "$@"; do
+  lab=${spec%%:*}; rem=${spec##*:}
+  [ -f "$T/$lab.counter.json" ] || echo "{\"remaining\":$rem,\"calls\":0}" > "$T/$lab.counter.json"
+  c="P0_LOG=$T/$lab.hook.log P0_COUNTER=$T/$lab.counter.json node $HERE/probe-hook.js Stop"
+  cmds="$cmds${cmds:+,}{\"type\":\"command\",\"command\":\"$c\"}"
+done
+echo "{\"hooks\":{\"Stop\":[{\"hooks\":[$cmds]}]}}" > "$T/proj/.claude/settings.json"
+tag=${res:0:8}; [ "$res" = "-" ] && tag=fresh
+args=(-p --model claude-haiku-4-5 --output-format stream-json --verbose --include-hook-events --setting-sources "$ss" --debug hooks --debug-file "$T/debug-$tag.log")
 [ "$plug" = 1 ] && args+=(--plugin-dir /home/cookys/projects/autopilot)
 [ "$res" != "-" ] && args+=(--resume "$res")
-cd $T/proj
-env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME=$T/home CLAUDE_CONFIG_DIR=$T/cfg P0_LOG=$T/hook.log P0_COUNTER=$T/counter.json \
-  timeout 300 claude "${args[@]}" "$prompt" > $T/stream-$4.jsonl 2> $T/stderr-$4.txt </dev/null
-echo rc=$? >> $T/rc-$4.txt
-node -e "const l=require('fs').readFileSync('$T/stream-$4.jsonl','utf8').split('\n').filter(x=>x.includes('\"type\":\"result\"'));for(const x of l){const o=JSON.parse(x);console.log('RESULT',o.session_id,o.is_error,o.total_cost_usd,JSON.stringify(o.result).slice(0,80))}"
+cd "$T/proj"
+env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$T/home" CLAUDE_CONFIG_DIR="$T/cfg" \
+  timeout 300 claude "${args[@]}" "$prompt" > "$T/stream-$tag.jsonl" 2> "$T/stderr-$tag.txt" </dev/null
+echo "rc=$? root=$ROOT" | tee -a "$T/rc.txt"
+node -e "for(const x of require('fs').readFileSync('$T/stream-$tag.jsonl','utf8').split('\n')){if(x.includes('\"type\":\"result\"')){const o=JSON.parse(x);console.log('RESULT',o.session_id,o.is_error,o.total_cost_usd,JSON.stringify(o.result).slice(0,80))}}"

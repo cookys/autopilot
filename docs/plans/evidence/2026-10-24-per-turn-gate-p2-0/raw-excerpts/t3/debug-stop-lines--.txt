@@ -1,0 +1,16 @@
+first debug line: 2026-10-24T00:39:35.912Z
+last debug line: 2026-10-24T00:39:41.805Z
+2026-10-24T00:39:39.220Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/opt-in-multiplexer.js Stop] (plugin autopilot@inline) finished with status 0 (36ms)
+2026-10-24T00:39:39.223Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/owner-question-guard.js] (plugin autopilot@inline) finished with status 0 (39ms)
+2026-10-24T00:39:39.224Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/awaiting-owner.js] (plugin autopilot@inline) finished with status 0 (39ms)
+2026-10-24T00:39:39.224Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/cost-tracker.js] (plugin autopilot@inline) finished with status 0 (40ms)
+2026-10-24T00:39:39.225Z [DEBUG] Hooks: Stop [node <scratch>/bin/hook.js Stop] finished with status 0 (42ms)
+2026-10-24T00:39:39.225Z [DEBUG] "Hook Stop (Stop) success:\n{\"decision\":\"block\",\"reason\":\"REASON-ONE: before stopping, reply with the single word ALPHA.\"}"
+2026-10-24T00:39:39.227Z [DEBUG] Hook Stop (node <scratch>/bin/hook.js Stop) returned permissionDecision: deny (reason: REASON-ONE: before stopping, reply with the single word ALPHA.)
+2026-10-24T00:39:39.228Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/dirty-protected-paths.js] (plugin autopilot@inline) finished with status 0 (44ms)
+2026-10-24T00:39:40.934Z [DEBUG] Hooks: Stop [node <scratch>/bin/hook.js Stop] finished with status 0 (34ms)
+2026-10-24T00:39:40.935Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/owner-question-guard.js] (plugin autopilot@inline) finished with status 0 (36ms)
+2026-10-24T00:39:40.939Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/opt-in-multiplexer.js Stop] (plugin autopilot@inline) finished with status 0 (40ms)
+2026-10-24T00:39:40.940Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/cost-tracker.js] (plugin autopilot@inline) finished with status 0 (41ms)
+2026-10-24T00:39:40.944Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/awaiting-owner.js] (plugin autopilot@inline) finished with status 0 (45ms)
+2026-10-24T00:39:40.952Z [DEBUG] Hooks: Stop [node /home/cookys/projects/autopilot/hooks/dirty-protected-paths.js] (plugin autopilot@inline) finished with status 0 (53ms)

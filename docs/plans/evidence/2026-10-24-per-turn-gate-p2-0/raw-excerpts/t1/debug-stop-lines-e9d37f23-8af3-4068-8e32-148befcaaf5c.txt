@@ -1,0 +1,6 @@
+first debug line: 2026-10-24T00:39:20.998Z
+last debug line: 2026-10-24T00:39:24.250Z
+2026-10-24T00:39:22.829Z [DEBUG] Hooks: Stop [node <scratch>/bin/hook.js Stop] finished with status 0 (31ms)
+2026-10-24T00:39:22.832Z [DEBUG] "Hook Stop (Stop) success:\n{\"decision\":\"block\",\"reason\":\"REASON-THREE: reply GAMMA.\"}"
+2026-10-24T00:39:22.834Z [DEBUG] Hook Stop (node <scratch>/bin/hook.js Stop) returned permissionDecision: deny (reason: REASON-THREE: reply GAMMA.)
+2026-10-24T00:39:23.986Z [DEBUG] Hooks: Stop [node <scratch>/bin/hook.js Stop] finished with status 0 (28ms)

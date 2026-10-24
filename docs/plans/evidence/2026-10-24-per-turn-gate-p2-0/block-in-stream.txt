@@ -1,3 +1,6 @@
-t1 stream-resume.jsonl REASON_in_stream=      3 REASON-THREE 
-t1 stream-resume.jsonl REASON_in_stream=      3 REASON-ONE 
-t3 stream-resume.jsonl REASON_in_stream=      3 REASON-ONE 
+Count of block-reason strings per stream file (file names as in sums.txt; one block honored = reason appears in the transcript echo of the hook feedback, several times per file because the stream repeats it)
+t1 stream--.jsonl reasons: {"REASON-ONE":3}
+t1 stream-e9d37f23-8af3-4068-8e32-148befcaaf5c.jsonl reasons: {"REASON-THREE":3}
+t2 stream--.jsonl reasons: {}
+t3 stream--.jsonl reasons: {"REASON-ONE":3}
+t4 stream-fresh.jsonl reasons: {"REASON-ONE":3}

@@ -22,3 +22,7 @@ Merge 86274b421 (tintegrity) added precision rules (pure-add surface edits, same
 ## Status 2026-10-24
 
 Re-replay merged 7b84a5520 (docs/plans/evidence/2026-10-23-test-integrity-accuracy/): 91.7% false positives by record (11/12), 83.3% by group (5/6) over the v2 60 merges; supersedes the unrecorded 83% above. Mode stays warn. Three rules proposed there; a follow-up unit is implementing rules 1-2.
+
+## Status 2026-10-24 (later)
+
+Merge 1ce92330d (tirules) shipped rules 1-2: a closed equivalence rule (only =, == and -eq pair; literal changing side; verbatim subject; one-to-one pairs with identical indentation; exact bracket pairing) and the identifier-removal exemption. Precision costs are pinned as C1-C14. The 60-range replay reports the same 9 records. Left: rule 3 (substitution pairing) and a fresh re-replay that must show under 5% false positives before mode flips to block.

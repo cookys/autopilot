@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0293 -->
+<!-- next-id: BL-0302 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -118,7 +118,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at…
 - **Pointer**: docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
-- **Context**: a peer host (twgs-revival, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and…
+- **Context**: agystdin 0221af27e: stdin stream-json shipped fail-closed (170000 B cap, empty-response and token-ceiling checks). Stays open: lifting the cap safely needs a per-host measurement or a tail-nonce self-check.
 
 ### Main-checkout boundary: accepted residuals of an accident guard that is not a sandbox
 - **Id**: BL-0023
@@ -288,7 +288,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
-
 ### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
 - **Id**: BL-0051
 - **Status**: open
@@ -322,14 +321,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。於是提出每回合驗證的做法；P0 hook 探測已完成，P1 基準實驗正在執行，整體還沒做完。 (draft)
+- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。因此改做每回合驗證。P0 探測、P1 基準、P2-0 證據與 P2-1 選用 hook 已出貨；P2-2 審查中，之後跑 P2-3 付費批次。 (draft)
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: P1 baseline run result (owner approved, d-0ab59f36; cap raised to 18 USD by d-66374200) is committed and reviewed. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced until a later change owns it.
-- **Trigger-Type**: owner
+- **Trigger**: P2-2 instrument passes review and merges; then the P2-3 paid batch can run. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29). P0 probe merged e726bc485 (evidence docs/plans/evidence/2026-10-23-per-turn-gate-p0/): hook-side GO met, pin 2.1.309 (d-ea7857ea). P1 approved (d-0ab59f36, cap 18 USD d-66374200), running.
+- **Context**: P1 rerun e13ff469e: M1 6/30, M2 13/30, M3 0/30, deviation accepted (d-baf11c30). P2 cost approved (d-15c0364c): C arm 18, ON arm 30 USD. P0 e726bc485; P2-0 2c4e5ccb8; P2-1 e68371406.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -364,14 +363,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-23
 - **Origin**: self
-- **Problem**: 測試完整性檢查目前只警告不擋，因為誤報率仍遠高於翻成攔截的門檻。三種誤報形狀已豁免。最新重放（同一批 v2 的 60 個 merge）誤報率 91.7%；三條降誤報規則已提出，前兩條實作中。要降到 5% 以下才考慮翻成攔截。
+- **Problem**: 測試完整性檢查目前只警告不擋，誤報率仍遠高於翻成攔截的門檻。前兩條降誤報規則已出貨（封閉規則，精度代價 C1–C14，重放仍報同樣 9 筆）；第三條規則與新一輪重放尚未做。
 - **Impact**: 維持警告時違規仍可通過，只能靠人自己看警告，沒人看就漏掉。 (draft)
 - **Trigger**: a re-replay of the same seed and 60 merges shows under 5% false positives, or someone proposes flipping mode to block
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 - **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
-- **Context**: Re-replay merged 7b84a5520 (docs/plans/evidence/2026-10-23-test-integrity-accuracy/): 91.7% FP by record, 83.3% by group, v2 60 merges. Bar under 5%, mode stays warn. Rules 1-2 being implemented by a follow-up unit; see sidecar.
+- **Context**: Rules 1-2 shipped (merge 1ce92330d, tirules). Left: rule 3 (substitution pairing), then a re-replay of the same 60 merges under 5% FP (was 91.7%, 7b84a5520). Mode stays warn. See sidecar.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Id**: BL-0066
@@ -536,10 +535,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
-
-
-
-
 ### mods/live recent conversation: groups expand by mouse only
 - **Id**: BL-0123
 - **Status**: open
@@ -568,16 +563,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
 
-
-
-
-
-
-
-
-
-
-
 ### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
 - **Id**: BL-0144
 - **Status**: open
@@ -605,12 +590,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Compaction point measured 2026-10-17 (window 533000): preTokens 499974-501310, about window minus 33K. Done: model note budget 4000B+, half-write guard. Eval: quiz/grade on real transcripts, ON = handoff file, OFF = 20-turn tail.
 
-
-
-
-
-
-
 ### Move exam registration to llm-playground; autopilot reads one JSON
 - **Id**: BL-0194
 - **Status**: open
@@ -624,7 +603,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner, 2026-10-15
 - **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
 - **Context**: Exam moves to llm-playground intake after SWE34, via engine-qualify headless. Trust auto/confirm/off (default auto). P5–P7; P3 optional, off; P4b is a residual pull.
-
 
 ### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）
 - **Id**: BL-0206
@@ -698,7 +676,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: l5 plan 2026-09-16, writer-only; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
 - **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
-
 
 ### Roster qualification: Explorer formal suite
 - **Id**: BL-0228
@@ -859,14 +836,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: 畫面上可見派工計畫只剩兩件事。一是 P2 hook 延遲已量完，guard-port 計畫已寫好，下一步是計畫審查，再實作。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有任何程式會讀它。
+- **Problem**: 畫面上可見派工計畫剩兩件事。一是 P2 的 guard-port 計畫已經過兩代審查並審定，可以進入實作（Design B 不可選）。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有程式會讀它。
 - **Impact**: 不寫 guard-port 計畫，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
-- **Trigger**: P2: plan review of docs/plans/2026-10-23-guard-port.md, then implementation (next step); P4 progress.json and work-round projection: radar asks for it
-- **Trigger-Type**: event
+- **Trigger**: P2: guard-port plan is reviewed and adjudicated (merge 0967088f1); implementation can start now. P4 progress.json and work-round projection: radar asks for it
+- **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131), evidence docs/plans/evidence/2026-10-23-hook-latency-p2/. Next: plan review of docs/plans/2026-10-23-guard-port.md (merge guardport 5749e8cfd), then implement; P4 stays parked.
+- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131). Guard-port plan: two review generations, depth-0 adjudicated revision, Design B is not selectable. P4 stays parked.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242
@@ -1088,7 +1065,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
 - **Context**: Detail in remaining-discoverability-entry-gaps.md. Dispatch-tree sentence withdrawn 2026-10-23: neither pilot arm opened depth0-control-loop.md; needs a SKILL.md-level change with its own eval.
 
-
 ### Uncalled-script follow-ups that touch guidance need eval
 - **Id**: BL-0279
 - **Status**: open
@@ -1102,20 +1078,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0275 relabel, 2026-10-22
 - **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
 - **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
-
-### dispatch-review.sh prints a printf option error on the cc-shim path
-- **Id**: BL-0287
-- **Status**: open
-- **Since**: 2026-10-23
-- **Origin**: self
-- **Problem**: The review script prints a harmless option error on stderr on one shim path, around line 504.
-- **Impact**: Cosmetic; the review completes.
-- **Trigger**: the stderr noise is worth removing
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: bldone7 review follow-up, 2026-10-23
-- **Pointer**: docs/backlog/dispatch-review-printf-option-error.md
-- **Context**: Message "printf: --: invalid option" on the cc-shim path; cosmetic, the review completes. Likely a printf format starting with dashes.
 
 ### dispatch-hetero test suites leave detached child processes behind
 - **Id**: BL-0289
@@ -1138,12 +1100,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 派遣審查與派遣撰寫兩支腳本的 claude 原生路徑，用真實的使用者設定目錄啟動子行程，違反腳本自己註解寫的規則：子行程只該拿到只放憑證檔的專用目錄。
 - **Impact**: claude 子行程可能把真實 ~/.claude/.claude.json 重設，造成使用者設定遺失。
-- **Trigger**: after the claude-native implementer unit (cnimpl) merges, reuse its credentials-only config seeding helper (still being added by cnimpl, not yet merged)
-- **Trigger-Type**: event
+- **Trigger**: cnimpl merged (64eedde66): dispatch-review.sh and dispatch-author.sh can now use scripts/lib/seed-claude-config.js for their claude-native branches
+- **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 2026-10-24 bldone8 audit of dispatch-review.sh / dispatch-author.sh
 - **Pointer**: docs/backlog/dispatch-claude-children-real-claude-config.md
-- **Context**: Verified at develop: the claude-native branches set no config dir and keep the real HOME; the credentials-only config seeding helper is not on develop yet. Details in sidecar.
+- **Context**: Verified at develop: the claude-native branches still set no config dir and keep the real HOME; the helper seed-claude-config.js is now on develop. Details in sidecar.
 
 ### Seat schema admits / and . in engine and model; audit path-building consumers
 - **Id**: BL-0291
@@ -1172,3 +1134,126 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-24 oqseat review
 - **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
 - **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.
+
+### dispatch-review: swap out a seat that goes idle (--idle-timeout)
+- **Id**: BL-0293
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 審查席位卡住不輸出時，只能等到整體逾時才失敗。要加一個閒置逾時：席位太久沒有任何輸出就判失敗並換席。
+- **Impact**: 卡住的席位會拖慢整輪審查，浪費等待時間。
+- **Trigger**: next dispatch-review seat that hangs silently, or an efficiency pass over review latency
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner efficiency rule, bldone9 2026-10-24
+- **Pointer**: docs/backlog/review-seat-idle-timeout.md
+
+### Paid batch should abort on the first auth failure
+- **Id**: BL-0294
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 付費評測批次遇到第一次認證失敗，應立刻中止，而不是每個 id 都重試燒掉預算。目前只有某個包裝腳本有自己的 STOP_AUTH，要做成共用機制。
+- **Impact**: 認證壞掉時批次可能空轉並浪費時間與額度。
+- **Trigger**: next paid batch wrapper is written or edited, or an auth failure burns more than one id
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner efficiency rule, bldone9 2026-10-24
+- **Pointer**: docs/backlog/paid-batch-abort-on-first-auth-failure.md
+
+### Findings batching: reviewers accumulate findings, then send once
+- **Id**: BL-0295
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: peer
+- **Reporter**: revival.3d
+- **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
+- **Reply**: none
+- **Problem**: 審查者每發現一點就送一次，對方要反覆處理。peer revival.3d 建議先累積再一次送出。這會改變指引，要做開關對照評測。
+- **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
+- **Trigger**: a guidance change to the reviewer flow is scheduled, or a batching ON/OFF eval is budgeted
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PEER-REPORTED revival.3d 2026-10-24
+- **Pointer**: docs/backlog/findings-batching-reviewer-guidance.md
+
+### plan-review: author-side precondition_failed burns the logical id
+- **Id**: BL-0296
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: plan 審查在作者端的前置條件失敗時，會把邏輯 id 直接燒掉，同一代重跑也被終局鎖擋住，只能換 id。
+- **Impact**: 一個小前置錯誤就要換 id 重來，浪費一輪審查。
+- **Trigger**: next plan review that dies on an author-side precondition_failed
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: bldone9 2026-10-24 code reading
+- **Pointer**: docs/backlog/plan-review-precondition-burns-logical-id.md
+
+### Long sessions never reap their background work
+- **Id**: BL-0297
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: peer
+- **Reporter**: llm-playground c4140
+- **Report**: 01M5NBBZDBHD4Y53Q78QP2ZNKB
+- **Reply**: none
+- **Problem**: 長時間的工作階段不會回收背景工作：背景殼層、監看與等待迴圈會一直累積，tasks 目錄也越積越多。peer llm-playground 回報。
+- **Impact**: 資源被吃掉，還會有失控的等待迴圈。
+- **Trigger**: a long session shows leftover background shells, or a state-checkpoint restore is edited
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED llm-playground c4140 2026-10-24
+- **Pointer**: docs/backlog/long-session-background-work-not-reaped.md
+
+### Remaining agy argv call sites should use agy-stream-json.js
+- **Id**: BL-0298
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 還有幾處呼叫 agy 的地方仍把提示放在命令列參數，沒有走共用的 stdin 傳輸。屬一致性問題，不是正確性問題。
+- **Impact**: 不同入口行為不一致，之後維護要記得多處。
+- **Trigger**: any of these call sites is edited
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: bldone9 2026-10-24 audit after agystdin
+- **Pointer**: docs/backlog/agy-remaining-argv-call-sites.md
+
+### fbtool P1: findings-write protection must land before the cc runner
+- **Id**: BL-0299
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 審查結果檔的寫入保護，必須在接上 cc runner 之前完成。目前的文字檢查只能防不小心提到，擋不了真的寫入。
+- **Impact**: 沒有真正保護，審查結果可能被改寫而不被發現。
+- **Trigger**: before the cc runner is wired into fbtool, or fbtool P1 starts
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: bldone9 2026-10-24 fbtool P1 note
+- **Pointer**: docs/backlog/fbtool-p1-findings-write-protection.md
+
+### bash-footgun-guard: add a bare ls rule for the Bash tool
+- **Id**: BL-0300
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 這台機器上，在 Bash 工具裡直接執行 ls 或 eza 會卡住。owner 已核准在防呆 hook 加一條規則擋裸 ls。
+- **Impact**: 不擋的話，工作階段會一再卡住。
+- **Trigger**: ready now; owner decision card d-75c08ca7 approved it
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner decision d-75c08ca7
+- **Pointer**: docs/backlog/bash-footgun-guard-bare-ls-rule.md
+
+### Claude Code upstream report draft (owner decides whether to send)
+- **Id**: BL-0301
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 整理了一份給 Claude Code 上游的回報草稿，交 owner 決定是否送出。內容是同為 2.1.309 時觀察到的四個行為問題。
+- **Impact**: 不回報的話，這些問題會繼續影響長時間工作。
+- **Trigger**: owner decides whether to send the draft
+- **Trigger-Type**: owner
+- **Effort**: XS
+- **Source**: bldone9 2026-10-24 observations on CC 2.1.309
+- **Pointer**: docs/backlog/claude-code-upstream-report-draft.md

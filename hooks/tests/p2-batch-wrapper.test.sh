@@ -65,17 +65,17 @@ mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need(" "n
 mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
-mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"
+mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === ''," "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
 mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
 mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r)),"
 mk_mut errfmt "if (he) need(" "if (false) need(" "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
-mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true,"
-mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);"
+mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true," "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
+mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
-mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok',"
+mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok'," "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
 mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && typeof" "need(true || o && typeof"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
 mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
@@ -89,6 +89,10 @@ mk_mut boolcheck "typeof o.constraints_pass === 'boolean' && typeof o.features_p
 mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
 mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
 mk_mut costraw "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut taskdir "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
+mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
+mk_mut cmdtpl "need(Array.isArray(av) &&" "need(true || Array.isArray(av) &&"
+mk_mut mtime "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -191,7 +195,8 @@ assert_eq "$(grep -c 'TASKHASH_DIFF post fail' "$TEST_TMP/run-nc8-mut/invocation
 assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
 
 echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
-audit_rc() { node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
+fixm() { local f; for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; }
+audit_rc() { [ -z "${NOFIXM:-}" ] && [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
 tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
 # 1 several models in every MODEL row
 tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
@@ -449,5 +454,28 @@ assert_eq "$(audit_rc "$TEST_TMP/mut-traceraw/run-p2-batch.js" "$TEST_TMP/t-traw
 tamper craw; RL=$(ls "$TEST_TMP"/t-craw/runs/*/run.log | head -1); sed -i -E 's/"total_cost_usd":[0-9.]+/"total_cost_usd":0.01/' "$RL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-craw")" 0 "run.log cost differs from the COST row: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-costraw/run-p2-batch.js" "$TEST_TMP/t-craw")" 0 "RED cost from summary only: mutant says OK"
+
+echo "--- round 7: task dir re-hash, saved probe responses, saved argv, run file times"
+echo "edited after the batch" >>"$TASKDIR/task.md"
+assert_neq "$(audit_rc "$WRAP" "$R1")" 0 "task directory edited after the batch: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-taskdir/run-p2-batch.js" "$R1")" 0 "RED task directory: audit without the re-hash says OK"
+git -C "$CLONE" checkout -q -- evals/orchestration/tasks
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "task directory restored: real audit OK"
+for pv in iserror delete cost; do
+  tamper pr; PF=$(ls "$TEST_TMP"/t-pr/probes/*-1.json | head -1)
+  case $pv in
+    iserror) sed -i 's/"is_error":false/"is_error":true/' "$PF" ;;
+    delete) rm -f "$PF" ;;
+    cost) sed -i -E 's/"total_cost_usd":[0-9.]+/"total_cost_usd":9.5/' "$PF" ;;
+  esac
+  assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pr")" 0 "saved probe response ($pv) disagrees with probes.tsv and the log: real audit non-zero"
+  assert_eq "$(audit_rc "$TEST_TMP/mut-probeaw/run-p2-batch.js" "$TEST_TMP/t-pr")" 0 "RED saved probe response ($pv): mutant says OK"
+done
+tamper cm; CF=$(ls "$TEST_TMP"/t-cm/cmd/ON-*.json | head -1); sed -i 's/"hook"/"observe"/' "$CF"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cm")" 0 "saved argv with another gate: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-cmdtpl/run-p2-batch.js" "$TEST_TMP/t-cm")" 0 "RED saved argv: mutant says OK"
+tamper mt; MF=$(ls "$TEST_TMP"/t-mt/runs/*/run.log | head -1); touch -d '+2 hours' "$MF"
+assert_neq "$(NOFIXM=1 audit_rc "$WRAP" "$TEST_TMP/t-mt")" 0 "run.log written outside START..END: real audit non-zero"
+assert_eq "$(NOFIXM=1 audit_rc "$TEST_TMP/mut-mtime/run-p2-batch.js" "$TEST_TMP/t-mt")" 0 "RED run file time: mutant says OK"
 
 finalize_test

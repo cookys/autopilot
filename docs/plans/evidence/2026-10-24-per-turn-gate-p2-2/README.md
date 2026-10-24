@@ -53,3 +53,7 @@ Red before green in `p2-batch-wrapper.test.sh`: RUNVERSION is compared with the 
 ## Review round 6 fixes
 
 Red before green in `p2-batch-wrapper.test.sh`: TURNS is checked against each run's `result.json` `turns_completed` and COMPLETE is recounted from the raw value (all result.json at 0 with a log of 5s was accepted); oracle fields must be real booleans (missing field, string "false", null); MODEL, the HOOKCOUNT trace counts and the COST run value are recomputed from `run.log` and the debug traces. PREREG section 4 has a new column naming the raw source of each row and lists the four rows that can only trust a summary.
+
+## Round 7: more rows recomputable
+
+Red before green in `p2-batch-wrapper.test.sh`: the task directory is re-hashed at audit time (an edit after the batch fails); each probe response is saved as `probes/<id>-<n>.json` (status, model, cost only) and the audit recomputes the ok/fail sequence and cost (is_error flipped, file deleted, cost changed all fail); each id's argv is saved as `cmd/<id>.json` and compared with the manifest template (another `--gate` value fails); run.log and result.json mtimes must lie within START..END (a file written two hours later fails). The window row stays log-clock based: accepted residual risk, written in the PREREG. Older timestamp tests got the mtime check added to their mutants so each still tests its own rule.

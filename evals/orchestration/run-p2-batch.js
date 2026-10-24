@@ -250,7 +250,11 @@ const W = {
     ctx.log('RUNVERSION', `${id} ${v === ctx.manifest.cli ? 'ok' : 'fail'} ${v}`);
   },
   writeOrder(ctx, id, arm, pos) { ctx.log('ORDER', `${id} ${arm} pos=${pos}`); },
-  writeCmd(ctx, id, argv, out, trace) { ctx.log('CMD', `${id} ${argvSha(argv, out, trace)}`); },
+  writeCmd(ctx, id, argv, out, trace) {
+    fs.mkdirSync(path.join(ctx.runDir, 'cmd'), { recursive: true });
+    fs.writeFileSync(path.join(ctx.runDir, 'cmd', `${id}.json`), `${JSON.stringify(argv)}\n`);
+    ctx.log('CMD', `${id} ${argvSha(argv, out, trace)}`);
+  },
   writeStartEnd(ctx, kind, id, extra) { ctx.log(kind, `${id} ${extra}`); },
   writeProbe(ctx, id, home) {
     const dir = path.join(ctx.runDir, 'probe-work');
@@ -258,11 +262,17 @@ const W = {
     const r = sh(ctx, [`HOME=${home}`, 'timeout', '90', 'claude', '-p', '--model', ctx.manifest.model, '--setting-sources', 'project',
       '--strict-mcp-config', '--dangerously-skip-permissions', '--output-format', 'json'], { cwd: dir, input: 'Reply with exactly AUTH_OK\n' });
     let cost = 0, err = 1, ok = 0;
+    const rec = { rc: r.status, parse_ok: false };
     try {
       const o = JSON.parse(r.stdout);
+      // Only status, model and cost fields are kept (no credential material is ever in the probe response).
+      Object.assign(rec, { parse_ok: true, is_error: !!o.is_error, result_head: String(o.result).slice(0, 200), model: o.modelUsage ? Object.keys(o.modelUsage).sort().join(',') : null, total_cost_usd: Number(o.total_cost_usd) || 0 });
       cost = Number(o.total_cost_usd) || 0; err = o.is_error ? 1 : 0; ok = String(o.result).includes('AUTH_OK') ? 1 : 0;
     } catch (_e) { /* stays failed */ }
     const good = !(r.status !== 0 || err || !ok);
+    fs.mkdirSync(path.join(ctx.runDir, 'probes'), { recursive: true });
+    const nth = fs.readdirSync(path.join(ctx.runDir, 'probes')).filter((f) => f.startsWith(`${id}-`)).length + 1;
+    fs.writeFileSync(path.join(ctx.runDir, 'probes', `${id}-${nth}.json`), `${JSON.stringify(rec)}\n`);
     fs.appendFileSync(path.join(ctx.runDir, 'probes.tsv'), `${id}\t${r.status}\t${cost.toFixed(6)}\t${good ? 'ok' : 'fail'}\n`);
     if (!good) { ctx.log('PROBE_FAIL', `${id} rc=${r.status} cost=${cost.toFixed(6)}`); throw new Exit(7, 'PAUSE id not launched'); }
     ctx.log('PROBE_OK', `${id} cost=${cost.toFixed(6)}`);
@@ -468,6 +478,15 @@ function audit(runDir, m, clone, opts) {
     const w0 = by('WINDOW_START')[0];
     if (w0) for (const r of by('START')) need(Math.abs((Date.parse(r.ts) - Date.parse(w0.ts)) / 1000 - Number(kvOf(r.rest).elapsed)) <= 3, `${idOf(r)}: START elapsed ${kvOf(r.rest).elapsed} disagrees with its timestamp`);
   }
+  // Weak window cross-check: the run's own files were written between its START and END (a few seconds of slack).
+  for (const id of ids) {
+    const st = byId('START', id)[0], en = byId('END', id)[0];
+    if (!st || !en) continue;
+    for (const f of ['run.log', 'result.json']) {
+      let mt = NaN; try { mt = fs.statSync(path.join(runDir, 'runs', id, f)).mtimeMs; } catch (_e) { /* below */ }
+      need(Number.isFinite(mt) && mt >= Date.parse(st.ts) - 5000 && mt <= Date.parse(en.ts) + 5000, `${id}: runs/${id}/${f} was last written outside its START..END window`);
+    }
+  }
   // 2 window
   const win0 = by('WINDOW_START')[0];
   need(by('WINDOW_START').length === 1, `WINDOW_START must appear exactly once (got ${by('WINDOW_START').length})`);
@@ -482,6 +501,11 @@ function audit(runDir, m, clone, opts) {
   if (clone) { try { expected = fs.readFileSync(path.join(clone, m.taskhash_expected), 'utf8'); } catch (_e) { /* below */ } }
   if (expected !== null) { need(pre === expected, 'taskhash.pre.txt differs from the preregistered listing'); need(post === expected, 'taskhash.post.txt differs from the preregistered listing'); }
   else need(pre !== null && post !== null && pre === post, 'taskhash.pre.txt and taskhash.post.txt differ');
+  if (clone) {
+    // The task directory as it is now, re-hashed here (it lives in the repo and still exists at audit time).
+    let nowList = null; try { nowList = taskListing(path.join(clone, 'evals', 'orchestration', 'tasks', m.task)); } catch (_e) { /* below */ }
+    need(nowList !== null && nowList === expected && nowList === post, 'the task directory now does not hash to the baseline listing and taskhash.post.txt');
+  }
   const td = by('TASKHASH_DIFF').map((r) => r.rest);
   need(td.length > 0 && !td.some((t) => t.includes('fail')), 'a TASKHASH_DIFF fail line is present or none was written');
   need(td.some((t) => t.startsWith('pre ok')), 'no TASKHASH_DIFF pre ok line');
@@ -509,6 +533,13 @@ function audit(runDir, m, clone, opts) {
     const logRows = rows.filter((r) => (r.kind === 'PROBE_OK' || r.kind === 'PROBE_FAIL') && idOf(r) === id);
     const logSeq = logRows.map((r) => (r.kind === 'PROBE_OK' ? 'ok' : 'fail'));
     need(tsvSeq.length > 0 && tsvSeq.join(',') === logSeq.join(','), `${id}: probes.tsv statuses (${tsvSeq.join(',')}) differ from the PROBE rows in the log (${logSeq.join(',')})`);
+    // The probe's own saved response decides ok/fail and the cost; tsv and log must agree with it.
+    const pfiles = []; for (let k = 1; fs.existsSync(path.join(runDir, 'probes', `${id}-${k}.json`)); k++) pfiles.push(path.join(runDir, 'probes', `${id}-${k}.json`));
+    const rawSeq = [], rawCost = [];
+    for (const f of pfiles) { let o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_e) { /* fail */ }
+      rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && String(o.result_head).includes('AUTH_OK') ? 'ok' : 'fail'); rawCost.push(Number(o.total_cost_usd) || 0); }
+    const tsvCost = probeTsvRows.filter((q) => q[0] === id).map((q) => Number(q[2]));
+    need(rawSeq.join(',') === tsvSeq.join(',') && rawCost.length === tsvCost.length && rawCost.every((c, k) => Math.abs(c - tsvCost[k]) < 5e-7), `${id}: probes/${id}-n.json (${rawSeq.join(',')}) differ from probes.tsv / the PROBE rows in status or cost`);
     need(tsvSeq[tsvSeq.length - 1] === 'ok', `${id}: the last probe did not succeed`);
     const okRows = logRows.filter((r) => r.kind === 'PROBE_OK'), st0 = byId('START', id)[0];
     need(okRows.length >= 1 && st0 && rows.indexOf(okRows[okRows.length - 1]) < rows.indexOf(st0) && Date.parse(okRows[okRows.length - 1].ts) <= Date.parse(st0.ts), `${id}: no successful probe before the START`);
@@ -517,6 +548,11 @@ function audit(runDir, m, clone, opts) {
   for (const o of order) {
     const c = byId('CMD', o.id);
     need(c.length === 1 && c[0].rest.split(' ')[1] === m.argv_sha[o.arm], `${o.id}: CMD missing or differs from the preregistered argv`);
+    // The saved argv is hashed again here and must be the manifest's command template (only out and trace may differ).
+    let av = null; try { av = JSON.parse(read(path.join('cmd', `${o.id}.json`))); } catch (_e) { /* below */ }
+    const outV = av && av[av.indexOf('--out') + 1], trV = av && av[av.indexOf('--hook-trace-dir') + 1];
+    need(Array.isArray(av) && JSON.stringify(av) === JSON.stringify(harnessArgv(m, o.arm, outV, trV)) && c.length === 1 && argvSha(av, outV, trV) === c[0].rest.split(' ')[1]
+      && /(^|\/)runs\/[^/]+$/.test(String(outV)) && String(outV).endsWith(`/runs/${o.id}`) && String(trV).endsWith(`/trace/${o.id}`), `${o.id}: the saved argv (cmd/${o.id}.json) is not the preregistered command template or does not hash to the CMD row`);
   }
   // 7 score
   const rcOf = endRcs(rows);

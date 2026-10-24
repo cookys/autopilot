@@ -980,6 +980,9 @@ const BARE_LS_DENY = [
   'time -p -- ls',
   '! ls',
   'time ! ls',
+  'a=( x ) y=1; ls', // a scalar assignment after an array one must not be read as another array
+  'opts=( -a ) F=1 ls',
+  'a[1]=( x ) ls',
   'cat <(ls)',
   'echo "$(ls)"',
   'echo "a $(cat <(ls)) b"',
@@ -1025,6 +1028,10 @@ const BARE_LS_ALLOW = [
   'xargs ls',
   'time -p command ls',
   'cat <(command ls)',
+  `a[${'x'.repeat(300)}]=( ls )`, // long subscript: the array target is recognised by a forward scan, not a fixed look-back
+  `a[${'x'.repeat(300)}]=(\nls\n)`,
+  `declare -a v[${'x'.repeat(300)}]=( ls )`,
+  'coproc foo ls', // bash runs `foo` with argument ls (foo: command not found): ls is never executed as a command
   'echo "<(ls)"', // no process substitution inside double quotes
   'printf "%s\\n" "<(ls)"',
   'echo "x >(ls) y"',

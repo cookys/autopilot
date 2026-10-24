@@ -904,54 +904,58 @@ function rewriteProcSubst(text) {
   return out;
 }
 
-// Is text[i] (an `=` followed by `(`) the end of an array target `NAME=` / `NAME+=` / `NAME[sub]=`? Bounded backward look.
-function arrayTargetEnds(text, i) {
-  let k = i - 1;
-  if (text[k] === '+') k -= 1;
-  if (text[k] === ']') {
-    const lo = Math.max(0, k - 200);
-    while (k > lo && text[k] !== '[') k -= 1;
-    if (text[k] !== '[') return false;
-    k -= 1;
-  }
-  const end = k;
-  while (k >= 0 && /\w/.test(text[k])) k -= 1;
-  return k < end && !/\d/.test(text[k + 1]);
-}
-
 // Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out, but keep the
-// command substitutions inside (`a=( $(ls) )`, backticks, `<(…)` already rewritten to `$(`). One linear pass, no regex backtracking.
+// command substitutions inside (`a=( $(ls) )`, backticks, `<(…)` already rewritten to `$(`).
+// One linear pass, no regex backtracking and no fixed look-back: a small state machine recognises the target
+// `NAME`, `NAME+`, `NAME[subscript]` (any length) at a word start, and enters the body only on `=(`.
+const ARR_BOUNDARY = /[\s;&|(){}]/;
 function stripArrayAssigns(text) {
   if (text.indexOf('=(') < 0) return text;
   let out = '';
   let last = 0;
-  for (let i = text.indexOf('=('); i >= 0 && i < text.length; i = text.indexOf('=(', i + 1)) {
-    if (i < last || !arrayTargetEnds(text, i)) continue;
+  let st = 0; // 0 word start · 1 identifier · 2 inside [subscript] · 3 after ] · 4 after + · 5 not an array target (skip word)
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (st === 2) {
+      if (c === '[') depth += 1;
+      else if (c === ']') { depth -= 1; if (depth === 0) st = 3; }
+      continue;
+    }
+    if (ARR_BOUNDARY.test(c)) { st = 0; continue; }
+    if (st === 0) { st = /[A-Za-z_]/.test(c) ? 1 : 5; continue; }
+    if (st === 5) continue;
+    if (st === 1 && /\w/.test(c)) continue;
+    if (c === '[' && st === 1) { st = 2; depth = 1; continue; }
+    if (c === '+' && (st === 1 || st === 3)) { st = 4; continue; }
+    if (c !== '=' || text[i + 1] !== '(') { st = 5; continue; }
+    // array assignment: `=(` ends the target
     out += `${text.slice(last, i)}= `;
-    let depth = 1;
+    let d = 1;
     let j = i + 2;
-    while (j < text.length && depth > 0) {
-      const c = text[j];
-      if ((c === '$' || c === '<' || c === '>') && text[j + 1] === '(') {
+    while (j < text.length && d > 0) {
+      const ch = text[j];
+      if ((ch === '$' || ch === '<' || ch === '>') && text[j + 1] === '(') {
         const e = closeParen(text, j + 2);
         if (e < 0) { j = text.length; break; }
         out += ` ${text.slice(j, e + 1)} `;
         j = e + 1;
         continue;
       }
-      if (c === '`') {
+      if (ch === '`') {
         const e = text.indexOf('`', j + 1);
         if (e < 0) { j = text.length; break; }
         out += ` ${text.slice(j, e + 1)} `;
         j = e + 1;
         continue;
       }
-      if (c === '(') depth += 1;
-      else if (c === ')') depth -= 1;
+      if (ch === '(') d += 1;
+      else if (ch === ')') d -= 1;
       j += 1;
     }
     last = j;
     i = j - 1;
+    st = 0;
   }
   return out + text.slice(last);
 }
@@ -971,7 +975,7 @@ function detectBareLs(cmd) {
       const raw = toks[i];
       if (afterTime && (raw === '-p' || raw === '--')) continue;
       if (raw === 'time') { afterTime = true; continue; }
-      if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw)) continue;
+      if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw) || KEYWORDS.has(raw)) continue;
       // `coproc [NAME {] cmd`: coproc is a reserved word, the command after it is alias-expanded.
       if (raw === 'coproc') { if (/^[A-Za-z_]\w*$/.test(toks[i + 1] || '') && toks[i + 2] === '{') i += 1; continue; }
       // A leading redirection (`> f ls`, `2>/dev/null ls`, `<f ls`) does not end command position; a bare operator takes the next word as its target.

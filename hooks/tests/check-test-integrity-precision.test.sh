@@ -25,6 +25,7 @@
 # RED at a3e740553 (acceptance round 12): N67 N68 N69 failed (bound moved to INT_MAX/INT_MIN, string ordering against ${a}x accepted); C8-C11 failed (relational literal changes were paired).
 # F12 and F18 (relational < with a literal swap, spaced and unspaced) were retired by the closed rule: C10 and C11 pin the same shapes as accepted precision cost.
 # RED at 6899fca8b (acceptance round 13): N70-N74 failed (unquoted \$a / \$1 / \$9 subject in [ ] vanishes when empty); C12 C13 failed (paired before).
+# C14: a quoted literal containing spaces is reported on purpose (whitespace split is kept; fail-closed trade-off, not a bug).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -777,5 +778,10 @@ if has_kind surface_touch; then report C13 1; else report C13 0; fi
 repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "1" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report F25 0; else report F25 1; fi
+
+# ── C14 accepted precision cost (depth-0 2026-10-24, review 4a4a20d5): the shape parser splits on whitespace, so a quoted literal with spaces loses the exemption; deliberate, a quote-aware split would reopen bypasses ──
+repo="$(mk_surface '[ "$a" = "foo bar" ]' '[ "$a" = "foo baz" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C14 1; else report C14 0; fi
 
 finalize_test

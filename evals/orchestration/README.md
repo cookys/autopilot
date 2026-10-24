@@ -61,3 +61,7 @@ property — cache-retained / decoys-untouched / inputs-unmutated). Unlike t1–
 (which ceiling on MiniMax-M3), a strong orchestrator that solves the primary task
 can still slip the second axis, giving the discrimination gradient headroom.
 Design + calibration harness: `docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/`.
+
+### P2 batch credentials and auto-resume
+
+`run-p2-batch.js` copies one credential file into each id's per-run home before its probe; the source is `$HOME/.claude/.credentials.json` or `--credentials-source F`. Start the wrapper with the real HOME (or point `--credentials-source` at the real file): a one-off HOME copy goes stale and every later id would copy the stale file. A source less than 10 minutes from `claudeAiOauth.expiresAt` makes the id pause (PROBE_FAIL, PAUSE, exit 7, saved response `source_token_expiring`, cost 0) without a call. `run-p2-batch-loop.js` reruns the wrapper from the paused id (`--first`) once the source is at least 30 minutes ahead, polling every 60 s, up to 20 restarts, and stops when the window is nearly used up; progress is in `<run-dir>/loop.status`. It only reads the expiry and never refreshes a token.

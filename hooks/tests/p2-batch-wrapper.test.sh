@@ -42,7 +42,7 @@ const fs = require('fs'), crypto = require('crypto'), path = require('path');
 const [wrapper, out, clone, src] = process.argv.slice(2);
 const w = require(src);
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-const m = { task: 't14-constraint-horizon', model: 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'unit-test-seed', n_per_arm: 3,
+const m = { task: 't14-constraint-horizon', model: process.env.MAN_MODEL || 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'unit-test-seed', n_per_arm: 3,
   arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: Number(process.env.MAN_WINDOW || 28800), min_complete: 2, max_blocks: 2,
   prereg: 'prereg/PREREG.md', taskhash_expected: 'prereg/taskhash.expected.txt', hook_path: 'hooks/per-turn-gate.js',
   harness_path: 'evals/orchestration/run-orchestration-eval.sh', argv_sha: {},
@@ -123,6 +123,9 @@ mk_mut nostrict "const strictRows = [] ||" "const strictRows = [] ||"
 mk_mut costchkmeta "need(kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap," "need(true || kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap,"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
+mk_mut noexpiry "const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;" "const expiring = false;"
+MAN_NOEXP="$CLONE/prereg/manifest-noexpiry-mutant.json"; make_manifest "$TEST_TMP/mut-noexpiry/run-p2-batch.js" "$MAN_NOEXP"
+MAN_M55="$CLONE/prereg/manifest-haiku55.json"; MAN_MODEL=claude-haiku-5-5 make_manifest "$WRAP" "$MAN_M55"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
 export MAN_WINDOW=3
 MAN_W3="$CLONE/prereg/manifest-w3.json"; make_manifest "$WRAP" "$MAN_W3"
@@ -142,7 +145,7 @@ TREE=$(git -C "$CLONE" write-tree); COMMIT=$(git -C "$CLONE" commit-tree "$TREE"
 FAKE_STATE_DIR="$TEST_TMP/fakestate"
 run_batch() { # <wrapper> <manifest> <rundir>; FAKE_TASK_EDIT optional
   [ -n "${KEEP_STATE:-}" ] || rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
-  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" FAKE_PROBE_SLEEP="${FAKE_PROBE_SLEEP:-}" FAKE_PROBE_FAIL_ONCE="${FAKE_PROBE_FAIL_ONCE:-}" ORCH_TIMEOUT=1m \
+  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" FAKE_PROBE_SLEEP="${FAKE_PROBE_SLEEP:-}" FAKE_PROBE_FAIL_ONCE="${FAKE_PROBE_FAIL_ONCE:-}" FAKE_MODEL="${FAKE_MODEL:-}" ORCH_TIMEOUT=1m \
     node "$1" --run --manifest "$2" --run-dir "$3" --clone "$CLONE" ${RUN_ARGS:-} >"$3.stdout" 2>"$3.stderr"
 }
 
@@ -471,7 +474,7 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm2")" 0 "raw hook log with 3 blocks
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm2")" 0 "RED raw hook log: mutant says OK"
 assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm")" 0 "RED BLOCKMAX -1: mutant says OK"
 # 4: the final timeout is computed once, before the first START artifact, and is what the harness call gets
-tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("W.writeProbe(ctx, id, home);");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
+tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("W.writeProbe(ctx, id, home, expiring);");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
 assert_eq "$(tmo_order "$WRAP")" "1:before" "one timeout computation, before ORDER/CMD/START"
 PRE_MUT="$TEST_TMP/mut-tmo2/run-p2-batch.js"; mkdir -p "$(dirname "$PRE_MUT")"; cp "$WRAP_SRC" "$PRE_MUT"
 mutate "$PRE_MUT" "    W.writeStartEnd(ctx, 'START', id, " "    const tmo2 = harnessTimeoutMs(ctx.elapsed(), m.window_s); void tmo2;
@@ -838,5 +841,64 @@ const known=new Set(w.LOG_SCHEMA.map(e=>e.kind));const fail=new Set(["STOP_COST"
 for(const k of new Set(kinds)){if(!known.has(k)&&!fail.has(k)){console.error("row kind written but not in the table:",k);bad++}}
 const prereg=fs.readFileSync(process.argv[3],"utf8");if(!prereg.includes(table)){console.error("PREREG appendix differs from --schema-table");bad++}
 process.exit(bad?1:0)' "$WRAP_SRC" "$0" "$REPO_ROOT/docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/PREREG.md"; assert_eq "$?" 0 "schema table: every row kind is listed, every field has its test, PREREG carries the table"
+
+echo "--- round 14: credential source, the auto-resume launcher, a model other than haiku-4-5"
+mkcred() { node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({claudeAiOauth:{accessToken:"x",expiresAt:Date.now()+Number(process.argv[2])*60000}}))' "$1" "$2"; chmod 600 "$1"; }
+mkcred "$TEST_TMP/cred-soon.json" 5; mkcred "$TEST_TMP/cred-fresh.json" 120
+RX="$TEST_TMP/run-expiring"
+RUN_ARGS="--credentials-source $TEST_TMP/cred-soon.json" run_batch "$WRAP" "$MAN" "$RX"; assert_eq "$?" 7 "source token 5 minutes from expiry: the first id pauses (exit 7)"
+assert_file_absent "$RX/runs/$(echo "$O1" | sed -n 1p | cut -d' ' -f2)"
+assert_eq "$(grep -c ' PROBE_FAIL ' "$RX/invocation.log")" 1 "expiring source: one PROBE_FAIL row"
+assert_contains "$(cat "$RX"/probes/*-1.json)" "source_token_expiring" "expiring source: the saved response names the reason"
+RUN_ARGS="--credentials-source $TEST_TMP/cred-fresh.json" KEEP_STATE=1 run_batch "$WRAP" "$MAN" "$RX"; assert_eq "$?" 0 "fresh source: the paused batch resumes and completes"
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$RX" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/rx-audit.out" 2>&1; assert_eq "$?" 0 "paused-on-expiry then resumed batch: audit OK ($(head -c 150 "$TEST_TMP/rx-audit.out"))"
+RUN_ARGS="--credentials-source $TEST_TMP/cred-soon.json" run_batch "$TEST_TMP/mut-noexpiry/run-p2-batch.js" "$MAN_NOEXP" "$TEST_TMP/run-noexp"; assert_neq "$?" 7 "RED expiring source: the mutant without the expiry check does not pause"
+# the launcher
+LOOP="$REPO_ROOT/evals/orchestration/run-p2-batch-loop.js"
+loop_run() { # <run-dir> <cred> [extra loop args]; fake claude on PATH, real HOME unused (credentials via --credentials-source)
+  local d="$1" c="$2"; shift 2; [ -n "${KEEP_STATE:-}" ] || rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
+  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 ORCH_TIMEOUT=1m FAKE_MODEL="${FAKE_MODEL:-}" \
+    node "$LOOP" --manifest "${LMAN:-$MAN}" --run-dir "$d" --clone "$CLONE" --credentials-source "$c" --wrapper "${LWRAP:-$WRAP}" --poll-s 0.2 "$@" >"$d.loop.out" 2>"$d.loop.err" </dev/null
+}
+RL1="$TEST_TMP/run-loop1"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop.json"
+( sleep 2; mkcred "$TEST_TMP/cred-loop.json" 120 ) &
+loop_run "$RL1" "$TEST_TMP/cred-loop.json"; assert_eq "$?" 0 "launcher: pause on an expiring source, restart once the source is fresh, batch completes"
+wait
+assert_contains "$(cat "$RL1/loop.status")" "ended rc=0" "launcher: final status line"
+assert_eq "$(grep -c ' PAUSE ' "$RL1/invocation.log")" 1 "launcher: one pause was written"
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$RL1" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/rl1-audit.out" 2>&1; assert_eq "$?" 0 "launcher batch: audit OK ($(head -c 150 "$TEST_TMP/rl1-audit.out"))"
+# window nearly used up: stops instead of restarting
+RL2="$TEST_TMP/run-loop2"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop2.json"
+loop_run "$RL2" "$TEST_TMP/cred-loop2.json" --min-window-s 999999; assert_eq "$?" 9 "launcher: window left below the minimum: stops with exit 9"
+assert_contains "$(cat "$RL2/loop.status")" "window_exhausted" "launcher: status says the window is exhausted"
+assert_eq "$(grep -c ' WRAPPER_START ' "$RL2/invocation.log")" 1 "launcher: no restart when the window is short"
+# a wrapper exit other than 7 is final
+RL3="$TEST_TMP/run-loop3"; mkdir -p "$RL3/runs/$(echo "$O1" | sed -n 1p | cut -d' ' -f2)"
+loop_run "$RL3" "$TEST_TMP/cred-fresh.json"; LRC=$?
+assert_neq "$LRC" 0 "launcher: a wrapper refusal ends the loop non-zero"
+assert_contains "$(cat "$RL3/loop.status")" "ended rc=" "launcher: the status records the final rc"
+assert_eq "$(grep -c ' WRAPPER_START ' "$RL3/invocation.log")" 1 "launcher: no second run after a non-7 exit"
+# restart limit
+RL4="$TEST_TMP/run-loop4"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop4.json"
+loop_run "$RL4" "$TEST_TMP/cred-loop4.json" --fresh-min 0 --max-restarts 1; assert_eq "$?" 9 "launcher: restart limit reached: exit 9"
+assert_contains "$(cat "$RL4/loop.status")" "restart_limit" "launcher: status says the restart limit"
+# negative controls for the launcher: a copy that ignores the window, and one that restarts after any exit code
+mkdir -p "$TEST_TMP/mut-loopwin" "$TEST_TMP/mut-loopany"; cp "$LOOP" "$TEST_TMP/mut-loopwin/l.js"; cp "$LOOP" "$TEST_TMP/mut-loopany/l.js"
+mutate "$TEST_TMP/mut-loopwin/l.js" "if (windowLeftS() < Number(o['min-window-s'])) { status(\`stopped window_exhausted left_s=\${Math.floor(windowLeftS())}\`); return 9; }
+      const exp" "const exp" || fail "loopwin mutant"
+mutate "$TEST_TMP/mut-loopwin/l.js" "    if (windowLeftS() < Number(o['min-window-s'])) { status(\`stopped window_exhausted left_s=\${Math.floor(windowLeftS())}\`); return 9; }
+    restarts++;" "    restarts++;" || fail "loopwin mutant 2"
+mutate "$TEST_TMP/mut-loopany/l.js" "if (rc !== 7) {" "if (rc === 0) {" || fail "loopany mutant"
+RL5="$TEST_TMP/run-loop5"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-loop5.json"
+LOOP="$TEST_TMP/mut-loopwin/l.js" loop_run "$RL5" "$TEST_TMP/cred-loop5.json" --min-window-s 999999 --fresh-min 0 --max-restarts 1 >/dev/null 2>&1
+assert_eq "$(grep -c ' WRAPPER_START ' "$RL5/invocation.log")" 2 "RED window: the launcher without the window check restarts although the window is short"
+RL6="$TEST_TMP/run-loop6"; mkdir -p "$RL6/runs/$(echo "$O1" | sed -n 1p | cut -d' ' -f2)"
+LOOP="$TEST_TMP/mut-loopany/l.js" loop_run "$RL6" "$TEST_TMP/cred-fresh.json" --fresh-min 0 --max-restarts 1 >/dev/null 2>&1
+assert_eq "$(grep -c ' WRAPPER_START ' "$RL6/invocation.log")" 2 "RED exit code: the launcher that restarts after any exit code runs the wrapper twice"
+# a model other than haiku-4-5 follows the manifest everywhere
+R55="$TEST_TMP/run-m55"; FAKE_MODEL=claude-haiku-5-5 run_batch "$WRAP" "$MAN_M55" "$R55"; assert_eq "$?" 0 "manifest model claude-haiku-5-5: the batch completes"
+assert_contains "$(cat "$R55"/cmd/ON-*.json | head -1)" "claude-haiku-5-5" "harness argv carries the manifest model"
+assert_eq "$(grep -c ' MODEL .* claude-haiku-5-5$' "$R55/invocation.log")" 6 "MODEL rows carry the resolved haiku-5-5 id"
+node "$WRAP" --audit --manifest "$MAN_M55" --run-dir "$R55" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/r55-audit.out" 2>&1; assert_eq "$?" 0 "haiku-5-5 batch: audit OK ($(head -c 150 "$TEST_TMP/r55-audit.out"))"
 
 finalize_test

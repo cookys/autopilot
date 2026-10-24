@@ -399,6 +399,9 @@ const OCJS = path.join(__dirname, 'opencode-containment.js');
   const p1 = path.join(root, 'probe1');
   cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'max', '--profile', 'probe', '--cwd', '/pc', '--version-string', '1.19.2', '--out', p1]);
   eq(nul(p1, 'argv.nul'), ['run', '--dir', '/pc', '--pure', '-m', 'p/m', '--agent', 'plan', '--variant', 'xhigh'], 'probe v1 argv unchanged');
+  const pd = path.join(root, 'probe1-default');
+  cli(['plan', '--bin', st, '--model', 'p/m', '--effort', 'default', '--profile', 'probe', '--cwd', '/pc', '--version-string', '1.19.2', '--out', pd]);
+  eq(nul(pd, 'argv.nul'), ['run', '--dir', '/pc', '--pure', '-m', 'p/m', '--agent', 'plan'], 'probe v1 default effort: no --variant (and never an empty one)');
 }
 
 // ── provider end-to-end, v2 adaptor ──

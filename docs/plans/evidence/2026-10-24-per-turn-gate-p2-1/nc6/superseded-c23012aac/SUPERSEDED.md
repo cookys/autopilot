@@ -1,0 +1,3 @@
+# Superseded: NC6 live against hook c23012aac
+
+This set (expected 4f37ce60d, result 357cde78d) tested `hooks/per-turn-gate.js` at c23012aac. The hook was changed afterwards (state lock with an owner token and two stages, no take-then-give-back; final version 8c725cde4), so these readings do not describe the shipped hook and are kept only as history. The current NC6 live result is in the parent directory. `run.sh` and `stub-verifier.js` stay in the parent directory and are unchanged; the hashes of those two files in the `sums.txt` here refer to files that are no longer in this directory (their content is the same, see the parent `sums.txt`).

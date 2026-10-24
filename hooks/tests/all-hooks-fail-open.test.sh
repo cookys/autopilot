@@ -27,6 +27,7 @@ HOOK_FILES=(
   hooks/large-file-warner.js
   hooks/log-error.js
   hooks/mcp-health.js
+  hooks/per-turn-gate.js
   hooks/reload-watch.js
   hooks/session-handoff.js
   hooks/session-summary.js

@@ -12,6 +12,7 @@
   "large-file-warner",
   "mcp-health",
   "orchestrator-edit-gate",
+  "per-turn-gate",
   "session-summary",
   "test-runner"
  ]

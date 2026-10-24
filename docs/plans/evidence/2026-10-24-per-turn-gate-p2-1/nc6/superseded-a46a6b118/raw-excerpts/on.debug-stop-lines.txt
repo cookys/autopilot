@@ -1,0 +1,6 @@
+first debug line: 2026-10-24T01:35:13.048Z
+2026-10-24T01:35:15.355Z [DEBUG] Hooks: Stop [node <SCRATCH>/ptg-p21/hooks/per-turn-gate.js] finished with status 0 (97ms)
+2026-10-24T01:35:15.358Z [DEBUG] "Hook Stop (Stop) success:\nstdout:\n{\"decision\":\"block\",\"reason\":\"The change you just made breaks project rule 1: `STUB-RULE: before stopping, reply with the single word PINEAPPLE`. Observed: `stub verifier always reports this`. Fix this without removing any feature you were asked for, and keep every other rule.\\n\"}\nstderr:\nautopilot: AUTOPILOT_LIVE_DIR=<MKTEMP>/on/live is not RAM-backed (ext4); using it as asked (slower, survives reboot)."
+2026-10-24T01:35:15.361Z [DEBUG] "Hook Stop (node <SCRATCH>/ptg-p21/hooks/per-turn-gate.js) returned permissionDecision: deny (reason: The change you just made breaks project rule 1: `STUB-RULE: before stopping, reply with the single word PINEAPPLE`. Observed: `stub verifier always reports this`. Fix this without removing any feature you were asked for, and keep every other rule.\n)"
+2026-10-24T01:35:17.882Z [DEBUG] Hooks: Stop [node <SCRATCH>/ptg-p21/hooks/per-turn-gate.js] finished with status 0 (53ms)
+2026-10-24T01:35:17.883Z [DEBUG] "Hook Stop (Stop) success:\nstderr:\nautopilot: AUTOPILOT_LIVE_DIR=<MKTEMP>/on/live is not RAM-backed (ext4); using it as asked (slower, survives reboot)."

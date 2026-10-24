@@ -66,4 +66,21 @@ Design + calibration harness: `docs/projects/_archive/2026/07/2026-07-09-m3-band
 
 `run-p2-batch.js` copies one credential file into each id's per-run home before its probe; the source is `$HOME/.claude/.credentials.json` or `--credentials-source F`. Start the wrapper with the real HOME (or point `--credentials-source` at the real file): a one-off HOME copy goes stale and every later id would copy the stale file. A source less than 10 minutes from `claudeAiOauth.expiresAt` makes the id pause (PROBE_FAIL, PAUSE, exit 7, saved response `source_token_expiring`, cost 0) without a call. `run-p2-batch-loop.js` reruns the wrapper from the paused id (`--first`) once the source is at least 30 minutes ahead, polling every 60 s, up to 20 restarts, and stops when the window is nearly used up; progress is in `<run-dir>/loop.status`. It only reads the expiry and never refreshes a token.
 
-Stopping a batch: one Ctrl-C (TERM or INT, to the launcher or straight to the wrapper) is a safe pause. The id that is running finishes, the next id pauses before its probe (PROBE_FAIL, PAUSE, reason `operator_stop`, exit 7), the launcher writes `stopped_by_operator` to `loop.status` and exits 0, and the batch resumes later (starting the launcher or the wrapper again clears `<run-dir>/stop.request`) and still audits. A second TERM or INT in a row gives up the batch: the launcher kills the wrapper's process group at once (status `aborted`), the log has no footer and the batch cannot be audited. After a SIGKILL of the launcher the wrapper (started with `--parent-pid`) lets the running id finish and pauses the next one with reason `parent_gone`, also a legal log. The launcher checks the remaining window before the first start too (a fresh batch has no `window.start` yet, so its window is whole). `CLAUDE_CONFIG_DIR` is unset for every child of the wrapper and the launcher, and `claude --version` runs in a throwaway home that holds no credentials.
+Stopping a batch: one Ctrl-C (TERM, INT or HUP, to the launcher or straight to the wrapper) is a safe pause. The id that is running finishes, the next id pauses before its probe (PROBE_FAIL, PAUSE, reason `operator_stop`, exit 7), the launcher writes `stopped_by_operator` to `loop.status` and exits 0, and the batch resumes later (starting the launcher or the wrapper again clears `<run-dir>/stop.request`) and still audits. A second TERM or INT in a row gives up the batch: the launcher kills the wrapper's process group at once (status `aborted`), the log has no footer and the batch cannot be audited. After a SIGKILL of the launcher the wrapper (started with `--parent-pid`) lets the running id finish and pauses the next one with reason `parent_gone`, also a legal log. The launcher checks the remaining window before the first start too (a fresh batch has no `window.start` yet, so its window is whole). Every `CLAUDE*` and `ANTHROPIC*` variable and the XDG config, data, state and cache homes are removed from every child of the wrapper and the launcher, and `claude --version` runs in a throwaway home that holds no credentials.
+
+Sweep table (what each call site and path does), kept with the tests in `hooks/tests/p2-batch-wrapper.test.sh`:
+
+| Class | Instance | Handling |
+|---|---|---|
+| claude child environment | `claude --version` (writeVersion) | throwaway `homes/_version` (onboarding file only), scrubbed env |
+| | auth probe (writeProbe) | per-run home, scrubbed env |
+| | harness call, and the claude it starts | per-run home, scrubbed env |
+| | git calls of the wrapper | same `env -u` prefix (no claude) |
+| | launcher to wrapper | `scrubEnv` of the launcher's environment |
+| termination | first TERM, INT or HUP to the launcher or the wrapper | safe pause: running id finishes, next id PAUSE `operator_stop`, legal log, resumable |
+| | second signal | hard stop, no footer, not auditable |
+| | SIGKILL of the launcher | wrapper pauses the next id (`parent_gone`), legal log, resumable |
+| | SIGKILL of the wrapper, harness killed with the wrapper, reboot | torn log, not auditable (label U) |
+| | harness or claude child dies by itself | END rc not 0, counted by the completion rule, legal |
+| time and window | `window.start`, `elapsed`, `expiresAt` | all epoch milliseconds from the local clock; seconds-valued `expiresAt` is normalised; window and margins in seconds or minutes by option name |
+| resume position | launcher `--first` | first id with no `runs/<id>`; the wrapper refuses a skip (previous id unfinished) and writes COSTCHK and VERSION once per id |

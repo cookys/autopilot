@@ -18,7 +18,7 @@
 // (access token expired, refresh token rotated by the main CLI) and every later id would copy that stale file. When the source's
 // claudeAiOauth.expiresAt is less than 10 minutes away the id is neither copied nor probed: it pauses (PROBE_FAIL, PAUSE, exit 7)
 // with a saved response that says auth_ok false, reason source_token_expiring, cost 0. A source without expiresAt is not judged.
-// Stop: the first TERM or INT (or a file <run-dir>/stop.request) is a safe pause: the running id finishes, the next id pauses before its
+// Stop: the first TERM, INT or HUP (or a file <run-dir>/stop.request) is a safe pause: the running id finishes, the next id pauses before its
 // probe (PROBE_FAIL, PAUSE, exit 7, reason operator_stop) and the batch resumes later; a second TERM or INT ends the process at once.
 // --parent-pid P (set by run-p2-batch-loop.js): when that process is gone (the wrapper was re-parented or P no longer exists) the next
 // id pauses before its probe (PROBE_FAIL, PAUSE, exit 7, reason parent_gone), so a killed launcher leaves no wrapper starting new ids.
@@ -43,8 +43,13 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 /** Set in the batch worker: a shared flag the main thread raises on the first TERM or INT. */
 let STOP = null;
 
-// CLAUDE_CONFIG_DIR is unset for every child: with it set, claude would read that directory (possibly the real ~/.claude) instead of the per-run home.
-const ENV_PREFIX = ['env', '-u', 'AUTOPILOT_SESSION_ID', '-u', 'CLAUDE_CODE_SESSION_ID', '-u', 'CLAUDE_CONFIG_DIR'];
+// Every child runs with the variables that could point claude at the real configuration or change how it authenticates removed:
+// every CLAUDE* and ANTHROPIC* variable (CLAUDE_CONFIG_DIR, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_TOKEN, ...) and the
+// XDG config, data, state and cache homes. HOME is replaced per call (the per-run home, or the credential-free version home).
+const SCRUB_RE = /^(CLAUDE|ANTHROPIC)|^XDG_(CONFIG|DATA|STATE|CACHE)_HOME$/;
+const scrubEnv = (env) => { const o = { ...env }; for (const k of Object.keys(o)) if (SCRUB_RE.test(k)) delete o[k]; return o; };
+const SCRUB_KEYS = [...new Set(['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', ...Object.keys(process.env).filter((k) => SCRUB_RE.test(k))])];
+const ENV_PREFIX = ['env', ...SCRUB_KEYS.flatMap((k) => ['-u', k])];
 const AUTH_RE = /failed to authenticate|oauth session expired|authentication_failed/i;
 const PROJECTION_AFTER = 5;
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -427,7 +432,11 @@ const CRED_MIN_AHEAD_MS = 10 * 60 * 1000;
 const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 /** claudeAiOauth.expiresAt (epoch ms) of a credential file, or null when it carries none (nothing to judge). */
 function credExpiresAt(file) {
-  try { const e = JSON.parse(fs.readFileSync(file, 'utf8')).claudeAiOauth.expiresAt; return Number.isFinite(e) ? e : null; } catch (_e) { return null; }
+  try {
+    const e = JSON.parse(fs.readFileSync(file, 'utf8')).claudeAiOauth.expiresAt;
+    if (!Number.isFinite(e) || e <= 0) return null;
+    return e < 1e11 ? e * 1000 : e; // epoch seconds (about 1.7e9) are read as seconds; the CLI writes milliseconds (about 1.7e12)
+  } catch (_e) { return null; }
 }
 
 function runBatch(ctx, first, last) {
@@ -1258,7 +1267,7 @@ function runInWorker() {
   const sab = new SharedArrayBuffer(4);
   const flag = new Int32Array(sab);
   let code = 3, n = 0;
-  for (const [name, c] of [['SIGTERM', 143], ['SIGINT', 130]]) process.on(name, () => { n++; if (n === 1) Atomics.store(flag, 0, 1); else process.exit(c); });
+  for (const [name, c] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) process.on(name, () => { n++; if (n === 1) Atomics.store(flag, 0, 1); else process.exit(c); });
   const w = new Worker(__filename, { argv: process.argv.slice(2), workerData: { sab } });
   w.on('message', (m) => { code = m.code; });
   w.on('error', (e) => { process.stderr.write(`${e && e.stack}\n`); code = 3; });
@@ -1270,4 +1279,4 @@ if (require.main === module) {
   else if (!isMainThread) { STOP = new Int32Array(workerData.sab); parentPort.postMessage({ code: main(process.argv.slice(2)) }); } else process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = { schemaTable, credExpiresAt, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };
+module.exports = { schemaTable, credExpiresAt, scrubEnv, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

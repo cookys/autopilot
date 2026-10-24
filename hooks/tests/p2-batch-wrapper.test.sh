@@ -126,7 +126,9 @@ mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL
 mk_mut noexpiry "const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;" "const expiring = false;"
 MAN_NOEXP="$CLONE/prereg/manifest-noexpiry-mutant.json"; make_manifest "$TEST_TMP/mut-noexpiry/run-p2-batch.js" "$MAN_NOEXP"
 MAN_M55="$CLONE/prereg/manifest-haiku55.json"; MAN_MODEL=claude-haiku-5-5 make_manifest "$WRAP" "$MAN_M55"
-mk_mut nocfgunset "'-u', 'CLAUDE_CODE_SESSION_ID', '-u', 'CLAUDE_CONFIG_DIR'];" "'-u', 'CLAUDE_CODE_SESSION_ID'];"
+mk_mut nocfgunset ".filter((k) => SCRUB_RE.test(k))" ".filter((k) => false)"
+mk_mut secondsunit "const CRED_MIN_AHEAD_MS = 10 * 60 * 1000;" "const CRED_MIN_AHEAD_MS = 10 * 60;"
+MAN_SECS="$CLONE/prereg/manifest-secs-mutant.json"; make_manifest "$TEST_TMP/mut-secondsunit/run-p2-batch.js" "$MAN_SECS"
 MAN_NOCFG="$CLONE/prereg/manifest-nocfg-mutant.json"; make_manifest "$TEST_TMP/mut-nocfgunset/run-p2-batch.js" "$MAN_NOCFG"
 mk_mut nopar "const orphan = ctx.parentPid ?" "const orphan = false && ctx.parentPid ?"
 MAN_NOPAR="$CLONE/prereg/manifest-nopar-mutant.json"; make_manifest "$TEST_TMP/mut-nopar/run-p2-batch.js" "$MAN_NOPAR"
@@ -981,15 +983,53 @@ RC2="$TEST_TMP/run-cfg-mut"; CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" run_batch "$TE
 assert_contains "$(cat "$FAKE_STATE_DIR/cfgdir.seen")" "extcfg" "RED: the wrapper without the unset hands the outside CLAUDE_CONFIG_DIR to claude"
 # the launcher drops it too (stub wrapper records what it was started with)
 mkdir -p "$TEST_TMP/stubw"; cat >"$TEST_TMP/stubw/w.js" <<'JS'
-const fs = require('fs'); module.exports = { makeOrder: () => [{ id: 'X-01' }], credExpiresAt: () => null };
+const fs = require('fs'); module.exports = { makeOrder: () => [{ id: 'X-01' }], credExpiresAt: () => null, scrubEnv: require(process.env.REAL_WRAP).scrubEnv };
 if (require.main === module) fs.writeFileSync(process.env.STUB_OUT, process.env.CLAUDE_CONFIG_DIR || 'unset');
 JS
-mkdir -p "$TEST_TMP/mut-loopcfg"; cp "$LOOP" "$TEST_TMP/mut-loopcfg/l.js"; mutate "$TEST_TMP/mut-loopcfg/l.js" "delete env.CLAUDE_CONFIG_DIR;" "" || fail "loopcfg mutant"
+mkdir -p "$TEST_TMP/mut-loopcfg"; cp "$LOOP" "$TEST_TMP/mut-loopcfg/l.js"; mutate "$TEST_TMP/mut-loopcfg/l.js" "const env = w.scrubEnv(process.env);" "const env = { ...process.env };" || fail "loopcfg mutant"
 for pair in "real:$LOOP" "mut:$TEST_TMP/mut-loopcfg/l.js"; do
-  STUB_OUT="$TEST_TMP/stub.out.${pair%%:*}" CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" node "${pair#*:}" --manifest "$MAN" --run-dir "$TEST_TMP/run-stub-${pair%%:*}" --clone "$CLONE" --wrapper "$TEST_TMP/stubw/w.js" </dev/null >/dev/null 2>&1
+  REAL_WRAP="$WRAP_SRC" STUB_OUT="$TEST_TMP/stub.out.${pair%%:*}" CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" node "${pair#*:}" --manifest "$MAN" --run-dir "$TEST_TMP/run-stub-${pair%%:*}" --clone "$CLONE" --wrapper "$TEST_TMP/stubw/w.js" </dev/null >/dev/null 2>&1
 done
 assert_eq "$(cat "$TEST_TMP/stub.out.real")" "unset" "launcher starts the wrapper without CLAUDE_CONFIG_DIR"
 assert_contains "$(cat "$TEST_TMP/stub.out.mut")" "extcfg" "RED: the launcher without the delete passes CLAUDE_CONFIG_DIR on"
+# every CLAUDE*, ANTHROPIC* and XDG home variable is gone from every claude child (probe, --version, turns)
+RE1="$TEST_TMP/run-envscrub"
+CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" CLAUDE_CODE_OAUTH_TOKEN=tok ANTHROPIC_API_KEY=key ANTHROPIC_BASE_URL=http://example.invalid CLAUDECODE=1 XDG_CONFIG_HOME="$TEST_TMP/xdg" run_batch "$WRAP" "$MAN" "$RE1"; assert_eq "$?" 0 "batch with CLAUDE*, ANTHROPIC* and XDG variables exported outside completes"
+assert_eq "$(cat "$FAKE_STATE_DIR/claude.env.seen" | wc -l | tr -d ' ')" 0 "no CLAUDE*, ANTHROPIC* or XDG_*_HOME variable reaches any claude child"
+RE2="$TEST_TMP/run-envscrub-mut"
+CLAUDE_CONFIG_DIR="$TEST_TMP/extcfg" ANTHROPIC_API_KEY=key XDG_CONFIG_HOME="$TEST_TMP/xdg" run_batch "$TEST_TMP/mut-nocfgunset/run-p2-batch.js" "$MAN_NOCFG" "$RE2"
+assert_contains "$(cat "$FAKE_STATE_DIR/claude.env.seen")" "ANTHROPIC_API_KEY=key" "RED: the wrapper that scrubs nothing hands ANTHROPIC_API_KEY to claude"
+# time units: expiresAt is read in milliseconds (seconds are normalised), 9 minutes ahead pauses, 11 minutes ahead goes on
+node -e 'const w=require(process.argv[1]),fs=require("fs"),d=process.argv[2];const wr=(n,v)=>{fs.writeFileSync(d+"/"+n,JSON.stringify({claudeAiOauth:{expiresAt:v}}));return d+"/"+n};
+const now=Date.now();const ok=(a,b,m)=>{if(a!==b){console.error("FAIL "+m+": "+a+" vs "+b);process.exit(1)}};
+ok(w.credExpiresAt(wr("ms",now+7200000))>now,true,"ms");ok(Math.abs(w.credExpiresAt(wr("sec",Math.floor(now/1000)+7200))-(now+7200000))<2000,true,"seconds normalised");
+ok(w.credExpiresAt(wr("str","soon")),null,"string");ok(w.credExpiresAt(wr("neg",-5)),null,"negative");ok(w.credExpiresAt(d+"/absent"),null,"absent")' "$WRAP_SRC" "$TEST_TMP" || fail "credExpiresAt units"
+assert_eq "$?" 0 "credExpiresAt: milliseconds as is, seconds normalised, other values not judged"
+mkcred "$TEST_TMP/cred-9.json" 9; mkcred "$TEST_TMP/cred-11.json" 11
+RU1="$TEST_TMP/run-u9"; RUN_ARGS="--credentials-source $TEST_TMP/cred-9.json" run_batch "$WRAP" "$MAN" "$RU1"; assert_eq "$?" 7 "source 9 minutes from expiry: pause"
+RU2="$TEST_TMP/run-u11"; RUN_ARGS="--credentials-source $TEST_TMP/cred-11.json --last 1" run_batch "$WRAP" "$MAN" "$RU2"; assert_eq "$?" 0 "source 11 minutes from expiry: the id runs"
+RU3="$TEST_TMP/run-u9mut"; RUN_ARGS="--credentials-source $TEST_TMP/cred-9.json" run_batch "$TEST_TMP/mut-secondsunit/run-p2-batch.js" "$MAN_SECS" "$RU3"; assert_neq "$?" 7 "RED: an expiry margin in the wrong unit lets a 9-minute token through"
+# HUP is a safe pause like TERM and INT
+life hup "$LOOP" "$MAN" "$WRAP" HUP; safe_stop_checks "HUP once"
+# a kill -9 of the wrapper itself (or a reboot) tears the log: the batch cannot be audited and says so
+RK="$TEST_TMP/run-kill9wrapper"; rm -rf "$FAKE_STATE_DIR" "$RK"; mkdir -p "$FAKE_STATE_DIR"
+env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 ORCH_TIMEOUT=1m FAKE_PROBE_SLEEP=3 \
+  node "$WRAP" --run --manifest "$MAN" --run-dir "$RK" --clone "$CLONE" >"$RK.out" 2>&1 </dev/null &
+WP=$!; sleep 1; kill -KILL "$WP"; wait "$WP" 2>/dev/null
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$RK" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/rk-audit.out" 2>&1; assert_neq "$?" 0 "kill -9 of the wrapper: the torn log fails the audit"
+# several pauses of different kinds in one batch: every id runs exactly once, in order, and the batch audits
+RM="$TEST_TMP/run-multipause"; cp "$TEST_TMP/cred-soon.json" "$TEST_TMP/cred-mp.json"; rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
+( sleep 2; mkcred "$TEST_TMP/cred-mp.json" 120 ) &
+KEEP_STATE=1 loop_run "$RM" "$TEST_TMP/cred-mp.json"; assert_eq "$?" 0 "multi-pause batch: the launcher pauses on the expiring source, resumes, and completes"
+wait
+RUN_ARGS="--credentials-source $TEST_TMP/cred-fresh.json --first 4 --last 4" KEEP_STATE=1 run_batch "$WRAP" "$MAN" "$TEST_TMP/run-multipause-b" >/dev/null 2>&1
+assert_eq "$(grep ' START ' "$RM/invocation.log" | awk '{print $3}' | sort | uniq -d | wc -l | tr -d ' ')" 0 "multi-pause batch: no id was started twice"
+assert_eq "$(grep -c ' START ' "$RM/invocation.log")" 6 "multi-pause batch: every id was started"
+assert_eq "$(grep ' ORDER ' "$RM/invocation.log" | awk '{print $3}' | tr '\n' ' ')" "$(echo "$O1" | awk '{print $2}' | tr '\n' ' ')" "multi-pause batch: ids ran in the seeded order"
+# RED: a launcher that resumes one position too late skips the paused id (after an operator stop at id 2)
+mkdir -p "$TEST_TMP/mut-loopskip"; cp "$LOOP" "$TEST_TMP/mut-loopskip/l.js"; mutate "$TEST_TMP/mut-loopskip/l.js" "if (next > 1) args.push('--first', String(next));" "if (next > 1) args.push('--first', String(next + 1));" || fail "loopskip mutant"
+life skip "$LOOP" "$MAN" "$WRAP" TERM
+LOOP="$TEST_TMP/mut-loopskip/l.js" KEEP_STATE=1 loop_run "$LIFE_DIR" "$TEST_TMP/cred-fresh.json"; assert_neq "$?" 0 "RED: a launcher that resumes at the wrong position does not complete the batch"
 # a model other than haiku-4-5 follows the manifest everywhere
 R55="$TEST_TMP/run-m55"; FAKE_MODEL=claude-haiku-5-5 run_batch "$WRAP" "$MAN_M55" "$R55"; assert_eq "$?" 0 "manifest model claude-haiku-5-5: the batch completes"
 assert_contains "$(cat "$R55"/cmd/ON-*.json | head -1)" "claude-haiku-5-5" "harness argv carries the manifest model"

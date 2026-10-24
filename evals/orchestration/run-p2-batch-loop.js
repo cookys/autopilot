@@ -13,7 +13,7 @@
 // file: it only reads the expiry. Start it with the real HOME (see run-p2-batch.js).
 // Lifecycle: the FIRST TERM or INT is a safe pause: the launcher writes <run-dir>/stop.request, tells the wrapper (which only raises a
 // flag), waits while the running id finishes and the next id pauses with reason operator_stop, writes the status `stopped_by_operator`
-// and exits 0; the batch resumes later (the next start clears the request). A SECOND TERM or INT kills the wrapper's whole process
+// and exits 0; the batch resumes later (the next start clears the request). A SECOND signal kills the wrapper's whole process
 // group at once (status `aborted`; such a batch cannot be audited) and exits 128+n. The wrapper gets --parent-pid, so after a SIGKILL
 // of the launcher it pauses before its next id with reason parent_gone. The running wrapper's pid is in <run-dir>/loop.wrapper.pid.
 // Exit code: the last wrapper exit code, 9 when it stopped for the window or the restart limit, 0 after a safe stop, 128+n after a hard one.
@@ -51,7 +51,7 @@ async function main(argv) {
   const stopFile = path.join(runDir, 'stop.request');
   fs.rmSync(stopFile, { force: true });
   let child = null, signalled = 0, signals = 0, hard = false;
-  for (const [name, num] of [['SIGTERM', 15], ['SIGINT', 2]]) {
+  for (const [name, num] of [['SIGTERM', 15], ['SIGINT', 2], ['SIGHUP', 1]]) {
     process.on(name, () => {
       signals++; signalled = num;
       if (signals === 1) { try { fs.writeFileSync(stopFile, `${new Date().toISOString()} ${name}\n`); } catch (_e) { /* status shows it */ } if (child) { try { process.kill(child.pid, name); } catch (_e) { /* gone */ } } } else { hard = true; if (child) { try { process.kill(-child.pid, 'SIGKILL'); } catch (_e) { /* gone */ } } }
@@ -66,7 +66,7 @@ async function main(argv) {
     if (next > 1) args.push('--first', String(next));
     if (o['credentials-source']) args.push('--credentials-source', credFile);
     status(`running restarts=${restarts} first=${next || 1}`);
-    const env = { ...process.env }; delete env.CLAUDE_CONFIG_DIR; // the wrapper's claude children must use the per-run home only
+    const env = w.scrubEnv(process.env); // no CLAUDE*, ANTHROPIC* or XDG home reaches the wrapper's claude children
     child = spawn(process.execPath, args, { stdio: 'inherit', env, detached: true }); // own process group, so the hard stop reaches the wrapper's children too
     fs.writeFileSync(path.join(runDir, 'loop.wrapper.pid'), `${child.pid}\n`);
     const rc = await new Promise((res) => child.on('exit', (code, sig) => res(code === null ? 128 + (sig === 'SIGTERM' ? 15 : 9) : code)));

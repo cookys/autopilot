@@ -57,6 +57,15 @@ AUD_MUT="$TEST_TMP/mut-audit/run-p2-batch.js"; mkdir -p "$(dirname "$AUD_MUT")";
 mutate "$AUD_MUT" "function audit(runDir, m, clone, opts) {" "function audit(runDir, m, clone, opts) { return [];" || fail "audit mutant could not be built"
 POST_MUT="$TEST_TMP/mut-post/run-p2-batch.js"; mkdir -p "$(dirname "$POST_MUT")"; cp "$WRAP_SRC" "$POST_MUT"
 mutate "$POST_MUT" "try { W.writeTaskHash(ctx, 'post'); } catch (e) {" "try { /* post listing removed */ } catch (e) {" || fail "post mutant could not be built"
+mk_mut() { # <name> then pairs: <old> <new> ...; builds $TEST_TMP/mut-<name>/run-p2-batch.js
+  local n="$1" f; shift; f="$TEST_TMP/mut-$n/run-p2-batch.js"; mkdir -p "$(dirname "$f")"; cp "$WRAP_SRC" "$f"
+  while [ $# -ge 2 ]; do mutate "$f" "$1" "$2" || fail "mutant $n could not be built"; shift 2; done
+}
+mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need("
+mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap,"
+mk_mut prereg "else if (pr.length) {" "else if (false) {"
+mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
+MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
 # manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
 MAN_MUT="$CLONE/prereg/manifest-audit-mutant.json"; make_manifest "$AUD_MUT" "$MAN_MUT"
@@ -149,5 +158,42 @@ if nc8 "$WRAP" "$MAN" "$TEST_TMP/run-nc8-real"; then echo "NC8 green: real wrapp
 if nc8 "$POST_MUT" "$MAN_POST" "$TEST_TMP/run-nc8-mut"; then fail "NC8 mutant (no post listing) passed: the control cannot go red"; else echo "NC8 red: wrapper without the post listing writes no TASKHASH_DIFF post fail"; fi
 assert_eq "$(grep -c 'TASKHASH_DIFF post fail' "$TEST_TMP/run-nc8-mut/invocation.log" 2>/dev/null || true)" 0 "NC8 red: mutant leaves no post fail line"
 assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
+
+echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
+audit_rc() { node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
+tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
+# 1 several models in every MODEL row
+tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-model")" 0 "multi-model rows: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-model/run-p2-batch.js" "$TEST_TMP/t-model")" 0 "RED multi-model: audit without the per-row check says OK"
+# 2 last COST row inflated
+tamper cost; python3 - "$TEST_TMP/t-cost/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n')
+i = max(k for k, l in enumerate(L) if ' COST ' in l); L[i] = re.sub(r'run=\S+', 'run=999.000000', L[i]); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cost")" 0 "last COST row 999: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-cost/run-p2-batch.js" "$TEST_TMP/t-cost")" 0 "RED last COST row: audit without the spend recomputation says OK"
+# 3 preregistration modified / removed from the index afterwards
+echo "edited after the batch" >>"$CLONE/prereg/PREREG.md"
+assert_neq "$(audit_rc "$WRAP" "$R1")" 0 "modified PREREG: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-prereg/run-p2-batch.js" "$R1")" 0 "RED modified PREREG: audit trusting the logged ancestor=yes says OK"
+git -C "$CLONE" checkout -q -- prereg/PREREG.md
+git -C "$CLONE" rm -q --cached prereg/PREREG.md
+assert_neq "$(audit_rc "$WRAP" "$R1")" 0 "PREREG removed from the index: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-prereg/run-p2-batch.js" "$R1")" 0 "RED PREREG removed from the index: mutant says OK"
+git -C "$CLONE" reset -q HEAD -- prereg/PREREG.md
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "PREREG restored: real audit OK again"
+# 4 probe counted once: running total equals the sum of runs and probes, id by id
+node -e '
+const fs=require("fs");const log=fs.readFileSync(process.argv[1]+"/invocation.log","utf8").split("\n");
+const probes=fs.readFileSync(process.argv[1]+"/probes.tsv","utf8").split("\n").filter(Boolean).map(l=>l.split("\t"));
+const run={},pr={};for(const [id,,c] of probes)pr[id]=Number(c);
+const tot={ON:0,C:0};let bad=0,n=0;
+for(const l of log){const m=/ COST (\S+) arm=(\S+) run=(\S+) probe=(\S+) running=(\S+)/.exec(l);if(!m)continue;n++;
+ tot[m[2]]+=Number(m[3])+pr[m[1]];if(Math.abs(tot[m[2]]-Number(m[5]))>5e-4){bad++;console.error("running mismatch",m[1],m[5],tot[m[2]].toFixed(4))}}
+process.exit(n===6&&!bad?0:1)' "$R1"; assert_eq "$?" 0 "COST running equals the id-by-id sum of runs and probes"
+R2="$TEST_TMP/run-probe-mut"; run_batch "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE" "$R2"
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN_PROBE" --run-dir "$R2" --clone "$CLONE" >/dev/null 2>&1; echo $?)" 0 "RED probe double count: a batch written with the double-counting writer fails the audit"
 
 finalize_test

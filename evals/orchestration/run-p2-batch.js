@@ -204,6 +204,7 @@ const W = {
       if (g(['status', '--porcelain', '--', rel]).stdout.trim()) throw new Exit(3, `ABORT ${what} modified`);
     }
     ctx.log('HASH', `manifest ${sha256(fs.readFileSync(ctx.manifestPath))}`);
+    ctx.log('HASH', `prereg ${sha256(fs.readFileSync(path.join(ctx.clone, m.prereg)))}`);
     const hash = g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim();
     const time = g(['log', '-1', '--format=%cI', '--', m.prereg]).stdout.trim();
     const anc = g(['merge-base', '--is-ancestor', hash, 'HEAD']).status === 0 ? 'yes' : 'no';
@@ -288,8 +289,9 @@ const W = {
     ctx.log('BLOCKMAX', `${id} ${Math.max(0, ...Object.values(per))}`);
   },
   writeCost(ctx, id, arm, runCost, probeCost) {
+    // probes.tsv already holds this id's probe (written before the run), so it is not added a second time.
     const a = armSpend(ctx, arm);
-    const p = projectCost({ runCosts: [...a.runCosts, runCost], probeSpent: a.probeSpent + probeCost, total: ctx.manifest.n_per_arm, cap: ctx.manifest.arms[arm].cap, probeCost: ctx.manifest.probe_cost });
+    const p = projectCost({ runCosts: [...a.runCosts, runCost], probeSpent: a.probeSpent, total: ctx.manifest.n_per_arm, cap: ctx.manifest.arms[arm].cap, probeCost: ctx.manifest.probe_cost });
     ctx.log('COST', `${id} arm=${arm} run=${runCost.toFixed(6)} probe=${probeCost.toFixed(6)} running=${p.spent.toFixed(4)} projected=${p.projected.toFixed(4)}`);
   },
 };
@@ -469,7 +471,8 @@ function audit(runDir, m, clone, opts) {
   // 9 model
   const models = new Set(by('MODEL').map((r) => r.rest.slice(idOf(r).length + 1)));
   need(by('MODEL').length === ids.length, 'a MODEL line is missing');
-  need(models.size === 1 && !models.has('unknown'), `resolved model ids are not a single known value: ${[...models].join(',')}`);
+  need(models.size === 1 && !models.has('unknown'), `resolved model ids are not a single known value: ${[...models].join(' | ')}`);
+  for (const r of by('MODEL')) need(/^[^\s,]+$/.test(r.rest.slice(idOf(r).length + 1)), `${idOf(r)}: MODEL must be exactly one model id (got "${r.rest.slice(idOf(r).length + 1)}")`);
   // 10 hook only in ON
   for (const o of order) {
     const h = byId('HOOKCOUNT', o.id);
@@ -508,9 +511,38 @@ function audit(runDir, m, clone, opts) {
     if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
+  // Actual spend per arm, re-derived from every COST row and probes.tsv (not from the wrapper's own pre-launch checks).
+  for (const arm of ['ON', 'C']) {
+    const armIds = ids.filter((i) => i.startsWith(`${arm}-`));
+    let runSum = 0;
+    for (const id of armIds) {
+      const c = byId('COST', id)[0];
+      if (!c) continue;
+      runSum += Number(kvOf(c.rest).run);
+      const probeSum = probeRows.filter(([pid]) => armIds.indexOf(pid) >= 0 && armIds.indexOf(pid) <= armIds.indexOf(id)).reduce((x, q) => x + Number(q[2]), 0);
+      need(Math.abs(Number(kvOf(c.rest).running) - (runSum + probeSum)) < 5e-4, `${id}: COST running ${kvOf(c.rest).running} differs from the sum of runs and probes ${(runSum + probeSum).toFixed(4)}`);
+    }
+    const total = runSum + probeRows.filter(([pid]) => pid.startsWith(`${arm}-`)).reduce((x, q) => x + Number(q[2]), 0);
+    need(total <= m.arms[arm].cap, `${arm}: actual spend ${total.toFixed(4)} exceeds the cap ${m.arms[arm].cap}`);
+  }
   // 14 prereg and hashes
   const pr = by('PREREG');
   need(pr.length >= 1 && pr.every((r) => r.rest.endsWith('ancestor=yes')), 'PREREG missing or not an ancestor of HEAD');
+  // Re-check the preregistration now, not from what the wrapper logged at the start.
+  if (!clone) fails.push('audit needs --clone to re-check the preregistration');
+  else if (pr.length) {
+    const ex = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+    const g = (a) => ex(['git', '-C', clone, ...a]);
+    const mrel = path.relative(clone, (opts && opts.manifestPath) || '');
+    const logged = (k) => { const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `)); return h.length ? h[0].rest.split(' ')[1] : null; };
+    for (const [what, rel, key] of [['PREREG note', m.prereg, 'prereg'], ['manifest', mrel, 'manifest']]) {
+      need(g(['ls-files', '--error-unmatch', rel]).status === 0, `${what} is no longer tracked`);
+      need(g(['status', '--porcelain', '--', rel]).stdout.trim() === '', `${what} is modified`);
+      let now = null; try { now = sha256(fs.readFileSync(path.join(clone, rel))); } catch (_e) { /* below */ }
+      need(now !== null && now === logged(key), `${what} content hash differs from the value logged at the start`);
+    }
+    need(g(['merge-base', '--is-ancestor', pr[0].rest.split(' ')[0], 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
+  }
   const win = by('WINDOW_START')[0], firstStart = by('START')[0];
   if (pr.length && win && firstStart) {
     const prTime = Date.parse(pr[0].rest.split(' ')[1]);
@@ -551,7 +583,7 @@ function selfcheck(wrapperPath) {
     const taskDir = path.join(clone, 'evals', 'orchestration', 'tasks', 'syn');
     fs.mkdirSync(taskDir, { recursive: true }); fs.mkdirSync(runDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, 'task.md'), 'synthetic task\n');
-    fs.writeFileSync(path.join(clone, 'hook.js'), 'hook\n'); fs.writeFileSync(path.join(clone, 'harness.sh'), 'harness\n');
+    fs.writeFileSync(path.join(clone, 'PREREG.md'), 'prereg\n'); fs.writeFileSync(path.join(clone, 'hook.js'), 'hook\n'); fs.writeFileSync(path.join(clone, 'harness.sh'), 'harness\n');
     fs.writeFileSync(path.join(clone, 'expected.txt'), taskListing(taskDir));
     const n = 3;
     const m = {
@@ -604,7 +636,7 @@ function selfcheck(wrapperPath) {
       say(`row ${i + 1} ${r.key}: ${missing.length ? `NO WRITER OUTPUT (${missing.join(', ')})` : 'written'}`);
       bad += missing.length ? 1 : 0;
     });
-    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json') });
+    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: () => ({ status: 0, stdout: '' }) });
     say(`synthetic batch: ${2 * n} ids, wrapper rc=${code}, audit ${fails.length ? `FAIL (${fails.join('; ')})` : 'PASS'}`);
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).

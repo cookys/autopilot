@@ -25,3 +25,7 @@ Each test holds a check for the real code and runs the same check against a muta
 ## Cost correction (depth-0 ruling, after the first PREREG commit)
 
 The first draft projected `spent + r x (mean + 2 sd + probe)` with caps C 17 / ON 31 and would have stopped the C arm before id 6 on P1-like costs (projected 20.30). Corrected to `spent + r x (mean + probe) + 2 sd x sqrt(r)` with caps C 18 / ON 30 (total 48). Red then green, both in `p2-batch-wrapper.test.sh`: on the old wrapper "P1 first five costs, cap 18: no STOP_COST" failed (`red-projection-old.txt`, projected 20.30); on the new one it passes (17.57), the 1.25-scaled costs stop, and a mutant that never stops fails the inflated-cost assertion.
+
+## Acceptance round 1 fixes
+
+Audit hardening, each red before green in `p2-batch-wrapper.test.sh` (red = a mutant of the audit or writer without the fix, run on the tampered or double-counted data): every `MODEL` row must be exactly one id (rows `a,b` were accepted); the audit re-derives each arm's actual spend from all `COST` rows and `probes.tsv` against the cap (a last `COST` of 999 was accepted); PREREG note and manifest are re-checked at audit time (tracked, unmodified, hash equal to the logged value, recorded commit an ancestor of HEAD); the `COST` running total no longer adds the probe a second time (asserted id by id, and a batch written by the double-counting writer fails the audit).

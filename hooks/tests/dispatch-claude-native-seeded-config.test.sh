@@ -117,4 +117,29 @@ for kind in review author; do
   ccshim_ok "$OLD" "$kind"; assert_neq "0" "$?" "negative control: $kind cc-shim without the unset is detected"
 done
 
+# An EXTERNAL CLAUDE_CONFIG_DIR (fake "operator" dir with credentials and a settings.json) exported before a
+# suite sources lib.sh must be dropped by lib.sh: a native case that never called the helper fails closed
+# (exit 2, stub never launched) instead of seeding from the external dir. Negative control: lib.sh without
+# its unset lets the external dir through (exit 0, stub launched).
+EXT="$TEST_TMP/external-config"; mkdir -p "$EXT"
+printf '{"claudeAiOauth":{"accessToken":"ext"}}\n' > "$EXT/.credentials.json"; printf '{}\n' > "$EXT/settings.json"
+LEAK_INNER="$TEST_TMP/leak-inner.sh"
+cat > "$LEAK_INNER" <<'INNER'
+. "$1"
+export TMPDIR="$OUTER_TMP/leak-tmp"; mkdir -p "$TMPDIR"
+rm -f "$STUB_REC"
+"$2/dispatch-author.sh" --runner claude-native --model m --prompt-file "$OUTER_TMP/p.txt" --bin "$STUB" --timeout 20s >/dev/null 2>&1 < /dev/null
+echo $?
+INNER
+LIB_ORIG="$REPO_ROOT/hooks/tests/lib.sh"
+LIB_NOUNSET="$REPO_ROOT/hooks/tests/lib-nounset-tmp.sh"
+grep -v '^unset CLAUDE_CONFIG_DIR$' "$LIB_ORIG" > "$LIB_NOUNSET"
+LEAK_RC_OK="$(env -i PATH="$PATH" HOME="$HOME" CLAUDE_CONFIG_DIR="$EXT" OUTER_TMP="$TEST_TMP" STUB="$STUB" STUB_REC="$REC" bash "$LEAK_INNER" "$LIB_ORIG" "$SD" 2>/dev/null | tail -1)"
+assert_eq "2" "$LEAK_RC_OK" "external CLAUDE_CONFIG_DIR is dropped by lib.sh: uncalled-helper native case fails closed"
+assert_file_absent "$REC" "fail closed: stub never launched"
+LEAK_RC_OLD="$(env -i PATH="$PATH" HOME="$HOME" CLAUDE_CONFIG_DIR="$EXT" OUTER_TMP="$TEST_TMP" STUB="$STUB" STUB_REC="$REC" bash "$LEAK_INNER" "$LIB_NOUNSET" "$SD" 2>/dev/null | tail -1)"
+rm -f "$LIB_NOUNSET"
+assert_neq "2" "$LEAK_RC_OLD" "negative control: lib.sh without the unset is not fail-closed (rc $LEAK_RC_OLD)"
+assert_file_exists "$REC" "negative control: without the unset the stub is launched from the external dir"
+
 finalize_test

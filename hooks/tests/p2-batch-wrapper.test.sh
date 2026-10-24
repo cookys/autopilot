@@ -69,6 +69,10 @@ mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {
 mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
+mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r)),"
+mk_mut errfmt "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
+mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true,"
+mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);"
 mk_mut hookerr "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
@@ -223,11 +227,13 @@ assert_eq "$(audit_rc "$TEST_TMP/mut-costchk/run-p2-batch.js" "$TEST_TMP/t-chk1"
 tamper win; python3 - "$TEST_TMP/t-win/invocation.log" <<'PY'
 import sys, re
 p = sys.argv[1]; L = open(p).read().split('\n'); i = max(k for k, l in enumerate(L) if ' END ' in l)
-L[i] = re.sub(r'^\d{4}-\d\d-\d\d', '2099-01-01', L[i]); open(p, 'w').write('\n'.join(L))
+for k in range(i, len(L)):
+    if L[k]: L[k] = re.sub(r'^\d{4}-\d\d-\d\d', '2099-01-01', L[k])
+open(p, 'w').write('\n'.join(L))
 PY
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-win")" 0 "last END after the window: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-window/run-p2-batch.js" "$TEST_TMP/t-win")" 0 "RED last END after the window: mutant says OK"
-TO_CHECK='const w=require(process.argv[1]);process.exit(w.harnessTimeoutMs(28800-120,28800)===120000&&w.harnessTimeoutMs(0,28800)===5400000?0:1)'
+TO_CHECK='const w=require(process.argv[1]);process.exit(w.harnessTimeoutMs(28800-120,28800)===120000&&w.harnessTimeoutMs(0,28800)===5400000&&w.harnessTimeoutMs(28800-0.4,28800)===400&&w.harnessTimeoutMs(28800,28800)===0&&w.harnessTimeoutMs(28900,28800)===0?0:1)'
 node -e "$TO_CHECK" "$WRAP"; assert_eq "$?" 0 "harness timeout is clamped to the remaining window"
 node -e "$TO_CHECK" "$TEST_TMP/mut-timeout/run-p2-batch.js"; assert_eq "$?" 1 "RED timeout clamp: the unclamped mutant fails the check"
 # 8 three ON runs with hook errors
@@ -244,9 +250,45 @@ assert_eq "$(audit_rc "$TEST_TMP/mut-hookerr/run-p2-batch.js" "$TEST_TMP/t-herr"
 tamper mrow; python3 - "$TEST_TMP/t-mrow/invocation.log" <<'PY'
 import sys
 p = sys.argv[1]; L = open(p).read().split('\n'); ix = [k for k, l in enumerate(L) if ' MODEL ' in l]
-L[ix[1]] = L[ix[0]]; open(p, 'w').write('\n'.join(L))
+L[ix[1]] = L[ix[1]].split(' ')[0] + ' ' + L[ix[0]].split(' ', 1)[1]; open(p, 'w').write('\n'.join(L))
 PY
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-mrow")" 0 "MODEL rows not one per id: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-modelrow/run-p2-batch.js" "$TEST_TMP/t-mrow")" 0 "RED MODEL per id: mutant says OK"
+
+echo "--- audit round 2: unknown COST id, HOOKERR format"
+tamper unk; python3 - "$TEST_TMP/t-unk/invocation.log" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); i = max(k for k, l in enumerate(L) if ' COST ' in l and ' COSTCHK ' not in l)
+L.insert(i + 1, L[i].replace(' COST C-', ' COST C-99 arm=C run=50.000000 probe=0 running=50 projected=50 #', 1) if ' COST C-' in L[i] else L[i].replace(' COST ON-', ' COST ON-99 arm=ON run=50.000000 probe=0 running=50 projected=50 #', 1)); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-unk")" 0 "COST row of an unknown id: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-spend/run-p2-batch.js" "$TEST_TMP/t-unk")" 0 "RED unknown-id COST row: mutant says OK"
+for bad in NaN -1 1.5; do
+  tamper herr2; sed -i -E "0,/( HOOKERR ON-[0-9]+ )0$/s//\1$bad/" "$TEST_TMP/t-herr2/invocation.log"
+  assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-herr2")" 0 "HOOKERR $bad: real audit non-zero"
+  assert_eq "$(audit_rc "$TEST_TMP/mut-errfmt/run-p2-batch.js" "$TEST_TMP/t-herr2")" 0 "RED HOOKERR $bad: mutant says OK"
+done
+
+echo "--- audit round 2: timestamp order, PREREG time from git"
+tamper ts; python3 - "$TEST_TMP/t-ts/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' END ' in l)
+L[i] = re.sub(r'^\S+', '2000-01-01T00:00:00.000Z', L[i]); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ts")" 0 "first END stamped 2000-01-01: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-ts/run-p2-batch.js" "$TEST_TMP/t-ts")" 0 "RED first END in 2000: mutant says OK"
+# whole batch moved to 2000 and the logged PREREG time forged to 1990: only git knows the real commit time
+tamper shift; python3 - "$TEST_TMP/t-shift/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n')
+for k, l in enumerate(L):
+    if not l: continue
+    L[k] = re.sub(r'^\d{4}-\d\d-\d\d', '2000-01-01', l)
+    if ' PREREG ' in l:
+        parts = L[k].split(' '); parts[3] = '1990-01-01T00:00:00+00:00'; L[k] = ' '.join(parts)
+open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-shift")" 0 "batch shifted to 2000, PREREG time forged: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-prtime/run-p2-batch.js" "$TEST_TMP/t-shift")" 0 "RED forged PREREG time: audit trusting the logged string says OK"
 
 finalize_test

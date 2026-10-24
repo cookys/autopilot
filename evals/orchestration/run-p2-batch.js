@@ -87,8 +87,8 @@ function projectCost({ runCosts, probeSpent, total, cap, probeCost }) {
   return { stage: 'post5', spent, projected, cap, stop: projected > cap };
 }
 
-/** Timeout for one harness call: at most 90 minutes and never past the end of the window. */
-function harnessTimeoutMs(elapsedS, windowS) { return Math.max(1000, Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)); }
+/** Timeout for one harness call: at most 90 minutes and never past the end of the window; 0 means no time is left (do not start). */
+function harnessTimeoutMs(elapsedS, windowS) { return Math.max(0, Math.floor(Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000))); }
 
 function harnessArgv(m, arm, out, trace) {
   return ['bash', m.harness_path, '--task', m.task, '--arm', 'off', '--runner', 'cc', '--model', m.model,
@@ -347,7 +347,7 @@ function runBatch(ctx, first, last) {
     if (fs.existsSync(out)) throw new Exit(4, `REFUSE ${id} output exists`);
     if (pos > 1 && !finishedIds(ctx).has(order[pos - 2].id)) throw new Exit(4, `REFUSE ${id} previous id not finished`);
     const elapsed = ctx.elapsed();
-    if (elapsed > m.window_s) throw new Exit(8, `STOP_WINDOW before ${id} elapsed=${elapsed}`);
+    if (elapsed >= m.window_s) throw new Exit(8, `STOP_WINDOW before ${id} elapsed=${elapsed}`);
     const a = armSpend(ctx, arm);
     const p = projectCost({ runCosts: a.runCosts, probeSpent: a.probeSpent, total: m.n_per_arm, cap: m.arms[arm].cap, probeCost: m.probe_cost });
     // One COSTCHK per id: a resumed id (after a failed probe) keeps its first row.
@@ -366,7 +366,9 @@ function runBatch(ctx, first, last) {
     W.writeOrder(ctx, id, arm, pos);
     W.writeCmd(ctx, id, argv, out, traceDir);
     W.writeStartEnd(ctx, 'START', id, `elapsed=${elapsed}`);
-    const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: harnessTimeoutMs(ctx.elapsed(), m.window_s), stdio: ['ignore', 'pipe', 'pipe'] });
+    const tmo = harnessTimeoutMs(ctx.elapsed(), m.window_s);
+    if (tmo <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left`);
+    const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: tmo, stdio: ['ignore', 'pipe', 'pipe'] });
     fs.mkdirSync(path.join(ctx.runDir, 'runs'), { recursive: true });
     fs.writeFileSync(`${out}.stdout`, r.stdout); fs.writeFileSync(`${out}.stderr`, r.stderr);
     W.writeStartEnd(ctx, 'END', id, `rc=${r.status}`);
@@ -427,6 +429,16 @@ function audit(runDir, m, clone, opts) {
   const seq = rows.filter((r) => r.kind === 'START' || r.kind === 'END').map((r) => `${r.kind} ${idOf(r)}`);
   const expectSeq = ids.flatMap((i) => [`START ${i}`, `END ${i}`]);
   need(seq.join('|') === expectSeq.join('|'), `START/END sequence differs from the preregistered order (got ${seq.length} entries, want ${expectSeq.length}; duplicate, missing, or out of order)`);
+  // timestamps: all parse, never go backwards, START <= END per id, START elapsed agrees with WINDOW_START
+  {
+    let prev = -Infinity, badTs = 0, backwards = 0;
+    for (const r of rows) { const t = Date.parse(r.ts); if (!Number.isFinite(t)) { badTs++; continue; } if (t < prev) backwards++; prev = Math.max(prev, t); }
+    need(badTs === 0, `${badTs} log lines have an unparseable timestamp`);
+    need(backwards === 0, `${backwards} log lines go back in time`);
+    for (const id of ids) { const st = byId('START', id)[0], en = byId('END', id)[0]; if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts), `${id}: END is earlier than START`); }
+    const w0 = by('WINDOW_START')[0];
+    if (w0) for (const r of by('START')) need(Math.abs((Date.parse(r.ts) - Date.parse(w0.ts)) / 1000 - Number(kvOf(r.rest).elapsed)) <= 3, `${idOf(r)}: START elapsed ${kvOf(r.rest).elapsed} disagrees with its timestamp`);
+  }
   // 2 window
   const win0 = by('WINDOW_START')[0];
   need(by('WINDOW_START').length === 1, `WINDOW_START must appear exactly once (got ${by('WINDOW_START').length})`);
@@ -496,7 +508,7 @@ function audit(runDir, m, clone, opts) {
   }
   { // instrument health: hook errors in at most 2 ON runs
     let errRuns = 0;
-    for (const o of order) { const e = byId('HOOKERR', o.id); need(e.length === 1, `${o.id}: need exactly one HOOKERR row`); if (o.arm === 'ON' && e.length === 1 && Number(e[0].rest.split(' ')[1]) > 0) errRuns++; }
+    for (const o of order) { const e = byId('HOOKERR', o.id); need(e.length === 1, `${o.id}: need exactly one HOOKERR row`); if (e.length === 1) { const v = e[0].rest.split(' ')[1]; need(/^\d+$/.test(v), `${o.id}: HOOKERR must be a non-negative integer (got "${v}")`); if (o.arm === 'ON' && Number(v) > 0) errRuns++; } }
     need(errRuns <= 2, `${errRuns} ON runs had hook errors (at most 2 allowed)`);
   }
   // 11 blocks per turn
@@ -527,6 +539,7 @@ function audit(runDir, m, clone, opts) {
     if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
+  for (const r of by('COST')) need(ids.includes(idOf(r)), `COST row for an unexpected id ${idOf(r)}`);
   for (const id of ids) {
     const cc = byId('COSTCHK', id), st = byId('START', id)[0];
     need(cc.length === 1, `${id}: need exactly one COSTCHK (got ${cc.length})`);
@@ -543,6 +556,9 @@ function audit(runDir, m, clone, opts) {
       const probeSum = probeRows.filter(([pid]) => armIds.indexOf(pid) >= 0 && armIds.indexOf(pid) <= armIds.indexOf(id)).reduce((x, q) => x + Number(q[2]), 0);
       need(Math.abs(Number(kvOf(c.rest).running) - (runSum + probeSum)) < 5e-4, `${id}: COST running ${kvOf(c.rest).running} differs from the sum of runs and probes ${(runSum + probeSum).toFixed(4)}`);
     }
+    // Every COST row counts toward its arm, expected id or not; an unknown or repeated id is itself a failure.
+    const allRuns = by('COST').filter((r) => (kvOf(r.rest).arm || idOf(r).split('-')[0]) === arm).reduce((x, r) => x + (Number(kvOf(r.rest).run) || 0), 0);
+    runSum = Math.max(runSum, allRuns);
     const total = runSum + probeRows.filter(([pid]) => pid.startsWith(`${arm}-`)).reduce((x, q) => x + Number(q[2]), 0);
     need(total <= m.arms[arm].cap, `${arm}: actual spend ${total.toFixed(4)} exceeds the cap ${m.arms[arm].cap}`);
   }
@@ -566,8 +582,13 @@ function audit(runDir, m, clone, opts) {
   }
   const win = by('WINDOW_START')[0], firstStart = by('START')[0];
   if (pr.length && win && firstStart) {
-    const prTime = Date.parse(pr[0].rest.split(' ')[1]);
-    need(prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit is not earlier than the window start');
+    // The commit time comes from git now, not from the time string the wrapper logged.
+    let prTime = NaN;
+    if (clone) {
+      const ex2 = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+      prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());
+    }
+    need(Number.isFinite(prTime) && prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit (time read from git) is not earlier than the window start and the first START');
     need(rows.indexOf(pr[0]) < rows.indexOf(firstStart), 'PREREG line is not before the first START');
   }
   const mh = by('HASH').filter((r) => r.rest.startsWith('manifest '));
@@ -657,7 +678,7 @@ function selfcheck(wrapperPath) {
       say(`row ${i + 1} ${r.key}: ${missing.length ? `NO WRITER OUTPUT (${missing.join(', ')})` : 'written'}`);
       bad += missing.length ? 1 : 0;
     });
-    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: () => ({ status: 0, stdout: '' }) });
+    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: (a) => ({ status: 0, stdout: a.includes('log') ? '2026-01-01T00:00:00+00:00\n' : '' }) });
     say(`synthetic batch: ${2 * n} ids, wrapper rc=${code}, audit ${fails.length ? `FAIL (${fails.join('; ')})` : 'PASS'}`);
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).

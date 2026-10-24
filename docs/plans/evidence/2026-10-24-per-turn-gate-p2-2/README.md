@@ -33,3 +33,7 @@ Audit hardening, each red before green in `p2-batch-wrapper.test.sh` (red = a mu
 ## Review round 1 fixes (four-seat review of f3c5ced30)
 
 Each red before green in `p2-batch-wrapper.test.sh` (red = a mutant of the audit or helper without the fix says OK / fails the check): the task hash baseline is pinned by sha256 in the manifest and checked by the wrapper at start and by the audit (tracked, unmodified, equal; the test swaps in a committed baseline and rewrites both listings to match); exactly one `COSTCHK` per id before its `START` (a resumed id keeps its first row); the last `END` within the window and the harness timeout clamped to the remaining window (`harnessTimeoutMs`); `HOOKERR` parsed per ON run, more than 2 ON runs with errors fail; one `MODEL` row per id (a duplicated row replacing another keeps the count but fails). The wrapper-side abort on a baseline hash mismatch has no separate test; the audit-side recheck is the tested path.
+
+## Review round 2 and acceptance round 2 fixes
+
+Red before green in `p2-batch-wrapper.test.sh` (mutant says OK, real audit non-zero): a `COST` row of an unknown id (spend now counts every `COST` row); `HOOKERR` NaN, -1 and 1.5 (one run each); `harnessTimeoutMs` has no 1 second floor (0 left = do not start, `STOP_WINDOW`); a first END stamped 2000-01-01; a batch shifted to 2000 with a forged 1990 PREREG time (the commit time now comes from git). Two earlier tamper inputs were rebuilt to keep timestamps monotone so they still test their own rule.

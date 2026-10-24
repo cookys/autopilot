@@ -37,3 +37,7 @@ Each red before green in `p2-batch-wrapper.test.sh` (red = a mutant of the audit
 ## Review round 2 and acceptance round 2 fixes
 
 Red before green in `p2-batch-wrapper.test.sh` (mutant says OK, real audit non-zero): a `COST` row of an unknown id (spend now counts every `COST` row); `HOOKERR` NaN, -1 and 1.5 (one run each); `harnessTimeoutMs` has no 1 second floor (0 left = do not start, `STOP_WINDOW`); a first END stamped 2000-01-01; a batch shifted to 2000 with a forged 1990 PREREG time (the commit time now comes from git). Two earlier tamper inputs were rebuilt to keep timestamps monotone so they still test their own rule.
+
+## Review round 3 and acceptance round 3 fixes
+
+Red before green in `p2-batch-wrapper.test.sh`: `START elapsed` is taken right before the row is written (a fake probe delayed 5 s no longer makes it disagree with its timestamp; the early-sampling mutant does); the final harness timeout is computed and checked before ORDER/CMD/START (window gone during the probe: exit 8, `STOP_WINDOW`, no START; the mutant without the check leaves a START with no END); negative run cost with a consistent running total; PREREG replaced by a later commit with the logged `HASH prereg` updated (checked through `git show <commit>:path` and `git log <commit>..HEAD -- paths`). The two older tests that overlapped the new git check had their mutants extended so each still tests its own rule. The coordinator's cv3 probe scripts were not used; the tests rebuild the same cases.

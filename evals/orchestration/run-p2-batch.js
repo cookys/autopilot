@@ -362,12 +362,18 @@ function runBatch(ctx, first, last) {
     fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
     fs.writeFileSync(path.join(home, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
     const probeCost = W.writeProbe(ctx, id, home);
+    // The probe takes seconds. Decide the window BEFORE any START artifact (ORDER, CMD, START) exists, and take the
+    // elapsed value written to START right before it is written, so it agrees with its own timestamp.
+    // (The first check at the top of the loop keeps the early value: it only decides whether to begin an id at all.)
+    const tmo0 = harnessTimeoutMs(ctx.elapsed(), m.window_s);
+    if (tmo0 <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left after the probe`);
     const argv = harnessArgv(m, arm, out, traceDir);
     W.writeOrder(ctx, id, arm, pos);
     W.writeCmd(ctx, id, argv, out, traceDir);
-    W.writeStartEnd(ctx, 'START', id, `elapsed=${elapsed}`);
-    const tmo = harnessTimeoutMs(ctx.elapsed(), m.window_s);
+    const elapsedNow = ctx.elapsed();
+    const tmo = harnessTimeoutMs(elapsedNow, m.window_s);
     if (tmo <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left`);
+    W.writeStartEnd(ctx, 'START', id, `elapsed=${elapsedNow}`);
     const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: tmo, stdio: ['ignore', 'pipe', 'pipe'] });
     fs.mkdirSync(path.join(ctx.runDir, 'runs'), { recursive: true });
     fs.writeFileSync(`${out}.stdout`, r.stdout); fs.writeFileSync(`${out}.stderr`, r.stderr);
@@ -545,6 +551,9 @@ function audit(runDir, m, clone, opts) {
     need(cc.length === 1, `${id}: need exactly one COSTCHK (got ${cc.length})`);
     need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st), `${id}: COSTCHK is not before the START`);
   }
+  // Costs are finite, non-negative numbers (a negative run cost could hide spend behind a consistent running total).
+  for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(/^\d+(\.\d+)?$/.test(kv[k] || '') && Number.isFinite(Number(kv[k])), `${idOf(r)}: COST ${k}=${kv[k]} is not a finite non-negative number`); }
+  for (const [pid, , pc] of probeRows) need(/^\d+(\.\d+)?$/.test(pc || ''), `${pid}: probes.tsv cost ${pc} is not a finite non-negative number`);
   // Actual spend per arm, re-derived from every COST row and probes.tsv (not from the wrapper's own pre-launch checks).
   for (const arm of ['ON', 'C']) {
     const armIds = ids.filter((i) => i.startsWith(`${arm}-`));
@@ -578,7 +587,13 @@ function audit(runDir, m, clone, opts) {
       let now = null; try { now = sha256(fs.readFileSync(path.join(clone, rel))); } catch (_e) { /* below */ }
       need(now !== null && now === logged(key), `${what} content hash differs from the value logged at the start`);
     }
-    need(g(['merge-base', '--is-ancestor', pr[0].rest.split(' ')[0], 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
+    const prCommit = pr[0].rest.split(' ')[0];
+    need(g(['merge-base', '--is-ancestor', prCommit, 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
+    // The note as committed at the recorded commit is the one hashed at the start, and nothing was committed over it since.
+    const atCommit = g(['show', `${prCommit}:${m.prereg}`]);
+    need(atCommit.status === 0 && sha256(atCommit.stdout) === logged('prereg'), 'the PREREG note at the recorded commit does not hash to the value logged at the start');
+    const since = g(['log', '--format=%H', `${prCommit}..HEAD`, '--', m.prereg, mrel, m.taskhash_expected]);
+    need(since.status === 0 && since.stdout.trim() === '', 'PREREG note, manifest or task hash baseline was committed again after the recorded preregistration commit');
   }
   const win = by('WINDOW_START')[0], firstStart = by('START')[0];
   if (pr.length && win && firstStart) {
@@ -678,7 +693,7 @@ function selfcheck(wrapperPath) {
       say(`row ${i + 1} ${r.key}: ${missing.length ? `NO WRITER OUTPUT (${missing.join(', ')})` : 'written'}`);
       bad += missing.length ? 1 : 0;
     });
-    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: (a) => ({ status: 0, stdout: a.includes('log') ? '2026-01-01T00:00:00+00:00\n' : '' }) });
+    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: (a) => ({ status: 0, stdout: a.includes('--format=%cI') ? '2026-01-01T00:00:00+00:00\n' : a.includes('show') ? 'prereg\n' : '' }) });
     say(`synthetic batch: ${2 * n} ids, wrapper rc=${code}, audit ${fails.length ? `FAIL (${fails.join('; ')})` : 'PASS'}`);
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).

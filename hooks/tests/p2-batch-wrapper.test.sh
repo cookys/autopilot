@@ -43,7 +43,7 @@ const [wrapper, out, clone, src] = process.argv.slice(2);
 const w = require(src);
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 const m = { task: 't14-constraint-horizon', model: 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'unit-test-seed', n_per_arm: 3,
-  arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
+  arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: Number(process.env.MAN_WINDOW || 28800), min_complete: 2, max_blocks: 2,
   prereg: 'prereg/PREREG.md', taskhash_expected: 'prereg/taskhash.expected.txt', hook_path: 'hooks/per-turn-gate.js',
   harness_path: 'evals/orchestration/run-orchestration-eval.sh', argv_sha: {},
   hashes: { wrapper: sha(wrapper), hook: sha(path.join(clone, 'hooks/per-turn-gate.js')), harness: sha(path.join(clone, 'evals/orchestration/run-orchestration-eval.sh')), taskhash_expected: sha(path.join(clone, 'prereg/taskhash.expected.txt')) } };
@@ -65,7 +65,7 @@ mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need("
 mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
-mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {"
+mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"
 mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
@@ -73,8 +73,17 @@ mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST'
 mk_mut errfmt "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
 mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true,"
 mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);"
+mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
+mk_mut nowindow "if (tmo0 <= 0) throw" "if (false) throw" "if (tmo <= 0) throw" "if (false) throw"
+mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || "
+mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
 mk_mut hookerr "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
+MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
+export MAN_WINDOW=3
+MAN_W3="$CLONE/prereg/manifest-w3.json"; make_manifest "$WRAP" "$MAN_W3"
+MAN_W3M="$CLONE/prereg/manifest-w3-mutant.json"; make_manifest "$TEST_TMP/mut-nowindow/run-p2-batch.js" "$MAN_W3M"
+unset MAN_WINDOW
 MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
 # manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
@@ -87,8 +96,8 @@ TREE=$(git -C "$CLONE" write-tree); COMMIT=$(git -C "$CLONE" commit-tree "$TREE"
 FAKE_STATE_DIR="$TEST_TMP/fakestate"
 run_batch() { # <wrapper> <manifest> <rundir>; FAKE_TASK_EDIT optional
   rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
-  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" ORCH_TIMEOUT=1m \
-    node "$1" --run --manifest "$2" --run-dir "$3" --clone "$CLONE" >"$3.stdout" 2>"$3.stderr"
+  env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" FAKE_PROBE_SLEEP="${FAKE_PROBE_SLEEP:-}" ORCH_TIMEOUT=1m \
+    node "$1" --run --manifest "$2" --run-dir "$3" --clone "$CLONE" ${RUN_ARGS:-} >"$3.stdout" 2>"$3.stderr"
 }
 
 echo "--- seeded order, cost rule, selfcheck"
@@ -290,5 +299,39 @@ open(p, 'w').write('\n'.join(L))
 PY
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-shift")" 0 "batch shifted to 2000, PREREG time forged: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-prtime/run-p2-batch.js" "$TEST_TMP/t-shift")" 0 "RED forged PREREG time: audit trusting the logged string says OK"
+
+echo "--- review round 3: START elapsed after a slow probe, window gone during the probe"
+elapsed_lines() { node "$1" --audit --manifest "$2" --run-dir "$3" --clone "$CLONE" 2>&1 | grep -c "disagrees with its timestamp"; }
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$WRAP" "$MAN" "$TEST_TMP/run-slow"
+assert_eq "$(elapsed_lines "$WRAP" "$MAN" "$TEST_TMP/run-slow")" 0 "slow probe (5 s): START elapsed agrees with its timestamp"
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE" "$TEST_TMP/run-slow-mut"
+assert_neq "$(elapsed_lines "$WRAP" "$MAN_SE" "$TEST_TMP/run-slow-mut")" 0 "RED slow probe: the early-sampling mutant writes an elapsed that disagrees with its timestamp"
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$WRAP" "$MAN_W3" "$TEST_TMP/run-w3"; w3rc=$?
+assert_eq "$w3rc" 8 "window gone during the probe: wrapper exits 8"
+assert_eq "$(grep -c ' STOP_WINDOW ' "$TEST_TMP/run-w3/invocation.log")" 1 "STOP_WINDOW written"
+assert_eq "$(grep -cE ' (START|ORDER|CMD) ' "$TEST_TMP/run-w3/invocation.log")" 0 "no ORDER, CMD or START artifact before the stop"
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_SLEEP=5 run_batch "$TEST_TMP/mut-nowindow/run-p2-batch.js" "$MAN_W3M" "$TEST_TMP/run-w3-mut"
+assert_neq "$(grep -cE ' START ' "$TEST_TMP/run-w3-mut/invocation.log")" 0 "RED window gone: the mutant without the pre-START check leaves a START"
+
+echo "--- acceptance round 3: negative cost, PREREG replaced by a later commit"
+tamper neg; python3 - "$TEST_TMP/t-neg/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n')
+i = max(k for k, l in enumerate(L) if ' COST ' in l and ' COSTCHK ' not in l)
+run = float(re.search(r'run=(\S+)', L[i]).group(1)); running = float(re.search(r'running=(\S+)', L[i]).group(1))
+L[i] = re.sub(r'run=\S+', 'run=-1.000000', L[i]); L[i] = re.sub(r'running=\S+', 'running=%.4f' % (running - run - 1), L[i])
+open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-neg")" 0 "negative run cost with a consistent running total: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-negcost/run-p2-batch.js" "$TEST_TMP/t-neg")" 0 "RED negative cost: mutant says OK"
+OLDHEAD=$(git -C "$CLONE" rev-parse HEAD)
+tamper late; echo "replacement text" >>"$CLONE/prereg/PREREG.md"
+NEWH=$(sha256sum "$CLONE/prereg/PREREG.md" | cut -d' ' -f1)
+sed -i -E "s/( HASH prereg )\S+/\1$NEWH/" "$TEST_TMP/t-late/invocation.log"
+git -C "$CLONE" add -A; NT=$(git -C "$CLONE" write-tree); NC=$(git -C "$CLONE" commit-tree "$NT" -p "$OLDHEAD" -m late); git -C "$CLONE" update-ref HEAD "$NC"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-late")" 0 "PREREG replaced by a later commit, logged hash updated: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-prereplaced/run-p2-batch.js" "$TEST_TMP/t-late")" 0 "RED replaced PREREG: mutant says OK"
+git -C "$CLONE" update-ref HEAD "$OLDHEAD"; git -C "$CLONE" reset -q --hard "$OLDHEAD"
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "PREREG restored: real audit OK"
 
 finalize_test

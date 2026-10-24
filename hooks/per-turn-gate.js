@@ -218,16 +218,22 @@ function acquireLock(lockDir, seam) {
         /**
          * Release atomically: rename the lock directory away first, then check the token in what was moved.
          * Matching token: ours, delete it. Anything else (or nothing to move): the lock was taken from us, so
-         * return false and the caller allows. If what we moved belongs to someone else, their own release
-         * finds no token at the path and allows too, so the hook only ever blocks less.
+         * return false and the caller allows; what we moved is NOT deleted but put back (or, if the path is
+         * taken again, left for the retention cleanup).
          */
         release() {
           const moved = `${lockDir}.rel.${crypto.randomBytes(6).toString('hex')}`;
           try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }
           const o = readOwner(moved);
-          const mine = !!o && o.token === token;
+          if (!o || o.token !== token) {
+            // Not ours: never delete someone else's live lock. Put it back; the lock directory is non-empty
+            // (owner.json), so the rename fails if the path already holds a newer lock, and then the moved
+            // directory is left for the retention cleanup (.lock.rel.* names are covered).
+            try { fs.renameSync(moved, lockDir); } catch (_e) { /* left for retention cleanup */ }
+            return false;
+          }
           try { fs.rmSync(moved, { recursive: true, force: true }); } catch (_e) { /* nothing */ }
-          return mine;
+          return true;
         },
         /**
          * Fenced state write: tmp file first, then, on the line right before the rename, check that the lock

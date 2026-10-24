@@ -282,7 +282,15 @@ fs.rmSync = function (p) { // runs between "token verified" and "deleted" of the
 };
 const aOk = a.release();
 fs.rmSync = rm;
-process.exit(aOk === true && b && b.release() === true ? 0 : 1);
+const atomicOk = aOk === true && b && b.release() === true;
+// the path is taken over by someone else's live lock BEFORE our release: ours reports failure, theirs survives
+const d3 = path.join(dir, 's3.lock'); const mine3 = acquireLock(d3);
+fs.rmSync(d3, { recursive: true }); const theirs = acquireLock(d3);
+const failed = mine3.release() === false;
+let theirsWrites = false;
+try { theirs.writeInt(path.join(dir, 's3.count'), 1); theirsWrites = fs.readFileSync(path.join(dir, 's3.count'), 'utf8').trim() === '1'; } catch (_e) { /* stays false */ }
+const theirsReleases = theirs.release() === true;
+process.exit(atomicOk && failed && theirsWrites && theirsReleases ? 0 : 1);
 JS
 nc19() { node "$TEST_TMP/relcase.js" "$1"; }
 
@@ -307,10 +315,11 @@ run_nc NC12w nc12 widecleanup "s#if (!STATE_NAME.test(name)) continue;##"
 run_nc NC12 nc12 noclean "s#^  cleanupState(dir,#  (() => {})(dir,#"
 run_nc NC14 nc14 givebackish "s#log(turn, 'allow', outcome, capCounter);#log(turn, 'allow', outcome, capCounter); fs.writeFileSync(path.join(dir, session + '.t' + turn + '.count'), '1');#"
 run_nc NC15 nc15 reclaimnotoken "s#if (movedToken !== judged) return null;##"
-run_nc NC15r nc15 releasenotoken "s#const mine = !!o \&\& o.token === token;#const mine = true;#"
+run_nc NC15r nc15 releasenotoken "s#if (!o || o.token !== token) {#if (false) {#"
 run_nc NC16 nc16 nodeadline "s#if (Date.now() >= deadline) return null;##"
 run_nc NC17 nc17 nofence "s#if (!fenced) {#if (false) {#"
 run_nc NC18 nc18 notimefence "s# \&\& Date.now() - acquiredAt < LOCK_STALE_MS / 2;#;#"
+run_nc NC19r nc19 nodrestore "s#try { fs.renameSync(moved, lockDir); } catch (_e) { /\* left for retention cleanup \*/ }#fs.rmSync(moved, { recursive: true, force: true });#"
 run_nc NC19 nc19 checkthendelete "s#try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }##; s#const mine = !!o \&\& o.token === token;#const mine = !!readOwner(lockDir) \&\& readOwner(lockDir).token === token; if (mine) fs.rmSync(lockDir, { recursive: true, force: true });#"
 run_nc NC13 nc13 alwaystrace "s#if (!enabled \&\& !hasVerifier) return;##"
 

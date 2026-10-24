@@ -1896,7 +1896,7 @@ def _norm_operand(tok):
 
 
 _ARITH_LITERAL = re.compile(r'"?-?[0-9]+"?')
-_ARITH_VAR = re.compile(r'"?\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*|[0-9])"?')
+_ARITH_VAR = re.compile(r'"?\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9])"?')
 _TEST_JOINERS = frozenset(("-o", "-a", "!", "||", "&&", "(", ")"))
 
 

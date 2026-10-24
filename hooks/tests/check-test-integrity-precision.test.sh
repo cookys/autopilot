@@ -21,6 +21,7 @@
 # RED at 51b0575f4 (acceptance round 10): see N55-N57 (locale string $".." / $'..' / mixed quoting paired with a pure quoted literal).
 # RED at 8b659d432 (acceptance round 11): N58-N62 failed (arithmetic comparison against a name / expression paired with an integer literal); C7 ([ ] with a name on the arithmetic side) also failed.
 # RED at 85eff5f32 (changed-side rule): N63 failed; N64 and F23 already behaved (the operand-set rule reports a changed subject variable).
+# RED at 21eadee16 (review 54a42840): see N65 N66 (braced ${a} normalised to $a and paired).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -715,5 +716,13 @@ if has_kind surface_touch; then report N64 1; else report N64 0; fi
 repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq "1" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report F23 0; else report F23 1; fi
+
+# ── N65 / N66 ${a} is not accepted as an arithmetic subject, either direction ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "${a}" -eq "0" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N65 1; else report N65 0; fi
+repo="$(mk_surface '[ "${a}" -eq "0" ]' '[ "$a" -eq "0" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N66 1; else report N66 0; fi
 
 finalize_test

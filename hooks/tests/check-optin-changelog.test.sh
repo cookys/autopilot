@@ -446,4 +446,52 @@ assert_eq "$?" "1" "committed bump with unnamed added stem is a violation"
 OUT=$(node "$NYC/scripts/check-optin-changelog.js" 2>&1)
 assert_eq "$?" "0" "committed bump with the added stem named passes"
 
+# 16) pre-release convention: the opt-in mention may sit under `## Unreleased` instead of `## v<version>`.
+cat > "$FIX/base.json" <<'EOF'
+{ "opt_in": ["accumulator"] }
+EOF
+cat > "$FIX/current.json" <<'EOF'
+{ "opt_in": ["accumulator", "session-summary"] }
+EOF
+# only in Unreleased => green
+cat > "$FIX/changelog.md" <<'EOF'
+# Changelog
+
+## Unreleased
+
+- new opt-in Stop hook session-summary, default off.
+
+## v2.26.3
+- nothing about hooks here
+EOF
+node "$SCRIPT" --manifest "$FIX/current.json" --baseline-manifest "$FIX/base.json" --changelog "$FIX/changelog.md" --version 2.26.3 >/dev/null 2>&1
+assert_eq "$?" "0" "opt-in change named only under Unreleased passes"
+# negative control: neither section mentions it => red
+cat > "$FIX/changelog.md" <<'EOF'
+## Unreleased
+
+- something unrelated
+
+## v2.26.3
+- nothing about hooks here
+EOF
+node "$SCRIPT" --manifest "$FIX/current.json" --baseline-manifest "$FIX/base.json" --changelog "$FIX/changelog.md" --version 2.26.3 >/dev/null 2>&1
+assert_eq "$?" "1" "opt-in change named in neither section stays red"
+# co-location still applies in Unreleased: the stem and 'opt-in' in different bullets => red
+cat > "$FIX/changelog.md" <<'EOF'
+## Unreleased
+
+- session-summary now writes less.
+- a different opt-in note about nothing in particular.
+
+## v2.26.3
+- nothing
+EOF
+node "$SCRIPT" --manifest "$FIX/current.json" --baseline-manifest "$FIX/base.json" --changelog "$FIX/changelog.md" --version 2.26.3 >/dev/null 2>&1
+assert_eq "$?" "1" "Unreleased: stem and opt-in in different bullets stays red"
+# no version section at all, only Unreleased => green
+printf '## Unreleased\n\n- opt-in hook session-summary added.\n' > "$FIX/changelog.md"
+node "$SCRIPT" --manifest "$FIX/current.json" --baseline-manifest "$FIX/base.json" --changelog "$FIX/changelog.md" --version 2.26.3 >/dev/null 2>&1
+assert_eq "$?" "0" "Unreleased alone (no version section) passes"
+
 finalize_test

@@ -2,7 +2,7 @@
 // check-optin-changelog.js — deterministic release-hygiene gate for opt-in hook CHANGELOG naming.
 //
 // Ensures that when the opt-in hook set changes, the current version's CHANGELOG entry
-// (## v<version>) contains `opt-in` and names every changed opt-in stem in a paragraph
+// (## v<version>, or the ## Unreleased section where pre-release changes are written) contains `opt-in` and names every changed opt-in stem in a paragraph
 // that also mentions `opt-in`.
 
 'use strict';
@@ -328,7 +328,16 @@ function extractSection(changelogText, version) {
   const escaped = escapeRegex(version);
   // Require whitespace or end-of-line right after the version so `v2.26.3` does
   // NOT match `v2.26.30` (digit) or `v2.26.3-alpha` (prerelease) headings.
-  const heading = new RegExp(`${HEADING_PREFIX}\\s+v${escaped}(?=\\s|$)`);
+  return extractByHeading(changelogText, new RegExp(`${HEADING_PREFIX}\\s+v${escaped}(?=\\s|$)`));
+}
+
+// Pre-release changes are written under `## Unreleased` until the release folds them into a version
+// section, so an opt-in mention there counts as well (the same co-location rules apply).
+function extractUnreleased(changelogText) {
+  return extractByHeading(changelogText, new RegExp(`${HEADING_PREFIX}\\s+unreleased(?=\\s|$)`, 'i'));
+}
+
+function extractByHeading(changelogText, heading) {
   const terminator = new RegExp(`${HEADING_PREFIX}\\s+`);
   const lines = cleanChangelogLines(changelogText.split(/\r?\n/));
 
@@ -484,10 +493,13 @@ function main() {
     return fail(`cannot read CHANGELOG at ${opts.changelog}: ${err.message}`, 1);
   }
 
-  const section = extractSection(changelogText, version);
-  if (section === null) {
+  const versionSection = extractSection(changelogText, version);
+  const unreleasedSection = extractUnreleased(changelogText);
+  if (versionSection === null && unreleasedSection === null) {
     return fail(`no CHANGELOG section for v${version} to verify the opt-in change`, 1);
   }
+  // Either section may carry the mention; blocks never span the two (blank-line join).
+  const section = [versionSection, unreleasedSection].filter((x) => x !== null).join('\n\n');
 
   const sectionText = section.toLowerCase();
   if (!paragraphHasOptIn(sectionText)) {

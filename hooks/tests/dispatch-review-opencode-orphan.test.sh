@@ -118,6 +118,7 @@ wait
 SEOF
 chmod +x "$STUB_HANG"
 for SIG in TERM INT; do
+  EXPECT_RC=130
   rm -f "$CH_PID_FILE" "$GC_PID_FILE"
   sleep 300 > /dev/null 2>&1 < /dev/null &
   BYSTANDER=$!
@@ -128,11 +129,18 @@ for SIG in TERM INT; do
   for _ in $(seq 1 50); do [ -s "$GC_PID_FILE" ] && break; sleep 0.2; done
   CPID="$(cat "$CH_PID_FILE" 2>/dev/null)"; GPID="$(cat "$GC_PID_FILE" 2>/dev/null)"
   [ -n "$CPID" ] && [ -n "$GPID" ]; assert_eq "0" "$?" "$SIG no launcher: child and grandchild recorded"
-  kill -"$SIG" "$DR_PID" 2>/dev/null; wait "$DR_PID" 2>/dev/null; sleep 0.5
+  kill -"$SIG" "$DR_PID" 2>/dev/null
+  for _ in $(seq 1 50); do kill -0 "$DR_PID" 2>/dev/null || break; sleep 0.2; done   # bounded: at most 10 s
+  kill -0 "$DR_PID" 2>/dev/null; assert_eq "1" "$?" "$SIG no launcher: dispatch-review exited within 10 s"
+  if kill -0 "$DR_PID" 2>/dev/null; then kill -KILL "$DR_PID" 2>/dev/null; fi
+  wait "$DR_PID" 2>/dev/null; DR_RC=$?
+  assert_eq "$DR_RC" "$EXPECT_RC" "$SIG no launcher: exit status"
+  sleep 0.3
   kill -0 "$CPID" 2>/dev/null; assert_eq "1" "$?" "$SIG no launcher: child gone"
   kill -0 "$GPID" 2>/dev/null; assert_eq "1" "$?" "$SIG no launcher: grandchild gone"
   kill -0 "$BYSTANDER" 2>/dev/null; assert_eq "0" "$?" "$SIG no launcher: unrelated process outside the group is still alive"
   [ -n "$GPID" ] && kill -KILL "$GPID" 2>/dev/null
+  [ -n "$CPID" ] && kill -KILL "$CPID" 2>/dev/null
   kill -KILL "$BYSTANDER" 2>/dev/null; wait "$BYSTANDER" 2>/dev/null
 done
 

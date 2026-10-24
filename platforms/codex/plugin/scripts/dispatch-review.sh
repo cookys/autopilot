@@ -1726,6 +1726,11 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # in the group, so they are reaped too and no pid list is ever kept.
   OC_SETSID=""; [ -n "$(type -P setsid)" ] && OC_SETSID="$(type -P setsid)"
   # Job control only without the launcher: as a group leader the launcher would fork and detach from `wait`.
+  # INT and TERM take one path while the child runs: kill its whole group at once, exit 130. A
+  # background bash job ignores SIGINT, so this must be our own trap, not signal propagation.
+  # Armed only for this window, where the only foreground command is a 0.2 s sleep, so the
+  # deferred trap runs promptly; the EXIT trap (cleanup) still follows.
+  trap 'if [ -n "${OC_PID:-}" ]; then kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null; fi; exit 130' INT TERM
   if [ -z "$OC_SETSID" ]; then set -m; fi
   # shellcheck disable=SC2086
   $OC_SETSID timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
@@ -1759,6 +1764,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   # The root is gone but a descendant may have been reparented and survived: it is still in the group.
   kill -KILL -- "-$OC_PID" 2>/dev/null || true
   OC_PID=""
+  trap - INT TERM
   if [ "$OPENCODE_QUOTA" -eq 0 ]; then
     wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   fi

@@ -3,6 +3,7 @@
 # Covers: exact prompt forwarding, empty-output fail-closed, output parseability,
 # and precondition failures on missing CLI args / missing env constraints.
 . "$(dirname "$0")/lib.sh"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 # Isolate from ambient session markers
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session_isolation"

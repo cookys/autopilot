@@ -3,12 +3,14 @@
 # Emulates just enough of 2.1.309: --version, a -p auth probe, and -p/--resume turns that edit the repo and run the
 # Stop hooks of .claude/settings.json (block => the "model" repairs the repo, hook called again with stop_hook_active true).
 # Env: FAKE_STATE (dir), FAKE_FIXTURES (t14 gate fixtures), FAKE_COST (per call), FAKE_TASK_EDIT (file edited once mid-batch).
-case "$*" in *--version*) echo "2.1.309 (Claude Code)"; exit 0 ;; esac
+[ -n "${FAKE_STATE:-}" ] && { mkdir -p "$FAKE_STATE"; env | grep -E '^(CLAUDE|ANTHROPIC|XDG_(CONFIG|DATA|STATE|CACHE)_HOME)' >> "$FAKE_STATE/claude.env.seen"; true; }
+case "$*" in *--version*) [ -n "${FAKE_STATE:-}" ] && { mkdir -p "$FAKE_STATE"; echo "$HOME" >> "$FAKE_STATE/version.home"; }; echo "2.1.309 (Claude Code)"; exit 0 ;; esac
 resume=""; dbg=""
 while [ $# -gt 0 ]; do
   case "$1" in --resume) resume="$2"; shift 2 ;; --debug-file) dbg="$2"; shift 2 ;; *) shift ;; esac
 done
 prompt=$(cat)
+mkdir -p "$FAKE_STATE"; echo "${CLAUDE_CONFIG_DIR-unset}" >> "$FAKE_STATE/cfgdir.seen"
 cost=${FAKE_COST:-0.1}
 case "$prompt" in
   *AUTH_OK*) if [ -n "${FAKE_PROBE_FAIL_ONCE:-}" ] && [ ! -e "$FAKE_STATE/probefailed" ]; then mkdir -p "$FAKE_STATE"; : > "$FAKE_STATE/probefailed"; echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; fi; [ -n "${FAKE_PROBE_NOCOST:-}" ] && { echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; }; [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;
@@ -32,4 +34,4 @@ fi
 # the real CLI also points <dir>/latest (absolute path) at the newest debug file
 [ -n "$dbg" ] && ln -sfn "$(cd "$(dirname "$dbg")" && pwd -P)/$(basename "$dbg")" "$(dirname "$dbg")/latest"
 total=$(node -e "console.log(($calls*$cost).toFixed(6))")
-printf '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"%s","total_cost_usd":%s,"modelUsage":{"claude-haiku-4-5":{}}}\n' "$sid" "$total"
+printf '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"%s","total_cost_usd":%s,"modelUsage":{"%s":{}}}\n' "$sid" "$total" "${FAKE_MODEL:-claude-haiku-4-5}"

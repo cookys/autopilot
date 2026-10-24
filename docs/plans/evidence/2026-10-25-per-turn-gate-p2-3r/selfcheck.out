@@ -1,0 +1,33 @@
+SELFCHECK run-p2-batch.js (plan 3.1)
+#  | condition                                                         | applies                             | writer
+1  | Each id launched exactly once, in the preregistered order         | per id                              | writeStartEnd -> START <id> / END <id> rc=
+2  | Sequential, one window of at most 8 h                             | per id and end                      | writeWindow -> WINDOW_START once; elapsed in each START; STOP_WINDOW
+3  | Task hashes equal the preregistered listing                       | first call, last call, early exit   | writeTaskHash -> taskhash.pre.txt, taskhash.post.txt, TASKHASH_DIFF ok|fail
+4  | CLI version 2.1.309                                               | per id                              | writeVersion -> VERSION <id> before the call; RUNVERSION <id> from result.json
+5  | Authentication probe passed, no expiry                            | per id                              | writeProbe -> PROBE_OK|PROBE_FAIL <id>, probes.tsv; STOP_AUTH
+6  | No deviation from the preregistered command                       | per id                              | writeCmd -> CMD <id> <sha256 of argv>
+7  | Oracle score recoverable                                          | per id, after the run               | writeScore -> SCORE <id> m1 m2 m3 or SCORE_MISSING <id>
+8  | At least 27 of 30 completed five turns, in each arm separately    | per id and end                      | writeTurns -> TURNS <id> arm n; COMPLETE ON=x/N C=y/N
+9  | Single resolved model id                                          | per id                              | writeModel -> MODEL <id> <value>
+10 | Hook active only in ON runs, and only the gate hook               | per id                              | writeHookCount -> HOOKCOUNT <id> gate_trace gate_log plugin (+ HOOKERR)
+11 | Blocks per turn never exceed N                                    | per id                              | writeBlockMax -> BLOCKMAX <id> <value> from the hook log
+12 | Interleaving order as preregistered (D2)                          | per id                              | writeOrder -> ORDER <id> <arm> before the call
+13 | Cost within the cap                                               | per id                              | writeCost -> COSTCHK before, COST <id> run probe running projected after, per arm; STOP_COST
+14 | Preregistration committed earlier                                 | before first call                   | writePrereg -> PREREG <hash> <time> ancestor=yes|no, HASH lines
+row 1 order-and-uniqueness: written
+row 2 window: written
+row 3 taskhash: written
+row 4 cli-version: written
+row 5 auth-probe: written
+row 6 command: written
+row 7 score: written
+row 8 complete: written
+row 9 model: written
+row 10 hook-only-on: written
+row 11 blockmax: written
+row 12 interleave: written
+row 13 cost: written
+row 14 prereg: written
+synthetic batch: 6 ids, wrapper rc=0, audit PASS
+dry projection (C cap 18), C arm after the P1 rerun's first five run costs: spent=2.8136 projected=17.5659 cap=18 -> ok (mean 0.5461, sample sd 0.0684)
+SELFCHECK OK: every row has a writer

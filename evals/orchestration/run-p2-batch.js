@@ -9,8 +9,20 @@
 //
 //   node run-p2-batch.js --selfcheck                       print the 3.1 table, run a synthetic batch, assert a writer per row
 //   node run-p2-batch.js --order --manifest M              print the seeded order
-//   node run-p2-batch.js --run --run-dir D --clone C --manifest M [--first i] [--last j]
+//   node run-p2-batch.js --run --run-dir D --clone C --manifest M [--first i] [--last j] [--credentials-source F] [--parent-pid P]
 //   node run-p2-batch.js --audit --run-dir D --manifest M  exit 0 only when every artifact is present and every condition holds
+//
+// Credentials: every id copies ONE file (mode 0600) from the credential source into its own per-run home before its probe; the
+// child process only ever sees that copy. The source is `$HOME/.claude/.credentials.json` unless `--credentials-source F` names
+// another. Start the wrapper with the REAL HOME (or point --credentials-source at the real file): a one-off HOME copy goes stale
+// (access token expired, refresh token rotated by the main CLI) and every later id would copy that stale file. When the source's
+// claudeAiOauth.expiresAt is less than 10 minutes away the id is neither copied nor probed: it pauses (PROBE_FAIL, PAUSE, exit 7)
+// with a saved response that says auth_ok false, reason source_token_expiring, cost 0. A source without expiresAt is not judged.
+// Stop: the first TERM, INT or HUP (or a file <run-dir>/stop.request) is a safe pause: the running id finishes, the next id pauses before its
+// probe (PROBE_FAIL, PAUSE, exit 7, reason operator_stop) and the batch resumes later; a second TERM or INT ends the process at once.
+// --parent-pid P (set by run-p2-batch-loop.js): when that process is gone (the wrapper was re-parented or P no longer exists) the next
+// id pauses before its probe (PROBE_FAIL, PAUSE, exit 7, reason parent_gone), so a killed launcher leaves no wrapper starting new ids.
+// The id already running finishes. Resume after a pause with --first <position of the paused id>; run-p2-batch-loop.js does that.
 //
 // Manifest (JSON; the preregistration commits it and states its sha256): task, model, cli, seed, n_per_arm,
 // arms {ON:{gate,cap,prior_run}, C:{gate,cap,prior_run}}, probe_cost, window_s, min_complete, max_blocks, prereg,
@@ -26,8 +38,18 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
-const ENV_PREFIX = ['env', '-u', 'AUTOPILOT_SESSION_ID', '-u', 'CLAUDE_CODE_SESSION_ID'];
+/** Set in the batch worker: a shared flag the main thread raises on the first TERM or INT. */
+let STOP = null;
+
+// Every child runs with the variables that could point claude at the real configuration or change how it authenticates removed:
+// every CLAUDE* and ANTHROPIC* variable (CLAUDE_CONFIG_DIR, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_TOKEN, ...) and the
+// XDG config, data, state and cache homes. HOME is replaced per call (the per-run home, or the credential-free version home).
+const SCRUB_RE = /^(CLAUDE|ANTHROPIC)|^XDG_(CONFIG|DATA|STATE|CACHE)_HOME$/;
+const scrubEnv = (env) => { const o = { ...env }; for (const k of Object.keys(o)) if (SCRUB_RE.test(k)) delete o[k]; return o; };
+const SCRUB_KEYS = [...new Set(['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', ...Object.keys(process.env).filter((k) => SCRUB_RE.test(k))])];
+const ENV_PREFIX = ['env', ...SCRUB_KEYS.flatMap((k) => ['-u', k])];
 const AUTH_RE = /failed to authenticate|oauth session expired|authentication_failed/i;
 const PROJECTION_AFTER = 5;
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -230,6 +252,8 @@ const W = {
   writeWindow(ctx) {
     const f = path.join(ctx.runDir, 'window.start');
     if (!fs.existsSync(f)) { fs.writeFileSync(f, `${ctx.now()}\n`); ctx.log('WINDOW_START', ''); }
+    const w0 = Number(fs.readFileSync(f, 'utf8'));
+    if (!Number.isFinite(w0) || w0 <= 0) throw new Exit(3, 'ABORT window.start is not a positive number');
     ctx.elapsed = () => Math.floor((ctx.now() - Number(fs.readFileSync(f, 'utf8'))) / 1000);
   },
   writeTaskHash(ctx, phase) {
@@ -241,7 +265,11 @@ const W = {
     return ok;
   },
   writeVersion(ctx, id) {
-    const v = (sh(ctx, ['claude', '--version']).stdout.split('\n')[0] || '').trim();
+    // --version needs no credentials: it runs in a throwaway home that holds only the onboarding file (never the real HOME).
+    const vh = path.join(ctx.runDir, 'homes', '_version');
+    fs.mkdirSync(vh, { recursive: true });
+    fs.writeFileSync(path.join(vh, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
+    const v = (sh(ctx, [`HOME=${vh}`, 'claude', '--version']).stdout.split('\n')[0] || '').trim();
     if (!readLog(ctx).some((r) => r.kind === 'VERSION' && idOf(r) === id)) ctx.log('VERSION', `${id} ${v}`); // once per id, also after a resume
     if (v !== ctx.manifest.cli) throw new Exit(3, `ABORT version ${id} differs from the pinned CLI`);
   },
@@ -256,13 +284,18 @@ const W = {
     ctx.log('CMD', `${id} ${argvSha(argv, out, trace)}`);
   },
   writeStartEnd(ctx, kind, id, extra) { ctx.log(kind, `${id} ${extra}`); },
-  writeProbe(ctx, id, home) {
+  /**
+   * forced: a reason string (source_token_expiring, parent_gone): no call is made. The saved response says so (auth_ok false,
+   * that reason, cost 0) and the id pauses through the ordinary PROBE_FAIL / PAUSE path.
+   */
+  writeProbe(ctx, id, home, forced) {
     const dir = path.join(ctx.runDir, 'probe-work');
     fs.mkdirSync(dir, { recursive: true });
-    const r = sh(ctx, [`HOME=${home}`, 'timeout', '90', 'claude', '-p', '--model', ctx.manifest.model, '--setting-sources', 'project',
+    const r = forced ? { status: 1, stdout: '' } : sh(ctx, [`HOME=${home}`, 'timeout', '90', 'claude', '-p', '--model', ctx.manifest.model, '--setting-sources', 'project',
       '--strict-mcp-config', '--dangerously-skip-permissions', '--output-format', 'json'], { cwd: dir, input: 'Reply with exactly AUTH_OK\n' });
     let cost = 0, err = 1, ok = 0;
     const rec = { rc: r.status, parse_ok: false };
+    if (forced) Object.assign(rec, { auth_ok: false, reason: String(forced) });
     try {
       const o = JSON.parse(r.stdout);
       // Only status, model and cost fields are kept (no credential material is ever in the probe response).
@@ -396,10 +429,30 @@ const finishedIds = (ctx) => new Set(readLog(ctx).filter((r) => r.kind === 'END'
 
 // ---------------------------------------------------------------- the batch
 
+/** A credential source this close to its expiry is not copied and not probed: the id pauses (see writeProbe). */
+const CRED_MIN_AHEAD_MS = 10 * 60 * 1000;
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+/**
+ * claudeAiOauth.expiresAt of a credential file as epoch milliseconds. Absent field -> null (nothing to judge). Anything else that is
+ * not a positive finite number (zero, negative, a string, null, an unreadable or unparsable file) -> 0, which counts as expired.
+ * Values below 1e11 are epoch seconds and are normalised to milliseconds (the CLI writes milliseconds).
+ */
+function credExpiresAt(file) {
+  let j;
+  try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_e) { return 0; }
+  const o = j && j.claudeAiOauth;
+  if (!o || typeof o !== 'object' || !('expiresAt' in o)) return null;
+  const e = o.expiresAt;
+  if (typeof e !== 'number' || !Number.isFinite(e) || e <= 0) return 0;
+  return e < 1e11 ? e * 1000 : e;
+}
+
 function runBatch(ctx, first, last) {
   const m = ctx.manifest;
   const order = makeOrder(m.seed, m.n_per_arm);
   const lo = first || 1, hi = last || order.length;
+  if (!(typeof m.window_s === 'number' && Number.isFinite(m.window_s) && m.window_s > 0)) throw new Exit(3, 'ABORT window_s of the manifest is not a positive number');
+  fs.rmSync(path.join(ctx.runDir, 'stop.request'), { force: true }); // a resume clears an earlier stop request
   ctx.log('WRAPPER_START', `first=${lo} last=${hi}`);
   ctx.started = true;
   W.writePrereg(ctx);
@@ -423,12 +476,22 @@ function runBatch(ctx, first, last) {
     W.writeVersion(ctx, id);
     fs.rmSync(home, { recursive: true, force: true });
     fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-    const cred = path.join(os.homedir(), '.claude', '.credentials.json');
+    // The credential file is copied from its source for every id (the per-run home is the only place the child sees it).
+    const cred = ctx.credSource || path.join(os.homedir(), '.claude', '.credentials.json');
     if (!fs.existsSync(cred)) throw new Exit(3, 'ABORT no credential file');
-    fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
-    fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
+    const exp = credExpiresAt(cred);
+    const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;
+    // A launcher that is gone (killed, even with SIGKILL) must not leave a wrapper that keeps starting ids: pause instead.
+    const orphan = ctx.parentPid ? (process.ppid !== ctx.parentPid || !pidAlive(ctx.parentPid)) : false;
+    // A stop request (first TERM or INT, or <run-dir>/stop.request) pauses before the next id; the running id always finishes.
+    const stopAsked = (STOP !== null && Atomics.load(STOP, 0) === 1) || fs.existsSync(path.join(ctx.runDir, 'stop.request'));
+    const pauseReason = expiring ? 'source_token_expiring' : (orphan ? 'parent_gone' : (stopAsked ? 'operator_stop' : ''));
+    if (!pauseReason) {
+      fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
+      fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
+    }
     fs.writeFileSync(path.join(home, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
-    W.writeProbe(ctx, id, home);
+    W.writeProbe(ctx, id, home, pauseReason);
     const probeCost = probeTotal(ctx.runDir, id);
     // The probe takes seconds. Decide the window BEFORE any START artifact (ORDER, CMD, START) exists, and take the
     // elapsed value written to START right before it is written, so it agrees with its own timestamp.
@@ -1011,7 +1074,7 @@ function audit(runDir, m, clone, opts) {
   // Re-check the preregistration now, not from what the wrapper logged at the start.
   if (!clone) fails.push('audit needs --clone to re-check the preregistration');
   else if (pr.length) {
-    const ex = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+    const ex = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8', env: scrubEnv(process.env) }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
     const g = (a) => ex(['git', '-C', clone, ...a]);
     const mrel = path.relative(clone, (opts && opts.manifestPath) || '');
     const logged = (k) => { const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `)); return h.length ? h[0].rest.split(' ')[1] : null; };
@@ -1038,7 +1101,7 @@ function audit(runDir, m, clone, opts) {
     // The commit time comes from git now, not from the time string the wrapper logged.
     let prTime = NaN;
     if (clone) {
-      const ex2 = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8' }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
+      const ex2 = (opts && opts.exec) || ((a) => { const r = spawnSync(a[0], a.slice(1), { encoding: 'utf8', env: scrubEnv(process.env) }); return { status: r.status === null ? 124 : r.status, stdout: r.stdout || '' }; });
       prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());
     }
     need(Number.isFinite(prTime) && prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit (time read from git) is not earlier than the window start and the first START');
@@ -1103,7 +1166,7 @@ function selfcheck(wrapperPath) {
     };
     const fakeOut = (argv) => argv[argv.indexOf('--out') + 1];
     const exec = (argv) => {
-      const a = argv.slice(5); // drop env -u .. -u ..
+      const a = argv.slice(ENV_PREFIX.length); // drop the env -u .. prefix
       const home = a[0] && a[0].startsWith('HOME=') ? a.shift() : null;
       void home;
       if (a[0] === 'git') {
@@ -1168,7 +1231,7 @@ function main(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (['--selfcheck', '--audit', '--run', '--order', '--schema-table'].includes(a)) flags.add(a);
-    else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file'].includes(a)) opt[a] = argv[++i];
+    else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file', '--credentials-source', '--parent-pid'].includes(a)) opt[a] = argv[++i];
     else { process.stderr.write(`unknown argument ${a}\n`); return 2; }
   }
   if (flags.has('--selfcheck')) return selfcheck(__filename);
@@ -1186,13 +1249,15 @@ function main(argv) {
     return fails.length ? 1 : 0;
   }
   if (flags.has('--run')) {
+    const nIds = 2 * manifest.n_per_arm;
+    const rangeArg = (name) => { if (opt[name] === undefined) return 0; const v = Number(opt[name]); return Number.isInteger(v) && v >= 1 && v <= nIds ? v : -1; };
+    const first = rangeArg('--first'), last = rangeArg('--last');
+    if (first < 0 || last < 0 || (first && last && first > last)) { process.stderr.write(`usage: --first and --last must be integers from 1 to ${nIds}, first not after last\n`); return 2; }
     const clone = path.resolve(opt['--clone'] || process.cwd());
     fs.mkdirSync(runDir, { recursive: true });
-    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
-    const onSig = () => { finish(ctx, 130); process.exit(130); };
-    process.on('SIGINT', onSig); process.on('SIGTERM', onSig);
+    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
     let code = 0;
-    try { runBatch(ctx, Number(opt['--first']) || 0, Number(opt['--last']) || 0); } catch (e) {
+    try { runBatch(ctx, first, last); } catch (e) {
       if (!(e instanceof Exit)) { ctx.log('ABORT', `unexpected ${String(e && e.message).slice(0, 120)}`); code = 3; } else {
         const [kind, ...rest] = e.line.split(' ');
         ctx.log(kind, rest.join(' '));
@@ -1206,6 +1271,28 @@ function main(argv) {
   return 2;
 }
 
-if (require.main === module) process.exitCode = main(process.argv.slice(2));
+/**
+ * The batch is synchronous, so signal handlers cannot run inside it. It runs in a worker thread instead and this thread keeps the
+ * handlers: the first TERM or INT raises the stop flag (safe pause: the running id finishes, the next one pauses with reason
+ * operator_stop, a legal log that resumes); the second one ends the process at once (an interrupted batch that does not audit).
+ */
+function runInWorker() {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let code = 3, n = 0;
+  for (const [name, c] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) process.on(name, () => { n++; if (n === 1) Atomics.store(flag, 0, 1); else process.exit(c); });
+  const w = new Worker(__filename, { argv: process.argv.slice(2), workerData: { sab, p2batchWorker: true } });
+  w.on('message', (m) => { code = m.code; });
+  w.on('error', (e) => { process.stderr.write(`${e && e.stack}\n`); code = 3; });
+  w.on('exit', () => { process.exitCode = code; });
+}
 
-module.exports = { schemaTable, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };
+if (!isMainThread && workerData && workerData.p2batchWorker) {
+  // The batch worker started by runInWorker: decided by the thread and its data, not by require.main.
+  STOP = new Int32Array(workerData.sab);
+  parentPort.postMessage({ code: main(process.argv.slice(2)) });
+} else if (require.main === module) {
+  if (process.argv.includes('--run')) runInWorker(); else process.exitCode = main(process.argv.slice(2));
+}
+
+module.exports = { schemaTable, credExpiresAt, scrubEnv, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

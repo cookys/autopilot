@@ -90,6 +90,24 @@ M="$TEST_TMP/w.marker"; : > "$M"; rm -f "$GC_PID_FILE"
 timeout 30 bash "$W" 1 "$M" -- bash -c 'echo hi; sleep 302 > /dev/null 2>&1 < /dev/null & echo $! > "$0"; wait' "$GC_PID_FILE" > "$TEST_TMP/w.out" 2>&1 < /dev/null
 assert_eq "125" "$?" "$L: watcher itself exits 125 on idle"
 sleep 0.5; alive; assert_eq "1" "$?" "$L: watcher leaves no orphan"; reap
+
+# (9) the seat's parent exits normally but leaves a stalled grandchild: the watcher reaps the group, no orphan.
+rm -f "$GC_PID_FILE"
+timeout 30 bash "$W" 30 "$TEST_TMP/w9.marker" -- bash -c 'echo hi; sleep 304 > /dev/null 2>&1 < /dev/null & echo $! > "$0"' "$GC_PID_FILE" > "$TEST_TMP/w9.out" 2>&1 < /dev/null
+assert_eq "0" "$?" "$L: parent exit keeps its own exit code"
+sleep 0.5; alive; assert_eq "1" "$?" "$L: grandchild left behind by an exited seat is reaped"; reap
+
+# (10) boundary: output every 2.75s under a 3s window must never be killed (whole-second timing killed it early).
+timeout 60 bash "$W" 3 "$TEST_TMP/w10.marker" -- bash -c 'for i in 1 2 3 4 5; do echo s$i; sleep 2.75; done' > "$TEST_TMP/w10.out" 2>&1 < /dev/null
+assert_eq "0" "$?" "$L: 2.75s gaps under a 3s window are not killed"
+assert_contains "$(cat "$TEST_TMP/w10.out")" 's5' "$L: boundary seat reached its last line"
+
+# (11) no bash job-control text in the shared output, on success and when the seat dies by signal.
+timeout 30 bash "$W" 30 "$TEST_TMP/w11.marker" -- bash -c 'echo ok; echo err >&2' > "$TEST_TMP/w11.out" 2>&1 < /dev/null
+assert_eq "ok
+err" "$(cat "$TEST_TMP/w11.out")" "$L: watched success output is exactly the seat's own output"
+timeout 30 bash "$W" 30 "$TEST_TMP/w11.marker" -- bash -c 'echo ok; kill -KILL $$' > "$TEST_TMP/w11b.out" 2>&1 < /dev/null
+assert_eq "ok" "$(cat "$TEST_TMP/w11b.out")" "$L: a signalled seat adds no Killed/Done text"
 }
 
 run_suite uutils
@@ -97,11 +115,30 @@ if [ -x "$GNU_BIN/timeout" ]; then
   _P="$PATH"; PATH="$GNU_BIN:$PATH"
   "$GNU_BIN/timeout" --version | head -1 | grep -q GNU; assert_eq "0" "$?" "GNU timeout really is GNU"
   run_suite gnu
-  # NEGATIVE CONTROL for the group fix: the previous watcher (kills its own group) must fail (8) under GNU timeout.
-  git -C "$REPO_ROOT" show 7908fced9:scripts/lib/idle-watch.sh > "$TEST_TMP/old-watch.sh" 2>/dev/null
+  # NEGATIVE CONTROL for the group fix: the previous watcher body (kills its OWN group, timeout included) is inlined
+  # here so the control cannot go hollow when history is squashed.
+  cat > "$TEST_TMP/old-watch.sh" <<'OLDEOF'
+#!/usr/bin/env bash
+idle="$1"; marker="$2"; shift 3
+"$@" <&0 &
+CHILD=$!
+sleep 0.5
+while kill -0 "$CHILD" 2>/dev/null; do
+  sleep 0.25; n=$((n + 1))
+  if [ "$n" -ge $((idle * 4)) ]; then
+    printf 'idle\n' > "$marker"
+    mypg="$(ps -o pgid= -p "$$" | tr -d ' ')"
+    kill -KILL -- "-$mypg" 2>/dev/null
+    exit 125
+  fi
+done
+wait "$CHILD"
+OLDEOF
   M="$TEST_TMP/old.marker"; : > "$M"; rm -f "$GC_PID_FILE"
   timeout 30 bash "$TEST_TMP/old-watch.sh" 1 "$M" -- bash -c 'echo hi; sleep 303 > /dev/null 2>&1 < /dev/null & echo $! > "$0"; wait' "$GC_PID_FILE" > /dev/null 2>&1 < /dev/null
-  assert_neq "125" "$?" "negative control: the group-killing watcher loses its own exit code under GNU timeout"
+  OLD_RC=$?
+  assert_eq "1" "$([ -s "$M" ] && echo 1 || echo 0)" "negative control fixture really reached its idle branch"
+  assert_neq "125" "$OLD_RC" "negative control: the group-killing watcher loses its own exit code under GNU timeout"
   sleep 0.3; reap
   PATH="$_P"
 else

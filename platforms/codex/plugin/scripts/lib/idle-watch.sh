@@ -57,20 +57,30 @@ kill_seat() {
   kill -KILL "$CHILD" 2>/dev/null
 }
 
+now_us() { # microseconds; bash >= 5 has EPOCHREALTIME, older shells fall back to whole seconds
+  if [ -n "${EPOCHREALTIME:-}" ]; then printf '%s' "${EPOCHREALTIME//[.,]/}"; else printf '%s' $((SECONDS * 1000000)); fi
+}
+
 # The seat leads a process group of its own (job control), so killing it never reaches this
 # watcher or the `timeout` above it: the 125 / 124 exit codes stay intact under GNU and uutils alike.
+# Job control makes bash print "Killed" / "Done" lines for the seat on ITS stderr; fd 2 is the shared
+# seat capture, so the seat keeps the original stderr (via fd 5) and the watcher's own fd 2 goes to
+# /dev/null from here on. The seat's stdout and stderr are untouched.
+exec 5>&2
 set -m
-"$@" <&0 3>&- 4>&- &
+"$@" <&0 2>&5 3>&- 4>&- 5>&- &
 CHILD=$!
 set +m
+exec 2>/dev/null 5>&-
 trap 'kill_seat; wait "$CHILD" 2>/dev/null; exit 143' TERM INT
 
-last="$(watch_size)"; since=$SECONDS
+idle_us=$((idle * 1000000))
+last="$(watch_size)"; since="$(now_us)"
 while kill -0 "$CHILD" 2>/dev/null; do
   sleep 0.25
   cur="$(watch_size)"
-  if [ "$cur" != "$last" ]; then last="$cur"; since=$SECONDS; continue; fi
-  if [ $((SECONDS - since)) -ge "$idle" ] && kill -0 "$CHILD" 2>/dev/null; then
+  if [ "$cur" != "$last" ]; then last="$cur"; since="$(now_us)"; continue; fi
+  if [ $(( $(now_us) - since )) -ge "$idle_us" ] && kill -0 "$CHILD" 2>/dev/null; then
     [ -n "$marker" ] && printf 'no output growth for %ss\n' "$idle" > "$marker"
     kill_seat
     wait "$CHILD" 2>/dev/null
@@ -78,3 +88,7 @@ while kill -0 "$CHILD" 2>/dev/null; do
   fi
 done
 wait "$CHILD"
+rc=$?
+# The seat's own process has exited; whatever it left in its group (a stalled grandchild) goes too.
+kill -KILL -- "-$CHILD" 2>/dev/null
+exit "$rc"

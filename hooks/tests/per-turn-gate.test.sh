@@ -38,11 +38,29 @@ console.log(JSON.stringify({ turn: 1, ok: true, violations: [], feature_gaps: []
 JS
 
 # mutant <name> <sed-expr> : copy of the hook with requires made absolute and one deliberate break.
+# The sed script is split into its s#..#..# commands and applied one at a time; every command must change
+# the file, so a pattern that no longer matches (a no-op mutant) fails the build of the mutant loudly.
 mutant() {
-  local out="$TEST_TMP/mut-$1.js"
+  local out="$TEST_TMP/mut-$1.js" cur="$TEST_TMP/mut-$1.cur" nxt="$TEST_TMP/mut-$1.nxt" cmd
   local abs="s#require('\./_shared#require('$HOOKS_DIR/_shared#; s#require('\.\./#require('$REPO_ROOT/#"
-  sed -e "$abs" -e "$2" "$REAL_HOOK" >"$out"
-  sed -e "$abs" "$REAL_HOOK" | cmp -s - "$out" && { echo "mutant $1 changes nothing" >&2; return 1; }
+  sed -e "$abs" "$REAL_HOOK" >"$cur"
+  while IFS= read -r -d '' cmd; do
+    sed -e "$cmd" "$cur" >"$nxt"
+    if cmp -s "$cur" "$nxt"; then echo "mutant $1: sed command matched nothing: $cmd" >&2; return 1; fi
+    mv "$nxt" "$cur"
+  done < <(node -e '
+    const s = process.argv[1]; let i = 0; const out = [];
+    const field = () => { let r = ""; while (i < s.length && s[i] !== "#") { if (s[i] === "\\") { r += s[i++]; } r += s[i++]; } i++; return r; };
+    while (i < s.length) {
+      while (s[i] === " " || s[i] === ";") i++;
+      if (i >= s.length) break;
+      if (s[i] !== "s" || s[i + 1] !== "#") { process.stderr.write("bad sed script near: " + s.slice(i, i + 30) + "\n"); process.exit(2); }
+      const start = i; i += 2; field(); field();
+      while (i < s.length && s[i] !== ";" && s[i] !== " ") i++;
+      out.push(s.slice(start, i));
+    }
+    process.stdout.write(out.map((c) => c + "\0").join(""));' "$2")
+  mv "$cur" "$out"
   echo "$out"
 }
 
@@ -277,7 +295,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-rel-')); const lockDir = 
 const a = acquireLock(lockDir);
 let b = null; const rm = fs.rmSync; let armed = true;
 fs.rmSync = function (p) { // runs between "token verified" and "deleted" of the old release
-  if (armed) { armed = false; fs.rmSync = rm; b = acquireLock(lockDir); }
+  if (armed) { armed = false; fs.rmSync = rm; rm(lockDir, { recursive: true, force: true }); b = acquireLock(lockDir); }
   return rm.apply(this, arguments);
 };
 const aOk = a.release();
@@ -320,7 +338,7 @@ run_nc NC16 nc16 nodeadline "s#if (Date.now() >= deadline) return null;##"
 run_nc NC17 nc17 nofence "s#if (!fenced) {#if (false) {#"
 run_nc NC18 nc18 notimefence "s# \&\& Date.now() - acquiredAt < LOCK_STALE_MS / 2;#;#"
 run_nc NC19r nc19 nodrestore "s#try { fs.renameSync(moved, lockDir); } catch (_e) { /\* left for retention cleanup \*/ }#fs.rmSync(moved, { recursive: true, force: true });#"
-run_nc NC19 nc19 checkthendelete "s#try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }##; s#const mine = !!o \&\& o.token === token;#const mine = !!readOwner(lockDir) \&\& readOwner(lockDir).token === token; if (mine) fs.rmSync(lockDir, { recursive: true, force: true });#"
+run_nc NC19 nc19 checkthendelete "s#try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }##; s#^          const o = readOwner(moved);#          const o = readOwner(lockDir);#; s#^          try { fs.rmSync(moved, { recursive: true, force: true }); } catch (_e) { /\* nothing \*/ }#          try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch (_e) { /* nothing */ }#"
 run_nc NC13 nc13 alwaystrace "s#if (!enabled \&\& !hasVerifier) return;##"
 
 # Knob off / nothing configured / prompt_id.

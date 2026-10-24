@@ -980,6 +980,17 @@ const BARE_LS_DENY = [
   'time -p -- ls',
   '! ls',
   'time ! ls',
+  '> /tmp/x ls',
+  '2>/dev/null ls',
+  '<f ls',
+  '>>x ls',
+  '&>x ls',
+  '2> /dev/null ls -la',
+  'FOO=1 >x ls',
+  'case $x in\n a) ls;;\nesac',
+  'case $x in a|b) ls ;; *) echo n ;; esac',
+  'case $x in a) echo y;; b) ls;; esac',
+  'case $x in a) ls;; esac',
   'if ls; then echo y; fi',
   'ls -la | head',
 ];
@@ -1003,6 +1014,14 @@ const BARE_LS_ALLOW = [
   'builtin ls',
   'xargs ls',
   'time -p command ls',
+  'commands=( ls -la )', // array assignment: words, not a command
+  'commands=(\nls\n)',
+  'declare -a c=( ls x )',
+  'ls () { echo ok; }', // function definition
+  'ls() { echo ok; }',
+  '> /tmp/x command ls',
+  'case $x in a) command ls;; esac',
+  'case $x in ls) echo y;; esac', // ls as a pattern
   '\\ls',
   '/bin/ls',
   '/usr/bin/ls -la',

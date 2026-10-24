@@ -1232,6 +1232,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bldone9 2026-10-24 fbtool P1 note
 - **Pointer**: docs/backlog/fbtool-p1-findings-write-protection.md
 
+### bash-footgun-guard: add a bare ls rule for the Bash tool
+- **Id**: BL-0300
+- **Status**: open
+- **Since**: 2026-10-24
+- **Origin**: self
+- **Problem**: 這台機器上，在 Bash 工具裡直接執行 ls 或 eza 會卡住。owner 已核准在防呆 hook 加一條規則擋裸 ls。
+- **Impact**: 不擋的話，工作階段會一再卡住。
+- **Trigger**: ready now; owner decision card d-75c08ca7 approved it
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner decision d-75c08ca7
+- **Pointer**: docs/backlog/bash-footgun-guard-bare-ls-rule.md
+
 ### Claude Code upstream report draft (owner decides whether to send)
 - **Id**: BL-0301
 - **Status**: open

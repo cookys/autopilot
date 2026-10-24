@@ -871,16 +871,47 @@ function detectZshExpansion(cmd, cwd) {
 // whose first real word (after VAR=val, `time`, and flow keywords) is literally the unquoted word `ls`.
 // `command ls`, `\\ls`, `/bin/ls`, `'ls'` and `env ls` are not that word and pass. Heredoc bodies and
 // quoted text never reach here (executableText); `bash -c` bodies are non-interactive and skipped.
+// Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out.
+function stripArrayAssigns(text) {
+  const re = /[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=\(/g;
+  let out = '';
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    for (; i < text.length && depth > 0; i += 1) {
+      if (text[i] === '(') depth += 1;
+      else if (text[i] === ')') depth -= 1;
+    }
+    out += `${text.slice(last, m.index)} `;
+    last = i;
+    re.lastIndex = i;
+  }
+  return out + text.slice(last);
+}
+const REDIR_RE = /^(?:\d+|&)?(?:>>|>\||>&|&>|>|<&|<)(.*)$/;
+
 function detectBareLs(cmd) {
-  const text = executableText(typeof cmd === 'string' ? cmd : '');
+  const text = stripArrayAssigns(executableText(typeof cmd === 'string' ? cmd : ''));
   if (!/\bls\b/.test(text)) return null;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;
     let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
-    for (const { raw } of tokens(seg.text)) {
+    const toks = tokens(seg.text).map((t) => t.raw);
+    for (let i = 0; i < toks.length; i += 1) {
+      const raw = toks[i];
       if (afterTime && (raw === '-p' || raw === '--')) continue;
       if (raw === 'time') { afterTime = true; continue; }
       if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw)) continue;
+      // A leading redirection (`> f ls`, `2>/dev/null ls`, `<f ls`) does not end command position; a bare operator takes the next word as its target.
+      const rd = REDIR_RE.exec(raw);
+      if (rd) { if (rd[1] === '') i += 1; continue; }
+      // `case x in a|b) ls`: skip the head and each arm label, the word after the label is a command.
+      if (raw === 'case') { const k = toks.indexOf('in', i + 1); if (k < 0) break; i = k; continue; }
+      if (/^\(?[^()\s]*\)$/.test(raw)) continue;
+      // `ls () { … }` defines a function named ls; it is not a call.
+      if (raw === 'ls' && /^\(/.test(toks[i + 1] || '')) break;
       if (raw === 'ls') {
         return {
           rule: 'bare-ls',

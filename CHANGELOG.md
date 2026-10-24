@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-- barels (BL-0300): bash-launch-guard rule 4 denies a bare `ls` in command position of a Bash call (this machine's interactive alias hangs the call); `command ls` and `/bin/ls` pass. Knob `depth0_delegate_gate.bare_ls` / `AUTOPILOT_BASH_GUARD_LS_MODE` off|warn|deny, default deny.
-
 - ptg-p21: new opt-in Stop hook per-turn-gate (BL-0055 phase 2, default off; W4 retry text unevaluated until the phase-2 evaluation passes).
 
 - bldone6 (docs only): BACKLOG archive, seventh batch. Closed BL-0227 (managed rail does not pass the scorecard scope file) per owner decision d-c191e50b on 2026-10-23: keep pinning, so a qc seat without a pin stays refused at intake and no review-side admission path is added; sidecar removed, no code change.

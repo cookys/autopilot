@@ -102,6 +102,15 @@ timeout 60 bash "$W" 3 "$TEST_TMP/w10.marker" -- bash -c 'for i in 1 2 3 4 5; do
 assert_eq "0" "$?" "$L: 2.75s gaps under a 3s window are not killed"
 assert_contains "$(cat "$TEST_TMP/w10.out")" 's5' "$L: boundary seat reached its last line"
 
+# (12) whole-second clock (old bash path, forced by the seam): 2.75s gaps under a 3s window survive, and
+# an idle seat still dies, between the window and window + 2s.
+AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS=1 timeout 60 bash "$W" 3 "$TEST_TMP/w12.marker" -- bash -c 'for i in 1 2 3 4 5 6; do echo s$i; sleep 2.75; done' > "$TEST_TMP/w12.out" 2>&1 < /dev/null
+assert_eq "0" "$?" "$L: whole-second clock never kills a 2.75s-gap seat under a 3s window"
+t0=$SECONDS
+AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS=1 timeout 60 bash "$W" 2 "$TEST_TMP/w12b.marker" -- bash -c 'echo a; sleep 30' > "$TEST_TMP/w12b.out" 2>&1 < /dev/null
+assert_eq "125" "$?" "$L: whole-second clock still kills an idle seat"
+[ $((SECONDS - t0)) -le 6 ]; assert_eq "0" "$?" "$L: ... within window + 2s plus slack (took $((SECONDS - t0))s)"
+
 # (11) no bash job-control text in the shared output, on success and when the seat dies by signal.
 timeout 30 bash "$W" 30 "$TEST_TMP/w11.marker" -- bash -c 'echo ok; echo err >&2' > "$TEST_TMP/w11.out" 2>&1 < /dev/null
 assert_eq "ok
@@ -109,6 +118,12 @@ err" "$(cat "$TEST_TMP/w11.out")" "$L: watched success output is exactly the sea
 timeout 30 bash "$W" 30 "$TEST_TMP/w11.marker" -- bash -c 'echo ok; kill -KILL $$' > "$TEST_TMP/w11b.out" 2>&1 < /dev/null
 assert_eq "ok" "$(cat "$TEST_TMP/w11b.out")" "$L: a signalled seat adds no Killed/Done text"
 }
+
+# NEGATIVE CONTROL for the whole-second rule: the old threshold (elapsed >= window, no +1) must kill the 2.75s-gap seat.
+sed 's/limit_us=\$(( (idle + 1) \* 1000000 ))/limit_us=$((idle_us - 1))/' "$W" > "$TEST_TMP/no-plus1-watch.sh"
+cmp -s "$W" "$TEST_TMP/no-plus1-watch.sh"; assert_neq "0" "$?" "negative control: the +1 line exists to be removed"
+AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS=1 timeout 60 bash "$TEST_TMP/no-plus1-watch.sh" 3 "$TEST_TMP/nc.marker" -- bash -c 'for i in 1 2 3 4 5 6; do echo s$i; sleep 2.75; done' > "$TEST_TMP/nc.out" 2>&1 < /dev/null
+assert_eq "125" "$?" "negative control: without the +1 the whole-second clock kills a healthy seat"
 
 run_suite uutils
 if [ -x "$GNU_BIN/timeout" ]; then

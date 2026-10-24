@@ -4764,6 +4764,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/idle-watch.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_RUN_APPROVAL_MODE",
       "kind": "env",
       "audience": "user",

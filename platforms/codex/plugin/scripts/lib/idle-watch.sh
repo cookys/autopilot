@@ -57,8 +57,13 @@ kill_seat() {
   kill -KILL "$CHILD" 2>/dev/null
 }
 
-now_us() { # microseconds; bash >= 5 has EPOCHREALTIME, older shells fall back to whole seconds
-  if [ -n "${EPOCHREALTIME:-}" ]; then printf '%s' "${EPOCHREALTIME//[.,]/}"; else printf '%s' $((SECONDS * 1000000)); fi
+# Clock. bash >= 5 has EPOCHREALTIME (microseconds). Older bash only has whole-second SECONDS, whose
+# tick can fall anywhere inside a second, so an elapsed value of N may really be anywhere in (N-1, N+1).
+# AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS=1 forces that path (test seam).
+WHOLE=0
+if [ -z "${EPOCHREALTIME:-}" ] || [ "${AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS:-}" = "1" ]; then WHOLE=1; fi
+now_us() { # sets NOW; no command substitution, a subshell would not see SECONDS advance
+  if [ "$WHOLE" = 0 ]; then NOW="${EPOCHREALTIME//[.,]/}"; else NOW=$((SECONDS * 1000000)); fi
 }
 
 # The seat leads a process group of its own (job control), so killing it never reaches this
@@ -75,12 +80,17 @@ exec 2>/dev/null 5>&-
 trap 'kill_seat; wait "$CHILD" 2>/dev/null; exit 143' TERM INT
 
 idle_us=$((idle * 1000000))
-last="$(watch_size)"; since="$(now_us)"
+# Fire only when elapsed is strictly above limit_us. Precise clock: at or past the window. Whole-second
+# clock: only when the integer elapsed is strictly above window + 1s, so a seat is never killed early;
+# the price is that an idle seat dies between <window> and <window>+2s (plus the 0.25s poll).
+if [ "$WHOLE" = 0 ]; then limit_us=$((idle_us - 1)); else limit_us=$(( (idle + 1) * 1000000 )); fi
+last="$(watch_size)"; now_us; since=$NOW
 while kill -0 "$CHILD" 2>/dev/null; do
   sleep 0.25
   cur="$(watch_size)"
-  if [ "$cur" != "$last" ]; then last="$cur"; since="$(now_us)"; continue; fi
-  if [ $(( $(now_us) - since )) -ge "$idle_us" ] && kill -0 "$CHILD" 2>/dev/null; then
+  if [ "$cur" != "$last" ]; then last="$cur"; now_us; since=$NOW; continue; fi
+  now_us
+  if [ $((NOW - since)) -gt "$limit_us" ] && kill -0 "$CHILD" 2>/dev/null; then
     [ -n "$marker" ] && printf 'no output growth for %ss\n' "$idle" > "$marker"
     kill_seat
     wait "$CHILD" 2>/dev/null

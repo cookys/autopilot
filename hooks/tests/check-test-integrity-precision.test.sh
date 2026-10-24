@@ -27,6 +27,7 @@
 # RED at 6899fca8b (acceptance round 13): N70-N74 failed (unquoted \$a / \$1 / \$9 subject in [ ] vanishes when empty); C12 C13 failed (paired before).
 # C14: a quoted literal containing spaces is reported on purpose (whitespace split is kept; fail-closed trade-off, not a bug).
 # RED at 10610a01f (acceptance round 14): N75-N82 failed (unbalanced [[ ... ] and Unicode-space separators paired as equivalents).
+# RED at 409adebfe (acceptance round 15): N83-N87 failed (CR VT FF FS GS split the diff line and hid the failure-masking tail; text=True also turned CR into LF).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -815,5 +816,22 @@ if has_kind surface_touch; then report N82 1; else report N82 0; fi
 repo="$(mk_surface '[[ "$a" = "0" ]]' '[[ "$a" = "1" ]]')"
 run_case "$repo"
 if has_kind surface_touch; then report F26 0; else report F26 1; fi
+
+# ── N83-N87 a control character ends a line for Python splitlines() but not for Bash: the tail must not be hidden ──
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\r|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N83 1; else report N83 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\v|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N84 1; else report N84 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\f|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N85 1; else report N85 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\x1c|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N86 1; else report N86 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\x1d|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N87 1; else report N87 0; fi
 
 finalize_test

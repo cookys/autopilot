@@ -47,9 +47,11 @@ def run_command(cmd, repo_dir, check=True, env=None, cwd=None, timeout=None):
         cwd=cwd or repo_dir,
         env=env,
         capture_output=True,
-        text=True,
         timeout=timeout,
     )
+    # Decode by hand: text=True would translate CR into LF and hide control characters.
+    res.stdout = (res.stdout or b"").decode("utf-8", "surrogateescape")
+    res.stderr = (res.stderr or b"").decode("utf-8", "surrogateescape")
     if check and res.returncode != 0:
         raise RuntimeError(f"{cmd[0]} failed for {' '.join(cmd[1:])}: {res.stderr or res.stdout}")
     return res
@@ -196,11 +198,10 @@ def read_blob(path, ref, repo_dir):
         ["git", "show", f"{ref}:{path}"],
         cwd=repo_dir,
         capture_output=True,
-        text=True,
     )
     if res.returncode != 0:
         return None
-    return res.stdout
+    return res.stdout.decode("utf-8", "surrogateescape")
 
 
 def decode_git_token(token):
@@ -1752,7 +1753,7 @@ _RAW_TAUTOLOGY = re.compile(
 
 def _raw_code(content, lang_key):
     """The line with comments dropped but string literals kept."""
-    return content.strip() if _code_without_comment(content, lang_key) else ""
+    return content.strip(" \t") if _code_without_comment(content, lang_key) else ""
 
 
 def _surface_assertion_like(content, lang_key):
@@ -1926,7 +1927,7 @@ def _assertion_shape(raw, strict):
     assertion function, or the test operator of a [ a OP b ] form. strict
     additionally demands NOTHING else on the line (no ||, &&, ;, |, !, if,
     subshell, redirection, trailing comment)."""
-    if any(ord(c) > 127 for c in raw):
+    if any(ord(c) > 127 or (ord(c) < 32 and c != "\t") or ord(c) == 127 for c in raw):
         return None  # non-ASCII (Unicode spaces, look-alikes): not a recognisable shape
     if strict and raw.rstrip().endswith("\\"):
         return None  # line continuation: the real command continues on the next line
@@ -2364,7 +2365,11 @@ def main():
     # 2) Parse hunks from patch output for line-level checks.
     files_diff = {}
     try:
-        diff_lines = run_command(["git", "diff", "-M", "-U0", range_str], repo_dir).stdout.splitlines()
+        diff_text = run_command(["git", "diff", "-M", "-U0", range_str], repo_dir).stdout
+        # Split on LF only: CR, VT, FF, FS and GS are not line ends for Bash.
+        diff_lines = diff_text.split("\n")
+        if diff_lines and diff_lines[-1] == "":
+            diff_lines.pop()
     except Exception as exc:
         emit_git_error(f"Failed to run diff: {exc}")
 

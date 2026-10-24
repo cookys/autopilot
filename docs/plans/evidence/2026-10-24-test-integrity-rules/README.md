@@ -34,3 +34,5 @@ Acceptance round 7 (hunk shape: an equivalent replacement needs a hunk made only
 Precision note: the hunk-shape rule makes a legitimate assertion replacement that shares a hunk with other changes get reported as well; replay therefore went 8 -> 9 (a8dac5e6). Cases C1-C5 in check-test-integrity-precision.test.sh pin this accepted cost (the original F9, F13-F16 shapes).
 
 Closed bracket rule (acceptance round 12): only = == -eq earn an equivalent; the changing side must be a literal free of $, backticks and unquoted glob characters on both sides, the subject verbatim identical. Replay re-run: 60 ranges, 0 errors, **9 records**, identical to the previous run (no additions, none lost). Relational and != / -ne literal changes are now reported (accepted precision cost, cases C8-C11).
+
+Control-character line splitting (acceptance round 15): the diff is split on LF only, CR/VT/FF/FS/GS no longer end a line, subprocess output is decoded without newline translation, and any ASCII control character other than tab in an assertion line gives no equivalence. Replay re-run: 60 ranges, 0 errors, **9 records**, identical to the previous run. Controls N83-N87 added.

@@ -96,6 +96,13 @@ OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1
 assert_contains "$(cat "$ARGV_LOG")" ' --variant xhigh ' "--effort max is clamped to --variant xhigh (provider has no max)"
 assert_not_contains "$(cat "$ARGV_LOG")" ' --variant max ' "max never reaches opencode (it would fall through to the provider default silently)"
 
+# 1b') --effort default: opencode-go models with no effort tier (beam-free, longcat-2.0) take no
+# --variant; the request then carries no reasoning_effort at all
+OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-eff-default --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+assert_contains "$OUT" '"status": "committed"' "opencode --effort default is accepted (not precondition_failed)"
+assert_not_contains "$(cat "$ARGV_LOG")" '--variant' "opencode --effort default sends no --variant"
+assert_contains "$(cat "$ARGV_LOG")" ' -m opencode-go/muse-spark-1.3-contributor ' "opencode --effort default still carries -m <model>"
+
 # 1c) opencode 2.x: --dir/--pure/--variant are gone; the plan is `run --standalone -m model#variant
 # --format json` with the worktree as cwd (lib/opencode-containment.js `plan --profile implement`)
 STUB_V2="$TEST_TMP/opencode-v2"
@@ -114,6 +121,8 @@ assert_contains "$OUT" '"status": "committed"' "opencode v2 committed path"
 assert_eq "run --standalone -m opencode-go/muse-spark-1.3-contributor#xhigh --format json" "$(cat "$ARGV_LOG")" "opencode v2 argv: --standalone, model#variant (max->xhigh), no --dir/--pure/--variant"
 assert_contains "$(cat "$ARGV_LOG.cwd")" "feat-oc-v2" "opencode v2 runs with the worktree as cwd"
 assert_contains "$(cat "$STDIN_LOG")" 'HARNESS DIRECTIVE' "opencode v2 prompt still travels on stdin"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-v2-default --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
+assert_eq "run --standalone -m opencode-go/muse-spark-1.3-contributor --format json" "$(cat "$ARGV_LOG")" "opencode v2 --effort default: bare model id, no #variant"
 STUB_V9="$TEST_TMP/opencode-v9"
 printf '#!/usr/bin/env bash\n[ "$1" = "--version" ] && { echo 9.0.1; exit 0; }\nexit 0\n' > "$STUB_V9"; chmod +x "$STUB_V9"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/x --branch feat/oc-v9 --prompt-file "$PROMPT" --opencode-bin "$STUB_V9" --context-window off 2>&1)"

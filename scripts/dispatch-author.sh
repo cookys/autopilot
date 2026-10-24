@@ -878,8 +878,8 @@ case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--e
 # a runner that consumes --effort would be handed the literal word "default".
 if [ "$EFFORT" = "default" ]; then
   case "$RUNNER" in
-    anthropic-compatible|cc-shim|claude-native|kimi) ;;
-    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+    anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
 # claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum

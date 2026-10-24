@@ -649,4 +649,17 @@ repo="$(mk_surface '[[ "$age" =~ "0" ]]' '[[ "$age" =~ .* ]]')"
 run_case "$repo"
 if has_kind surface_touch; then report N54 1; else report N54 0; fi
 
+# ── F20 / F21 quoted glob characters are literals: a literal swap is a legitimate pair ──
+repo="$(mk_surface '[[ "$x" == "a*b" ]]' '[[ "$x" == "a*c" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F20 0; else report F20 1; fi
+repo="$(mk_surface "[[ \"\$x\" == 'a*b' ]]" "[[ \"\$x\" == 'a*c' ]]")"
+run_case "$repo"
+if has_kind surface_touch; then report F21 0; else report F21 1; fi
+
+# ── C6 escaped glob character: conservatively treated as unquoted, accepted precision cost (depth-0 2026-10-24) ──
+repo="$(mk_surface '[[ "$x" == a\*b ]]' '[[ "$x" == a\*c ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C6 1; else report C6 0; fi
+
 finalize_test

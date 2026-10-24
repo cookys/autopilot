@@ -36,9 +36,16 @@ run_seat() { # <mode> <extra args...>; sets OUT RC ELAPSED
 alive() { local p; p="$(cat "$GC_PID_FILE" 2>/dev/null)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
 reap() { local p; p="$(cat "$GC_PID_FILE" 2>/dev/null)"; [ -n "$p" ] && kill -KILL "$p" 2>/dev/null; return 0; }
 
+GNU_TIMEOUT=/usr/bin/gnutimeout   # real GNU coreutils timeout (setpgid(0,0), no --foreground): the uutils one on this host is not the reference
+GNU_BIN="$TEST_TMP/gnu-bin"; mkdir -p "$GNU_BIN"
+[ -x "$GNU_TIMEOUT" ] && ln -sf "$GNU_TIMEOUT" "$GNU_BIN/timeout"
+W="$REPO_ROOT/scripts/lib/idle-watch.sh"
+
+run_suite() { # <label>  (PATH decides which timeout the rail and the watcher run under)
+L="$1"
 # (1) stall after some output: killed at the idle window, correct code, no orphan, well before the wall cap.
 run_seat stall --timeout 60s --idle-timeout 2s
-assert_contains "$OUT" '"status": "no_verdict"' "stalled seat is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "$L: stalled seat is no_verdict"
 assert_contains "$OUT" 'seat_idle_timeout' "reason code is seat_idle_timeout"
 assert_eq "1" "$RC" "no_verdict exit code"
 [ "$ELAPSED" -lt 30 ]; assert_eq "0" "$?" "killed near the idle window, not the 60s wall cap (took ${ELAPSED}s)"
@@ -71,12 +78,33 @@ AUTOPILOT_IDLE_WATCH_SCRIPT="$NOOP" run_seat stall --timeout 4s --idle-timeout 1
 assert_not_contains "$OUT" 'seat_idle_timeout' "negative control: without the real watcher the stall is not reported idle"
 sleep 0.3; reap
 
-# (6) watcher alone, same-group fallback: descendants are walked and killed when the group is the root's.
-W="$REPO_ROOT/scripts/lib/idle-watch.sh"; F="$TEST_TMP/w.out"; M="$TEST_TMP/w.marker"; : > "$M"
-rm -f "$GC_PID_FILE"
-timeout 30 bash -c 'AUTOPILOT_IDLE_ROOT_PGID=$(ps -o pgid= -p $$ | tr -d " ") exec "$@"' _ \
-  bash "$W" 1 "$M" -- bash -c 'echo hi; sleep 302 & echo $! > "$0"; wait' "$GC_PID_FILE" > "$F" 2>&1 < /dev/null
-assert_eq "125" "$?" "watcher exits 125 on idle"
-assert_contains "$(cat "$M")" 'no output growth' "marker written"
-sleep 0.5; alive; assert_eq "1" "$?" "same-group fallback kills the descendant"; reap
+
+# (7) wall clock first with the knob set: timeout's own 124 survives (reason carries rc=124, not 137), no orphan.
+run_seat stall --timeout 3s --idle-timeout 600s
+assert_contains "$OUT" 'rc=124' "$L: wall-cap TERM path keeps exit 124"
+assert_not_contains "$OUT" 'seat_idle_timeout' "$L: wall cap first is not an idle verdict"
+sleep 0.5; alive; assert_eq "1" "$?" "$L: wall-cap path leaves no orphan"; reap
+
+# (8) watcher under this timeout: exits 125 itself (the marker hides the code from the rail output).
+M="$TEST_TMP/w.marker"; : > "$M"; rm -f "$GC_PID_FILE"
+timeout 30 bash "$W" 1 "$M" -- bash -c 'echo hi; sleep 302 > /dev/null 2>&1 < /dev/null & echo $! > "$0"; wait' "$GC_PID_FILE" > "$TEST_TMP/w.out" 2>&1 < /dev/null
+assert_eq "125" "$?" "$L: watcher itself exits 125 on idle"
+sleep 0.5; alive; assert_eq "1" "$?" "$L: watcher leaves no orphan"; reap
+}
+
+run_suite uutils
+if [ -x "$GNU_BIN/timeout" ]; then
+  _P="$PATH"; PATH="$GNU_BIN:$PATH"
+  "$GNU_BIN/timeout" --version | head -1 | grep -q GNU; assert_eq "0" "$?" "GNU timeout really is GNU"
+  run_suite gnu
+  # NEGATIVE CONTROL for the group fix: the previous watcher (kills its own group) must fail (8) under GNU timeout.
+  git -C "$REPO_ROOT" show 7908fced9:scripts/lib/idle-watch.sh > "$TEST_TMP/old-watch.sh" 2>/dev/null
+  M="$TEST_TMP/old.marker"; : > "$M"; rm -f "$GC_PID_FILE"
+  timeout 30 bash "$TEST_TMP/old-watch.sh" 1 "$M" -- bash -c 'echo hi; sleep 303 > /dev/null 2>&1 < /dev/null & echo $! > "$0"; wait' "$GC_PID_FILE" > /dev/null 2>&1 < /dev/null
+  assert_neq "125" "$?" "negative control: the group-killing watcher loses its own exit code under GNU timeout"
+  sleep 0.3; reap
+  PATH="$_P"
+else
+  echo "SKIP gnu: $GNU_TIMEOUT not present"
+fi
 finalize_test

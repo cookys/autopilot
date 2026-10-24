@@ -14,10 +14,9 @@
 # Fail-open: when neither stdout nor stderr is a regular file (a pipe or a tty has no size to
 # watch) or <idle_seconds> is not a positive integer, the command is exec'd unwatched.
 #
-# Kill scope: AUTOPILOT_IDLE_ROOT_PGID names the caller's own process group (never to be killed).
-# When this process is in a different group (the normal case under `timeout`, which leads a
-# group of its own) the whole group is killed, so no descendant survives. When it shares the
-# caller's group the descendants of the command are walked and killed instead.
+# Kill scope: the command runs as the leader of its own process group (`set -m`), and only that
+# group is killed. The watcher and the `timeout` above it are outside it, so a wall-clock TERM
+# (timeout -> watcher trap -> seat group killed) still ends as timeout's own exit 124.
 #
 # Exit: the command's own code; 125 idle kill; 143 on TERM/INT (command killed first).
 
@@ -48,19 +47,23 @@ descendants() { # <pid>: print every descendant pid, depth first
 }
 
 kill_seat() {
-  local mypg pid
-  mypg="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')"
-  if [ -n "$mypg" ] && [ "$mypg" != "${AUTOPILOT_IDLE_ROOT_PGID:-}" ]; then
-    kill -KILL -- "-$mypg" 2>/dev/null
-  else
+  local pid pg
+  pg="$(ps -o pgid= -p "$CHILD" 2>/dev/null | tr -d ' ')"
+  if [ "$pg" = "$CHILD" ]; then
+    kill -KILL -- "-$CHILD" 2>/dev/null
+  else   # job control unavailable: walk the descendants instead
     for pid in $(descendants "$CHILD"); do kill -KILL "$pid" 2>/dev/null; done
-    kill -KILL "$CHILD" 2>/dev/null
   fi
+  kill -KILL "$CHILD" 2>/dev/null
 }
 
+# The seat leads a process group of its own (job control), so killing it never reaches this
+# watcher or the `timeout` above it: the 125 / 124 exit codes stay intact under GNU and uutils alike.
+set -m
 "$@" <&0 3>&- 4>&- &
 CHILD=$!
-trap 'kill_seat; exit 143' TERM INT
+set +m
+trap 'kill_seat; wait "$CHILD" 2>/dev/null; exit 143' TERM INT
 
 last="$(watch_size)"; since=$SECONDS
 while kill -0 "$CHILD" 2>/dev/null; do

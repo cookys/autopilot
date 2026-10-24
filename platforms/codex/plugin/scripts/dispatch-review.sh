@@ -1081,7 +1081,6 @@ if [ -n "$IDLE_TIMEOUT" ] && [ "$IDLE_TIMEOUT" != "0" ]; then
   _idle_s=$(( _idle_ms / 1000 ))
   [ "$_idle_s" -ge 1 ] || die_precondition "--idle-timeout must be at least 1s (got: $IDLE_TIMEOUT)"
   IDLE_MARKER="$(mktemp -t dispatch-review-idle-XXXXXX)"; : > "$IDLE_MARKER"
-  AUTOPILOT_IDLE_ROOT_PGID="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')"; export AUTOPILOT_IDLE_ROOT_PGID
   IDLE_WRAP=(bash "${AUTOPILOT_IDLE_WATCH_SCRIPT:-$_REVIEW_SELF_DIR/lib/idle-watch.sh}" "$_idle_s" "$IDLE_MARKER" --)
 fi
 # INT/TERM are not trapped. Bash defers a signal trap until the foreground

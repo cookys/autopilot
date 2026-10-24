@@ -4764,19 +4764,6 @@
       "relates": []
     },
     {
-      "name": "AUTOPILOT_IDLE_ROOT_PGID",
-      "kind": "env",
-      "audience": "internal",
-      "class": "plumbing",
-      "default": null,
-      "readers": [
-        "scripts/dispatch-review.sh",
-        "scripts/lib/idle-watch.sh"
-      ],
-      "doc": null,
-      "relates": []
-    },
-    {
       "name": "AUTOPILOT_RUN_APPROVAL_MODE",
       "kind": "env",
       "audience": "user",

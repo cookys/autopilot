@@ -6,12 +6,21 @@ Date 2026-10-24 (Taipei). Plan: `docs/plans/2026-10-24-per-turn-gate-phase2.md` 
 
 `trial-v1.sh` (this directory) is the runner that produced t1-t3; `trial.sh` is its v2 (used for t4 and any rerun): same call, but all state lives under a `mktemp -d` root outside the repo, the hook command is generated per `<label>:<remaining>` spec (so several project Stop hooks can run with independent counters), and it refuses to run when the root is inside a git work tree (negative control: the first v2 draft checked a not-yet-existing directory, ran and copied credentials into the checkout; that copy was deleted at once, never staged or committed, and the check was fixed to create the directory first; second draft refused with rc=3). Both runners run one `claude -p` call per invocation: config dir holds only a copy of `.credentials.json` (never the real `~/.claude`; in t1-t3 the dirs were under the scratch directory outside the repo tree, in v2 under mktemp), HOME is a per-trial scratch dir, cwd is a scratch project whose `.claude/settings.json` defines only the probe Stop hook (t1-t3 ran `p20run/bin/hook.js`; its sha256 equals the committed `probe-hook.js`, both listed in `sums.txt`; the P0 throwaway hook: blocks while `remaining` in a counter file is above 0, logs the full stdin). Trace: `--output-format stream-json --verbose --include-hook-events --debug hooks`. Every call ran with `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID`. Raw logs stay in scratch; `sums.txt` lists their sha256. `readings.txt` is the de-identified summary (ids replaced by globally unique labels `<tN.sidK>` / `<tN.pidK>`, numbered per trial, so equal labels mean equal ids within a trial); `block-in-stream.txt` counts the block reason in the stream; `verifier-wall.txt` is (d).
 
-Commands (see `trial.sh` arguments: name, setting-sources, plugin 0/1, resume id or `-`, prompt):
-- t1 turn 1: `trial.sh t1 project 0 - "Reply with exactly: OK"` (counter remaining=1)
-- t1 turn 2: `REMAIN=1 trial.sh t1 project 0 <session id of turn 1> "Reply with exactly: DONE"`
-- t2: `trial.sh t2 user 0 - "Reply with exactly: OK"` (negative control for b)
-- t3: `trial.sh t3 project 1 - "Reply with exactly: OK"` (adds `--plugin-dir /home/cookys/projects/autopilot`)
-- t4 (reverse of c): `trial.sh t4 project 1 - "Reply with exactly: OK" gate:0 plugsim:1` (two project Stop hooks, both `probe-hook.js`: `gate` allows, `plugsim` blocks once, simulating a plugin hook that blocks; plus the five real plugin hooks)
+Commands. `trial.sh` arguments: name, setting-sources, plugin 0/1, resume id or `-`, prompt, then one `<label>:<remaining blocks>` per project Stop hook.
+
+v1 historical commands (`trial-v1.sh`, not executable, now also refuses to run inside a work tree; do not run). They produced t1-t3 and relied on v1 behaviour: one hard-wired hook, one shared `counter.json`/`hook.log` whose call count carried across turns, and an optional `REMAIN` variable:
+- t1 turn 1: `trial-v1.sh t1 project 0 - "Reply with exactly: OK"` (counter remaining=1)
+- t1 turn 2: `REMAIN=1 trial-v1.sh t1 project 0 <session id of turn 1> "Reply with exactly: DONE"`
+- t2: `trial-v1.sh t2 user 0 - "Reply with exactly: OK"` (negative control for b)
+- t3: `trial-v1.sh t3 project 1 - "Reply with exactly: OK"` (adds `--plugin-dir <REPO>`)
+
+Equivalent reruns with v2 `trial.sh` (it makes its own `mktemp -d` root and prints it as `root=`; set `P20_ROOT=<dir outside the repo>` to reuse one root across the two turns of t1). The v2 counter is created only when absent, so resetting it between turns means deleting the counter file; the call number in the hook log then restarts at 1 (v1 kept counting 3, 4):
+- t1 turn 1: `P20_ROOT=$ROOT trial.sh t1 project 0 - "Reply with exactly: OK" gate:1`
+- t1 turn 2: `rm $ROOT/trials/t1/gate.counter.json; P20_ROOT=$ROOT trial.sh t1 project 0 <session id from the RESULT line of turn 1> "Reply with exactly: DONE" gate:1`
+- t2: `trial.sh t2 user 0 - "Reply with exactly: OK" gate:1`
+- t3: `trial.sh t3 project 1 - "Reply with exactly: OK" gate:1`
+- t4 (v2 as run):
+`trial.sh t4 project 1 - "Reply with exactly: OK" gate:0 plugsim:1` (two project Stop hooks, both `probe-hook.js`: `gate` allows, `plugsim` blocks once, simulating a plugin hook that blocks; plus the five real plugin hooks)
 - (d): `node gate/verify-turn.js --turn 5 --repo repo --json` in `evals/orchestration/tasks/t14-constraint-horizon`, timed with `/usr/bin/time`, five runs.
 
 ## Results
@@ -36,9 +45,13 @@ None with section 2.1 (turn boundary) or 2.3 (coexistence, timing: measured max 
 
 ## Raw readings, call times, per-hook detail
 
-- `raw-excerpts/<trial>/`: `hook.log` (probe hook stdin and decision per call, raw; t4 has `gate.hook.log` and `plugsim.hook.log`), `stream-excerpt-*.jsonl` (stream-json `init`, `hook_started`/`hook_response` and `result` lines; dropped: assistant/user message bodies, tool lists, skill lists, usage tables, SessionStart hook stdout; the credential copy and `.credentials.json` are not included; a scan for `sk-ant`, token fields, `Bearer` and the account email finds nothing), `debug-stop-lines-*.txt` (the `--debug hooks` lines for Stop executions and decisions plus the first and last debug timestamp). File names keep the original suffixes (`--` = fresh session, the 36-character suffix = resume of that session). `sums.txt` now points at these committed files; the sha256 of the full raw files is kept in its last section for the record (they stay in scratch).
+- `raw-excerpts/<trial>/`: `hook.log` (probe hook stdin and decision per call; masked as described below; t4 has `gate.hook.log` and `plugsim.hook.log`), `stream-excerpt-*.jsonl` (stream-json `init`, `hook_started`/`hook_response` and `result` lines; dropped: assistant/user message bodies, tool lists, skill lists, usage tables, SessionStart hook stdout; the credential copy and `.credentials.json` are not included; a scan for `sk-ant`, token fields, `Bearer` and the account email finds nothing), `debug-stop-lines-*.txt` (the `--debug hooks` lines for Stop executions and decisions plus the first and last debug timestamp). File names keep the original suffixes (`--` = fresh session, `resume` = the resumed second turn of t1; in the scratch originals that suffix was the 36-character session id). `sums.txt` now points at these committed files; the sha256 of the full raw files is kept in its last section for the record (they stay in scratch).
 - `call-times.txt`: start of every real call (first `--debug` timestamp) and stream file mtime, against the `expected.md` commit time 00:38:59Z (08:38:59+08:00). All five measured calls started at 00:39:12Z or later (t4 at 00:44:54Z), so none started before the expected readings were committed. The mishap call (see Method) is not listed: its files were deleted with the stray directory; it ran after the expected.md commit as well (it was run while building v2 after t3).
 - `stop-events.txt`: per Stop event, each hook (command, exit status, duration, source) and any decision output. Trials t1-t3 only have this aggregate from the debug log and stream hook events (no per-hook decision record was kept at the time; a hook that blocks shows as a `success:` stdout line followed by a `returned permissionDecision: deny` line naming the hook). For t4 the same sources were kept and both probe instances are told apart by their `gate.`/`plugsim.` log paths in the command; the `plugsim` instance is the one with the `deny` line.
+
+## Masking
+
+The committed excerpts and notes are masked deterministically (script not shipped; rules are exact string/regex substitutions): `<SCRATCH>` the scratch directory of the session, `<MKTEMP>` the mktemp root of t4, `<REPO>` the autopilot checkout, `<HOME>` the user's home, `<SCRATCH-ENC>`/`<MKTEMP-ENC>`/`<REPO-ENC>` the dash-encoded forms inside transcript paths, every other UUID `<id>`. Session and prompt ids become `<tN.sidK>` / `<tN.pidK>`, numbered per trial in the order readings.txt uses (hook logs first, then stream sessions), so equality is kept and labels match readings.txt. The full-file sha256 values in the last section of `sums.txt` are of the files before masking. `check-recompute.js` (run in this directory, `node check-recompute.js`) recomputes the decision lines and cost sum of `readings.txt`, the first debug timestamps in `call-times.txt` and the hook-execution count of `stop-events.txt` from the committed excerpts; all pass. The stream file mtimes in `call-times.txt` are not recomputable from the excerpts.
 
 ## Credentials check
 

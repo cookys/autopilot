@@ -8,7 +8,7 @@ hook log hook.log
 stream file stream--.jsonl
 init session=<t1.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
 result session=<t1.sid1> is_error=false subtype=success cost=0.0195218 text="ALPHA"
-stream file stream-e9d37f23-8af3-4068-8e32-148befcaaf5c.jsonl
+stream file stream-resume.jsonl
 init session=<t1.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
 result session=<t1.sid1> is_error=false subtype=success cost=0.025133399999999997 text="GAMMA"
 ## t2

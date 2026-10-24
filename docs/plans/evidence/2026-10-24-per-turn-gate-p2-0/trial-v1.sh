@@ -1,7 +1,10 @@
 #!/bin/bash
+# HISTORICAL VERSION, kept only to compare with t1-t3. DO NOT RUN. Use trial.sh (v2).
+# The only edits after t1-t3 ran: this header, the not-executable mode, and the work-tree refusal below.
 # usage: trial.sh <name> <setting-sources> <plugin 0|1> <resume-session-or-"-"> <prompt>
 set -u
 R=$(dirname "$0"); name=$1; ss=$2; plug=$3; res=$4; prompt=$5
+if git -C "$R" rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo "refusing: $R is inside a git work tree (historical script, do not run)" >&2; exit 3; fi
 T=$R/trials/$name; mkdir -p $T/home $T/proj/.claude $T/cfg
 [ -f $T/cfg/.credentials.json ] || cp ~/.claude/.credentials.json $T/cfg/.credentials.json
 cat > $T/proj/.claude/settings.json <<J

@@ -61,8 +61,8 @@ mk_mut() { # <name> then pairs: <old> <new> ...; builds $TEST_TMP/mut-<name>/run
   local n="$1" f; shift; f="$TEST_TMP/mut-$n/run-p2-batch.js"; mkdir -p "$(dirname "$f")"; cp "$WRAP_SRC" "$f"
   while [ $# -ge 2 ]; do mutate "$f" "$1" "$2" || fail "mutant $n could not be built"; shift 2; done
 }
-mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need("
-mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap,"
+mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need(" "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
+mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
 mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"
@@ -76,14 +76,19 @@ mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--form
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok',"
-mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && kv0.m1" "need(true || o && kv0.m1"
+mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && typeof" "need(true || o && typeof"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
-mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || "
+mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
 mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal,"
-mk_mut endrc "if (kv.n === '5' && rcOf[id] === 0) tally" "if (kv.n === '5') tally"
-mk_mut rcint "need(Number.isInteger(rcOf[id])," "need(true || Number.isInteger(rcOf[id])," "if (kv.n === '5' && rcOf[id] === 0) tally" "if (kv.n === '5') tally"
-mk_mut scoreor "need(o && kv0.m1" "need(true || o && kv0.m1"
+mk_mut endrc "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
+mk_mut rcint "need(Number.isInteger(rcOf[id])," "need(true || Number.isInteger(rcOf[id])," "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
+mk_mut scoreor "need(o && typeof" "need(true || o && typeof"
+mk_mut turnsraw "need(Number(kv.n) === rawTurns," "need(true || Number(kv.n) === rawTurns," "if (rawTurns === 5 && rcOf[id] === 0)" "if (kv.n === '5' && rcOf[id] === 0)"
+mk_mut boolcheck "typeof o.constraints_pass === 'boolean' && typeof o.features_pass === 'boolean' && " ""
+mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
+mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
+mk_mut costraw "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -409,5 +414,40 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-emiss")" 0 "SCORE_MISSING after a su
 tamper orc; OL=$(ls "$TEST_TMP"/t-orc/runs/*/oracle.log | head -1); sed -i 's/"constraints_pass": *true/"constraints_pass": false/; s/"constraints_pass":true/"constraints_pass":false/' "$OL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-orc")" 0 "oracle.log disagrees with the SCORE row: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-scoreor/run-p2-batch.js" "$TEST_TMP/t-orc")" 0 "RED oracle recomputation: mutant says OK"
+
+echo "--- round 6: TURNS from result.json, oracle booleans"
+tamper tz; for f in "$TEST_TMP"/t-tz/runs/*/result.json; do sed -i -E 's/"turns_completed":[0-9]+/"turns_completed":0/' "$f"; done
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tz")" 0 "all result.json turns_completed 0, log says 5 and COMPLETE 3/3: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-turnsraw/run-p2-batch.js" "$TEST_TMP/t-tz")" 0 "RED TURNS summary only: mutant says OK"
+for variant in missing string null; do
+  tamper ob; python3 - "$TEST_TMP/t-ob" "$variant" <<'PY'
+import sys, json, glob, re
+d, v = sys.argv[1:3]
+oc = sorted(glob.glob(d + '/runs/*/oracle.log'))[0]; rid = oc.split('/')[-2]
+txt = open(oc).read()
+pat = r'"features_pass":\s*(true|false),?'
+if not re.search(pat, txt): raise SystemExit('no features_pass field in oracle.log')
+rep = {'missing': '', 'string': '"features_pass": "false",', 'null': '"features_pass": null,'}[v]
+open(oc, 'w').write(re.sub(pat, rep, txt, count=1))
+p = d + '/invocation.log'; L = open(p).read().split('\n')
+for k, l in enumerate(L):
+    if ' SCORE ' + rid + ' ' in l: L[k] = re.sub(r'm1=.*$', 'm1=1 m2=0 m3=0', l)
+open(p, 'w').write('\n'.join(L))
+PY
+  assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ob")" 0 "oracle features_pass $variant, SCORE m2=0: real audit non-zero"
+  assert_eq "$(audit_rc "$TEST_TMP/mut-boolcheck/run-p2-batch.js" "$TEST_TMP/t-ob")" 0 "RED oracle $variant: mutant says OK"
+done
+
+echo "--- round 6: MODEL, trace counts and run cost recomputed from raw files"
+tamper mraw; RL=$(ls "$TEST_TMP"/t-mraw/runs/*/run.log | head -1); sed -i 's/claude-haiku-4-5/claude-other-9/' "$RL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-mraw")" 0 "run.log model differs from the MODEL row: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-modelraw/run-p2-batch.js" "$TEST_TMP/t-mraw")" 0 "RED MODEL from summary only: mutant says OK"
+tamper traw; TF=$(ls "$TEST_TMP"/t-traw/trace/ON-*/trace-turn1.log | head -1)
+echo 'Hooks: Stop [node x/hooks/per-turn-gate.js] finished with status 0 (3ms)' >>"$TF"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-traw")" 0 "trace has one more gate execution than the HOOKCOUNT row says: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-traceraw/run-p2-batch.js" "$TEST_TMP/t-traw")" 0 "RED trace counts from summary only: mutant says OK"
+tamper craw; RL=$(ls "$TEST_TMP"/t-craw/runs/*/run.log | head -1); sed -i -E 's/"total_cost_usd":[0-9.]+/"total_cost_usd":0.01/' "$RL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-craw")" 0 "run.log cost differs from the COST row: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-costraw/run-p2-batch.js" "$TEST_TMP/t-craw")" 0 "RED cost from summary only: mutant says OK"
 
 finalize_test

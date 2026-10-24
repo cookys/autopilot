@@ -22,8 +22,8 @@ Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decisi
 | W4 commit (mode `violations+features`) | `977027c999e52383ad354f35fa88ea16dec7476f` (hook blob `45f3c47845c30b00e1b0c7a742b40210becab5bd`) |
 | Treatment hook = develop final | `hooks/per-turn-gate.js` at develop `1ce92330d`: blob `f4fdf20152efcb7ecb15108fefc24bf10b8dfefc`, sha256 `10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0`. It differs from the W4 commit by the P2-1 review fixes (locking, state fencing, validation: fd63ae15c, 8c41e656b, e2302e5dc, 9aa650fc8); the W4 trigger and retry text are the ones evaluated. |
 | Harness `evals/orchestration/run-orchestration-eval.sh` | sha256 `eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149` |
-| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `3bee72c074c681f18b8f678153c98b0af76a12323bcc44e607b8fd4005081137` |
-| `manifest.json` (this directory) | sha256 `483e2f97916f8da7e60553c6f40c0c866687abf32578f3bd99381f04afc0455c`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
+| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `01759dd729c0c8df380e2ecd5248b5f3b9c72565e5659c3fc3b3841dc0085ab7` |
+| `manifest.json` (this directory) | sha256 `741bcdd32ad65ad1f78773c8124cdc237d1d58ebae490306e445e8e23ad0e5c6`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
 | `taskhash.expected.txt` | sha256 `2b1bcd033bd41093250649e1ed16bb28f7af9cd371771e864d1310f0c67756d4`, also in the manifest; the wrapper requires it tracked, unmodified and equal to that value, and the audit re-checks all three |
 | `order.txt` (this directory) | sha256 `080bf25ed67ca1ddf96bbdff68b46298ef99d968d84632360e87b37b0c1f67fc` |
 | `selfcheck.out` (this directory) | output of `node evals/orchestration/run-p2-batch.js --selfcheck` at the wrapper hash above |
@@ -59,22 +59,24 @@ Check on the P1 rerun control's first five run costs (0.5529, 0.4575, 0.5917, 0.
 
 `--selfcheck` drives the real batch code over a synthetic batch (fake executor), asserts every row's tokens were written, runs the audit over the result, and prints the table (`selfcheck.out`). A batch is valid only if `node evals/orchestration/run-p2-batch.js --audit --manifest <manifest> --run-dir <dir> --clone <clone>` exits 0.
 
-| # | Condition | Applies | Artifact written by the wrapper |
-|---|---|---|---|
-| 1 | Each id launched exactly once, in the preregistered order | per id | `START <id> elapsed=` before the call, `END <id> rc=` after; the audit checks the START/END sequence equals the seeded order |
-| 2 | Sequential, one window of at most 8 h | per id and end | `WINDOW_START` once (file `window.start`); `elapsed=` in each START; `STOP_WINDOW` (exit 8) if exceeded |
-| 3 | Task hashes equal the preregistered listing | first call, last call, any early exit | `taskhash.pre.txt`, `taskhash.post.txt`, `TASKHASH_DIFF pre|post ok|fail` (post is written on every way out of the wrapper) |
-| 4 | CLI version 2.1.309 | per id | `VERSION <id> <value>` before the call; `RUNVERSION <id> ok|fail` from `result.json` |
-| 5 | Authentication probe passed, no expiry | per id | `PROBE_OK|PROBE_FAIL <id>`, `probes.tsv`; `STOP_AUTH` (exit 6) when a run ends in an auth error; a failed probe launches nothing (exit 7) |
-| 6 | No deviation from the preregistered command | per id | `CMD <id> <sha256 of argv>` (out and trace paths replaced by placeholders), audited against `argv_sha` |
-| 7 | Oracle score recoverable | per id | `SCORE <id> m1 m2 m3` or `SCORE_MISSING <id>` |
-| 8 | At least 27 of 30 completed five turns, in each arm | per id and end | `TURNS <id> arm= n=`; `COMPLETE ON=x/30 C=y/30` |
-| 9 | Single resolved model id | per id | `MODEL <id> <value>` |
-| 10 | Hook only in ON runs, only the gate hook | per id | `HOOKCOUNT <id> gate_trace= gate_log= plugin=`, `HOOKERR <id> n` (trace from `--debug hooks --debug-file`, same flags in both arms) |
-| 11 | Blocks per turn never exceed N | per id | `BLOCKMAX <id> v` from the hook log |
-| 12 | Interleaving order as preregistered | per id | `ORDER <id> <arm> pos=k` before the call |
-| 13 | Cost within the cap | per id | `COSTCHK` before, `COST <id> arm= run= probe= running= projected=` after; `STOP_COST` (exit 5) |
-| 14 | Preregistration committed earlier | before first call | `PREREG <hash> <time> ancestor=yes|no` (note and manifest tracked and unmodified), `HASH wrapper|hook|harness|manifest`; the audit checks the commit time is before `WINDOW_START` and the first START |
+| # | Condition | Applies | Artifact written by the wrapper | Audit recomputes from |
+|---|---|---|---|---|
+| 1 | Each id launched exactly once, in the preregistered order | per id | `START <id> elapsed=` before the call, `END <id> rc=` after; the audit checks the START/END sequence equals the seeded order | log rows and their timestamps only; the order itself is recomputed from the manifest seed |
+| 2 | Sequential, one window of at most 8 h | per id and end | `WINDOW_START` once (file `window.start`); `elapsed=` in each START; `STOP_WINDOW` (exit 8) if exceeded | log timestamps and `window.start` only (summary-trusting, no independent raw file) |
+| 3 | Task hashes equal the preregistered listing | first call, last call, any early exit | `taskhash.pre.txt`, `taskhash.post.txt`, `TASKHASH_DIFF pre|post ok|fail` (post is written on every way out of the wrapper) | `taskhash.pre/post.txt` against the committed baseline; the task directory itself is not re-hashed at audit time (summary-trusting for its later state) |
+| 4 | CLI version 2.1.309 | per id | `VERSION <id> <value>` before the call; `RUNVERSION <id> ok|fail` from `result.json` | manifest pin and `runs/<id>/result.json` `runner_version`; the pre-run `VERSION` row is log-only |
+| 5 | Authentication probe passed, no expiry | per id | `PROBE_OK|PROBE_FAIL <id>`, `probes.tsv`; `STOP_AUTH` (exit 6) when a run ends in an auth error; a failed probe launches nothing (exit 7) | `probes.tsv` cross-checked with the PROBE rows; both are written by the wrapper and the probe response is not kept (summary-trusting) |
+| 6 | No deviation from the preregistered command | per id | `CMD <id> <sha256 of argv>` (out and trace paths replaced by placeholders), audited against `argv_sha` | `argv_sha` in the committed manifest; the harness's actual argv is not stored, only its hash (summary-trusting beyond the hash) |
+| 7 | Oracle score recoverable | per id | `SCORE <id> m1 m2 m3` or `SCORE_MISSING <id>` | `runs/<id>/oracle.log` (both fields must be real booleans) |
+| 8 | At least 27 of 30 completed five turns, in each arm | per id and end | `TURNS <id> arm= n=`; `COMPLETE ON=x/30 C=y/30` | `runs/<id>/result.json` `turns_completed` and the END rc |
+| 9 | Single resolved model id | per id | `MODEL <id> <value>` | `runs/<id>/run.log` `modelUsage` keys |
+| 10 | Hook only in ON runs, only the gate hook | per id | `HOOKCOUNT <id> gate_trace= gate_log= plugin=`, `HOOKERR <id> n` (trace from `--debug hooks --debug-file`, same flags in both arms) | `trace/<id>/` debug traces (gate_trace, plugin) and `runs/<id>/hook/live/per-turn-gate/*.jsonl` (gate_log, HOOKERR) |
+| 11 | Blocks per turn never exceed N | per id | `BLOCKMAX <id> v` from the hook log | `runs/<id>/hook/live/per-turn-gate/*.jsonl` |
+| 12 | Interleaving order as preregistered | per id | `ORDER <id> <arm> pos=k` before the call | manifest seed |
+| 13 | Cost within the cap | per id | `COSTCHK` before, `COST <id> arm= run= probe= running= projected=` after; `STOP_COST` (exit 5) | `runs/<id>/run.log` last result `total_cost_usd` (run cost), `probes.tsv` (probe costs, summary-trusting beyond the file), COSTCHK recomputed from the COST rows |
+| 14 | Preregistration committed earlier | before first call | `PREREG <hash> <time> ancestor=yes|no` (note and manifest tracked and unmodified), `HASH wrapper|hook|harness|manifest`; the audit checks the commit time is before `WINDOW_START` and the first START | git: note at the recorded commit, history since, commit time; committed manifest and baseline files |
+
+Rows that can only trust a summary (no raw file the audit can recompute from): 2 window (timestamps only), 3 (the task directory state after the batch), 5 (the probe response is not kept; `probes.tsv` and the log are both wrapper-written), 6 (only the argv hash is stored). Everything else is recomputed from raw run files, which must still be present when the audit runs.
 
 Also kept: no scratch path in `invocation.log` (the audit scans for absolute paths), node timestamps, the `env -u` prefix, one harness call per id.
 

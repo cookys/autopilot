@@ -284,14 +284,7 @@ const W = {
     ctx.log('MODEL', `${id} ${keys.size ? [...keys].sort().join(',') : 'unknown'}`);
   },
   writeHookCount(ctx, id, arm, out, traceDir) {
-    const lines = [];
-    try { for (const f of fs.readdirSync(traceDir).sort()) lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* no trace */ }
-    let gateTrace = 0, plugin = 0;
-    for (const l of lines) {
-      const m = /Hooks: Stop \[([^\]]*)\].*finished with status/.exec(l);
-      if (!m) continue;
-      if (m[1].includes('hooks/per-turn-gate.js')) gateTrace++; else plugin++;
-    }
+    const { gate: gateTrace, plugin } = traceCounts(traceDir);
     const recs = hookRecords(out);
     ctx.log('HOOKCOUNT', `${id} gate_trace=${gateTrace} gate_log=${recs.length} plugin=${plugin}`);
     ctx.log('HOOKERR', `${id} ${recs.filter((r) => r.reason === 'error').length}`);
@@ -309,6 +302,27 @@ const W = {
     ctx.log('COST', `${id} arm=${arm} run=${runCost.toFixed(6)} probe=${probeCost.toFixed(6)} running=${p.spent.toFixed(4)} projected=${p.projected.toFixed(4)}`);
   },
 };
+
+/** Gate-hook and other Stop-hook executions counted from the debug traces of one run. */
+function traceCounts(traceDir) {
+  const lines = [];
+  try { for (const f of fs.readdirSync(traceDir).sort()) lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* no trace */ }
+  let gate = 0, plugin = 0;
+  for (const l of lines) {
+    const m = /Hooks: Stop \[([^\]]*)\].*finished with status/.exec(l);
+    if (!m) continue;
+    if (m[1].includes('hooks/per-turn-gate.js')) gate++; else plugin++;
+  }
+  return { gate, plugin };
+}
+
+/** Resolved model ids from the result objects of a run.log, joined as the MODEL row writes them. */
+function modelsOf(runLog) {
+  const keys = new Set();
+  for (const o of jsonObjects(runLog)) if (o.type === 'result' && o.modelUsage && typeof o.modelUsage === 'object') for (const k of Object.keys(o.modelUsage)) keys.add(k);
+  return keys.size ? [...keys].sort().join(',') : 'unknown';
+}
+const lastResultCost = (runLog) => { let c = 0; for (const o of jsonObjects(runLog)) if (o.type === 'result') c = Number(o.total_cost_usd) || 0; return c; };
 
 function hookRecords(out) {
   const dir = path.join(out, 'hook', 'live', 'per-turn-gate');
@@ -514,7 +528,8 @@ function audit(runDir, m, clone, opts) {
     if (sc.length === 1) {
       let o = null; try { o = jsonObjects(read(path.join('runs', id, 'oracle.log')))[0]; } catch (_e) { /* below */ }
       const kv0 = kvOf(sc[0].rest);
-      need(o && kv0.m1 === (o.constraints_pass === true ? '1' : '0') && kv0.m2 === (o.features_pass === true ? '1' : '0'), `${id}: SCORE differs from the oracle.log recomputation`);
+      // Both oracle fields must be real booleans (as writeScore requires); anything else is not a recoverable score.
+      need(o && typeof o.constraints_pass === 'boolean' && typeof o.features_pass === 'boolean' && kv0.m1 === (o.constraints_pass === true ? '1' : '0') && kv0.m2 === (o.features_pass === true ? '1' : '0'), `${id}: SCORE differs from the oracle.log recomputation`);
     }
     if (sc.length === 1) {
       const kv = kvOf(sc[0].rest);
@@ -528,7 +543,13 @@ function audit(runDir, m, clone, opts) {
   for (const id of ids) {
     const t = byId('TURNS', id);
     need(t.length === 1, `${id}: TURNS missing`);
-    if (t.length === 1) { const kv = kvOf(t[0].rest); if (kv.n === '5' && rcOf[id] === 0) tally[kv.arm]++; }
+    if (t.length === 1) {
+      // The raw count comes from the run's own result.json; the TURNS row must equal it and the recount uses the raw value.
+      let rawTurns = -1; try { const v = JSON.parse(read(path.join('runs', id, 'result.json'))).turns_completed; if (Number.isInteger(v)) rawTurns = v; } catch (_e) { /* -1 */ }
+      const kv = kvOf(t[0].rest);
+      need(Number(kv.n) === rawTurns, `${id}: TURNS n=${kv.n} differs from result.json turns_completed (${rawTurns})`);
+      if (rawTurns === 5 && rcOf[id] === 0) tally[(order.find((o) => o.id === id) || {}).arm]++;
+    }
   }
   for (const arm of ['ON', 'C']) need(tally[arm] >= m.min_complete, `${arm}: only ${tally[arm]} of ${m.n_per_arm} completed five turns (need ${m.min_complete})`);
   const comp = by('COMPLETE');
@@ -538,6 +559,7 @@ function audit(runDir, m, clone, opts) {
   need(by('MODEL').length === ids.length, 'a MODEL line is missing');
   need(models.size === 1 && !models.has('unknown'), `resolved model ids are not a single known value: ${[...models].join(' | ')}`);
   for (const id of ids) need(byId('MODEL', id).length === 1, `${id}: need exactly one MODEL row`);
+  for (const id of ids) { const mr = byId('MODEL', id)[0]; if (mr) need(mr.rest.slice(id.length + 1) === modelsOf(read(path.join('runs', id, 'run.log')) || ''), `${id}: MODEL row differs from the model ids in the run's own result objects`); }
   for (const r of by('MODEL')) need(/^[^\s,]+$/.test(r.rest.slice(idOf(r).length + 1)), `${idOf(r)}: MODEL must be exactly one model id (got "${r.rest.slice(idOf(r).length + 1)}")`);
   // 10 hook only in ON
   for (const o of order) {
@@ -545,6 +567,8 @@ function audit(runDir, m, clone, opts) {
     need(h.length === 1, `${o.id}: HOOKCOUNT missing`);
     if (h.length === 1) {
       const kv = kvOf(h[0].rest);
+      const tc = traceCounts(path.join(runDir, 'trace', o.id));
+      need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin, `${o.id}: HOOKCOUNT gate_trace/plugin (${kv.gate_trace}/${kv.plugin}) differ from the debug traces (${tc.gate}/${tc.plugin})`);
       if (o.arm === 'ON') need(Number(kv.gate_trace) === Number(kv.gate_log) && Number(kv.gate_log) > 0, `${o.id}: gate_trace ${kv.gate_trace} != gate_log ${kv.gate_log} (or zero)`);
       else need(Number(kv.gate_trace) === 0 && Number(kv.gate_log) === 0, `${o.id}: control run shows gate hook activity`);
     }
@@ -592,6 +616,7 @@ function audit(runDir, m, clone, opts) {
     if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
+  for (const id of ids) { const c0 = byId('COST', id)[0]; if (c0) { const rawCost = lastResultCost(read(path.join('runs', id, 'run.log')) || ''); need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5, `${id}: COST run ${kvOf(c0.rest).run} differs from the last result object of run.log (${rawCost})`); } }
   for (const r of by('COST')) need(ids.includes(idOf(r)), `COST row for an unexpected id ${idOf(r)}`);
   for (const id of ids) {
     const cc = byId('COSTCHK', id), st = byId('START', id)[0];

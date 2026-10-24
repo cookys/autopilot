@@ -49,3 +49,7 @@ Red before green in `p2-batch-wrapper.test.sh`: probes.tsv now carries a status 
 ## Acceptance round 5 fixes
 
 Red before green in `p2-batch-wrapper.test.sh`: RUNVERSION is compared with the pin and with `result.json` (a `wrong-version` value behind an ok marker, and an altered `result.json`, were accepted); END rc must be an integer, a non-zero rc (124 included) is not counted in COMPLETE and the audit recounts COMPLETE itself (an rc=124 run still counted fails; an rc=124 run with SCORE_MISSING or an oracle-consistent SCORE and a lowered COMPLETE is a valid batch; SCORE_MISSING after rc 0 fails); every SCORE is recomputed from the run's `oracle.log`. The wrapper writes COMPLETE with the same rule. Test data are rebuilt equivalents of the coordinator's `new-end-failed` and rc=124 cases.
+
+## Review round 6 fixes
+
+Red before green in `p2-batch-wrapper.test.sh`: TURNS is checked against each run's `result.json` `turns_completed` and COMPLETE is recounted from the raw value (all result.json at 0 with a log of 5s was accepted); oracle fields must be real booleans (missing field, string "false", null); MODEL, the HOOKCOUNT trace counts and the COST run value are recomputed from `run.log` and the debug traces. PREREG section 4 has a new column naming the raw source of each row and lists the four rows that can only trust a summary.

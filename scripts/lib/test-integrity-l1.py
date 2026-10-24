@@ -1895,6 +1895,9 @@ def _norm_operand(tok):
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", tok)
 
 
+_TEST_JOINERS = frozenset(("-o", "-a", "!", "||", "&&", "(", ")"))
+
+
 def _assertion_shape(raw, strict):
     """(kind, key) of a bare assertion statement, else None. kind/key is the
     assertion function, or the test operator of a [ a OP b ] form. strict
@@ -1906,7 +1909,7 @@ def _assertion_shape(raw, strict):
     if call:
         if strict and not _STRICT_ARGS.fullmatch(" " + call.group(2)):
             return None
-        return ("fn", call.group(1).lower())
+        return ("fn", call.group(1))
     br = _BRACKET.match(raw)
     if br:
         inner = _QUOTED.sub("Q", br.group(1))
@@ -1920,8 +1923,13 @@ def _assertion_shape(raw, strict):
             probe = re.sub(r"\s[<>]\s", " ", inner) if dbl else inner
             if re.search(r"[|&;()<>!#`]", probe):
                 return None
+        # Only exactly "operand operator operand" is a recognisable shape:
+        # -o, -a, !, ||, && or any extra token could make the test always true.
+        toks = inner.split()
+        if len(toks) != 3 or toks[0] in _TEST_JOINERS or toks[2] in _TEST_JOINERS:
+            return None
         op = _TEST_OP.search(" " + inner + " ")
-        return ("op", op.group(1)) if op else None
+        return ("op", op.group(1)) if op and op.group(1) == toks[1] else None
     return None
 
 

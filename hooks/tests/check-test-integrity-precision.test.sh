@@ -16,6 +16,7 @@
 # RED at ae6cd0d61 (acceptance round 6): N38 N39 N40 N41 failed (heredoc end word moved so a context assertion became text; ${age:-} / $((age)) / $(echo $age) accepted as equivalents).
 # RED at edc664987 (acceptance round 7): N42 N43 N44 failed (assertion replaced by a block - function, if false, : ' ' - accepted as equivalent). F9 F13-F16 had to move their extra line into unchanged context: a hunk with any non-assertion-pair line no longer earns the equivalent exemption.
 # RED at e0e6bbf0b (review 2bb2da5e): N45 failed (one space and one tab compared equal by character count).
+# RED at 185ca0591 (acceptance round 8): N47 N48 failed (multi-operand [ ... -o/-a ... ] paired with a three-token test); N46 N49 N50 passed on the base (case-fold and ! / || were already caught by other checks) and stay as controls.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -613,5 +614,24 @@ if has_kind surface_touch; then report C5 1; else report C5 0; fi
 repo="$(mk_surface $' assert_eq "$age" "0"' $'\tassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report N45 1; else report N45 0; fi
+
+# ── N46 shell function names are case sensitive ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'Assert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report N46 1; else report N46 0; fi
+
+# ── N47-N50 bracket arity: only exactly "operand operator operand" is the same shape ──
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "1" -o x ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N47 1; else report N47 0; fi
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "1" -a x ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N48 1; else report N48 0; fi
+repo="$(mk_surface '[ "$age" = "0" ]' '[ ! "$age" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N49 1; else report N49 0; fi
+repo="$(mk_surface '[[ "$age" = "0" ]]' '[[ "$age" = "1" || x ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N50 1; else report N50 0; fi
 
 finalize_test

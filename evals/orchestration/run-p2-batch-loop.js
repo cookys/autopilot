@@ -11,10 +11,12 @@
 // --min-window-s left (checked before the first start too; a fresh batch has no window.start yet, so its window is whole), after
 // --max-restarts restarts, or on any exit code other than 0 or 7. It never refreshes a token and never touches a credential
 // file: it only reads the expiry. Start it with the real HOME (see run-p2-batch.js).
-// Lifecycle: TERM and INT are forwarded to the running wrapper and the launcher waits for it to end (status `interrupted`); the
-// wrapper gets --parent-pid, so after a SIGKILL of the launcher the wrapper pauses before its next id (PROBE_FAIL, PAUSE).
-// The running wrapper's pid is in <run-dir>/loop.wrapper.pid.
-// Exit code: the last wrapper exit code, 9 when it stopped for the window or the restart limit, 128+n after a signal.
+// Lifecycle: the FIRST TERM or INT is a safe pause: the launcher writes <run-dir>/stop.request, tells the wrapper (which only raises a
+// flag), waits while the running id finishes and the next id pauses with reason operator_stop, writes the status `stopped_by_operator`
+// and exits 0; the batch resumes later (the next start clears the request). A SECOND TERM or INT kills the wrapper's whole process
+// group at once (status `aborted`; such a batch cannot be audited) and exits 128+n. The wrapper gets --parent-pid, so after a SIGKILL
+// of the launcher it pauses before its next id with reason parent_gone. The running wrapper's pid is in <run-dir>/loop.wrapper.pid.
+// Exit code: the last wrapper exit code, 9 when it stopped for the window or the restart limit, 0 after a safe stop, 128+n after a hard one.
 
 const fs = require('fs');
 const path = require('path');
@@ -46,8 +48,15 @@ async function main(argv) {
     try { return manifest.window_s - (Date.now() - Number(fs.readFileSync(path.join(runDir, 'window.start'), 'utf8'))) / 1000; } catch (_e) { return manifest.window_s; }
   };
   const credFile = o['credentials-source'] ? path.resolve(o['credentials-source']) : path.join(process.env.HOME || '', '.claude', '.credentials.json');
-  let child = null, signalled = 0;
-  for (const [name, num] of [['SIGTERM', 15], ['SIGINT', 2]]) process.on(name, () => { signalled = num; if (child) { try { process.kill(-child.pid, name); } catch (_e) { /* already gone */ } } });
+  const stopFile = path.join(runDir, 'stop.request');
+  fs.rmSync(stopFile, { force: true });
+  let child = null, signalled = 0, signals = 0, hard = false;
+  for (const [name, num] of [['SIGTERM', 15], ['SIGINT', 2]]) {
+    process.on(name, () => {
+      signals++; signalled = num;
+      if (signals === 1) { try { fs.writeFileSync(stopFile, `${new Date().toISOString()} ${name}\n`); } catch (_e) { /* status shows it */ } if (child) { try { process.kill(child.pid, name); } catch (_e) { /* gone */ } } } else { hard = true; if (child) { try { process.kill(-child.pid, 'SIGKILL'); } catch (_e) { /* gone */ } } }
+    });
+  }
   let restarts = 0;
   for (;;) {
     if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
@@ -58,16 +67,17 @@ async function main(argv) {
     if (o['credentials-source']) args.push('--credentials-source', credFile);
     status(`running restarts=${restarts} first=${next || 1}`);
     const env = { ...process.env }; delete env.CLAUDE_CONFIG_DIR; // the wrapper's claude children must use the per-run home only
-    child = spawn(process.execPath, args, { stdio: 'inherit', env, detached: true }); // own process group: a forwarded signal reaches the wrapper's children too
+    child = spawn(process.execPath, args, { stdio: 'inherit', env, detached: true }); // own process group, so the hard stop reaches the wrapper's children too
     fs.writeFileSync(path.join(runDir, 'loop.wrapper.pid'), `${child.pid}\n`);
     const rc = await new Promise((res) => child.on('exit', (code, sig) => res(code === null ? 128 + (sig === 'SIGTERM' ? 15 : 9) : code)));
     child = null;
-    if (signalled) { status(`interrupted signal=${signalled} wrapper_rc=${rc} restarts=${restarts}`); return 128 + signalled; }
+    if (hard) { status(`aborted hard stop signal=${signalled} wrapper_rc=${rc}: the batch cannot be audited`); return 128 + signalled; }
+    if (signalled || fs.existsSync(stopFile)) { status(`stopped_by_operator wrapper_rc=${rc} restarts=${restarts}`); return rc === 0 || rc === 7 ? 0 : rc; }
     if (rc !== 7) { status(`ended rc=${rc} restarts=${restarts}`); return rc; }
     status(`paused rc=7 restarts=${restarts} waiting for a fresh credential source`);
     if (restarts >= Number(o['max-restarts'])) { status(`stopped restart_limit restarts=${restarts}`); return 9; }
     for (;;) {
-      if (signalled) { status(`interrupted signal=${signalled} restarts=${restarts}`); return 128 + signalled; }
+      if (signalled || fs.existsSync(stopFile)) { status(`stopped_by_operator restarts=${restarts}`); return 0; }
       if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
       const exp = w.credExpiresAt(credFile);
       if (exp === null || exp - Date.now() >= Number(o['fresh-min']) * 60000) break;
@@ -75,7 +85,7 @@ async function main(argv) {
     }
     // At least one poll interval passes between a pause and its restart, even when the source is already fresh.
     await wait(Number(o['poll-s']));
-    if (signalled) { status(`interrupted signal=${signalled} restarts=${restarts}`); return 128 + signalled; }
+    if (signalled || fs.existsSync(stopFile)) { status(`stopped_by_operator restarts=${restarts}`); return 0; }
     restarts++;
   }
 }

@@ -18,6 +18,8 @@
 // (access token expired, refresh token rotated by the main CLI) and every later id would copy that stale file. When the source's
 // claudeAiOauth.expiresAt is less than 10 minutes away the id is neither copied nor probed: it pauses (PROBE_FAIL, PAUSE, exit 7)
 // with a saved response that says auth_ok false, reason source_token_expiring, cost 0. A source without expiresAt is not judged.
+// Stop: the first TERM or INT (or a file <run-dir>/stop.request) is a safe pause: the running id finishes, the next id pauses before its
+// probe (PROBE_FAIL, PAUSE, exit 7, reason operator_stop) and the batch resumes later; a second TERM or INT ends the process at once.
 // --parent-pid P (set by run-p2-batch-loop.js): when that process is gone (the wrapper was re-parented or P no longer exists) the next
 // id pauses before its probe (PROBE_FAIL, PAUSE, exit 7, reason parent_gone), so a killed launcher leaves no wrapper starting new ids.
 // The id already running finishes. Resume after a pause with --first <position of the paused id>; run-p2-batch-loop.js does that.
@@ -36,6 +38,10 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+
+/** Set in the batch worker: a shared flag the main thread raises on the first TERM or INT. */
+let STOP = null;
 
 // CLAUDE_CONFIG_DIR is unset for every child: with it set, claude would read that directory (possibly the real ~/.claude) instead of the per-run home.
 const ENV_PREFIX = ['env', '-u', 'AUTOPILOT_SESSION_ID', '-u', 'CLAUDE_CODE_SESSION_ID', '-u', 'CLAUDE_CONFIG_DIR'];
@@ -252,7 +258,11 @@ const W = {
     return ok;
   },
   writeVersion(ctx, id) {
-    const v = (sh(ctx, ['claude', '--version']).stdout.split('\n')[0] || '').trim();
+    // --version needs no credentials: it runs in a throwaway home that holds only the onboarding file (never the real HOME).
+    const vh = path.join(ctx.runDir, 'homes', '_version');
+    fs.mkdirSync(vh, { recursive: true });
+    fs.writeFileSync(path.join(vh, '.claude.json'), '{"hasCompletedOnboarding":true}\n');
+    const v = (sh(ctx, [`HOME=${vh}`, 'claude', '--version']).stdout.split('\n')[0] || '').trim();
     if (!readLog(ctx).some((r) => r.kind === 'VERSION' && idOf(r) === id)) ctx.log('VERSION', `${id} ${v}`); // once per id, also after a resume
     if (v !== ctx.manifest.cli) throw new Exit(3, `ABORT version ${id} differs from the pinned CLI`);
   },
@@ -424,6 +434,7 @@ function runBatch(ctx, first, last) {
   const m = ctx.manifest;
   const order = makeOrder(m.seed, m.n_per_arm);
   const lo = first || 1, hi = last || order.length;
+  fs.rmSync(path.join(ctx.runDir, 'stop.request'), { force: true }); // a resume clears an earlier stop request
   ctx.log('WRAPPER_START', `first=${lo} last=${hi}`);
   ctx.started = true;
   W.writePrereg(ctx);
@@ -454,7 +465,9 @@ function runBatch(ctx, first, last) {
     const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;
     // A launcher that is gone (killed, even with SIGKILL) must not leave a wrapper that keeps starting ids: pause instead.
     const orphan = ctx.parentPid ? (process.ppid !== ctx.parentPid || !pidAlive(ctx.parentPid)) : false;
-    const pauseReason = expiring ? 'source_token_expiring' : (orphan ? 'parent_gone' : '');
+    // A stop request (first TERM or INT, or <run-dir>/stop.request) pauses before the next id; the running id always finishes.
+    const stopAsked = (STOP !== null && Atomics.load(STOP, 0) === 1) || fs.existsSync(path.join(ctx.runDir, 'stop.request'));
+    const pauseReason = expiring ? 'source_token_expiring' : (orphan ? 'parent_gone' : (stopAsked ? 'operator_stop' : ''));
     if (!pauseReason) {
       fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
       fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
@@ -1221,8 +1234,6 @@ function main(argv) {
     const clone = path.resolve(opt['--clone'] || process.cwd());
     fs.mkdirSync(runDir, { recursive: true });
     const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
-    // No signal handlers: the batch is synchronous, so a handler could not run before it ended and would only turn TERM into a no-op.
-    // TERM or INT therefore stops the wrapper at once; the log then has no footer, which is an interrupted batch (it does not audit).
     let code = 0;
     try { runBatch(ctx, Number(opt['--first']) || 0, Number(opt['--last']) || 0); } catch (e) {
       if (!(e instanceof Exit)) { ctx.log('ABORT', `unexpected ${String(e && e.message).slice(0, 120)}`); code = 3; } else {
@@ -1238,6 +1249,25 @@ function main(argv) {
   return 2;
 }
 
-if (require.main === module) process.exitCode = main(process.argv.slice(2));
+/**
+ * The batch is synchronous, so signal handlers cannot run inside it. It runs in a worker thread instead and this thread keeps the
+ * handlers: the first TERM or INT raises the stop flag (safe pause: the running id finishes, the next one pauses with reason
+ * operator_stop, a legal log that resumes); the second one ends the process at once (an interrupted batch that does not audit).
+ */
+function runInWorker() {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let code = 3, n = 0;
+  for (const [name, c] of [['SIGTERM', 143], ['SIGINT', 130]]) process.on(name, () => { n++; if (n === 1) Atomics.store(flag, 0, 1); else process.exit(c); });
+  const w = new Worker(__filename, { argv: process.argv.slice(2), workerData: { sab } });
+  w.on('message', (m) => { code = m.code; });
+  w.on('error', (e) => { process.stderr.write(`${e && e.stack}\n`); code = 3; });
+  w.on('exit', () => { process.exitCode = code; });
+}
+
+if (require.main === module) {
+  if (isMainThread && process.argv.includes('--run')) runInWorker();
+  else if (!isMainThread) { STOP = new Int32Array(workerData.sab); parentPort.postMessage({ code: main(process.argv.slice(2)) }); } else process.exitCode = main(process.argv.slice(2));
+}
 
 module.exports = { schemaTable, credExpiresAt, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

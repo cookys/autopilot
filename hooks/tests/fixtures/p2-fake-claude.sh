@@ -3,7 +3,7 @@
 # Emulates just enough of 2.1.309: --version, a -p auth probe, and -p/--resume turns that edit the repo and run the
 # Stop hooks of .claude/settings.json (block => the "model" repairs the repo, hook called again with stop_hook_active true).
 # Env: FAKE_STATE (dir), FAKE_FIXTURES (t14 gate fixtures), FAKE_COST (per call), FAKE_TASK_EDIT (file edited once mid-batch).
-case "$*" in *--version*) echo "2.1.309 (Claude Code)"; exit 0 ;; esac
+case "$*" in *--version*) [ -n "${FAKE_STATE:-}" ] && { mkdir -p "$FAKE_STATE"; echo "$HOME" >> "$FAKE_STATE/version.home"; }; echo "2.1.309 (Claude Code)"; exit 0 ;; esac
 resume=""; dbg=""
 while [ $# -gt 0 ]; do
   case "$1" in --resume) resume="$2"; shift 2 ;; --debug-file) dbg="$2"; shift 2 ;; *) shift ;; esac

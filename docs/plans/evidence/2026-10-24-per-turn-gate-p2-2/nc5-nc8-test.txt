@@ -1,0 +1,13 @@
+--- seeded order, cost rule, selfcheck
+RED selfcheck: mutant exits non-zero
+--- valid batch
+--- NC5 audit
+NC5 truncated: real audit rc=1, stubbed audit rc=0
+NC5 notaskpost: real audit rc=1, stubbed audit rc=0
+NC5 dupstart: real audit rc=1, stubbed audit rc=0
+--- NC8 task integrity
+nc8: post-fail lines=1 audit rc=1
+NC8 green: real wrapper records TASKHASH_DIFF post fail and the audit fails
+nc8: post-fail lines=0 audit rc=1
+NC8 red: wrapper without the post listing writes no TASKHASH_DIFF post fail
+PASS [p2-batch-wrapper] 20 assertions

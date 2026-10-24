@@ -1,0 +1,3 @@
+RED NC7: hook log: want exactly 1 block record, got 0;
+GREEN NC7: real harness holds
+PASS [orchestration-eval-hook] 10 assertions

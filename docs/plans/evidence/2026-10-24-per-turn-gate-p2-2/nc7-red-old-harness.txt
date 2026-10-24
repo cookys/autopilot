@@ -1,0 +1,3 @@
+== NC7 red: the develop harness (1ce92330d) has no --gate hook ==
+ERROR: --gate must be off|observe|enforce (got: hook)
+exit=2

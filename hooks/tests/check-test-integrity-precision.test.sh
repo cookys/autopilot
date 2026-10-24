@@ -14,6 +14,7 @@
 # RED at d4415142e (acceptance round 5): N33 N34 N35 failed (replacement moved into an existing heredoc, or always true via ${age}, accepted as equivalent).
 # RED at ae6cd0d61 (four-seat round 3): N36 F19 failed (double quote opened by $(cat <<'EOF' and closed lines later masked the heredoc opener; single-quoted '${x}' treated as self-comparison).
 # RED at ae6cd0d61 (acceptance round 6): N38 N39 N40 N41 failed (heredoc end word moved so a context assertion became text; ${age:-} / $((age)) / $(echo $age) accepted as equivalents).
+# RED at edc664987 (acceptance round 7): N42 N43 N44 failed (assertion replaced by a block - function, if false, : ' ' - accepted as equivalent). F9 F13-F16 had to move their extra line into unchanged context: a hunk with any non-assertion-pair line no longer earns the equivalent exemption.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -291,9 +292,9 @@ if has_kind deleted_line && has_text 'tests/tool-gc.test.sh'; then report N11 1;
 # ── F9 rule 1: surface helper edited, assertion kept (net 0) ────────────────
 repo="$(new_repo)"
 mkdir -p "$repo/tests/fixtures"
-printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+printf 'assert_eq "$a" "1" "x"\necho keep\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
 commit_all "$repo" "base"
-printf 'assert_eq "$a" "1" "x, with a longer message"\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
+printf 'assert_eq "$a" "1" "x, with a longer message"\necho keep\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
 commit_all "$repo" "parametrise helper"
 run_case "$repo"
 if has_kind surface_touch; then report F9 0; else report F9 1; fi
@@ -478,22 +479,22 @@ run_case "$repo"
 if has_kind surface_touch; then report N30 1; else report N30 0; fi
 
 # ── F13 rule 1: a here-string is not a heredoc opener ──
-repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
+repo="$(mk_surface $'cat <<< hello\nassert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report F13 0; else report F13 1; fi
 
 # ── F14 rule 1: <<EOF inside a quoted string is data ──
-repo="$(mk_surface 'assert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
+repo="$(mk_surface $'echo \'use <<EOF\'\nassert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report F14 0; else report F14 1; fi
 
 # ── F15 rule 1: <<EOF inside a trailing comment is data ──
-repo="$(mk_surface 'assert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
+repo="$(mk_surface $'echo ok # use <<EOF\nassert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report F15 0; else report F15 1; fi
 
 # ── F16 rule 1: heredoc delimiter with a dash closes at its full name ──
-repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
+repo="$(mk_surface $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
 run_case "$repo"
 if has_kind surface_touch; then report F16 0; else report F16 1; fi
 
@@ -564,5 +565,16 @@ if has_kind surface_touch; then report N40 1; else report N40 0; fi
 repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$(echo $age)"')"
 run_case "$repo"
 if has_kind surface_touch; then report N41 1; else report N41 0; fi
+
+# ── N42 / N43 / N44 rule 1: replacement wrapped in a block that may never run ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'unused() {\nassert_eq "$age" "1"\n}')"
+run_case "$repo"
+if has_kind surface_touch; then report N42 1; else report N42 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' $'if false; then\nassert_eq "$age" "1"\nfi')"
+run_case "$repo"
+if has_kind surface_touch; then report N43 1; else report N43 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' $': \'\nassert_eq "$age" "1"\n\'')"
+run_case "$repo"
+if has_kind surface_touch; then report N44 1; else report N44 0; fi
 
 finalize_test

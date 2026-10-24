@@ -1997,12 +1997,15 @@ def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None, bas
             return True
     for hunk in hunks:
         new_no = hunk["new_start"]
+        h_removed, h_added = [], []
         heredoc_end = None
         heredoc_opened_added = False
         prev_continues = False
         for line in hunk["lines"]:
             if line.startswith("-"):
                 removed += 1
+                if line[1:].strip():
+                    h_removed.append(line[1:])
                 if lang_key and _surface_assertion_like(line[1:], lang_key):
                     removed_asserts.append(line[1:])
                 continue
@@ -2022,12 +2025,26 @@ def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None, bas
                 if hd:
                     heredoc_end = hd.group(2)
                     heredoc_opened_added = line.startswith("+")
+            if line.startswith("+") and body.strip():
+                h_added.append(body)
             if line.startswith("+"):
                 if lang_key and _surface_assertion_like(body, lang_key):
                     if in_heredoc or prev_continues:
                         inert_added.add(len(added_asserts))
                     added_asserts.append(body)
             prev_continues = lang_key == "shell" and body.rstrip().endswith("\\")
+        if lang_key and any(_surface_assertion_like(r, lang_key) for r in h_removed):
+            # An equivalent replacement exists only in a hunk made purely of
+            # one-to-one assertion pairs at the same indentation. Any other
+            # added line (block opener/closer, heredoc, comment, definition)
+            # may change whether the new assertion executes: report.
+            if len(h_removed) != len(h_added) or not all(
+                _surface_assertion_like(r, lang_key)
+                and _surface_assertion_like(a, lang_key)
+                and (len(r) - len(r.lstrip())) == (len(a) - len(a.lstrip()))
+                for r, a in zip(h_removed, h_added)
+            ):
+                return True
         if heredoc_end is not None and heredoc_opened_added:
             # -U0 hunk: an added heredoc opener still open at the hunk end wraps
             # unchanged lines below it into text; the diff cannot show which.

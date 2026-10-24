@@ -2,6 +2,11 @@
   "ranges_scanned": 60,
   "records": [
     {
+      "merge_sha": "a8dac5e62b8fe54b31e94c0aec50495a2ab563b3",
+      "kind": "surface_touch",
+      "file": "evals/orchestration/tasks/t7-config-rename/repo/tests/tool.test.js"
+    },
+    {
       "merge_sha": "6fcfed4b19dc9d9fe955665d42d669ff112e8670",
       "kind": "surface_touch",
       "file": ".github/workflows/test.yml"

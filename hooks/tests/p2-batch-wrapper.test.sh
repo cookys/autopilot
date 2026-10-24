@@ -70,14 +70,17 @@ mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(c
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
 mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r)),"
-mk_mut errfmt "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
+mk_mut errfmt "if (he) need(" "if (false) need(" "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
 mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true,"
 mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);"
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
-mk_mut nowindow "if (tmo0 <= 0) throw" "if (false) throw" "if (tmo <= 0) throw" "if (false) throw"
+mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
+mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok',"
+mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3"
+mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
 mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || "
 mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
-mk_mut hookerr "need(errRuns <= 2," "need(true || errRuns <= 2,"
+mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
 export MAN_WINDOW=3
@@ -333,5 +336,37 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-late")" 0 "PREREG replaced by a late
 assert_eq "$(audit_rc "$TEST_TMP/mut-prereplaced/run-p2-batch.js" "$TEST_TMP/t-late")" 0 "RED replaced PREREG: mutant says OK"
 git -C "$CLONE" update-ref HEAD "$OLDHEAD"; git -C "$CLONE" reset -q --hard "$OLDHEAD"
 assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "PREREG restored: real audit OK"
+
+echo "--- round 4: probe status, SCORE values, BLOCKMAX from raw log, timeout before artifacts"
+tamper pst; python3 - "$TEST_TMP/t-pst/probes.tsv" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); f = L[0].split('\t'); f[1] = '1'; f[3] = 'fail'; L[0] = '\t'.join(f); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pst")" 0 "failed probe row covered by a PROBE_OK: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-probest/run-p2-batch.js" "$TEST_TMP/t-pst")" 0 "RED failed probe row: mutant says OK"
+for sv in "m1=NaN m2=1 m3=0" "m1=1 m2=0 m3=1" "m1=2 m2=1 m3=1"; do
+  tamper sc; python3 - "$TEST_TMP/t-sc/invocation.log" "$sv" <<'PY'
+import sys, re
+p, sv = sys.argv[1:3]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' SCORE ' in l)
+L[i] = re.sub(r'm1=.*$', sv, L[i]); open(p, 'w').write('\n'.join(L))
+PY
+  assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-sc")" 0 "SCORE '$sv': real audit non-zero"
+  assert_eq "$(audit_rc "$TEST_TMP/mut-scoreval/run-p2-batch.js" "$TEST_TMP/t-sc")" 0 "RED SCORE '$sv': mutant says OK"
+done
+tamper bm; sed -i -E "0,/( BLOCKMAX \S+ )[0-9]+$/s//\1-1/" "$TEST_TMP/t-bm/invocation.log"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm")" 0 "BLOCKMAX -1: real audit non-zero"
+tamper bm2; ONID=$(grep -oE ' BLOCKMAX ON-[0-9]+' "$TEST_TMP/t-bm2/invocation.log" | head -1 | awk '{print $2}')
+HL=$(ls "$TEST_TMP/t-bm2/runs/$ONID/hook/live/per-turn-gate/"*.jsonl | head -1)
+printf '%s\n%s\n' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":2}' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":3}' >>"$HL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm2")" 0 "raw hook log with 3 blocks in a turn, summary says 1: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm2")" 0 "RED raw hook log: mutant says OK"
+assert_eq "$(audit_rc "$TEST_TMP/mut-bmax/run-p2-batch.js" "$TEST_TMP/t-bm")" 0 "RED BLOCKMAX -1: mutant says OK"
+# 4: the final timeout is computed once, before the first START artifact, and is what the harness call gets
+tmo_order() { node -e 'const s=require("fs").readFileSync(process.argv[1],"utf8");const st=s.indexOf("const probeCost = W.writeProbe");const loop=s.slice(st,s.indexOf("const r = sh(ctx",st));const calls=(loop.match(/harnessTimeoutMs\(/g)||[]).length;const firstTmo=loop.indexOf("harnessTimeoutMs(");const firstArt=loop.indexOf("W.writeOrder(");console.log(calls+":"+(firstTmo>=0&&firstTmo<firstArt?"before":"after"))' "$1"; }
+assert_eq "$(tmo_order "$WRAP")" "1:before" "one timeout computation, before ORDER/CMD/START"
+PRE_MUT="$TEST_TMP/mut-tmo2/run-p2-batch.js"; mkdir -p "$(dirname "$PRE_MUT")"; cp "$WRAP_SRC" "$PRE_MUT"
+mutate "$PRE_MUT" "    W.writeStartEnd(ctx, 'START', id, " "    const tmo2 = harnessTimeoutMs(ctx.elapsed(), m.window_s); void tmo2;
+    W.writeStartEnd(ctx, 'START', id, " || fail "tmo2 mutant"
+assert_neq "$(tmo_order "$PRE_MUT")" "1:before" "RED timeout: a second computation after the artifacts is detected"
 
 finalize_test

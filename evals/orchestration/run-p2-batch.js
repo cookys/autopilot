@@ -255,8 +255,9 @@ const W = {
       const o = JSON.parse(r.stdout);
       cost = Number(o.total_cost_usd) || 0; err = o.is_error ? 1 : 0; ok = String(o.result).includes('AUTH_OK') ? 1 : 0;
     } catch (_e) { /* stays failed */ }
-    fs.appendFileSync(path.join(ctx.runDir, 'probes.tsv'), `${id}\t${r.status}\t${cost.toFixed(6)}\n`);
-    if (r.status !== 0 || err || !ok) { ctx.log('PROBE_FAIL', `${id} rc=${r.status} cost=${cost.toFixed(6)}`); throw new Exit(7, 'PAUSE id not launched'); }
+    const good = !(r.status !== 0 || err || !ok);
+    fs.appendFileSync(path.join(ctx.runDir, 'probes.tsv'), `${id}\t${r.status}\t${cost.toFixed(6)}\t${good ? 'ok' : 'fail'}\n`);
+    if (!good) { ctx.log('PROBE_FAIL', `${id} rc=${r.status} cost=${cost.toFixed(6)}`); throw new Exit(7, 'PAUSE id not launched'); }
     ctx.log('PROBE_OK', `${id} cost=${cost.toFixed(6)}`);
     return cost;
   },
@@ -365,14 +366,13 @@ function runBatch(ctx, first, last) {
     // The probe takes seconds. Decide the window BEFORE any START artifact (ORDER, CMD, START) exists, and take the
     // elapsed value written to START right before it is written, so it agrees with its own timestamp.
     // (The first check at the top of the loop keeps the early value: it only decides whether to begin an id at all.)
-    const tmo0 = harnessTimeoutMs(ctx.elapsed(), m.window_s);
-    if (tmo0 <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left after the probe`);
+    // The final timeout is computed here, once, before ORDER/CMD/START, and is the value the harness call gets.
+    const tmo = harnessTimeoutMs(ctx.elapsed(), m.window_s);
+    if (tmo <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left after the probe`);
     const argv = harnessArgv(m, arm, out, traceDir);
     W.writeOrder(ctx, id, arm, pos);
     W.writeCmd(ctx, id, argv, out, traceDir);
     const elapsedNow = ctx.elapsed();
-    const tmo = harnessTimeoutMs(elapsedNow, m.window_s);
-    if (tmo <= 0) throw new Exit(8, `STOP_WINDOW before ${id} no window left`);
     W.writeStartEnd(ctx, 'START', id, `elapsed=${elapsedNow}`);
     const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: tmo, stdio: ['ignore', 'pipe', 'pipe'] });
     fs.mkdirSync(path.join(ctx.runDir, 'runs'), { recursive: true });
@@ -473,10 +473,17 @@ function audit(runDir, m, clone, opts) {
   // 5 probe
   // A PROBE_FAIL pauses the batch; the id is then launched once after a fresh login, so only an id without PROBE_OK fails.
   need(by('STOP_AUTH').length === 0, 'STOP_AUTH is present');
-  const probeTsv = (read('probes.tsv') || '').split('\n').filter(Boolean).map((l) => l.split('\t')[0]);
+  const probeTsvRows = (read('probes.tsv') || '').split('\n').filter(Boolean).map((l) => l.split('\t'));
   for (const id of ids) {
-    need(byId('PROBE_OK', id).length >= 1, `${id}: PROBE_OK missing`);
-    need(probeTsv.includes(id), `${id}: no probes.tsv row`);
+    // probes.tsv statuses and the PROBE_OK/PROBE_FAIL rows of this id must be the same sequence, ending in a success
+    // that comes before the id's START; a failed row cannot be covered by a PROBE_OK.
+    const tsvSeq = probeTsvRows.filter((q) => q[0] === id).map((q) => (q[1] === '0' && q[3] === 'ok' ? 'ok' : 'fail'));
+    const logRows = rows.filter((r) => (r.kind === 'PROBE_OK' || r.kind === 'PROBE_FAIL') && idOf(r) === id);
+    const logSeq = logRows.map((r) => (r.kind === 'PROBE_OK' ? 'ok' : 'fail'));
+    need(tsvSeq.length > 0 && tsvSeq.join(',') === logSeq.join(','), `${id}: probes.tsv statuses (${tsvSeq.join(',')}) differ from the PROBE rows in the log (${logSeq.join(',')})`);
+    need(tsvSeq[tsvSeq.length - 1] === 'ok', `${id}: the last probe did not succeed`);
+    const okRows = logRows.filter((r) => r.kind === 'PROBE_OK'), st0 = byId('START', id)[0];
+    need(okRows.length >= 1 && st0 && rows.indexOf(okRows[okRows.length - 1]) < rows.indexOf(st0) && Date.parse(okRows[okRows.length - 1].ts) <= Date.parse(st0.ts), `${id}: no successful probe before the START`);
   }
   // 6 command
   for (const o of order) {
@@ -485,7 +492,16 @@ function audit(runDir, m, clone, opts) {
   }
   // 7 score
   need(by('SCORE_MISSING').length === 0, 'SCORE_MISSING is present');
-  for (const id of ids) need(byId('SCORE', id).length === 1, `${id}: SCORE missing`);
+  for (const id of ids) {
+    const sc = byId('SCORE', id);
+    need(sc.length === 1, `${id}: SCORE missing`);
+    if (sc.length === 1) {
+      const kv = kvOf(sc[0].rest);
+      const okv = ['m1', 'm2', 'm3'].every((k) => kv[k] === '0' || kv[k] === '1');
+      need(okv, `${id}: SCORE values must each be 0 or 1 (got ${sc[0].rest})`);
+      need(okv && kv.m3 === (kv.m1 === '1' && kv.m2 === '1' ? '1' : '0'), `${id}: SCORE m3 must be 1 exactly when m1 and m2 are 1`);
+    }
+  }
   // 8 completion per arm
   const tally = { ON: 0, C: 0 };
   for (const id of ids) {
@@ -520,7 +536,17 @@ function audit(runDir, m, clone, opts) {
   // 11 blocks per turn
   for (const id of ids) {
     const b = byId('BLOCKMAX', id);
-    need(b.length === 1 && Number(b[0].rest.split(' ')[1]) <= m.max_blocks, `${id}: BLOCKMAX missing or above ${m.max_blocks}`);
+    const bv = b.length === 1 ? b[0].rest.split(' ')[1] : null;
+    need(bv !== null && /^\d+$/.test(bv) && Number(bv) <= m.max_blocks, `${id}: BLOCKMAX missing, not a non-negative integer, or above ${m.max_blocks}`);
+    // Recompute from the raw hook log of the run, not from the summary rows.
+    const raw = hookRecords(path.join(runDir, 'runs', id));
+    const per = {}; for (const rec of raw) if (rec.decision === 'block') per[String(rec.turn)] = (per[String(rec.turn)] || 0) + 1;
+    const rawMax = Math.max(0, ...Object.values(per));
+    need(bv !== null && rawMax === Number(bv), `${id}: BLOCKMAX ${bv} differs from the raw hook log (${rawMax})`);
+    need(rawMax <= m.max_blocks, `${id}: raw hook log shows ${rawMax} blocks in one turn (max ${m.max_blocks})`);
+    const hc = byId('HOOKCOUNT', id)[0], he = byId('HOOKERR', id)[0];
+    if (hc) need(Number(kvOf(hc.rest).gate_log) === raw.length, `${id}: HOOKCOUNT gate_log differs from the raw hook log (${raw.length})`);
+    if (he) need(Number(he.rest.split(' ')[1]) === raw.filter((x) => x.reason === 'error').length, `${id}: HOOKERR differs from the raw hook log`);
   }
   // 12 order lines
   for (let i = 0; i < order.length; i++) {

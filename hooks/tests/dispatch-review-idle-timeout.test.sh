@@ -119,11 +119,20 @@ timeout 30 bash "$W" 30 "$TEST_TMP/w11.marker" -- bash -c 'echo ok; kill -KILL $
 assert_eq "ok" "$(cat "$TEST_TMP/w11b.out")" "$L: a signalled seat adds no Killed/Done text"
 }
 
-# NEGATIVE CONTROL for the whole-second rule: the old threshold (elapsed >= window, no +1) must kill the 2.75s-gap seat.
-sed 's/limit_us=\$(( (idle + 1) \* 1000000 ))/limit_us=$((idle_us - 1))/' "$W" > "$TEST_TMP/no-plus1-watch.sh"
-cmp -s "$W" "$TEST_TMP/no-plus1-watch.sh"; assert_neq "0" "$?" "negative control: the +1 line exists to be removed"
-AUTOPILOT_IDLE_WATCH_WHOLE_SECONDS=1 timeout 60 bash "$TEST_TMP/no-plus1-watch.sh" 3 "$TEST_TMP/nc.marker" -- bash -c 'for i in 1 2 3 4 5 6; do echo s$i; sleep 2.75; done' > "$TEST_TMP/nc.out" 2>&1 < /dev/null
-assert_eq "125" "$?" "negative control: without the +1 the whole-second clock kills a healthy seat"
+# Decision table for the idle verdict (pure function, no clock, no phase). elapsed_us idle whole -> kill?
+kills() { ( . "${3:-$W}"; idle_exceeded "$1" "$2" "$4" ) && echo kill || echo keep; }
+tbl() { # <watcher file> <label>
+  assert_eq "keep" "$(kills 3000000 3 "$1" 1)" "$2 whole clock: elapsed = window is kept"
+  assert_eq "keep" "$(kills 4000000 3 "$1" 1)" "$2 whole clock: elapsed = window + 1s is kept"
+  assert_eq "kill" "$(kills 5000000 3 "$1" 1)" "$2 whole clock: elapsed = window + 2s is killed"
+  assert_eq "keep" "$(kills 2999999 3 "$1" 0)" "$2 precise clock: just under the window is kept"
+  assert_eq "kill" "$(kills 3000000 3 "$1" 0)" "$2 precise clock: the window is killed"
+}
+tbl "$W" "real"
+# NEGATIVE CONTROL: mutate the whole-second limit to drop the +1 (the old rule); the table must turn red.
+sed 's/(\$2 + 1) \* 1000000/$2 * 1000000/' "$W" > "$TEST_TMP/no-plus1-watch.sh"
+cmp -s "$W" "$TEST_TMP/no-plus1-watch.sh"; assert_neq "0" "$?" "negative control: the +1 expression exists to be removed"
+assert_eq "kill" "$(kills 4000000 3 "$TEST_TMP/no-plus1-watch.sh" 1)" "negative control: without the +1, window + 1s is killed (healthy seat lost)"
 
 run_suite uutils
 if [ -x "$GNU_BIN/timeout" ]; then

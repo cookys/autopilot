@@ -20,6 +20,17 @@
 #
 # Exit: the command's own code; 125 idle kill; 143 on TERM/INT (command killed first).
 
+# idle_exceeded <elapsed_us> <idle_seconds> <whole_seconds_clock 0|1>: exit 0 when the seat is to be killed.
+# Precise clock: at or past the window. Whole-second clock: only when the integer elapsed is strictly
+# above window + 1s, so a seat is never killed early (an idle seat dies between window and window + 2s).
+idle_exceeded() {
+  local limit_us
+  if [ "$3" = 0 ]; then limit_us=$(( $2 * 1000000 - 1 )); else limit_us=$(( ($2 + 1) * 1000000 )); fi
+  [ "$1" -gt "$limit_us" ]
+}
+# Sourced (the decision table test): define the function and stop.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then return 0; fi
+
 idle="${1:-}"; marker="${2:-}"
 if [ "${3:-}" = "--" ]; then shift 3; else echo "idle-watch: usage: idle-watch.sh <seconds> <marker> -- cmd..." >&2; exit 2; fi
 
@@ -79,18 +90,13 @@ set +m
 exec 2>/dev/null 5>&-
 trap 'kill_seat; wait "$CHILD" 2>/dev/null; exit 143' TERM INT
 
-idle_us=$((idle * 1000000))
-# Fire only when elapsed is strictly above limit_us. Precise clock: at or past the window. Whole-second
-# clock: only when the integer elapsed is strictly above window + 1s, so a seat is never killed early;
-# the price is that an idle seat dies between <window> and <window>+2s (plus the 0.25s poll).
-if [ "$WHOLE" = 0 ]; then limit_us=$((idle_us - 1)); else limit_us=$(( (idle + 1) * 1000000 )); fi
 last="$(watch_size)"; now_us; since=$NOW
 while kill -0 "$CHILD" 2>/dev/null; do
   sleep 0.25
   cur="$(watch_size)"
   if [ "$cur" != "$last" ]; then last="$cur"; now_us; since=$NOW; continue; fi
   now_us
-  if [ $((NOW - since)) -gt "$limit_us" ] && kill -0 "$CHILD" 2>/dev/null; then
+  if idle_exceeded $((NOW - since)) "$idle" "$WHOLE" && kill -0 "$CHILD" 2>/dev/null; then
     [ -n "$marker" ] && printf 'no output growth for %ss\n' "$idle" > "$marker"
     kill_seat
     wait "$CHILD" 2>/dev/null

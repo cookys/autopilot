@@ -36,6 +36,7 @@
 #            `agy agents` lists the tool-less agent. Credentials are copied on
 #            the launch path only. --hostname review is proven by the preflight
 #            itself running with it for both CLIs (probe 2026-10-03).
+#   --kimi-effort: kimi only; low|high|max, set as KIMI_MODEL_THINKING_EFFORT inside the seat (default: not set).
 #   --bin: kimi entry (main.mjs under --node-dir, or the standalone kimi ELF, detected by magic) or the agy ELF.
 #   --node-dir: node install root (bin/node + lib/...); default from PATH.
 #   --cred-dir: kimi ~/.kimi-code or agy ~/.gemini/antigravity-cli (launch only).
@@ -64,6 +65,7 @@ OUT_FILE=""
 ERR_FILE=""
 TIMEOUT=""
 MODEL=""
+KIMI_EFFORT=""
 EFFORT=""
 BIN_DIR=""
 AUTH_FILE=""
@@ -95,6 +97,7 @@ while [[ $# -gt 0 ]]; do
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --model)       MODEL="${2:-}"; shift 2 ;;
     --effort)      EFFORT="${2:-}"; shift 2 ;;
+    --kimi-effort) KIMI_EFFORT="${2:-}"; shift 2 ;;
     --bin-dir)     BIN_DIR="${2:-}"; shift 2 ;;
     --auth-file)   AUTH_FILE="${2:-}"; shift 2 ;;
     --bwrap)       BWRAP_BIN="${2:-}"; shift 2 ;;
@@ -120,6 +123,10 @@ done
 case "$PROFILE" in
   kimi|agy) RUNNER="$PROFILE" ;;
 esac
+if [ -n "$KIMI_EFFORT" ]; then
+  [ "$RUNNER" = "kimi" ] || usage_die "--kimi-effort applies to --profile kimi only"
+  case "$KIMI_EFFORT" in low|high|max) ;; *) usage_die "--kimi-effort must be low|high|max (got: $KIMI_EFFORT)" ;; esac
+fi
 if [ "$PREFLIGHT" -eq 1 ]; then
   PROFILE="preflight"
 elif [ "$PROFILE" = "codex" ] || [ -n "$RUNNER" ]; then
@@ -534,6 +541,12 @@ write_runner_args() {
   append --setenv
   append TERM
   append dumb
+  if [ "$RUNNER" = "kimi" ] && [ -n "$KIMI_EFFORT" ]; then
+    # --clearenv above wiped the caller's tier; kimi-code falls back to the copied config.toml default_effort without it
+    append --setenv
+    append KIMI_MODEL_THINKING_EFFORT
+    append "$KIMI_EFFORT"
+  fi
   append --chdir
   append /home/review/work
 }

@@ -23,6 +23,15 @@ equal(run('default', ['QRP_HTTP_EFFORT'], { QRP_HTTP_EFFORT: 'default' }).sent, 
 equal(run('high', ['QRP_TRANSPORT', 'QRP_CLI_KIND', 'QRP_CLI_EFFORT'], { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_EFFORT: 'high' }).status, 'match', 'cli label equals QRP_CLI_EFFORT');
 equal(run('none', ['QRP_TRANSPORT', 'QRP_CLI_KIND'], { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy' }).status, 'match', 'agy has no effort dimension; label none is honest');
 
+// kimi-code takes KIMI_MODEL_THINKING_EFFORT (low|high|max), so the provider sends the effort
+// and the label is compared with the value, not with `none`
+const kimiNames = ['QRP_TRANSPORT', 'QRP_CLI_KIND', 'QRP_CLI_EFFORT'];
+equal(run('high', kimiNames, { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_EFFORT: 'high' }).status, 'match', 'kimi label equals QRP_CLI_EFFORT');
+equal(run('high', kimiNames, { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_EFFORT: 'high' }).sent, 'high', 'kimi records the value actually sent');
+equal(run('default', kimiNames, { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi' }).status, 'match', 'kimi with no effort variable sends nothing; label default is honest');
+equal(run('none', kimiNames, { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_EFFORT: 'high' }).status, 'mismatch', 'kimi is no longer an effort-less kind; label none is false');
+equal(run('low', kimiNames, { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_EFFORT: 'max' }).status, 'mismatch', 'kimi wrong value is a mismatch');
+
 // mismatch: the incident
 const incident = run('high', ['QRP_HTTP_EFFORT', 'QRP_BASE_URL'], {});
 equal(incident.status, 'mismatch', 'label high with QRP_HTTP_EFFORT unset is a mismatch');

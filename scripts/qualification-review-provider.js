@@ -51,8 +51,9 @@
  * `--effort xhigh|max` → "invalid --effort". Every model in agy's roster carries
  * its effort IN THE MODEL NAME ("Gemini 3.7 Flash (High)"), so QRP_CLI_EFFORT is
  * deliberately ignored for this kind — passing it would hard-fail every case.
- * kimi likewise has no effort scale (config.toml exposes `[thinking] enabled`
- * on/off only); QRP_CLI_EFFORT is ignored there for the same reason.
+ * kimi has no effort FLAG, but kimi-code reads KIMI_MODEL_THINKING_EFFORT (low|high|max); without it
+ * the copied config.toml default_effort (max) runs whatever the seat declares. QRP_CLI_EFFORT is
+ * therefore set into the child env for kimi; `default`/unset sends nothing, other values throw.
  *
  * The broker redirects HOME, so only credential env vars named via --provider-env
  * reach us. CLI-transport credentials ride harness-native redirect vars:
@@ -1347,7 +1348,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       '--agent', agyContainment.AGENT_NAME];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
-    // No effort flag exists for kimi (thinking is a boolean in config.toml).
+    // No effort flag exists for kimi; the tier travels as KIMI_MODEL_THINKING_EFFORT (set on the child env below).
     //
     // CONTAINMENT (BL-0156): kimi has no --tools flag; the only way to take its
     // tools away is a custom agent file with `tools: []` (--agent-file). Same single
@@ -1355,6 +1356,9 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     // without QRP_CLI_HOME: the post-run audit reads <HOME>/.kimi-code/sessions, and
     // without a cloned HOME the run would write into (and be audited against) the
     // operator's real ~/.kimi-code -- refuse instead of exposing it.
+    if (effort && effort !== 'default' && !['low', 'high', 'max'].includes(effort)) {
+      throw new Error(`kimi does not offer effort "${effort}" (low|high|max only)`);
+    }
     if (!process.env.QRP_CLI_HOME) {
       throw new Error(
         'kimi requires QRP_CLI_HOME: the tool-less agent is only provable via the post-run '
@@ -1676,6 +1680,11 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       ...(kind === 'grok' ? { GROK_HOME: cloneHome } : {}),
     }
     : process.env;
+  if (kind === 'kimi') {
+    childEnv = { ...childEnv };
+    delete childEnv.KIMI_MODEL_THINKING_EFFORT;
+    if (effort && effort !== 'default') childEnv.KIMI_MODEL_THINKING_EFFORT = effort;   // validated in the args branch
+  }
   if (kind === 'opencode') {
     // credentials come from the cloned QRP_CLI_HOME when set, else the ambient HOME
     const authHome = cloneHome || process.env.HOME || os.homedir();

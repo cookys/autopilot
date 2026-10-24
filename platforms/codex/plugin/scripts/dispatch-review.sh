@@ -565,6 +565,21 @@ fi
 # is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
 if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+# kimi has no effort flag: kimi-code reads KIMI_MODEL_THINKING_EFFORT (low|high|max), and without it runs
+# config.toml's default_effort (max) whatever tier the seat declares (peer report 2026-10-24: 21 exam requests
+# for a `high` seat all went out as max). Sent only for an EXPLICIT --effort (the xhigh script default is not a
+# seat decision); `default` sends nothing; a value kimi does not offer fails closed rather than being remapped.
+# The variable is unset first so an ambient value can never stand in for the seat's tier.
+if [ "$RUNNER" = "kimi" ]; then
+  unset KIMI_MODEL_THINKING_EFFORT
+  KIMI_EFFORT_SEND=""
+  if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then
+    case "$EFFORT" in
+      low|high|max) KIMI_EFFORT_SEND="$EFFORT"; export KIMI_MODEL_THINKING_EFFORT="$EFFORT" ;;
+      *) die_precondition "--effort $EFFORT is not offered by kimi (low|high|max only); use one of those or --effort default" ;;
+    esac
+  fi
+fi
 
 # R1 detach: when ledger coords are supplied and detach is on (default), re-run this dispatch
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
@@ -1568,6 +1583,8 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     [ -z "${AUTOPILOT_CLEANROOM_KIMI_NODE_DIR:-}" ] || KIMI_CR_ARGS+=(--node-dir "$AUTOPILOT_CLEANROOM_KIMI_NODE_DIR")
     blind_runner_preflight kimi "${KIMI_CR_ARGS[@]}"
     [ -z "${AUTOPILOT_CLEANROOM_KIMI_CRED_DIR:-}" ] || KIMI_CR_ARGS+=(--cred-dir "$AUTOPILOT_CLEANROOM_KIMI_CRED_DIR")
+    # the seat runs under --clearenv, so the exported variable cannot reach it: the launcher re-sets it inside
+    [ -z "$KIMI_EFFORT_SEND" ] || KIMI_CR_ARGS+=(--kimi-effort "$KIMI_EFFORT_SEND")
     "$_CLEANROOM_LAUNCHER" --profile kimi \
       --prompt-file "$PROMPT_FILE" --out "$KIMI_OUT" --err "$KIMI_ERR" \
       --timeout "$TIMEOUT" --model "$MODEL" \

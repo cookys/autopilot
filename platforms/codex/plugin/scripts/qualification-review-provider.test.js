@@ -138,7 +138,7 @@ const agentFile = flag === -1 ? null : argv[flag + 1];
 let agentText = null;
 try { agentText = agentFile ? fs.readFileSync(agentFile, 'utf8') : null; } catch { /* absent */ }
 if (process.env.STUB_CAPTURE) {
-  fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv, agentFile, agentText, home: process.env.HOME }));
+  fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv, agentFile, agentText, home: process.env.HOME, effort: process.env.KIMI_MODEL_THINKING_EFFORT === undefined ? null : process.env.KIMI_MODEL_THINKING_EFFORT }));
 }
 const mode = process.env.STUB_KIMI_WIRE || 'clean';
 if (mode !== 'none') {
@@ -2099,6 +2099,16 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   check(ok.captured && !ok.captured.argv.includes('--dangerously-skip-permissions'), 'kimi argv has no skip-permissions flag');
   check(ok.captured && ok.captured.home !== kimiTemplate && ok.captured.home !== tempRoot, 'kimi ran under a cloned HOME, not the template or ambient home');
   check(ok.captured && !fs.existsSync(ok.captured.agentFile), 'the temp agent file is removed after the run');
+  // effort: kimi has no flag; the seat's tier rides KIMI_MODEL_THINKING_EFFORT (an ambient value never stands in)
+  equal(ok.captured.effort, null, 'kimi without QRP_CLI_EFFORT sends no effort variable');
+  for (const e of ['low', 'high', 'max']) {
+    const r = runProvider({ env: kimiEnv('clean', { QRP_CLI_EFFORT: e, KIMI_MODEL_THINKING_EFFORT: 'ambient' }), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+    equal(r.captured && r.captured.effort, e, `kimi QRP_CLI_EFFORT=${e} reaches the CLI as KIMI_MODEL_THINKING_EFFORT`);
+  }
+  const dflt = runProvider({ env: kimiEnv('clean', { QRP_CLI_EFFORT: 'default', KIMI_MODEL_THINKING_EFFORT: 'ambient' }), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(dflt.captured && dflt.captured.effort, null, 'kimi QRP_CLI_EFFORT=default sends nothing (ambient scrubbed)');
+  const badEffort = runProvider({ env: kimiEnv('clean', { QRP_CLI_EFFORT: 'xhigh' }), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  check(badEffort.child.status !== 0 && /low\|high\|max/.test(badEffort.child.stderr) && badEffort.captured === null, 'kimi QRP_CLI_EFFORT=xhigh fails closed without spawning');
   // Negative control (red): a wire where the default tool-using agent ran -> case rejected.
   const leak = runProvider({ env: kimiEnv('leak'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(leak.child.status, 1, 'kimi run whose wire shows tool use is rejected');
@@ -2309,5 +2319,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 513) throw new Error(`qualification-review-provider: expected exactly 513 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 519) throw new Error(`qualification-review-provider: expected exactly 519 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

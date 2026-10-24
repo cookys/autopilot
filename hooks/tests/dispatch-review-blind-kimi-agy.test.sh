@@ -179,6 +179,23 @@ for C in migrated-second-agent migrated-empty; do
   assert_contains "$OUT" 'fail-closed' "blind agy [$C] is a fail-closed void"
 done
 
+# ---- kimi effort: the seat's declared tier reaches the cleanroom launcher (explicit effort only) ----
+MODEL_ARG=fixture
+rm -f "$LAUNCH_ARGV"
+OUT="$(SCEN=clean AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_CLEANROOM_BWRAP="$FAKE_BWRAP" \
+  AUTOPILOT_CLEANROOM_LAUNCHER="$LAUNCHER" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner kimi --model fixture --effort high --diff-file "$DIFF" --bin "$STUB_KIMI" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "blind kimi --effort high is reviewed"
+assert_contains "$(tr '\n' ' ' < "$LAUNCH_ARGV")" '--kimi-effort high' "blind kimi --effort high is forwarded to the launcher"
+rm -f "$LAUNCH_ARGV"
+OUT="$(run_blind kimi clean)"; EXIT=$?
+assert_not_contains "$(tr '\n' ' ' < "$LAUNCH_ARGV")" '--kimi-effort' "blind kimi without --effort forwards no effort (script default is not a seat decision)"
+OUT="$(SCEN=clean AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_CLEANROOM_BWRAP="$FAKE_BWRAP" \
+  AUTOPILOT_CLEANROOM_LAUNCHER="$LAUNCHER" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner kimi --model fixture --effort xhigh --diff-file "$DIFF" --bin "$STUB_KIMI" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind kimi --effort xhigh fails closed"
+assert_contains "$OUT" 'low|high|max' "blind kimi --effort xhigh refusal names the accepted values"
+
 # ---- launcher non-zero / preflight red / missing pieces ----
 MODEL_ARG=fixture
 OUT="$(LAUNCH_RC=124 run_blind kimi clean)"; EXIT=$?
@@ -239,6 +256,29 @@ assert_contains "$REC" '[-m] [kimi-code/k3] [--output-format] [text]' "non-blind
 assert_not_contains "$REC" '--agent-file' "non-blind kimi argv has no --agent-file"
 assert_contains "$REC" 'CWD-IS-TMP:yes' "non-blind kimi still runs in a scratch cwd"
 assert_not_contains "$REC" 'AUTOPILOT_BLIND' "non-blind kimi env carries no blind flag"
+# non-blind kimi effort: an explicit --effort reaches the CLI as KIMI_MODEL_THINKING_EFFORT (env, not argv)
+KIMI_ENVREC="$TEST_TMP/kimi-envrec"
+cat > "$KIMI_ENVREC" <<'ENVREC_EOF'
+#!/usr/bin/env bash
+if [ "${KIMI_MODEL_THINKING_EFFORT+set}" = set ]; then printf 'SET:%s\n' "$KIMI_MODEL_THINKING_EFFORT" > "$KIMI_ENVREC_OUT"; else printf 'UNSET\n' > "$KIMI_ENVREC_OUT"; fi
+begin="$(printf '%s\n' "$2" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n 1p)"
+end="$(printf '%s\n' "$2" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n 1p)"
+printf '%s\nVERDICT: FIX-THEN-SHIP\nFINDINGS: x\n%s\n' "$begin" "$end"
+ENVREC_EOF
+chmod +x "$KIMI_ENVREC"
+export KIMI_ENVREC_OUT="$TEST_TMP/kimi-envrec.out"
+for E in low high max; do
+  rm -f "$KIMI_ENVREC_OUT"
+  OUT="$(AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner kimi --model kimi-code/k3 --effort "$E" --diff-file "$DIFF" --bin "$KIMI_ENVREC" 2>&1)"; EXIT=$?
+  assert_eq "SET:$E" "$(cat "$KIMI_ENVREC_OUT" 2>/dev/null)" "non-blind kimi --effort $E reaches the CLI as KIMI_MODEL_THINKING_EFFORT"
+done
+rm -f "$KIMI_ENVREC_OUT"
+OUT="$(KIMI_MODEL_THINKING_EFFORT=max AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner kimi --model kimi-code/k3 --effort default --diff-file "$DIFF" --bin "$KIMI_ENVREC" 2>&1)"; EXIT=$?
+assert_eq "UNSET" "$(cat "$KIMI_ENVREC_OUT" 2>/dev/null)" "non-blind kimi --effort default sends no effort variable (ambient one scrubbed)"
+rm -f "$KIMI_ENVREC_OUT"
+OUT="$(AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 "$SCRIPT" --runner kimi --model kimi-code/k3 --effort medium --diff-file "$DIFF" --bin "$KIMI_ENVREC" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-blind kimi --effort medium fails closed"
+assert_file_absent "$KIMI_ENVREC_OUT" "non-blind kimi --effort medium never spawned the CLI"
 # The wrap must also be absent from the non-blind branch SOURCE: every launcher reference sits under the blind guard.
 NB_REFS="$(awk '/elif \[\[ "\$RUNNER" = "kimi" \]\]/{k=1} /elif \[\[ "\$RUNNER" = "opencode" \]\]/{k=0} k' "$SCRIPT" | awk '/BLIND_RUNNER_CLEANROOM" -eq 1/{g=1} /^  else$/{g=0} !g' | grep -c '_CLEANROOM_LAUNCHER')"
 assert_eq "0" "$NB_REFS" "negative control: kimi launcher references exist only under the blind guard"

@@ -211,6 +211,28 @@ assert_file_exists "$TEST_TMP/seat-l-kimi/home/.kimi-code/config.toml" "kimi con
 assert_contains "$(cat "$TEST_TMP/l-kimi.json")" '"seat_root_removed": false' "kept seat reported for the audit"
 rm -rf "$TEST_TMP/seat-l-kimi"
 
+# kimi effort: --clearenv drops everything, so the effort must be re-set INSIDE the seat or the
+# seat's copied config.toml default_effort (max) silently wins over the seat's declared tier.
+assert_not_contains "$A" "KIMI_MODEL_THINKING_EFFORT" "kimi launch without --kimi-effort sets no effort variable"
+set +e
+run_fake "$TEST_TMP/l-kimi-eff" 0 "$LAUNCHER" --profile kimi --prompt-file "$STUBS/prompt.txt" \
+  --out "$TEST_TMP/l-kimi-eff.out" --err "$TEST_TMP/l-kimi-eff.err" --timeout 20s --model kimi-code/k3 --kimi-effort high \
+  --bin "$STUBS/nodedir/lib/kimi/main.mjs" --node-dir "$STUBS/nodedir" --cred-dir "$STUBS/credkimi" \
+  --seat-root "$TEST_TMP/seat-l-kimi-eff" > "$TEST_TMP/l-kimi-eff.json"
+assert_eq "0" "$?" "kimi launch with --kimi-effort high exits 0"
+set -e
+if argv_pair "$TEST_TMP/l-kimi-eff/args.bin" KIMI_MODEL_THINKING_EFFORT high; then :; else fail "kimi seat env carries KIMI_MODEL_THINKING_EFFORT=high"; fi
+rm -rf "$TEST_TMP/seat-l-kimi-eff"
+set +e
+run_fake "$TEST_TMP/l-kimi-bad" 0 "$LAUNCHER" --profile kimi --prompt-file "$STUBS/prompt.txt" \
+  --out "$TEST_TMP/l-kimi-bad.out" --err "$TEST_TMP/l-kimi-bad.err" --timeout 20s --model kimi-code/k3 --kimi-effort medium \
+  --bin "$STUBS/nodedir/lib/kimi/main.mjs" --node-dir "$STUBS/nodedir" --cred-dir "$STUBS/credkimi" \
+  --seat-root "$TEST_TMP/seat-l-kimi-bad" > "$TEST_TMP/l-kimi-bad.json" 2> "$TEST_TMP/l-kimi-bad.err2"
+BAD_RC=$?
+set -e
+[ "$BAD_RC" -ne 0 ] && assert_eq ok ok "kimi launch with --kimi-effort medium fails closed" || fail "kimi launch accepted --kimi-effort medium"
+rm -rf "$TEST_TMP/seat-l-kimi-bad"
+
 set +e
 FAKE_BWRAP_AGY_RESULT=1 run_fake "$TEST_TMP/l-agy" 0 "$LAUNCHER" --profile agy --prompt-file "$STUBS/prompt.txt" \
   --out "$TEST_TMP/l-agy.out" --err "$TEST_TMP/l-agy.err" --timeout 20s --model gemini-x --effort low \

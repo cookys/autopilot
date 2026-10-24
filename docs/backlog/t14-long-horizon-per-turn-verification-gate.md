@@ -7,3 +7,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Effort**: M.
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 
+
+## Status 2026-10-25
+
+First P2-3 batch (2026-10-24) judged U (credential copy expired, nobody resumed within the window): docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/RESULT.md. Instrument fixes merged 563768f30. Haiku 4.5 rerun started 2026-10-25 06:34 Taipei, PREREG docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r/. A Haiku 5.5 batch follows, PREREG docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/.

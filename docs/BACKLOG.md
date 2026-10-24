@@ -321,9 +321,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 實驗發現每回合重新提醒模型守規則，只是讓措辭改變，行為沒有明顯進步。因此改做每回合驗證。P0 探測、P1 基準、P2-0 證據與 P2-1 選用 hook 已出貨；P2-2 審查中，之後跑 P2-3 付費批次。 (draft)
+- **Problem**: 每回合重新提醒模型守規則，行為沒有明顯進步，因此改做每回合驗證。P2-2 已合併；第一批 P2-3 判為 U（憑證過期），儀器已修，Haiku 4.5 重跑 2026-10-25 開跑，之後再跑 Haiku 5.5。
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: P2-2 instrument passes review and merges; then the P2-3 paid batch can run. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger**: the Haiku 4.5 rerun (2026-10-25) and the Haiku 5.5 batch of P2-3 finish and are judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
@@ -1093,20 +1093,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-hetero-suite-detached-children.md
 - **Context**: Processes were bash -c IN_DETACHED_CHILD=1 ... detached_main from /tmp/autopilot-test-dispatch-hetero-*. Add cleanup in the suite.
 
-### dispatch-review.sh and dispatch-author.sh launch claude children with the real ~/.claude
-- **Id**: BL-0290
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 派遣審查與派遣撰寫兩支腳本的 claude 原生路徑，用真實的使用者設定目錄啟動子行程，違反腳本自己註解寫的規則：子行程只該拿到只放憑證檔的專用目錄。
-- **Impact**: claude 子行程可能把真實 ~/.claude/.claude.json 重設，造成使用者設定遺失。
-- **Trigger**: cnimpl merged (64eedde66): dispatch-review.sh and dispatch-author.sh can now use scripts/lib/seed-claude-config.js for their claude-native branches
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: 2026-10-24 bldone8 audit of dispatch-review.sh / dispatch-author.sh
-- **Pointer**: docs/backlog/dispatch-claude-children-real-claude-config.md
-- **Context**: Verified at develop: the claude-native branches still set no config dir and keep the real HOME; the helper seed-claude-config.js is now on develop. Details in sidecar.
-
 ### Seat schema admits / and . in engine and model; audit path-building consumers
 - **Id**: BL-0291
 - **Status**: open
@@ -1135,19 +1121,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
 - **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.
 
-### dispatch-review: swap out a seat that goes idle (--idle-timeout)
-- **Id**: BL-0293
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 審查席位卡住不輸出時，只能等到整體逾時才失敗。要加一個閒置逾時：席位太久沒有任何輸出就判失敗並換席。
-- **Impact**: 卡住的席位會拖慢整輪審查，浪費等待時間。
-- **Trigger**: next dispatch-review seat that hangs silently, or an efficiency pass over review latency
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: owner efficiency rule, bldone9 2026-10-24
-- **Pointer**: docs/backlog/review-seat-idle-timeout.md
-
 ### Paid batch should abort on the first auth failure
 - **Id**: BL-0294
 - **Status**: open
@@ -1168,8 +1141,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: revival.3d
 - **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
-- **Reply**: none
-- **Problem**: 審查者每發現一點就送一次，對方要反覆處理。peer revival.3d 建議先累積再一次送出。這會改變指引，要做開關對照評測。
+- **Reply**: 2026-10-25 01M5QR3SKAR0303QRVJC11P60P/01M5QR4BJFH17NV55671K2MBMN
+- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。副問題已確認非 autopilot 問題並於 2026-10-25 回覆。owner 決定先做 ON/OFF 評測，再決定是否改指引。
 - **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
 - **Trigger**: a guidance change to the reviewer flow is scheduled, or a batching ON/OFF eval is budgeted
 - **Trigger-Type**: owner
@@ -1231,19 +1204,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: bldone9 2026-10-24 fbtool P1 note
 - **Pointer**: docs/backlog/fbtool-p1-findings-write-protection.md
-
-### bash-footgun-guard: add a bare ls rule for the Bash tool
-- **Id**: BL-0300
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 這台機器上，在 Bash 工具裡直接執行 ls 或 eza 會卡住。owner 已核准在防呆 hook 加一條規則擋裸 ls。
-- **Impact**: 不擋的話，工作階段會一再卡住。
-- **Trigger**: ready now; owner decision card d-75c08ca7 approved it
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: owner decision d-75c08ca7
-- **Pointer**: docs/backlog/bash-footgun-guard-bare-ls-rule.md
 
 ### Claude Code upstream report draft (owner decides whether to send)
 - **Id**: BL-0301

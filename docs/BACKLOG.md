@@ -1093,20 +1093,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-hetero-suite-detached-children.md
 - **Context**: Processes were bash -c IN_DETACHED_CHILD=1 ... detached_main from /tmp/autopilot-test-dispatch-hetero-*. Add cleanup in the suite.
 
-### dispatch-review.sh and dispatch-author.sh launch claude children with the real ~/.claude
-- **Id**: BL-0290
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 派遣審查與派遣撰寫兩支腳本的 claude 原生路徑，用真實的使用者設定目錄啟動子行程，違反腳本自己註解寫的規則：子行程只該拿到只放憑證檔的專用目錄。
-- **Impact**: claude 子行程可能把真實 ~/.claude/.claude.json 重設，造成使用者設定遺失。
-- **Trigger**: cnimpl merged (64eedde66): dispatch-review.sh and dispatch-author.sh can now use scripts/lib/seed-claude-config.js for their claude-native branches
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: 2026-10-24 bldone8 audit of dispatch-review.sh / dispatch-author.sh
-- **Pointer**: docs/backlog/dispatch-claude-children-real-claude-config.md
-- **Context**: Verified at develop: the claude-native branches still set no config dir and keep the real HOME; the helper seed-claude-config.js is now on develop. Details in sidecar.
-
 ### Seat schema admits / and . in engine and model; audit path-building consumers
 - **Id**: BL-0291
 - **Status**: open

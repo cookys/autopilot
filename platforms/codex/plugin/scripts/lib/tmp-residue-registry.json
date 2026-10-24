@@ -759,7 +759,7 @@
       "kind": "scratch",
       "owner": "scripts/lib/seed-claude-config.js",
       "retention_days": null,
-      "reason": "seeded CLAUDE_CONFIG_DIR (only .credentials.json) for the claude-native implementer child; dispatch-hetero.sh removes it after the worker and in cleanup/abort_dispatch"
+      "reason": "seeded CLAUDE_CONFIG_DIR (only .credentials.json) for the claude-native child; dispatch-hetero.sh removes it after the worker and in cleanup/abort_dispatch; dispatch-review.sh and dispatch-author.sh remove it after the child and in their EXIT trap"
     }
   ]
 }

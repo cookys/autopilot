@@ -978,6 +978,7 @@ GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak 
 GROK_PARSE="" # grok glued-preamble normalized parse target (v2.36.4); trap-reaped like the other rails
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
+CNATIVE_CFG="" # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (BL-0290); reaped by the EXIT trap
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
 QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
@@ -1013,6 +1014,7 @@ cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
+  [ -n "$CNATIVE_CFG" ] && rm -rf "$CNATIVE_CFG"
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
   [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
   [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
@@ -1902,13 +1904,17 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # ANTHROPIC_AUTH_TOKEN precondition, no `env -u ANTHROPIC_API_KEY`, no HOME redirection
   # (native OAuth-session / subscription credentials commonly live under the real HOME; unlike
   # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
+  # BL-0290: the child gets CLAUDE_CONFIG_DIR = a seeded 0700 dir holding ONLY a copy of
+  # .credentials.json (never the real config dir, which a child can reset); removed on every exit path.
+  CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
+    || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
+  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
-  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  rm -rf "$CNATIVE_CWD" "$CNATIVE_CFG"; CNATIVE_CWD=""; CNATIVE_CFG=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CNATIVE_RC" -ne 0 ]; then
     printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"

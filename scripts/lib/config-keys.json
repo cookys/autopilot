@@ -496,6 +496,27 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.bare_ls",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_LS_MODE"
+      ],
+      "summary": "What to do with a bare ls in command position of a Bash call (an alias or function wrapper can hang it): \"deny\", \"warn\" or \"off\".",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.threshold",
       "kind": "config_key",
       "audience": "user",
@@ -3723,6 +3744,21 @@
         "depth0_delegate_gate.pkill_self_match"
       ],
       "summary": "Environment override of depth0_delegate_gate.pkill_self_match; a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_LS_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.bare_ls"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.bare_ls; a garbage value maps to deny."
     },
     {
       "name": "AUTOPILOT_CAPTURE_PAYLOAD",

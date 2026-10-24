@@ -215,6 +215,18 @@ function skipDq(s, i) { // i is just past an opening `"`; returns the index just
   return s.length;
 }
 
+// Index of the backtick that closes a backtick substitution whose body starts at i (just past the opening one), or -1.
+// A backslash escapes the next character, so an escaped \` inside the body is a nested substitution, not the end. Linear.
+function findBacktickClose(text, i) {
+  for (let j = i; j < text.length;) {
+    if (text[j] === '`') return j;
+    j += text[j] === '\\' ? 2 : 1;
+  }
+  return -1;
+}
+// Body of a backtick substitution as the shell sees it: `\`` `\$` `\\` lose their backslash (so a nested \`…\` becomes a real one).
+const unescapeBacktickBody = (b) => b.replace(/\\([`$\\])/g, '$1');
+
 function closeParen(s, i) { // i is just past `$(`; returns the index of the matching `)` or -1
   let depth = 1;
   const pending = [];
@@ -223,7 +235,7 @@ function closeParen(s, i) { // i is just past `$(`; returns the index of the mat
     if (c === '\\') { i += 2; continue; }
     if (c === "'") { const j = s.indexOf("'", i + 1); i = j < 0 ? s.length : j + 1; continue; }
     if (c === '"') { i = skipDq(s, i + 1); continue; }
-    if (c === '`') { const j = s.indexOf('`', i + 1); i = j < 0 ? s.length : j + 1; continue; }
+    if (c === '`') { const j = findBacktickClose(s, i + 1); i = j < 0 ? s.length : j + 1; continue; }
     if (c === '#' && (i === 0 || /[\s;&|(]/.test(s[i - 1]))) { const j = s.indexOf('\n', i); i = j < 0 ? s.length : j; continue; }
     if (c === '<' && s[i + 1] === '<' && s[i + 2] !== '<' && s[i + 2] !== '(') {
       const hm = /^<<(-?)[ \t]*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z_]\w*))/.exec(s.slice(i, i + 200));
@@ -262,9 +274,9 @@ function findSubstitutions(text) {
     if (!inD && c === "'") { const j = text.indexOf("'", i + 1); i = j < 0 ? text.length : j + 1; continue; }
     if (c === '"') { inD = !inD; i += 1; continue; }
     if (c === '`') {
-      let j = i + 1;
-      while (j < text.length && text[j] !== '`') j += text[j] === '\\' ? 2 : 1;
-      out.push(text.slice(i + 1, Math.min(j, text.length)));
+      let j = findBacktickClose(text, i + 1);
+      if (j < 0) j = text.length;
+      out.push(unescapeBacktickBody(text.slice(i + 1, j)));
       i = j + 1; continue;
     }
     if (c === '$' && text[i + 1] === '(' && text[i + 2] !== '(') {
@@ -863,4 +875,206 @@ function detectZshExpansion(cmd, cwd) {
   return null;
 }
 
-module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };
+
+
+
+// Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out, but keep the
+// command substitutions inside (`a=( $(ls) )`, backticks, `<(…)` already rewritten to `$(`).
+// One linear pass, no regex backtracking and no fixed look-back: a small state machine recognises the target
+// `NAME`, `NAME+`, `NAME[subscript]` (any length) at a word start, and enters the body only on `=(`.
+// ---- Quote-aware preprocessing for detectBareLs -------------------------------------------------------------------
+// ONE linear scan decides, for every character, whether it is live shell syntax:
+//   0 live (command position syntax)   1 inside double quotes (data, but `$(` and backticks still run)
+//   2 literal (single-quoted, or escaped by a backslash)
+// `$(…)` and backticks open a nested live region, also inside double quotes. Every preprocessor below recognises its own
+// opener (`<(`, `=(`, `((`) only at a live position, so quoted text such as `echo "(("; ls` is never rewritten or swallowed.
+function quoteMask(text) {
+  const n = text.length;
+  const m = new Uint8Array(n);
+  const stack = [{ k: 'code', d: 0 }]; // k: code | dq | bt ; d: paren depth inside a code region
+  let i = 0;
+  while (i < n) {
+    const top = stack[stack.length - 1];
+    const c = text[i];
+    if (top.k === 'dq') {
+      if (c === '\\') {
+        if (i + 1 < n && '"$`\\'.includes(text[i + 1])) { m[i] = 2; m[i + 1] = 2; i += 2; } else { m[i] = 1; i += 1; }
+        continue;
+      }
+      if (c === '"') { m[i] = 1; stack.pop(); i += 1; continue; }
+      if (c === '$' && text[i + 1] === '(') { m[i] = 1; m[i + 1] = 1; stack.push({ k: 'code', d: 1 }); i += 2; continue; }
+      if (c === '`') { m[i] = 1; stack.push({ k: 'bt', d: 0 }); i += 1; continue; }
+      m[i] = 1; i += 1;
+      continue;
+    }
+    if (c === '\\') { m[i] = 2; if (i + 1 < n) m[i + 1] = 2; i += 2; continue; }
+    if (c === "'") {
+      const e = text.indexOf("'", i + 1);
+      const end = e < 0 ? n - 1 : e;
+      for (let k = i; k <= end; k += 1) m[k] = 2;
+      i = end + 1;
+      continue;
+    }
+    if (c === '"') { m[i] = 1; stack.push({ k: 'dq', d: 0 }); i += 1; continue; }
+    if (c === '`') {
+      if (top.k === 'bt') stack.pop(); else stack.push({ k: 'bt', d: 0 });
+      i += 1;
+      continue;
+    }
+    if (c === '$' && text[i + 1] === '(') { stack.push({ k: 'code', d: 1 }); i += 2; continue; }
+    if (c === '(') top.d += 1;
+    else if (c === ')' && top.d > 0) { top.d -= 1; if (top.d === 0 && top.k === 'code' && stack.length > 1) stack.pop(); }
+    i += 1;
+  }
+  return m;
+}
+
+// Rewrite `<(` / `>(` (process substitution) to `$(` at live positions only.
+function rewriteProcSubst(text) {
+  if (!/[<>]\(/.test(text)) return text;
+  const m = quoteMask(text);
+  let out = '';
+  for (let i = 0; i < text.length;) {
+    const c = text[i];
+    if ((c === '<' || c === '>') && text[i + 1] === '(' && m[i] === 0 && m[i + 1] === 0) { out += ' $('; i += 2; continue; }
+    out += c; i += 1;
+  }
+  return out;
+}
+
+// Arithmetic contexts `(( … ))`, `$(( … ))`, `for (( … ))`: the words inside are variables, not commands. Blank the
+// construct but keep the `$(…)` / backtick substitutions inside it, which do run. `( (ls) )` (space between) stays a subshell.
+function stripArithmetic(text) {
+  if (text.indexOf('((') < 0) return text;
+  const m = quoteMask(text);
+  const n = text.length;
+  let out = '';
+  let last = 0;
+  for (let i = text.indexOf('(('); i >= 0 && i < n; i = text.indexOf('((', i + 1)) {
+    if (i < last) continue;
+    const dollar = text[i - 1] === '$' && m[i - 1] < 2;
+    if (!((m[i] === 0 && m[i + 1] === 0) || (dollar && m[i] < 2))) continue; // quoted `((` is text
+    const body = scanBody(text, m, i + 2, 2);
+    if (body.unclosed) break; // never drop an unterminated tail: the later rules still inspect it as written
+    out += `${text.slice(last, dollar ? i - 1 : i)} ${body.kept} 0 `;
+    last = body.end;
+    i = Math.max(i, body.end - 1);
+  }
+  return out + text.slice(last);
+}
+
+// Shared body scanner for `=(` arrays and `((` arithmetic: from `start` with `depth` open parentheses, returns
+// { kept, end }: `end` is just past the closing `)`, `kept` the substitutions (`$(…)`, backticks) that really run.
+// Only live parentheses count; literal (quoted or escaped) characters are skipped.
+function scanBody(text, m, start, depth) {
+  let kept = '';
+  let d = depth;
+  let j = start;
+  const n = text.length;
+  while (j < n && d > 0) {
+    const ch = text[j];
+    if (m[j] === 2) { j += 1; continue; }
+    if (ch === '$' && text[j + 1] === '(') {
+      const e = closeParen(text, j + 2);
+      if (e < 0) return { kept, end: n, unclosed: true };
+      kept += ` ${text.slice(j, e + 1)} `;
+      j = e + 1;
+      continue;
+    }
+    if (ch === '`') {
+      const e = findBacktickClose(text, j + 1);
+      if (e < 0) return { kept, end: n, unclosed: true };
+      kept += ` ${text.slice(j, e + 1)} `;
+      j = e + 1;
+      continue;
+    }
+    if (m[j] === 0) {
+      if (ch === '(') d += 1;
+      else if (ch === ')') d -= 1;
+    }
+    j += 1;
+  }
+  return { kept, end: Math.min(j, n), unclosed: d > 0 };
+}
+
+// Array assignments `a=( … )` hold words, not commands: blank the body, keep its running substitutions. A small state
+// machine recognises the target `NAME`, `NAME+`, `NAME[subscript]` (any length) at a live word start and enters the body
+// only on a live `=(`. Linear.
+const ARR_BOUNDARY = /[\s;&|(){}]/;
+function stripArrayAssigns(text) {
+  if (text.indexOf('=(') < 0) return text;
+  const m = quoteMask(text);
+  let out = '';
+  let last = 0;
+  let st = 0; // 0 word start · 1 identifier · 2 inside [subscript] · 3 after ] · 4 after + · 5 not an array target (skip word)
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (st === 2) {
+      if (m[i] !== 0) continue;
+      if (c === '[') depth += 1;
+      else if (c === ']') { depth -= 1; if (depth === 0) st = 3; }
+      continue;
+    }
+    if (m[i] !== 0) { st = 5; continue; } // a quoted or escaped character: not a plain assignment target
+    if (ARR_BOUNDARY.test(c)) { st = 0; continue; }
+    if (st === 0) { st = /[A-Za-z_]/.test(c) ? 1 : 5; continue; }
+    if (st === 5) continue;
+    if (st === 1 && /\w/.test(c)) continue;
+    if (c === '[' && st === 1) { st = 2; depth = 1; continue; }
+    if (c === '+' && (st === 1 || st === 3)) { st = 4; continue; }
+    if (c !== '=' || text[i + 1] !== '(' || m[i + 1] !== 0) { st = 5; continue; }
+    const body = scanBody(text, m, i + 2, 1);
+    if (body.unclosed) break; // keep the unterminated tail as written
+    out += `${text.slice(last, i)}= ${body.kept}`;
+    last = body.end;
+    i = body.end - 1;
+    st = 0;
+  }
+  return out + text.slice(last);
+}
+
+const REDIR_RE = /^(?:\d+|&)?(?:>>|>\||>&|&>|>|<&|<)(.*)$/;
+
+function detectBareLs(cmd) {
+  try { return detectBareLsUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
+}
+function detectBareLsUnguarded(cmd) {
+  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
+  // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
+  const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
+  if (!/\bls\b/.test(text)) return null;
+  for (const seg of expandSegments(text)) {
+    if (seg.sh) continue;
+    let afterTime = false; // `time` is a reserved word: its options (`-p`, `--`) are skipped with it, the command after still gets alias expansion
+    const toks = tokens(seg.text).map((t) => t.raw);
+    for (let i = 0; i < toks.length; i += 1) {
+      const raw = toks[i];
+      if (afterTime && (raw === '-p' || raw === '--')) continue;
+      if (raw === 'time') { afterTime = true; continue; }
+      if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw) || KEYWORDS.has(raw)) continue;
+      // `coproc [NAME {] cmd`: coproc is a reserved word, the command after it is alias-expanded.
+      if (raw === 'coproc') { if (/^[A-Za-z_]\w*$/.test(toks[i + 1] || '') && toks[i + 2] === '{') i += 1; continue; }
+      // A leading redirection (`> f ls`, `2>/dev/null ls`, `<f ls`) does not end command position; a bare operator takes the next word as its target.
+      const rd = REDIR_RE.exec(raw);
+      if (rd) { if (rd[1] === '') i += 1; continue; }
+      // `case x in a|b) ls`: skip the head and each arm label, the word after the label is a command.
+      if (raw === 'case') { const k = toks.indexOf('in', i + 1); if (k < 0) break; i = k; continue; }
+      if (/^\(?[^()\s]*\)$/.test(raw)) continue;
+      // `ls () { … }` defines a function named ls; it is not a call.
+      if (raw === 'ls' && /^\(/.test(toks[i + 1] || '')) break;
+      if (raw === 'ls') {
+        return {
+          rule: 'bare-ls',
+          why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
+            + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
+        };
+      }
+      break;
+    }
+  }
+  return null;
+}
+
+module.exports = { detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

@@ -26,12 +26,14 @@ function rmAll() { for (const d of made.splice(0)) fs.rmSync(d, { recursive: tru
 test.after(rmAll);
 process.on('exit', rmAll);
 
-function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
+// Rules 1-3 fixtures use `ls` as filler; rule 4 would deny them first, so it is off unless `lsDefault` (rule 4 tests).
+function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = {}) {
   const home = mk('blg-home-');
   const live = mk('blg-live-');
   // An ambient knob must not leak in: only the `env` argument may set it.
   const baseEnv = { ...process.env };
   delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_LS_MODE;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -39,7 +41,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
     }),
     encoding: 'utf8',
     env: {
-      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
+      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...(lsDefault ? {} : { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' }), ...env,
     },
   });
   let out = null;
@@ -960,3 +962,191 @@ for (const cmd of BL192_ALLOW) {
     assert.strictEqual(r.deny, false);
   });
 }
+
+// ---- Rule 4 (BL-0300): bare `ls` in command position => deny ----
+const BARE_LS_DENY = [
+  'ls',
+  'ls -la /tmp',
+  'cd /repo && ls',
+  'echo hi; ls docs',
+  'false || ls',
+  'cat x | ls',
+  'echo $(ls)',
+  'echo `ls`',
+  'FOO=1 ls',
+  'time ls',
+  'time -p ls',
+  'time -- ls',
+  'time -p -- ls',
+  '! ls',
+  'time ! ls',
+  // array bodies: parentheses inside quotes or after a backslash are data (verified with a harmless alias in real bash)
+  'a=( "(" ); ls',
+  'a=( \\( ); ls',
+  "a=( ')' ); ls",
+  'a=( ")" ); ls',
+  'a=( $( echo ")" ) ); ls',
+  'a=(\n"(" \n)\nls',
+  'a=( "a\\"b)" ); ls',
+  'a=( `echo ")"` ); ls',
+  'a=( "$(ls)" )', // a command substitution inside double quotes runs
+  'a=( x ) y=1; ls', // a scalar assignment after an array one must not be read as another array
+  'opts=( -a ) F=1 ls',
+  'a[1]=( x ) ls',
+  'cat <(ls)',
+  // quoted openers are text: the ls after them still runs (verified with a harmless alias in real bash)
+  'echo "(("; ls',
+  'printf "%s" "(("; ls',
+  "echo '(('; ls",
+  'a=( "(()" ); ls',
+  'echo "a=(" ; ls',
+  'echo "x a=(" ; ls',
+  'grep "((" Makefile; ls',
+  'echo "(( "; ls',
+  // unterminated openers: bash itself rejects the line, but the guard never drops the tail it cannot judge
+  '(( 1 + ; ls',
+  "echo '<(' ; ls",
+  'echo "\\$((" ; ls',
+  'echo "x" "((" ; ls',
+  '( ls )', // a subshell, even when nested with a space between the parentheses
+  '( (ls) )',
+  '(( ls = 1 )); ls',
+  'echo $(( $(ls) + 1 ))',
+  'echo $(( `ls` + 1 ))',
+  'for (( i=0; i<1; i++ )); do ls; done',
+  'echo "`echo \\`x\\`; ls`"', // an escaped backtick inside a backtick body is a nested substitution, not the end
+  'echo "`echo \\`ls\\``"',
+  'echo `echo \\`x\\`; ls`',
+  'a=( `echo \\`x\\`; ls` )',
+  'echo "`cat <(ls)`"',
+  'echo "$(ls)"',
+  'echo "a $(cat <(ls)) b"',
+  'cat <(ls) <(command ls)',
+  'tee >(ls)',
+  'coproc ls',
+  'coproc NAME { ls; }',
+  'a=( $(ls) )',
+  'a=( `ls` )',
+  'a=( x <(ls) )',
+  '> /tmp/x ls',
+  '2>/dev/null ls',
+  '<f ls',
+  '>>x ls',
+  '&>x ls',
+  '2> /dev/null ls -la',
+  'FOO=1 >x ls',
+  'case $x in\n a) ls;;\nesac',
+  'case $x in a|b) ls ;; *) echo n ;; esac',
+  'case $x in a) echo y;; b) ls;; esac',
+  'case $x in a) ls;; esac',
+  'if ls; then echo y; fi',
+  'ls -la | head',
+];
+for (const cmd of BARE_LS_DENY) {
+  test(`rule4 denies bare ls: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /bare-ls/);
+    assert.match(r.reason, /command ls/);
+    assert.match(r.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+  });
+}
+const BARE_LS_ALLOW = [
+  'command ls',
+  'command ls -la',
+  'exec ls', // builtins/commands take ls as an argument: bash expands aliases only in command position
+  'nice ls',
+  'env ls',
+  'sudo ls',
+  'nohup ls',
+  'builtin ls',
+  'xargs ls',
+  'time -p command ls',
+  'cat <(command ls)',
+  '(( ls = 1 )); printf "%s\\n" "$ls"', // arithmetic: ls is a variable
+  '(( ls > 0 ))',
+  '(( (ls) ))',
+  'x=$(( ls + 1 )); echo $x',
+  'for (( ls=0; ls<3; ls++ )); do :; done',
+  'echo $(( ls + 1 ))',
+  'echo "\\`ls\\`"', // escaped backticks in double quotes are literal text
+  'echo \\`ls\\`',
+  'echo "`command ls`"',
+  'a=( \\)\nls\n)', // `\)` is data, so the ls below is an array element
+  "a=( ')'\nls\n)",
+  'a=( "x)"\nls\n)',
+  "a=( '$(ls)' )", // single quotes are literal
+  `a[${'x'.repeat(300)}]=( ls )`, // long subscript: the array target is recognised by a forward scan, not a fixed look-back
+  `a[${'x'.repeat(300)}]=(\nls\n)`,
+  `declare -a v[${'x'.repeat(300)}]=( ls )`,
+  'coproc foo ls', // bash runs `foo` with argument ls (foo: command not found): ls is never executed as a command
+  'echo "<(ls)"', // no process substitution inside double quotes
+  'printf "%s\\n" "<(ls)"',
+  'echo "x >(ls) y"',
+  'echo \\<\\(ls\\)',
+  "echo '<(ls)'",
+  'coproc command ls',
+  'coproc NAME { command ls; }',
+  'a=( $(command ls) )',
+  'commands=( ls -la )', // array assignment: words, not a command
+  'commands=(\nls\n)',
+  'declare -a c=( ls x )',
+  'ls () { echo ok; }', // function definition
+  'ls() { echo ok; }',
+  '> /tmp/x command ls',
+  'case $x in a) command ls;; esac',
+  'case $x in ls) echo y;; esac', // ls as a pattern
+  '\\ls',
+  '/bin/ls',
+  '/usr/bin/ls -la',
+  "'ls'",
+  'cat ls.txt',
+  'grep ls file',
+  'echo ls',
+  'echo "ls -la"',
+  "echo 'a; ls'",
+  'lsof -i :80',
+  'lsblk',
+  'git ls-files',
+  'git ls-files | wc -l',
+  'for x in ls; do echo $x; done',
+  'cat <<EOF\nls\nEOF',
+  "bash -c 'ls'",
+  'echo x && command ls | head',
+];
+for (const cmd of BARE_LS_ALLOW) {
+  test(`rule4 allows: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, false);
+    assert.doesNotMatch(r.ctx, /bare-ls/);
+  });
+}
+test('rule4 knob: env warn advises without denying, off is silent, garbage denies', () => {
+  const w = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'warn' } });
+  assert.strictEqual(w.deny, false);
+  assert.match(w.ctx, /bare-ls/);
+  const o = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' } });
+  assert.strictEqual(o.deny, false);
+  assert.doesNotMatch(o.ctx, /bare-ls/);
+  assert.strictEqual(run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
+});
+
+// Cost bound: the hook runs on every Bash call, so crafted unclosed `[a` / `a=(` runs must stay linear.
+for (const [name, unit] of [['[a', '[a'], ['a=(', 'a=('], ['"((', '"(('], ['((', '(('], ['<(', '<(']]) {
+  test(`rule4 stays fast on 25000 x ${name}`, () => {
+    const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+    for (const cmd of [`echo ${unit.repeat(25000)}`, `echo ls ${unit.repeat(25000)}`]) {
+      const t0 = process.hrtime.bigint();
+      detectBareLs(cmd);
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+      assert.ok(ms < 150, `${ms} ms for ${cmd.slice(0, 12)}`);
+    }
+  });
+}
+
+test('rule4 fails open (no throw) on deeply nested quote/substitution input', () => {
+  const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+  for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
+    assert.doesNotThrow(() => detectBareLs(`echo ls ${unit.repeat(25000)}`));
+  }
+});

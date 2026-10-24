@@ -22,7 +22,7 @@ done
 echo "{\"hooks\":{\"Stop\":[{\"hooks\":[$cmds]}]}}" > "$T/proj/.claude/settings.json"
 tag=${res:0:8}; [ "$res" = "-" ] && tag=fresh
 args=(-p --model claude-haiku-4-5 --output-format stream-json --verbose --include-hook-events --setting-sources "$ss" --debug hooks --debug-file "$T/debug-$tag.log")
-[ "$plug" = 1 ] && args+=(--plugin-dir /home/cookys/projects/autopilot)
+if [ "$plug" = 1 ]; then [ -n "${AUTOPILOT_REPO:-}" ] || { echo "AUTOPILOT_REPO is not set (path of the autopilot checkout to load as plugin)" >&2; exit 2; }; args+=(--plugin-dir "$AUTOPILOT_REPO"); fi
 [ "$res" != "-" ] && args+=(--resume "$res")
 cd "$T/proj"
 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$T/home" CLAUDE_CONFIG_DIR="$T/cfg" \

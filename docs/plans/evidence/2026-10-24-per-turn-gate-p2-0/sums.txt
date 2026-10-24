@@ -14,8 +14,8 @@ d4095fe1bf849565fee96a07d0ab1aeba24e7b29a5a61f110dfa62bebfa7cebe  raw-excerpts/t
 f945dfa8acad677feb878f029985074a830c3b9469c9d90e82ecc57e13bdc32c  raw-excerpts/t4/plugsim.hook.log
 ee2faf300d8e0580a46634515ec512d9ecf16c35a560faff54bbbd880c5a27b8  raw-excerpts/t4/stream-excerpt-fresh.jsonl
 8c18cb49c5b03c92a3630f92ca9c7c4dfe05672ad3692724d3d30d71dbae33a7  probe-hook.js
-7ee7519eec0c22e902d0ac3a548c158ab5fd85aa4856ed01fec2adcef4ec4fad  trial.sh
-112d08abf4219e48a7f1e612d536fccf3464601cceb150830771f110af1d34f1  trial-v1.sh
+49f73e5e3914a29da3852275d5e490224bebf480d9e75ea71820b07f0114989e  trial.sh
+14db0a0ef48a3847d81ee49fa806e2274cd4961279518729261f12e4e26e8878  trial-v1.sh
 88de0eae626ffa281c9647ec893907836af3cdd49e14803450c61de362dd0f5b  check-recompute.js
 281ac74093a211559fbb401475061aee0f4c141a3f683c297787be4abf788059  verifier-wall.txt
 ed3d604dd8ba02ab4bc8c023b58fffdac9127b691458f1272c4bd65ce6c06150  readings.txt
@@ -23,7 +23,7 @@ fa5eeca01749fd01fc0e49c4ce5fbf901ed25da84c313cd265ab98053b797070  block-in-strea
 6fc8c23ed36190603449e648b4ac7ffa4f79588be2b7fd174e242c91f25c60f2  call-times.txt
 7c27582a2de3239b795c8f85abde8d045c0a3891fc37a3dfe46e15e0e8b4df20  stop-events.txt
 def9caab50e0679fc1a17c4dcede4d697e446a360fa6701992dd76efe7cb0353  expected.md
-5d00c92504bc35e8ad9dcc5fe9691b9fb2f795890f9f0332eef5e59295db49d5  README.md
+a8567b2222209aae0e8f07308082cb5b76e4b1a4f99cd202db5dbd25c5b408c6  README.md
 # hook program that ran in t1-t3 (p20run/bin/hook.js) is identical to probe-hook.js:
 8c18cb49c5b03c92a3630f92ca9c7c4dfe05672ad3692724d3d30d71dbae33a7  p20run/bin/hook.js (equals probe-hook.js above)
 # full raw files, kept in scratch, not committed; hashes are of the files BEFORE masking (t1-t3 under <SCRATCH>/p20run/trials, t4 under <MKTEMP>/trials; the resumed t1 files were named with the session id)

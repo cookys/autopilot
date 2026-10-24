@@ -1,6 +1,7 @@
 #!/bin/bash
 # HISTORICAL VERSION, kept only to compare with t1-t3. DO NOT RUN. Use trial.sh (v2).
 # The only edits after t1-t3 ran: this header, the not-executable mode, and the work-tree refusal below.
+# Also after the fact: the plugin path was changed to the environment variable AUTOPILOT_REPO (it was a hard-coded checkout path).
 # usage: trial.sh <name> <setting-sources> <plugin 0|1> <resume-session-or-"-"> <prompt>
 set -u
 R=$(dirname "$0"); name=$1; ss=$2; plug=$3; res=$4; prompt=$5
@@ -13,7 +14,7 @@ J
 [ -f $T/counter.json ] || echo '{"remaining":1,"calls":0}' > $T/counter.json
 [ -n "${REMAIN:-}" ] && echo "{\"remaining\":$REMAIN,\"calls\":$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$T/counter.json','utf8')).calls)}catch(e){console.log(0)}")}" > $T/counter.json
 args=(-p --model claude-haiku-4-5 --output-format stream-json --verbose --include-hook-events --setting-sources "$ss" --debug hooks --debug-file $T/debug-$4.log)
-[ "$plug" = 1 ] && args+=(--plugin-dir /home/cookys/projects/autopilot)
+if [ "$plug" = 1 ]; then [ -n "${AUTOPILOT_REPO:-}" ] || { echo "AUTOPILOT_REPO is not set (path of the autopilot checkout to load as plugin)" >&2; exit 2; }; args+=(--plugin-dir "$AUTOPILOT_REPO"); fi
 [ "$res" != "-" ] && args+=(--resume "$res")
 cd $T/proj
 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME=$T/home CLAUDE_CONFIG_DIR=$T/cfg P0_LOG=$T/hook.log P0_COUNTER=$T/counter.json \

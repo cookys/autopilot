@@ -12,15 +12,15 @@ v1 historical commands (`trial-v1.sh`, not executable, now also refuses to run i
 - t1 turn 1: `trial-v1.sh t1 project 0 - "Reply with exactly: OK"` (counter remaining=1)
 - t1 turn 2: `REMAIN=1 trial-v1.sh t1 project 0 <session id of turn 1> "Reply with exactly: DONE"`
 - t2: `trial-v1.sh t2 user 0 - "Reply with exactly: OK"` (negative control for b)
-- t3: `trial-v1.sh t3 project 1 - "Reply with exactly: OK"` (adds `--plugin-dir <REPO>`)
+- t3: `AUTOPILOT_REPO=<REPO> trial-v1.sh t3 project 1 - "Reply with exactly: OK"` (adds `--plugin-dir $AUTOPILOT_REPO`; both runners now take the checkout path from `AUTOPILOT_REPO` and exit 2 when it is unset, instead of the original hard-coded path)
 
 Equivalent reruns with v2 `trial.sh` (it makes its own `mktemp -d` root and prints it as `root=`; set `P20_ROOT=<dir outside the repo>` to reuse one root across the two turns of t1). The v2 counter is created only when absent, so resetting it between turns means deleting the counter file; the call number in the hook log then restarts at 1 (v1 kept counting 3, 4):
 - t1 turn 1: `P20_ROOT=$ROOT trial.sh t1 project 0 - "Reply with exactly: OK" gate:1`
 - t1 turn 2: `rm $ROOT/trials/t1/gate.counter.json; P20_ROOT=$ROOT trial.sh t1 project 0 <session id from the RESULT line of turn 1> "Reply with exactly: DONE" gate:1`
 - t2: `trial.sh t2 user 0 - "Reply with exactly: OK" gate:1`
-- t3: `trial.sh t3 project 1 - "Reply with exactly: OK" gate:1`
+- t3: `AUTOPILOT_REPO=<REPO> trial.sh t3 project 1 - "Reply with exactly: OK" gate:1`
 - t4 (v2 as run):
-`trial.sh t4 project 1 - "Reply with exactly: OK" gate:0 plugsim:1` (two project Stop hooks, both `probe-hook.js`: `gate` allows, `plugsim` blocks once, simulating a plugin hook that blocks; plus the five real plugin hooks)
+`AUTOPILOT_REPO=<REPO> trial.sh t4 project 1 - "Reply with exactly: OK" gate:0 plugsim:1` (two project Stop hooks, both `probe-hook.js`: `gate` allows, `plugsim` blocks once, simulating a plugin hook that blocks; plus the five real plugin hooks)
 - (d): `node gate/verify-turn.js --turn 5 --repo repo --json` in `evals/orchestration/tasks/t14-constraint-horizon`, timed with `/usr/bin/time`, five runs.
 
 ## Results

@@ -29,5 +29,5 @@ row 12 interleave: written
 row 13 cost: written
 row 14 prereg: written
 synthetic batch: 6 ids, wrapper rc=0, audit PASS
-dry projection, C arm after the P1 rerun's first five run costs: spent=2.8136 projected=20.3037 cap=17 -> STOP_COST (mean 0.5461, sample sd 0.0684)
+dry projection (C cap 18), C arm after the P1 rerun's first five run costs: spent=2.8136 projected=17.5659 cap=18 -> ok (mean 0.5461, sample sd 0.0684)
 SELFCHECK OK: every row has a writer

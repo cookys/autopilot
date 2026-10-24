@@ -71,8 +71,9 @@ const sampleSd = (a) => {
  * THE cost stop rule (one function; the preregistration quotes it). Per arm, before launching an id:
  *   spent = runs already paid in this arm + probes already paid in this arm
  *   fewer than 5 finished runs in the arm: projected = spent + one probe (no projection yet), stage pre5
- *   5 or more: projected = spent + remaining * (mean + 2 * sample sd of the finished run costs + one probe),
- *              remaining = ids of the arm not yet finished, the one about to start included; stage post5
+ *   5 or more: projected = spent + r * (mean of the finished run costs + one probe) + 2 * sample sd * sqrt(r),
+ *              r = ids of the arm not yet finished, the one about to start included (independent costs add, so the
+ *              sd of the sum of r costs is sd * sqrt(r); the plan's "mean plus 2 sd for the remaining ids" read this way); stage post5
  * stop when projected > the arm's cap.
  */
 function projectCost({ runCosts, probeSpent, total, cap, probeCost }) {
@@ -82,7 +83,7 @@ function projectCost({ runCosts, probeSpent, total, cap, probeCost }) {
     return { stage: 'pre5', spent, projected, cap, stop: projected > cap };
   }
   const remaining = total - runCosts.length;
-  const projected = spent + remaining * (mean(runCosts) + 2 * sampleSd(runCosts) + probeCost);
+  const projected = spent + remaining * (mean(runCosts) + probeCost) + 2 * sampleSd(runCosts) * Math.sqrt(remaining);
   return { stage: 'post5', spent, projected, cap, stop: projected > cap };
 }
 
@@ -555,7 +556,7 @@ function selfcheck(wrapperPath) {
     const n = 3;
     const m = {
       task: 'syn', model: 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'selfcheck-seed', n_per_arm: n,
-      arms: { ON: { gate: 'hook', cap: 31 }, C: { gate: 'observe', cap: 17 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
+      arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
       prereg: 'PREREG.md', taskhash_expected: 'expected.txt', hook_path: 'hook.js', harness_path: 'harness.sh', argv_sha: {},
       hashes: { wrapper: sha256(fs.readFileSync(wrapperPath)), hook: sha256('hook\n'), harness: sha256('harness\n') },
     };
@@ -608,8 +609,8 @@ function selfcheck(wrapperPath) {
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).
     const p1 = [0.552910, 0.457526, 0.591696, 0.500538, 0.627904];
-    const dry = projectCost({ runCosts: p1, probeSpent: 5 * 0.0166, total: 30, cap: 17, probeCost: 0.0166 });
-    say(`dry projection, C arm after the P1 rerun's first five run costs: spent=${dry.spent.toFixed(4)} projected=${dry.projected.toFixed(4)} cap=${dry.cap} -> ${dry.stop ? 'STOP_COST' : 'ok'} (mean ${mean(p1).toFixed(4)}, sample sd ${sampleSd(p1).toFixed(4)})`);
+    const dry = projectCost({ runCosts: p1, probeSpent: 5 * 0.0166, total: 30, cap: 18, probeCost: 0.0166 });
+    say(`dry projection (C cap 18), C arm after the P1 rerun's first five run costs: spent=${dry.spent.toFixed(4)} projected=${dry.projected.toFixed(4)} cap=${dry.cap} -> ${dry.stop ? 'STOP_COST' : 'ok'} (mean ${mean(p1).toFixed(4)}, sample sd ${sampleSd(p1).toFixed(4)})`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   say(bad ? `SELFCHECK FAIL (${bad})` : 'SELFCHECK OK: every row has a writer');
   return bad ? 1 : 0;

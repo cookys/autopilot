@@ -43,7 +43,7 @@ const [wrapper, out, clone, src] = process.argv.slice(2);
 const w = require(src);
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 const m = { task: 't14-constraint-horizon', model: 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'unit-test-seed', n_per_arm: 3,
-  arms: { ON: { gate: 'hook', cap: 31 }, C: { gate: 'observe', cap: 17 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
+  arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
   prereg: 'prereg/PREREG.md', taskhash_expected: 'prereg/taskhash.expected.txt', hook_path: 'hooks/per-turn-gate.js',
   harness_path: 'evals/orchestration/run-orchestration-eval.sh', argv_sha: {},
   hashes: { wrapper: sha(wrapper), hook: sha(path.join(clone, 'hooks/per-turn-gate.js')), harness: sha(path.join(clone, 'evals/orchestration/run-orchestration-eval.sh')) } };
@@ -83,7 +83,12 @@ const base={total:30,cap:17,probeCost:0.0166};
 let p=w.projectCost({...base,runCosts:[0.5,0.5,0.5,0.5],probeSpent:0.07}); eq(p.stage,"pre5","stage before five"); eq(p.stop,false,"no projection before five");
 p=w.projectCost({...base,runCosts:[0.5,0.5,0.5,0.5,0.5],probeSpent:0.083}); eq(p.stage,"post5","stage after five"); eq(p.stop,false,"flat 0.5 costs stay under the cap");
 p=w.projectCost({...base,runCosts:[0.5,0.7,0.5,0.7,0.5],probeSpent:0.083}); eq(p.stop,true,"noisy costs push the projection over the cap");
+p=w.projectCost({total:30,cap:18,probeCost:0.0166,runCosts:[0.552910,0.457526,0.591696,0.500538,0.627904],probeSpent:5*0.0166}); eq(p.stop,false,"P1 first five costs, cap 18: no STOP_COST ("+p.projected.toFixed(2)+")");
+p=w.projectCost({total:30,cap:18,probeCost:0.0166,runCosts:[0.552910,0.457526,0.591696,0.500538,0.627904].map(x=>x*1.25),probeSpent:5*0.0166}); eq(p.stop,true,"P1 costs scaled by 1.25: STOP_COST ("+p.projected.toFixed(2)+")");
 ' "$WRAP" || fail "projectCost checks"
+PJ_MUT="$TEST_TMP/mut-proj/run-p2-batch.js"; mkdir -p "$(dirname "$PJ_MUT")"; cp "$WRAP_SRC" "$PJ_MUT"
+mutate "$PJ_MUT" "return { stage: 'post5', spent, projected, cap, stop: projected > cap };" "return { stage: 'post5', spent, projected, cap, stop: false };" || fail "projection mutant could not be built"
+if node -e 'const w=require(process.argv[1]);const p=w.projectCost({total:30,cap:18,probeCost:0.0166,runCosts:[0.69,0.57,0.74,0.63,0.78],probeSpent:0.083});process.exit(p.stop?0:1)' "$PJ_MUT"; then fail "projection mutant (never stops) still stops"; else echo "RED projection: the never-stopping mutant misses STOP_COST on inflated costs"; fi
 SC_OUT=$(node "$WRAP" --selfcheck 2>&1); SC_RC=$?
 assert_eq "$SC_RC" 0 "selfcheck exits 0"
 assert_contains "$SC_OUT" "SELFCHECK OK: every row has a writer" "selfcheck verdict"

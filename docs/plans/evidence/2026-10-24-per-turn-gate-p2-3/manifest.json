@@ -7,11 +7,11 @@
   "arms": {
     "ON": {
       "gate": "hook",
-      "cap": 31
+      "cap": 30
     },
     "C": {
       "gate": "observe",
-      "cap": 17
+      "cap": 18
     }
   },
   "probe_cost": 0.0166,
@@ -27,7 +27,7 @@
     "C": "ca86864056a6969fb4efe05b06cd59cb051991a09e4f705eea714f4a460ad8d2"
   },
   "hashes": {
-    "wrapper": "bbe22662d73017753d390c9bcd8eb5704bfd25776f7d7dd6a9399183eef0a807",
+    "wrapper": "1c2272a8a58326551b4feea5cef94843248c620a09a47a3a23da4e26ecae2c51",
     "hook": "10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0",
     "harness": "eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149"
   }

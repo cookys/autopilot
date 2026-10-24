@@ -1,6 +1,6 @@
 # P2-3 batch preregistration - per-turn gate, hook ON against a concurrent control (BL-0055 phase 2)
 
-Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decision d-15c0364c (2026-10-24, Taipei time): D2 (concurrent control), 30 ON and 30 C runs, total cap 48 USD, C arm 17 USD, ON arm 31 USD, n = 30. Plan: `docs/plans/2026-10-24-per-turn-gate-phase2.md` sections 3, 3.1, 4. No model call was made while building the instrument; every test used a stub runner or a fake `claude`.
+Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decision d-15c0364c (2026-10-24, Taipei time): D2 (concurrent control), 30 ON and 30 C runs, total cap 48 USD (split corrected to C 18 / ON 30, section 3), n = 30. Plan: `docs/plans/2026-10-24-per-turn-gate-phase2.md` sections 3, 3.1, 4. No model call was made while building the instrument; every test used a stub runner or a fake `claude`.
 
 ## 1. What is measured
 
@@ -22,8 +22,8 @@ Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decisi
 | W4 commit (mode `violations+features`) | `977027c999e52383ad354f35fa88ea16dec7476f` (hook blob `45f3c47845c30b00e1b0c7a742b40210becab5bd`) |
 | Treatment hook = develop final | `hooks/per-turn-gate.js` at develop `1ce92330d`: blob `f4fdf20152efcb7ecb15108fefc24bf10b8dfefc`, sha256 `10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0`. It differs from the W4 commit by the P2-1 review fixes (locking, state fencing, validation: fd63ae15c, 8c41e656b, e2302e5dc, 9aa650fc8); the W4 trigger and retry text are the ones evaluated. |
 | Harness `evals/orchestration/run-orchestration-eval.sh` | sha256 `eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149` |
-| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `bbe22662d73017753d390c9bcd8eb5704bfd25776f7d7dd6a9399183eef0a807` |
-| `manifest.json` (this directory) | sha256 `69d26e21082396ebff86da812dc1e86dc17a11e22fee5d254452b80ef0bed82d`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
+| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `1c2272a8a58326551b4feea5cef94843248c620a09a47a3a23da4e26ecae2c51` |
+| `manifest.json` (this directory) | sha256 `a0133fa5dda36f98746f404d4b9b5a196e46056117e73446cca1fc3b46c275d0`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
 | `order.txt` (this directory) | sha256 `080bf25ed67ca1ddf96bbdff68b46298ef99d968d84632360e87b37b0c1f67fc` |
 | `selfcheck.out` (this directory) | output of `node evals/orchestration/run-p2-batch.js --selfcheck` at the wrapper hash above |
 
@@ -44,15 +44,15 @@ Seed `ptg-p2-3-order-2026-10-24`. Pair k holds `ON-k` and `C-k`; mulberry32 seed
 
 ## 3. Cost caps and the stop rule
 
-Caps, never raised in place: C arm 17 USD, ON arm 31 USD (total 48), each with its own projection. A run costs its last result object's `total_cost_usd` (cumulative within a session); a probe costs its own `total_cost_usd` (about 0.0166). Before every id, in `projectCost` (the single function the wrapper and the audit share):
+Caps, never raised in place: **C arm 18 USD, ON arm 30 USD** (total 48, as approved in d-15c0364c), each with its own projection. This replaces the first draft of this note (C 17, ON 31, and a per-id "mean + 2 sd" projection); depth-0 ruled the change a preregistration correction inside the approved 48 USD, made before any measured call. A run costs its last result object's `total_cost_usd` (cumulative within a session); a probe costs its own `total_cost_usd` (about 0.0166). Before every id, in `projectCost` (the single function the wrapper and the audit share):
 
 - fewer than 5 finished runs in the arm: projected = arm spend (runs + probes) + one probe; no projection yet;
-- 5 or more: projected = arm spend + remaining ids of the arm (the one about to start included) x (mean of the arm's finished run costs + 2 x their sample standard deviation + one probe);
+- 5 or more: projected = arm spend + r x (mean of the arm's finished run costs + one probe) + 2 x sample sd x sqrt(r), where r = ids of the arm not yet finished, the one about to start included;
 - projected > the arm's cap: write `STOP_COST`, exit 5, launch nothing more; the batch is U and the owner decides on a rerun.
 
-`COSTCHK` rows carry the projection; the audit recomputes each one from the `COST` rows.
+Reading of the plan's wording ("mean plus 2 sample sd for its remaining ids"): the remaining cost is a sum of r roughly independent run costs, so its mean is r x mean and its standard deviation is sd x sqrt(r); the rule bounds that sum at mean + 2 sd. Charging 2 sd to every id separately would bound a sum of r costs at 2 sd x r, which is far wider than any sum of independent costs and stopped a typical C arm early. `COSTCHK` rows carry the projection; the audit recomputes each one from the `COST` rows.
 
-**Known property, for the owner (O2) before launch:** this literal rule is strict. Applied to the first five run costs of the P1 rerun control (0.5529, 0.4575, 0.5917, 0.5005, 0.6279; mean 0.5461, sample sd 0.0684) it projects 20.30 USD against the C cap 17 and writes `STOP_COST` before C id number 6, although the P1 batch cost 16.23 USD in total. It is printed by `--selfcheck` (see `selfcheck.out`). Whether to keep the rule and cap as written, or to amend them (a different projection, a higher C cap), is an owner decision that needs a new preregistration; this note does not change either.
+Check on the P1 rerun control's first five run costs (0.5529, 0.4575, 0.5917, 0.5005, 0.6279; mean 0.5461, sample sd 0.0684; five probes 0.083): projected 17.57 USD (probes charged) against the C cap 18, so no `STOP_COST`; the same numbers scaled by 1.25 project above 18 and stop. Both are asserted in `hooks/tests/p2-batch-wrapper.test.sh` and the first is printed by `--selfcheck` (`selfcheck.out`). The depth-0 note quoted 17.07; that figure leaves the probes out, the wrapper charges them, both are under 18.
 
 ## 4. Validity conditions and their artifacts (plan 3.1, implemented by `run-p2-batch.js`)
 

@@ -57,30 +57,37 @@ AUD_MUT="$TEST_TMP/mut-audit/run-p2-batch.js"; mkdir -p "$(dirname "$AUD_MUT")";
 mutate "$AUD_MUT" "function audit(runDir, m, clone, opts) {" "function audit(runDir, m, clone, opts) { return [];" || fail "audit mutant could not be built"
 POST_MUT="$TEST_TMP/mut-post/run-p2-batch.js"; mkdir -p "$(dirname "$POST_MUT")"; cp "$WRAP_SRC" "$POST_MUT"
 mutate "$POST_MUT" "try { W.writeTaskHash(ctx, 'post'); } catch (e) {" "try { /* post listing removed */ } catch (e) {" || fail "post mutant could not be built"
+mk_smut() { SMUT=1 mk_mut "$@"; }
 mk_mut() { # <name> then pairs: <old> <new> ...; builds $TEST_TMP/mut-<name>/run-p2-batch.js
   local n="$1" f; shift; f="$TEST_TMP/mut-$n/run-p2-batch.js"; mkdir -p "$(dirname "$f")"; cp "$WRAP_SRC" "$f"
+  # Old-rule mutants switch the generic strict layers off, so each of them still tests only its own rule.
+  # (Strict-layer mutants are built with mk_smut, which leaves them on.)
+  if [ -z "${SMUT:-}" ]; then
+    mutate "$f" "const strictRows = auditRows(rows, ids, order, m);" "const strictRows = [] || auditRows(rows, ids, order, m);" || fail "strict-off mutant $n"
+    mutate "$f" "fails.push(...auditFiles(" "fails.push(...[] || auditFiles(" || fail "strict-off mutant $n"
+  fi
   while [ $# -ge 2 ]; do mutate "$f" "$1" "$2" || fail "mutant $n could not be built"; shift 2; done
 }
 mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need(" "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
-mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
 mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === ''," "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
 mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
-mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r)),"
+mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r))," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
 mk_mut errfmt "if (he) need(" "if (false) need(" "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
 mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true," "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
-mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
+mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&" "need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(true || g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(w0 && Number.isFinite(wsv) &&" "need(true || w0 && Number.isFinite(wsv) &&"
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok'," "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
 mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && typeof" "need(true || o && typeof"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
-mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
-mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
-mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal,"
+mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
+mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&" "need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit," "need(true || g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit,"
+mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal," "need(rv.length !== 1 ||" "need(true || rv.length !== 1 ||"
 mk_mut endrc "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
 mk_mut rcint "need(Number.isInteger(rcOf[id])," "need(true || Number.isInteger(rcOf[id])," "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
 mk_mut scoreor "need(o && typeof" "need(true || o && typeof"
@@ -90,13 +97,13 @@ mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.sl
 mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
 mk_mut costraw "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut taskdir "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
-mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')" "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -"
+mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')" "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -" "need(Math.abs(c - (typeof o.total_cost_usd" "need(true || Math.abs(c - (typeof o.total_cost_usd"
 mk_mut cmdtpl "need(Array.isArray(av) &&" "need(true || Array.isArray(av) &&"
 mk_mut mtime "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
 mk_mut oldhead "o.auth_ok === true" "String(o.result_head).includes('AUTH_OK')"
 mk_mut canon "need(Array.isArray(av) && outV === path.join" "need(true || Array.isArray(av) && outV === path.join"
 mk_mut slack "Math.floor(mt) >= Date.parse(st.ts) &&" "Math.floor(mt) >= Date.parse(st.ts) - 5000 &&" "Math.floor(mt) <= Date.parse(en.ts)," "Math.floor(mt) <= Date.parse(en.ts) + 5000,"
-mk_mut costnull "? o.total_cost_usd : null; return c; };" "? o.total_cost_usd : 0; return c; };"
+mk_mut costnull "? o.total_cost_usd : null; return c; };" "? o.total_cost_usd : 0; return c; };" "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
 mk_mut probecost "cost = costOk ? o.total_cost_usd : 0; err = (o.is_error || !costOk) ? 1 : 0;" "cost = 0; err = o.is_error ? 1 : 0;"
 mk_mut authscan "need(!AUTH_RE.test(raw)," "need(true || !AUTH_RE.test(raw),"
 mk_mut tracefiles "need(tc.files > 0," "need(true || tc.files > 0,"
@@ -112,6 +119,8 @@ mk_mut probefield "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Mat
 mk_mut stderrfile "need(errText !== null," "need(true || errText !== null,"
 mk_mut filehash "need(fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(true || fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(true || fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper," "need(true || fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper,"
 mk_mut nan "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0);" "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : NaN);"
+mk_mut nostrict "const strictRows = [] ||" "const strictRows = [] ||"
+mk_mut costchkmeta "need(kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap," "need(true || kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap,"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -570,5 +579,58 @@ node "$WRAP" --audit --manifest "$MAN" --run-dir "$RF" --clone "$CLONE" --wrappe
 assert_eq "$(grep -c ' PROBE_FAIL ' "$RF/invocation.log")" 1 "the failed probe is in the log"
 NANMUT="$TEST_TMP/mut-nan/run-p2-batch.js"
 assert_neq "$(node "$NANMUT" --audit --manifest "$MAN_NAN" --run-dir "$RF" --clone "$CLONE" --wrapper-file "$NANMUT" >/dev/null 2>&1; echo $?)" 0 "RED probe without cost: the NaN mutant fails a valid resumed batch"
+
+echo "--- round 10: the schema table, one tamper per row kind and per raw file"
+logedit() { # <name> <python expr body acting on list L (log lines)>
+  tamper "$1"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" <<'PY'
+import sys, re
+p, code = sys.argv[1:3]; L = open(p).read().split('\n'); exec(code); open(p, 'w').write('\n'.join(L))
+PY
+}
+chk_real() { assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$1")" 0 "$2"; }
+chk_red() { assert_eq "$(audit_rc "$TEST_TMP/mut-nostrict/run-p2-batch.js" "$TEST_TMP/t-$1")" 0 "RED $2"; }
+logedit ws "i = next(k for k, l in enumerate(L) if ' WRAPPER_START ' in l); L[i] = re.sub(r'first=\S+ last=\S+', 'first=5 last=2', L[i])"; chk_real ws "WRAPPER_START range first>last: real audit non-zero"
+logedit wd "i = max(k for k, l in enumerate(L) if ' WRAPPER_DONE ' in l); L[i] = re.sub(r'last=\S+', 'last=5', L[i])"; chk_real wd "final WRAPPER_DONE not last=2n: real audit non-zero"
+logedit we "i = max(k for k, l in enumerate(L) if ' WRAPPER_EXIT ' in l); L[i] = re.sub(r'rc=\S+', 'rc=7', L[i])"; chk_real we "final WRAPPER_EXIT rc=7: real audit non-zero"
+tamper wsf; echo $(( $(cat "$TEST_TMP/t-wsf/window.start") - 3600000 )) >"$TEST_TMP/t-wsf/window.start"; chk_real wsf "WINDOW_START file disagrees with the row: real audit non-zero"
+logedit ob "i = next(k for k, l in enumerate(L) if ' ORDER ' in l); o = L[i]; fid = o.split()[2]; del L[i]; s = next(k for k, l in enumerate(L) if ' START ' + fid + ' ' in l); L.insert(s + 1, L[s].split(' ')[0] + ' ' + o.split(' ', 1)[1])"
+chk_real ob "ORDER before START violated (ORDER row after START): real audit non-zero"; chk_red ob "ORDER position: audit without the strict layers says OK"
+logedit vv "i = next(k for k, l in enumerate(L) if ' VERSION ' in l); L[i] = re.sub(r'VERSION (\S+) .*', r'VERSION \1 2.1.0 (Claude Code)', L[i])"; chk_real vv "VERSION value is not the pin: real audit non-zero"
+logedit pok "i = next(k for k, l in enumerate(L) if ' PROBE_OK ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.500000', L[i])"; chk_real pok "PROBE_OK cost differs from the saved response: real audit non-zero"
+rm -rf "$TEST_TMP/t-rfa"; cp -a "$RF" "$TEST_TMP/t-rfa"; sed -i "s#$RF#$TEST_TMP/t-rfa#g" "$TEST_TMP"/t-rfa/cmd/*.json
+python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'rc=\S+', 'rc=9', L[i]); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "PROBE_FAIL rc differs from the saved response: real audit non-zero"
+python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n'); L = [l for l in L if ' PAUSE ' not in l]; open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "PAUSE count differs from the PROBE_FAIL count: real audit non-zero"
+logedit ccm "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'stage=\S+', 'stage=post5', L[i])"; chk_real ccm "COSTCHK metadata (stage) differs from the recomputed value: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-costchkmeta/run-p2-batch.js" "$TEST_TMP/t-ccm")" 0 "RED COSTCHK metadata: mutant says OK"
+logedit ccc "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'cap=\S+', 'cap=99', L[i])"; chk_real ccc "COSTCHK metadata (cap) differs from the manifest: real audit non-zero"
+logedit cca "i = next(k for k, l in enumerate(L) if ' COST ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real cca "COST arm differs from the seeded arm: real audit non-zero"
+logedit tur "i = next(k for k, l in enumerate(L) if ' TURNS ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real tur "TURNS arm differs from the seeded arm: real audit non-zero"
+logedit trm "L.insert(len(L) - 2, L[-3].split(' ')[0] + ' STOP_COST before C-01 projected=99')"; chk_real trm "terminal row STOP_COST present: real audit non-zero"
+logedit unk "L.insert(len(L) - 2, L[-3].split(' ')[0] + ' ZZZ something')"; chk_real unk "unknown row kind ZZZ: real audit non-zero"; chk_red unk "unknown row kind: audit without the strict layers says OK"
+logedit gar "L.insert(len(L) - 2, 'garbage without a timestamp')"; chk_real gar "unknown row kind (an unparseable line): real audit non-zero"
+tamper tsu; printf 'ZZ-01\t0\t0.100000\tok\n' >>"$TEST_TMP/t-tsu/probes.tsv"; chk_real tsu "probes.tsv unknown id: real audit non-zero"; chk_red tsu "probes.tsv unknown id: audit without the strict layers says OK"
+tamper rex; mkdir "$TEST_TMP/t-rex/runs/EXTRA"; chk_real rex "extra entry in runs/: real audit non-zero"; chk_red rex "extra entry in runs/: mutant says OK"
+tamper gjc; GJ=$(ls "$TEST_TMP"/t-gjc/runs/*/gate.jsonl | head -1); echo '{broken' >>"$GJ"; chk_real gjc "gate.jsonl corrupt line: real audit non-zero"; chk_red gjc "gate.jsonl corrupt line: mutant says OK"
+tamper hjc; HJ=$(ls "$TEST_TMP"/t-hjc/runs/ON-*/hook/live/per-turn-gate/*.jsonl | head -1); echo '{broken' >>"$HJ"; chk_real hjc "corrupt hook log line (skipped by the old reader): real audit non-zero"; chk_red hjc "corrupt hook log line: audit without the strict layers says OK"
+tamper cx; rm -f "$TEST_TMP/t-cx/cmd/$(ls "$TEST_TMP/t-cx/cmd" | head -1)"; chk_real cx "cmd/ file set is not exactly the expected ids: real audit non-zero"
+node "$WRAP" --audit --manifest "$MAN" --run-dir "$R1" >/dev/null 2>&1; assert_neq "$?" 0 "audit without --clone: non-zero"
+# every assertion text named in the schema table exists in this file, and PREREG carries the generated table verbatim
+node -e '
+const w=require(process.argv[1]),fs=require("fs");const t=fs.readFileSync(process.argv[2],"utf8");
+const table=w.schemaTable();const names=[...table.matchAll(/`([^`]+)` \|$/gm)].map(m=>m[1]).filter(Boolean);
+let bad=0;for(const n of names){if(!t.includes(n)){console.error("test text missing:",n);bad++}}
+const kinds=[...fs.readFileSync(process.argv[1],"utf8").matchAll(/ctx\.log\(\x27([A-Z_]+)\x27/g)].map(m=>m[1]);
+const known=new Set(w.LOG_SCHEMA.map(e=>e.kind));const fail=new Set(["STOP_COST","STOP_WINDOW","STOP_AUTH","ABORT","REFUSE","COST_INVALID"]);
+for(const k of new Set(kinds)){if(!known.has(k)&&!fail.has(k)){console.error("row kind written but not in the table:",k);bad++}}
+const prereg=fs.readFileSync(process.argv[3],"utf8");if(!prereg.includes(table)){console.error("PREREG appendix differs from --schema-table");bad++}
+process.exit(bad?1:0)' "$WRAP_SRC" "$0" "$REPO_ROOT/docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/PREREG.md"; assert_eq "$?" 0 "schema table: every row kind is listed, every test text exists, PREREG carries the table"
 
 finalize_test

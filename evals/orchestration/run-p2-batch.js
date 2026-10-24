@@ -461,6 +461,171 @@ function finish(ctx, code) {
   ctx.log('WRAPPER_EXIT', `rc=${code}`);
 }
 
+// ---------------------------------------------------------------- strict schema (every log row kind, every field, every raw file)
+
+const NUM = '\\d+(?:\\.\\d+)?';
+/**
+ * Every row kind the wrapper writes, its exact shape, and how the audit checks each field.
+ * An unknown kind or a row that does not match its shape fails the audit. `how` names where the audit gets the truth:
+ * RAW = recomputed from a raw file, SEED/MANIFEST = derived from the seed or manifest, ROW = derived from other rows,
+ * GIT = read from git, FORMAT = shape and position only. `test` names the assertion message in
+ * hooks/tests/p2-batch-wrapper.test.sh that tampers this row (a test checks that every name exists there).
+ */
+const LOG_SCHEMA = [
+  { kind: 'WRAPPER_START', re: /^first=(\d+) last=(\d+)$/, test: 'WRAPPER_START range', fields: [['first', 'FORMAT: 1 <= first <= last <= 2n'], ['last', 'FORMAT: last <= 2n']] },
+  { kind: 'WRAPPER_DONE', re: /^last=(\d+)$/, test: 'final WRAPPER_DONE', fields: [['last', 'ROW: the final one equals 2n (full batch)']] },
+  { kind: 'WRAPPER_EXIT', re: /^rc=(\d+)$/, test: 'final WRAPPER_EXIT', fields: [['rc', 'ROW: the last row of the log, rc 0; one per WRAPPER_START']] },
+  { kind: 'HASH', re: /^(wrapper|hook|harness|taskhash_expected|manifest|prereg) ([0-9a-f]{64})$/, test: 'swapped taskhash baseline', fields: [['name', 'FORMAT: one of six names, all present'], ['sha256', 'RAW: the file hashed now (wrapper, hook, harness, manifest, PREREG note, baseline) and MANIFEST']] },
+  { kind: 'PREREG', re: /^([0-9a-f]{40}) (\S+) ancestor=(yes|no)$/, test: 'forged PREREG time', fields: [['commit', 'GIT: git log -1 -- the PREREG path; note at that commit hashes to HASH prereg'], ['time', 'GIT: committer time of that commit, and earlier than WINDOW_START'], ['ancestor', 'GIT: merge-base --is-ancestor now']] },
+  { kind: 'WINDOW_START', re: /^$/, test: 'WINDOW_START file', fields: [['(none)', 'RAW: window.start epoch agrees with the row timestamp; exactly one row, before the first START']] },
+  { kind: 'TASKHASH_DIFF', re: /^(pre|post) (ok|fail)(?: .*)?$/, test: 'NC8 green', fields: [['phase', 'FORMAT'], ['verdict', 'RAW: taskhash.pre/post.txt equal the baseline listing and the task directory hashed now']] },
+  { kind: 'ORDER', re: /^(\S+) (ON|C) pos=(\d+)$/, test: 'ORDER before START', fields: [['id', 'SEED'], ['arm', 'SEED'], ['pos', 'SEED'], ['position', 'ROW: after the id\'s last probe row, before its CMD and START']] },
+  { kind: 'VERSION', re: /^(\S+) (.+)$/, test: 'VERSION value', fields: [['id', 'SEED'], ['value', 'MANIFEST: the pinned CLI']] },
+  { kind: 'PROBE_OK', re: /^(\S+) cost=(NUM)$/, test: 'PROBE_OK cost', fields: [['id', 'SEED'], ['cost', 'RAW: probes/<id>-<k>.json, the k-th attempt']] },
+  { kind: 'PROBE_FAIL', re: /^(\S+) rc=(\d+) cost=(NUM)$/, test: 'PROBE_FAIL rc', fields: [['id', 'SEED'], ['rc', 'RAW: saved response rc'], ['cost', 'RAW: saved response cost']] },
+  { kind: 'PAUSE', re: /^id not launched$/, test: 'PAUSE count', fields: [['(none)', 'ROW: one per PROBE_FAIL']] },
+  { kind: 'CMD', re: /^(\S+) ([0-9a-f]{64})$/, test: 'saved argv with another gate', fields: [['id', 'SEED'], ['sha256', 'RAW: cmd/<id>.json re-hashed; MANIFEST argv_sha and template']] },
+  { kind: 'START', re: /^(\S+) elapsed=(\d+)$/, test: 'dupstart', fields: [['id', 'SEED (order)'], ['elapsed', 'ROW: timestamp minus WINDOW_START, 3 s slack']] },
+  { kind: 'END', re: /^(\S+) rc=(\d+)$/, test: 'END rc=abc', fields: [['id', 'SEED (order)'], ['rc', 'FORMAT integer; semantics in COMPLETE and SCORE_MISSING']] },
+  { kind: 'COSTCHK', re: /^(\S+) arm=(ON|C) stage=(pre5|post5) spent=(NUM) projected=(NUM) cap=(NUM) (ok|stop)$/, test: 'COSTCHK metadata', fields: [['id', 'SEED'], ['arm', 'SEED'], ['stage', 'ROW: recomputed from the COST rows before it'], ['spent', 'ROW: recomputed; covers earlier probes in probes.tsv'], ['projected', 'ROW: recomputed by projectCost'], ['cap', 'MANIFEST'], ['verdict', 'ROW: ok only when the recomputed projection is within the cap']] },
+  { kind: 'COST', re: /^(\S+) arm=(ON|C) run=(NUM) probe=(NUM) running=(NUM) projected=(NUM)$/, test: 'COST arm', fields: [['id', 'SEED'], ['arm', 'SEED'], ['run', 'RAW: last result object of run.log'], ['probe', 'RAW: sum of the id\'s saved probe responses'], ['running', 'ROW: arm sum of runs plus probes.tsv up to this id'], ['projected', 'ROW: recomputed by projectCost']] },
+  { kind: 'SCORE', re: /^(\S+) m1=(\S+) m2=(\S+) m3=(\S+)$/, test: "SCORE '", fields: [['id', 'SEED'], ['m1', 'RAW: oracle.log constraints_pass (real boolean)'], ['m2', 'RAW: oracle.log features_pass (real boolean)'], ['m3', 'ROW: m1 and m2']] },
+  { kind: 'SCORE_MISSING', re: /^(\S+)$/, test: 'SCORE_MISSING after a successful call', fields: [['id', 'SEED; only after END rc != 0']] },
+  { kind: 'TURNS', re: /^(\S+) arm=(ON|C) n=(-?\d+)$/, test: 'all result.json turns_completed 0', fields: [['id', 'SEED'], ['arm', 'SEED'], ['n', 'RAW: result.json turns_completed']] },
+  { kind: 'RUNVERSION', re: /^(\S+) (ok|fail) (.+)$/, test: 'RUNVERSION wrong-version', fields: [['id', 'SEED'], ['flag', 'ROW: ok exactly when the value is the pin'], ['value', 'RAW: result.json runner_version, and MANIFEST pin']] },
+  { kind: 'MODEL', re: /^(\S+) (.+)$/, test: 'multi-model rows', fields: [['id', 'SEED'], ['value', 'RAW: modelUsage keys of run.log; exactly one id, same in all rows']] },
+  { kind: 'HOOKCOUNT', re: /^(\S+) gate_trace=(\d+) gate_log=(\d+) plugin=(\d+)$/, test: 'trace has one more gate execution', fields: [['id', 'SEED'], ['gate_trace', 'RAW: trace/<id>/ files'], ['gate_log', 'RAW: hook JSONL record count'], ['plugin', 'RAW: trace/<id>/ files']] },
+  { kind: 'HOOKERR', re: /^(\S+) (\S+)$/, test: 'hook errors in 3 ON runs', fields: [['id', 'SEED'], ['n', 'RAW: hook JSONL error records; non-negative integer']] },
+  { kind: 'BLOCKMAX', re: /^(\S+) (\S+)$/, test: 'BLOCKMAX -1', fields: [['id', 'SEED'], ['value', 'RAW: hook JSONL max block records in one turn; at most N']] },
+  { kind: 'COMPLETE', re: /^ON=(\d+)\/(\d+) C=(\d+)\/(\d+)$/, test: 'rc=124 run still counted in COMPLETE', fields: [['ON, C', 'ROW: recount from END rc and result.json turns_completed (the last row)'], ['n', 'MANIFEST']] },
+];
+// Rows whose mere presence invalidates the batch.
+const FAIL_KINDS = new Set(['STOP_COST', 'STOP_WINDOW', 'STOP_AUTH', 'ABORT', 'REFUSE', 'COST_INVALID']);
+const SCHEMA_BY_KIND = Object.fromEntries(LOG_SCHEMA.map((e) => [e.kind, { ...e, re: new RegExp(e.re.source.replace(/NUM/g, NUM)) }]));
+
+// Raw files: what must exist, parse completely, and which set of names is allowed.
+const FILE_SCHEMA = [
+  ['invocation.log', 'every line parses to a known row kind and shape', 'unknown row kind'],
+  ['window.start', 'one number; agrees with the WINDOW_START row', 'WINDOW_START file'],
+  ['taskhash.pre.txt, taskhash.post.txt', 'exist; equal the baseline', 'notaskpost'],
+  ['probes.tsv', 'every line has 4 columns, id in the expected set, rc integer, cost number, status ok|fail', 'probes.tsv unknown id'],
+  ['probes/<id>-<n>.json', 'the set is exactly the files of expected ids, n = 1..k per id, each a complete JSON object', 'extra probe response with a gap'],
+  ['cmd/<id>.json', 'the set is exactly the expected ids; each a JSON array; template and canonical paths', 'saved argv with another gate'],
+  ['runs/', 'entries are exactly <id>/, <id>.stdout, <id>.stderr for the expected ids (no more, no fewer)', 'extra entry in runs'],
+  ['runs/<id>/run.log', 'exists for a finished call; result objects parse; AUTH pattern absent', 'raw run.log shows an expired session'],
+  ['runs/<id>.stderr', 'exists (empty is fine); AUTH pattern absent', 'stderr files deleted'],
+  ['runs/<id>/result.json', 'exists and parses when the call ended with rc 0 (when present it must parse)', 'result.json runner_version differs'],
+  ['runs/<id>/oracle.log', 'exists when the call ended with rc 0; first JSON object parses', 'oracle.log disagrees'],
+  ['runs/<id>/gate.jsonl', 'exists when the call ended with rc 0; every line is a JSON object', 'gate.jsonl corrupt line'],
+  ['runs/<id>/hook/live/per-turn-gate/*.jsonl', 'ON: at least one file; C: no hook directory; every record line parses with its fields', 'corrupt hook log line'],
+  ['trace/<id>/trace-turn<n>.log', 'the set is exactly the expected ids; at least one readable file each', 'all C-arm traces deleted'],
+];
+
+function schemaTable() {
+  const out = ['| Row kind | Field | How the audit checks it | Test (assertion text) |', '|---|---|---|---|'];
+  for (const e of LOG_SCHEMA) e.fields.forEach(([f, how], i) => out.push(`| ${i === 0 ? `\`${e.kind}\`` : ''} | ${f} | ${how.replace(/\|/g, '/')} | ${i === 0 ? `\`${e.test}\`` : ''} |`));
+  out.push('| any other kind, an unparseable row, a missing timestamp | all | the audit fails | `unknown row kind` |');
+  out.push(`| ${[...FAIL_KINDS].map((k) => `\`${k}\``).join(', ')} | all | presence fails the audit | \`terminal row\` |`);
+  out.push('', '| Raw file or set | Must | Test (assertion text) |', '|---|---|---|');
+  for (const [f, must, test] of FILE_SCHEMA) out.push(`| \`${f}\` | ${must} | \`${test}\` |`);
+  return `${out.join('\n')}\n`;
+}
+
+const POST_KINDS = ['COST', 'SCORE', 'SCORE_MISSING', 'TURNS', 'RUNVERSION', 'MODEL', 'HOOKCOUNT', 'HOOKERR', 'BLOCKMAX'];
+
+/** Row shapes, ids, positions and the per-id sequence. Returns the failures (the caller stops here when there are any). */
+function auditRows(rows, ids, order, m) {
+  const f = [];
+  const n2 = ids.length;
+  rows.forEach((r, i) => {
+    if (r.kind === '?' || !r.ts || !Number.isFinite(Date.parse(r.ts))) { f.push(`unknown row kind or unparseable row ${i + 1}: ${r.raw.slice(0, 60)}`); return; }
+    if (FAIL_KINDS.has(r.kind)) { f.push(`terminal row present: ${r.kind}`); return; }
+    const sc = SCHEMA_BY_KIND[r.kind];
+    if (!sc) { f.push(`unknown row kind ${r.kind}`); return; }
+    const mm = sc.re.exec(r.rest);
+    if (!mm) { f.push(`${r.kind}: row does not match its shape: ${r.rest.slice(0, 80)}`); return; }
+    const hasId = !['WRAPPER_START', 'WRAPPER_DONE', 'WRAPPER_EXIT', 'HASH', 'PREREG', 'WINDOW_START', 'TASKHASH_DIFF', 'PAUSE', 'COMPLETE'].includes(r.kind);
+    if (hasId && !ids.includes(mm[1])) f.push(`${r.kind}: id ${mm[1]} is not in the expected set`);
+    const arm = ({ ORDER: 2, COSTCHK: 2, COST: 2, TURNS: 2 })[r.kind];
+    if (hasId && arm && ids.includes(mm[1])) { const want = order.find((o) => o.id === mm[1]).arm; if (mm[arm] !== want) f.push(`${r.kind} ${mm[1]}: arm ${mm[arm]} differs from the seeded arm ${want}`); }
+    if (r.kind === 'WRAPPER_START' && !(Number(mm[1]) >= 1 && Number(mm[1]) <= Number(mm[2]) && Number(mm[2]) <= n2)) f.push(`WRAPPER_START range: ${r.rest}`);
+  });
+  if (f.length) return f;
+  const kinds = (k) => rows.filter((r) => r.kind === k);
+  const done = kinds('WRAPPER_DONE'), exits = kinds('WRAPPER_EXIT');
+  if (!(done.length && Number(/last=(\d+)/.exec(done[done.length - 1].rest)[1]) === n2)) f.push('final WRAPPER_DONE is missing or not last=2n');
+  if (!(exits.length && rows[rows.length - 1] === exits[exits.length - 1] && exits[exits.length - 1].rest === 'rc=0')) f.push('final WRAPPER_EXIT is missing, not the last row, or not rc=0');
+  if (exits.length !== kinds('WRAPPER_START').length) f.push('final WRAPPER_EXIT count differs from the WRAPPER_START count');
+  if (kinds('PAUSE').length !== kinds('PROBE_FAIL').length) f.push('PAUSE count differs from the PROBE_FAIL count');
+  // per-id sequence: COSTCHK < VERSION < probes < ORDER < CMD < START < END < every post row, each post row once
+  for (const id of ids) {
+    const of = (k) => rows.map((r, i) => (r.kind === k && r.rest.split(' ')[0] === id ? i : -1)).filter((i) => i >= 0);
+    const one = (k) => { const a = of(k); if (a.length !== 1) f.push(`${id}: need exactly one ${k} row (got ${a.length})`); return a[0]; };
+    const cc = one('COSTCHK'), or = one('ORDER'), cm = one('CMD'), st = one('START'), en = one('END');
+    const ver = of('VERSION'), pr = [...of('PROBE_OK'), ...of('PROBE_FAIL')].sort((a, b) => a - b);
+    const lastBefore = Math.max(...ver, ...pr, cc);
+    if (!(cc < Math.min(...ver) && pr.length && Math.max(...pr) < or && or < cm && cm < st && st < en && lastBefore < or)) f.push(`${id}: rows are out of sequence (COSTCHK, VERSION, PROBE, ORDER, CMD, START, END)`);
+    const postKinds = POST_KINDS.filter((k) => k !== 'SCORE' && k !== 'SCORE_MISSING');
+    for (const k of postKinds) { const p = one(k); if (!(p > en)) f.push(`${id}: ${k} is not after END`); }
+    const sa = of('SCORE'), sb = of('SCORE_MISSING');
+    if (sa.length + sb.length !== 1 || !((sa[0] ?? sb[0]) > en)) f.push(`${id}: need exactly one SCORE or SCORE_MISSING after END`);
+  }
+  const pre = rows.findIndex((r) => r.kind === 'PREREG'), ws = rows.findIndex((r) => r.kind === 'WINDOW_START'), s0 = rows.findIndex((r) => r.kind === 'START');
+  if (kinds('WINDOW_START').length !== 1 || !(ws < s0)) f.push('WINDOW_START must appear exactly once, before the first START');
+  if (!(pre >= 0 && pre < s0)) f.push('PREREG must appear before the first START');
+  void m;
+  return f;
+}
+
+const HOOK_REASONS = new Set(['block', 'clean', 'cap', 'error', 'off']);
+/** Raw file inventory and completeness. */
+function auditFiles(runDir, ids, order, m, rcOf) {
+  const f = [];
+  const exists = (p) => fs.existsSync(path.join(runDir, p));
+  const list = (p) => { try { return fs.readdirSync(path.join(runDir, p)).sort(); } catch (_e) { return null; } };
+  const sameSet = (got, want, what) => { if (got === null) { f.push(`${what}: directory is missing`); return; } const a = new Set(got), b = new Set(want); const extra = got.filter((x) => !b.has(x)), miss = want.filter((x) => !a.has(x)); if (extra.length || miss.length) f.push(`${what}: extra entry in ${what} [${extra.join(',')}] or missing [${miss.join(',')}]`); };
+  sameSet(list('runs'), ids.flatMap((i) => [i, `${i}.stdout`, `${i}.stderr`]), 'runs');
+  sameSet(list('trace'), ids, 'trace');
+  sameSet(list('cmd'), ids.map((i) => `${i}.json`), 'cmd');
+  const parseJson = (p) => { try { return JSON.parse(fs.readFileSync(path.join(runDir, p), 'utf8')); } catch (_e) { return undefined; } };
+  const ws = (() => { try { return fs.readFileSync(path.join(runDir, 'window.start'), 'utf8').trim(); } catch (_e) { return null; } })();
+  if (ws === null || !/^\d+$/.test(ws)) f.push('window.start is missing or not a number');
+  for (const id of ids) {
+    const ok = rcOf[id] === 0;
+    const rp = (x) => path.join('runs', id, x);
+    if (ok) {
+      for (const need of ['run.log', 'result.json', 'oracle.log', 'gate.jsonl']) if (!exists(rp(need))) f.push(`${id}: runs/${id}/${need} is missing`);
+      const rj = parseJson(rp('result.json'));
+      if (exists(rp('result.json')) && !(rj && typeof rj === 'object' && ['task_id', 'arm', 'runner', 'model', 'runner_version', 'turns', 'turns_completed'].every((k) => k in rj))) f.push(`${id}: result.json does not parse or lacks fields`);
+    } else if (exists(rp('result.json')) && parseJson(rp('result.json')) === undefined) f.push(`${id}: result.json does not parse`);
+    if (exists(rp('gate.jsonl'))) fs.readFileSync(path.join(runDir, rp('gate.jsonl')), 'utf8').split('\n').forEach((l, i) => { if (l.trim()) { try { const o = JSON.parse(l); if (!o || typeof o !== 'object') throw new Error('x'); } catch (_e) { f.push(`${id}: gate.jsonl corrupt line ${i + 1}`); } } });
+    const arm = order.find((o) => o.id === id).arm;
+    const hd = path.join('runs', id, 'hook', 'live', 'per-turn-gate');
+    if (arm === 'C') { if (exists(path.join('runs', id, 'hook'))) f.push(`${id}: control run has a hook directory`); } else {
+      const files = (list(hd) || []).filter((x) => x.endsWith('.jsonl'));
+      if (!files.length) f.push(`${id}: ON run has no hook JSONL file`);
+      for (const file of files) fs.readFileSync(path.join(runDir, hd, file), 'utf8').split('\n').forEach((l, i) => {
+        if (!l.trim()) return;
+        let o; try { o = JSON.parse(l); } catch (_e) { f.push(`${id}: corrupt hook log line ${file}:${i + 1}`); return; }
+        const okRec = o && typeof o === 'object' && typeof o.session === 'string' && (o.turn === null || Number.isInteger(o.turn)) && (o.decision === 'allow' || o.decision === 'block') && HOOK_REASONS.has(o.reason) && Number.isInteger(o.counter) && o.counter >= 0;
+        if (!okRec) f.push(`${id}: corrupt hook log line ${file}:${i + 1} (fields)`);
+      });
+    }
+    const tr = list(path.join('trace', id)) || [];
+    if (!tr.length || !tr.every((x) => /^trace-turn\d+\.log$/.test(x))) f.push(`${id}: trace/${id} has no trace-turn files or unexpected names`);
+    const cmdv = parseJson(path.join('cmd', `${id}.json`));
+    if (!Array.isArray(cmdv)) f.push(`${id}: cmd/${id}.json is not a JSON array`);
+  }
+  // probes.tsv: complete and well formed
+  const tsv = (() => { try { return fs.readFileSync(path.join(runDir, 'probes.tsv'), 'utf8').split('\n').filter(Boolean); } catch (_e) { return null; } })();
+  if (tsv === null) f.push('probes.tsv is missing');
+  else tsv.forEach((l, i) => { const c = l.split('\t'); if (!(c.length === 4 && ids.includes(c[0]) && /^\d+$/.test(c[1]) && /^\d+(\.\d+)?$/.test(c[2]) && (c[3] === 'ok' || c[3] === 'fail'))) f.push(`probes.tsv line ${i + 1} unknown id or malformed: ${l.slice(0, 60)}`); });
+  // saved probe responses: each a complete JSON object
+  for (const file of list('probes') || []) { const o = parseJson(path.join('probes', file)); if (!(o && typeof o === 'object' && 'rc' in o && 'parse_ok' in o)) f.push(`probes/${file}: not a complete probe record`); }
+  void m;
+  return f;
+}
+
 // ---------------------------------------------------------------- audit
 
 function audit(runDir, m, clone, opts) {
@@ -469,11 +634,15 @@ function audit(runDir, m, clone, opts) {
   const read = (f) => { try { return fs.readFileSync(path.join(runDir, f), 'utf8'); } catch (_e) { return null; } };
   const logText = read('invocation.log');
   if (logText === null) return ['invocation.log is absent'];
+  if (!clone) return ['audit needs --clone (the committed files are re-checked against git and the real files)'];
   const rows = parseLog(logText);
   const order = makeOrder(m.seed, m.n_per_arm);
   const ids = order.map((o) => o.id);
   const by = (kind) => rows.filter((r) => r.kind === kind);
   const byId = (kind, id) => by(kind).filter((r) => idOf(r) === id);
+  // Strict layer 1: every row has a known kind, its exact shape, an expected id/arm and its place in the per-id sequence.
+  const strictRows = auditRows(rows, ids, order, m);
+  if (strictRows.length) return strictRows;
 
   // 1 order and uniqueness: the START sequence is the seeded order, each START closed by its END before the next START.
   const seq = rows.filter((r) => r.kind === 'START' || r.kind === 'END').map((r) => `${r.kind} ${idOf(r)}`);
@@ -500,6 +669,7 @@ function audit(runDir, m, clone, opts) {
       need(Number.isFinite(mt) && Math.floor(mt) >= Date.parse(st.ts) && Math.floor(mt) <= Date.parse(en.ts), `${id}: runs/${id}/${f} was last written outside its START..END window`);
     }
   }
+  { const w0 = by('WINDOW_START')[0]; const wsv = Number((read('window.start') || '').trim()); need(w0 && Number.isFinite(wsv) && Math.abs(wsv - Date.parse(w0.ts)) < 2000, 'window.start does not agree with the WINDOW_START row'); }
   // 2 window
   const win0 = by('WINDOW_START')[0];
   need(by('WINDOW_START').length === 1, `WINDOW_START must appear exactly once (got ${by('WINDOW_START').length})`);
@@ -529,6 +699,7 @@ function audit(runDir, m, clone, opts) {
     need(v.length >= 1 && v.every((r) => r.rest.slice(id.length + 1) === m.cli), `${id}: VERSION missing or not ${m.cli}`);
     const rv = byId('RUNVERSION', id);
     need(rv.length === 1 && rv[0].rest.split(' ')[1] === 'ok', `${id}: RUNVERSION missing or not ok`);
+    need(rv.length !== 1 || (rv[0].rest.split(' ')[1] === 'ok') === (rv[0].rest.split(' ').slice(2).join(' ') === m.cli), `${id}: RUNVERSION flag disagrees with its value`);
     // Do not trust the ok marker: compare the logged value with the pin and with the run's own result.json.
     const rvVal = rv.length === 1 ? rv[0].rest.split(' ').slice(2).join(' ') : null;
     need(rvVal === m.cli, `${id}: RUNVERSION value "${rvVal}" is not the pinned ${m.cli}`);
@@ -568,6 +739,13 @@ function audit(runDir, m, clone, opts) {
       rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && o.auth_ok === true && typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0 ? 'ok' : 'fail'); rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0); } // a failed probe without a usable cost is recorded as 0 on both sides (probes.tsv and the saved response)
     const tsvCost = probeTsvRows.filter((q) => q[0] === id).map((q) => Number(q[2]));
     need(rawSeq.join(',') === tsvSeq.join(',') && rawCost.length === tsvCost.length && rawCost.every((c, k) => Math.abs(c - tsvCost[k]) < 5e-7), `${id}: probes/${id}-n.json (${rawSeq.join(',')}) differ from probes.tsv / the PROBE rows in status or cost`);
+    // The k-th PROBE row of this id is the k-th saved response: same cost, and for a failure the same rc.
+    logRows.forEach((r, k) => {
+      let o = {}; try { o = JSON.parse(fs.readFileSync(pfiles[k], 'utf8')); } catch (_e) { /* mismatch below */ }
+      const kvp = kvOf(r.rest); const c = Number(kvp.cost);
+      need(Math.abs(c - (typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0)) < 5e-7, `${id}: PROBE_OK/PROBE_FAIL cost ${kvp.cost} differs from the saved response ${k + 1}`);
+      if (r.kind === 'PROBE_FAIL') need(String(o.rc) === kvp.rc, `${id}: PROBE_FAIL rc ${kvp.rc} differs from the saved response rc ${o.rc}`);
+    });
     probeRaw[id] = rawCost.reduce((x, y) => x + (Number.isFinite(y) ? y : 0), 0);
     need(tsvSeq[tsvSeq.length - 1] === 'ok', `${id}: the last probe did not succeed`);
     const okRows = logRows.filter((r) => r.kind === 'PROBE_OK'), st0 = byId('START', id)[0];
@@ -678,9 +856,16 @@ function audit(runDir, m, clone, opts) {
       const probeSpent = Number(kv.spent) - seen[arm].reduce((x, y) => x + y, 0);
       need(probeSpent >= before - 5e-4, `${id}: COSTCHK spent ${kv.spent} does not cover the earlier runs and probes`);
       const p = projectCost({ runCosts: seen[arm], probeSpent, total: m.n_per_arm, cap: m.arms[arm].cap, probeCost: m.probe_cost });
+      need(kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap, `${id}: COSTCHK stage/cap (${kv.stage}/${kv.cap}) differ from the recomputed ${p.stage}/${m.arms[arm].cap}`);
       need(Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop && r.rest.endsWith(' ok'), `${id}: COSTCHK projection ${kv.projected} differs from the recomputed ${p.projected.toFixed(4)} or exceeds the cap`);
     }
-    if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
+    if (r.kind === 'COST') {
+      const kv = kvOf(r.rest); const id = idOf(r);
+      const probeToDate = probeRows.filter(([pid]) => pid.startsWith(`${kv.arm}-`) && ids.indexOf(pid) <= ids.indexOf(id)).reduce((x, q) => x + Number(q[2]), 0);
+      const p2 = projectCost({ runCosts: [...seen[kv.arm], Number(kv.run)], probeSpent: probeToDate, total: m.n_per_arm, cap: m.arms[kv.arm].cap, probeCost: m.probe_cost });
+      need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4, `${id}: COST projected ${kv.projected} differs from the recomputed ${p2.projected.toFixed(4)}`);
+      seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe);
+    }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
   for (const id of ids) { const c0 = byId('COST', id)[0]; if (c0) { const rawCost = lastResultCost(read(path.join('runs', id, 'run.log')) || ''); need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5, `${id}: COST run ${kvOf(c0.rest).run} differs from the last result object of run.log (${rawCost})`); } }
@@ -728,6 +913,8 @@ function audit(runDir, m, clone, opts) {
       need(now !== null && now === logged(key), `${what} content hash differs from the value logged at the start`);
     }
     const prCommit = pr[0].rest.split(' ')[0];
+    need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit, 'the logged PREREG commit is not the commit of the PREREG note');
+    need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1], 'the logged PREREG time differs from the commit time in git');
     need(g(['merge-base', '--is-ancestor', prCommit, 'HEAD']).status === 0, 'the recorded preregistration commit is not an ancestor of HEAD now');
     // The note as committed at the recorded commit is the one hashed at the start, and nothing was committed over it since.
     const atCommit = g(['show', `${prCommit}:${m.prereg}`]);
@@ -754,7 +941,7 @@ function audit(runDir, m, clone, opts) {
     need(h.length >= 1 && h.every((r) => r.rest === `${k} ${m.hashes[k]}`), `HASH ${k} missing or differs from the preregistered value`);
   }
   // The files themselves, hashed now: hook, harness, this wrapper (the file that is running, or --wrapper-file) and the manifest values.
-  if (clone) {
+  {
     const fh = (f) => { try { return sha256(fs.readFileSync(f)); } catch (_e) { return null; } };
     need(fh(path.join(clone, m.hook_path)) === m.hashes.hook, 'the hook file now differs from the preregistered sha256');
     need(fh(path.join(clone, m.harness_path)) === m.hashes.harness, 'the harness file now differs from the preregistered sha256');
@@ -764,6 +951,8 @@ function audit(runDir, m, clone, opts) {
   need(!/(^|[\s=(\[])\/[^\s]+/m.test(logText.split('\n').map((l) => l.replace(/^\S+ /, '')).join('\n')), 'invocation.log contains an absolute path');
   need(!logText.includes(runDir), 'invocation.log contains the run directory');
   need(by('ABORT').length === 0 && by('REFUSE').length === 0, 'ABORT or REFUSE present');
+  // Strict layer 2: the raw files are complete, parse in full, and the sets are exactly the expected ids.
+  fails.push(...auditFiles(runDir, ids, order, m, endRcs(rows)));
   return fails;
 }
 
@@ -803,7 +992,7 @@ function selfcheck(wrapperPath) {
       void home;
       if (a[0] === 'git') {
         const sub = a[3];
-        if (sub === 'log') return { status: 0, stdout: a.includes('--format=%H') ? 'c0ffee\n' : '2026-01-01T00:00:00+00:00\n', stderr: '' };
+        if (sub === 'log') return { status: 0, stdout: a.includes('--format=%H') ? 'c0ffee0000000000000000000000000000000000\n' : '2026-01-01T00:00:00+00:00\n', stderr: '' };
         return { status: 0, stdout: '', stderr: '' };
       }
       if (a[0] === 'claude') return { status: 0, stdout: '2.1.309 (Claude Code)\n', stderr: '' };
@@ -813,7 +1002,8 @@ function selfcheck(wrapperPath) {
         const trace = a[a.indexOf('--hook-trace-dir') + 1];
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); // a real harness call takes far longer than the 1 ms file clock granularity
         fs.mkdirSync(o, { recursive: true }); fs.mkdirSync(trace, { recursive: true });
-        fs.writeFileSync(path.join(o, 'result.json'), JSON.stringify({ runner_version: '2.1.309 (Claude Code)', turns_completed: 5 }));
+        fs.writeFileSync(path.join(o, 'result.json'), JSON.stringify({ task_id: 'syn', arm: 'off', runner: 'cc', model: 'claude-haiku-4-5', runner_version: '2.1.309 (Claude Code)', turns: 5, turns_completed: 5 }));
+        fs.writeFileSync(path.join(o, 'gate.jsonl'), '{"turn":1,"ok":true}\n');
         fs.writeFileSync(path.join(o, 'run.log'), `${JSON.stringify({ type: 'result', total_cost_usd: 0.5, modelUsage: { 'claude-haiku-4-5': {} } })}\n`);
         fs.writeFileSync(path.join(o, 'oracle.log'), '{"features_pass":true,"constraints_pass":true}\n');
         fs.writeFileSync(path.join(trace, 'trace-turn1.log'), '');
@@ -842,7 +1032,7 @@ function selfcheck(wrapperPath) {
       say(`row ${i + 1} ${r.key}: ${missing.length ? `NO WRITER OUTPUT (${missing.join(', ')})` : 'written'}`);
       bad += missing.length ? 1 : 0;
     });
-    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: (a) => ({ status: 0, stdout: a.includes('--format=%cI') ? '2026-01-01T00:00:00+00:00\n' : a.includes('show') ? 'prereg\n' : '' }) });
+    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json'), exec: (a) => ({ status: 0, stdout: a.includes('--format=%cI') ? '2026-01-01T00:00:00+00:00\n' : a.some((x) => x.endsWith('..HEAD')) ? '' : a.includes('--format=%H') ? 'c0ffee0000000000000000000000000000000000\n' : a.includes('show') ? 'prereg\n' : '' }) });
     say(`synthetic batch: ${2 * n} ids, wrapper rc=${code}, audit ${fails.length ? `FAIL (${fails.join('; ')})` : 'PASS'}`);
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).
@@ -861,11 +1051,12 @@ function main(argv) {
   const flags = new Set();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (['--selfcheck', '--audit', '--run', '--order'].includes(a)) flags.add(a);
+    if (['--selfcheck', '--audit', '--run', '--order', '--schema-table'].includes(a)) flags.add(a);
     else if (['--run-dir', '--clone', '--manifest', '--first', '--last', '--wrapper-file'].includes(a)) opt[a] = argv[++i];
     else { process.stderr.write(`unknown argument ${a}\n`); return 2; }
   }
   if (flags.has('--selfcheck')) return selfcheck(__filename);
+  if (flags.has('--schema-table')) { process.stdout.write(schemaTable()); return 0; }
   if (!opt['--manifest']) { process.stderr.write('usage: --manifest M required\n'); return 2; }
   const manifest = JSON.parse(fs.readFileSync(opt['--manifest'], 'utf8'));
   if (flags.has('--order')) { makeOrder(manifest.seed, manifest.n_per_arm).forEach((o, i) => process.stdout.write(`${i + 1} ${o.id}\n`)); return 0; }
@@ -901,4 +1092,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };
+module.exports = { schemaTable, LOG_SCHEMA, lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

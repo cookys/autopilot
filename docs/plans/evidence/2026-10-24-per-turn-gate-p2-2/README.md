@@ -65,3 +65,7 @@ Red before green in `p2-batch-wrapper.test.sh`: probe status uses a saved `auth_
 ## Round 9 fixes
 
 Red before green in `p2-batch-wrapper.test.sh`: probe files are enumerated as a set (a gap, an unknown id; the sequential-read mutant misses them); COST `probe=999`; missing stderr file; hook and harness edited after the batch, and another wrapper file than the preregistered one (the audit that only compares HASH rows passes them); a batch whose first probe failed (no cost) and was redone after the pause audits OK (the NaN mutant fails it). The upper-bound `Math.floor` on file mtimes is kept on purpose and now carries a comment.
+
+## Round 10: systematic convergence
+
+PREREG Appendix A is generated from the code (`--schema-table`) and a test checks that it is verbatim in PREREG, that every row kind the wrapper writes is in it, and that every assertion text it names exists in `p2-batch-wrapper.test.sh`. New in this round: strict row shapes with per-id sequence and seeded id/arm checks, file-set equality for runs/trace/cmd/probes, strict parsing of hook JSONL, gate.jsonl and probes.tsv, ORDER position, COSTCHK stage/cap and COST projected recomputation, PROBE rows against the saved responses, RUNVERSION flag, PREREG commit and time against git, window.start against the row, final WRAPPER_DONE/EXIT, and a mandatory `--clone`. Old-rule mutants switch the two strict layers off so each keeps testing only its own rule; strict-layer cases are compared with a mutant that switches only those layers off.

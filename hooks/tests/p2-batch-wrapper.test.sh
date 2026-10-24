@@ -1035,5 +1035,21 @@ R55="$TEST_TMP/run-m55"; FAKE_MODEL=claude-haiku-5-5 run_batch "$WRAP" "$MAN_M55
 assert_contains "$(cat "$R55"/cmd/ON-*.json | head -1)" "claude-haiku-5-5" "harness argv carries the manifest model"
 assert_eq "$(grep -c ' MODEL .* claude-haiku-5-5$' "$R55/invocation.log")" 6 "MODEL rows carry the resolved haiku-5-5 id"
 node "$WRAP" --audit --manifest "$MAN_M55" --run-dir "$R55" --clone "$CLONE" --wrapper-file "$WRAP" >"$TEST_TMP/r55-audit.out" 2>&1; assert_eq "$?" 0 "haiku-5-5 batch: audit OK ($(head -c 150 "$TEST_TMP/r55-audit.out"))"
+# the two rerun preregistrations stay in step with the wrapper: its hash, the generated appendix, the seeded order
+prereg_in_step() { # <dir> -> prints ok or the first mismatch
+  node -e '
+const fs=require("fs"),c=require("crypto"),d=process.argv[1],src=process.argv[2];const sha=(f)=>c.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+const w=require(src),m=JSON.parse(fs.readFileSync(d+"/manifest.json","utf8"));
+if(m.hashes.wrapper!==sha(src)){console.log("manifest wrapper hash differs");process.exit(0)}
+if(!fs.readFileSync(d+"/PREREG.md","utf8").includes(w.schemaTable())){console.log("appendix differs");process.exit(0)}
+const o=w.makeOrder(m.seed,m.n_per_arm).map((x,i)=>(i+1)+" "+x.id).join("\n")+"\n";if(o!==fs.readFileSync(d+"/order.txt","utf8")){console.log("order differs");process.exit(0)}
+if(!fs.readFileSync(d+"/PREREG.md","utf8").includes(sha(d+"/manifest.json"))){console.log("PREREG does not state the manifest sha256");process.exit(0)}
+console.log("ok")' "$1" "$WRAP_SRC"
+}
+for pd in 2026-10-25-per-turn-gate-p2-3r 2026-10-25-per-turn-gate-p2-3-h55; do
+  assert_eq "$(prereg_in_step "$REPO_ROOT/docs/plans/evidence/$pd")" ok "$pd: manifest wrapper hash, appendix, order and manifest sha256 are in step"
+done
+rm -rf "$TEST_TMP/prereg-bad"; cp -a "$REPO_ROOT/docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r" "$TEST_TMP/prereg-bad"; sed -i 's/"wrapper": "./"wrapper": "0/' "$TEST_TMP/prereg-bad/manifest.json"
+assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad")" ok "RED: a manifest with another wrapper hash is reported out of step"
 
 finalize_test

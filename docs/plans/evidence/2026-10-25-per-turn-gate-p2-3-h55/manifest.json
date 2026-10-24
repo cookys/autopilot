@@ -1,0 +1,35 @@
+{
+  "task": "t14-constraint-horizon",
+  "model": "claude-haiku-5-5",
+  "cli": "2.1.309 (Claude Code)",
+  "seed": "ptg-p2-3-h55-order-2026-10-25",
+  "n_per_arm": 30,
+  "arms": {
+    "ON": {
+      "gate": "hook",
+      "cap": 3
+    },
+    "C": {
+      "gate": "observe",
+      "cap": 3
+    }
+  },
+  "probe_cost": 0.0015,
+  "window_s": 28800,
+  "min_complete": 27,
+  "max_blocks": 2,
+  "prereg": "docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/PREREG.md",
+  "taskhash_expected": "docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/taskhash.expected.txt",
+  "hook_path": "hooks/per-turn-gate.js",
+  "harness_path": "evals/orchestration/run-orchestration-eval.sh",
+  "argv_sha": {
+    "ON": "a6f2d8566c75eb43e6b2ece6d9c52aa2ecdb0988bc607a60ab33919774b4689d",
+    "C": "5c7614a9c4915ee5d10ef654f6fd6f08a03efa2fa049dd831f6abbb5232b8947"
+  },
+  "hashes": {
+    "wrapper": "7a2f0a5fedddadce0e410fa0145d1733e28c52e0310cc7da9123b7feb22de792",
+    "hook": "10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0",
+    "harness": "eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149",
+    "taskhash_expected": "2b1bcd033bd41093250649e1ed16bb28f7af9cd371771e864d1310f0c67756d4"
+  }
+}

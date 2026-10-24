@@ -58,6 +58,8 @@
  *            Knob (independent of the gate mode): ~/.autopilot/config.json depth0_delegate_gate.pkill_self_match
  *            or env AUTOPILOT_BASH_GUARD_PKILL_MODE = off|warn|deny (default deny; garbage ⇒ deny). Only the
  *            Bash TOOL call text is judged — scripts that use pgrep -f internally are never run through this hook.
+ *   2b. DENY (BL-0300) a bare `ls` in command position (alias/function wrapper hangs the call); `command ls`, `/bin/ls`
+ *            pass. Knob: depth0_delegate_gate.bare_ls or env AUTOPILOT_BASH_GUARD_LS_MODE = off|warn|deny (default deny).
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
  * Gate mode `off` silences all three. Rules 1 and 2 deny in `warn` and `block` modes alike.
@@ -78,7 +80,7 @@ const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('..
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
 // Bash-launch hazards (BL-0019): detach-without-wake (deny), pkill -f self-match (deny, knob), zsh `=`/glob (warn).
-const { detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
+const { detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
 
 const DEFAULT_THRESHOLD = 8;
 const DEFAULT_GUARDED = ['fable', 'opus'];
@@ -96,7 +98,7 @@ function isBashReadClass(cmd) {
 
 function loadConfig() {
   const cfg = {
-    mode: 'warn', pkillMode: 'deny', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED, waitAdviceEvery: DEFAULT_WAIT_ADVICE_EVERY,
+    mode: 'warn', pkillMode: 'deny', lsMode: 'deny', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED, waitAdviceEvery: DEFAULT_WAIT_ADVICE_EVERY,
   };
   try {
     const file = configPath();
@@ -106,6 +108,7 @@ function loadConfig() {
       if (g && typeof g === 'object') {
         if (['off', 'warn', 'block'].includes(g.mode)) cfg.mode = g.mode;
         if (['off', 'warn', 'deny'].includes(g.pkill_self_match)) cfg.pkillMode = g.pkill_self_match;
+        if (['off', 'warn', 'deny'].includes(g.bare_ls)) cfg.lsMode = g.bare_ls;
         if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
         if (Number.isInteger(g.wait_advice_every) && g.wait_advice_every > 0) cfg.waitAdviceEvery = g.wait_advice_every;
         if (Array.isArray(g.guarded_models) && g.guarded_models.every((m) => typeof m === 'string')) {
@@ -122,6 +125,8 @@ function loadConfig() {
   // Env wins over config; unset/empty leaves config alone, a garbage value maps to deny (never leaves the rule disarmed).
   const envPk = process.env.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   if (envPk !== undefined && envPk !== '') cfg.pkillMode = ['off', 'warn', 'deny'].includes(envPk) ? envPk : 'deny';
+  const envLs = process.env.AUTOPILOT_BASH_GUARD_LS_MODE;
+  if (envLs !== undefined && envLs !== '') cfg.lsMode = ['off', 'warn', 'deny'].includes(envLs) ? envLs : 'deny';
   const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
   if (envEvery !== undefined && /^\d+$/.test(envEvery.trim()) && Number(envEvery) > 0) cfg.waitAdviceEvery = Number(envEvery);
   return cfg;
@@ -232,6 +237,13 @@ function classify(tool, input) {
         process.exit(0);
       }
       if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
+      const ls = cfg.lsMode === 'off' ? null : detectBareLs(cmd);
+      if (ls && cfg.lsMode === 'deny') {
+        emitDeny(`bash-launch-guard (${ls.rule}): ${ls.why}. Set AUTOPILOT_BASH_GUARD_LS_MODE=warn|off `
+          + '(or depth0_delegate_gate.bare_ls in ~/.autopilot/config.json) to relax.');
+        process.exit(0);
+      }
+      if (ls) launchWarns.push(`bash-launch-guard (${ls.rule}): ${ls.why}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());

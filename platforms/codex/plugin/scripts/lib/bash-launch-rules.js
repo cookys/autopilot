@@ -863,4 +863,30 @@ function detectZshExpansion(cmd, cwd) {
   return null;
 }
 
-module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };
+// Rule 4 (BL-0300). Returns { rule, why } or null.
+// An interactive shell may alias/wrap `ls` (eza, a function); the Bash tool sources that setup, and the
+// wrapper hangs the call. Alias expansion happens on the first word of a command only, so a hit is a segment
+// whose first real word (after VAR=val, `time`, and flow keywords) is literally the unquoted word `ls`.
+// `command ls`, `\\ls`, `/bin/ls`, `'ls'` and `env ls` are not that word and pass. Heredoc bodies and
+// quoted text never reach here (executableText); `bash -c` bodies are non-interactive and skipped.
+function detectBareLs(cmd) {
+  const text = executableText(typeof cmd === 'string' ? cmd : '');
+  if (!/\bls\b/.test(text)) return null;
+  for (const seg of expandSegments(text)) {
+    if (seg.sh) continue;
+    for (const { raw } of tokens(seg.text)) {
+      if (/^[A-Za-z_]\w*=/.test(raw) || KEYWORDS.has(raw) || raw === 'time') continue;
+      if (raw === 'ls') {
+        return {
+          rule: 'bare-ls',
+          why: 'a bare `ls` in the Bash tool runs this machine\'s interactive alias/function (eza or similar) and can hang the whole call. '
+            + 'Use `command ls` or `/bin/ls`, or the Glob / Read tools',
+        };
+      }
+      break;
+    }
+  }
+  return null;
+}
+
+module.exports = { detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

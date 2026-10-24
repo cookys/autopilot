@@ -26,12 +26,14 @@ function rmAll() { for (const d of made.splice(0)) fs.rmSync(d, { recursive: tru
 test.after(rmAll);
 process.on('exit', rmAll);
 
-function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
+// Rules 1-3 fixtures use `ls` as filler; rule 4 would deny them first, so it is off unless `lsDefault` (rule 4 tests).
+function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = {}) {
   const home = mk('blg-home-');
   const live = mk('blg-live-');
   // An ambient knob must not leak in: only the `env` argument may set it.
   const baseEnv = { ...process.env };
   delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_LS_MODE;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -39,7 +41,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
     }),
     encoding: 'utf8',
     env: {
-      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
+      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...(lsDefault ? {} : { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' }), ...env,
     },
   });
   let out = null;
@@ -960,3 +962,65 @@ for (const cmd of BL192_ALLOW) {
     assert.strictEqual(r.deny, false);
   });
 }
+
+// ---- Rule 4 (BL-0300): bare `ls` in command position => deny ----
+const BARE_LS_DENY = [
+  'ls',
+  'ls -la /tmp',
+  'cd /repo && ls',
+  'echo hi; ls docs',
+  'false || ls',
+  'cat x | ls',
+  'echo $(ls)',
+  'echo `ls`',
+  'FOO=1 ls',
+  'time ls',
+  'if ls; then echo y; fi',
+  'ls -la | head',
+];
+for (const cmd of BARE_LS_DENY) {
+  test(`rule4 denies bare ls: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /bare-ls/);
+    assert.match(r.reason, /command ls/);
+    assert.match(r.reason, /AUTOPILOT_BASH_GUARD_LS_MODE/);
+  });
+}
+const BARE_LS_ALLOW = [
+  'command ls',
+  'command ls -la',
+  '\\ls',
+  '/bin/ls',
+  '/usr/bin/ls -la',
+  "'ls'",
+  'cat ls.txt',
+  'grep ls file',
+  'echo ls',
+  'echo "ls -la"',
+  "echo 'a; ls'",
+  'lsof -i :80',
+  'lsblk',
+  'git ls-files',
+  'git ls-files | wc -l',
+  'for x in ls; do echo $x; done',
+  'cat <<EOF\nls\nEOF',
+  "bash -c 'ls'",
+  'echo x && command ls | head',
+];
+for (const cmd of BARE_LS_ALLOW) {
+  test(`rule4 allows: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd, { lsDefault: true });
+    assert.strictEqual(r.deny, false);
+    assert.doesNotMatch(r.ctx, /bare-ls/);
+  });
+}
+test('rule4 knob: env warn advises without denying, off is silent, garbage denies', () => {
+  const w = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'warn' } });
+  assert.strictEqual(w.deny, false);
+  assert.match(w.ctx, /bare-ls/);
+  const o = run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'off' } });
+  assert.strictEqual(o.deny, false);
+  assert.doesNotMatch(o.ctx, /bare-ls/);
+  assert.strictEqual(run('ls', { lsDefault: true, env: { AUTOPILOT_BASH_GUARD_LS_MODE: 'bogus' } }).deny, true);
+});

@@ -893,6 +893,13 @@ function rewriteProcSubst(text) {
           j = e + 1;
           continue;
         }
+        if (text[j] === '`') { // a backtick substitution runs too: rewrite its body like a `$(` body
+          const e = text.indexOf('`', j + 1);
+          if (e < 0) { out += text.slice(j); j = n; break; }
+          out += `\`${rewriteProcSubst(text.slice(j + 1, e))}\``;
+          j = e + 1;
+          continue;
+        }
         out += text[j]; j += 1;
       }
       if (j < n) { out += '"'; j += 1; }
@@ -902,6 +909,45 @@ function rewriteProcSubst(text) {
     out += c; i += 1;
   }
   return out;
+}
+
+// Body of an array assignment, starting just past `=(`: returns { kept, end } where `end` is just past the closing `)`
+// and `kept` is the command substitutions (`$(…)`, `<(…)`, `>(…)`, backticks) that really run, including those inside
+// double quotes. Parenthesis depth counts only unquoted, unescaped `(` and `)`: a backslash escapes the next char,
+// single quotes are literal data, double quotes are data except for `$(…)` and backticks. One linear pass.
+function scanArrayBody(text, start) {
+  let kept = '';
+  let d = 1;
+  let j = start;
+  const n = text.length;
+  let inDq = false;
+  const keepSub = (from, to) => { kept += ` ${text.slice(from, to)} `; };
+  while (j < n && d > 0) {
+    const ch = text[j];
+    if (ch === '\\') { j += 2; continue; }
+    if (!inDq && ch === "'") { const e = text.indexOf("'", j + 1); j = e < 0 ? n : e + 1; continue; }
+    if (ch === '"') { inDq = !inDq; j += 1; continue; }
+    if ((ch === '$' || (!inDq && (ch === '<' || ch === '>'))) && text[j + 1] === '(') {
+      const e = closeParen(text, j + 2);
+      if (e < 0) return { kept, end: n };
+      keepSub(j, e + 1);
+      j = e + 1;
+      continue;
+    }
+    if (ch === '`') {
+      const e = text.indexOf('`', j + 1);
+      if (e < 0) return { kept, end: n };
+      keepSub(j, e + 1);
+      j = e + 1;
+      continue;
+    }
+    if (!inDq) {
+      if (ch === '(') d += 1;
+      else if (ch === ')') d -= 1;
+    }
+    j += 1;
+  }
+  return { kept, end: Math.min(j, n) };
 }
 
 // Array assignment bodies (`a=( ls -la )`, spanning lines) hold words, not commands: blank them out, but keep the
@@ -931,28 +977,9 @@ function stripArrayAssigns(text) {
     if (c !== '=' || text[i + 1] !== '(') { st = 5; continue; }
     // array assignment: `=(` ends the target
     out += `${text.slice(last, i)}= `;
-    let d = 1;
-    let j = i + 2;
-    while (j < text.length && d > 0) {
-      const ch = text[j];
-      if ((ch === '$' || ch === '<' || ch === '>') && text[j + 1] === '(') {
-        const e = closeParen(text, j + 2);
-        if (e < 0) { j = text.length; break; }
-        out += ` ${text.slice(j, e + 1)} `;
-        j = e + 1;
-        continue;
-      }
-      if (ch === '`') {
-        const e = text.indexOf('`', j + 1);
-        if (e < 0) { j = text.length; break; }
-        out += ` ${text.slice(j, e + 1)} `;
-        j = e + 1;
-        continue;
-      }
-      if (ch === '(') d += 1;
-      else if (ch === ')') d -= 1;
-      j += 1;
-    }
+    const body = scanArrayBody(text, i + 2);
+    out += body.kept;
+    const j = body.end;
     last = j;
     i = j - 1;
     st = 0;
@@ -962,6 +989,9 @@ function stripArrayAssigns(text) {
 const REDIR_RE = /^(?:\d+|&)?(?:>>|>\||>&|&>|>|<&|<)(.*)$/;
 
 function detectBareLs(cmd) {
+  try { return detectBareLsUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
+}
+function detectBareLsUnguarded(cmd) {
   const exec = executableText(typeof cmd === 'string' ? cmd : '');
   if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
   // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.

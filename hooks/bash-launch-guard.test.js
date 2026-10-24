@@ -980,10 +980,21 @@ const BARE_LS_DENY = [
   'time -p -- ls',
   '! ls',
   'time ! ls',
+  // array bodies: parentheses inside quotes or after a backslash are data (verified with a harmless alias in real bash)
+  'a=( "(" ); ls',
+  'a=( \\( ); ls',
+  "a=( ')' ); ls",
+  'a=( ")" ); ls',
+  'a=( $( echo ")" ) ); ls',
+  'a=(\n"(" \n)\nls',
+  'a=( "a\\"b)" ); ls',
+  'a=( `echo ")"` ); ls',
+  'a=( "$(ls)" )', // a command substitution inside double quotes runs
   'a=( x ) y=1; ls', // a scalar assignment after an array one must not be read as another array
   'opts=( -a ) F=1 ls',
   'a[1]=( x ) ls',
   'cat <(ls)',
+  'echo "`cat <(ls)`"',
   'echo "$(ls)"',
   'echo "a $(cat <(ls)) b"',
   'cat <(ls) <(command ls)',
@@ -1028,6 +1039,11 @@ const BARE_LS_ALLOW = [
   'xargs ls',
   'time -p command ls',
   'cat <(command ls)',
+  'echo "`command ls`"',
+  'a=( \\)\nls\n)', // `\)` is data, so the ls below is an array element
+  "a=( ')'\nls\n)",
+  'a=( "x)"\nls\n)',
+  "a=( '$(ls)' )", // single quotes are literal
   `a[${'x'.repeat(300)}]=( ls )`, // long subscript: the array target is recognised by a forward scan, not a fixed look-back
   `a[${'x'.repeat(300)}]=(\nls\n)`,
   `declare -a v[${'x'.repeat(300)}]=( ls )`,
@@ -1095,3 +1111,10 @@ for (const [name, unit] of [['[a', '[a'], ['a=(', 'a=(']]) {
     }
   });
 }
+
+test('rule4 fails open (no throw) on deeply nested quote/substitution input', () => {
+  const { detectBareLs } = require('../scripts/lib/bash-launch-rules.js');
+  for (const unit of ['a=( "$(', 'x="$(', '"`']) {
+    assert.doesNotThrow(() => detectBareLs(`echo ls ${unit.repeat(25000)}`));
+  }
+});

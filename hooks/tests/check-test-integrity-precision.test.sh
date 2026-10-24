@@ -26,6 +26,7 @@
 # F12 and F18 (relational < with a literal swap, spaced and unspaced) were retired by the closed rule: C10 and C11 pin the same shapes as accepted precision cost.
 # RED at 6899fca8b (acceptance round 13): N70-N74 failed (unquoted \$a / \$1 / \$9 subject in [ ] vanishes when empty); C12 C13 failed (paired before).
 # C14: a quoted literal containing spaces is reported on purpose (whitespace split is kept; fail-closed trade-off, not a bug).
+# RED at 10610a01f (acceptance round 14): N75-N82 failed (unbalanced [[ ... ] and Unicode-space separators paired as equivalents).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -783,5 +784,36 @@ if has_kind surface_touch; then report F25 0; else report F25 1; fi
 repo="$(mk_surface '[ "$a" = "foo bar" ]' '[ "$a" = "foo baz" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report C14 1; else report C14 0; fi
+
+# ── N75-N82 mismatched brackets and non-ASCII whitespace are not a recognisable test shape ──
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N75 1; else report N75 0; fi
+repo="$(mk_surface '[[ "$a" == "0" ]]' $'[[ "$a" == "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N76 1; else report N76 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a" -eq "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N77 1; else report N77 0; fi
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a"\u00a0=\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N78 1; else report N78 0; fi
+repo="$(mk_surface '[[ "$a" == "0" ]]' $'[[ "$a"\u00a0==\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N79 1; else report N79 0; fi
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a"\u2003=\u2003"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N80 1; else report N80 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a"\u202f-eq\u202f"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N81 1; else report N81 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a"\u00a0-eq\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N82 1; else report N82 0; fi
+
+# ── F26 plain ASCII double bracket equality stays a legitimate pair ──
+repo="$(mk_surface '[[ "$a" = "0" ]]' '[[ "$a" = "1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F26 0; else report F26 1; fi
 
 finalize_test

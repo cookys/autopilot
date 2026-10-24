@@ -1778,7 +1778,17 @@ _STRICT_ARGS = re.compile(
     r'(?:\s+(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|()<>!#"\'`]+))*'
 )
 _HEREDOC_OPEN = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\1")
-_BRACKET = re.compile(r"^\[\[?\s(.+)\s\]\]?$")
+# Exactly paired brackets, ASCII blank (space or tab) after the opener and before the closer.
+_BRACKET = re.compile(r"^(?:\[\[[ \t](?P<d>.+)[ \t]\]\]|\[[ \t](?P<s>.+)[ \t]\])$")
+
+
+def _bracket_inner(m):
+    return m.group("d") if m.group("d") is not None else m.group("s")
+
+
+def _ascii_split(text):
+    """Bash splits words on ASCII blanks only, never on Unicode spaces."""
+    return [t for t in re.split(r"[ \t]+", text) if t]
 _TEST_OP = re.compile(r"\s(-[a-z]{2}|==?|!=|=~|<|>)\s")
 _QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
 
@@ -1916,6 +1926,8 @@ def _assertion_shape(raw, strict):
     assertion function, or the test operator of a [ a OP b ] form. strict
     additionally demands NOTHING else on the line (no ||, &&, ;, |, !, if,
     subshell, redirection, trailing comment)."""
+    if any(ord(c) > 127 for c in raw):
+        return None  # non-ASCII (Unicode spaces, look-alikes): not a recognisable shape
     if strict and raw.rstrip().endswith("\\"):
         return None  # line continuation: the real command continues on the next line
     call = _ASSERT_CALL.match(raw)
@@ -1925,7 +1937,7 @@ def _assertion_shape(raw, strict):
         return ("fn", call.group(1))
     br = _BRACKET.match(raw)
     if br:
-        inner = _QUOTED.sub("Q", br.group(1))
+        inner = _QUOTED.sub("Q", _bracket_inner(br))
         dbl = raw.startswith("[[")
         if dbl:
             # Inside [[ ]] < and > are comparison operators at any token
@@ -1938,7 +1950,7 @@ def _assertion_shape(raw, strict):
                 return None
         # Only exactly "operand operator operand" is a recognisable shape:
         # -o, -a, !, ||, && or any extra token could make the test always true.
-        toks = inner.split()
+        toks = _ascii_split(inner)
         if len(toks) != 3 or toks[0] in _TEST_JOINERS or toks[2] in _TEST_JOINERS:
             return None
         # Operands must be a pure quoted string ("..." or '...') or a pure
@@ -1952,7 +1964,7 @@ def _assertion_shape(raw, strict):
         # ordering (!=, -ne, -lt, -le, -gt, -ge, <, >) can loosen the assertion.
         if toks[1] not in ("=", "==", "-eq"):
             return None
-        raw_toks = br.group(1).split()
+        raw_toks = _ascii_split(_bracket_inner(br))
         if len(raw_toks) != 3:
             return None
         single = not raw.startswith("[[")
@@ -1993,7 +2005,7 @@ def _degenerate_added(content, lang_key):
     br = _BRACKET.match(raw)
     if br:
         # [ a OP b ] / [[ a OP b ]]: a self-comparison is always true.
-        toks = _ARG.findall(re.sub(r"\s*([<>])\s*", r" \1 ", br.group(1)) if raw.startswith("[[") else br.group(1))
+        toks = _ARG.findall(re.sub(r"\s*([<>])\s*", r" \1 ", _bracket_inner(br)) if raw.startswith("[[") else _bracket_inner(br))
         if len(toks) == 3 and toks[1] in ("=", "==", "-eq", "-le", "-ge", "=~") \
                 and _norm_operand(toks[0]) == _norm_operand(toks[2]):
             return True

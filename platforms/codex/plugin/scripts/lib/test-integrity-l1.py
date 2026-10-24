@@ -47,9 +47,11 @@ def run_command(cmd, repo_dir, check=True, env=None, cwd=None, timeout=None):
         cwd=cwd or repo_dir,
         env=env,
         capture_output=True,
-        text=True,
         timeout=timeout,
     )
+    # Decode by hand: text=True would translate CR into LF and hide control characters.
+    res.stdout = (res.stdout or b"").decode("utf-8", "surrogateescape")
+    res.stderr = (res.stderr or b"").decode("utf-8", "surrogateescape")
     if check and res.returncode != 0:
         raise RuntimeError(f"{cmd[0]} failed for {' '.join(cmd[1:])}: {res.stderr or res.stdout}")
     return res
@@ -196,11 +198,10 @@ def read_blob(path, ref, repo_dir):
         ["git", "show", f"{ref}:{path}"],
         cwd=repo_dir,
         capture_output=True,
-        text=True,
     )
     if res.returncode != 0:
         return None
-    return res.stdout
+    return res.stdout.decode("utf-8", "surrogateescape")
 
 
 def decode_git_token(token):
@@ -1591,6 +1592,7 @@ _TAUTOLOGY = {
         r"|\bassert\.equal\s*\(\s*true\s*,\s*true\s*\)"
     ),
     "shell": re.compile(
+        r"\[\[?\s*(?!Q\s)(\S+)\s+(?:=|==|-eq)\s+\1\s+\]?\]|&&\s*true\s*(?:;|\}|$)|"
         r"^\s*(?:if|elif)\s+!\s+(?:true|:)\s*(?:;|$)|"
         r"\[\s*1\s*=\s*1\s*\]|\[\s*\"a\"\s*=\s*\"a\"\s*\]|\[\s*'a'\s*=\s*'a'\s*\]|(?:^|[;&|])\s*true\s*\|\|\s*\(?\s*fail\b"
     ),
@@ -1736,20 +1738,422 @@ def deleted_test_target_also_deleted(test_path, lang_key, old_text, deleted_path
     return False
 
 
-def _surface_edit_removes_lines(status, info):
-    """True when a changed surface file lost or rewrote a line (BL-0060 v3 rule b)."""
+_OPERAND_STOP = frozenset(
+    "if elif then else fi do done not and or true false test eq ne lt gt le ge "
+    "echo exit return fail assert expect should self def".split()
+)
+_OPERAND_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[0-9]+")
+
+
+_SHELL_BARE_TEST = re.compile(r"\[\[?\s.+\s\]\]?")
+_RAW_TAUTOLOGY = re.compile(
+    r"\[\[?\s*(\S+)\s+(?:=|==|-eq)\s+\1\s+\]\]?|&&\s*true\s*(?:;|\}|$)|\[\s*1\s+-eq\s+1\s*\]"
+)
+
+
+def _raw_code(content, lang_key):
+    """The line with comments dropped but string literals kept."""
+    return content.strip(" \t") if _code_without_comment(content, lang_key) else ""
+
+
+def _surface_assertion_like(content, lang_key):
+    """Non-tautological assertion-class line, or (shell) a bare [ ... ] /
+    [[ ... ]] condition. Used only by the surface-touch net-assertion rule."""
+    raw = _raw_code(content, lang_key)
+    if not raw:
+        return False
+    if lang_key == "shell" and _RAW_TAUTOLOGY.search(raw):
+        return False
+    if is_assertion_class_line(content, lang_key):
+        return True
+    return lang_key == "shell" and bool(_SHELL_BARE_TEST.search(raw))
+
+
+def _norm_line(content, lang_key):
+    return re.sub(r"\s+", " ", _raw_code(content, lang_key))
+
+
+_ASSERT_CALL = re.compile(r"^\s*((?:assert\w*|expect\w*))\s+(.*)$", re.I)
+_ARG = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|]+')
+_STRICT_ARGS = re.compile(
+    r'(?:\s+(?:"(?:[^"\\]|\\.)*"|\'[^\']*\'|[^\s;&|()<>!#"\'`]+))*'
+)
+_HEREDOC_OPEN = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\1")
+# Exactly paired brackets, ASCII blank (space or tab) after the opener and before the closer.
+_BRACKET = re.compile(r"^(?:\[\[[ \t](?P<d>.+)[ \t]\]\]|\[[ \t](?P<s>.+)[ \t]\])$")
+
+
+def _bracket_inner(m):
+    return m.group("d") if m.group("d") is not None else m.group("s")
+
+
+def _ascii_split(text):
+    """Bash splits words on ASCII blanks only, never on Unicode spaces."""
+    return [t for t in re.split(r"[ \t]+", text) if t]
+_TEST_OP = re.compile(r"\s(-[a-z]{2}|==?|!=|=~|<|>)\s")
+_QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
+
+
+def _shell_code_mask(line):
+    """Per-character flags: True where the character is shell CODE, False inside
+    a quoted span (quotes included), an escaped pair, or a trailing comment.
+    Mirrors shell_code_view's scanner but keeps positions."""
+    n = len(line)
+    mask = [True] * n
+    i = 0
+    prev_is_boundary = True
+    while i < n:
+        c = line[i]
+        if c == "\\" and i + 1 < n:
+            mask[i:i + 2] = [False, False]
+            i += 2
+            prev_is_boundary = False
+            continue
+        if c == "'":
+            j = line.find("'", i + 1)
+            end = n if j == -1 else j + 1
+            mask[i:end] = [False] * (end - i)
+            i = end
+            prev_is_boundary = False
+            continue
+        if c == '"':
+            j = i + 1
+            while j < n:
+                if line[j] == "\\":
+                    j += 2
+                    continue
+                if line[j] == '"':
+                    break
+                j += 1
+            end = j + 1 if j < n else n
+            if j >= n or "$(" in line[i:end]:
+                # Unclosed here, or holding a command substitution: its
+                # content may be live code (`x="$(cat <<'EOF'`). Fail closed:
+                # treat it as code, masking only the quote character.
+                end = i + 1
+            mask[i:end] = [False] * (end - i)
+            i = end
+            prev_is_boundary = False
+            continue
+        if c == "#" and prev_is_boundary:
+            mask[i:] = [False] * (n - i)
+            break
+        prev_is_boundary = c.isspace() or c in ";&|("
+        i += 1
+    return mask
+
+
+def _heredoc_open(body):
+    """First real heredoc opener in a shell line (not a here-string, not inside
+    a quoted span or a comment), else None."""
+    mask = None
+    for m in _HEREDOC_OPEN.finditer(body):
+        if mask is None:
+            mask = _shell_code_mask(body)
+        if mask[m.start()]:
+            return m
+    return None
+
+
+def _heredoc_body_lines(text):
+    """1-based line numbers of shell heredoc BODY lines in a whole file."""
+    out = set()
+    end = None
+    for no, body in enumerate(text.split("\n"), 1):
+        if end is not None:
+            if body.strip() == end:
+                end = None
+            else:
+                out.add(no)
+            continue
+        hd = _heredoc_open(body)
+        if hd:
+            end = hd.group(2)
+    return out
+
+
+def _assertion_liveness(text):
+    """(live, dead) Counters of normalised assertion-like lines in a whole shell
+    file; dead = inside a heredoc body."""
+    from collections import Counter
+    live, dead = Counter(), Counter()
+    body_lines = _heredoc_body_lines(text)
+    for no, line in enumerate(text.split("\n"), 1):
+        if _surface_assertion_like(line, "shell"):
+            (dead if no in body_lines else live)[_norm_line(line, "shell")] += 1
+    return live, dead
+
+
+def _assertion_went_dead(base_text, head_text):
+    """True when some assertion text lost a live copy while gaining a dead
+    (heredoc body) one: the edit swallowed a real assertion into text, which a
+    -U0 diff can show with no assertion line added or removed at all."""
+    bl, bd = _assertion_liveness(base_text)
+    hl, hd = _assertion_liveness(head_text)
+    return any(hl[t] < bl[t] and hd[t] > bd[t] for t in bl)
+
+
+_COMPLEX_EXPANSION = re.compile(r"\$\{[^}]*[^A-Za-z0-9_}][^}]*\}|\$\(|`")
+
+
+def _norm_operand(tok):
+    """$x, ${x} and "$x" compare equal."""
+    tok = tok.strip()
+    if len(tok) >= 2 and tok[0] == "'" and tok[-1] == "'":
+        return tok  # single quotes do not expand: stay literal
+    if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
+        tok = tok[1:-1]
+    return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", tok)
+
+
+_ARITH_LITERAL = re.compile(r'"?-?[0-9]+"?')
+_ARITH_VAR = re.compile(r'"?\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9])"?')
+_EQ_STR_LITERAL = re.compile(r'"[^"$`\\]*"|\'[^\'$`]*\'|[^\s"\'$`*?\[\\]+')
+
+
+def _eq_literal(tok, integer):
+    """A literal free of $, backticks and unquoted glob characters; for -eq it
+    must be a decimal integer (a bare name would be evaluated as a variable)."""
+    if integer:
+        return bool(_ARITH_LITERAL.fullmatch(tok))
+    return bool(_EQ_STR_LITERAL.fullmatch(tok))
+
+
+_TEST_JOINERS = frozenset(("-o", "-a", "!", "||", "&&", "(", ")"))
+
+
+def _assertion_shape(raw, strict):
+    """(kind, key) of a bare assertion statement, else None. kind/key is the
+    assertion function, or the test operator of a [ a OP b ] form. strict
+    additionally demands NOTHING else on the line (no ||, &&, ;, |, !, if,
+    subshell, redirection, trailing comment)."""
+    if any(ord(c) > 127 or (ord(c) < 32 and c != "\t") or ord(c) == 127 for c in raw):
+        return None  # non-ASCII (Unicode spaces, look-alikes): not a recognisable shape
+    if strict and raw.rstrip().endswith("\\"):
+        return None  # line continuation: the real command continues on the next line
+    call = _ASSERT_CALL.match(raw)
+    if call:
+        if strict and not _STRICT_ARGS.fullmatch(" " + call.group(2)):
+            return None
+        return ("fn", call.group(1))
+    br = _BRACKET.match(raw)
+    if br:
+        inner = _QUOTED.sub("Q", _bracket_inner(br))
+        dbl = raw.startswith("[[")
+        if dbl:
+            # Inside [[ ]] < and > are comparison operators at any token
+            # boundary, spaced or not.
+            inner = re.sub(r"\s*([<>])\s*", r" \1 ", inner)
+        if strict:
+            # In [ ] a < or > is a redirection and stays rejected.
+            probe = re.sub(r"\s[<>]\s", " ", inner) if dbl else inner
+            if re.search(r"[|&;()<>!#`]", probe):
+                return None
+        # Only exactly "operand operator operand" is a recognisable shape:
+        # -o, -a, !, ||, && or any extra token could make the test always true.
+        toks = _ascii_split(inner)
+        if len(toks) != 3 or toks[0] in _TEST_JOINERS or toks[2] in _TEST_JOINERS:
+            return None
+        # Operands must be a pure quoted string ("..." or '...') or a pure
+        # unquoted word. $"..", $'..' and mixed forms can hide an expansion.
+        if any(t != "Q" and ("Q" in t or "'" in t or '"' in t) for t in toks):
+            return None
+        # A pattern (unquoted * ? [) or any regex (=~) can match everything.
+        if toks[1] == "=~" or any(re.search(r"[*?\[]", t) for t in (toks[0], toks[2])):
+            return None
+        # Closed rule: only equality earns an equivalence. Moving a bound or an
+        # ordering (!=, -ne, -lt, -le, -gt, -ge, <, >) can loosen the assertion.
+        if toks[1] not in ("=", "==", "-eq"):
+            return None
+        raw_toks = _ascii_split(_bracket_inner(br))
+        if len(raw_toks) != 3:
+            return None
+        single = not raw.startswith("[[")
+        rep = []
+        for t in (raw_toks[0], raw_toks[2]):
+            if _eq_literal(t, toks[1] == "-eq"):
+                if single and (t.strip("\"'").startswith("-") or t.strip("\"'") in ("!", "(", ")")):
+                    return None  # [ ] may parse it as an operator
+                rep.append("#")  # the changing side: any such literal pairs
+            elif _ARITH_VAR.fullmatch(t):
+                if single and not t.startswith('"'):
+                    return None  # [ ] word-splits an unquoted subject
+                rep.append(t)  # the subject: must be verbatim identical
+            else:
+                return None
+        return ("op", toks[1], tuple(rep))
+    return None
+
+
+def _degenerate_added(content, lang_key):
+    """An added assertion that is not a strict bare assertion statement, or is
+    a self-comparison of its first two arguments. Never an equivalent."""
+    raw = _raw_code(content, lang_key)
+    if lang_key != "shell" or not raw:
+        return False
+    if _assertion_shape(raw, True) is None:
+        return True
+    if _COMPLEX_EXPANSION.search(_SQ_STRING.sub(" ", raw)):
+        # ${x:-}, ${x#..}, $((..)), $(..), `..`: cannot prove the operand is
+        # not the subject itself. Fail closed.
+        return True
+    call = _ASSERT_CALL.match(raw)
+    if call:
+        args = _ARG.findall(call.group(2))
+        if len(args) >= 2 and _norm_operand(args[0]) == _norm_operand(args[1]):
+            return True
+        return False
+    br = _BRACKET.match(raw)
+    if br:
+        # [ a OP b ] / [[ a OP b ]]: a self-comparison is always true.
+        toks = _ARG.findall(re.sub(r"\s*([<>])\s*", r" \1 ", _bracket_inner(br)) if raw.startswith("[[") else _bracket_inner(br))
+        if len(toks) == 3 and toks[1] in ("=", "==", "-eq", "-le", "-ge", "=~") \
+                and _norm_operand(toks[0]) == _norm_operand(toks[2]):
+            return True
+    return False
+
+
+def _operands(content, lang_key):
+    """Subject operands of an assertion line: identifiers/numbers minus the
+    assertion vocabulary (function names such as assert_eq, test keywords)."""
+    out = set()
+    text = _SQ_STRING.sub(" ", _raw_code(content, lang_key))
+    text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
+    for tok in _OPERAND_TOKEN.findall(text):
+        low = tok.lower()
+        if low in _OPERAND_STOP or low == "expect" or low.startswith("assert"):
+            continue
+        out.add(tok)
+    return out
+
+
+def _surface_edit_removes_lines(status, info, lang_key=None, head_text=None, base_text=None):
+    """True when a changed surface file should be reported as a touch.
+
+    BL-0060 v3 rule b: a Modified file is a touch only when the diff deletes or
+    rewrites an existing line. Rule 1 (net-assertion, 2026-10-24): for a file
+    with a known language, a Modified surface file is a touch only when the
+    diff removes more assertion/exit-class lines than it adds (the predicate
+    deleted_line uses). Unknown-language files (json, yaml, ...) keep the
+    any-removed-line behaviour because assertions cannot be recognised there.
+    """
     if not status.startswith("M"):
         return True
     hunks = (info or {}).get("hunks") or []
     if not hunks:
         return True
+    removed = 0
+    removed_asserts = []
+    added_asserts = []
+    inert_added = set()  # added assertion lines that never execute as written
+    head_heredoc = None
+    if lang_key == "shell":
+        if head_text is None:
+            return True  # cannot see the whole file: fail closed
+        head_heredoc = _heredoc_body_lines(head_text)
+        if base_text is None:
+            return True
+        if _assertion_went_dead(base_text, head_text):
+            return True
     for hunk in hunks:
+        new_no = hunk["new_start"]
+        h_removed, h_added = [], []
+        heredoc_end = None
+        heredoc_opened_added = False
+        prev_continues = False
         for line in hunk["lines"]:
             if line.startswith("-"):
+                removed += 1
+                if line[1:].strip():
+                    h_removed.append(line[1:])
+                if lang_key and _surface_assertion_like(line[1:], lang_key):
+                    removed_asserts.append(line[1:])
+                continue
+            if line.startswith("\\"):
+                continue
+            body = line[1:]
+            cur_no = new_no
+            new_no += 1
+            in_heredoc = heredoc_end is not None or (
+                head_heredoc is not None and cur_no in head_heredoc
+            )
+            if in_heredoc:
+                if body.strip() == heredoc_end:
+                    heredoc_end = None
+            elif lang_key == "shell":
+                hd = _heredoc_open(body)
+                if hd:
+                    heredoc_end = hd.group(2)
+                    heredoc_opened_added = line.startswith("+")
+            if line.startswith("+") and body.strip():
+                h_added.append(body)
+            if line.startswith("+"):
+                if lang_key and _surface_assertion_like(body, lang_key):
+                    if in_heredoc or prev_continues:
+                        inert_added.add(len(added_asserts))
+                    added_asserts.append(body)
+            prev_continues = lang_key == "shell" and body.rstrip().endswith("\\")
+        if lang_key and any(_surface_assertion_like(r, lang_key) for r in h_removed):
+            # An equivalent replacement exists only in a hunk made purely of
+            # one-to-one assertion pairs at the same indentation. Any other
+            # added line (block opener/closer, heredoc, comment, definition)
+            # may change whether the new assertion executes: report.
+            if len(h_removed) != len(h_added) or not all(
+                _surface_assertion_like(r, lang_key)
+                and _surface_assertion_like(a, lang_key)
+                and r[: len(r) - len(r.lstrip())] == a[: len(a) - len(a.lstrip())]
+                for r, a in zip(h_removed, h_added)
+            ):
                 return True
+        if heredoc_end is not None and heredoc_opened_added:
+            # -U0 hunk: an added heredoc opener still open at the hunk end wraps
+            # unchanged lines below it into text; the diff cannot show which.
+            return True
+    if not lang_key:
+        return removed > 0
+    # Each removed assertion needs its own added equivalent on the same subject.
+    pool = [
+        (_norm_line(a, lang_key), _operands(a, lang_key), _assertion_shape(_raw_code(a, lang_key), True))
+        for i, a in enumerate(added_asserts)
+        if i not in inert_added and not _degenerate_added(a, lang_key)
+    ]
+    for gone in removed_asserts:
+        norm, ops = _norm_line(gone, lang_key), _operands(gone, lang_key)
+        match = None
+        gone_shape = _assertion_shape(_raw_code(gone, lang_key), False)
+        for idx, (a_norm, a_ops, a_shape) in enumerate(pool):
+            if lang_key == "shell" and a_shape != gone_shape:
+                continue
+            if a_norm == norm or (ops and ops <= a_ops):
+                match = idx
+                break
+        if match is None:
+            return True
+        pool.pop(match)
     return False
 
 
+_DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+_SQ_STRING = re.compile(r"'[^']*'")
+_DQ_KEEP = re.compile(r"\$\([^)]*\)|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\d")
+
+
+_LEAD_CALL = re.compile(r"^\s*(?:(?:!|if|then|elif|while|until)\s+|\(\s*)*(?:assert|expect)\w*", re.I)
+
+
+def _subject_tokens(detail):
+    """Identifier tokens an assertion exercises. Message/literal text inside
+    quotes is ignored; variable references and $(...) bodies are kept."""
+    # Drop only the syntactic call name (the first command word of the
+    # assertion), never an assert/expect-looking name in the arguments.
+    detail = _LEAD_CALL.sub("", detail, count=1)
+    text = _SQ_STRING.sub(" ", detail)
+    text = _DQ_STRING.sub(lambda m: " " + " ".join(_DQ_KEEP.findall(m.group(1))) + " ", text)
+    return set(_IDENT_TOKEN.findall(text))
+
+
+# Identifier-like tokens (>= 4 chars) used by the rule-2 identifier exemption.
+_IDENT_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 _TEST_SUFFIX = re.compile(r"^(.+?)(?:\.test|_test|\.spec)?\.[^.]+$")
 
 
@@ -1961,7 +2365,11 @@ def main():
     # 2) Parse hunks from patch output for line-level checks.
     files_diff = {}
     try:
-        diff_lines = run_command(["git", "diff", "-M", "-U0", range_str], repo_dir).stdout.splitlines()
+        diff_text = run_command(["git", "diff", "-M", "-U0", range_str], repo_dir).stdout
+        # Split on LF only: CR, VT, FF, FS and GS are not line ends for Bash.
+        diff_lines = diff_text.split("\n")
+        if diff_lines and diff_lines[-1] == "":
+            diff_lines.pop()
     except Exception as exc:
         emit_git_error(f"Failed to run diff: {exc}")
 
@@ -2177,7 +2585,13 @@ def main():
         if (
             matches_patterns(new_path, surface_path_regexes)
             and not status.startswith("A")
-            and _surface_edit_removes_lines(status, files_diff.get(new_path))
+            and _surface_edit_removes_lines(
+                status,
+                files_diff.get(new_path),
+                get_lang_key(new_path),
+                read_blob(new_path, head_ref, repo_dir),
+                read_blob(old_path, base_ref, repo_dir),
+            )
         ):
             if new_path not in surface_touches:
                 surface_touches.append(new_path)
@@ -2225,6 +2639,56 @@ def main():
                 "detail": detail,
             }
         )
+
+    # Rule 2 (2026-10-24): identifiers removed from product (non-test) files.
+    product_removed_tokens = set()
+    for _p, _info in files_diff.items():
+        if matches_patterns(_p, test_path_regexes):
+            continue
+        for _hunk in _info.get("hunks", []):
+            for _ln in _hunk["lines"]:
+                if _ln.startswith("-"):
+                    _live = _code_without_comment(_ln[1:], get_lang_key(_p))
+                    product_removed_tokens.update(_IDENT_TOKEN.findall(_live))
+    _absent_cache = {}
+
+    def _absent_at_head(token):
+        if token not in _absent_cache:
+            # Absent from live code at the head: hits in test files (e.g. an
+            # assert_not_contains tombstone), prose (.md/.txt) and docs/evals
+            # history do not keep the identifier alive; any product line at the
+            # head (code, comment, or a changed line) does.
+            res = run_command(
+                ["git", "grep", "-nwF", "-e", token, head_ref, "--"], repo_dir, check=False
+            )
+            if res.returncode == 1:
+                _absent_cache[token] = True
+            elif res.returncode == 0:
+                live = False
+                prefix = head_ref + ":"
+                for ln in (res.stdout or "").splitlines():
+                    rest = ln[len(prefix):] if ln.startswith(prefix) else ln
+                    parts = rest.split(":", 2)
+                    if len(parts) < 3:
+                        live = True
+                        break
+                    hit_path, content = parts[0], parts[2]
+                    if matches_patterns(hit_path, test_path_regexes):
+                        continue
+                    if hit_path.endswith((".md", ".txt")) or hit_path.startswith(("docs/", "evals/")):
+                        continue
+                    live = True
+                    break
+                _absent_cache[token] = not live
+            else:
+                _absent_cache[token] = False
+        return _absent_cache[token]
+
+    def _subject_identifier_removed(detail):
+        for token in _subject_tokens(detail):
+            if token in product_removed_tokens and _absent_at_head(token):
+                return True
+        return False
 
     for file_path, info in files_diff.items():
         if not matches_patterns(file_path, test_path_regexes):
@@ -2276,6 +2740,10 @@ def main():
                         added_asserts += 1
         if len(deleted_asserts) - added_asserts > 0:
             for line_no, detail in deleted_asserts:
+                # Rule 2: the removed assertion's subject identifier was deleted
+                # from product files in this range and is gone at the head.
+                if _subject_identifier_removed(detail):
+                    continue
                 _append_deleted_line(file_path, line_no, detail)
 
     for file_path, info in files_diff.items():

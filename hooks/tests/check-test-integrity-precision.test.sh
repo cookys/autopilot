@@ -5,7 +5,29 @@
 # RED at ecb84c9e5: F1 F2 F3 F4 failed on the unmodified base (checker still reported them); N1 N2 N3 N4 N5 N6 passed.
 # RED at c65144649: N7 N8 F5 failed on the unmodified base.
 # RED at 9cd17a5c6: F6 F7 F8 failed on the unmodified base (pure-add surface edit, same-topic replacement, if-! form still reported); N9 N10 passed.
+# RED at da158d42d: F9 F10 failed on the unmodified base (net-0 surface edit, identifier-removed assertion still reported); N12 N13 passed.
+# RED at 566272d61 (tirules round 1 head): N14 N15 N16 N17 N18 failed (rules 1-2 too loose: tautology rewrite, unrelated added assertion, comment-only/changed-line/message-token exemptions).
+# RED at 42482c4ca (tirules round 3): N19 N20 failed (masking tail, self-comparison counted as equivalent); N21 passed.
+# RED at 96e05a96b: F12 N28 failed (N27 passed); N29 N30 failed (continuation / heredoc wrapper accepted as equivalent): [[ < ]] treated as redirect; assertion function name counted as subject identifier.
 # RED at 0d790a1b7: N11 failed on the base of this fix (hollow same-stem replacement exempted the deleted test).
+# RED at d4415142e: F13 F14 F15 F16 F17 F18 failed (here-string / quoted / commented <<EOF opened a phantom heredoc, END-OF-FILE delimiter truncated, $expected_value subject dropped, [[ "$age"<"5" ]] without spaces rejected); N31 N32 passed.
+# RED at d4415142e (acceptance round 5): N33 N34 N35 failed (replacement moved into an existing heredoc, or always true via ${age}, accepted as equivalent).
+# RED at ae6cd0d61 (four-seat round 3): N36 F19 failed (double quote opened by $(cat <<'EOF' and closed lines later masked the heredoc opener; single-quoted '${x}' treated as self-comparison).
+# RED at ae6cd0d61 (acceptance round 6): N38 N39 N40 N41 failed (heredoc end word moved so a context assertion became text; ${age:-} / $((age)) / $(echo $age) accepted as equivalents).
+# RED at edc664987 (acceptance round 7): N42 N43 N44 failed (assertion replaced by a block - function, if false, : ' ' - accepted as equivalent). F9 F13-F16 had to move their extra line into unchanged context: a hunk with any non-assertion-pair line no longer earns the equivalent exemption.
+# RED at e0e6bbf0b (review 2bb2da5e): N45 failed (one space and one tab compared equal by character count).
+# RED at 185ca0591 (acceptance round 8): N47 N48 failed (multi-operand [ ... -o/-a ... ] paired with a three-token test); N46 N49 N50 passed on the base (case-fold and ! / || were already caught by other checks) and stay as controls.
+# RED at 25e18b71b (acceptance round 9): N51-N54 failed (unquoted glob / regex operand paired with a quoted literal).
+# RED at 51b0575f4 (acceptance round 10): see N55-N57 (locale string $".." / $'..' / mixed quoting paired with a pure quoted literal).
+# RED at 8b659d432 (acceptance round 11): N58-N62 failed (arithmetic comparison against a name / expression paired with an integer literal); C7 ([ ] with a name on the arithmetic side) also failed.
+# RED at 85eff5f32 (changed-side rule): N63 failed; N64 and F23 already behaved (the operand-set rule reports a changed subject variable).
+# RED at 21eadee16 (review 54a42840): see N65 N66 (braced ${a} normalised to $a and paired).
+# RED at a3e740553 (acceptance round 12): N67 N68 N69 failed (bound moved to INT_MAX/INT_MIN, string ordering against ${a}x accepted); C8-C11 failed (relational literal changes were paired).
+# F12 and F18 (relational < with a literal swap, spaced and unspaced) were retired by the closed rule: C10 and C11 pin the same shapes as accepted precision cost.
+# RED at 6899fca8b (acceptance round 13): N70-N74 failed (unquoted \$a / \$1 / \$9 subject in [ ] vanishes when empty); C12 C13 failed (paired before).
+# C14: a quoted literal containing spaces is reported on purpose (whitespace split is kept; fail-closed trade-off, not a bug).
+# RED at 10610a01f (acceptance round 14): N75-N82 failed (unbalanced [[ ... ] and Unicode-space separators paired as equivalents).
+# RED at 409adebfe (acceptance round 15): N83-N87 failed (CR VT FF FS GS split the diff line and hid the failure-masking tail; text=True also turned CR into LF).
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -279,5 +301,537 @@ printf '# gc removed\nif ! true; then exit 1; fi\n' > "$repo/tests/tool-gc-remov
 commit_all "$repo" "delete test, add hollow same-stem file"
 run_case "$repo"
 if has_kind deleted_line && has_text 'tests/tool-gc.test.sh'; then report N11 1; else report N11 0; fi
+
+# ── F9 rule 1: surface helper edited, assertion kept (net 0) ────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\necho keep\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'assert_eq "$a" "1" "x, with a longer message"\necho keep\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "parametrise helper"
+run_case "$repo"
+if has_kind surface_touch; then report F9 0; else report F9 1; fi
+
+# ── N12 rule 1 control: surface helper loses an assertion, no replacement ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'export A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "drop helper assertion"
+run_case "$repo"
+if has_kind surface_touch && has_text 'tests/fixtures/helper.sh'; then report N12 1; else report N12 0; fi
+
+# ── F10 rule 2: assertion removed with the identifier it tested ────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep legacy_widget_key scripts/conf.sh)" "x" "key"\nassert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "remove key and its assertion"
+run_case "$repo"
+if has_kind deleted_line; then report F10 0; else report F10 1; fi
+
+# ── N13 rule 2 control: assertion removed, identifier still in product ─────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep legacy_widget_key scripts/conf.sh)" "x" "key"\nassert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=1\nkeep=3\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$(grep keep scripts/conf.sh)" "y" "keep"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "drop assertion, key stays"
+run_case "$repo"
+if has_kind deleted_line; then report N13 1; else report N13 0; fi
+
+# surface-file fixture builder
+mk_surface() { # mk_surface <old> <new>
+  local r; r="$(new_repo)"
+  printf '## Mode\nmode: block\n## Integrity Surface Paths\n- "harness/**"\n' > "$r/.claude/test-integrity-config.md"
+  mkdir -p "$r/harness"
+  printf '%s\n' "$1" > "$r/harness/lib.sh"
+  commit_all "$r" "base"
+  printf '%s\n' "$2" > "$r/harness/lib.sh"
+  commit_all "$r" "edit"
+  echo "$r"
+}
+
+# ── N14 rule 1: assertion rewritten into an always-true form ───────────────
+repo="$(mk_surface 'check() { [ "$1" = "$2" ]; }' 'check() { [ 1 -eq 1 ]; }')"
+run_case "$repo"
+if has_kind surface_touch; then report N14 1; else report N14 0; fi
+
+# ── N15 rule 1: unrelated added assertion must not offset a removed one ────
+repo="$(mk_surface 'assert_eq "$actual" "$expected"' 'assert_eq "$other" "unrelated"')"
+run_case "$repo"
+if has_kind surface_touch; then report N15 1; else report N15 0; fi
+
+# ── N15c rule 1: added assertion whose MESSAGE echoes the removed operands must not offset it ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_gt "$n" "1" "age was 0 before"')"
+run_case "$repo"
+if has_kind surface_touch; then report N15c 1; else report N15c 0; fi
+
+# ── F11 rule 1: same-subject replacement with a message is still a replacement (no FP) ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "1" "age was 0 before"')"
+run_case "$repo"
+if has_kind surface_touch; then report F11 0; else report F11 1; fi
+
+# ── N15b rule 1: self-comparison / && true tautologies are reported ────────
+repo="$(mk_surface 'check() { [ "$1" = "$2" ]; }' 'check() { [ "$1" = "$2" ] && true; }')"
+run_case "$repo"
+if has_kind surface_touch; then report N15b 1; else report N15b 0; fi
+
+# ── N16 rule 2: key removed from code but left in a comment ────────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n# legacy_widget_key\n' > "$repo/scripts/foo.sh"
+printf 'test_legacy_widget_key() {\n assert_eq "$legacy_widget_key" "1"\n}\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf '# legacy_widget_key\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "drop key, comment stays"
+run_case "$repo"
+if has_kind deleted_line; then report N16 1; else report N16 0; fi
+
+# ── N17 rule 2: changed product line still uses the key (key=1 -> key=2) ───
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$legacy_widget_key" "1"\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=2\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "change key value, drop assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N17 1; else report N17 0; fi
+
+# ── N18 rule 2: only a message word matches a removed comment ──────────────
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'legacy_widget_key=1\n# obsolete_message\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$legacy_widget_key" "1" "obsolete_message"\nassert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "base"
+printf 'legacy_widget_key=1\n' > "$repo/scripts/foo.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/foo.test.sh"
+commit_all "$repo" "drop comment and assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N18 1; else report N18 0; fi
+
+# ── N19 rule 1: failure-masking tail appended to the assertion ─────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" || ! false')"
+run_case "$repo"
+if has_kind surface_touch; then report N19 1; else report N19 0; fi
+
+# ── N20 rule 1: self-comparison rewrite is a tautology ─────────────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$age"')"
+run_case "$repo"
+if has_kind surface_touch; then report N20 1; else report N20 0; fi
+
+# ── N21 rule 1: renamed subject stays reported ─────────────────────────────
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$years" "0"')"
+run_case "$repo"
+if has_kind surface_touch; then report N21 1; else report N21 0; fi
+
+# ── N22 (c) if-then-fi: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'if assert_eq "$age" "0"; then :; fi')"
+run_case "$repo"
+if has_kind surface_touch; then report N22 1; else report N22 0; fi
+
+# ── N23 (f) || true # ignored: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" || true # ignored')"
+run_case "$repo"
+if has_kind surface_touch; then report N23 1; else report N23 0; fi
+
+# ── N24 && :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" && :')"
+run_case "$repo"
+if has_kind surface_touch; then report N24 1; else report N24 0; fi
+
+# ── N25 subshell || :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' '( assert_eq "$age" "0" ) || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N25 1; else report N25 0; fi
+
+# ── N26 redirect || :: non-bare added line is not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" > /dev/null || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N26 1; else report N26 0; fi
+
+# ── N27 rule 1: single-bracket [ a < b ] is a redirect, never an equivalent ──
+repo="$(mk_surface '[ "$age" < "5" ]' '[ "$age" < "9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N27 1; else report N27 0; fi
+
+# ── N28 rule 2: product deletes a helper named assert_eq; the removed assertion must still be reported ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'assert_eq() { :; }\nkeep=2\n' > "$repo/scripts/helper.sh"
+printf 'assert_eq "$age" "0"\nassert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/helper.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "delete helper and assertion"
+run_case "$repo"
+if has_kind deleted_line; then report N28 1; else report N28 0; fi
+
+# ── N29 rule 1: line continuation feeding || : swallows the failure ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'assert_eq "$age" "0" \\\n  || :')"
+run_case "$repo"
+if has_kind surface_touch; then report N29 1; else report N29 0; fi
+
+# ── N30 rule 1: assertion wrapped in a heredoc is text, not an equivalent ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<\'EOF_BODY\'\nassert_eq "$age" "0"\nEOF_BODY')"
+run_case "$repo"
+if has_kind surface_touch; then report N30 1; else report N30 0; fi
+
+# ── F13 rule 1: a here-string is not a heredoc opener ──
+repo="$(mk_surface $'cat <<< hello\nassert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F13 0; else report F13 1; fi
+
+# ── F14 rule 1: <<EOF inside a quoted string is data ──
+repo="$(mk_surface $'echo \'use <<EOF\'\nassert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F14 0; else report F14 1; fi
+
+# ── F15 rule 1: <<EOF inside a trailing comment is data ──
+repo="$(mk_surface $'echo ok # use <<EOF\nassert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F15 0; else report F15 1; fi
+
+# ── F16 rule 1: heredoc delimiter with a dash closes at its full name ──
+repo="$(mk_surface $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report F16 0; else report F16 1; fi
+
+# ── N31 rule 1: assertion wrapped in a dash-delimited heredoc is still text ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\nassert_eq "$age" "5"\nEND-OF-FILE')"
+run_case "$repo"
+if has_kind surface_touch; then report N31 1; else report N31 0; fi
+
+# ── F17 rule 2: subject variable named expected_value is a subject, removed with its assertion ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests" "$repo/scripts"
+printf 'expected_value=1\nkeep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$expected_value" "1"\nassert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "base"
+printf 'keep=2\n' > "$repo/scripts/conf.sh"
+printf 'assert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
+commit_all "$repo" "remove variable and its assertion"
+run_case "$repo"
+if has_kind deleted_line; then report F17 0; else report F17 1; fi
+
+# ── N32 rule 1: [ a<b ] without spaces stays a redirect ──
+repo="$(mk_surface '[ "$age"<"5" ]' '[ "$age"<"9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N32 1; else report N32 0; fi
+
+# ── N33 rule 1: replacement lands inside a heredoc that opens outside the hunk ──
+repo="$(mk_surface $'cat <<\'END\'\ntext one\nplaceholder\nEND\nassert_eq "$age" "0"' $'cat <<\'END\'\ntext one\nassert_eq "$age" "5"\nEND')"
+run_case "$repo"
+if has_kind surface_touch; then report N33 1; else report N33 0; fi
+
+# ── N34 rule 1: assertion rewritten to compare $age with ${age} is always true ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "${age}"')"
+run_case "$repo"
+if has_kind surface_touch; then report N34 1; else report N34 0; fi
+
+# ── N35 rule 1: [ "$age" = "${age}" ] is always true ──
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "${age}" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N35 1; else report N35 0; fi
+
+# ── N36 rule 1: heredoc opened inside "$( ... )" whose closing quote is on a later line ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'expected="$(cat <<\'EOF\'\nassert_eq "$age" "5"\nEOF\n)"')"
+run_case "$repo"
+if has_kind surface_touch; then report N36 1; else report N36 0; fi
+
+# ── F19 rule 1: single quotes do not expand, '${x}' is not a self-comparison ──
+repo="$(mk_surface 'assert_eq "$x" "0"' "assert_eq \"\$x\" '\${x}'")"
+run_case "$repo"
+if has_kind surface_touch; then report F19 0; else report F19 1; fi
+
+# ── N38 rule 1: moving the heredoc end word swallows an unchanged real assertion (-U0 shows no assertion line) ──
+repo="$(mk_surface $'cat <<\'END\'\ntext\nplaceholder\nEND\nassert_eq "$age" "0"' $'cat <<\'END\'\ntext\nassert_eq "$age" "0"\nEND')"
+run_case "$repo"
+if has_kind surface_touch; then report N38 1; else report N38 0; fi
+
+# ── N39 / N40 / N41 rule 1: operands whose value cannot be proven different from the subject ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "${age:-}"')"
+run_case "$repo"
+if has_kind surface_touch; then report N39 1; else report N39 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$((age))"')"
+run_case "$repo"
+if has_kind surface_touch; then report N40 1; else report N40 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "$(echo $age)"')"
+run_case "$repo"
+if has_kind surface_touch; then report N41 1; else report N41 0; fi
+
+# ── N42 / N43 / N44 rule 1: replacement wrapped in a block that may never run ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'unused() {\nassert_eq "$age" "1"\n}')"
+run_case "$repo"
+if has_kind surface_touch; then report N42 1; else report N42 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' $'if false; then\nassert_eq "$age" "1"\nfi')"
+run_case "$repo"
+if has_kind surface_touch; then report N43 1; else report N43 0; fi
+repo="$(mk_surface 'assert_eq "$age" "0"' $': \'\nassert_eq "$age" "1"\n\'')"
+run_case "$repo"
+if has_kind surface_touch; then report N44 1; else report N44 0; fi
+
+# Accepted precision cost (depth-0 2026-10-24): legitimate edit, but in the same hunk as the assertion; the hunk-shape rule deliberately over-reports it.
+# ── C1 original F9 shape: assertion edit and export A=1 -> A=2 adjacent in one hunk ──
+repo="$(new_repo)"
+mkdir -p "$repo/tests/fixtures"
+printf 'assert_eq "$a" "1" "x"\nexport A=1\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "base"
+printf 'assert_eq "$a" "1" "x, with a longer message"\nexport A=2\n' > "$repo/tests/fixtures/helper.sh"
+commit_all "$repo" "parametrise helper"
+run_case "$repo"
+if has_kind surface_touch; then report C1 1; else report C1 0; fi
+
+# ── C2 original F13 shape: here-string added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<< hello\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C2 1; else report C2 0; fi
+
+# ── C3 original F14 shape: quoted <<EOF line added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo \'use <<EOF\'\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C3 1; else report C3 0; fi
+
+# ── C4 original F15 shape: commented <<EOF line added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'echo ok # use <<EOF\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C4 1; else report C4 0; fi
+
+# ── C5 original F16 shape: closed END-OF-FILE heredoc added in the same hunk ──
+repo="$(mk_surface 'assert_eq "$age" "0"' $'cat <<END-OF-FILE\ntext\nEND-OF-FILE\nassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report C5 1; else report C5 0; fi
+
+# ── N45 hunk shape: one space versus one tab of indentation is not the same indentation ──
+repo="$(mk_surface $' assert_eq "$age" "0"' $'\tassert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report N45 1; else report N45 0; fi
+
+# ── N46 shell function names are case sensitive ──
+repo="$(mk_surface 'assert_eq "$age" "0"' 'Assert_eq "$age" "5"')"
+run_case "$repo"
+if has_kind surface_touch; then report N46 1; else report N46 0; fi
+
+# ── N47-N50 bracket arity: only exactly "operand operator operand" is the same shape ──
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "1" -o x ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N47 1; else report N47 0; fi
+repo="$(mk_surface '[ "$age" = "0" ]' '[ "$age" = "1" -a x ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N48 1; else report N48 0; fi
+repo="$(mk_surface '[ "$age" = "0" ]' '[ ! "$age" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N49 1; else report N49 0; fi
+repo="$(mk_surface '[[ "$age" = "0" ]]' '[[ "$age" = "1" || x ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N50 1; else report N50 0; fi
+
+# ── N51-N54 a pattern or regex operand makes the comparison always true: never the same shape as a literal ──
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == * ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N51 1; else report N51 0; fi
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == ?* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N52 1; else report N52 0; fi
+repo="$(mk_surface '[[ "$age" == "0" ]]' '[[ "$age" == [0-9]* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N53 1; else report N53 0; fi
+repo="$(mk_surface '[[ "$age" =~ "0" ]]' '[[ "$age" =~ .* ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N54 1; else report N54 0; fi
+
+# ── F20 / F21 quoted glob characters are literals: a literal swap is a legitimate pair ──
+repo="$(mk_surface '[[ "$x" == "a*b" ]]' '[[ "$x" == "a*c" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F20 0; else report F20 1; fi
+repo="$(mk_surface "[[ \"\$x\" == 'a*b' ]]" "[[ \"\$x\" == 'a*c' ]]")"
+run_case "$repo"
+if has_kind surface_touch; then report F21 0; else report F21 1; fi
+
+# ── C6 escaped glob character: conservatively treated as unquoted, accepted precision cost (depth-0 2026-10-24) ──
+repo="$(mk_surface '[[ "$x" == a\*b ]]' '[[ "$x" == a\*c ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C6 1; else report C6 0; fi
+
+# ── N55-N57 locale / ANSI-C / mixed quoting is not a pure quote form: never the same shape ──
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = $"$a" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N55 1; else report N55 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' "[ \"\$a\" = \$'0' ]")"
+run_case "$repo"
+if has_kind surface_touch; then report N56 1; else report N56 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "$a"$"x" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N57 1; else report N57 0; fi
+
+# ── N58-N62 [[ ]] arithmetic operands are evaluated recursively: a name or expression is a self-comparison ──
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "a" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N58 1; else report N58 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq a ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N59 1; else report N59 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "a+0" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N60 1; else report N60 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq $a+0 ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N61 1; else report N61 0; fi
+repo="$(mk_surface '[[ "$a" -lt "5" ]]' '[[ "$a" -lt a ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N62 1; else report N62 0; fi
+
+# ── F22 integer literal swap in an arithmetic comparison stays a legitimate pair ──
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' '[[ "$a" -eq "-5" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F22 0; else report F22 1; fi
+
+# ── C7 [ ] with a name on the arithmetic side is reported too (same rule for simplicity, accepted precision cost, depth-0 2026-10-24) ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq b ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C7 1; else report C7 0; fi
+
+# ── N63 / N64 the changed side of an arithmetic comparison must be an integer literal on both sides ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq "$b" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N63 1; else report N63 0; fi
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$b" -eq "0" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N64 1; else report N64 0; fi
+
+# ── F23 only the integer literal changes, the subject is the same variable ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report F23 0; else report F23 1; fi
+
+# ── N65 / N66 ${a} is not accepted as an arithmetic subject, either direction ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "${a}" -eq "0" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N65 1; else report N65 0; fi
+repo="$(mk_surface '[ "${a}" -eq "0" ]' '[ "$a" -eq "0" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N66 1; else report N66 0; fi
+
+# ── N67-N69 closed rule: only = == -eq earn an equivalent; moving a bound or an ordering never does ──
+repo="$(mk_surface '[ "$a" -le "0" ]' '[ "$a" -le "9223372036854775807" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N67 1; else report N67 0; fi
+repo="$(mk_surface '[ "$a" -ge "0" ]' '[ "$a" -ge "-9223372036854775808" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N68 1; else report N68 0; fi
+repo="$(mk_surface '[[ "$a" < "0" ]]' '[[ "$a" < "${a}x" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N69 1; else report N69 0; fi
+
+# ── C8-C11 accepted precision cost (depth-0 2026-10-24): a literal change under != -ne -lt or < is reported ──
+repo="$(mk_surface '[ "$a" -ne "0" ]' '[ "$a" -ne "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C8 1; else report C8 0; fi
+repo="$(mk_surface '[ "$a" -lt "5" ]' '[ "$a" -lt "9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C9 1; else report C9 0; fi
+repo="$(mk_surface '[[ "$age" < "5" ]]' '[[ "$age" < "9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C10 1; else report C10 0; fi
+repo="$(mk_surface '[[ "$age"<"5" ]]' '[[ "$age"<"9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C11 1; else report C11 0; fi
+
+# ── F24 string equality literal swap stays a legitimate pair ──
+repo="$(mk_surface '[ "$a" = "foo" ]' '[ "$a" = "bar" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report F24 0; else report F24 1; fi
+
+# ── N70-N74 [ ] word-splits an unquoted subject: when it is empty the operand vanishes and the test turns unary ──
+repo="$(mk_surface '[ "-z" = $a ]' '[ "-n" = $a ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N70 1; else report N70 0; fi
+repo="$(mk_surface '[ "-z" == $a ]' '[ "-n" == $a ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N71 1; else report N71 0; fi
+repo="$(mk_surface '[ "-z" = $1 ]' '[ "-n" = $1 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N72 1; else report N72 0; fi
+repo="$(mk_surface '[ "-z" == $1 ]' '[ "-n" == $1 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N73 1; else report N73 0; fi
+repo="$(mk_surface '[ "-z" = $9 ]' '[ "-n" = $9 ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N74 1; else report N74 0; fi
+
+# ── C12 / C13 accepted precision cost (depth-0 2026-10-24): in [ ] a quoted literal starting with - or an unquoted subject is never paired ──
+repo="$(mk_surface '[ "$a" -eq "0" ]' '[ "$a" -eq "-5" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C12 1; else report C12 0; fi
+repo="$(mk_surface '[ $a = "0" ]' '[ $a = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C13 1; else report C13 0; fi
+
+# ── F25 single bracket with a quoted subject and plain literals stays a legitimate pair ──
+repo="$(mk_surface '[ "$a" = "0" ]' '[ "$a" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report F25 0; else report F25 1; fi
+
+# ── C14 accepted precision cost (depth-0 2026-10-24, review 4a4a20d5): the shape parser splits on whitespace, so a quoted literal with spaces loses the exemption; deliberate, a quote-aware split would reopen bypasses ──
+repo="$(mk_surface '[ "$a" = "foo bar" ]' '[ "$a" = "foo baz" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C14 1; else report C14 0; fi
+
+# ── N75-N82 mismatched brackets and non-ASCII whitespace are not a recognisable test shape ──
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a" = "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N75 1; else report N75 0; fi
+repo="$(mk_surface '[[ "$a" == "0" ]]' $'[[ "$a" == "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N76 1; else report N76 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a" -eq "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N77 1; else report N77 0; fi
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a"\u00a0=\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N78 1; else report N78 0; fi
+repo="$(mk_surface '[[ "$a" == "0" ]]' $'[[ "$a"\u00a0==\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N79 1; else report N79 0; fi
+repo="$(mk_surface '[[ "$a" = "0" ]]' $'[[ "$a"\u2003=\u2003"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N80 1; else report N80 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a"\u202f-eq\u202f"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N81 1; else report N81 0; fi
+repo="$(mk_surface '[[ "$a" -eq "0" ]]' $'[[ "$a"\u00a0-eq\u00a0"1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N82 1; else report N82 0; fi
+
+# ── F26 plain ASCII double bracket equality stays a legitimate pair ──
+repo="$(mk_surface '[[ "$a" = "0" ]]' '[[ "$a" = "1" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report F26 0; else report F26 1; fi
+
+# ── N83-N87 a control character ends a line for Python splitlines() but not for Bash: the tail must not be hidden ──
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\r|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N83 1; else report N83 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\v|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N84 1; else report N84 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\f|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N85 1; else report N85 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\x1c|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N86 1; else report N86 0; fi
+repo="$(mk_surface '[ "$a" = "0" ]' $'[ "$a" = "1" ]\x1d|| true')"
+run_case "$repo"
+if has_kind surface_touch; then report N87 1; else report N87 0; fi
 
 finalize_test

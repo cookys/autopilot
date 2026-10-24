@@ -871,6 +871,39 @@ function detectZshExpansion(cmd, cwd) {
 // whose first real word (after VAR=val, `time`, and flow keywords) is literally the unquoted word `ls`.
 // `command ls`, `\\ls`, `/bin/ls`, `'ls'` and `env ls` are not that word and pass. Heredoc bodies and
 // quoted text never reach here (executableText); `bash -c` bodies are non-interactive and skipped.
+// Rewrite `<(` / `>(` (process substitution) to `$(` outside quotes only: single quotes, double quotes and a
+// backslash keep them literal. A `$(` inside double quotes runs, so its body is rewritten recursively. Linear.
+function rewriteProcSubst(text) {
+  let out = '';
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (c === '\\') { out += text.slice(i, i + 2); i += 2; continue; }
+    if (c === "'") { const j = text.indexOf("'", i + 1); const e = j < 0 ? n : j + 1; out += text.slice(i, e); i = e; continue; }
+    if (c === '"') {
+      let j = i + 1;
+      out += '"';
+      while (j < n && text[j] !== '"') {
+        if (text[j] === '\\') { out += text.slice(j, j + 2); j += 2; continue; }
+        if (text[j] === '$' && text[j + 1] === '(') {
+          const e = closeParen(text, j + 2);
+          if (e < 0) { out += text.slice(j); j = n; break; }
+          out += `$(${rewriteProcSubst(text.slice(j + 2, e))})`;
+          j = e + 1;
+          continue;
+        }
+        out += text[j]; j += 1;
+      }
+      if (j < n) { out += '"'; j += 1; }
+      i = j; continue;
+    }
+    if ((c === '<' || c === '>') && text[i + 1] === '(') { out += ' $('; i += 2; continue; }
+    out += c; i += 1;
+  }
+  return out;
+}
+
 // Is text[i] (an `=` followed by `(`) the end of an array target `NAME=` / `NAME+=` / `NAME[sub]=`? Bounded backward look.
 function arrayTargetEnds(text, i) {
   let k = i - 1;
@@ -928,7 +961,7 @@ function detectBareLs(cmd) {
   const exec = executableText(typeof cmd === 'string' ? cmd : '');
   if (!exec.includes('ls')) return null; // cheap exit first: this hook runs on every Bash call
   // `<(…)` / `>(…)` process substitution runs its body as a command list, exactly like `$(…)`.
-  const text = stripArrayAssigns(exec.replace(/[<>]\(/g, ' $('));
+  const text = stripArrayAssigns(rewriteProcSubst(exec));
   if (!/\bls\b/.test(text)) return null;
   for (const seg of expandSegments(text)) {
     if (seg.sh) continue;

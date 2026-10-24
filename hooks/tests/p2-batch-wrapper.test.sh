@@ -46,7 +46,7 @@ const m = { task: 't14-constraint-horizon', model: 'claude-haiku-4-5', cli: '2.1
   arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
   prereg: 'prereg/PREREG.md', taskhash_expected: 'prereg/taskhash.expected.txt', hook_path: 'hooks/per-turn-gate.js',
   harness_path: 'evals/orchestration/run-orchestration-eval.sh', argv_sha: {},
-  hashes: { wrapper: sha(wrapper), hook: sha(path.join(clone, 'hooks/per-turn-gate.js')), harness: sha(path.join(clone, 'evals/orchestration/run-orchestration-eval.sh')) } };
+  hashes: { wrapper: sha(wrapper), hook: sha(path.join(clone, 'hooks/per-turn-gate.js')), harness: sha(path.join(clone, 'evals/orchestration/run-orchestration-eval.sh')), taskhash_expected: sha(path.join(clone, 'prereg/taskhash.expected.txt')) } };
 for (const arm of ['ON', 'C']) m.argv_sha[arm] = w.argvSha(w.harnessArgv(m, arm, '<o>', '<t>'), '<o>', '<t>');
 fs.writeFileSync(out, JSON.stringify(m, null, 2));
 JS
@@ -65,6 +65,12 @@ mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need("
 mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
+mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {"
+mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
+mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
+mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
+mk_mut hookerr "need(errRuns <= 2," "need(true || errRuns <= 2,"
+mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
 # manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
@@ -195,5 +201,52 @@ for(const l of log){const m=/ COST (\S+) arm=(\S+) run=(\S+) probe=(\S+) running
 process.exit(n===6&&!bad?0:1)' "$R1"; assert_eq "$?" 0 "COST running equals the id-by-id sum of runs and probes"
 R2="$TEST_TMP/run-probe-mut"; run_batch "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE" "$R2"
 assert_neq "$(node "$WRAP" --audit --manifest "$MAN_PROBE" --run-dir "$R2" --clone "$CLONE" >/dev/null 2>&1; echo $?)" 0 "RED probe double count: a batch written with the double-counting writer fails the audit"
+
+echo "--- audit round 1 review: baseline pin, COSTCHK, window, HOOKERR, MODEL per id"
+# 5 task hash baseline replaced AFTER the batch by a committed file, with pre and post listings rewritten to match it
+OLDHEAD=$(git -C "$CLONE" rev-parse HEAD)
+tamper base; echo "x" >>"$CLONE/prereg/taskhash.expected.txt"
+cp "$CLONE/prereg/taskhash.expected.txt" "$TEST_TMP/t-base/taskhash.pre.txt"; cp "$CLONE/prereg/taskhash.expected.txt" "$TEST_TMP/t-base/taskhash.post.txt"
+git -C "$CLONE" add -A; NT=$(git -C "$CLONE" write-tree); NC=$(git -C "$CLONE" commit-tree "$NT" -p "$OLDHEAD" -m swap); git -C "$CLONE" update-ref HEAD "$NC"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-base")" 0 "swapped taskhash baseline: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-base/run-p2-batch.js" "$TEST_TMP/t-base")" 0 "RED swapped taskhash baseline: audit without the baseline re-check says OK"
+git -C "$CLONE" update-ref HEAD "$OLDHEAD"; git -C "$CLONE" reset -q --hard "$OLDHEAD"
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "baseline restored: real audit OK"
+# 6 a COSTCHK row missing / after START
+tamper chk1; python3 - "$TEST_TMP/t-chk1/invocation.log" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); del L[i]; open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-chk1")" 0 "missing COSTCHK: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-costchk/run-p2-batch.js" "$TEST_TMP/t-chk1")" 0 "RED missing COSTCHK: mutant says OK"
+# 7 window: the last END is later than the window end; the harness timeout never passes the window
+tamper win; python3 - "$TEST_TMP/t-win/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n'); i = max(k for k, l in enumerate(L) if ' END ' in l)
+L[i] = re.sub(r'^\d{4}-\d\d-\d\d', '2099-01-01', L[i]); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-win")" 0 "last END after the window: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-window/run-p2-batch.js" "$TEST_TMP/t-win")" 0 "RED last END after the window: mutant says OK"
+TO_CHECK='const w=require(process.argv[1]);process.exit(w.harnessTimeoutMs(28800-120,28800)===120000&&w.harnessTimeoutMs(0,28800)===5400000?0:1)'
+node -e "$TO_CHECK" "$WRAP"; assert_eq "$?" 0 "harness timeout is clamped to the remaining window"
+node -e "$TO_CHECK" "$TEST_TMP/mut-timeout/run-p2-batch.js"; assert_eq "$?" 1 "RED timeout clamp: the unclamped mutant fails the check"
+# 8 three ON runs with hook errors
+tamper herr; python3 - "$TEST_TMP/t-herr/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n')
+for k, l in enumerate(L):
+    if ' HOOKERR ON-' in l: L[k] = re.sub(r' 0$', ' 1', l)
+open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-herr")" 0 "hook errors in 3 ON runs: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-hookerr/run-p2-batch.js" "$TEST_TMP/t-herr")" 0 "RED hook errors: mutant says OK"
+# 9 one MODEL row duplicated and another dropped (count unchanged)
+tamper mrow; python3 - "$TEST_TMP/t-mrow/invocation.log" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); ix = [k for k, l in enumerate(L) if ' MODEL ' in l]
+L[ix[1]] = L[ix[0]]; open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-mrow")" 0 "MODEL rows not one per id: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-modelrow/run-p2-batch.js" "$TEST_TMP/t-mrow")" 0 "RED MODEL per id: mutant says OK"
 
 finalize_test

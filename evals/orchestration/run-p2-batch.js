@@ -87,6 +87,9 @@ function projectCost({ runCosts, probeSpent, total, cap, probeCost }) {
   return { stage: 'post5', spent, projected, cap, stop: projected > cap };
 }
 
+/** Timeout for one harness call: at most 90 minutes and never past the end of the window. */
+function harnessTimeoutMs(elapsedS, windowS) { return Math.max(1000, Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)); }
+
 function harnessArgv(m, arm, out, trace) {
   return ['bash', m.harness_path, '--task', m.task, '--arm', 'off', '--runner', 'cc', '--model', m.model,
     '--out', out, '--gate', m.arms[arm].gate, '--hook-trace-dir', trace];
@@ -199,12 +202,15 @@ const W = {
     const g = (a) => sh(ctx, ['git', '-C', ctx.clone, ...a]);
     // The preregistration note and the manifest it states the sha256 of must both be committed and unmodified.
     const mrel = path.relative(ctx.clone, ctx.manifestPath);
-    for (const [what, rel] of [['prereg', m.prereg], ['manifest', mrel]]) {
+    for (const [what, rel] of [['prereg', m.prereg], ['manifest', mrel], ['taskhash baseline', m.taskhash_expected]]) {
       if (g(['ls-files', '--error-unmatch', rel]).status !== 0) throw new Exit(3, `ABORT ${what} not tracked`);
       if (g(['status', '--porcelain', '--', rel]).stdout.trim()) throw new Exit(3, `ABORT ${what} modified`);
     }
     ctx.log('HASH', `manifest ${sha256(fs.readFileSync(ctx.manifestPath))}`);
     ctx.log('HASH', `prereg ${sha256(fs.readFileSync(path.join(ctx.clone, m.prereg)))}`);
+    const th = sha256(fs.readFileSync(path.join(ctx.clone, m.taskhash_expected)));
+    ctx.log('HASH', `taskhash_expected ${th}`);
+    if (th !== m.hashes.taskhash_expected) throw new Exit(3, 'ABORT taskhash baseline sha256 differs from the preregistered value');
     const hash = g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim();
     const time = g(['log', '-1', '--format=%cI', '--', m.prereg]).stdout.trim();
     const anc = g(['merge-base', '--is-ancestor', hash, 'HEAD']).status === 0 ? 'yes' : 'no';
@@ -344,7 +350,8 @@ function runBatch(ctx, first, last) {
     if (elapsed > m.window_s) throw new Exit(8, `STOP_WINDOW before ${id} elapsed=${elapsed}`);
     const a = armSpend(ctx, arm);
     const p = projectCost({ runCosts: a.runCosts, probeSpent: a.probeSpent, total: m.n_per_arm, cap: m.arms[arm].cap, probeCost: m.probe_cost });
-    ctx.log('COSTCHK', `${id} arm=${arm} stage=${p.stage} spent=${p.spent.toFixed(4)} projected=${p.projected.toFixed(4)} cap=${p.cap} ${p.stop ? 'stop' : 'ok'}`);
+    // One COSTCHK per id: a resumed id (after a failed probe) keeps its first row.
+    if (!readLog(ctx).some((r) => r.kind === 'COSTCHK' && idOf(r) === id)) ctx.log('COSTCHK', `${id} arm=${arm} stage=${p.stage} spent=${p.spent.toFixed(4)} projected=${p.projected.toFixed(4)} cap=${p.cap} ${p.stop ? 'stop' : 'ok'}`);
     if (p.stop) throw new Exit(5, `STOP_COST before ${id} arm=${arm} projected=${p.projected.toFixed(4)} cap=${p.cap}`);
     W.writeVersion(ctx, id);
     fs.rmSync(home, { recursive: true, force: true });
@@ -359,11 +366,12 @@ function runBatch(ctx, first, last) {
     W.writeOrder(ctx, id, arm, pos);
     W.writeCmd(ctx, id, argv, out, traceDir);
     W.writeStartEnd(ctx, 'START', id, `elapsed=${elapsed}`);
-    const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: 90 * 60 * 1000, stdio: ['ignore', 'pipe', 'pipe'] });
+    const r = sh(ctx, [`HOME=${home}`, ...argv], { cwd: ctx.clone, timeout: harnessTimeoutMs(ctx.elapsed(), m.window_s), stdio: ['ignore', 'pipe', 'pipe'] });
     fs.mkdirSync(path.join(ctx.runDir, 'runs'), { recursive: true });
     fs.writeFileSync(`${out}.stdout`, r.stdout); fs.writeFileSync(`${out}.stderr`, r.stderr);
     W.writeStartEnd(ctx, 'END', id, `rc=${r.status}`);
     postRun(ctx, id, arm, out, traceDir, probeCost);
+    if (r.status === 124 && ctx.elapsed() >= m.window_s - 1) throw new Exit(8, `STOP_WINDOW during ${id}`);
     fs.rmSync(home, { recursive: true, force: true });
     let bad = '';
     for (const f of [path.join(out, 'run.log'), `${out}.stderr`]) { try { bad += fs.readFileSync(f, 'utf8'); } catch (_e) { /* none */ } }
@@ -420,8 +428,10 @@ function audit(runDir, m, clone, opts) {
   const expectSeq = ids.flatMap((i) => [`START ${i}`, `END ${i}`]);
   need(seq.join('|') === expectSeq.join('|'), `START/END sequence differs from the preregistered order (got ${seq.length} entries, want ${expectSeq.length}; duplicate, missing, or out of order)`);
   // 2 window
+  const win0 = by('WINDOW_START')[0];
   need(by('WINDOW_START').length === 1, `WINDOW_START must appear exactly once (got ${by('WINDOW_START').length})`);
   need(by('STOP_WINDOW').length === 0, 'STOP_WINDOW is present');
+  { const ends = by('END'); if (win0 && ends.length) need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s, 'the last END is later than the window end'); }
   for (const r of by('START')) need(Number(kvOf(r.rest).elapsed) <= m.window_s, `${idOf(r)} started after the window`);
   // 3 task hash
   const pre = read('taskhash.pre.txt'), post = read('taskhash.post.txt');
@@ -472,6 +482,7 @@ function audit(runDir, m, clone, opts) {
   const models = new Set(by('MODEL').map((r) => r.rest.slice(idOf(r).length + 1)));
   need(by('MODEL').length === ids.length, 'a MODEL line is missing');
   need(models.size === 1 && !models.has('unknown'), `resolved model ids are not a single known value: ${[...models].join(' | ')}`);
+  for (const id of ids) need(byId('MODEL', id).length === 1, `${id}: need exactly one MODEL row`);
   for (const r of by('MODEL')) need(/^[^\s,]+$/.test(r.rest.slice(idOf(r).length + 1)), `${idOf(r)}: MODEL must be exactly one model id (got "${r.rest.slice(idOf(r).length + 1)}")`);
   // 10 hook only in ON
   for (const o of order) {
@@ -482,6 +493,11 @@ function audit(runDir, m, clone, opts) {
       if (o.arm === 'ON') need(Number(kv.gate_trace) === Number(kv.gate_log) && Number(kv.gate_log) > 0, `${o.id}: gate_trace ${kv.gate_trace} != gate_log ${kv.gate_log} (or zero)`);
       else need(Number(kv.gate_trace) === 0 && Number(kv.gate_log) === 0, `${o.id}: control run shows gate hook activity`);
     }
+  }
+  { // instrument health: hook errors in at most 2 ON runs
+    let errRuns = 0;
+    for (const o of order) { const e = byId('HOOKERR', o.id); need(e.length === 1, `${o.id}: need exactly one HOOKERR row`); if (o.arm === 'ON' && e.length === 1 && Number(e[0].rest.split(' ')[1]) > 0) errRuns++; }
+    need(errRuns <= 2, `${errRuns} ON runs had hook errors (at most 2 allowed)`);
   }
   // 11 blocks per turn
   for (const id of ids) {
@@ -511,6 +527,11 @@ function audit(runDir, m, clone, opts) {
     if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
+  for (const id of ids) {
+    const cc = byId('COSTCHK', id), st = byId('START', id)[0];
+    need(cc.length === 1, `${id}: need exactly one COSTCHK (got ${cc.length})`);
+    need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st), `${id}: COSTCHK is not before the START`);
+  }
   // Actual spend per arm, re-derived from every COST row and probes.tsv (not from the wrapper's own pre-launch checks).
   for (const arm of ['ON', 'C']) {
     const armIds = ids.filter((i) => i.startsWith(`${arm}-`));
@@ -535,7 +556,7 @@ function audit(runDir, m, clone, opts) {
     const g = (a) => ex(['git', '-C', clone, ...a]);
     const mrel = path.relative(clone, (opts && opts.manifestPath) || '');
     const logged = (k) => { const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `)); return h.length ? h[0].rest.split(' ')[1] : null; };
-    for (const [what, rel, key] of [['PREREG note', m.prereg, 'prereg'], ['manifest', mrel, 'manifest']]) {
+    for (const [what, rel, key] of [['PREREG note', m.prereg, 'prereg'], ['manifest', mrel, 'manifest'], ['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {
       need(g(['ls-files', '--error-unmatch', rel]).status === 0, `${what} is no longer tracked`);
       need(g(['status', '--porcelain', '--', rel]).stdout.trim() === '', `${what} is modified`);
       let now = null; try { now = sha256(fs.readFileSync(path.join(clone, rel))); } catch (_e) { /* below */ }
@@ -552,7 +573,7 @@ function audit(runDir, m, clone, opts) {
   const mh = by('HASH').filter((r) => r.rest.startsWith('manifest '));
   need(mh.length >= 1 && new Set(mh.map((r) => r.rest)).size === 1, 'HASH manifest missing or not constant');
   if (clone && mh.length) { try { need(mh[0].rest === `manifest ${sha256(fs.readFileSync(opts && opts.manifestPath))}`, 'HASH manifest differs from the manifest file'); } catch (_e) { fails.push('manifest file unreadable for the audit'); } }
-  for (const k of ['wrapper', 'hook', 'harness']) {
+  for (const k of ['wrapper', 'hook', 'harness', 'taskhash_expected']) {
     const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `));
     need(h.length >= 1 && h.every((r) => r.rest === `${k} ${m.hashes[k]}`), `HASH ${k} missing or differs from the preregistered value`);
   }
@@ -590,7 +611,7 @@ function selfcheck(wrapperPath) {
       task: 'syn', model: 'claude-haiku-4-5', cli: '2.1.309 (Claude Code)', seed: 'selfcheck-seed', n_per_arm: n,
       arms: { ON: { gate: 'hook', cap: 30 }, C: { gate: 'observe', cap: 18 } }, probe_cost: 0.0166, window_s: 28800, min_complete: 2, max_blocks: 2,
       prereg: 'PREREG.md', taskhash_expected: 'expected.txt', hook_path: 'hook.js', harness_path: 'harness.sh', argv_sha: {},
-      hashes: { wrapper: sha256(fs.readFileSync(wrapperPath)), hook: sha256('hook\n'), harness: sha256('harness\n') },
+      hashes: { wrapper: sha256(fs.readFileSync(wrapperPath)), hook: sha256('hook\n'), harness: sha256('harness\n'), taskhash_expected: sha256(fs.readFileSync(path.join(clone, 'expected.txt'))) },
     };
     const fakeOut = (argv) => argv[argv.indexOf('--out') + 1];
     const exec = (argv) => {
@@ -695,4 +716,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };
+module.exports = { harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

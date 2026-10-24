@@ -1,0 +1,3 @@
+first debug line: 2026-10-24T01:35:09.576Z
+2026-10-24T01:35:11.967Z [DEBUG] Hooks: Stop [node <SCRATCH>/ptg-p21/hooks/per-turn-gate.js] finished with status 0 (51ms)
+2026-10-24T01:35:11.967Z [DEBUG] "Hook Stop (Stop) success:\nstderr:\nautopilot: AUTOPILOT_LIVE_DIR=<MKTEMP>/off/live is not RAM-backed (ext4); using it as asked (slower, survives reboot)."

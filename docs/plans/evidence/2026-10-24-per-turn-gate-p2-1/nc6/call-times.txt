@@ -1,0 +1,4 @@
+expected commit fe38ae6fa at 2026-10-24T01:35:09Z (date -u right after commit)
+run | first debug timestamp (UTC) | stream mtime (UTC)
+off | 2026-10-24T01:35:09.576Z | 2026-10-24T01:35:11.980Z
+on | 2026-10-24T01:35:13.048Z | 2026-10-24T01:35:17.894Z

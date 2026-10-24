@@ -1,0 +1,1 @@
+result total_cost_usd: 0.016342, 0.0199808 sum=0.0363228

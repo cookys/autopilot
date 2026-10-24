@@ -675,6 +675,22 @@
       "type": "number"
     },
     {
+      "name": "per_turn_gate.state_retention_days",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 7,
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Days after which per-turn-gate deletes its untouched counter, turn and lock files from the live-state directory (log files are kept).",
+      "type": "number"
+    },
+    {
       "name": "subagent_budget.mode",
       "kind": "config_key",
       "audience": "user",

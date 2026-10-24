@@ -34,6 +34,19 @@
  * configured but the hook is not enabled (a hook nobody configured leaves no trace); in that case
  * `turn` is null and no counter state is touched.
  *
+ * Nothing configured (hook not enabled AND no verifier): the hook returns before touching the disk, so the
+ * live-state directory gets no new file at all. Verifier configured but hook not enabled: exactly one `off`
+ * record per Stop (so a live check can tell "knob off" from "hook not running"). Enabled without a usable
+ * verifier: `error`.
+ *
+ * Concurrency: the per-session state transitions run under an atomic lock directory (<session>.lock,
+ * mkdir, stale after 30 s). Turn and counter are decided, and a block slot is reserved, inside the lock;
+ * the verifier runs outside it; a non-block outcome gives the slot back. A lock that cannot be taken in
+ * 5 s allows and logs `error` (an error never blocks).
+ *
+ * Retention: every call deletes this hook's counter, turn, tmp and lock files older than
+ * per_turn_gate.state_retention_days (default 7). Log files are kept.
+ *
  * State (same directory): <session>.turn holds the current turn index; <session>.t<turn>.count holds
  * the number of blocks given in that turn.
  */
@@ -48,6 +61,9 @@ const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state
 const HOOK_STEM = 'per-turn-gate';
 const DEFAULT_MAX_BLOCKS = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_RETENTION_DAYS = 7;
+const LOCK_WAIT_MS = 5000;
+const LOCK_STALE_MS = 30000;
 const MODES = ['violations', 'violations+features'];
 
 /**
@@ -123,6 +139,7 @@ function runVerifier(command, turn, repo, timeoutMs) {
     return { kind: 'error' };
   }
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { kind: 'error' };
+  if (!validSchema(json)) return { kind: 'error' };
   return { kind: r.status === 1 ? 'violations' : 'clean', json };
 }
 
@@ -134,6 +151,61 @@ function isReportable(result, mode) {
 
 function gapsOf(json) {
   return json && Array.isArray(json.feature_gaps) ? json.feature_gaps : [];
+}
+
+const isText = (x) => typeof x === 'string' || (typeof x === 'number' && Number.isFinite(x));
+
+/** Schema of a verifier answer: violations[] of {constraint, rule, evidence}, feature_gaps[] of strings (optional). */
+function validSchema(json) {
+  if (!Array.isArray(json.violations)) return false;
+  for (const v of json.violations) {
+    if (!v || typeof v !== 'object' || !isText(v.constraint) || !isText(v.rule) || !isText(v.evidence)) return false;
+  }
+  if (json.feature_gaps !== undefined) {
+    if (!Array.isArray(json.feature_gaps) || !json.feature_gaps.every((g) => typeof g === 'string')) return false;
+  }
+  return true;
+}
+
+function sleepMs(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_e) { /* nothing */ }
+}
+
+/** Take the per-session lock (mkdir is atomic). Returns an unlock function, or null when it could not be taken. */
+function acquireLock(lockDir) {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      return () => { try { fs.rmdirSync(lockDir); } catch (_e) { /* nothing */ } };
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') return null;
+    }
+    try {
+      if (Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS) {
+        try { fs.rmdirSync(lockDir); } catch (_e) { /* someone else reclaimed it */ }
+        continue;
+      }
+    } catch (_e) { continue; } // vanished between mkdir and stat: retry
+    if (Date.now() >= deadline) return null;
+    sleepMs(20);
+  }
+}
+
+/** Delete this hook's state files (not the logs) untouched for more than `days` days. */
+function cleanupState(dir, days) {
+  const cutoff = Date.now() - days * 86400000;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (_e) { return; }
+  for (const name of names) {
+    if (!/\.(turn|count|lock)$|\.tmp$/.test(name)) continue;
+    const f = path.join(dir, name);
+    try {
+      const st = fs.statSync(f);
+      if (st.mtimeMs >= cutoff) continue;
+      if (st.isDirectory()) fs.rmdirSync(f); else fs.unlinkSync(f);
+    } catch (_e) { /* fail-open */ }
+  }
 }
 
 /**
@@ -204,43 +276,71 @@ function main() {
     return;
   }
 
-  const turnFile = path.join(dir, `${session}.turn`);
-  const prevTurn = readInt(turnFile);
-  const turn = prevTurn === 0 ? 1 : (startsNewTurn(payload) ? prevTurn + 1 : prevTurn);
-  try { writeInt(turnFile, turn); } catch (_e) { /* fail-open */ }
+  cleanupState(dir, intKnob(gate.state_retention_days, DEFAULT_RETENTION_DAYS, 1));
 
-  const countFile = path.join(dir, `${session}.t${turn}.count`);
-  const counter = readInt(countFile);
   const maxBlocks = intKnob(gate.max_blocks, DEFAULT_MAX_BLOCKS, 0);
   const mode = MODES.includes(gate.mode) ? gate.mode : MODES[0];
-
   if (!payloadOk || !hasVerifier) {
-    log(turn, 'allow', 'error', counter);
-    return;
-  }
-  if (counter >= maxBlocks) {
-    log(turn, 'allow', 'cap', counter);
+    log(null, 'allow', 'error', 0);
     return;
   }
 
-  const repo = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
-  const result = runVerifier(gate.verifier, turn, repo, intKnob(gate.timeout_ms, DEFAULT_TIMEOUT_MS, 1));
-  if (result.kind === 'error') {
-    log(turn, 'allow', 'error', counter);
-    return;
-  }
-  if (!isReportable(result, mode)) {
-    log(turn, 'allow', 'clean', counter);
-    return;
-  }
+  const lockDir = path.join(dir, `${session}.lock`);
+  const turnFile = path.join(dir, `${session}.turn`);
 
-  const next = counter + 1;
-  try { writeInt(countFile, next); } catch (_e) {
-    log(turn, 'allow', 'error', counter); // cannot count, so cannot bound: do not block
+  // Phase A (locked): decide the turn, and reserve a block slot if the cap allows one.
+  let unlock = acquireLock(lockDir);
+  if (!unlock) {
+    log(null, 'allow', 'error', 0);
     return;
   }
-  log(turn, 'block', 'block', next);
-  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: renderRetry(result.json, mode) })}\n`);
+  let turn;
+  let countFile;
+  let reserved;
+  try {
+    const prevTurn = readInt(turnFile);
+    turn = prevTurn === 0 ? 1 : (startsNewTurn(payload) ? prevTurn + 1 : prevTurn);
+    writeInt(turnFile, turn);
+    countFile = path.join(dir, `${session}.t${turn}.count`);
+    const counter = readInt(countFile);
+    if (counter >= maxBlocks) {
+      unlock(); unlock = null;
+      log(turn, 'allow', 'cap', counter);
+      return;
+    }
+    reserved = counter + 1;
+    writeInt(countFile, reserved);
+  } catch (_e) {
+    if (unlock) unlock();
+    log(null, 'allow', 'error', 0); // cannot count, so cannot bound: do not block
+    return;
+  }
+  unlock();
+
+  // Verifier and text (unlocked). Everything that can fail happens before any block is logged.
+  const giveBack = () => {
+    const u = acquireLock(lockDir);
+    if (!u) return; // slot stays consumed: the cap only gets stricter
+    try { writeInt(countFile, Math.max(0, readInt(countFile) - 1)); } catch (_e) { /* fail-open */ } finally { u(); }
+  };
+  let text = null;
+  let outcome = 'error';
+  try {
+    const repo = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
+    const result = runVerifier(gate.verifier, turn, repo, intKnob(gate.timeout_ms, DEFAULT_TIMEOUT_MS, 1));
+    if (result.kind === 'error') outcome = 'error';
+    else if (!isReportable(result, mode)) outcome = 'clean';
+    else { text = renderRetry(result.json, mode); outcome = 'block'; }
+  } catch (_e) {
+    outcome = 'error';
+  }
+  if (outcome !== 'block') {
+    giveBack();
+    log(turn, 'allow', outcome, reserved - 1);
+    return;
+  }
+  log(turn, 'block', 'block', reserved);
+  process.stdout.write(`${JSON.stringify({ decision: 'block', reason: text })}\n`);
 }
 
 try {

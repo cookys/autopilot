@@ -19,6 +19,11 @@ const v = [{ constraint: 2, rule: 'timestamps are UTC', evidence: 'local time se
 if (m === 'violate') { console.log(JSON.stringify({ turn: 1, ok: false, violations: v, feature_gaps: [] })); process.exit(1); }
 if (m === 'gaps') { console.log(JSON.stringify({ turn: 1, ok: true, violations: [], feature_gaps: ['export did not write a file'] })); process.exit(0); }
 if (m === 'both') { console.log(JSON.stringify({ turn: 1, ok: false, violations: v, feature_gaps: ['export did not write a file'] })); process.exit(1); }
+if (m === 'nullviol') { console.log(JSON.stringify({ violations: [null] })); process.exit(1); }
+if (m === 'notarray') { console.log(JSON.stringify({ violations: 'oops' })); process.exit(1); }
+if (m === 'missing') { console.log(JSON.stringify({ ok: false })); process.exit(1); }
+if (m === 'partial') { console.log(JSON.stringify({ violations: [{ constraint: 1 }] })); process.exit(1); }
+if (m === 'badgaps') { console.log(JSON.stringify({ violations: [], feature_gaps: [null] })); process.exit(0); }
 if (m === 'crash') { process.exit(2); }
 if (m === 'garbage') { console.log('not json {'); process.exit(1); }
 if (m === 'slow') { setTimeout(() => {}, 30000); return; }
@@ -116,20 +121,63 @@ nc9t() {
   node -e 'const r=JSON.parse(process.argv[1]).reason;const a=r.indexOf("timestamps are UTC"),b=r.indexOf("export did not write"),c=r.indexOf("Keep the parts");process.exit(a>=0&&b>a&&c>b?0:1)' "$STOP_OUT"
 }
 
+# NC10: seven concurrent Stops of one session (re-entries) never exceed the cap and each leaves one record.
+nc10() {
+  fresh nc10; export PTG_V_MODE=violate
+  local i pids=""
+  for i in 1 2 3 4 5 6 7; do
+    ( printf '{"session_id":"s1","cwd":"%s","stop_hook_active":true,"prompt_id":"p"}' "$CASE_DIR/repo" | env HOME="$HOOK_HOME" node "$1" >"$CASE_DIR/out.$i" 2>/dev/null ) &
+    pids="$pids $!"
+  done
+  wait $pids
+  local n; n=$(cat "$CASE_DIR"/out.* | grep -c '"decision":"block"' || true)
+  [ "$n" -le 2 ] && [ "$(log_count)" = 7 ] && [ "$(log_has '"decision":"block"')" = "$n" ] && [ "$(log_has '"turn":1,')" = 7 ] || return 1
+}
+# NC11: a malformed verifier answer is an error: allow, one error record, no slot consumed.
+nc11() {
+  local mode
+  for mode in nullviol notarray missing partial badgaps; do
+    fresh "nc11-$mode" '{"mode":"violations+features"}'; export PTG_V_MODE=$mode
+    stop "$1" false
+    [ "$(blocks)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"error"')" = 1 ] && [ "$(log_count)" = 1 ] || return 1
+    [ "$(cat "$AUTOPILOT_LIVE_DIR"/per-turn-gate/s1.t1.count 2>/dev/null || echo 0)" = 0 ] || return 1
+  done
+}
+# NC12: state files older than the retention are removed, fresh ones and logs stay.
+nc12() {
+  fresh nc12; export PTG_V_MODE=clean
+  local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"; mkdir -p "$d/old.lock"
+  : >"$d/old.t3.count"; : >"$d/old.turn"; : >"$d/fresh.turn"; echo '{}' >"$d/old.jsonl"
+  touch -d '10 days ago' "$d/old.t3.count" "$d/old.turn" "$d/old.lock" "$d/old.jsonl"
+  stop "$1" false
+  [ ! -e "$d/old.t3.count" ] && [ ! -e "$d/old.turn" ] && [ ! -e "$d/old.lock" ] && [ -e "$d/fresh.turn" ] && [ -e "$d/old.jsonl" ] && [ -e "$d/s1.turn" ]
+}
+# NC13: nothing configured => the live-state directory gets no new file or directory at all.
+nc13() {
+  fresh nc13; printf '{}' >"$AUTOPILOT_CONFIG_FILE"; export PTG_V_MODE=violate
+  stop "$1" false
+  [ "$(find "$AUTOPILOT_LIVE_DIR" -mindepth 1 | wc -l | tr -d ' ')" = 0 ] && [ "$(blocks)" = 0 ]
+}
+
 run_nc() { # <label> <fn> <mutant-name> <sed-expr>
   if "$2" "$REAL_HOOK"; then assert_eq 0 0 "$1 holds on the real hook"; else fail "$1 broken on the real hook"; fi
   local m; m="$(mutant "$3" "$4")" || { fail "$1 mutant not built"; return; }
   if "$2" "$m"; then fail "$1 negative control: the mutant passed (check cannot go red)"; else assert_eq 0 0 "$1 red on the mutant"; fi
 }
 
-run_nc NC1 nc1 allowall "s#^  const next = counter + 1;#  return;\n  const next = counter + 1;#"
+run_nc NC1 nc1 allowall "s#else { text = renderRetry(result.json, mode); outcome = 'block'; }#else { outcome = 'clean'; }#"
 run_nc NC2 nc2 nocap "s#if (counter >= maxBlocks) {#if (false) {#"
-run_nc NC3 nc3 blockonerr "s#log(turn, 'allow', 'error', counter);\n##; s#if (result.kind === 'error') {#if (false) {#; s#return { kind: 'error' };#return { kind: 'violations', json: {} };#g"
+run_nc NC3 nc3 blockonerr "s#if (result.kind === 'error') outcome = 'error';#if (false) outcome = 'error';#; s#return { kind: 'error' };#return { kind: 'violations', json: {} };#g"
 run_nc NC4 nc4 noreset "s#startsNewTurn(payload) ? prevTurn + 1 : prevTurn#prevTurn#"
 run_nc NC9v nc9v gapsblock "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return gapsOf(result.json).length > 0;#"
 
 run_nc NC9f nc9f gapsnever "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return false;#"
 run_nc NC9t nc9t nogate "s#const withGaps = mode === 'violations+features' \&\& gaps.length > 0;#const withGaps = gaps.length > 0;#"
+
+run_nc NC10 nc10 nolock "s#let unlock = acquireLock(lockDir);#let unlock = () => {};#; s#const u = acquireLock(lockDir);#const u = () => {};#; s#const counter = readInt(countFile);#const counter = readInt(countFile); sleepMs(150);#"
+run_nc NC11 nc11 noschema "s#if (!validSchema(json)) return { kind: 'error' };##"
+run_nc NC12 nc12 noclean "s#^  cleanupState(dir,#  (() => {})(dir,#"
+run_nc NC13 nc13 alwaystrace "s#if (!enabled \&\& !hasVerifier) return;##"
 
 # Knob off / nothing configured / prompt_id.
 fresh off; export PTG_V_MODE=violate

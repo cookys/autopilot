@@ -123,6 +123,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `per_turn_gate.verifier` (config.json) | Command the (opt-in) per-turn-gate Stop hook runs at turn end as `<command> --turn <n> --repo <cwd> --json`; exit 1 blocks the stop with its violations, any error allows. Needs `hooks.per-turn-gate` too. | none | none |
 | `per_turn_gate.mode` (config.json) | What per-turn-gate may block on: "violations" (verifier exit 1 only) or "violations+features" (also exit 0 with a non-empty `feature_gaps`; this trigger and its retry text are unevaluated until the BL-0055 phase 2 evaluation passes). | violations | none |
 | `per_turn_gate.max_blocks` (config.json) | Blocks per-turn-gate may give in one turn. | `2` | none |
+| `per_turn_gate.state_retention_days` (config.json) | Days after which per-turn-gate deletes its untouched counter, turn and lock files from the live-state directory (log files are kept). | `7` | none |
 | `per_turn_gate.timeout_ms` (config.json) | Hard timeout of the verifier in milliseconds; a timeout allows the stop. | `30000` | none |
 | `subagent_budget.mode` (config.json) | Subagent budget gate on Agent dispatch (per-lane relay and turn ceilings): "remind" denies at a ceiling, "warn" only notes it, "off" disables. | remind | `AUTOPILOT_SUBAGENT_BUDGET_MODE` |
 | `subagent_budget.lane_dispatch_max` (config.json) | Dispatches one lane may already have before the next is denied (reviewers excluded). | `4` | `AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX` |

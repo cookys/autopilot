@@ -22,8 +22,8 @@ Committed before any measured call. Lane ptg-p22 (P2-2 Instrument). Owner decisi
 | W4 commit (mode `violations+features`) | `977027c999e52383ad354f35fa88ea16dec7476f` (hook blob `45f3c47845c30b00e1b0c7a742b40210becab5bd`) |
 | Treatment hook = develop final | `hooks/per-turn-gate.js` at develop `1ce92330d`: blob `f4fdf20152efcb7ecb15108fefc24bf10b8dfefc`, sha256 `10913c34c413f2e31d698b5f0d331d1bac6b3382620429eb8622a61271b3a6f0`. It differs from the W4 commit by the P2-1 review fixes (locking, state fencing, validation: fd63ae15c, 8c41e656b, e2302e5dc, 9aa650fc8); the W4 trigger and retry text are the ones evaluated. |
 | Harness `evals/orchestration/run-orchestration-eval.sh` | sha256 `eb97b2be8c11274d3962efe1c48c300b715ffebf198dd3e599d447fcf4f80149` |
-| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `bacfba3e45593e1a780a36286c9926fb551b9a9ad36f14403f696228bd991faa` |
-| `manifest.json` (this directory) | sha256 `31a29d8b42732da6637839b2e004f89223d0c12bf9714c6619cddd251ef15c3e`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
+| Wrapper `evals/orchestration/run-p2-batch.js` | sha256 `3bee72c074c681f18b8f678153c98b0af76a12323bcc44e607b8fd4005081137` |
+| `manifest.json` (this directory) | sha256 `483e2f97916f8da7e60553c6f40c0c866687abf32578f3bd99381f04afc0455c`; the wrapper refuses an untracked or modified manifest and logs `HASH manifest` |
 | `taskhash.expected.txt` | sha256 `2b1bcd033bd41093250649e1ed16bb28f7af9cd371771e864d1310f0c67756d4`, also in the manifest; the wrapper requires it tracked, unmodified and equal to that value, and the audit re-checks all three |
 | `order.txt` (this directory) | sha256 `080bf25ed67ca1ddf96bbdff68b46298ef99d968d84632360e87b37b0c1f67fc` |
 | `selfcheck.out` (this directory) | output of `node evals/orchestration/run-p2-batch.js --selfcheck` at the wrapper hash above |
@@ -77,6 +77,10 @@ Check on the P1 rerun control's first five run costs (0.5529, 0.4575, 0.5917, 0.
 | 14 | Preregistration committed earlier | before first call | `PREREG <hash> <time> ancestor=yes|no` (note and manifest tracked and unmodified), `HASH wrapper|hook|harness|manifest`; the audit checks the commit time is before `WINDOW_START` and the first START |
 
 Also kept: no scratch path in `invocation.log` (the audit scans for absolute paths), node timestamps, the `env -u` prefix, one harness call per id.
+
+### Failed runs and the completion count (semantics)
+
+One failed run does not invalidate the batch; the plan tolerates failures through "at least 27 of 30 completed five turns, in each arm". Every `END` carries an integer harness rc. A run with rc other than 0 (a timeout is 124) is never counted as complete, even if `TURNS` says 5; its `SCORE` is either `SCORE_MISSING` or equal to the audit's own recomputation from the run's `oracle.log` (a successful call, rc 0, must have a `SCORE`). The audit recomputes `COMPLETE ON=x/30 C=y/30` itself from END rc and TURNS and fails if the logged line differs; the 27-of-30 minimum applies to that recount. The audit also compares each `RUNVERSION` value with the pinned `2.1.309 (Claude Code)` and with the run's own `result.json` `runner_version`, not with the ok marker.
 
 ## 5. Procedure for P2-3 and what is committed
 

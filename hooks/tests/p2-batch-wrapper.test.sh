@@ -76,10 +76,14 @@ mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--form
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok',"
-mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3"
+mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && kv0.m1" "need(true || o && kv0.m1"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
 mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || "
 mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
+mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal,"
+mk_mut endrc "if (kv.n === '5' && rcOf[id] === 0) tally" "if (kv.n === '5') tally"
+mk_mut rcint "need(Number.isInteger(rcOf[id])," "need(true || Number.isInteger(rcOf[id])," "if (kv.n === '5' && rcOf[id] === 0) tally" "if (kv.n === '5') tally"
+mk_mut scoreor "need(o && kv0.m1" "need(true || o && kv0.m1"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -368,5 +372,42 @@ PRE_MUT="$TEST_TMP/mut-tmo2/run-p2-batch.js"; mkdir -p "$(dirname "$PRE_MUT")"; 
 mutate "$PRE_MUT" "    W.writeStartEnd(ctx, 'START', id, " "    const tmo2 = harnessTimeoutMs(ctx.elapsed(), m.window_s); void tmo2;
     W.writeStartEnd(ctx, 'START', id, " || fail "tmo2 mutant"
 assert_neq "$(tmo_order "$PRE_MUT")" "1:before" "RED timeout: a second computation after the artifacts is detected"
+
+echo "--- acceptance round 5: RUNVERSION value, END rc semantics"
+tamper rv; sed -i -E "0,/( RUNVERSION \S+ ok ).*/s//\1wrong-version/" "$TEST_TMP/t-rv/invocation.log"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv")" 0 "RUNVERSION wrong-version behind an ok marker: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-runver/run-p2-batch.js" "$TEST_TMP/t-rv")" 0 "RED RUNVERSION: mutant says OK"
+tamper rv2; RJ=$(ls "$TEST_TMP"/t-rv2/runs/*/result.json | head -1); sed -i 's/"runner_version":"[^"]*"/"runner_version":"2.0.0 (Claude Code)"/' "$RJ"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv2")" 0 "result.json runner_version differs from the log: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-runver/run-p2-batch.js" "$TEST_TMP/t-rv2")" 0 "RED result.json runner_version: mutant says OK"
+endrc_case() { # <name> <rc> <score: keep|missing> <complete: keep|lower>
+  tamper "$1"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" "$3" "$4" <<'PY'
+import sys, re
+p, rc, score, comp = sys.argv[1:5]; L = open(p).read().split('\n')
+i = next(k for k, l in enumerate(L) if ' END ' in l); fid = L[i].split()[2]
+L[i] = re.sub(r'rc=\S+', 'rc=' + rc, L[i])
+if score == 'missing':
+    j = next(k for k, l in enumerate(L) if ' SCORE ' + fid + ' ' in l); L[j] = L[j].split(' ')[0] + ' SCORE_MISSING ' + fid
+if comp == 'lower':
+    j = max(k for k, l in enumerate(L) if ' COMPLETE ' in l); arm = fid.split('-')[0]
+    L[j] = re.sub(arm + r'=(\d+)', lambda m: arm + '=' + str(int(m.group(1)) - 1), L[j])
+open(p, 'w').write('\n'.join(L))
+PY
+}
+endrc_case e124a 124 keep keep
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124a")" 0 "rc=124 run still counted in COMPLETE: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-endrc/run-p2-batch.js" "$TEST_TMP/t-e124a")" 0 "RED rc=124 counted as complete: mutant says OK"
+endrc_case e124b 124 missing lower
+assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124b")" 0 "one rc=124 run, SCORE_MISSING, COMPLETE lowered: still a valid batch (27-of-30 tolerance)"
+endrc_case e124c 124 keep lower
+assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124c")" 0 "rc=124 run with its (oracle-consistent) SCORE and COMPLETE lowered: valid"
+endrc_case ebad abc keep keep
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ebad")" 0 "END rc=abc: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-rcint/run-p2-batch.js" "$TEST_TMP/t-ebad")" 0 "RED END rc=abc: mutant says OK"
+endrc_case emiss 0 missing keep
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-emiss")" 0 "SCORE_MISSING after a successful call (rc=0): real audit non-zero"
+tamper orc; OL=$(ls "$TEST_TMP"/t-orc/runs/*/oracle.log | head -1); sed -i 's/"constraints_pass": *true/"constraints_pass": false/; s/"constraints_pass":true/"constraints_pass":false/' "$OL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-orc")" 0 "oracle.log disagrees with the SCORE row: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-scoreor/run-p2-batch.js" "$TEST_TMP/t-orc")" 0 "RED oracle recomputation: mutant says OK"
 
 finalize_test

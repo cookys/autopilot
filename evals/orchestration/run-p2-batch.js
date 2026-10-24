@@ -136,6 +136,13 @@ function taskListing(taskDir) {
   return files.map((f) => `${gitBlobSha(fs.readFileSync(path.join(taskDir, f)))}  ${f}\n`).join('');
 }
 
+/** id -> integer rc of its END row (NaN when the row is absent or the rc is not a plain integer). */
+function endRcs(rows) {
+  const o = {};
+  for (const r of rows) if (r.kind === 'END') { const v = kvOf(r.rest).rc; o[r.rest.split(' ')[0]] = /^\d+$/.test(v || '') ? Number(v) : NaN; }
+  return o;
+}
+
 function parseLog(text) {
   const rows = [];
   for (const line of text.split('\n')) {
@@ -411,7 +418,9 @@ function finish(ctx, code) {
     try { W.writeTaskHash(ctx, 'post'); } catch (e) { ctx.log('TASKHASH_DIFF', `post fail ${String(e.message).slice(0, 80)}`); }
     const n = ctx.manifest.n_per_arm;
     const tally = { ON: 0, C: 0 };
-    for (const r of readLog(ctx)) if (r.kind === 'TURNS') { const kv = kvOf(r.rest); if (kv.n === '5') tally[kv.arm]++; }
+    // A run counts as complete only when its harness call ended with rc 0 AND it finished five turns.
+    const rcs = endRcs(readLog(ctx));
+    for (const r of readLog(ctx)) if (r.kind === 'TURNS') { const kv = kvOf(r.rest); if (kv.n === '5' && rcs[idOf(r)] === 0) tally[kv.arm]++; }
     ctx.log('COMPLETE', `ON=${tally.ON}/${n} C=${tally.C}/${n}`);
   }
   ctx.log('WRAPPER_EXIT', `rc=${code}`);
@@ -469,6 +478,11 @@ function audit(runDir, m, clone, opts) {
     need(v.length >= 1 && v.every((r) => r.rest.slice(id.length + 1) === m.cli), `${id}: VERSION missing or not ${m.cli}`);
     const rv = byId('RUNVERSION', id);
     need(rv.length === 1 && rv[0].rest.split(' ')[1] === 'ok', `${id}: RUNVERSION missing or not ok`);
+    // Do not trust the ok marker: compare the logged value with the pin and with the run's own result.json.
+    const rvVal = rv.length === 1 ? rv[0].rest.split(' ').slice(2).join(' ') : null;
+    need(rvVal === m.cli, `${id}: RUNVERSION value "${rvVal}" is not the pinned ${m.cli}`);
+    let rj = null; try { rj = JSON.parse(read(path.join('runs', id, 'result.json'))).runner_version; } catch (_e) { /* below */ }
+    need(rj === rvVal, `${id}: result.json runner_version "${rj}" differs from the logged RUNVERSION`);
   }
   // 5 probe
   // A PROBE_FAIL pauses the batch; the id is then launched once after a fresh login, so only an id without PROBE_OK fails.
@@ -491,10 +505,17 @@ function audit(runDir, m, clone, opts) {
     need(c.length === 1 && c[0].rest.split(' ')[1] === m.argv_sha[o.arm], `${o.id}: CMD missing or differs from the preregistered argv`);
   }
   // 7 score
-  need(by('SCORE_MISSING').length === 0, 'SCORE_MISSING is present');
+  const rcOf = endRcs(rows);
+  for (const id of ids) need(Number.isInteger(rcOf[id]), `${id}: END rc is absent or not an integer`);
   for (const id of ids) {
-    const sc = byId('SCORE', id);
-    need(sc.length === 1, `${id}: SCORE missing`);
+    const sc = byId('SCORE', id), miss = byId('SCORE_MISSING', id);
+    // A failed harness call (rc != 0, 124 included) may have no score; a successful one must.
+    need((sc.length === 1 && miss.length === 0) || (sc.length === 0 && miss.length === 1 && rcOf[id] !== 0), `${id}: need one SCORE (or SCORE_MISSING only after a failed call, rc != 0)`);
+    if (sc.length === 1) {
+      let o = null; try { o = jsonObjects(read(path.join('runs', id, 'oracle.log')))[0]; } catch (_e) { /* below */ }
+      const kv0 = kvOf(sc[0].rest);
+      need(o && kv0.m1 === (o.constraints_pass === true ? '1' : '0') && kv0.m2 === (o.features_pass === true ? '1' : '0'), `${id}: SCORE differs from the oracle.log recomputation`);
+    }
     if (sc.length === 1) {
       const kv = kvOf(sc[0].rest);
       const okv = ['m1', 'm2', 'm3'].every((k) => kv[k] === '0' || kv[k] === '1');
@@ -507,11 +528,11 @@ function audit(runDir, m, clone, opts) {
   for (const id of ids) {
     const t = byId('TURNS', id);
     need(t.length === 1, `${id}: TURNS missing`);
-    if (t.length === 1) { const kv = kvOf(t[0].rest); if (kv.n === '5') tally[kv.arm]++; }
+    if (t.length === 1) { const kv = kvOf(t[0].rest); if (kv.n === '5' && rcOf[id] === 0) tally[kv.arm]++; }
   }
   for (const arm of ['ON', 'C']) need(tally[arm] >= m.min_complete, `${arm}: only ${tally[arm]} of ${m.n_per_arm} completed five turns (need ${m.min_complete})`);
   const comp = by('COMPLETE');
-  need(comp.length > 0 && comp[comp.length - 1].rest === `ON=${tally.ON}/${m.n_per_arm} C=${tally.C}/${m.n_per_arm}`, 'last COMPLETE line does not match the TURNS rows');
+  need(comp.length > 0 && comp[comp.length - 1].rest === `ON=${tally.ON}/${m.n_per_arm} C=${tally.C}/${m.n_per_arm}`, 'last COMPLETE line does not match the recount from END rc and TURNS rows');
   // 9 model
   const models = new Set(by('MODEL').map((r) => r.rest.slice(idOf(r).length + 1)));
   need(by('MODEL').length === ids.length, 'a MODEL line is missing');

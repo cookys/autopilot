@@ -606,6 +606,74 @@
       "type": "boolean"
     },
     {
+      "name": "per_turn_gate.verifier",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Command the opt-in per-turn-gate Stop hook runs at turn end as `<command> --turn <n> --repo <cwd> --json` (exit 0 clean, 1 violations, anything else an error). Empty or missing: the hook never blocks.",
+      "type": "string"
+    },
+    {
+      "name": "per_turn_gate.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "violations",
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "What per-turn-gate may block on: \"violations\" (verifier exit 1 only).",
+      "type": "enum",
+      "allowed": [
+        "violations"
+      ],
+      "invalid_effect": "an unknown mode is treated as \"violations\""
+    },
+    {
+      "name": "per_turn_gate.max_blocks",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 2,
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Blocks per-turn-gate may give in one turn before it lets the stop through.",
+      "type": "number"
+    },
+    {
+      "name": "per_turn_gate.timeout_ms",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 30000,
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Hard timeout of the per-turn-gate verifier in milliseconds; a timeout allows the stop.",
+      "type": "number"
+    },
+    {
       "name": "subagent_budget.mode",
       "kind": "config_key",
       "audience": "user",

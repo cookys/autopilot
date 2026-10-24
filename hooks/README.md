@@ -2,7 +2,7 @@
 
 Every hook knob (config.json keys and environment variables) is indexed in [docs/settings-reference.md](../docs/settings-reference.md).
 
-39 Claude Code hooks for runtime enforcement of development discipline: **26 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+40 Claude Code hooks for runtime enforcement of development discipline: **26 default-on** (Tier A) + **14 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 14 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -120,6 +120,7 @@ hooks/
   test-runner.js           # Tier B (opt-in)
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
+  per-turn-gate.js         # Tier B (opt-in) — Stop: runs a configured verifier, blocks up to N times per turn on its violations (BL-0055 phase 2)
   dispatch-model-guard.js  # Tier A (default-on since v2.35.15) — remind (deny→agent decides) on guarded expensive engine / omitted model
   version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
   residue-auto-reap.js     # Tier A (default-on, silent outside a git repo) — detached 24 h-throttled `repo-residue-sweep.js reap --auto` incl. the daily temp-root prune, `residue.tmp_prune` (SessionStart); logic in residue-auto-reap-lib.js
@@ -245,7 +246,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
-## Tier B — Opt-In (13 hooks)
+## Tier B — Opt-In (14 hooks)
 
 Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
 
@@ -272,6 +273,7 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s. The advisory also reaches the model via `hookSpecificOutput.additionalContext` on the same event. |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap). The PostToolUseFailure advisory reaches the model via `hookSpecificOutput.additionalContext`; the PreToolUse unhealthy path remains an exit-2 deny (stderr only, byte-identical to origin/develop). |
 | orchestrator-edit-gate | PreToolUse | Edit\|Write\|NotebookEdit | In /l4-/l6 sessions (marker via `scripts/session-mode.js`) depth-0 product edits are warned (default) or denied (`block`); subagents pass (payload `agent_id`, SPIKE-1). Allowlist: docs/projects, docs/plans, .claude, .autopilot. Mode: `orchestrator_edit_gate.mode` or `AUTOPILOT_ORCH_EDIT_GATE_MODE`. The advisory also reaches the model via `hookSpecificOutput.additionalContext` on the same event. |
+| per-turn-gate | Stop | — | **Opt-in (BL-0055 phase 2), also needs `per_turn_gate.verifier`.** Runs the configured verifier (`<command> --turn <n> --repo <cwd> --json`; exit 0 clean, 1 violations, anything else an error) and, on exit 1, prints a Stop `{"decision":"block","reason":...}` with the violations (wording of `gate_write_retry` in `evals/orchestration/run-orchestration-eval.sh`), at most `per_turn_gate.max_blocks` (2) times per turn. Verifier crash, timeout, unparseable output or a missing command allows (fail-open). **Turn boundary**: a Stop with `stop_hook_active` false starts a new turn (counter 0, turn + 1); true is a re-entry after a block. Confirmed by P2-0 on CLI 2.1.309 (`docs/plans/evidence/2026-10-24-per-turn-gate-p2-0/README.md` on branch `hands/ptg-p20/1`; also: `session_id` is stable across `--resume`, all six Stop hooks run and a block from any of them blocks, verifier wall time <= 0.16 s); stdin `prompt_id` is logged as a cross-check. State and log live under `<live-state>/per-turn-gate/`: `<session>.turn`, `<session>.t<turn>.count`, and `<session>.jsonl` with exactly one record per invocation `{session, turn, prompt_id, decision, reason, counter}` (`reason` block\|clean\|cap\|error\|off; `off` only when a verifier is configured but the hook is not enabled). Wired directly in `hooks.json` (not the opt-in multiplexer, which does not pass a Stop `decision` through). Pending, not part of this hook: live NC6 and the ON/OFF evaluation (plan P2-2 to P2-4). |
 
 > The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
 
@@ -389,5 +391,6 @@ gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT
 | Stop | `cost-tracker.js` | v2.35.15 default-on (was opt-in): cost-tracker — per-session cost rows + cumulative cache-read warning; AUTOPILOT_COST_TRACKER=false to opt out. |
 | Stop | `dirty-protected-paths.js` | v2.36.11 default-on: dirty-protected-paths — turn-end reminder when uncommitted work under protected_paths passes min_files/min_lines; systemMessage only, never a Stop decision; AUTOPILOT_DIRTY_TREE_REMINDER=false to opt out. |
 | Stop | `owner-question-guard.js` | default-on: owner-question-guard — blocks once when the reply waits for the owner without a decision card id; AUTOPILOT_OWNER_QUESTION_GUARD=off to opt out. |
+| Stop | `per-turn-gate.js` | opt-in: per-turn-gate (BL-0055 phase 2) — runs a configured verifier at turn end and blocks up to `per_turn_gate.max_blocks` times per turn on its violations; off unless `hooks.per-turn-gate` is enabled and a verifier is configured. |
 | TaskCreated / TaskCompleted | `session-tasks.js` | mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus. |
 | PermissionRequest / Notification | `awaiting-owner.js` | mods P1W W1e default-on: awaiting-owner — maintains <live>/attention/<sid>.json while Claude Code waits on the human (permission / question / idle); AUTOPILOT_AWAITING_OWNER=off to opt out. |

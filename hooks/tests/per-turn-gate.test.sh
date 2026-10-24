@@ -199,7 +199,11 @@ const got = acquireLock(lockDir, { afterJudged: (d) => { fs.rmSync(d, { recursiv
 // the stale lock was replaced by a live one between the judgement and the reclaim
 const gaveUp = got === null;
 const holderLost = holder ? holder.release() === false : false;
-process.exit(gaveUp && holderLost ? 0 : 1);
+// a lock path now holding someone else's lock: our release must report failure
+const d2 = path.join(dir, 's2.lock'); const h = acquireLock(d2);
+fs.rmSync(d2, { recursive: true }); fs.mkdirSync(d2); writeOwner(d2, 'someone-else', Date.now());
+const foreignSeen = h.release() === false;
+process.exit(gaveUp && holderLost && foreignSeen ? 0 : 1);
 JS
 # NC15: stale judgement, then the lock is swapped for a live one: the reclaimer gives up and the holder notices.
 nc15() { node "$TEST_TMP/lockcase.js" "$1"; }
@@ -218,6 +222,69 @@ nc16() {
   t1=$(date +%s)
   [ $((t1 - t0)) -le 8 ] && [ "$(log_count)" = 1 ] && [ "$(blocks)" = 1 ]
 }
+
+# --require shim: pauses a hook inside its counter write (after the tmp file, before the rename) until $PTG_GO exists.
+cat >"$TEST_TMP/pause.cjs" <<'JS'
+const fs = require('fs'); const write = fs.writeFileSync;
+fs.writeFileSync = function (a) {
+  const r = write.apply(this, arguments);
+  if (process.env.PTG_PAUSE && /\.count\.\d+\.tmp$/.test(String(a))) {
+    write(process.env.PTG_READY, 'ready');
+    while (!fs.existsSync(process.env.PTG_GO)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+  return r;
+};
+JS
+# start_paused <hook> : a real hook process, paused inside its counter write. Sets HOLD_PID.
+start_paused() {
+  rm -f "$CASE_DIR/ready" "$CASE_DIR/go"
+  ( printf '{"session_id":"s1","cwd":"%s","stop_hook_active":true,"prompt_id":"p"}' "$CASE_DIR/repo" \
+      | env HOME="$HOOK_HOME" NODE_OPTIONS="--require=$TEST_TMP/pause.cjs" PTG_PAUSE=1 PTG_READY="$CASE_DIR/ready" PTG_GO="$CASE_DIR/go" node "$1" >"$CASE_DIR/out.holder" 2>/dev/null ) &
+  HOLD_PID=$!
+  local i; for i in $(seq 1 300); do [ -e "$CASE_DIR/ready" ] && return 0; sleep 0.05; done
+  return 1
+}
+# NC17: a holder paused inside its counter write while its lock is really reclaimed must not write back its
+# stale counter: two other calls block (2 = cap), the old holder resumes and must not block a third time.
+nc17() {
+  fresh nc17; export PTG_V_MODE=violate
+  local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"
+  start_paused "$1" || return 1
+  node -e 'const f=process.argv[1];const o=JSON.parse(require("fs").readFileSync(f,"utf8"));o.created=Date.now()-60000;require("fs").writeFileSync(f,JSON.stringify(o))' "$d/s1.lock/owner.json"
+  stop "$1" true; local b1; b1=$(blocks)
+  stop "$1" true; local b2; b2=$(blocks)
+  touch "$CASE_DIR/go"; wait "$HOLD_PID"
+  local bh; bh=$(grep -c '"decision":"block"' "$CASE_DIR/out.holder" || true)
+  stop "$1" true; local b3; b3=$(blocks)   # a later call: a stale write-back would have reset the counter to 1
+  [ $((b1 + b2 + bh + b3)) -le 2 ] && [ "$(log_has '"decision":"block"')" -le 2 ] && [ "$(log_count)" = 4 ] && [ "$(cat "$d/s1.t1.count")" -le 2 ] && [ ! -e "$d"/s1.t1.count.*.tmp ]
+}
+# NC18: a holder paused for more than half the stale threshold (16 s) is fenced by time alone, even though
+# nobody touched its lock: allow with error, nothing written.
+nc18() {
+  fresh nc18; export PTG_V_MODE=violate
+  local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"
+  start_paused "$1" || return 1
+  sleep 16; touch "$CASE_DIR/go"; wait "$HOLD_PID"
+  [ "$(grep -c '"decision":"block"' "$CASE_DIR/out.holder" || true)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"error"')" = 1 ] \
+    && [ ! -e "$d/s1.t1.count" ] && [ ! -e "$d"/s1.t1.count.*.tmp ]
+}
+# NC19: release is atomic. A new lock appearing at the path after our token was checked is not deleted.
+cat >"$TEST_TMP/relcase.js" <<'JS'
+'use strict';
+const fs = require('fs'); const path = require('path'); const os = require('os');
+const { acquireLock } = require(process.argv[2]);
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-rel-')); const lockDir = path.join(dir, 's1.lock');
+const a = acquireLock(lockDir);
+let b = null; const rm = fs.rmSync; let armed = true;
+fs.rmSync = function (p) { // runs between "token verified" and "deleted" of the old release
+  if (armed) { armed = false; fs.rmSync = rm; b = acquireLock(lockDir); }
+  return rm.apply(this, arguments);
+};
+const aOk = a.release();
+fs.rmSync = rm;
+process.exit(aOk === true && b && b.release() === true ? 0 : 1);
+JS
+nc19() { node "$TEST_TMP/relcase.js" "$1"; }
 
 run_nc() { # <label> <fn> <mutant-name> <sed-expr>
   if "$2" "$REAL_HOOK"; then assert_eq 0 0 "$1 holds on the real hook"; else fail "$1 broken on the real hook"; fi
@@ -238,10 +305,13 @@ run_nc NC10 nc10 nolock "s#const lockA = acquireLock(lockDir);#const lockA = { r
 run_nc NC11 nc11 noschema "s#if (!validSchema(json)) return { kind: 'error' };##"
 run_nc NC12w nc12 widecleanup "s#if (!STATE_NAME.test(name)) continue;##"
 run_nc NC12 nc12 noclean "s#^  cleanupState(dir,#  (() => {})(dir,#"
-run_nc NC14 nc14 givebackish "s#log(turn, 'allow', outcome, capCounter);#log(turn, 'allow', outcome, capCounter); writeInt(path.join(dir, session + '.t' + turn + '.count'), 1);#"
+run_nc NC14 nc14 givebackish "s#log(turn, 'allow', outcome, capCounter);#log(turn, 'allow', outcome, capCounter); fs.writeFileSync(path.join(dir, session + '.t' + turn + '.count'), '1');#"
 run_nc NC15 nc15 reclaimnotoken "s#if (movedToken !== judged) return null;##"
-run_nc NC15r nc15 releasenotoken "s#if (!o || o.token !== token) return false;##"
+run_nc NC15r nc15 releasenotoken "s#const mine = !!o \&\& o.token === token;#const mine = true;#"
 run_nc NC16 nc16 nodeadline "s#if (Date.now() >= deadline) return null;##"
+run_nc NC17 nc17 nofence "s#if (!fenced) {#if (false) {#"
+run_nc NC18 nc18 notimefence "s# \&\& Date.now() - acquiredAt < LOCK_STALE_MS / 2;#;#"
+run_nc NC19 nc19 checkthendelete "s#try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }##; s#const mine = !!o \&\& o.token === token;#const mine = !!readOwner(lockDir) \&\& readOwner(lockDir).token === token; if (mine) fs.rmSync(lockDir, { recursive: true, force: true });#"
 run_nc NC13 nc13 alwaystrace "s#if (!enabled \&\& !hasVerifier) return;##"
 
 # Knob off / nothing configured / prompt_id.

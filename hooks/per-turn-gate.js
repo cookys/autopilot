@@ -45,7 +45,12 @@
  * no verifier run); the verifier runs outside any lock; only a block takes a second lock, re-reads the
  * state (same turn, below the cap) and then counts. Nothing is taken before it is needed, so nothing is
  * given back. A lock not taken in 5 s, or one found taken from us at release, allows and logs `error`
- * (an error never blocks; a broken lock can only block less).
+ * (an error never blocks; a broken lock can only block less). State writes are fenced: tmp file, then right
+ * before the rename a check that the lock path still holds our token and that less than half the stale
+ * threshold (15 s) has passed since we took the lock; otherwise the write is dropped and the call allows
+ * with `error`. Accepted residual risk: an external stop of more than 15 s between that check and the
+ * rename (two adjacent synchronous calls). A lock path occupied by a regular file: a fresh one makes the
+ * call allow with `error` after 5 s; one older than the stale threshold is leftover and is reclaimed.
  *
  * Retention: every call deletes this hook's own counter, turn, pid-tmp and lock files older than
  * per_turn_gate.state_retention_days (default 7). Log files are kept.
@@ -110,12 +115,6 @@ function readInt(file) {
   } catch (_e) {
     return 0;
   }
-}
-
-function writeInt(file, n) {
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${n}\n`);
-  fs.renameSync(tmp, file);
 }
 
 /** Run the verifier. Returns {kind:'error'} or {kind:'clean'|'violations', json}. */
@@ -208,6 +207,7 @@ function acquireLock(lockDir, seam) {
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
+      const acquiredAt = Date.now();
       try {
         fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token, created: Date.now() }));
       } catch (_e) {
@@ -215,11 +215,34 @@ function acquireLock(lockDir, seam) {
         return null;
       }
       return {
+        /**
+         * Release atomically: rename the lock directory away first, then check the token in what was moved.
+         * Matching token: ours, delete it. Anything else (or nothing to move): the lock was taken from us, so
+         * return false and the caller allows. If what we moved belongs to someone else, their own release
+         * finds no token at the path and allows too, so the hook only ever blocks less.
+         */
         release() {
-          const o = readOwner(lockDir);
-          if (!o || o.token !== token) return false;
-          try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch (_e) { /* nothing */ }
-          return true;
+          const moved = `${lockDir}.rel.${crypto.randomBytes(6).toString('hex')}`;
+          try { fs.renameSync(lockDir, moved); } catch (_e) { return false; }
+          const o = readOwner(moved);
+          const mine = !!o && o.token === token;
+          try { fs.rmSync(moved, { recursive: true, force: true }); } catch (_e) { /* nothing */ }
+          return mine;
+        },
+        /**
+         * Fenced state write: tmp file first, then, on the line right before the rename, check that the lock
+         * path still holds our token AND that less than half the stale threshold has passed since we took it.
+         * Either failing deletes the tmp file and throws, so a holder that was paused past the stale
+         * threshold (and reclaimed meanwhile) cannot write an out-of-date counter. Accepted residual risk: a
+         * stop of more than half the threshold (15 s) between the check and the rename, two adjacent
+         * synchronous calls (an external SIGSTOP).
+         */
+        writeInt(file, n) {
+          const tmp = `${file}.${process.pid}.tmp`;
+          fs.writeFileSync(tmp, `${n}\n`);
+          const fenced = (readOwner(lockDir) || {}).token === token && Date.now() - acquiredAt < LOCK_STALE_MS / 2;
+          if (!fenced) { try { fs.unlinkSync(tmp); } catch (_e) { /* nothing */ } throw new Error('lock fence'); }
+          fs.renameSync(tmp, file);
         },
       };
     } catch (e) {
@@ -252,7 +275,7 @@ function acquireLock(lockDir, seam) {
 }
 
 /** Delete this hook's own state files (not the logs, not anything else) untouched for more than `days` days. */
-const STATE_NAME = /^[A-Za-z0-9_-]+\.(?:turn|t\d+\.count)(?:\.\d+\.tmp)?$|^[A-Za-z0-9_-]+\.lock(?:\.reclaim\.[0-9a-f]+)?$/;
+const STATE_NAME = /^[A-Za-z0-9_-]+\.(?:turn|t\d+\.count)(?:\.\d+\.tmp)?$|^[A-Za-z0-9_-]+\.lock(?:\.(?:reclaim|rel)\.[0-9a-f]+)?$/;
 function cleanupState(dir, days) {
   const cutoff = Date.now() - days * 86400000;
   let names = [];
@@ -359,7 +382,7 @@ function main() {
   try {
     const prevTurn = readInt(turnFile);
     turn = prevTurn === 0 ? 1 : (startsNewTurn(payload) ? prevTurn + 1 : prevTurn);
-    writeInt(turnFile, turn);
+    lockA.writeInt(turnFile, turn);
     capCounter = readInt(path.join(dir, `${session}.t${turn}.count`));
     atCap = capCounter >= maxBlocks;
   } catch (_e) {
@@ -407,7 +430,7 @@ function main() {
     counterNow = readInt(countFile);
     if (readInt(turnFile) !== turn) verdict = 'error'; // a newer turn began while the verifier ran: this answer is stale
     else if (counterNow >= maxBlocks) verdict = 'cap';
-    else { writeInt(countFile, counterNow + 1); counterNow += 1; verdict = 'block'; }
+    else { lockB.writeInt(countFile, counterNow + 1); counterNow += 1; verdict = 'block'; }
   } catch (_e) {
     verdict = 'error';
   }

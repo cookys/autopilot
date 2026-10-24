@@ -196,9 +196,13 @@ const W = {
   writePrereg(ctx) {
     const m = ctx.manifest;
     const g = (a) => sh(ctx, ['git', '-C', ctx.clone, ...a]);
-    const tracked = g(['ls-files', '--error-unmatch', m.prereg]);
-    if (tracked.status !== 0) throw new Exit(3, 'ABORT prereg not tracked');
-    if (g(['status', '--porcelain', '--', m.prereg]).stdout.trim()) throw new Exit(3, 'ABORT prereg modified');
+    // The preregistration note and the manifest it states the sha256 of must both be committed and unmodified.
+    const mrel = path.relative(ctx.clone, ctx.manifestPath);
+    for (const [what, rel] of [['prereg', m.prereg], ['manifest', mrel]]) {
+      if (g(['ls-files', '--error-unmatch', rel]).status !== 0) throw new Exit(3, `ABORT ${what} not tracked`);
+      if (g(['status', '--porcelain', '--', rel]).stdout.trim()) throw new Exit(3, `ABORT ${what} modified`);
+    }
+    ctx.log('HASH', `manifest ${sha256(fs.readFileSync(ctx.manifestPath))}`);
     const hash = g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim();
     const time = g(['log', '-1', '--format=%cI', '--', m.prereg]).stdout.trim();
     const anc = g(['merge-base', '--is-ancestor', hash, 'HEAD']).status === 0 ? 'yes' : 'no';
@@ -396,7 +400,7 @@ function finish(ctx, code) {
 
 // ---------------------------------------------------------------- audit
 
-function audit(runDir, m, clone) {
+function audit(runDir, m, clone, opts) {
   const fails = [];
   const need = (cond, msg) => { if (!cond) fails.push(msg); };
   const read = (f) => { try { return fs.readFileSync(path.join(runDir, f), 'utf8'); } catch (_e) { return null; } };
@@ -512,6 +516,9 @@ function audit(runDir, m, clone) {
     need(prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit is not earlier than the window start');
     need(rows.indexOf(pr[0]) < rows.indexOf(firstStart), 'PREREG line is not before the first START');
   }
+  const mh = by('HASH').filter((r) => r.rest.startsWith('manifest '));
+  need(mh.length >= 1 && new Set(mh.map((r) => r.rest)).size === 1, 'HASH manifest missing or not constant');
+  if (clone && mh.length) { try { need(mh[0].rest === `manifest ${sha256(fs.readFileSync(opts && opts.manifestPath))}`, 'HASH manifest differs from the manifest file'); } catch (_e) { fails.push('manifest file unreadable for the audit'); } }
   for (const k of ['wrapper', 'hook', 'harness']) {
     const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `));
     need(h.length >= 1 && h.every((r) => r.rest === `${k} ${m.hashes[k]}`), `HASH ${k} missing or differs from the preregistered value`);
@@ -584,7 +591,8 @@ function selfcheck(wrapperPath) {
     fs.mkdirSync(path.join(tmp, '.claude'), { recursive: true }); fs.writeFileSync(path.join(tmp, '.claude', '.credentials.json'), '{}');
     for (const arm of ['ON', 'C']) { const o = path.join(runDir, 'x'); m.argv_sha[arm] = argvSha(harnessArgv(m, arm, o, `${o}t`), o, `${o}t`); }
     // argv_sha is path independent: placeholders replace --out and --hook-trace-dir.
-    const ctx = makeCtx({ runDir, clone, manifest: m, taskDir, wrapperPath, exec });
+    fs.writeFileSync(path.join(clone, 'manifest.json'), JSON.stringify(m));
+    const ctx = makeCtx({ runDir, clone, manifest: m, manifestPath: path.join(clone, 'manifest.json'), taskDir, wrapperPath, exec });
     let code = 0;
     try { runBatch(ctx, 1, 2 * n); } catch (e) { if (e instanceof Exit) { ctx.log(e.line.split(' ')[0], e.line.split(' ').slice(1).join(' ')); code = e.code; } else throw e; }
     finish(ctx, code);
@@ -595,7 +603,7 @@ function selfcheck(wrapperPath) {
       say(`row ${i + 1} ${r.key}: ${missing.length ? `NO WRITER OUTPUT (${missing.join(', ')})` : 'written'}`);
       bad += missing.length ? 1 : 0;
     });
-    const fails = audit(runDir, m, clone);
+    const fails = audit(runDir, m, clone, { manifestPath: path.join(clone, 'manifest.json') });
     say(`synthetic batch: ${2 * n} ids, wrapper rc=${code}, audit ${fails.length ? `FAIL (${fails.join('; ')})` : 'PASS'}`);
     bad += fails.length + (code === 0 ? 0 : 1);
     // Dry projection on the first five costs of the P1 rerun control (docs/plans/evidence/2026-10-24-per-turn-gate-p1-rerun/costs.tsv).
@@ -626,7 +634,7 @@ function main(argv) {
   const runDir = path.resolve(opt['--run-dir']);
   if (flags.has('--audit')) {
     const clone = opt['--clone'] ? path.resolve(opt['--clone']) : null;
-    const fails = audit(runDir, manifest, clone);
+    const fails = audit(runDir, manifest, clone, { manifestPath: path.resolve(opt['--manifest']) });
     for (const f of fails) process.stdout.write(`AUDIT FAIL: ${f}\n`);
     process.stdout.write(fails.length ? `AUDIT FAILED (${fails.length})\n` : 'AUDIT OK\n');
     return fails.length ? 1 : 0;
@@ -634,7 +642,7 @@ function main(argv) {
   if (flags.has('--run')) {
     const clone = path.resolve(opt['--clone'] || process.cwd());
     fs.mkdirSync(runDir, { recursive: true });
-    const ctx = makeCtx({ runDir, clone, manifest, wrapperPath: __filename, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
+    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
     const onSig = () => { finish(ctx, 130); process.exit(130); };
     process.on('SIGINT', onSig); process.on('SIGTERM', onSig);
     let code = 0;

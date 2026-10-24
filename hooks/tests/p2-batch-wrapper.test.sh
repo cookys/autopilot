@@ -36,10 +36,6 @@ TASKDIR="$CLONE/evals/orchestration/tasks/t14-constraint-horizon"
 node -e 'const w=require(process.argv[1]);require("fs").writeFileSync(process.argv[3],w.taskListing(process.argv[2]))' "$WRAP_SRC" "$TASKDIR" "$CLONE/prereg/taskhash.expected.txt"
 echo "preregistration stand-in" >"$CLONE/prereg/PREREG.md"
 git -C "$CLONE" init -q; git -C "$CLONE" config user.name t; git -C "$CLONE" config user.email t@example.com; git -C "$CLONE" config commit.gpgsign false
-git -C "$CLONE" add -A
-# plumbing commit: no commit hooks run in the throwaway clone
-TREE=$(git -C "$CLONE" write-tree); COMMIT=$(git -C "$CLONE" commit-tree "$TREE" -m prereg); git -C "$CLONE" update-ref HEAD "$COMMIT"
-
 make_manifest() { # <wrapper> <out>
   node - "$1" "$2" "$CLONE" "$WRAP_SRC" <<'JS'
 const fs = require('fs'), crypto = require('crypto'), path = require('path');
@@ -56,15 +52,25 @@ fs.writeFileSync(out, JSON.stringify(m, null, 2));
 JS
 }
 
+WRAP="$TEST_TMP/real/run-p2-batch.js"; mkdir -p "$(dirname "$WRAP")"; cp "$WRAP_SRC" "$WRAP"
+AUD_MUT="$TEST_TMP/mut-audit/run-p2-batch.js"; mkdir -p "$(dirname "$AUD_MUT")"; cp "$WRAP_SRC" "$AUD_MUT"
+mutate "$AUD_MUT" "function audit(runDir, m, clone, opts) {" "function audit(runDir, m, clone, opts) { return [];" || fail "audit mutant could not be built"
+POST_MUT="$TEST_TMP/mut-post/run-p2-batch.js"; mkdir -p "$(dirname "$POST_MUT")"; cp "$WRAP_SRC" "$POST_MUT"
+mutate "$POST_MUT" "try { W.writeTaskHash(ctx, 'post'); } catch (e) {" "try { /* post listing removed */ } catch (e) {" || fail "post mutant could not be built"
+# manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
+MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
+MAN_MUT="$CLONE/prereg/manifest-audit-mutant.json"; make_manifest "$AUD_MUT" "$MAN_MUT"
+MAN_POST="$CLONE/prereg/manifest-post-mutant.json"; make_manifest "$POST_MUT" "$MAN_POST"
+git -C "$CLONE" add -A
+# plumbing commit: no commit hooks run in the throwaway clone
+TREE=$(git -C "$CLONE" write-tree); COMMIT=$(git -C "$CLONE" commit-tree "$TREE" -m prereg); git -C "$CLONE" update-ref HEAD "$COMMIT"
+
 FAKE_STATE_DIR="$TEST_TMP/fakestate"
 run_batch() { # <wrapper> <manifest> <rundir>; FAKE_TASK_EDIT optional
   rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"
   env PATH="$BIN:$PATH" HOME="$FHOME" FAKE_STATE="$FAKE_STATE_DIR" FAKE_FIXTURES="$TASKDIR/gate/fixtures" FAKE_COST=0.1 FAKE_TASK_EDIT="${FAKE_TASK_EDIT:-}" ORCH_TIMEOUT=1m \
     node "$1" --run --manifest "$2" --run-dir "$3" --clone "$CLONE" >"$3.stdout" 2>"$3.stderr"
 }
-
-WRAP="$TEST_TMP/real/run-p2-batch.js"; mkdir -p "$(dirname "$WRAP")"; cp "$WRAP_SRC" "$WRAP"
-MAN="$TEST_TMP/manifest.json"; make_manifest "$WRAP" "$MAN"
 
 echo "--- seeded order, cost rule, selfcheck"
 O1=$(node "$WRAP" --order --manifest "$MAN"); O2=$(node "$WRAP" --order --manifest "$MAN")
@@ -96,9 +102,6 @@ assert_eq "$(grep -c 'HOOKCOUNT C-.* gate_trace=0 gate_log=0' "$R1/invocation.lo
 assert_not_contains "$(cat "$R1/invocation.log")" "$TEST_TMP" "log carries no scratch path"
 
 echo "--- NC5 audit"
-AUD_MUT="$TEST_TMP/mut-audit/run-p2-batch.js"; mkdir -p "$(dirname "$AUD_MUT")"; cp "$WRAP_SRC" "$AUD_MUT"
-mutate "$AUD_MUT" "function audit(runDir, m, clone) {" "function audit(runDir, m, clone) { return [];" || fail "audit mutant could not be built"
-MAN_MUT="$TEST_TMP/manifest-mut.json"; make_manifest "$AUD_MUT" "$MAN_MUT"
 corrupt() { # <name> <rundir copy>
   case "$1" in
     truncated) python3 - "$2/invocation.log" <<'PY'
@@ -128,9 +131,6 @@ for c in truncated notaskpost dupstart; do
 done
 
 echo "--- NC8 task integrity"
-POST_MUT="$TEST_TMP/mut-post/run-p2-batch.js"; mkdir -p "$(dirname "$POST_MUT")"; cp "$WRAP_SRC" "$POST_MUT"
-mutate "$POST_MUT" "try { W.writeTaskHash(ctx, 'post'); } catch (e) {" "try { /* post listing removed */ } catch (e) {" || fail "post mutant could not be built"
-MAN_POST="$TEST_TMP/manifest-post.json"; make_manifest "$POST_MUT" "$MAN_POST"
 nc8() { # <wrapper> <manifest> <rundir>: 0 when an edited task file leaves a TASKHASH_DIFF post fail line and a non-zero audit
   FAKE_TASK_EDIT="$TASKDIR/task.md" run_batch "$1" "$2" "$3"
   git -C "$CLONE" checkout -q -- evals/orchestration/tasks 2>/dev/null

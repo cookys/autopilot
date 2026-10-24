@@ -69,3 +69,7 @@ Red before green in `p2-batch-wrapper.test.sh`: probe files are enumerated as a 
 ## Round 10: systematic convergence
 
 PREREG Appendix A is generated from the code (`--schema-table`) and a test checks that it is verbatim in PREREG, that every row kind the wrapper writes is in it, and that every assertion text it names exists in `p2-batch-wrapper.test.sh`. New in this round: strict row shapes with per-id sequence and seeded id/arm checks, file-set equality for runs/trace/cmd/probes, strict parsing of hook JSONL, gate.jsonl and probes.tsv, ORDER position, COSTCHK stage/cap and COST projected recomputation, PROBE rows against the saved responses, RUNVERSION flag, PREREG commit and time against git, window.start against the row, final WRAPPER_DONE/EXIT, and a mandatory `--clone`. Old-rule mutants switch the two strict layers off so each keeps testing only its own rule; strict-layer cases are compared with a mutant that switches only those layers off.
+
+## Round 11 (acceptance of 43bff86e3, review generation 10, real-CLI trial)
+
+COSTCHK spent is recomputed exactly; run.log lines starting with `{` must parse; each HASH kind once per invocation and every row checked; gate.jsonl lines may not be arrays; `trace/<id>/latest` handled (symlink to the highest trace-turn file, never counted); VERSION once per id between COSTCHK and the first PROBE; TASKHASH_DIFF shape closed. Appendix A test column is now a `T:KIND.field` label per field, each checked to exist in `hooks/tests/p2-batch-wrapper.test.sh`.

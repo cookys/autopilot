@@ -29,5 +29,7 @@ if [ -n "$CMD" ]; then
     case "$out" in *'"decision":"block"'*) cp "$FAKE_FIXTURES/good/cli.py" "$PWD/cli.py"; active=true ;; *) break ;; esac
   done
 fi
+# the real CLI also points <dir>/latest (absolute path) at the newest debug file
+[ -n "$dbg" ] && ln -sfn "$(cd "$(dirname "$dbg")" && pwd -P)/$(basename "$dbg")" "$(dirname "$dbg")/latest"
 total=$(node -e "console.log(($calls*$cost).toFixed(6))")
 printf '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"%s","total_cost_usd":%s,"modelUsage":{"claude-haiku-4-5":{}}}\n' "$sid" "$total"

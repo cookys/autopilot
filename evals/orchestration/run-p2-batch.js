@@ -242,7 +242,7 @@ const W = {
   },
   writeVersion(ctx, id) {
     const v = (sh(ctx, ['claude', '--version']).stdout.split('\n')[0] || '').trim();
-    ctx.log('VERSION', `${id} ${v}`);
+    if (!readLog(ctx).some((r) => r.kind === 'VERSION' && idOf(r) === id)) ctx.log('VERSION', `${id} ${v}`); // once per id, also after a resume
     if (v !== ctx.manifest.cli) throw new Exit(3, `ABORT version ${id} differs from the pinned CLI`);
   },
   writeRunVersion(ctx, id, resultJson) {
@@ -316,11 +316,33 @@ const W = {
 };
 
 /** Gate-hook and other Stop-hook executions counted from the debug traces of one run. */
+/**
+ * Regular trace-turn<N>.log files of a trace directory, plus the verdict on a `latest` entry. The real CLI's --debug-file
+ * adds `latest`, a symlink to the highest-numbered trace-turn file; it is never counted as a trace file, and it is valid
+ * only as a symlink that resolves to that very file. Any other name is unexpected.
+ */
+function traceFiles(traceDir) {
+  const out = { regular: [], other: [], latest: null, latestOk: true };
+  let names = [];
+  try { names = fs.readdirSync(traceDir).sort(); } catch (_e) { return out; }
+  for (const f of names) {
+    let st = null; try { st = fs.lstatSync(path.join(traceDir, f)); } catch (_e) { st = null; }
+    if (f === 'latest') { out.latest = st; continue; }
+    if (st && st.isFile() && /^trace-turn\d+\.log$/.test(f)) out.regular.push(f); else out.other.push(f);
+  }
+  if (out.latest) {
+    const top = [...out.regular].sort((x, y) => Number(/\d+/.exec(y)[0]) - Number(/\d+/.exec(x)[0]))[0];
+    try { out.latestOk = !!top && out.latest.isSymbolicLink() && fs.realpathSync(path.join(traceDir, 'latest')) === path.join(fs.realpathSync(traceDir), top); } catch (_e) { out.latestOk = false; }
+  }
+  return out;
+}
+
 function traceCounts(traceDir) {
   const lines = [];
-  try { for (const f of fs.readdirSync(traceDir).sort()) lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* no trace */ }
-  let gate = 0, plugin = 0, files = 0;
-  try { files = fs.readdirSync(traceDir).filter((f) => { try { fs.readFileSync(path.join(traceDir, f)); return true; } catch (_e) { return false; } }).length; } catch (_e) { files = 0; }
+  const tf = traceFiles(traceDir);
+  for (const f of tf.regular) { try { lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* unreadable */ } }
+  let gate = 0, plugin = 0;
+  const files = tf.regular.length;
   for (const l of lines) {
     const m = /Hooks: Stop \[([^\]]*)\].*finished with status/.exec(l);
     if (!m) continue;
@@ -450,7 +472,7 @@ function finish(ctx, code) {
   if (ctx.finished) return;
   ctx.finished = true;
   if (ctx.started) {
-    try { W.writeTaskHash(ctx, 'post'); } catch (e) { ctx.log('TASKHASH_DIFF', `post fail ${String(e.message).slice(0, 80)}`); }
+    try { W.writeTaskHash(ctx, 'post'); } catch (e) { ctx.log('TASKHASH_DIFF', 'post fail'); }
     const n = ctx.manifest.n_per_arm;
     const tally = { ON: 0, C: 0 };
     // A run counts as complete only when its harness call ended with rc 0 AND it finished five turns.
@@ -472,32 +494,32 @@ const NUM = '\\d+(?:\\.\\d+)?';
  * hooks/tests/p2-batch-wrapper.test.sh that tampers this row (a test checks that every name exists there).
  */
 const LOG_SCHEMA = [
-  { kind: 'WRAPPER_START', re: /^first=(\d+) last=(\d+)$/, test: 'WRAPPER_START range', fields: [['first', 'FORMAT: 1 <= first <= last <= 2n'], ['last', 'FORMAT: last <= 2n']] },
-  { kind: 'WRAPPER_DONE', re: /^last=(\d+)$/, test: 'final WRAPPER_DONE', fields: [['last', 'ROW: the final one equals 2n (full batch)']] },
-  { kind: 'WRAPPER_EXIT', re: /^rc=(\d+)$/, test: 'final WRAPPER_EXIT', fields: [['rc', 'ROW: the last row of the log, rc 0; one per WRAPPER_START']] },
-  { kind: 'HASH', re: /^(wrapper|hook|harness|taskhash_expected|manifest|prereg) ([0-9a-f]{64})$/, test: 'swapped taskhash baseline', fields: [['name', 'FORMAT: one of six names, all present'], ['sha256', 'RAW: the file hashed now (wrapper, hook, harness, manifest, PREREG note, baseline) and MANIFEST']] },
-  { kind: 'PREREG', re: /^([0-9a-f]{40}) (\S+) ancestor=(yes|no)$/, test: 'forged PREREG time', fields: [['commit', 'GIT: git log -1 -- the PREREG path; note at that commit hashes to HASH prereg'], ['time', 'GIT: committer time of that commit, and earlier than WINDOW_START'], ['ancestor', 'GIT: merge-base --is-ancestor now']] },
-  { kind: 'WINDOW_START', re: /^$/, test: 'WINDOW_START file', fields: [['(none)', 'RAW: window.start epoch agrees with the row timestamp; exactly one row, before the first START']] },
-  { kind: 'TASKHASH_DIFF', re: /^(pre|post) (ok|fail)(?: .*)?$/, test: 'NC8 green', fields: [['phase', 'FORMAT'], ['verdict', 'RAW: taskhash.pre/post.txt equal the baseline listing and the task directory hashed now']] },
-  { kind: 'ORDER', re: /^(\S+) (ON|C) pos=(\d+)$/, test: 'ORDER before START', fields: [['id', 'SEED'], ['arm', 'SEED'], ['pos', 'SEED'], ['position', 'ROW: after the id\'s last probe row, before its CMD and START']] },
-  { kind: 'VERSION', re: /^(\S+) (.+)$/, test: 'VERSION value', fields: [['id', 'SEED'], ['value', 'MANIFEST: the pinned CLI']] },
-  { kind: 'PROBE_OK', re: /^(\S+) cost=(NUM)$/, test: 'PROBE_OK cost', fields: [['id', 'SEED'], ['cost', 'RAW: probes/<id>-<k>.json, the k-th attempt']] },
-  { kind: 'PROBE_FAIL', re: /^(\S+) rc=(\d+) cost=(NUM)$/, test: 'PROBE_FAIL rc', fields: [['id', 'SEED'], ['rc', 'RAW: saved response rc'], ['cost', 'RAW: saved response cost']] },
-  { kind: 'PAUSE', re: /^id not launched$/, test: 'PAUSE count', fields: [['(none)', 'ROW: one per PROBE_FAIL']] },
-  { kind: 'CMD', re: /^(\S+) ([0-9a-f]{64})$/, test: 'saved argv with another gate', fields: [['id', 'SEED'], ['sha256', 'RAW: cmd/<id>.json re-hashed; MANIFEST argv_sha and template']] },
-  { kind: 'START', re: /^(\S+) elapsed=(\d+)$/, test: 'dupstart', fields: [['id', 'SEED (order)'], ['elapsed', 'ROW: timestamp minus WINDOW_START, 3 s slack']] },
-  { kind: 'END', re: /^(\S+) rc=(\d+)$/, test: 'END rc=abc', fields: [['id', 'SEED (order)'], ['rc', 'FORMAT integer; semantics in COMPLETE and SCORE_MISSING']] },
-  { kind: 'COSTCHK', re: /^(\S+) arm=(ON|C) stage=(pre5|post5) spent=(NUM) projected=(NUM) cap=(NUM) (ok|stop)$/, test: 'COSTCHK metadata', fields: [['id', 'SEED'], ['arm', 'SEED'], ['stage', 'ROW: recomputed from the COST rows before it'], ['spent', 'ROW: recomputed; covers earlier probes in probes.tsv'], ['projected', 'ROW: recomputed by projectCost'], ['cap', 'MANIFEST'], ['verdict', 'ROW: ok only when the recomputed projection is within the cap']] },
-  { kind: 'COST', re: /^(\S+) arm=(ON|C) run=(NUM) probe=(NUM) running=(NUM) projected=(NUM)$/, test: 'COST arm', fields: [['id', 'SEED'], ['arm', 'SEED'], ['run', 'RAW: last result object of run.log'], ['probe', 'RAW: sum of the id\'s saved probe responses'], ['running', 'ROW: arm sum of runs plus probes.tsv up to this id'], ['projected', 'ROW: recomputed by projectCost']] },
-  { kind: 'SCORE', re: /^(\S+) m1=(\S+) m2=(\S+) m3=(\S+)$/, test: "SCORE '", fields: [['id', 'SEED'], ['m1', 'RAW: oracle.log constraints_pass (real boolean)'], ['m2', 'RAW: oracle.log features_pass (real boolean)'], ['m3', 'ROW: m1 and m2']] },
-  { kind: 'SCORE_MISSING', re: /^(\S+)$/, test: 'SCORE_MISSING after a successful call', fields: [['id', 'SEED; only after END rc != 0']] },
-  { kind: 'TURNS', re: /^(\S+) arm=(ON|C) n=(-?\d+)$/, test: 'all result.json turns_completed 0', fields: [['id', 'SEED'], ['arm', 'SEED'], ['n', 'RAW: result.json turns_completed']] },
-  { kind: 'RUNVERSION', re: /^(\S+) (ok|fail) (.+)$/, test: 'RUNVERSION wrong-version', fields: [['id', 'SEED'], ['flag', 'ROW: ok exactly when the value is the pin'], ['value', 'RAW: result.json runner_version, and MANIFEST pin']] },
-  { kind: 'MODEL', re: /^(\S+) (.+)$/, test: 'multi-model rows', fields: [['id', 'SEED'], ['value', 'RAW: modelUsage keys of run.log; exactly one id, same in all rows']] },
-  { kind: 'HOOKCOUNT', re: /^(\S+) gate_trace=(\d+) gate_log=(\d+) plugin=(\d+)$/, test: 'trace has one more gate execution', fields: [['id', 'SEED'], ['gate_trace', 'RAW: trace/<id>/ files'], ['gate_log', 'RAW: hook JSONL record count'], ['plugin', 'RAW: trace/<id>/ files']] },
-  { kind: 'HOOKERR', re: /^(\S+) (\S+)$/, test: 'hook errors in 3 ON runs', fields: [['id', 'SEED'], ['n', 'RAW: hook JSONL error records; non-negative integer']] },
-  { kind: 'BLOCKMAX', re: /^(\S+) (\S+)$/, test: 'BLOCKMAX -1', fields: [['id', 'SEED'], ['value', 'RAW: hook JSONL max block records in one turn; at most N']] },
-  { kind: 'COMPLETE', re: /^ON=(\d+)\/(\d+) C=(\d+)\/(\d+)$/, test: 'rc=124 run still counted in COMPLETE', fields: [['ON, C', 'ROW: recount from END rc and result.json turns_completed (the last row)'], ['n', 'MANIFEST']] },
+  { kind: 'WRAPPER_START', re: /^first=(\d+) last=(\d+)$/, fields: [['first', 'FORMAT: 1 <= first <= last <= 2n'], ['last', 'FORMAT: last <= 2n']] },
+  { kind: 'WRAPPER_DONE', re: /^last=(\d+)$/, fields: [['last', 'ROW: the final one equals 2n (full batch)']] },
+  { kind: 'WRAPPER_EXIT', re: /^rc=(\d+)$/, fields: [['rc', 'ROW: the last row of the log, rc 0; one per WRAPPER_START']] },
+  { kind: 'HASH', re: /^(wrapper|hook|harness|taskhash_expected|manifest|prereg) ([0-9a-f]{64})$/, fields: [['name', 'FORMAT: one of six names, all present'], ['count', 'ROW: each of the six appears once per WRAPPER_START, and every one equals the actual file'], ['sha256', 'RAW: the file hashed now (wrapper, hook, harness, manifest, PREREG note, baseline) and MANIFEST']] },
+  { kind: 'PREREG', re: /^([0-9a-f]{40}) (\S+) ancestor=(yes|no)$/, fields: [['commit', 'GIT: git log -1 -- the PREREG path; note at that commit hashes to HASH prereg'], ['time', 'GIT: committer time of that commit, and earlier than WINDOW_START'], ['ancestor', 'GIT: merge-base --is-ancestor now']] },
+  { kind: 'WINDOW_START', re: /^$/, fields: [['row', 'RAW: window.start epoch agrees with the row timestamp; exactly one row, before the first START']] },
+  { kind: 'TASKHASH_DIFF', re: /^(pre|post) (ok|fail)$/, fields: [['phase', 'FORMAT'], ['tail', 'FORMAT: nothing follows ok or fail'], ['verdict', 'RAW: taskhash.pre/post.txt equal the baseline listing and the task directory hashed now']] },
+  { kind: 'ORDER', re: /^(\S+) (ON|C) pos=(\d+)$/, fields: [['id', 'SEED'], ['arm', 'SEED'], ['pos', 'SEED'], ['position', 'ROW: after the id\'s last probe row, before its CMD and START']] },
+  { kind: 'VERSION', re: /^(\S+) (.+)$/, fields: [['id', 'SEED'], ['value', 'MANIFEST: the pinned CLI'], ['position', 'ROW: exactly one per id, after its COSTCHK and before its first PROBE row']] },
+  { kind: 'PROBE_OK', re: /^(\S+) cost=(NUM)$/, fields: [['id', 'SEED'], ['cost', 'RAW: probes/<id>-<k>.json, the k-th attempt']] },
+  { kind: 'PROBE_FAIL', re: /^(\S+) rc=(\d+) cost=(NUM)$/, fields: [['id', 'SEED'], ['rc', 'RAW: saved response rc'], ['cost', 'RAW: saved response cost']] },
+  { kind: 'PAUSE', re: /^id not launched$/, fields: [['row', 'ROW: one per PROBE_FAIL']] },
+  { kind: 'CMD', re: /^(\S+) ([0-9a-f]{64})$/, fields: [['id', 'SEED'], ['sha256', 'RAW: cmd/<id>.json re-hashed; MANIFEST argv_sha and template']] },
+  { kind: 'START', re: /^(\S+) elapsed=(\d+)$/, fields: [['id', 'SEED (order)'], ['elapsed', 'ROW: timestamp minus WINDOW_START, 3 s slack']] },
+  { kind: 'END', re: /^(\S+) rc=(\d+)$/, fields: [['id', 'SEED (order)'], ['rc', 'FORMAT integer; semantics in COMPLETE and SCORE_MISSING']] },
+  { kind: 'COSTCHK', re: /^(\S+) arm=(ON|C) stage=(pre5|post5) spent=(NUM) projected=(NUM) cap=(NUM) (ok|stop)$/, fields: [['id', 'SEED'], ['arm', 'SEED'], ['stage', 'ROW: recomputed from the COST rows before it'], ['spent', 'ROW: recomputed; covers earlier probes in probes.tsv'], ['projected', 'ROW: recomputed by projectCost'], ['cap', 'MANIFEST'], ['verdict', 'ROW: ok only when the recomputed projection is within the cap']] },
+  { kind: 'COST', re: /^(\S+) arm=(ON|C) run=(NUM) probe=(NUM) running=(NUM) projected=(NUM)$/, fields: [['id', 'SEED'], ['arm', 'SEED'], ['run', 'RAW: last result object of run.log'], ['probe', 'RAW: sum of the id\'s saved probe responses'], ['running', 'ROW: arm sum of runs plus probes.tsv up to this id'], ['projected', 'ROW: recomputed by projectCost']] },
+  { kind: 'SCORE', re: /^(\S+) m1=(\S+) m2=(\S+) m3=(\S+)$/, fields: [['id', 'SEED'], ['m1', 'RAW: oracle.log constraints_pass (real boolean)'], ['m2', 'RAW: oracle.log features_pass (real boolean)'], ['m3', 'ROW: m1 and m2']] },
+  { kind: 'SCORE_MISSING', re: /^(\S+)$/, fields: [['id', 'SEED; only after END rc != 0']] },
+  { kind: 'TURNS', re: /^(\S+) arm=(ON|C) n=(-?\d+)$/, fields: [['id', 'SEED'], ['arm', 'SEED'], ['n', 'RAW: result.json turns_completed']] },
+  { kind: 'RUNVERSION', re: /^(\S+) (ok|fail) (.+)$/, fields: [['id', 'SEED'], ['flag', 'ROW: ok exactly when the value is the pin'], ['value', 'RAW: result.json runner_version, and MANIFEST pin']] },
+  { kind: 'MODEL', re: /^(\S+) (.+)$/, fields: [['id', 'SEED'], ['value', 'RAW: modelUsage keys of run.log; exactly one id, same in all rows']] },
+  { kind: 'HOOKCOUNT', re: /^(\S+) gate_trace=(\d+) gate_log=(\d+) plugin=(\d+)$/, fields: [['id', 'SEED'], ['gate_trace', 'RAW: trace/<id>/ files'], ['gate_log', 'RAW: hook JSONL record count'], ['plugin', 'RAW: trace/<id>/ files']] },
+  { kind: 'HOOKERR', re: /^(\S+) (\S+)$/, fields: [['id', 'SEED'], ['n', 'RAW: hook JSONL error records; non-negative integer']] },
+  { kind: 'BLOCKMAX', re: /^(\S+) (\S+)$/, fields: [['id', 'SEED'], ['value', 'RAW: hook JSONL max block records in one turn; at most N']] },
+  { kind: 'COMPLETE', re: /^ON=(\d+)\/(\d+) C=(\d+)\/(\d+)$/, fields: [['counts', 'ROW: recount from END rc and result.json turns_completed (the last row)'], ['n', 'MANIFEST: n_per_arm in both counts']] },
 ];
 // Rows whose mere presence invalidates the batch.
 const FAIL_KINDS = new Set(['STOP_COST', 'STOP_WINDOW', 'STOP_AUTH', 'ABORT', 'REFUSE', 'COST_INVALID']);
@@ -510,20 +532,23 @@ const FILE_SCHEMA = [
   ['taskhash.pre.txt, taskhash.post.txt', 'exist; equal the baseline', 'notaskpost'],
   ['probes.tsv', 'every line has 4 columns, id in the expected set, rc integer, cost number, status ok|fail', 'probes.tsv unknown id'],
   ['probes/<id>-<n>.json', 'the set is exactly the files of expected ids, n = 1..k per id, each a complete JSON object', 'extra probe response with a gap'],
-  ['cmd/<id>.json', 'the set is exactly the expected ids; each a JSON array; template and canonical paths', 'saved argv with another gate'],
+  ['cmd/<id>.json', 'the set is exactly the expected ids; each a JSON array', 'cmd/ file set is not exactly the expected ids'],
+  ['cmd/<id>.json (content)', 'equals the manifest template with the canonical paths and hashes to the CMD row', 'saved argv with another gate'],
   ['runs/', 'entries are exactly <id>/, <id>.stdout, <id>.stderr for the expected ids (no more, no fewer)', 'extra entry in runs'],
-  ['runs/<id>/run.log', 'exists for a finished call; result objects parse; AUTH pattern absent', 'raw run.log shows an expired session'],
+  ['runs/<id>/run.log', 'exists for a finished call; AUTH pattern absent', 'raw run.log shows an expired session'],
+  ['runs/<id>/run.log (JSON lines)', 'every line that starts with { parses completely (a truncated result object fails)', 'run.log truncated result object'],
   ['runs/<id>.stderr', 'exists (empty is fine); AUTH pattern absent', 'stderr files deleted'],
-  ['runs/<id>/result.json', 'exists and parses when the call ended with rc 0 (when present it must parse)', 'result.json runner_version differs'],
+  ['runs/<id>/result.json', 'exists and parses completely when the call ended with rc 0 (when present it must parse); runner_version equals the log', 'result.json truncated'],
   ['runs/<id>/oracle.log', 'exists when the call ended with rc 0; first JSON object parses', 'oracle.log disagrees'],
   ['runs/<id>/gate.jsonl', 'exists when the call ended with rc 0; every line is a JSON object', 'gate.jsonl corrupt line'],
   ['runs/<id>/hook/live/per-turn-gate/*.jsonl', 'ON: at least one file; C: no hook directory; every record line parses with its fields', 'corrupt hook log line'],
-  ['trace/<id>/trace-turn<n>.log', 'the set is exactly the expected ids; at least one readable file each', 'all C-arm traces deleted'],
+  ['trace/<id>/trace-turn<n>.log', 'the set is exactly the expected ids; at least one regular file each; only a `latest` symlink to the highest-numbered file may be extra (never counted)', 'all C-arm traces deleted'],
+  ['trace/<id>/latest', 'absent, or a symlink resolving to the highest-numbered trace-turn file', 'trace latest symlink to the wrong file'],
 ];
 
 function schemaTable() {
   const out = ['| Row kind | Field | How the audit checks it | Test (assertion text) |', '|---|---|---|---|'];
-  for (const e of LOG_SCHEMA) e.fields.forEach(([f, how], i) => out.push(`| ${i === 0 ? `\`${e.kind}\`` : ''} | ${f} | ${how.replace(/\|/g, '/')} | ${i === 0 ? `\`${e.test}\`` : ''} |`));
+  for (const e of LOG_SCHEMA) e.fields.forEach(([f, how], i) => out.push(`| ${i === 0 ? `\`${e.kind}\`` : ''} | ${f} | ${how.replace(/\|/g, '/')} | \`T:${e.kind}.${f}\` |`));
   out.push('| any other kind, an unparseable row, a missing timestamp | all | the audit fails | `unknown row kind` |');
   out.push(`| ${[...FAIL_KINDS].map((k) => `\`${k}\``).join(', ')} | all | presence fails the audit | \`terminal row\` |`);
   out.push('', '| Raw file or set | Must | Test (assertion text) |', '|---|---|---|');
@@ -561,10 +586,10 @@ function auditRows(rows, ids, order, m) {
   for (const id of ids) {
     const of = (k) => rows.map((r, i) => (r.kind === k && r.rest.split(' ')[0] === id ? i : -1)).filter((i) => i >= 0);
     const one = (k) => { const a = of(k); if (a.length !== 1) f.push(`${id}: need exactly one ${k} row (got ${a.length})`); return a[0]; };
-    const cc = one('COSTCHK'), or = one('ORDER'), cm = one('CMD'), st = one('START'), en = one('END');
-    const ver = of('VERSION'), pr = [...of('PROBE_OK'), ...of('PROBE_FAIL')].sort((a, b) => a - b);
-    const lastBefore = Math.max(...ver, ...pr, cc);
-    if (!(cc < Math.min(...ver) && pr.length && Math.max(...pr) < or && or < cm && cm < st && st < en && lastBefore < or)) f.push(`${id}: rows are out of sequence (COSTCHK, VERSION, PROBE, ORDER, CMD, START, END)`);
+    const cc = one('COSTCHK'), vr = one('VERSION'), or = one('ORDER'), cm = one('CMD'), st = one('START'), en = one('END');
+    const pr = [...of('PROBE_OK'), ...of('PROBE_FAIL')].sort((a, b) => a - b);
+    const lastBefore = Math.max(vr, ...pr, cc);
+    if (!(cc < vr && vr < Math.min(...pr) && Math.max(...pr) < or && or < cm && cm < st && st < en && lastBefore < or)) f.push(`${id}: rows are out of sequence (COSTCHK, VERSION, PROBE, ORDER, CMD, START, END)`);
     const postKinds = POST_KINDS.filter((k) => k !== 'SCORE' && k !== 'SCORE_MISSING');
     for (const k of postKinds) { const p = one(k); if (!(p > en)) f.push(`${id}: ${k} is not after END`); }
     const sa = of('SCORE'), sb = of('SCORE_MISSING');
@@ -598,7 +623,8 @@ function auditFiles(runDir, ids, order, m, rcOf) {
       const rj = parseJson(rp('result.json'));
       if (exists(rp('result.json')) && !(rj && typeof rj === 'object' && ['task_id', 'arm', 'runner', 'model', 'runner_version', 'turns', 'turns_completed'].every((k) => k in rj))) f.push(`${id}: result.json does not parse or lacks fields`);
     } else if (exists(rp('result.json')) && parseJson(rp('result.json')) === undefined) f.push(`${id}: result.json does not parse`);
-    if (exists(rp('gate.jsonl'))) fs.readFileSync(path.join(runDir, rp('gate.jsonl')), 'utf8').split('\n').forEach((l, i) => { if (l.trim()) { try { const o = JSON.parse(l); if (!o || typeof o !== 'object') throw new Error('x'); } catch (_e) { f.push(`${id}: gate.jsonl corrupt line ${i + 1}`); } } });
+    if (exists(rp('run.log'))) fs.readFileSync(path.join(runDir, rp('run.log')), 'utf8').split('\n').forEach((l, i) => { if (l.trimStart().startsWith('{')) { try { JSON.parse(l); } catch (_e) { f.push(`${id}: run.log truncated result object or broken JSON line ${i + 1}`); } } });
+    if (exists(rp('gate.jsonl'))) fs.readFileSync(path.join(runDir, rp('gate.jsonl')), 'utf8').split('\n').forEach((l, i) => { if (l.trim()) { try { const o = JSON.parse(l); if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('x'); } catch (_e) { f.push(`${id}: gate.jsonl corrupt line ${i + 1}`); } } });
     const arm = order.find((o) => o.id === id).arm;
     const hd = path.join('runs', id, 'hook', 'live', 'per-turn-gate');
     if (arm === 'C') { if (exists(path.join('runs', id, 'hook'))) f.push(`${id}: control run has a hook directory`); } else {
@@ -611,8 +637,9 @@ function auditFiles(runDir, ids, order, m, rcOf) {
         if (!okRec) f.push(`${id}: corrupt hook log line ${file}:${i + 1} (fields)`);
       });
     }
-    const tr = list(path.join('trace', id)) || [];
-    if (!tr.length || !tr.every((x) => /^trace-turn\d+\.log$/.test(x))) f.push(`${id}: trace/${id} has no trace-turn files or unexpected names`);
+    const tf = traceFiles(path.join(runDir, 'trace', id));
+    if (!tf.regular.length || tf.other.length) f.push(`${id}: trace/${id} has no trace-turn files or unexpected names`);
+    if (tf.latest && !tf.latestOk) f.push(`${id}: trace/${id}/latest is not a symlink to the highest trace-turn file`);
     const cmdv = parseJson(path.join('cmd', `${id}.json`));
     if (!Array.isArray(cmdv)) f.push(`${id}: cmd/${id}.json is not a JSON array`);
   }
@@ -851,11 +878,13 @@ function audit(runDir, m, clone, opts) {
   for (const r of rows) {
     if (r.kind === 'COSTCHK') {
       const kv = kvOf(r.rest); const id = idOf(r); const arm = kv.arm;
-      const before = probeRows.filter(([pid]) => pid.startsWith(`${arm}-`) && ids.indexOf(pid) < ids.indexOf(id)).reduce((x, p) => x + Number(p[2]), 0);
-      // The logged spent must cover every earlier id's probe (a failed probe of this very id may be in it too).
-      const probeSpent = Number(kv.spent) - seen[arm].reduce((x, y) => x + y, 0);
-      need(probeSpent >= before - 5e-4, `${id}: COSTCHK spent ${kv.spent} does not cover the earlier runs and probes`);
-      const p = projectCost({ runCosts: seen[arm], probeSpent, total: m.n_per_arm, cap: m.arms[arm].cap, probeCost: m.probe_cost });
+      // spent is recomputed from the raw files of every earlier id of the arm: run.log result costs plus every saved probe response.
+      const earlier = ids.filter((i2) => i2.startsWith(`${arm}-`) && ids.indexOf(i2) < ids.indexOf(id));
+      const rawRuns = earlier.map((i2) => lastResultCost(read(path.join('runs', i2, 'run.log')) || '')).map((c) => (c === null ? 0 : c));
+      const probeSpent = earlier.reduce((x, i2) => x + (probeRaw[i2] || 0), 0);
+      const spentWant = rawRuns.reduce((x, y) => x + y, 0) + probeSpent;
+      need(Math.abs(Number(kv.spent) - spentWant) < 5e-4, `${id}: COSTCHK spent ${kv.spent} differs from the raw files (${spentWant.toFixed(4)})`);
+      const p = projectCost({ runCosts: rawRuns, probeSpent, total: m.n_per_arm, cap: m.arms[arm].cap, probeCost: m.probe_cost });
       need(kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap, `${id}: COSTCHK stage/cap (${kv.stage}/${kv.cap}) differ from the recomputed ${p.stage}/${m.arms[arm].cap}`);
       need(Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop && r.rest.endsWith(' ok'), `${id}: COSTCHK projection ${kv.projected} differs from the recomputed ${p.projected.toFixed(4)} or exceeds the cap`);
     }
@@ -933,12 +962,17 @@ function audit(runDir, m, clone, opts) {
     need(Number.isFinite(prTime) && prTime < Date.parse(win.ts) && prTime < Date.parse(firstStart.ts), 'the preregistration commit (time read from git) is not earlier than the window start and the first START');
     need(rows.indexOf(pr[0]) < rows.indexOf(firstStart), 'PREREG line is not before the first START');
   }
-  const mh = by('HASH').filter((r) => r.rest.startsWith('manifest '));
-  need(mh.length >= 1 && new Set(mh.map((r) => r.rest)).size === 1, 'HASH manifest missing or not constant');
-  if (clone && mh.length) { try { need(mh[0].rest === `manifest ${sha256(fs.readFileSync(opts && opts.manifestPath))}`, 'HASH manifest differs from the manifest file'); } catch (_e) { fails.push('manifest file unreadable for the audit'); } }
-  for (const k of ['wrapper', 'hook', 'harness', 'taskhash_expected']) {
-    const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `));
-    need(h.length >= 1 && h.every((r) => r.rest === `${k} ${m.hashes[k]}`), `HASH ${k} missing or differs from the preregistered value`);
+  {
+    // Each HASH kind appears once per wrapper invocation, and every row equals the actual file (not only the first one).
+    const nStart = by('WRAPPER_START').length;
+    const fh = (f) => { try { return sha256(fs.readFileSync(f)); } catch (_e) { return null; } };
+    const actual = { manifest: fh(opts && opts.manifestPath), prereg: fh(path.join(clone, m.prereg)), taskhash_expected: fh(path.join(clone, m.taskhash_expected)), hook: fh(path.join(clone, m.hook_path)), harness: fh(path.join(clone, m.harness_path)), wrapper: fh((opts && opts.wrapperPath) || __filename) };
+    for (const k of Object.keys(actual)) {
+      const h = by('HASH').filter((r) => r.rest.startsWith(`${k} `));
+      need(h.length === nStart, `HASH ${k}: ${h.length} rows for ${nStart} wrapper invocations (each kind exactly once per invocation)`);
+      need(h.every((r) => r.rest === `${k} ${actual[k]}`), `HASH ${k}: a row differs from the actual file`);
+      if (m.hashes[k]) need(actual[k] === m.hashes[k], `HASH ${k}: the actual file differs from the preregistered value`);
+    }
   }
   // The files themselves, hashed now: hook, harness, this wrapper (the file that is running, or --wrapper-file) and the manifest values.
   {

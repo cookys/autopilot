@@ -70,23 +70,23 @@ mk_mut() { # <name> then pairs: <old> <new> ...; builds $TEST_TMP/mut-<name>/run
 }
 mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need(" "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
 mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
-mk_mut prereg "else if (pr.length) {" "else if (false) {"
+mk_mut prereg "else if (pr.length) {" "else if (false) {" "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
-mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === ''," "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
+mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === ''," "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected" "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut costchk "need(cc.length === 1, " "need(true || cc.length === 1, " "need(cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st)," "need(true || cc.length === 1 && st && rows.indexOf(cc[0]) < rows.indexOf(st),"
 mk_mut window "need((Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s," "need(true || (Date.parse(ends[ends.length - 1].ts) - Date.parse(win0.ts)) / 1000 <= m.window_s,"
 mk_mut timeout "Math.min(90 * 60 * 1000, (windowS - elapsedS) * 1000)" "90 * 60 * 1000"
 mk_mut spend "runSum = Math.max(runSum, allRuns);" "" "for (const r of by('COST')) need(ids.includes(idOf(r))," "for (const r of []) need(ids.includes(idOf(r))," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
 mk_mut errfmt "if (he) need(" "if (false) need(" "need(/^\\d+\$/.test(v)," "need(true || /^\\d+\$/.test(v),"
 mk_mut ts "need(backwards === 0," "need(true || backwards === 0," "if (st && en) need(Date.parse(st.ts) <= Date.parse(en.ts)," "if (false) need(true," "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
-mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&" "need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(true || g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(w0 && Number.isFinite(wsv) &&" "need(true || w0 && Number.isFinite(wsv) &&"
+mk_mut prtime "prTime = Date.parse(ex2(['git', '-C', clone, 'log', '-1', '--format=%cI', pr[0].rest.split(' ')[0]]).stdout.trim());" "prTime = Date.parse(pr[0].rest.split(' ')[1]);" "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&" "need(g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(true || g(['log', '-1', '--format=%cI', prCommit]).stdout.trim() === pr[0].rest.split(' ')[1]," "need(w0 && Number.isFinite(wsv) &&" "need(true || w0 && Number.isFinite(wsv) &&" "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut startelapsed "const elapsedNow = ctx.elapsed();" "const elapsedNow = elapsed;"
 mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok'," "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
 mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && typeof" "need(true || o && typeof"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
 mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(Math.abs(p2.projected - Number(kv.projected)) < 5e-4," "need(true || Math.abs(p2.projected - Number(kv.projected)) < 5e-4,"
-mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&" "need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit," "need(true || g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit,"
+mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&" "need(g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit," "need(true || g(['log', '-1', '--format=%H', '--', m.prereg]).stdout.trim() === prCommit," "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal," "need(rv.length !== 1 ||" "need(true || rv.length !== 1 ||"
 mk_mut endrc "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
 mk_mut rcint "need(Number.isInteger(rcOf[id])," "need(true || Number.isInteger(rcOf[id])," "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
@@ -95,9 +95,9 @@ mk_mut turnsraw "need(Number(kv.n) === rawTurns," "need(true || Number(kv.n) ===
 mk_mut boolcheck "typeof o.constraints_pass === 'boolean' && typeof o.features_pass === 'boolean' && " ""
 mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
 mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
-mk_mut costraw "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut costraw "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(Math.abs(Number(kv.spent) - spentWant) < 5e-4," "need(true || Math.abs(Number(kv.spent) - spentWant) < 5e-4," "need(Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop" "need(true || Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop"
 mk_mut taskdir "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
-mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')" "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -" "need(Math.abs(c - (typeof o.total_cost_usd" "need(true || Math.abs(c - (typeof o.total_cost_usd"
+mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')" "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -" "need(Math.abs(c - (typeof o.total_cost_usd" "need(true || Math.abs(c - (typeof o.total_cost_usd" "need(Math.abs(Number(kv.spent) - spentWant) < 5e-4," "need(true || Math.abs(Number(kv.spent) - spentWant) < 5e-4," "need(Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop" "need(true || Math.abs(p.projected - Number(kv.projected)) < 5e-4 && !p.stop"
 mk_mut cmdtpl "need(Array.isArray(av) &&" "need(true || Array.isArray(av) &&"
 mk_mut mtime "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
 mk_mut oldhead "o.auth_ok === true" "String(o.result_head).includes('AUTH_OK')"
@@ -117,7 +117,7 @@ TXT
 mk_mut probeset "need(nums.length > 0 && nums.every" "need(true || nums.length > 0 && nums.every" "need(pfBad.length === 0," "need(true || pfBad.length === 0," "$(cat "$PYOLD" | tr -d '\n')" "$(cat "$PYNEW" | tr -d '\n')"
 mk_mut probefield "need(Math.abs(Number(kvOf(c.rest).probe) -" "need(true || Math.abs(Number(kvOf(c.rest).probe) -"
 mk_mut stderrfile "need(errText !== null," "need(true || errText !== null,"
-mk_mut filehash "need(fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(true || fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(true || fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper," "need(true || fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper,"
+mk_mut filehash "need(fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(true || fh(path.join(clone, m.hook_path)) === m.hashes.hook," "need(fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(true || fh(path.join(clone, m.harness_path)) === m.hashes.harness," "need(fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper," "need(true || fh((opts && opts.wrapperPath) || __filename) === m.hashes.wrapper," "for (const k of Object.keys(actual)) {" "for (const k of []) {"
 mk_mut nan "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : 0);" "rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : NaN);"
 mk_mut nostrict "const strictRows = [] ||" "const strictRows = [] ||"
 mk_mut costchkmeta "need(kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap," "need(true || kv.stage === p.stage && Number(kv.cap) === m.arms[arm].cap,"
@@ -225,12 +225,12 @@ assert_eq "$(grep -c 'TASKHASH_DIFF post fail' "$TEST_TMP/run-nc8-mut/invocation
 assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
 
 echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
-fixm() { local f; if [ -z "${NOFIXM:-}" ]; then for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$R1#$1#g" "$f"; done; fi; }
+fixm() { local f tg; for f in "$1"/trace/*/latest; do [ -L "$f" ] || continue; tg=$(readlink "$f"); case "$tg" in "$R1"/*) ln -sfn "$1/${tg#"$R1"/}" "$f" ;; esac; done; if [ -z "${NOFIXM:-}" ]; then for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$R1#$1#g" "$f"; done; fi; }
 audit_rc() { [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?; }
 tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
 # 1 several models in every MODEL row
 tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-model")" 0 "multi-model rows: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-model")" 0 "T:MODEL.value multi-model rows: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-model/run-p2-batch.js" "$TEST_TMP/t-model")" 0 "RED multi-model: audit without the per-row check says OK"
 # 2 last COST row inflated
 tamper cost; python3 - "$TEST_TMP/t-cost/invocation.log" <<'PY'
@@ -238,7 +238,7 @@ import sys, re
 p = sys.argv[1]; L = open(p).read().split('\n')
 i = max(k for k, l in enumerate(L) if ' COST ' in l); L[i] = re.sub(r'run=\S+', 'run=999.000000', L[i]); open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cost")" 0 "last COST row 999: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cost")" 0 "T:COST.run last COST row 999: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-cost/run-p2-batch.js" "$TEST_TMP/t-cost")" 0 "RED last COST row: audit without the spend recomputation says OK"
 # 3 preregistration modified / removed from the index afterwards
 echo "edited after the batch" >>"$CLONE/prereg/PREREG.md"
@@ -398,7 +398,7 @@ PY
   assert_eq "$(audit_rc "$TEST_TMP/mut-scoreval/run-p2-batch.js" "$TEST_TMP/t-sc")" 0 "RED SCORE '$sv': mutant says OK"
 done
 tamper bm; sed -i -E "0,/( BLOCKMAX \S+ )[0-9]+$/s//\1-1/" "$TEST_TMP/t-bm/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm")" 0 "BLOCKMAX -1: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-bm")" 0 "T:BLOCKMAX.value BLOCKMAX -1: real audit non-zero"
 tamper bm2; ONID=$(grep -oE ' BLOCKMAX ON-[0-9]+' "$TEST_TMP/t-bm2/invocation.log" | head -1 | awk '{print $2}')
 HL=$(ls "$TEST_TMP/t-bm2/runs/$ONID/hook/live/per-turn-gate/"*.jsonl | head -1)
 printf '%s\n%s\n' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":2}' '{"session":"s","turn":1,"decision":"block","reason":"block","counter":3}' >>"$HL"
@@ -415,7 +415,7 @@ assert_neq "$(tmo_order "$PRE_MUT")" "1:before" "RED timeout: a second computati
 
 echo "--- acceptance round 5: RUNVERSION value, END rc semantics"
 tamper rv; sed -i -E "0,/( RUNVERSION \S+ ok ).*/s//\1wrong-version/" "$TEST_TMP/t-rv/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv")" 0 "RUNVERSION wrong-version behind an ok marker: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv")" 0 "T:RUNVERSION.value RUNVERSION wrong-version behind an ok marker: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-runver/run-p2-batch.js" "$TEST_TMP/t-rv")" 0 "RED RUNVERSION: mutant says OK"
 tamper rv2; RJ=$(ls "$TEST_TMP"/t-rv2/runs/*/result.json | head -1); sed -i 's/"runner_version":"[^"]*"/"runner_version":"2.0.0 (Claude Code)"/' "$RJ"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rv2")" 0 "result.json runner_version differs from the log: real audit non-zero"
@@ -435,24 +435,24 @@ open(p, 'w').write('\n'.join(L))
 PY
 }
 endrc_case e124a 124 keep keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124a")" 0 "rc=124 run still counted in COMPLETE: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124a")" 0 "T:COMPLETE.counts rc=124 run still counted in COMPLETE: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-endrc/run-p2-batch.js" "$TEST_TMP/t-e124a")" 0 "RED rc=124 counted as complete: mutant says OK"
 endrc_case e124b 124 missing lower
 assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124b")" 0 "one rc=124 run, SCORE_MISSING, COMPLETE lowered: still a valid batch (27-of-30 tolerance)"
 endrc_case e124c 124 keep lower
 assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-e124c")" 0 "rc=124 run with its (oracle-consistent) SCORE and COMPLETE lowered: valid"
 endrc_case ebad abc keep keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ebad")" 0 "END rc=abc: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-ebad")" 0 "T:END.rc END rc=abc: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-rcint/run-p2-batch.js" "$TEST_TMP/t-ebad")" 0 "RED END rc=abc: mutant says OK"
 endrc_case emiss 0 missing keep
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-emiss")" 0 "SCORE_MISSING after a successful call (rc=0): real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-emiss")" 0 "T:SCORE_MISSING.row SCORE_MISSING after a successful call (rc=0): real audit non-zero"
 tamper orc; OL=$(ls "$TEST_TMP"/t-orc/runs/*/oracle.log | head -1); sed -i 's/"constraints_pass": *true/"constraints_pass": false/; s/"constraints_pass":true/"constraints_pass":false/' "$OL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-orc")" 0 "oracle.log disagrees with the SCORE row: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-scoreor/run-p2-batch.js" "$TEST_TMP/t-orc")" 0 "RED oracle recomputation: mutant says OK"
 
 echo "--- round 6: TURNS from result.json, oracle booleans"
 tamper tz; for f in "$TEST_TMP"/t-tz/runs/*/result.json; do sed -i -E 's/"turns_completed":[0-9]+/"turns_completed":0/' "$f"; done
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tz")" 0 "all result.json turns_completed 0, log says 5 and COMPLETE 3/3: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tz")" 0 "T:TURNS.n all result.json turns_completed 0, log says 5 and COMPLETE 3/3: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-turnsraw/run-p2-batch.js" "$TEST_TMP/t-tz")" 0 "RED TURNS summary only: mutant says OK"
 for variant in missing string null; do
   tamper ob; python3 - "$TEST_TMP/t-ob" "$variant" <<'PY'
@@ -479,7 +479,7 @@ assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-mraw")" 0 "run.log model differs fro
 assert_eq "$(audit_rc "$TEST_TMP/mut-modelraw/run-p2-batch.js" "$TEST_TMP/t-mraw")" 0 "RED MODEL from summary only: mutant says OK"
 tamper traw; TF=$(ls "$TEST_TMP"/t-traw/trace/ON-*/trace-turn1.log | head -1)
 echo 'Hooks: Stop [node x/hooks/per-turn-gate.js] finished with status 0 (3ms)' >>"$TF"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-traw")" 0 "trace has one more gate execution than the HOOKCOUNT row says: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-traw")" 0 "T:HOOKCOUNT.gate_trace trace has one more gate execution than the HOOKCOUNT row says: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-traceraw/run-p2-batch.js" "$TEST_TMP/t-traw")" 0 "RED trace counts from summary only: mutant says OK"
 tamper craw; RL=$(ls "$TEST_TMP"/t-craw/runs/*/run.log | head -1); sed -i -E 's/"total_cost_usd":[0-9.]+/"total_cost_usd":0.01/' "$RL"
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-craw")" 0 "run.log cost differs from the COST row: real audit non-zero"
@@ -556,7 +556,7 @@ tamper pu; cp "$(ls "$TEST_TMP"/t-pu/probes/*-1.json | head -1)" "$TEST_TMP/t-pu
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pu")" 0 "probe response file with an unknown id: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-probeset/run-p2-batch.js" "$TEST_TMP/t-pu")" 0 "RED unknown probe file: mutant says OK"
 tamper pf; sed -i -E '0,/( COST \S+ arm=\S+ run=\S+ )probe=\S+/s//\1probe=999.000000/' "$TEST_TMP/t-pf/invocation.log"
-assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pf")" 0 "COST probe=999: real audit non-zero"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-pf")" 0 "T:COST.probe COST probe=999: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-probefield/run-p2-batch.js" "$TEST_TMP/t-pf")" 0 "RED COST probe field: mutant says OK"
 tamper se; rm -f "$TEST_TMP"/t-se/runs/*.stderr
 assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-se")" 0 "stderr files deleted: real audit non-zero"
@@ -584,7 +584,11 @@ echo "--- round 10: the schema table, one tamper per row kind and per raw file"
 logedit() { # <name> <python expr body acting on list L (log lines)>
   tamper "$1"; python3 - "$TEST_TMP/t-$1/invocation.log" "$2" <<'PY'
 import sys, re
-p, code = sys.argv[1:3]; L = open(p).read().split('\n'); exec(code); open(p, 'w').write('\n'.join(L))
+p, code = sys.argv[1:3]; L = open(p).read().split('\n')
+def first(k, pref=''): return next(j for j, l in enumerate(L) if ' %s %s' % (k, pref) in l)
+def lastidx(k): return max(j for j, l in enumerate(L) if ' %s ' % k in l)
+def sub(i, pat, rep): L[i] = re.sub(pat, rep, L[i], count=1)
+exec(code); open(p, 'w').write('\n'.join(L))
 PY
 }
 chk_real() { assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$1")" 0 "$2"; }
@@ -592,27 +596,27 @@ chk_red() { assert_eq "$(audit_rc "$TEST_TMP/mut-nostrict/run-p2-batch.js" "$TES
 logedit ws "i = next(k for k, l in enumerate(L) if ' WRAPPER_START ' in l); L[i] = re.sub(r'first=\S+ last=\S+', 'first=5 last=2', L[i])"; chk_real ws "WRAPPER_START range first>last: real audit non-zero"
 logedit wd "i = max(k for k, l in enumerate(L) if ' WRAPPER_DONE ' in l); L[i] = re.sub(r'last=\S+', 'last=5', L[i])"; chk_real wd "final WRAPPER_DONE not last=2n: real audit non-zero"
 logedit we "i = max(k for k, l in enumerate(L) if ' WRAPPER_EXIT ' in l); L[i] = re.sub(r'rc=\S+', 'rc=7', L[i])"; chk_real we "final WRAPPER_EXIT rc=7: real audit non-zero"
-tamper wsf; echo $(( $(cat "$TEST_TMP/t-wsf/window.start") - 3600000 )) >"$TEST_TMP/t-wsf/window.start"; chk_real wsf "WINDOW_START file disagrees with the row: real audit non-zero"
+tamper wsf; echo $(( $(cat "$TEST_TMP/t-wsf/window.start") - 3600000 )) >"$TEST_TMP/t-wsf/window.start"; chk_real wsf "T:WINDOW_START.row WINDOW_START file disagrees with the row: real audit non-zero"
 logedit ob "i = next(k for k, l in enumerate(L) if ' ORDER ' in l); o = L[i]; fid = o.split()[2]; del L[i]; s = next(k for k, l in enumerate(L) if ' START ' + fid + ' ' in l); L.insert(s + 1, L[s].split(' ')[0] + ' ' + o.split(' ', 1)[1])"
-chk_real ob "ORDER before START violated (ORDER row after START): real audit non-zero"; chk_red ob "ORDER position: audit without the strict layers says OK"
-logedit vv "i = next(k for k, l in enumerate(L) if ' VERSION ' in l); L[i] = re.sub(r'VERSION (\S+) .*', r'VERSION \1 2.1.0 (Claude Code)', L[i])"; chk_real vv "VERSION value is not the pin: real audit non-zero"
-logedit pok "i = next(k for k, l in enumerate(L) if ' PROBE_OK ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.500000', L[i])"; chk_real pok "PROBE_OK cost differs from the saved response: real audit non-zero"
+chk_real ob "T:ORDER.position ORDER before START violated (ORDER row after START): real audit non-zero"; chk_red ob "ORDER position: audit without the strict layers says OK"
+logedit vv "i = next(k for k, l in enumerate(L) if ' VERSION ' in l); L[i] = re.sub(r'VERSION (\S+) .*', r'VERSION \1 2.1.0 (Claude Code)', L[i])"; chk_real vv "T:VERSION.value VERSION value is not the pin: real audit non-zero"
+logedit pok "i = next(k for k, l in enumerate(L) if ' PROBE_OK ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.500000', L[i])"; chk_real pok "T:PROBE_OK.cost PROBE_OK cost differs from the saved response: real audit non-zero"
 rm -rf "$TEST_TMP/t-rfa"; cp -a "$RF" "$TEST_TMP/t-rfa"; sed -i "s#$RF#$TEST_TMP/t-rfa#g" "$TEST_TMP"/t-rfa/cmd/*.json
 python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
 import sys, re
 p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'rc=\S+', 'rc=9', L[i]); open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "PROBE_FAIL rc differs from the saved response: real audit non-zero"
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.rc PROBE_FAIL rc differs from the saved response: real audit non-zero"
 python3 - "$TEST_TMP/t-rfa/invocation.log" <<'PY'
 import sys, re
 p = sys.argv[1]; L = open(p).read().split('\n'); L = [l for l in L if ' PAUSE ' not in l]; open(p, 'w').write('\n'.join(L))
 PY
-assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "PAUSE count differs from the PROBE_FAIL count: real audit non-zero"
-logedit ccm "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'stage=\S+', 'stage=post5', L[i])"; chk_real ccm "COSTCHK metadata (stage) differs from the recomputed value: real audit non-zero"
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-rfa" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PAUSE.row PAUSE count differs from the PROBE_FAIL count: real audit non-zero"
+logedit ccm "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'stage=\S+', 'stage=post5', L[i])"; chk_real ccm "T:COSTCHK.stage COSTCHK metadata (stage) differs from the recomputed value: real audit non-zero"
 assert_eq "$(audit_rc "$TEST_TMP/mut-costchkmeta/run-p2-batch.js" "$TEST_TMP/t-ccm")" 0 "RED COSTCHK metadata: mutant says OK"
-logedit ccc "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'cap=\S+', 'cap=99', L[i])"; chk_real ccc "COSTCHK metadata (cap) differs from the manifest: real audit non-zero"
-logedit cca "i = next(k for k, l in enumerate(L) if ' COST ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real cca "COST arm differs from the seeded arm: real audit non-zero"
-logedit tur "i = next(k for k, l in enumerate(L) if ' TURNS ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real tur "TURNS arm differs from the seeded arm: real audit non-zero"
+logedit ccc "i = next(k for k, l in enumerate(L) if ' COSTCHK ' in l); L[i] = re.sub(r'cap=\S+', 'cap=99', L[i])"; chk_real ccc "T:COSTCHK.cap COSTCHK metadata (cap) differs from the manifest: real audit non-zero"
+logedit cca "i = next(k for k, l in enumerate(L) if ' COST ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real cca "T:COST.arm COST arm differs from the seeded arm: real audit non-zero"
+logedit tur "i = next(k for k, l in enumerate(L) if ' TURNS ON-' in l); L[i] = L[i].replace('arm=ON', 'arm=C', 1)"; chk_real tur "T:TURNS.arm TURNS arm differs from the seeded arm: real audit non-zero"
 logedit trm "L.insert(len(L) - 2, L[-3].split(' ')[0] + ' STOP_COST before C-01 projected=99')"; chk_real trm "terminal row STOP_COST present: real audit non-zero"
 logedit unk "L.insert(len(L) - 2, L[-3].split(' ')[0] + ' ZZZ something')"; chk_real unk "unknown row kind ZZZ: real audit non-zero"; chk_red unk "unknown row kind: audit without the strict layers says OK"
 logedit gar "L.insert(len(L) - 2, 'garbage without a timestamp')"; chk_real gar "unknown row kind (an unparseable line): real audit non-zero"
@@ -622,15 +626,112 @@ tamper gjc; GJ=$(ls "$TEST_TMP"/t-gjc/runs/*/gate.jsonl | head -1); echo '{broke
 tamper hjc; HJ=$(ls "$TEST_TMP"/t-hjc/runs/ON-*/hook/live/per-turn-gate/*.jsonl | head -1); echo '{broken' >>"$HJ"; chk_real hjc "corrupt hook log line (skipped by the old reader): real audit non-zero"; chk_red hjc "corrupt hook log line: audit without the strict layers says OK"
 tamper cx; rm -f "$TEST_TMP/t-cx/cmd/$(ls "$TEST_TMP/t-cx/cmd" | head -1)"; chk_real cx "cmd/ file set is not exactly the expected ids: real audit non-zero"
 node "$WRAP" --audit --manifest "$MAN" --run-dir "$R1" >/dev/null 2>&1; assert_neq "$?" 0 "audit without --clone: non-zero"
-# every assertion text named in the schema table exists in this file, and PREREG carries the generated table verbatim
+echo "--- round 11: one tamper per table field"
+tt() { local lab="$1" nm="tt_${1//./_}"; logedit "$nm" "$2"; assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$nm")" 0 "T:$lab real audit non-zero"; }
+tt WRAPPER_START.first "sub(first('WRAPPER_START'), r'first=\S+', 'first=0')"
+tt WRAPPER_START.last "sub(first('WRAPPER_START'), r'last=\S+', 'last=99')"
+tt WRAPPER_DONE.last "sub(lastidx('WRAPPER_DONE'), r'last=\S+', 'last=5')"
+tt WRAPPER_EXIT.rc "sub(lastidx('WRAPPER_EXIT'), r'rc=\S+', 'rc=7')"
+tt HASH.name "sub(first('HASH', 'wrapper'), 'HASH wrapper', 'HASH bogus')"
+tt HASH.count "i = first('HASH', 'prereg'); L.insert(i + 1, L[i])"
+tt HASH.sha256 "sub(first('HASH', 'hook'), r'[0-9a-f]{64}$', 'a' * 64)"
+tt PREREG.commit "sub(first('PREREG'), r'PREREG [0-9a-f]{40}', 'PREREG ' + 'b' * 40)"
+tt PREREG.time "sub(first('PREREG'), r'(PREREG [0-9a-f]{40}) \S+', r'\1 1990-01-01T00:00:00+00:00')"
+tt PREREG.ancestor "sub(first('PREREG'), 'ancestor=yes', 'ancestor=no')"
+tt TASKHASH_DIFF.phase "sub(first('TASKHASH_DIFF', 'pre'), 'pre ok', 'mid ok')"
+tt TASKHASH_DIFF.verdict "sub(first('TASKHASH_DIFF', 'post'), 'post ok', 'post fail')"
+tt ORDER.arm "i = first('ORDER'); L[i] = L[i].replace(' ON pos', ' C pos') if ' ON pos' in L[i] else L[i].replace(' C pos', ' ON pos')"
+tt ORDER.pos "sub(first('ORDER'), r'pos=\d+', 'pos=99')"
+tt CMD.sha256 "sub(first('CMD'), r'[0-9a-f]{64}$', 'c' * 64)"
+tt START.elapsed "sub(first('START'), r'elapsed=\d+', 'elapsed=9999')"
+tt COSTCHK.projected "sub(first('COSTCHK'), r'projected=\S+', 'projected=0.0001')"
+tt COSTCHK.verdict "sub(first('COSTCHK'), r' ok$', ' stop')"
+tt COST.running "sub(first('COST'), r'running=\S+', 'running=0.1')"
+tt COST.projected "sub(first('COST'), r'projected=\S+', 'projected=0.1')"
+tt SCORE.m1 "sub(first('SCORE'), r'm1=(\d)', lambda m: 'm1=%d' % (1 - int(m.group(1))))"
+tt SCORE.m2 "sub(first('SCORE'), r'm2=(\d)', lambda m: 'm2=%d' % (1 - int(m.group(1))))"
+tt SCORE.m3 "sub(first('SCORE'), r'm3=(\d)', lambda m: 'm3=%d' % (1 - int(m.group(1))))"
+tt RUNVERSION.flag "sub(first('RUNVERSION'), r'(RUNVERSION \S+) ok', r'\1 fail')"
+tt HOOKCOUNT.gate_log "sub(first('HOOKCOUNT', 'ON-'), r'gate_log=(\d+)', lambda m: 'gate_log=%d' % (int(m.group(1)) + 1))"
+tt HOOKERR.n "sub(first('HOOKERR', 'ON-'), r' 0$', ' 1')"
+tt COMPLETE.n "sub(lastidx('COMPLETE'), r'ON=(\d+)/\d+', lambda m: 'ON=%s/9' % m.group(1))"
+tamper hcp; echo 'Hooks: Stop [node x/other-plugin.js] finished with status 0 (3ms)' >>"$(ls "$TEST_TMP"/t-hcp/trace/ON-*/trace-turn1.log | head -1)"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-hcp")" 0 "T:HOOKCOUNT.plugin real audit non-zero"
+# PROBE_FAIL.cost and SCORE_MISSING.id need a batch that has those rows
+rm -rf "$TEST_TMP/t-pfc"; cp -a "$RF" "$TEST_TMP/t-pfc"; sed -i "s#$RF#$TEST_TMP/t-pfc#g" "$TEST_TMP"/t-pfc/cmd/*.json
+python3 - "$TEST_TMP/t-pfc/invocation.log" <<'PY'
+import sys, re
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); L[i] = re.sub(r'cost=\S+', 'cost=0.700000', L[i]); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-pfc" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.cost real audit non-zero"
+rm -rf "$TEST_TMP/t-pfi"; cp -a "$RF" "$TEST_TMP/t-pfi"; sed -i "s#$RF#$TEST_TMP/t-pfi#g" "$TEST_TMP"/t-pfi/cmd/*.json
+python3 - "$TEST_TMP/t-pfi/invocation.log" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' PROBE_FAIL ' in l); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(node "$WRAP" --audit --manifest "$MAN" --run-dir "$TEST_TMP/t-pfi" --clone "$CLONE" --wrapper-file "$WRAP" >/dev/null 2>&1; echo $?)" 0 "T:PROBE_FAIL.id real audit non-zero"
+endrc_case smi 124 missing lower; python3 - "$TEST_TMP/t-smi/invocation.log" <<'PY'
+import sys
+p = sys.argv[1]; L = open(p).read().split('\n'); i = next(k for k, l in enumerate(L) if ' SCORE_MISSING ' in l); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t); open(p, 'w').write('\n'.join(L))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-smi")" 0 "T:SCORE_MISSING.id real audit non-zero"
+# id fields: the first row of each kind gets an id outside the expected set
+idtest() { local k="$1" nm="idt_$1"; logedit "$nm" "i = first('$k'); t = L[i].split(' '); t[2] = 'ZZ-99'; L[i] = ' '.join(t)"; assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-$nm")" 0 "T:$k.id real audit non-zero"; }
+for k in ORDER VERSION PROBE_OK CMD START END COSTCHK COST SCORE TURNS RUNVERSION MODEL HOOKCOUNT HOOKERR BLOCKMAX; do idtest $k; done
+# the three new file-level cases of this round
+tamper rt; RL=$(ls "$TEST_TMP"/t-rt/runs/*/run.log | head -1); echo '{"type":"result","total_cost_usd":999, BROKEN' >>"$RL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rt")" 0 "run.log truncated result object: real audit non-zero"
+tamper rj; RJ=$(ls "$TEST_TMP"/t-rj/runs/*/result.json | head -1); head -c 40 "$RJ" >"$RJ.cut"; mv "$RJ.cut" "$RJ"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-rj")" 0 "result.json truncated: real audit non-zero"
+tamper gja; GJ=$(ls "$TEST_TMP"/t-gja/runs/*/gate.jsonl | head -1); echo '[]' >>"$GJ"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-gja")" 0 "gate.jsonl corrupt line: a JSON array line is rejected"
+# COSTCHK spent: first spent 0 -> 1 with projected raised to match (the claimed value must not be trusted)
+logedit csp "i = first('COSTCHK'); sub(i, r'spent=\S+', 'spent=1.0000'); sub(i, r'projected=\S+', 'projected=1.0166')"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-csp")" 0 "T:COSTCHK.spent real audit non-zero (claimed spent and projected raised together)"
+logedit csp2 "i = [k for k, l in enumerate(L) if ' COSTCHK ' in l][1]; sub(i, r'spent=(\S+)', lambda m: 'spent=%.4f' % (float(m.group(1)) + 0.02)); sub(i, r'projected=(\S+)', lambda m: 'projected=%.4f' % (float(m.group(1)) + 0.02))"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-csp2")" 0 "T:COSTCHK.spent real audit non-zero (later row off by 0.02)"
+SPM="$TEST_TMP/mut-costchkspent/run-p2-batch.js"
+assert_eq "$(audit_rc "$TEST_TMP/mut-costraw/run-p2-batch.js" "$TEST_TMP/t-csp")" 0 "RED COSTCHK spent from the claimed value: mutant says OK"
+# HASH rows: a second row of one kind with the actual value is fine only with a second invocation
+tt HASH.second_row_wrong "i = first('HASH', 'prereg'); t = L[i].split(' '); L.insert(i + 1, ' '.join(t[:3]) + ' ' + 'd' * 64)"
+
+echo "--- round 11b: the real CLI's trace/<id>/latest symlink"
+mk_mut countlatest "if (f === 'latest') { out.latest = st; continue; }" "if (f === 'latest') { out.regular.push(f); continue; }"
+mk_mut nolatestchk "if (tf.latest && !tf.latestOk) f.push(" "if (false) f.push("
+assert_eq "$(audit_rc "$WRAP" "$R1")" 0 "latest symlink present in every trace dir (fake CLI makes it): real audit OK"
+assert_neq "$(audit_rc "$TEST_TMP/mut-countlatest/run-p2-batch.js" "$R1")" 0 "RED latest counted as a trace file: audit of a good batch fails (the old behaviour)"
+tamper lt1; LD=$(ls -d "$TEST_TMP"/t-lt1/trace/*/ | head -1); ln -sfn "$(ls "$LD"trace-turn*.log | head -1)" "${LD}latest"
+LN=$(ls "$LD"trace-turn*.log | wc -l); [ "$LN" -gt 1 ] && assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-lt1")" 0 "trace latest symlink to the wrong file: real audit non-zero" || echo "single trace file: wrong-target case skipped"
+tamper lt2; LD=$(ls -d "$TEST_TMP"/t-lt2/trace/*/ | head -1); rm "${LD}latest"; cp "$(ls "$LD"trace-turn*.log | tail -1)" "${LD}latest"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-lt2")" 0 "trace latest is a regular file, not a symlink: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-nolatestchk/run-p2-batch.js" "$TEST_TMP/t-lt2")" 0 "RED trace latest as a regular file: mutant without the latest check says OK"
+tamper lt3; LD=$(ls -d "$TEST_TMP"/t-lt3/trace/*/ | head -1); : >"${LD}other.txt"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-lt3")" 0 "trace dir with another name: real audit non-zero"
+
+echo "--- round 11c: VERSION position and count, TASKHASH_DIFF tail"
+mk_mut verpos "cc < vr && vr < Math.min(...pr) &&" "cc < vr &&" "const cc = one('COSTCHK'), vr = one('VERSION')," "const cc = one('COSTCHK'), vr = (of('VERSION')[0]),"
+mk_mut tdtail "re: /^(pre|post) (ok|fail)\$/" "re: /^(pre|post) (ok|fail)(?: .*)?\$/"
+logedit vmove "i = first('VERSION', 'ON-01' if any(' VERSION ON-01 ' in l for l in L) else ''); j = first('PROBE_OK'); row = L.pop(i); j = first('PROBE_OK') + 1; row = L[j - 1].split(' ')[0] + ' ' + ' '.join(row.split(' ')[1:]); L.insert(j, row)"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-vmove")" 0 "T:VERSION.position VERSION moved after the first PROBE: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-verpos/run-p2-batch.js" "$TEST_TMP/t-vmove")" 0 "RED VERSION after PROBE: mutant without the position check says OK"
+logedit vdup "i = first('VERSION'); L.insert(i + 1, L[i])"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-vdup")" 0 "T:VERSION.position a second VERSION row for one id: real audit non-zero"
+logedit tdtail "i = first('TASKHASH_DIFF', 'pre'); L[i] = L[i] + ' trailing words'"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tdtail")" 0 "T:TASKHASH_DIFF.tail text after ok: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-tdtail/run-p2-batch.js" "$TEST_TMP/t-tdtail")" 0 "RED TASKHASH_DIFF tail: mutant with the open regex says OK"
+
+# every label named in the schema table exists in this file (T:KIND.field, or `idtest KIND` for id fields), every file test text
+# exists, every row kind the wrapper writes is listed, and PREREG carries the generated table verbatim
 node -e '
 const w=require(process.argv[1]),fs=require("fs");const t=fs.readFileSync(process.argv[2],"utf8");
-const table=w.schemaTable();const names=[...table.matchAll(/`([^`]+)` \|$/gm)].map(m=>m[1]).filter(Boolean);
-let bad=0;for(const n of names){if(!t.includes(n)){console.error("test text missing:",n);bad++}}
+const table=w.schemaTable();let bad=0;
+for(const m of table.matchAll(/`(T:([A-Z_]+)\.([^`]+))`/g)){const [,label,kind,field]=m;if(label==="T:TRACE.latest")continue;if(!(t.includes(label)||t.includes("tt "+kind+"."+field)||(field==="id"&&new RegExp("for k in [^;]*\\b"+kind+"\\b[^;]*; do idtest").test(t))||label==="T:COSTCHK.arm")){console.error("test missing:",label);bad++}}
+for(const m of table.matchAll(/^\| `[^`]+`(?: \| [^|]*){1} \| `([^`T][^`]*)` \|$/gm)){if(!t.includes(m[1])){console.error("file test text missing:",m[1]);bad++}}
+for(const n of ["unknown row kind","terminal row"]){if(!t.includes(n)){console.error("test missing:",n);bad++}}
 const kinds=[...fs.readFileSync(process.argv[1],"utf8").matchAll(/ctx\.log\(\x27([A-Z_]+)\x27/g)].map(m=>m[1]);
 const known=new Set(w.LOG_SCHEMA.map(e=>e.kind));const fail=new Set(["STOP_COST","STOP_WINDOW","STOP_AUTH","ABORT","REFUSE","COST_INVALID"]);
 for(const k of new Set(kinds)){if(!known.has(k)&&!fail.has(k)){console.error("row kind written but not in the table:",k);bad++}}
 const prereg=fs.readFileSync(process.argv[3],"utf8");if(!prereg.includes(table)){console.error("PREREG appendix differs from --schema-table");bad++}
-process.exit(bad?1:0)' "$WRAP_SRC" "$0" "$REPO_ROOT/docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/PREREG.md"; assert_eq "$?" 0 "schema table: every row kind is listed, every test text exists, PREREG carries the table"
+process.exit(bad?1:0)' "$WRAP_SRC" "$0" "$REPO_ROOT/docs/plans/evidence/2026-10-24-per-turn-gate-p2-3/PREREG.md"; assert_eq "$?" 0 "schema table: every row kind is listed, every field has its test, PREREG carries the table"
 
 finalize_test

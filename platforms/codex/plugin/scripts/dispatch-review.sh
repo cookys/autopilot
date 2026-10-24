@@ -42,6 +42,13 @@
 #                               # large diff at a high effort routinely needs more than 5m
 #                               # (a ~166 KB diff at codex effort=max hit rc=124 on 2026-08-07),
 #                               # so raise this before blaming the model for a silent review.
+#       [--idle-timeout 10m]    # IDLE CAP (BL-0293), off by default. A seat whose capture files (stdout +
+#                               # stderr) have not grown for this long is killed (whole process group) and
+#                               # reported as status:no_verdict, error `seat_idle_timeout: ...`, so the
+#                               # caller swaps the seat instead of waiting for the wall cap. Ns / Nm / bare
+#                               # seconds; env AUTOPILOT_REVIEW_IDLE_TIMEOUT is the same knob (flag wins).
+#                               # Applies to codex(non-cleanroom) grok qoder cursor kimi opencode cc-shim
+#                               # claude-native; see references/hetero-dispatch.md for safe values.
 #       [--max-tokens <n>]      # response-token cap (1..200000): anthropic-compatible/qoderclicn only
 #       [--bin <path>]          # override the runner binary (test seam)
 #       [--checklists <c1,c2>]  # optional adversarial checklist
@@ -227,7 +234,7 @@ else
   _review_die_agy_alias_lib
 fi
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; IDLE_TIMEOUT="${AUTOPILOT_REVIEW_IDLE_TIMEOUT:-}"; IDLE_MARKER=""; IDLE_WRAP=(); BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
@@ -245,6 +252,7 @@ while [[ $# -gt 0 ]]; do
     --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
+    --idle-timeout) IDLE_TIMEOUT="${2:-}"; shift 2 ;;
     --max-tokens)
       MAX_TOKENS_SUPPLIED=1
       if [ "$#" -lt 2 ] || [ -z "${2:-}" ] || [[ "${2:-}" = --* ]]; then
@@ -262,7 +270,7 @@ while [[ $# -gt 0 ]]; do
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
-    -h|--help)   sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,54p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -953,6 +961,13 @@ emit_no_verdict() {
   # rule, so a single-seat re-ask is meaningful. Transport, timeout and rc failures never
   # set it. The field is absent otherwise, keeping the no_verdict shape unchanged.
   [ "${FORMAT_REJECT:-}" = "1" ] && format_reject_json=', "format_reject": true'
+  # BL-0293: idle-watch.sh leaves a non-empty marker when it killed the seat for silence. That
+  # beats whatever the runner's rc branch guessed ("exited non-zero (rc=125)"); the caller keys
+  # on the `seat_idle_timeout` code to swap the seat. Never a format reject.
+  if [ -n "$IDLE_MARKER" ] && [ -s "$IDLE_MARKER" ]; then
+    reason="seat_idle_timeout: $(head -n1 "$IDLE_MARKER") — seat killed, partial output not parsed"
+    format_reject_json=""; FORMAT_REJECT=""
+  fi
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
   printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s }\n' \
@@ -1010,6 +1025,7 @@ cleanup() {
   [ -n "$FRAME_CLOSE_FILE" ] && rm -f "$FRAME_CLOSE_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
+  [ -n "$IDLE_MARKER" ] && rm -f "$IDLE_MARKER"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
@@ -1056,6 +1072,17 @@ cleanup() {
   declare -F review_manifest_finalize >/dev/null 2>&1 && review_manifest_finalize
 }
 trap cleanup EXIT
+
+# BL-0293 idle cap: empty / 0 = off (unchanged behaviour). Otherwise every wrapped runner is
+# started as `timeout "$TIMEOUT" <IDLE_WRAP> <cmd>` (lib/idle-watch.sh).
+if [ -n "$IDLE_TIMEOUT" ] && [ "$IDLE_TIMEOUT" != "0" ]; then
+  case "$IDLE_TIMEOUT" in *[!0-9]*) ;; *) IDLE_TIMEOUT="${IDLE_TIMEOUT}s" ;; esac   # bare number = seconds (unlike --timeout's ms)
+  _idle_ms="$(timeout_to_ms "$IDLE_TIMEOUT")" || die_precondition "--idle-timeout must be seconds or use Ns/Nm syntax (got: $IDLE_TIMEOUT)"
+  _idle_s=$(( _idle_ms / 1000 ))
+  [ "$_idle_s" -ge 1 ] || die_precondition "--idle-timeout must be at least 1s (got: $IDLE_TIMEOUT)"
+  IDLE_MARKER="$(mktemp -t dispatch-review-idle-XXXXXX)"; : > "$IDLE_MARKER"
+  IDLE_WRAP=(bash "${AUTOPILOT_IDLE_WATCH_SCRIPT:-$_REVIEW_SELF_DIR/lib/idle-watch.sh}" "$_idle_s" "$IDLE_MARKER" --)
+fi
 # INT/TERM are not trapped. Bash defers a signal trap until the foreground
 # child finishes and then exits with that child's status, so a TERM trap does
 # not stop the script promptly. An untrapped TERM exits 143 immediately and
@@ -1338,7 +1365,7 @@ if [[ "$RUNNER" = "codex" ]]; then
       > "$_launch_json"
     CODEX_RC=$?
   else
-  timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
   CODEX_RC=$?
@@ -1395,7 +1422,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # effort enum is per-MODEL (grok-4.5 rejects xhigh; 4.6+ accept) ⇒ clamp against THIS model's live enum.
   GROK_EFFORT="$(grok_effort_clamp "$EFFORT" "$MODEL" "$GROK_BIN")"
   grok_effort_note "$EFFORT" "dispatch-review" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
-  timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
       --reasoning-effort "$GROK_EFFORT" \
       --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>&1
   GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
@@ -1460,7 +1487,7 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
     QODER_TOKEN_ARGS+=(--max-output-tokens "$MAX_TOKENS")
   fi
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
       --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence \
       "${@:6}" < "$5"' \
       _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
@@ -1514,7 +1541,7 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   CURSOR_OUT="$(mktemp -t dispatch-review-cursor-out-XXXXXX)"
   CURSOR_ERR="$(mktemp -t dispatch-review-cursor-err-XXXXXX)"
   CURSOR_CWD="$(mktemp -d -t dispatch-review-cursorcwd-XXXXXX)"
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
       --output-format text < "$4"' \
       _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$CURSOR_OUT" 2> "$CURSOR_ERR"
   CURSOR_RC=$?   # no set -e in this script (top is `set -uo pipefail`) — capturing $? is safe
@@ -1620,7 +1647,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     KIMI_ARGV_PROMPT="$(cat "$PROMPT_FILE")"
   fi
   # -p requires the prompt as an argument (no --prompt-file); big prompts use the file pointer above.
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$3" -m "$4" --output-format text' \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p "$3" -m "$4" --output-format text' \
       _ "$KIMI_CWD" "$KIMI_BIN" "$KIMI_ARGV_PROMPT" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
   KIMI_RC=$?
   fi
@@ -1733,7 +1760,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   trap 'if [ -n "${OC_PID:-}" ]; then kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null; fi; exit 130' INT TERM
   if [ -z "$OC_SETSID" ]; then set -m; fi
   # shellcheck disable=SC2086
-  $OC_SETSID timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+  $OC_SETSID timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
       env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR" &
   OC_PID=$!
@@ -1874,7 +1901,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # the first-non-blank / vocabulary / prompt-echo guards.
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
@@ -1904,7 +1931,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  timeout "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true

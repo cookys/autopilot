@@ -218,6 +218,17 @@ identity for every family today, deliberately: the published evidence says the l
 incomparable, which is not the same as knowing the exchange rate between them, and a fabricated
 coefficient would re-create the defect this rule exists to avoid.
 
+## Reviewer idle cap (BL-0293)
+
+`dispatch-review.sh --idle-timeout <dur>` (env `AUTOPILOT_REVIEW_IDLE_TIMEOUT`, flag wins) fails a seat that has gone quiet instead of waiting for the wall-clock `--timeout`. `<dur>` is `Ns`, `Nm` or bare seconds (unlike `--timeout`, where a bare number is milliseconds).
+
+- **Detection.** `scripts/lib/idle-watch.sh` sits between `timeout "$TIMEOUT"` and the runner command. It watches the combined size of the seat's stdout and stderr targets, which are the capture files the rail redirected the runner into; any change resets the idle clock. Output that never reaches a regular file (a cleanroom launcher, a pipe) is not watched, and the command runs unwatched.
+- **Kill and verdict.** After `<dur>` without growth the whole process group is killed (SIGKILL), so no descendant survives. The seat runs as leader of its own group (`set -m`), so the kill never reaches the watcher or `timeout`: an idle kill exits 125, and a wall-clock TERM still ends as `timeout`'s own 124. The result is `status: no_verdict`, exit 1, `error` starting `seat_idle_timeout:`. It is never `format_reject`, so no same-seat re-ask.
+- **Timing precision.** With bash >= 5 the idle clock is exact (`EPOCHREALTIME`). An older bash only has whole seconds, so the watcher fires only when the integer elapsed is strictly above the window + 1s: it never kills early, and an idle seat dies between the window and the window + 2s.
+- **Swap the seat.** `hetero-review-loop.js` already treats any `no_verdict` as a seat gap: the generation is recorded `aborted` (`seat_gap`) and the operator re-collects the next generation with another seat. The error text survives in the seat artifact. The loop passes its environment through, so exporting `AUTOPILOT_REVIEW_IDLE_TIMEOUT` before `collect` covers every seat.
+- **Default is off.** Unset or `0` keeps today's behaviour exactly. A runner can think silently for a long time, and a runner that buffers its answer (`claude -p` as cc-shim and claude-native, effectively) prints nothing until the end, so any fixed default would kill healthy seats. Pick a value above the longest quiet stretch you have seen for the engine (10 minutes is a safe start for streaming runners such as grok, kimi, opencode and codex); leave it unset for buffered runners.
+- **Scope.** Wired for codex (non-cleanroom), grok, qoder, cursor, kimi, opencode, cc-shim and claude-native. agy and the cleanroom launchers keep their own wall cap; anthropic-compatible is a single HTTP call with its own timeout.
+
 ## Reviewer output-token budget
 
 `dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through

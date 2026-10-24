@@ -22,6 +22,8 @@
 # RED at 8b659d432 (acceptance round 11): N58-N62 failed (arithmetic comparison against a name / expression paired with an integer literal); C7 ([ ] with a name on the arithmetic side) also failed.
 # RED at 85eff5f32 (changed-side rule): N63 failed; N64 and F23 already behaved (the operand-set rule reports a changed subject variable).
 # RED at 21eadee16 (review 54a42840): see N65 N66 (braced ${a} normalised to $a and paired).
+# RED at a3e740553 (acceptance round 12): N67 N68 N69 failed (bound moved to INT_MAX/INT_MIN, string ordering against ${a}x accepted); C8-C11 failed (relational literal changes were paired).
+# F12 and F18 (relational < with a literal swap, spaced and unspaced) were retired by the closed rule: C10 and C11 pin the same shapes as accepted precision cost.
 . "$(dirname "$0")/lib.sh"
 
 S="$REPO_ROOT/scripts/check-test-integrity.sh"
@@ -453,11 +455,6 @@ repo="$(mk_surface 'assert_eq "$age" "0"' 'assert_eq "$age" "0" > /dev/null || :
 run_case "$repo"
 if has_kind surface_touch; then report N26 1; else report N26 0; fi
 
-# ── F12 rule 1: [[ a < b ]] is a comparison operator, same-shape replacement is equivalent ──
-repo="$(mk_surface '[[ "$age" < "5" ]]' '[[ "$age" < "9" ]]')"
-run_case "$repo"
-if has_kind surface_touch; then report F12 0; else report F12 1; fi
-
 # ── N27 rule 1: single-bracket [ a < b ] is a redirect, never an equivalent ──
 repo="$(mk_surface '[ "$age" < "5" ]' '[ "$age" < "9" ]')"
 run_case "$repo"
@@ -521,11 +518,6 @@ printf 'assert_eq "$keep" "2"\n' > "$repo/tests/conf.test.sh"
 commit_all "$repo" "remove variable and its assertion"
 run_case "$repo"
 if has_kind deleted_line; then report F17 0; else report F17 1; fi
-
-# ── F18 rule 1: [[ a<b ]] without spaces is a comparison operator ──
-repo="$(mk_surface '[[ "$age"<"5" ]]' '[[ "$age"<"9" ]]')"
-run_case "$repo"
-if has_kind surface_touch; then report F18 0; else report F18 1; fi
 
 # ── N32 rule 1: [ a<b ] without spaces stays a redirect ──
 repo="$(mk_surface '[ "$age"<"5" ]' '[ "$age"<"9" ]')"
@@ -724,5 +716,35 @@ if has_kind surface_touch; then report N65 1; else report N65 0; fi
 repo="$(mk_surface '[ "${a}" -eq "0" ]' '[ "$a" -eq "0" ]')"
 run_case "$repo"
 if has_kind surface_touch; then report N66 1; else report N66 0; fi
+
+# ── N67-N69 closed rule: only = == -eq earn an equivalent; moving a bound or an ordering never does ──
+repo="$(mk_surface '[ "$a" -le "0" ]' '[ "$a" -le "9223372036854775807" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N67 1; else report N67 0; fi
+repo="$(mk_surface '[ "$a" -ge "0" ]' '[ "$a" -ge "-9223372036854775808" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report N68 1; else report N68 0; fi
+repo="$(mk_surface '[[ "$a" < "0" ]]' '[[ "$a" < "${a}x" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report N69 1; else report N69 0; fi
+
+# ── C8-C11 accepted precision cost (depth-0 2026-10-24): a literal change under != -ne -lt or < is reported ──
+repo="$(mk_surface '[ "$a" -ne "0" ]' '[ "$a" -ne "1" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C8 1; else report C8 0; fi
+repo="$(mk_surface '[ "$a" -lt "5" ]' '[ "$a" -lt "9" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report C9 1; else report C9 0; fi
+repo="$(mk_surface '[[ "$age" < "5" ]]' '[[ "$age" < "9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C10 1; else report C10 0; fi
+repo="$(mk_surface '[[ "$age"<"5" ]]' '[[ "$age"<"9" ]]')"
+run_case "$repo"
+if has_kind surface_touch; then report C11 1; else report C11 0; fi
+
+# ── F24 string equality literal swap stays a legitimate pair ──
+repo="$(mk_surface '[ "$a" = "foo" ]' '[ "$a" = "bar" ]')"
+run_case "$repo"
+if has_kind surface_touch; then report F24 0; else report F24 1; fi
 
 finalize_test

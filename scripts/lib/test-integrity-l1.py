@@ -1897,6 +1897,17 @@ def _norm_operand(tok):
 
 _ARITH_LITERAL = re.compile(r'"?-?[0-9]+"?')
 _ARITH_VAR = re.compile(r'"?\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9])"?')
+_EQ_STR_LITERAL = re.compile(r'"[^"$`\\]*"|\'[^\'$`]*\'|[^\s"\'$`*?\[\\]+')
+
+
+def _eq_literal(tok, integer):
+    """A literal free of $, backticks and unquoted glob characters; for -eq it
+    must be a decimal integer (a bare name would be evaluated as a variable)."""
+    if integer:
+        return bool(_ARITH_LITERAL.fullmatch(tok))
+    return bool(_EQ_STR_LITERAL.fullmatch(tok))
+
+
 _TEST_JOINERS = frozenset(("-o", "-a", "!", "||", "&&", "(", ")"))
 
 
@@ -1937,28 +1948,22 @@ def _assertion_shape(raw, strict):
         # A pattern (unquoted * ? [) or any regex (=~) can match everything.
         if toks[1] == "=~" or any(re.search(r"[*?\[]", t) for t in (toks[0], toks[2])):
             return None
-        if toks[1] in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
-            # [[ ]] evaluates arithmetic operands recursively, so a bare name or
-            # expression resolves to a variable. Each operand must be a decimal
-            # integer literal or a plain $variable reference.
-            raw_toks = br.group(1).split()
-            if len(raw_toks) != 3 or not all(
-                _ARITH_LITERAL.fullmatch(raw_toks[i]) or _ARITH_VAR.fullmatch(raw_toks[i])
-                for i in (0, 2)
-            ):
-                return None
-        op = _TEST_OP.search(" " + inner + " ")
-        if not (op and op.group(1) == toks[1]):
+        # Closed rule: only equality earns an equivalence. Moving a bound or an
+        # ordering (!=, -ne, -lt, -le, -gt, -ge, <, >) can loosen the assertion.
+        if toks[1] not in ("=", "==", "-eq"):
             return None
-        if toks[1] in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
-            # Variable operands are the subject and must be identical on both
-            # sides of an edit; only integer literals may change.
-            subj = tuple(
-                "#" if _ARITH_LITERAL.fullmatch(t) else _norm_operand(t)
-                for t in (raw_toks[0], raw_toks[2])
-            )
-            return ("op", toks[1], subj)
-        return ("op", op.group(1))
+        raw_toks = br.group(1).split()
+        if len(raw_toks) != 3:
+            return None
+        rep = []
+        for t in (raw_toks[0], raw_toks[2]):
+            if _eq_literal(t, toks[1] == "-eq"):
+                rep.append("#")  # the changing side: any such literal pairs
+            elif _ARITH_VAR.fullmatch(t):
+                rep.append(t)  # the subject: must be verbatim identical
+            else:
+                return None
+        return ("op", toks[1], tuple(rep))
     return None
 
 

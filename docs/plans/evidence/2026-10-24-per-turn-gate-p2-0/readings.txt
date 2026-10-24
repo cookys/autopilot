@@ -33,4 +33,4 @@ hook log plugsim.hook.log
 stream file stream-fresh.jsonl
 init session=<t4.sid1> version=2.1.309 model=claude-haiku-4-5 apiKeySource=none
 result session=<t4.sid1> is_error=false subtype=success cost=0.0242565 text="ALPHA"
-costs (each result object, plus 0.032369 for the refused-guard mishap call, see README): 0.0195218, 0.025133399999999997, 0.016572, 0.0525764, 0.0242565, 0.032369 sum=0.17042910000000003
+costs per call, increments of total_cost_usd within a session (t1 resume total 0.0251334 minus its first turn 0.0195218 = 0.0056116), then the mishap call from mishap-call.txt: 0.0195218, 0.0056116, 0.016572, 0.0525764, 0.0242565, 0.032369 sum=0.1509073

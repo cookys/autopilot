@@ -1,0 +1,6 @@
+Guard-mishap call (see README, Method): the first draft of trial.sh ran one real call before its work-tree guard worked. Its stream and debug files were in the directory that was deleted at once, so no result event survives. The only record is the runner's own console line, taken from the tool output of that moment:
+
+RESULT <id> false 0.032369 "Hey! I'm set up and ready to work on the autopilot repository. What can I help ..."
+
+mishap_cost_usd=0.032369
+(Provenance: console line only, not a preserved artifact; the checker adds this value but cannot re-derive it from a result event.)
